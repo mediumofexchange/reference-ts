@@ -3,17 +3,18 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 7 M1 (branch `feat/scope-reader`): the multi-backing reader in `src/`. Promote
-`scripts/pool/v3/scope-{replay,recovery}.mjs` (whole-scope classification, merged
-imports, per-backing adoption, force/clock, cross-scope receipts, counts, compact
-faults) to `src/pool/v3/scope-reader.ts`, add a runtime package entry for any scope,
-and delete the harness copies. Acceptance: local-check's scope groups pass through
-`src/` on both venues with identical verdicts (CI `check:pool:v3 -- --ergo`), the
-runtime entry agrees with them, independent review, reports re-recorded. Stop: no
-operator activation of multi-backing segments, wallet payment or testnet drill (M2/M3).
+Slice 7 M1 (done, PR #39): the multi-backing reader in `src/`. Acceptance: local-check's
+scope groups pass through `src/` on both venues with identical verdicts, `readPackage`
+agrees with them, independent review, reports re-recorded. Next run: slice 7 M2.
 
 ## Status
-- Started 2026-09-28 from main `e57fc31`.
+- `src/pool/v3/scope-reader.ts` replaces `scope-{replay,recovery}.mjs` (same reads,
+  charges and checks; resume identity kept). `readPackage` reads any scope, falling back
+  from the single-backing walk on `ScopeRequired`. `scope-runtime-check.mjs` compared
+  it with 23 multi-backing selections; `test/pool-v3-scope-reader.test.ts` is the
+  oracle-proof fixture. The replay report's verdict fields equal main's (only
+  proof-randomized hashes differ). An opus review found no blockers; its coverage and
+  doc findings are fixed, the refusal-evidence gap is Next 5(h).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -30,8 +31,9 @@ operator activation of multi-backing segments, wallet payment or testnet drill (
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Multi-backing (slice 7): M1 reader above; M2 operator activation and succession of
-   multi-backing segments in the journal; M3 two-backing testnet drill.
+1. Multi-backing (slice 7, M1 reader done): M2 operator activation and succession of
+   multi-backing segments in the journal (`store.ts` opens single-backing only; its
+   reads move to `readPackage`); M3 two-backing testnet drill. Stop: no adoption.
 2. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
@@ -52,7 +54,9 @@ operator activation of multi-backing segments, wallet payment or testnet drill (
    return an old-segment receipt for an adopted forced record (traced only). (d) Ergo
    reports bind pool-v3 `786f962` but no `venue-ergo.md` revision; the CRS is unbound.
    (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
-   `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit.
+   `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit. (h) Runtime
+   package-reader refusals drop the receipt walk's proven contradictions and fault facts
+   (the harness keeps them); attach them to the refusal if a runtime caller needs them.
 6. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
    Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
@@ -86,7 +90,9 @@ operator activation of multi-backing segments, wallet payment or testnet drill (
 - No service delivery blocker remains. Server timeout followed by eventual
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
+- Deletions refused by the classifier (non-blocking): `git rm` the unused shims
+  `scripts/pool/v3/{receipt-state,non-service}.mjs` and, after `local-replay.mjs` imports
+  from `dist/pool/v3/{scope-evidence,terms}.js`, `scope-evidence.mjs`.
 
-Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28.
-The single-backing wallet path is complete and v2 is retired, within that rounding;
-configuration adoption, multi-backing runtime, qualified deployment storage and mainnet remain.
+Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28 (the
+multi-backing reader is in; operator activation, configuration adoption, qualified storage, mainnet remain).

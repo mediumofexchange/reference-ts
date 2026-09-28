@@ -1,5 +1,5 @@
 {
-  "schema": "moe-v3-local-replay-experiment-23",
+  "schema": "moe-v3-local-replay-experiment-24",
   "specification": "786f962",
   "node": "v24.21.0",
   "compactIntrinsic": [
@@ -11,18 +11,18 @@
           {
             "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
             "sequence": "4",
-            "root": "14194e043d294bf1f0949132efbbf0c9c606eb7a9f6930319808525151fe1131",
+            "root": "1c71ebdd73fef83c60914242cc5ec20d7a468e3ed517bc61ae44a126846355fb",
             "index": "11",
             "backing": "52448a870116e5bf229e814782da34763408289d47559d5bcbbd644443124b72",
-            "segment": "52605825d0694118fb23d25b77893b55b8fd8cb9b305d7c20abe64dd4df9b1d4",
+            "segment": "8cc1d93747c83d4ae848358b7c9888fb7e36fc128ef448e1fbb234d28ad9f691",
             "position": "2",
             "length": "2",
-            "evidence": "389a24a763deb7b749e797219fec35701d5623ac6252cbf5879f1fd62dcdcc1f",
+            "evidence": "53b3a12ccba0fc96b7d8f8fdb278735be8af6ccf93db53578b812a3102df456b",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "2caefa5e7fe74ae4052c5b07f0190051a94e5c50a5f59bc2aea541d043e1b13d",
-            "proofHash": "a9d10126d881f6b6d263782403190767f7dad7886c805fe4075f280ef2c531b3",
+            "statementHash": "6ed59339c494e5876d7359f1e1c15832bb6c27b27b2c449ac9c97d8228603b72",
+            "proofHash": "5ae2affcdc61cd65629da2824e3d6b7ac513ee8b7e7ee84c67368c1266332f06",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -43,8 +43,8 @@
           "outstanding": "9",
           "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
           "spentRoot": "d3dfde14e110d61603458b6deadbcd17a228ab907d5c825027e855e19a79361f",
-          "historyHash": "67b837ca689e10c4ec3c3d2250979a6682c96e101c925e413fa1de47ddc9dafd",
-          "evidenceHash": "029105a1c09d735fc0c6912d57bf428faeb322cda873ff02260e17094e66e101",
+          "historyHash": "29b4c632652f42a028d53cc2b54378780e25577207a09000cfdff5e78929c302",
+          "evidenceHash": "ed92a890559ec88b559e525f01de852b9904498c5d3376e55598449926a7dee1",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -148,18 +148,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "3c0bfc0222abc48ccf7b2aff3624171d687b492007b2c7227efe29e55cac77c5",
+            "root": "2a4565c0bc730b3d2e075818962369831aca3ed18bbbfbfdaea3014e2ed6d472",
             "index": "2",
             "backing": "52448a870116e5bf229e814782da34763408289d47559d5bcbbd644443124b72",
             "segment": "edef302c754802d2760062555c57067340b2ee4f09edf2242063147619bbb86f",
             "position": "1",
             "length": "2",
-            "evidence": "f5b3eb6376bfd71cc462bb46cb11b1391c44c1a431c732c1b32aced1e82c664e",
+            "evidence": "e316104dc181f07f3a44bcaffd5e47911000606c867627cda116243940600e98",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "9f5f57ef4cd9a918f9d301a4833e9a24c184ce6095f4fa5f63a9793a02d0334d",
-            "proofHash": "5b9bbedce4feb8d5b7ca4c2feb5a8f7e9745d5a7a14e9d8726444efc7e0c2cdf",
+            "proofHash": "36dd2c862467b4b2c5662011bb63da42993787ff0770bcf86a9ae206d1958c8a",
             "signatureHash": "908547f1b2d4982bd41c61aa3c2f7c72d090320cfaaddeecbcee2fb47858742f"
           }
         ],
@@ -181,7 +181,7 @@
           "noteRoot": "18371851561693188180777240044239802289404842448985376332435604640937641650534",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "9b90bcb5ee7c21031bbf8a151773b9e0cdddeeafbf7a8855e39543f4c18047b9",
-          "evidenceHash": "54f3ec8cd52d9984174fc247110a789cbf15c3f59eac0be33d7b079d60c91ba5",
+          "evidenceHash": "497138b83863bd5899e869c3acb6bb82869f309a06e79b9a7a1400975acfe38b",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -233,18 +233,18 @@
           {
             "operator": "19204c8c3ba85ba059cd18ac9017bd02a18da5d10c68fb779a34be43ef067791",
             "sequence": "4",
-            "root": "37fbea6abdf6b722c58b238d148e4fab9225bbf548dfec1734387a27f8cab79f",
+            "root": "7a6843e79aec8e149dd00ae2830eb7db0e60ebce38e56be70789ab0323cf70a0",
             "index": "11",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
-            "segment": "5f63099969c420b5e57296216c9625b3a75d91342ac936f3da62bc792abb2bd2",
+            "segment": "683f26802ebd4b1bda602606bb08fa0bc79dc97c11bf14f50fe1620667e88543",
             "position": "2",
             "length": "2",
-            "evidence": "7fef83eba72586deca703a76563e2a1f1b43a0fde646651db3cec1f8594779f9",
+            "evidence": "d4507b6b143ec75362db98bd9bf1e59a793b3184e20f7194abf0bdf2c2052d72",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "795c9e460f83f2c2d350df6872423015b5b9c85826f75f01d78e2e36b2818d7f",
-            "proofHash": "f7ef33951cc86e112f68c2ee9382467f38fae842a067eaebb5083e8b6741e812",
+            "statementHash": "128acc8a03233a3ce99075c993e3378f81368c7fbf2353cfd691a24854e78b30",
+            "proofHash": "67e9c4992546e5992b9587adddb624f548ab166c97149b818e35c01c9e9837e7",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -265,8 +265,8 @@
           "outstanding": "9",
           "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
           "spentRoot": "277a0920e5cb63cc5e6cd6669ed438f5d06198a8259727cbbd5b9a748127abe1",
-          "historyHash": "c9c7f95b115a874783f1bdc5154d2bd78e95cd637b9d536e7071e3f2d487d72c",
-          "evidenceHash": "9e0af152e0a1650b4b7254819286c6be997573621f8f51ab95cbc7e735981ea6",
+          "historyHash": "9f9ec8e2ded811b8fcf06216eb65b1c6a85c3649db8c382b3956e08c9ecb481f",
+          "evidenceHash": "786e13e9bdae90e821aef6c7b9df9ff44b65eba32798e9961879991bff6ac62f",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -643,18 +643,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "9ad608e17f7f1e200fb5eeaa8892f784c977af8f7ee9f7b8d6ca436435e631dd",
+            "root": "e15753321286a3c0cf0559eac7a8a36b043d075b528aaa07e58cec4aff519e45",
             "index": "4",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "fb0f5f57c78c6de3c91d90a84a63c907891bfd7b283e8c2d78e6661047079b0f",
+            "evidence": "8167a4c414c6a226f4339da4667fa01d4358d9dfb9bd6994a111151321e86ef1",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "28dc050fc1aea7cc1130cb30281a08675f268d98a76a0021e871b9e26f4c8000",
+            "proofHash": "ac173150f8af0168bdcfe8b37f5dca6b20c080e7a20bd6b1c0745dd7aba30b15",
             "signatureHash": "94eb0e82471510a5d375d15ed3de63c390e56b58023ec1073366a32175eb433c"
           }
         ],
@@ -676,7 +676,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -735,18 +735,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "9ad608e17f7f1e200fb5eeaa8892f784c977af8f7ee9f7b8d6ca436435e631dd",
+            "root": "e15753321286a3c0cf0559eac7a8a36b043d075b528aaa07e58cec4aff519e45",
             "index": "4",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "fb0f5f57c78c6de3c91d90a84a63c907891bfd7b283e8c2d78e6661047079b0f",
+            "evidence": "8167a4c414c6a226f4339da4667fa01d4358d9dfb9bd6994a111151321e86ef1",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "28dc050fc1aea7cc1130cb30281a08675f268d98a76a0021e871b9e26f4c8000",
+            "proofHash": "ac173150f8af0168bdcfe8b37f5dca6b20c080e7a20bd6b1c0745dd7aba30b15",
             "signatureHash": "94eb0e82471510a5d375d15ed3de63c390e56b58023ec1073366a32175eb433c"
           }
         ],
@@ -768,7 +768,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -827,18 +827,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "9ad608e17f7f1e200fb5eeaa8892f784c977af8f7ee9f7b8d6ca436435e631dd",
+            "root": "e15753321286a3c0cf0559eac7a8a36b043d075b528aaa07e58cec4aff519e45",
             "index": "4",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "fb0f5f57c78c6de3c91d90a84a63c907891bfd7b283e8c2d78e6661047079b0f",
+            "evidence": "8167a4c414c6a226f4339da4667fa01d4358d9dfb9bd6994a111151321e86ef1",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "28dc050fc1aea7cc1130cb30281a08675f268d98a76a0021e871b9e26f4c8000",
+            "proofHash": "ac173150f8af0168bdcfe8b37f5dca6b20c080e7a20bd6b1c0745dd7aba30b15",
             "signatureHash": "94eb0e82471510a5d375d15ed3de63c390e56b58023ec1073366a32175eb433c"
           }
         ],
@@ -860,7 +860,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -924,13 +924,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "b0d80aa2aab09182bcdec332c34a719feadefe80abc5e2dab3a5e3a46d86e81f",
+            "root": "72f5f2b990549472dce25b7618690d451cd2fb95678844fc1a3a88f048d1ece9",
             "index": "4",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "3af78931dc8f9bad2e0b8101f2779dd3f31fa9fbbe7e2b05b63048c7f7befebf",
+            "evidence": "c1b6d690abde6fe920d3e7fa1ab38c687f6ac61dd73766232b87c778ef23960b",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -938,7 +938,7 @@
             "authorizationBacking": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "ee4544d26dfe006b5303dc190ffe58e43abc7befebef40d45a92ce9aad0956b1",
+            "proofHash": "8f01e8bd8a54febe95b5e5c3e088917a70a62497d99c834c3473f6160408c6f5",
             "signatureHash": "bbdf99899dd3bc7f8983202443b57e9d1218da76a4402db65535055ecacff70e"
           }
         ],
@@ -960,7 +960,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -1019,13 +1019,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "b0d80aa2aab09182bcdec332c34a719feadefe80abc5e2dab3a5e3a46d86e81f",
+            "root": "72f5f2b990549472dce25b7618690d451cd2fb95678844fc1a3a88f048d1ece9",
             "index": "4",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "3af78931dc8f9bad2e0b8101f2779dd3f31fa9fbbe7e2b05b63048c7f7befebf",
+            "evidence": "c1b6d690abde6fe920d3e7fa1ab38c687f6ac61dd73766232b87c778ef23960b",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -1033,7 +1033,7 @@
             "authorizationBacking": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "ee4544d26dfe006b5303dc190ffe58e43abc7befebef40d45a92ce9aad0956b1",
+            "proofHash": "8f01e8bd8a54febe95b5e5c3e088917a70a62497d99c834c3473f6160408c6f5",
             "signatureHash": "bbdf99899dd3bc7f8983202443b57e9d1218da76a4402db65535055ecacff70e"
           }
         ],
@@ -1055,7 +1055,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -1114,13 +1114,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "b0d80aa2aab09182bcdec332c34a719feadefe80abc5e2dab3a5e3a46d86e81f",
+            "root": "72f5f2b990549472dce25b7618690d451cd2fb95678844fc1a3a88f048d1ece9",
             "index": "4",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "3af78931dc8f9bad2e0b8101f2779dd3f31fa9fbbe7e2b05b63048c7f7befebf",
+            "evidence": "c1b6d690abde6fe920d3e7fa1ab38c687f6ac61dd73766232b87c778ef23960b",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -1128,7 +1128,7 @@
             "authorizationBacking": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "ee4544d26dfe006b5303dc190ffe58e43abc7befebef40d45a92ce9aad0956b1",
+            "proofHash": "8f01e8bd8a54febe95b5e5c3e088917a70a62497d99c834c3473f6160408c6f5",
             "signatureHash": "bbdf99899dd3bc7f8983202443b57e9d1218da76a4402db65535055ecacff70e"
           }
         ],
@@ -1150,7 +1150,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -1214,18 +1214,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "9ad608e17f7f1e200fb5eeaa8892f784c977af8f7ee9f7b8d6ca436435e631dd",
+            "root": "e15753321286a3c0cf0559eac7a8a36b043d075b528aaa07e58cec4aff519e45",
             "index": "7",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "fb0f5f57c78c6de3c91d90a84a63c907891bfd7b283e8c2d78e6661047079b0f",
+            "evidence": "8167a4c414c6a226f4339da4667fa01d4358d9dfb9bd6994a111151321e86ef1",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "28dc050fc1aea7cc1130cb30281a08675f268d98a76a0021e871b9e26f4c8000",
+            "proofHash": "ac173150f8af0168bdcfe8b37f5dca6b20c080e7a20bd6b1c0745dd7aba30b15",
             "signatureHash": "94eb0e82471510a5d375d15ed3de63c390e56b58023ec1073366a32175eb433c"
           }
         ],
@@ -1247,7 +1247,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -1300,18 +1300,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "4",
-            "root": "afd87e3bbdad45a26427f873cac48ad63cedcca089f08d80a9297d73a0f38fc9",
+            "root": "3ee0c2551123f359731d9316e5524bb71e2403a4b1fa633f79a4449774e9f6ac",
             "index": "16",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
-            "segment": "bb23ddb28ebadf32fbbf962bb72576f79782c728fdee062a8e34f6dcdae27786",
+            "segment": "6022a920dc89e6848658f609361e26cf4f0d24d2d450fb0d88e6cf8b58f8dfb6",
             "position": "1",
             "length": "1",
-            "evidence": "2609d90894dd0f8f1f7669e11cffdbb0effde2fae2d4596601ec0c69e07e5000",
+            "evidence": "2aa6732c39ef4c97eff80ae52b454ca214bbfa3c1a353535d3a49cbc34001d83",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "28dc050fc1aea7cc1130cb30281a08675f268d98a76a0021e871b9e26f4c8000",
+            "proofHash": "ac173150f8af0168bdcfe8b37f5dca6b20c080e7a20bd6b1c0745dd7aba30b15",
             "signatureHash": "94eb0e82471510a5d375d15ed3de63c390e56b58023ec1073366a32175eb433c"
           }
         ],
@@ -1332,8 +1332,8 @@
           "outstanding": "9",
           "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
           "spentRoot": "277a0920e5cb63cc5e6cd6669ed438f5d06198a8259727cbbd5b9a748127abe1",
-          "historyHash": "c9c7f95b115a874783f1bdc5154d2bd78e95cd637b9d536e7071e3f2d487d72c",
-          "evidenceHash": "9e0af152e0a1650b4b7254819286c6be997573621f8f51ab95cbc7e735981ea6",
+          "historyHash": "9f9ec8e2ded811b8fcf06216eb65b1c6a85c3649db8c382b3956e08c9ecb481f",
+          "evidenceHash": "786e13e9bdae90e821aef6c7b9df9ff44b65eba32798e9961879991bff6ac62f",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -1424,13 +1424,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "b0d80aa2aab09182bcdec332c34a719feadefe80abc5e2dab3a5e3a46d86e81f",
+            "root": "72f5f2b990549472dce25b7618690d451cd2fb95678844fc1a3a88f048d1ece9",
             "index": "10",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "3af78931dc8f9bad2e0b8101f2779dd3f31fa9fbbe7e2b05b63048c7f7befebf",
+            "evidence": "c1b6d690abde6fe920d3e7fa1ab38c687f6ac61dd73766232b87c778ef23960b",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -1438,7 +1438,7 @@
             "authorizationBacking": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "ee4544d26dfe006b5303dc190ffe58e43abc7befebef40d45a92ce9aad0956b1",
+            "proofHash": "8f01e8bd8a54febe95b5e5c3e088917a70a62497d99c834c3473f6160408c6f5",
             "signatureHash": "bbdf99899dd3bc7f8983202443b57e9d1218da76a4402db65535055ecacff70e"
           }
         ],
@@ -1460,7 +1460,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -1514,13 +1514,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "b0d80aa2aab09182bcdec332c34a719feadefe80abc5e2dab3a5e3a46d86e81f",
+            "root": "72f5f2b990549472dce25b7618690d451cd2fb95678844fc1a3a88f048d1ece9",
             "index": "10",
             "backing": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "segment": "7c9bf041498ac7e5cddffbf804314132a094026eedddd6da75b9bebf3e6202c4",
             "position": "1",
             "length": "1",
-            "evidence": "3af78931dc8f9bad2e0b8101f2779dd3f31fa9fbbe7e2b05b63048c7f7befebf",
+            "evidence": "c1b6d690abde6fe920d3e7fa1ab38c687f6ac61dd73766232b87c778ef23960b",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -1528,7 +1528,7 @@
             "authorizationBacking": "065c85c50563a4e0113398361ef7b4f751b70002caa31c36383bd02f51a261b1",
             "classification": "not-established",
             "statementHash": "f5c80cf1bc7106754abf0a12ade0aed4df78260f3eaeff87ed9f00b4090d2a22",
-            "proofHash": "ee4544d26dfe006b5303dc190ffe58e43abc7befebef40d45a92ce9aad0956b1",
+            "proofHash": "8f01e8bd8a54febe95b5e5c3e088917a70a62497d99c834c3473f6160408c6f5",
             "signatureHash": "bbdf99899dd3bc7f8983202443b57e9d1218da76a4402db65535055ecacff70e"
           }
         ],
@@ -1550,7 +1550,7 @@
           "noteRoot": "12372632234266391811647943320959920169387963977054696914686406415655155432186",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c0cc4638bc2968f33a04204dd5b2899f484a1bdac284758028abc562d47e8a06",
-          "evidenceHash": "4a886b057eff393fd4037660526b519ad068cebc63be553b99221f15a6f6b0fa",
+          "evidenceHash": "fe65326ca311180e4f5242a098976976bab7aa5ba04df60d6542f33b02ce6689",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -1627,18 +1627,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "46b388976881029678edaa573c841177002453587ae10ce90960830a7ef339a0",
+            "root": "24ada90ae4b927a7f427d0b5c34587c0172e3ffce61645527cebb19562cf2ca8",
             "index": "4",
             "backing": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "a3eb57334becf940bd93c70c064c964b52d5a24951ce7e6c483045643b39cfac",
+            "evidence": "3de520b5cc3356a24a0da4678474190192d79d3fec3e615b6c8fbcdadf8d04a4",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "e8c7c41d0d12b6919afc54dc2bb7dec3ee26246f45fd0e6cb58117580f168a16",
+            "proofHash": "031cba23579545a1847ec7a592d7c26bb40b7440508e6deba0448170cc344453",
             "signatureHash": "353324e6a6c8c749f0dd1a0da894af4dd968185fe120de171f7381ffa682ecc2"
           }
         ],
@@ -1660,7 +1660,7 @@
           "noteRoot": "12796118860441681182996750155914562641971990239910301651775196558501590681326",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c04908aa5f9faa5aeb1d29ac2ee44dad5503e09eab3dcd6016a41f54e4e5c667",
-          "evidenceHash": "5f2c033c23769d6a2239809d382a71d2533e69e6363dff94fa4ca9e58461282c",
+          "evidenceHash": "09cb59b377e71a1a101f3a1efd0b69b4e4865aa47dc520b9e7d2bd392e3ff2ba",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -1798,18 +1798,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "46b388976881029678edaa573c841177002453587ae10ce90960830a7ef339a0",
+            "root": "24ada90ae4b927a7f427d0b5c34587c0172e3ffce61645527cebb19562cf2ca8",
             "index": "4",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "4787838cfc4c68197c77115677b1a3fa458e5845b0c95e9f5bd3145921c65fc9",
+            "evidence": "866c49c365b993cbd67b98ba8e2e1b8c47f9a2deb16b199224f448913ff900ab",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "e8c7c41d0d12b6919afc54dc2bb7dec3ee26246f45fd0e6cb58117580f168a16",
+            "proofHash": "031cba23579545a1847ec7a592d7c26bb40b7440508e6deba0448170cc344453",
             "signatureHash": "353324e6a6c8c749f0dd1a0da894af4dd968185fe120de171f7381ffa682ecc2"
           }
         ],
@@ -1831,7 +1831,7 @@
           "noteRoot": "12796118860441681182996750155914562641971990239910301651775196558501590681326",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c04908aa5f9faa5aeb1d29ac2ee44dad5503e09eab3dcd6016a41f54e4e5c667",
-          "evidenceHash": "5f2c033c23769d6a2239809d382a71d2533e69e6363dff94fa4ca9e58461282c",
+          "evidenceHash": "09cb59b377e71a1a101f3a1efd0b69b4e4865aa47dc520b9e7d2bd392e3ff2ba",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -1960,13 +1960,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ddd422161c5bca91a056c7e541f4658b19f4ad751af7b9be8173177f2dbfe0a9",
+            "root": "14fbd3f6597e88a52ddbc786a6235b2da8425eaf5feefb7d90487dad874d5680",
             "index": "4",
             "backing": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "81fc0138fd9fd9580079db42ff1f8c503a9ba3192aa4139d2f241b8c2ee18081",
+            "evidence": "57f08d88b6adbca7041b7dc726612fefe5a42990de6d3a5642d8f5490f19689c",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -1974,7 +1974,7 @@
             "authorizationBacking": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "c644886907f35ba781762e26384c4ee1752f8457da1de62752aaaa7e7aa9fa21",
+            "proofHash": "4f6404b78ed989e518c0b325311322418ce8a7ab20692d33d3644d868a743349",
             "signatureHash": "ef5125485756b2d3571f7395383f53fa74a56cc82cd9815996eb86c3c7db1511"
           }
         ],
@@ -1996,7 +1996,7 @@
           "noteRoot": "12796118860441681182996750155914562641971990239910301651775196558501590681326",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c04908aa5f9faa5aeb1d29ac2ee44dad5503e09eab3dcd6016a41f54e4e5c667",
-          "evidenceHash": "5f2c033c23769d6a2239809d382a71d2533e69e6363dff94fa4ca9e58461282c",
+          "evidenceHash": "09cb59b377e71a1a101f3a1efd0b69b4e4865aa47dc520b9e7d2bd392e3ff2ba",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -2134,13 +2134,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ddd422161c5bca91a056c7e541f4658b19f4ad751af7b9be8173177f2dbfe0a9",
+            "root": "14fbd3f6597e88a52ddbc786a6235b2da8425eaf5feefb7d90487dad874d5680",
             "index": "4",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "246b303360edb9d127433c04045e9fe4fd6b71f10b9fc9aad0ddff8a7b332446",
+            "evidence": "68da6483bfcc7cc49ea2f9006eb79bafecc87acabad35d772e2c4dd4fd1df022",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -2148,7 +2148,7 @@
             "authorizationBacking": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "c644886907f35ba781762e26384c4ee1752f8457da1de62752aaaa7e7aa9fa21",
+            "proofHash": "4f6404b78ed989e518c0b325311322418ce8a7ab20692d33d3644d868a743349",
             "signatureHash": "ef5125485756b2d3571f7395383f53fa74a56cc82cd9815996eb86c3c7db1511"
           }
         ],
@@ -2170,7 +2170,7 @@
           "noteRoot": "12796118860441681182996750155914562641971990239910301651775196558501590681326",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c04908aa5f9faa5aeb1d29ac2ee44dad5503e09eab3dcd6016a41f54e4e5c667",
-          "evidenceHash": "5f2c033c23769d6a2239809d382a71d2533e69e6363dff94fa4ca9e58461282c",
+          "evidenceHash": "09cb59b377e71a1a101f3a1efd0b69b4e4865aa47dc520b9e7d2bd392e3ff2ba",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -2312,13 +2312,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ddd422161c5bca91a056c7e541f4658b19f4ad751af7b9be8173177f2dbfe0a9",
+            "root": "14fbd3f6597e88a52ddbc786a6235b2da8425eaf5feefb7d90487dad874d5680",
             "index": "4",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "246b303360edb9d127433c04045e9fe4fd6b71f10b9fc9aad0ddff8a7b332446",
+            "evidence": "68da6483bfcc7cc49ea2f9006eb79bafecc87acabad35d772e2c4dd4fd1df022",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -2326,7 +2326,7 @@
             "authorizationBacking": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "c644886907f35ba781762e26384c4ee1752f8457da1de62752aaaa7e7aa9fa21",
+            "proofHash": "4f6404b78ed989e518c0b325311322418ce8a7ab20692d33d3644d868a743349",
             "signatureHash": "ef5125485756b2d3571f7395383f53fa74a56cc82cd9815996eb86c3c7db1511"
           }
         ]
@@ -2340,13 +2340,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ddd422161c5bca91a056c7e541f4658b19f4ad751af7b9be8173177f2dbfe0a9",
+            "root": "14fbd3f6597e88a52ddbc786a6235b2da8425eaf5feefb7d90487dad874d5680",
             "index": "4",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "246b303360edb9d127433c04045e9fe4fd6b71f10b9fc9aad0ddff8a7b332446",
+            "evidence": "68da6483bfcc7cc49ea2f9006eb79bafecc87acabad35d772e2c4dd4fd1df022",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -2354,7 +2354,7 @@
             "authorizationBacking": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "c644886907f35ba781762e26384c4ee1752f8457da1de62752aaaa7e7aa9fa21",
+            "proofHash": "4f6404b78ed989e518c0b325311322418ce8a7ab20692d33d3644d868a743349",
             "signatureHash": "ef5125485756b2d3571f7395383f53fa74a56cc82cd9815996eb86c3c7db1511"
           }
         ],
@@ -2376,7 +2376,7 @@
           "noteRoot": "12796118860441681182996750155914562641971990239910301651775196558501590681326",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c04908aa5f9faa5aeb1d29ac2ee44dad5503e09eab3dcd6016a41f54e4e5c667",
-          "evidenceHash": "5f2c033c23769d6a2239809d382a71d2533e69e6363dff94fa4ca9e58461282c",
+          "evidenceHash": "09cb59b377e71a1a101f3a1efd0b69b4e4865aa47dc520b9e7d2bd392e3ff2ba",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -2436,13 +2436,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ddd422161c5bca91a056c7e541f4658b19f4ad751af7b9be8173177f2dbfe0a9",
+            "root": "14fbd3f6597e88a52ddbc786a6235b2da8425eaf5feefb7d90487dad874d5680",
             "index": "4",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "246b303360edb9d127433c04045e9fe4fd6b71f10b9fc9aad0ddff8a7b332446",
+            "evidence": "68da6483bfcc7cc49ea2f9006eb79bafecc87acabad35d772e2c4dd4fd1df022",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -2450,7 +2450,7 @@
             "authorizationBacking": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "c644886907f35ba781762e26384c4ee1752f8457da1de62752aaaa7e7aa9fa21",
+            "proofHash": "4f6404b78ed989e518c0b325311322418ce8a7ab20692d33d3644d868a743349",
             "signatureHash": "ef5125485756b2d3571f7395383f53fa74a56cc82cd9815996eb86c3c7db1511"
           }
         ],
@@ -2472,7 +2472,7 @@
           "noteRoot": "12796118860441681182996750155914562641971990239910301651775196558501590681326",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c04908aa5f9faa5aeb1d29ac2ee44dad5503e09eab3dcd6016a41f54e4e5c667",
-          "evidenceHash": "5f2c033c23769d6a2239809d382a71d2533e69e6363dff94fa4ca9e58461282c",
+          "evidenceHash": "09cb59b377e71a1a101f3a1efd0b69b4e4865aa47dc520b9e7d2bd392e3ff2ba",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -2538,13 +2538,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ddd422161c5bca91a056c7e541f4658b19f4ad751af7b9be8173177f2dbfe0a9",
+            "root": "14fbd3f6597e88a52ddbc786a6235b2da8425eaf5feefb7d90487dad874d5680",
             "index": "4",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "246b303360edb9d127433c04045e9fe4fd6b71f10b9fc9aad0ddff8a7b332446",
+            "evidence": "68da6483bfcc7cc49ea2f9006eb79bafecc87acabad35d772e2c4dd4fd1df022",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -2552,7 +2552,7 @@
             "authorizationBacking": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "c644886907f35ba781762e26384c4ee1752f8457da1de62752aaaa7e7aa9fa21",
+            "proofHash": "4f6404b78ed989e518c0b325311322418ce8a7ab20692d33d3644d868a743349",
             "signatureHash": "ef5125485756b2d3571f7395383f53fa74a56cc82cd9815996eb86c3c7db1511"
           }
         ],
@@ -2574,7 +2574,7 @@
           "noteRoot": "12796118860441681182996750155914562641971990239910301651775196558501590681326",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "c04908aa5f9faa5aeb1d29ac2ee44dad5503e09eab3dcd6016a41f54e4e5c667",
-          "evidenceHash": "5f2c033c23769d6a2239809d382a71d2533e69e6363dff94fa4ca9e58461282c",
+          "evidenceHash": "09cb59b377e71a1a101f3a1efd0b69b4e4865aa47dc520b9e7d2bd392e3ff2ba",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -2631,18 +2631,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "7",
-            "root": "ba93b6244fb7756d4155650d9bee18281f90abe3475b1c5d90dfaaecbe782eac",
+            "root": "5e7b5842bada9632347890a1d54ecd84eb5072acab0e17a914fb867e4067108d",
             "index": "15",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
-            "segment": "21c31bf339536782383a715365d9c61e6f385de74e49c88665e2a8d5a3224700",
+            "segment": "39f85dd9146be5f146092ff5ff27a072ef596067c81a53c3dc759c3510728740",
             "position": "2",
             "length": "2",
-            "evidence": "a55c0644bd42b77ecc7c91f08d1f01a327bcbffb628ee1a04f2471d4db3f34d3",
+            "evidence": "ae6f83022326e47c7c7bc1572011cab24fb3d830eea5a9b914e2c60e1bb5f2ef",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "b20bf2082165bff7fba9309a2bf4be3ebc689cc039d5c419bb3dc1b923fa066e",
-            "proofHash": "8ce99eb65e391c5c08c2fa70a801c412213a756b41e0f7a02056932debb9e414",
+            "statementHash": "4ca37cda622f62f61f343165421faf1a73a6cb2dcee51f9284c07caa19c465ff",
+            "proofHash": "3d54682d3ce878285cf2a8f5bd94d622af2b7adc7f1b12e4cf2d42d950d1f969",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -2663,8 +2663,8 @@
           "outstanding": "9",
           "noteRoot": "13960783451364451726379112286293998421052329171811762642661697827439902403320",
           "spentRoot": "7425700d44de41da3332075a3e89500330a3caef0649eed6c120b8ed61dd8a95",
-          "historyHash": "df59d32dd4226abf50666aefcb9b271eb5aecac8ffe38a86231a4f07ed4ab7aa",
-          "evidenceHash": "7a087b42e5781137946891fb94ac4894921ddb18add6370453de20da133f0410",
+          "historyHash": "7bdcfd7f01788b7d54abf0264984415ec1c9830ff6846f39ad1b4b480cd9a791",
+          "evidenceHash": "24b3fa809feb87c913e6c98af0628bc340b8b19fe690d3a47e9c0100c2595311",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -2867,18 +2867,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "7",
-            "root": "ba93b6244fb7756d4155650d9bee18281f90abe3475b1c5d90dfaaecbe782eac",
+            "root": "5e7b5842bada9632347890a1d54ecd84eb5072acab0e17a914fb867e4067108d",
             "index": "15",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
-            "segment": "21c31bf339536782383a715365d9c61e6f385de74e49c88665e2a8d5a3224700",
+            "segment": "39f85dd9146be5f146092ff5ff27a072ef596067c81a53c3dc759c3510728740",
             "position": "2",
             "length": "2",
-            "evidence": "a55c0644bd42b77ecc7c91f08d1f01a327bcbffb628ee1a04f2471d4db3f34d3",
+            "evidence": "ae6f83022326e47c7c7bc1572011cab24fb3d830eea5a9b914e2c60e1bb5f2ef",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "b20bf2082165bff7fba9309a2bf4be3ebc689cc039d5c419bb3dc1b923fa066e",
-            "proofHash": "8ce99eb65e391c5c08c2fa70a801c412213a756b41e0f7a02056932debb9e414",
+            "statementHash": "4ca37cda622f62f61f343165421faf1a73a6cb2dcee51f9284c07caa19c465ff",
+            "proofHash": "3d54682d3ce878285cf2a8f5bd94d622af2b7adc7f1b12e4cf2d42d950d1f969",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ]
@@ -2892,18 +2892,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "7",
-            "root": "ba93b6244fb7756d4155650d9bee18281f90abe3475b1c5d90dfaaecbe782eac",
+            "root": "5e7b5842bada9632347890a1d54ecd84eb5072acab0e17a914fb867e4067108d",
             "index": "15",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
-            "segment": "21c31bf339536782383a715365d9c61e6f385de74e49c88665e2a8d5a3224700",
+            "segment": "39f85dd9146be5f146092ff5ff27a072ef596067c81a53c3dc759c3510728740",
             "position": "2",
             "length": "2",
-            "evidence": "a55c0644bd42b77ecc7c91f08d1f01a327bcbffb628ee1a04f2471d4db3f34d3",
+            "evidence": "ae6f83022326e47c7c7bc1572011cab24fb3d830eea5a9b914e2c60e1bb5f2ef",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "b20bf2082165bff7fba9309a2bf4be3ebc689cc039d5c419bb3dc1b923fa066e",
-            "proofHash": "8ce99eb65e391c5c08c2fa70a801c412213a756b41e0f7a02056932debb9e414",
+            "statementHash": "4ca37cda622f62f61f343165421faf1a73a6cb2dcee51f9284c07caa19c465ff",
+            "proofHash": "3d54682d3ce878285cf2a8f5bd94d622af2b7adc7f1b12e4cf2d42d950d1f969",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -2924,8 +2924,8 @@
           "outstanding": "20",
           "noteRoot": "13960783451364451726379112286293998421052329171811762642661697827439902403320",
           "spentRoot": "7425700d44de41da3332075a3e89500330a3caef0649eed6c120b8ed61dd8a95",
-          "historyHash": "df59d32dd4226abf50666aefcb9b271eb5aecac8ffe38a86231a4f07ed4ab7aa",
-          "evidenceHash": "7a087b42e5781137946891fb94ac4894921ddb18add6370453de20da133f0410",
+          "historyHash": "7bdcfd7f01788b7d54abf0264984415ec1c9830ff6846f39ad1b4b480cd9a791",
+          "evidenceHash": "24b3fa809feb87c913e6c98af0628bc340b8b19fe690d3a47e9c0100c2595311",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -3096,18 +3096,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "46b388976881029678edaa573c841177002453587ae10ce90960830a7ef339a0",
+            "root": "24ada90ae4b927a7f427d0b5c34587c0172e3ffce61645527cebb19562cf2ca8",
             "index": "4",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "4787838cfc4c68197c77115677b1a3fa458e5845b0c95e9f5bd3145921c65fc9",
+            "evidence": "866c49c365b993cbd67b98ba8e2e1b8c47f9a2deb16b199224f448913ff900ab",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "e8c7c41d0d12b6919afc54dc2bb7dec3ee26246f45fd0e6cb58117580f168a16",
+            "proofHash": "031cba23579545a1847ec7a592d7c26bb40b7440508e6deba0448170cc344453",
             "signatureHash": "353324e6a6c8c749f0dd1a0da894af4dd968185fe120de171f7381ffa682ecc2"
           }
         ],
@@ -3128,8 +3128,8 @@
           "outstanding": "20",
           "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
-          "historyHash": "4347dce72da3978de89cc96989fadf7ea52c181b8307063d29dd1f4132808e40",
-          "evidenceHash": "ea70d69467af0ce49013874b42d39beac8cfb45f7b7cd9c758b08572c341e298",
+          "historyHash": "d9caff8026156300a8dcf5ae9c16953d28cde33466671b81241eae023b0f50ba",
+          "evidenceHash": "5da388b548abeabf9bf558276f81c34dd399eb518b4e6ed28be0ce1c17f4f338",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -3186,18 +3186,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "24800e5f082b6c40b39f8442d61607466bdc95278c53c14c86182508cef6596e",
+            "root": "19f965f80ace9d225f0a4f70a0f23733bf218a5e2d7cc9c6f540bc989faa6d45",
             "index": "4",
             "backing": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "f121310623dd2af6f065ed9ed368d629cdae9b84e31c53dbdbc6cefa145f19a9",
+            "evidence": "f37b3d6988bea8a6d2e1b4755fbc550518d459fe95fd6a24d8a43aa6e71b01d7",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "5895e667c20bb0a467b53660118475b09bc8fdc34fc16f98e418737c37aa4e30",
+            "proofHash": "3aa061fce6dec5ebc630a7c0c03c22c6fc176c19995ae548001120c50a63e7e7",
             "signatureHash": "e7627065a141c420a84c6ead9375d85de1954ad4c95b87f0ad4cd83fec777806"
           }
         ],
@@ -3219,7 +3219,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -3364,18 +3364,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "24800e5f082b6c40b39f8442d61607466bdc95278c53c14c86182508cef6596e",
+            "root": "19f965f80ace9d225f0a4f70a0f23733bf218a5e2d7cc9c6f540bc989faa6d45",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "7edc76236a2c8070d64822dabb705d68876b8737fd625d57c067f841dd64e409",
+            "evidence": "6c4d74e668c09ea3919448ea8ebffefe249220102c5af30830dfa61b61e2b77f",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "5895e667c20bb0a467b53660118475b09bc8fdc34fc16f98e418737c37aa4e30",
+            "proofHash": "3aa061fce6dec5ebc630a7c0c03c22c6fc176c19995ae548001120c50a63e7e7",
             "signatureHash": "e7627065a141c420a84c6ead9375d85de1954ad4c95b87f0ad4cd83fec777806"
           }
         ],
@@ -3397,7 +3397,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -3542,13 +3542,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "585bcce2850dede355146f2b005b7c65629a916a4de7ed5b2470af4b0559b590",
+            "evidence": "5a098a71dc5fa5dda905da7f41787e95e86b45e8c29a57e1fbf6f796c16c3fe4",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -3556,7 +3556,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ],
@@ -3578,7 +3578,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -3723,13 +3723,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "936bbb289a320fdb0c9922155b7c9392af3c07d18d2b0cb59e9fd0319ceef86c",
+            "evidence": "fd8f502a76b2a76a0af3790b4bdc1e33cef90a9741d523b42354c874a98b5ad6",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -3737,7 +3737,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ],
@@ -3759,7 +3759,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -3917,13 +3917,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "936bbb289a320fdb0c9922155b7c9392af3c07d18d2b0cb59e9fd0319ceef86c",
+            "evidence": "fd8f502a76b2a76a0af3790b4bdc1e33cef90a9741d523b42354c874a98b5ad6",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -3931,7 +3931,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ]
@@ -3945,13 +3945,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "936bbb289a320fdb0c9922155b7c9392af3c07d18d2b0cb59e9fd0319ceef86c",
+            "evidence": "fd8f502a76b2a76a0af3790b4bdc1e33cef90a9741d523b42354c874a98b5ad6",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -3959,7 +3959,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ],
@@ -3981,7 +3981,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "5",
             "lag": "2",
@@ -4048,13 +4048,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "936bbb289a320fdb0c9922155b7c9392af3c07d18d2b0cb59e9fd0319ceef86c",
+            "evidence": "fd8f502a76b2a76a0af3790b4bdc1e33cef90a9741d523b42354c874a98b5ad6",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -4062,7 +4062,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ],
@@ -4084,7 +4084,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "9",
             "lag": "2",
@@ -4157,13 +4157,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "936bbb289a320fdb0c9922155b7c9392af3c07d18d2b0cb59e9fd0319ceef86c",
+            "evidence": "fd8f502a76b2a76a0af3790b4bdc1e33cef90a9741d523b42354c874a98b5ad6",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -4171,7 +4171,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ],
@@ -4193,7 +4193,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "9",
             "lag": "2",
@@ -4266,13 +4266,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "936bbb289a320fdb0c9922155b7c9392af3c07d18d2b0cb59e9fd0319ceef86c",
+            "evidence": "fd8f502a76b2a76a0af3790b4bdc1e33cef90a9741d523b42354c874a98b5ad6",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -4280,7 +4280,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ],
@@ -4302,7 +4302,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "8",
             "lag": "2",
@@ -4375,13 +4375,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "98a623f4bb1f8234d687f4644434967e00e6cba7ba40437fefd4d43e5f50f40c",
+            "root": "4c902bb6aa41b524d0638120500dd3ac28be97c52094f5179c1b0692f6b3b064",
             "index": "4",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "936bbb289a320fdb0c9922155b7c9392af3c07d18d2b0cb59e9fd0319ceef86c",
+            "evidence": "fd8f502a76b2a76a0af3790b4bdc1e33cef90a9741d523b42354c874a98b5ad6",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -4389,7 +4389,7 @@
             "authorizationBacking": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "db9a64f2f62a612c6d7059499270a1f183bd5ffe06f4069d8d8b1e78c085bac0",
+            "proofHash": "e493f83c6abe6f17ddb95860b4126a65bda42a25f539797a0405166bed4513a0",
             "signatureHash": "24ff42e99b0fc86ab70e61274b957abcea0ca0509e3bff37a313655d01e53c8f"
           }
         ],
@@ -4411,7 +4411,7 @@
           "noteRoot": "15360590806520874918219888737756577514918459060263365430934323762187637851829",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
           "historyHash": "ab79b19d5093c297b5addf6e3457f743bf77623211851781299bf1e02a6d8043",
-          "evidenceHash": "56b355ae467da11e18b81fcf37454f138f5906b0970047bc8da1e841b88df8c1",
+          "evidenceHash": "7265661f4387b5cc11657f75360bfac182a76a521cd03c83c316d30b136a2489",
           "range": {
             "judgingIndex": "8",
             "lag": "2",
@@ -4484,18 +4484,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "7",
-            "root": "c2fe72b0f7d314413e9155428a68ecea7d967070ce7d91538cbe74f30c80b469",
+            "root": "8a13db9391d4098d4e10db6a10a20c248497a7f9b8add7e458bec604d0ebcedc",
             "index": "8",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
-            "segment": "0b571f0fa7d71da82cf60ee0e7e17da4fc2cbd78e19a0966d9cef708c1b68943",
+            "segment": "12e7cc660c76c18752b03f0ab08980109949fe41d85b1fdd0ae24337415452f1",
             "position": "1",
             "length": "1",
-            "evidence": "bfd5d82c3337fd8d5cf46679b1ecaea3431d61a91c3566d8a006c4bc315ae7cf",
+            "evidence": "9a66a26087e2a04084e9f758d71fd532fbc2ab46a9293ad9df1383997239f762",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "1c2da5463ab7451b195d9cf9e38ddb27b156af7ef7dfa8a525b585df97c4ba2e",
-            "proofHash": "e605a6296aea2d15c5ae3beb6c7c368b32260f5ce42905728ba7babba07a7314",
+            "statementHash": "0ff5f917a805006c6e646bb4711c3bc6d5f62a4bc95c5857addd55281e2c209c",
+            "proofHash": "4766ffdbeea9ac1d3c6eed84a3ebfbb20f6968e43714c9a81f86bbd733032a7d",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -4516,8 +4516,8 @@
           "outstanding": "10",
           "noteRoot": "18651968788414115892714299917293624692760989353382419404435740840760673614891",
           "spentRoot": "5661c8c85ff9d1a5f54cd0f613b5c74f00b79f45d3e80850c936243a8bae6c9f",
-          "historyHash": "bc37dcbcec817f42e76df62f0e1f197672c0fabfdc9702b9d6916e90abd0b1c1",
-          "evidenceHash": "350840793ccdd202f10f0c8b6e912ed9acb3fee5431a142d208df00a7e101118",
+          "historyHash": "c865acf015a0c757c5eb6c87509a5cbc831a66b9ffeac16ae38c2ac22afdb87b",
+          "evidenceHash": "cad6ec077116c0bcc16a6594e244e65e3a5a7136e991e16dff1b7577761f7b95",
           "range": {
             "judgingIndex": "9",
             "lag": "2",
@@ -4705,18 +4705,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "7",
-            "root": "c2fe72b0f7d314413e9155428a68ecea7d967070ce7d91538cbe74f30c80b469",
+            "root": "8a13db9391d4098d4e10db6a10a20c248497a7f9b8add7e458bec604d0ebcedc",
             "index": "8",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
-            "segment": "0b571f0fa7d71da82cf60ee0e7e17da4fc2cbd78e19a0966d9cef708c1b68943",
+            "segment": "12e7cc660c76c18752b03f0ab08980109949fe41d85b1fdd0ae24337415452f1",
             "position": "1",
             "length": "1",
-            "evidence": "bfd5d82c3337fd8d5cf46679b1ecaea3431d61a91c3566d8a006c4bc315ae7cf",
+            "evidence": "9a66a26087e2a04084e9f758d71fd532fbc2ab46a9293ad9df1383997239f762",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "1c2da5463ab7451b195d9cf9e38ddb27b156af7ef7dfa8a525b585df97c4ba2e",
-            "proofHash": "e605a6296aea2d15c5ae3beb6c7c368b32260f5ce42905728ba7babba07a7314",
+            "statementHash": "0ff5f917a805006c6e646bb4711c3bc6d5f62a4bc95c5857addd55281e2c209c",
+            "proofHash": "4766ffdbeea9ac1d3c6eed84a3ebfbb20f6968e43714c9a81f86bbd733032a7d",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ]
@@ -4730,18 +4730,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "7",
-            "root": "c2fe72b0f7d314413e9155428a68ecea7d967070ce7d91538cbe74f30c80b469",
+            "root": "8a13db9391d4098d4e10db6a10a20c248497a7f9b8add7e458bec604d0ebcedc",
             "index": "8",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
-            "segment": "0b571f0fa7d71da82cf60ee0e7e17da4fc2cbd78e19a0966d9cef708c1b68943",
+            "segment": "12e7cc660c76c18752b03f0ab08980109949fe41d85b1fdd0ae24337415452f1",
             "position": "1",
             "length": "1",
-            "evidence": "bfd5d82c3337fd8d5cf46679b1ecaea3431d61a91c3566d8a006c4bc315ae7cf",
+            "evidence": "9a66a26087e2a04084e9f758d71fd532fbc2ab46a9293ad9df1383997239f762",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "1c2da5463ab7451b195d9cf9e38ddb27b156af7ef7dfa8a525b585df97c4ba2e",
-            "proofHash": "e605a6296aea2d15c5ae3beb6c7c368b32260f5ce42905728ba7babba07a7314",
+            "statementHash": "0ff5f917a805006c6e646bb4711c3bc6d5f62a4bc95c5857addd55281e2c209c",
+            "proofHash": "4766ffdbeea9ac1d3c6eed84a3ebfbb20f6968e43714c9a81f86bbd733032a7d",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -4762,8 +4762,8 @@
           "outstanding": "20",
           "noteRoot": "18651968788414115892714299917293624692760989353382419404435740840760673614891",
           "spentRoot": "5661c8c85ff9d1a5f54cd0f613b5c74f00b79f45d3e80850c936243a8bae6c9f",
-          "historyHash": "bc37dcbcec817f42e76df62f0e1f197672c0fabfdc9702b9d6916e90abd0b1c1",
-          "evidenceHash": "350840793ccdd202f10f0c8b6e912ed9acb3fee5431a142d208df00a7e101118",
+          "historyHash": "c865acf015a0c757c5eb6c87509a5cbc831a66b9ffeac16ae38c2ac22afdb87b",
+          "evidenceHash": "cad6ec077116c0bcc16a6594e244e65e3a5a7136e991e16dff1b7577761f7b95",
           "range": {
             "judgingIndex": "9",
             "lag": "2",
@@ -4938,18 +4938,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "9",
-            "root": "763afc6d2eebbac3bdc50c84a40aacf94f4bc597082c40daa2f9559586e8504f",
+            "root": "d59ed729a974a88452d24683aaf890903b7de6a59ad7926bfb84f0e5a837996d",
             "index": "14",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
-            "segment": "a7390087c3d4bd5df24065e4a52191981b55112ebeb60062e5b1bc57e512e35b",
+            "segment": "6055d0c56de4258b030abba72845904becb6b15ff961782737d943836e5df907",
             "position": "9",
             "length": "9",
-            "evidence": "2e3a22574d17618e907743344bf93666727056b2b98e18da429dc6ba5e3ade30",
+            "evidence": "b412c4012761d3390005cac889c89ac5ed4ae143f195e5544adae2700a681a0c",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "e0dc65c54ead244afc4957b5950c11407c2b7e10c2273031830bf6dd2ce02325",
-            "proofHash": "57100c85cd460da39e25f79c38c1b68f6217619045a64ddb713700db233152a9",
+            "statementHash": "325b5cf6f5113759e52038653709ca6e12604caf21e04dcdfdcb9545177aa304",
+            "proofHash": "9e4dee68dc77bc39683e731af509afc2c481b18a26371a86419438a4cb90f5d2",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -4968,10 +4968,10 @@
           "issued": "20",
           "burned": "0",
           "outstanding": "20",
-          "noteRoot": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+          "noteRoot": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
           "spentRoot": "950aa5d0cdf7465c43dbbc2b2de9dfb1b69b56df8fd1b213239ca594b0298a85",
-          "historyHash": "e11589819a930b27ef968234150925decc40338364d579c450c46101a2b7719a",
-          "evidenceHash": "8c6fd2e8bd977d813afe79dc0f06878003851d32fd58151183b65a9e00d24400",
+          "historyHash": "b68db2a2dcd9dcc47228c9120fc490be7e4677f1a09f14700e24ce013352cb9a",
+          "evidenceHash": "269bb4e169618b21f44d0d667c8e1dfbeedd95b04c346ba6238a2b6aa7232ac0",
           "range": {
             "judgingIndex": "14",
             "lag": "2",
@@ -5114,13 +5114,13 @@
         },
         "candidates": [
           {
-            "cm": "17632624004193811200602438782490798371258769314338201037222860565716861028824",
-            "nf": "17057037965615616214907857142319807622361044159933218144530912832351377128880",
+            "cm": "10011270784624461759483300378667123248862269664194603025666871404772915240877",
+            "nf": "10699381945531797305868023539969673324755293547362786524265437920256055164649",
             "value": "20",
             "leaf": "1",
-            "anchor": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+            "anchor": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
             "siblings": [
-              "8136364847473056586853884293962434604843930448240371725079875260266768569410",
+              "2511963007103894497637846067843146140252960442762134522114664355015939115814",
               "16257989699773466206393016511488115181357775227253857822747532441271299011144",
               "18512210749048123247642993997959185422374521570323643912234746702547156445707",
               "1935094829533267935830464563796710052445228582946993128186972021230315590035",
@@ -5201,18 +5201,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "9",
-            "root": "763afc6d2eebbac3bdc50c84a40aacf94f4bc597082c40daa2f9559586e8504f",
+            "root": "d59ed729a974a88452d24683aaf890903b7de6a59ad7926bfb84f0e5a837996d",
             "index": "14",
             "backing": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
-            "segment": "a7390087c3d4bd5df24065e4a52191981b55112ebeb60062e5b1bc57e512e35b",
+            "segment": "6055d0c56de4258b030abba72845904becb6b15ff961782737d943836e5df907",
             "position": "9",
             "length": "9",
-            "evidence": "50e5ab84e15c41930e1ca9789e2c5fde9b9cacee927fbdbc67af0f319b05c8f5",
+            "evidence": "0f6d2e95be6f50fca8927d45449f7a0a3297f1d6d6fa4e20c5e5488c171a7812",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "e0dc65c54ead244afc4957b5950c11407c2b7e10c2273031830bf6dd2ce02325",
-            "proofHash": "57100c85cd460da39e25f79c38c1b68f6217619045a64ddb713700db233152a9",
+            "statementHash": "325b5cf6f5113759e52038653709ca6e12604caf21e04dcdfdcb9545177aa304",
+            "proofHash": "9e4dee68dc77bc39683e731af509afc2c481b18a26371a86419438a4cb90f5d2",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -5231,10 +5231,10 @@
           "issued": "20",
           "burned": "0",
           "outstanding": "20",
-          "noteRoot": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+          "noteRoot": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
           "spentRoot": "950aa5d0cdf7465c43dbbc2b2de9dfb1b69b56df8fd1b213239ca594b0298a85",
-          "historyHash": "e11589819a930b27ef968234150925decc40338364d579c450c46101a2b7719a",
-          "evidenceHash": "8c6fd2e8bd977d813afe79dc0f06878003851d32fd58151183b65a9e00d24400",
+          "historyHash": "b68db2a2dcd9dcc47228c9120fc490be7e4677f1a09f14700e24ce013352cb9a",
+          "evidenceHash": "269bb4e169618b21f44d0d667c8e1dfbeedd95b04c346ba6238a2b6aa7232ac0",
           "range": {
             "judgingIndex": "14",
             "lag": "2",
@@ -5377,13 +5377,13 @@
         },
         "candidates": [
           {
-            "cm": "17632624004193811200602438782490798371258769314338201037222860565716861028824",
-            "nf": "17057037965615616214907857142319807622361044159933218144530912832351377128880",
+            "cm": "10011270784624461759483300378667123248862269664194603025666871404772915240877",
+            "nf": "10699381945531797305868023539969673324755293547362786524265437920256055164649",
             "value": "20",
             "leaf": "1",
-            "anchor": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+            "anchor": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
             "siblings": [
-              "8136364847473056586853884293962434604843930448240371725079875260266768569410",
+              "2511963007103894497637846067843146140252960442762134522114664355015939115814",
               "16257989699773466206393016511488115181357775227253857822747532441271299011144",
               "18512210749048123247642993997959185422374521570323643912234746702547156445707",
               "1935094829533267935830464563796710052445228582946993128186972021230315590035",
@@ -5477,19 +5477,19 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "9",
-            "root": "37cbf82d02916906eda608d4a3b3e3a01534d7c9e73b6d1ff2511a650a5cae59",
+            "root": "21e97b5980341c7e20373895d2cbfc46b6566313109494d26328dd482b3abf17",
             "index": "14",
             "backing": "d219ca2888440b9405dbfdcb575a071f236a50b18555eb11fabe4b74fa8d0f52",
-            "segment": "a7390087c3d4bd5df24065e4a52191981b55112ebeb60062e5b1bc57e512e35b",
+            "segment": "6055d0c56de4258b030abba72845904becb6b15ff961782737d943836e5df907",
             "position": "8",
             "length": "9",
-            "evidence": "371bd16817f9e4290e0464f285bbe1ff2a8ed28accabece7c824db1a0ab38690",
+            "evidence": "80556ba18103cfe474ef48ca9650ca1e2b1abaf28902c322912695fcda5a8d10",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "f807d3dbce474ae61d6e4ba83e8afffd91b48e3932ac6e65bfc4243f3d3303cc",
-            "proofHash": "4aa41b0c936fb1f9b923bb3b0144921d40b0810132fccdf89efbb953ba929fa6",
-            "signatureHash": "0b582827c41d526745467b35e48ed86ae6bd6408e0873a9294afe4c67ef02f42"
+            "statementHash": "b043edf20223540bdd24d7edb593dddd9a58ae3b779ee2d52985157a2c63d333",
+            "proofHash": "824f8f85d653c9a4da870bf0713d12627c858b0a25118daa142b8dcc20e39bca",
+            "signatureHash": "f1cecaf6b48cb315370918510d36d0c3a5d3f13231d7abe9c1aceb8e2e4a22b3"
           }
         ]
       }
@@ -5502,18 +5502,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "10",
-            "root": "24800e5f082b6c40b39f8442d61607466bdc95278c53c14c86182508cef6596e",
+            "root": "19f965f80ace9d225f0a4f70a0f23733bf218a5e2d7cc9c6f540bc989faa6d45",
             "index": "8",
             "backing": "dc9b753c5e15b27e6835c88d32493d724658905095f260c1dc44cc85fa0090ab",
             "segment": "a38e5424242c2663e6c1197d5300027420ac0c7148de0c26e21881a2e73954b8",
             "position": "2",
             "length": "2",
-            "evidence": "f121310623dd2af6f065ed9ed368d629cdae9b84e31c53dbdbc6cefa145f19a9",
+            "evidence": "f37b3d6988bea8a6d2e1b4755fbc550518d459fe95fd6a24d8a43aa6e71b01d7",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "fbce6141e864a85574825b8410bafc1e10eafd27afc1d3f0ec3ccf5ce809d3a6",
-            "proofHash": "5895e667c20bb0a467b53660118475b09bc8fdc34fc16f98e418737c37aa4e30",
+            "proofHash": "3aa061fce6dec5ebc630a7c0c03c22c6fc176c19995ae548001120c50a63e7e7",
             "signatureHash": "e7627065a141c420a84c6ead9375d85de1954ad4c95b87f0ad4cd83fec777806"
           }
         ],
@@ -5534,8 +5534,8 @@
           "outstanding": "20",
           "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
-          "historyHash": "14e3fa2a3b4d5b970fe0505f82b3b4789d48a18e211b2485048addfd1797bb42",
-          "evidenceHash": "7f6002edd9271a61055f38f7026ac30add2549e679109dc1546aabd8e4a933c1",
+          "historyHash": "30ea419fa084ee88fe0ec9a633b34fe556d350a3d237e691ca5997204381a7bf",
+          "evidenceHash": "421c62ac8308280c3527a7d24a4f07c2495c43bff0c7dc4033e5db34ca426223",
           "range": {
             "judgingIndex": "8",
             "lag": "2",
@@ -5613,18 +5613,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "74a78e11ac308841c8b63ff185f16d164b1fa544f1262d6ef979c3fa5b5097dc",
+            "root": "9b4acddf3d3968e4e8995ddd5825980ea062cb8c5d04fd8757be394814caa8a7",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "5",
             "length": "5",
-            "evidence": "31b819a5b0945203415dbe64a62b807cd41e2b0a896563f46af023a16b3cf8dd",
+            "evidence": "0c3c0969baa066584b3246db156724b1b5779709d78e3d18ff7480b362479339",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "ee977d671a896e1de95d52b9f95126b6a9bc124a643c1316192b720c6efe70ec",
-            "proofHash": "17c11e78cfa8ffe9b2280bad3eb58b3f2a336fabdb4339f0307494e7b6985951",
+            "statementHash": "ad9a9467f05a539bfe8da71f9c0f558568e74f26361f54c484e06a65d7435bd6",
+            "proofHash": "1a8e68002bc0d8e5d45295b82a7df3207de361865db54092ac7b3a9ef3b53d69",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -5645,8 +5645,8 @@
           "outstanding": "10",
           "noteRoot": "15403308777318549563935722631043855072599054033769839329332322327627147064497",
           "spentRoot": "b092dec1da7992704be8a027f7941bf56654f94e8511a5d4e4bd62fbbd0f1917",
-          "historyHash": "7b03ab64d82f127f63caefe0cf750c1fb1d41fda83e33f7a9f6e23ce0f8de288",
-          "evidenceHash": "5f4ae42a99d208466ed8682caa9bc83120b0ac4ba71206ea656f9a6bbfe6bcf3",
+          "historyHash": "0f86ac8f93045be273c2e9c69504182d1f88ea07aefe4e1bbfeaefde606ed0c1",
+          "evidenceHash": "8cdcf79361bd35bf871a68dd240477729e8f35c0e3cbd25857d341a4e5e0f9e0",
           "range": {
             "judgingIndex": "13",
             "lag": "2",
@@ -5746,18 +5746,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "4",
-            "root": "74a78e11ac308841c8b63ff185f16d164b1fa544f1262d6ef979c3fa5b5097dc",
+            "root": "9b4acddf3d3968e4e8995ddd5825980ea062cb8c5d04fd8757be394814caa8a7",
             "index": "12",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "5",
             "length": "5",
-            "evidence": "31b819a5b0945203415dbe64a62b807cd41e2b0a896563f46af023a16b3cf8dd",
+            "evidence": "0c3c0969baa066584b3246db156724b1b5779709d78e3d18ff7480b362479339",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "ee977d671a896e1de95d52b9f95126b6a9bc124a643c1316192b720c6efe70ec",
-            "proofHash": "17c11e78cfa8ffe9b2280bad3eb58b3f2a336fabdb4339f0307494e7b6985951",
+            "statementHash": "ad9a9467f05a539bfe8da71f9c0f558568e74f26361f54c484e06a65d7435bd6",
+            "proofHash": "1a8e68002bc0d8e5d45295b82a7df3207de361865db54092ac7b3a9ef3b53d69",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -5778,8 +5778,8 @@
           "outstanding": "10",
           "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
-          "historyHash": "79b54b39d0e86cb77f813707a78cb3fabf9a52213f7903fc40dd91a84249484b",
-          "evidenceHash": "8dfa18c4ccd1d61ff5a0b434122bc8f5c19932efa670d5c507936c06bf769203",
+          "historyHash": "846dfa73f8e0e62d72d99fc27e8ecee28d20665e8c6b2eebc37691c7dbf60e75",
+          "evidenceHash": "233ef1393dbb159a4a0d41a1a10aa600a93f30c0c876fc2690095adfec0d564a",
           "range": {
             "judgingIndex": "12",
             "lag": "2",
@@ -5886,18 +5886,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "57e3286d3ce385df249b693c107e5b7744211abe134c5eba6be0f6e1aa8f8444",
+            "root": "c47e1e52fb9f9fd99f9c2604f395ff6312a7c669165ac1e058bb15edb4a0c365",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "4",
             "length": "5",
-            "evidence": "26aa0991951e5d754ed8ff9a8f76eccc6ae1392a32a50f6f165e9890d9f4987f",
+            "evidence": "322d199f29dc642287a8857c3c55eb8f2a5e119c3e1c1d0b58219ff5fd76fe03",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b239500b9186278e3fc52a3c4d6ad0ec424568f8f676839d631d8169ea37fea1",
+            "proofHash": "b965fe2899f99f951305521c2852626c7ed816f864c45e43c0f73b7f2efb2e64",
             "signatureHash": "bfa0d92a949997852ae11b16c28c0259c24c324ee4116966eb809cfb9d74179d"
           }
         ]
@@ -5924,13 +5924,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "651f71a7d8c30fbdec709fa02f4767336ff627abbf3b1d226e930170bf1af395",
+            "root": "ba4acc21dc00a5b6a09bc7f9aa7ddaa058b8e56a3fb18dc568a5286e0f2febda",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "1",
             "length": "5",
-            "evidence": "2884abb4dd4a62a544638621874c7bb8419af3ce57b82b33737d5de60981d74d",
+            "evidence": "d6821fe304e3306c7a222b7713a62951b6bb896a9f201f3dbded5f31fe9d644d",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -5938,7 +5938,7 @@
             "authorizationBacking": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
             "classification": "not-established",
             "statementHash": "37e84cb5a555ab32c6a5fbfd68f63a97e1f705c8d927029b39740c073f3c3054",
-            "proofHash": "8ebdcda807937efaab7209a16355828cd9975445ccdd18c278c42b405d29d391",
+            "proofHash": "0a6a5b4cab50c8b72e36db3daafd1594e61d374965a2e1293b17e014ccf48702",
             "signatureHash": "316fbe0261727b2ae43a28395884d2d0368c350dd0547008061d72ecb3edbcee"
           }
         ]
@@ -5952,35 +5952,35 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "f68134c62ac2fc10d95444b65802295eeb3d9199e25c38ac7d808e42dff33670",
+            "root": "431aea2daaded3e56f79a06fd4976d3be98ba47874a4455b0c7a7ad950bc1087",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "4",
             "length": "5",
-            "evidence": "9e86df9150ac70a1f4d813c71fc570b99dbcfe927f13eed5f588b538d026d1e3",
+            "evidence": "7383595ff3135f58812ad869c6f5436cff14c9df7401787438635647005e9dfc",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b239500b9186278e3fc52a3c4d6ad0ec424568f8f676839d631d8169ea37fea1",
+            "proofHash": "b965fe2899f99f951305521c2852626c7ed816f864c45e43c0f73b7f2efb2e64",
             "signatureHash": "bfa0d92a949997852ae11b16c28c0259c24c324ee4116966eb809cfb9d74179d"
           },
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "f68134c62ac2fc10d95444b65802295eeb3d9199e25c38ac7d808e42dff33670",
+            "root": "431aea2daaded3e56f79a06fd4976d3be98ba47874a4455b0c7a7ad950bc1087",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "5",
             "length": "5",
-            "evidence": "0bb06d638c665992959d6127e2ed79f0547dc8634627a9f0e2bf000325e0b3cd",
+            "evidence": "5aa08163497adeab06105f8cdd5b914753ccc452a27b5837cdd3887a71e5e883",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "ee977d671a896e1de95d52b9f95126b6a9bc124a643c1316192b720c6efe70ec",
-            "proofHash": "17c11e78cfa8ffe9b2280bad3eb58b3f2a336fabdb4339f0307494e7b6985951",
+            "statementHash": "ad9a9467f05a539bfe8da71f9c0f558568e74f26361f54c484e06a65d7435bd6",
+            "proofHash": "1a8e68002bc0d8e5d45295b82a7df3207de361865db54092ac7b3a9ef3b53d69",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -6001,8 +6001,8 @@
           "outstanding": "10",
           "noteRoot": "15403308777318549563935722631043855072599054033769839329332322327627147064497",
           "spentRoot": "b092dec1da7992704be8a027f7941bf56654f94e8511a5d4e4bd62fbbd0f1917",
-          "historyHash": "7b03ab64d82f127f63caefe0cf750c1fb1d41fda83e33f7a9f6e23ce0f8de288",
-          "evidenceHash": "5f4ae42a99d208466ed8682caa9bc83120b0ac4ba71206ea656f9a6bbfe6bcf3",
+          "historyHash": "0f86ac8f93045be273c2e9c69504182d1f88ea07aefe4e1bbfeaefde606ed0c1",
+          "evidenceHash": "8cdcf79361bd35bf871a68dd240477729e8f35c0e3cbd25857d341a4e5e0f9e0",
           "range": {
             "judgingIndex": "13",
             "lag": "2",
@@ -6102,35 +6102,35 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "f68134c62ac2fc10d95444b65802295eeb3d9199e25c38ac7d808e42dff33670",
+            "root": "431aea2daaded3e56f79a06fd4976d3be98ba47874a4455b0c7a7ad950bc1087",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "4",
             "length": "5",
-            "evidence": "9e86df9150ac70a1f4d813c71fc570b99dbcfe927f13eed5f588b538d026d1e3",
+            "evidence": "7383595ff3135f58812ad869c6f5436cff14c9df7401787438635647005e9dfc",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b239500b9186278e3fc52a3c4d6ad0ec424568f8f676839d631d8169ea37fea1",
+            "proofHash": "b965fe2899f99f951305521c2852626c7ed816f864c45e43c0f73b7f2efb2e64",
             "signatureHash": "bfa0d92a949997852ae11b16c28c0259c24c324ee4116966eb809cfb9d74179d"
           },
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "f68134c62ac2fc10d95444b65802295eeb3d9199e25c38ac7d808e42dff33670",
+            "root": "431aea2daaded3e56f79a06fd4976d3be98ba47874a4455b0c7a7ad950bc1087",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "5",
             "length": "5",
-            "evidence": "0bb06d638c665992959d6127e2ed79f0547dc8634627a9f0e2bf000325e0b3cd",
+            "evidence": "5aa08163497adeab06105f8cdd5b914753ccc452a27b5837cdd3887a71e5e883",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "ee977d671a896e1de95d52b9f95126b6a9bc124a643c1316192b720c6efe70ec",
-            "proofHash": "17c11e78cfa8ffe9b2280bad3eb58b3f2a336fabdb4339f0307494e7b6985951",
+            "statementHash": "ad9a9467f05a539bfe8da71f9c0f558568e74f26361f54c484e06a65d7435bd6",
+            "proofHash": "1a8e68002bc0d8e5d45295b82a7df3207de361865db54092ac7b3a9ef3b53d69",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         ],
@@ -6151,8 +6151,8 @@
           "outstanding": "10",
           "noteRoot": "15403308777318549563935722631043855072599054033769839329332322327627147064497",
           "spentRoot": "b092dec1da7992704be8a027f7941bf56654f94e8511a5d4e4bd62fbbd0f1917",
-          "historyHash": "7b03ab64d82f127f63caefe0cf750c1fb1d41fda83e33f7a9f6e23ce0f8de288",
-          "evidenceHash": "5f4ae42a99d208466ed8682caa9bc83120b0ac4ba71206ea656f9a6bbfe6bcf3",
+          "historyHash": "0f86ac8f93045be273c2e9c69504182d1f88ea07aefe4e1bbfeaefde606ed0c1",
+          "evidenceHash": "8cdcf79361bd35bf871a68dd240477729e8f35c0e3cbd25857d341a4e5e0f9e0",
           "range": {
             "judgingIndex": "13",
             "lag": "2",
@@ -6265,18 +6265,18 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "57e3286d3ce385df249b693c107e5b7744211abe134c5eba6be0f6e1aa8f8444",
+            "root": "c47e1e52fb9f9fd99f9c2604f395ff6312a7c669165ac1e058bb15edb4a0c365",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "4",
             "length": "5",
-            "evidence": "26aa0991951e5d754ed8ff9a8f76eccc6ae1392a32a50f6f165e9890d9f4987f",
+            "evidence": "322d199f29dc642287a8857c3c55eb8f2a5e119c3e1c1d0b58219ff5fd76fe03",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b239500b9186278e3fc52a3c4d6ad0ec424568f8f676839d631d8169ea37fea1",
+            "proofHash": "b965fe2899f99f951305521c2852626c7ed816f864c45e43c0f73b7f2efb2e64",
             "signatureHash": "bfa0d92a949997852ae11b16c28c0259c24c324ee4116966eb809cfb9d74179d"
           }
         ]
@@ -6303,35 +6303,35 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "5",
-            "root": "74a78e11ac308841c8b63ff185f16d164b1fa544f1262d6ef979c3fa5b5097dc",
+            "root": "9b4acddf3d3968e4e8995ddd5825980ea062cb8c5d04fd8757be394814caa8a7",
             "index": "13",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "5",
             "length": "5",
-            "evidence": "31b819a5b0945203415dbe64a62b807cd41e2b0a896563f46af023a16b3cf8dd",
+            "evidence": "0c3c0969baa066584b3246db156724b1b5779709d78e3d18ff7480b362479339",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
-            "statementHash": "ee977d671a896e1de95d52b9f95126b6a9bc124a643c1316192b720c6efe70ec",
-            "proofHash": "17c11e78cfa8ffe9b2280bad3eb58b3f2a336fabdb4339f0307494e7b6985951",
+            "statementHash": "ad9a9467f05a539bfe8da71f9c0f558568e74f26361f54c484e06a65d7435bd6",
+            "proofHash": "1a8e68002bc0d8e5d45295b82a7df3207de361865db54092ac7b3a9ef3b53d69",
             "signatureHash": "0000000000000000000000000000000000000000000000000000000000000000"
           },
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "6",
-            "root": "57e3286d3ce385df249b693c107e5b7744211abe134c5eba6be0f6e1aa8f8444",
+            "root": "c47e1e52fb9f9fd99f9c2604f395ff6312a7c669165ac1e058bb15edb4a0c365",
             "index": "14",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
-            "segment": "22d06c45f89a2d91ea8faa9671acc180bdfe3195c128fcba441bff97841f5b96",
+            "segment": "30c0ceddebc032c23b98a08e7054b7da17919681afdd3742f2f526f0add913e6",
             "position": "4",
             "length": "5",
-            "evidence": "26aa0991951e5d754ed8ff9a8f76eccc6ae1392a32a50f6f165e9890d9f4987f",
+            "evidence": "322d199f29dc642287a8857c3c55eb8f2a5e119c3e1c1d0b58219ff5fd76fe03",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "PROOF",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b239500b9186278e3fc52a3c4d6ad0ec424568f8f676839d631d8169ea37fea1",
+            "proofHash": "b965fe2899f99f951305521c2852626c7ed816f864c45e43c0f73b7f2efb2e64",
             "signatureHash": "bfa0d92a949997852ae11b16c28c0259c24c324ee4116966eb809cfb9d74179d"
           }
         ]
@@ -6347,13 +6347,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "2",
-            "root": "a4f67b404ba82a2ea9726788ff49cc36efda5749e0e5622d2d860b32649ec3a1",
+            "root": "7ab518eabd6a85bb02c4f81a5b720ad096d6450697eb32181eb16d8422337b1e",
             "index": "2",
             "backing": "52448a870116e5bf229e814782da34763408289d47559d5bcbbd644443124b72",
             "segment": "edef302c754802d2760062555c57067340b2ee4f09edf2242063147619bbb86f",
             "position": "1",
             "length": "1",
-            "evidence": "9a4198632e459735752a061a0e2e146f00e9079ea82610318d70f5617187dfd2",
+            "evidence": "a404acbab64440bcdb3a89f65b11538bacb106b97f27abe8094062802a7198bb",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -6361,7 +6361,7 @@
             "authorizationBacking": "52448a870116e5bf229e814782da34763408289d47559d5bcbbd644443124b72",
             "classification": "not-established",
             "statementHash": "9f5f57ef4cd9a918f9d301a4833e9a24c184ce6095f4fa5f63a9793a02d0334d",
-            "proofHash": "8657948e738c73e18ff9707db0a6f6dbbcf3e4169911a01c0553ead6b1262a87",
+            "proofHash": "7d5ea4d911bfca36095e12095baef63933a252edd21c4f51847ca93234728cb6",
             "signatureHash": "af08a483159b4c0bbbe0b120d397489e78648a8b64147fa54f4ebd1be8afb393"
           }
         ],
@@ -6439,13 +6439,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ddd422161c5bca91a056c7e541f4658b19f4ad751af7b9be8173177f2dbfe0a9",
+            "root": "14fbd3f6597e88a52ddbc786a6235b2da8425eaf5feefb7d90487dad874d5680",
             "index": "7",
             "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
             "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
             "position": "2",
             "length": "2",
-            "evidence": "246b303360edb9d127433c04045e9fe4fd6b71f10b9fc9aad0ddff8a7b332446",
+            "evidence": "68da6483bfcc7cc49ea2f9006eb79bafecc87acabad35d772e2c4dd4fd1df022",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "issue",
@@ -6453,7 +6453,7 @@
             "authorizationBacking": "7fc2031f4c562e60bef0199118520b71013347d533210b8afc686b639027ff94",
             "classification": "not-established",
             "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-            "proofHash": "c644886907f35ba781762e26384c4ee1752f8457da1de62752aaaa7e7aa9fa21",
+            "proofHash": "4f6404b78ed989e518c0b325311322418ce8a7ab20692d33d3644d868a743349",
             "signatureHash": "ef5125485756b2d3571f7395383f53fa74a56cc82cd9815996eb86c3c7db1511"
           }
         ],
@@ -6474,8 +6474,8 @@
           "outstanding": "20",
           "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
           "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
-          "historyHash": "4347dce72da3978de89cc96989fadf7ea52c181b8307063d29dd1f4132808e40",
-          "evidenceHash": "ea70d69467af0ce49013874b42d39beac8cfb45f7b7cd9c758b08572c341e298",
+          "historyHash": "d9caff8026156300a8dcf5ae9c16953d28cde33466671b81241eae023b0f50ba",
+          "evidenceHash": "5da388b548abeabf9bf558276f81c34dd399eb518b4e6ed28be0ce1c17f4f338",
           "range": {
             "judgingIndex": "20",
             "lag": "2",
@@ -6544,13 +6544,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "c4eeecaac7fe9aa213459763d75c697dcb8f383c46054e8affc36c6f59c8acdb",
+            "root": "612e69ddd8c132855b35e27678b3bda716bf028771f7983cdd97572d5cee8568",
             "index": "5",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
             "segment": "9fa6f0faf43feecb3c483501e7f5a75f5a8a77da679a67c19ad95de09689756a",
             "position": "3",
             "length": "3",
-            "evidence": "085627196fe5c5476b446205ad252360a3d19ff04e00f5b405fc420862925b07",
+            "evidence": "8223b08dfb3336056435c4c910985b716ba8c1f63a58746144ab2575483d63be",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "withdrawal",
@@ -6586,13 +6586,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "d8d6b9564e479aab925fd0167bec0861ab00b64060e662fc975c826dd0376483",
+            "root": "89e24522d9009e9b50aa679bb4d40af87bed3fab106c96fde9f4dd005b97cf2f",
             "index": "5",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
             "segment": "9fa6f0faf43feecb3c483501e7f5a75f5a8a77da679a67c19ad95de09689756a",
             "position": "3",
             "length": "3",
-            "evidence": "8d0a90aaf95670a073fbe159e3711030c92c61b9f0e50ced9229020cf1fd06fe",
+            "evidence": "9c7e90e36dd1c3a20dc168739dfe84e03b87c47c2a9c8f91bac69a7354c90ec9",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "acceptance",
@@ -6601,7 +6601,7 @@
             "demand": "71b0f2d69872d979150e627a5652d84e9d89dbf3a71c2e2457d58b196358e0f3",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b4598eef3684ce87e2fa7b47cf853a237b754d93dd8983f7d30d1e9352b53edd",
+            "proofHash": "fc54676ed46cbabafc49e991295e956434d242df9e2ea433a4fe6adf52fdc5f6",
             "signatureHash": "32d2930fab959157d09d73c053cf85a8af034a63ab4dd9ce3506b1048e00029f"
           }
         ]
@@ -6628,13 +6628,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "3b5f74cbc00c40a2df9b3efecc2497342ce22625278445868445ac104ce92384",
+            "root": "84506e42d22bd318f125bb16fd16087545e5f1d84f1ec7ce5a7cda68712b764e",
             "index": "5",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
             "segment": "9fa6f0faf43feecb3c483501e7f5a75f5a8a77da679a67c19ad95de09689756a",
             "position": "3",
             "length": "3",
-            "evidence": "8f2b242f2e1f9c5b5a8fa5c8ad687166a7a7b6a3c955a5095f8b7fd4147a9716",
+            "evidence": "3fa89330be55f68ce8983840bd4455aa14176448ac99373fb8f6e3b5b9ef5d54",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "release",
@@ -6643,7 +6643,7 @@
             "demand": "71b0f2d69872d979150e627a5652d84e9d89dbf3a71c2e2457d58b196358e0f3",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b4598eef3684ce87e2fa7b47cf853a237b754d93dd8983f7d30d1e9352b53edd",
+            "proofHash": "fc54676ed46cbabafc49e991295e956434d242df9e2ea433a4fe6adf52fdc5f6",
             "signatureHash": "29ebaff344a510fbe1e7af48bd00ad531b9cca949d66d05661265efa4915021a"
           }
         ]
@@ -6670,13 +6670,13 @@
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ba41bd0de586245c089ecd753756ee55c6e9c2126c705c2be840c205203cc3d1",
+            "root": "b5422206504dc328bfbf1e00929ce08eda4e4706baf4ac0e1c9d948a6413a581",
             "index": "5",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
             "segment": "9fa6f0faf43feecb3c483501e7f5a75f5a8a77da679a67c19ad95de09689756a",
             "position": "3",
             "length": "3",
-            "evidence": "6fb4d7313ab431b410f8c5f372db60065ab58a93061ba6471964c4a57c46ce64",
+            "evidence": "f4592fe877666a959eb275ed9a8b7d631b21da646c8b53b14df15a64104bae40",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "acceptance",
@@ -6685,19 +6685,19 @@
             "demand": "71b0f2d69872d979150e627a5652d84e9d89dbf3a71c2e2457d58b196358e0f3",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b4598eef3684ce87e2fa7b47cf853a237b754d93dd8983f7d30d1e9352b53edd",
+            "proofHash": "fc54676ed46cbabafc49e991295e956434d242df9e2ea433a4fe6adf52fdc5f6",
             "signatureHash": "bce5a48043e34cf746840fee031dd734a7fae1c1385c6362dca74d45258b7903"
           },
           {
             "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
             "sequence": "3",
-            "root": "ba41bd0de586245c089ecd753756ee55c6e9c2126c705c2be840c205203cc3d1",
+            "root": "b5422206504dc328bfbf1e00929ce08eda4e4706baf4ac0e1c9d948a6413a581",
             "index": "5",
             "backing": "7e6f45dacab43e72cf7d618bc56cf01faa81c238901aeb5c8dea301ba65ccd97",
             "segment": "9fa6f0faf43feecb3c483501e7f5a75f5a8a77da679a67c19ad95de09689756a",
             "position": "3",
             "length": "3",
-            "evidence": "6fb4d7313ab431b410f8c5f372db60065ab58a93061ba6471964c4a57c46ce64",
+            "evidence": "f4592fe877666a959eb275ed9a8b7d631b21da646c8b53b14df15a64104bae40",
             "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
             "check": "SIGNATURE",
             "authorizationRole": "release",
@@ -6706,7 +6706,7 @@
             "demand": "71b0f2d69872d979150e627a5652d84e9d89dbf3a71c2e2457d58b196358e0f3",
             "classification": "not-established",
             "statementHash": "6a8884b1311be14e92fb37b9ff3752b96deedebab5ca149f483dc9657d2bc8c1",
-            "proofHash": "b4598eef3684ce87e2fa7b47cf853a237b754d93dd8983f7d30d1e9352b53edd",
+            "proofHash": "fc54676ed46cbabafc49e991295e956434d242df9e2ea433a4fe6adf52fdc5f6",
             "signatureHash": "bce5a48043e34cf746840fee031dd734a7fae1c1385c6362dca74d45258b7903"
           }
         ]
@@ -6723,18 +6723,18 @@
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "3",
-          "root": "3c0bfc0222abc48ccf7b2aff3624171d687b492007b2c7227efe29e55cac77c5",
+          "root": "2a4565c0bc730b3d2e075818962369831aca3ed18bbbfbfdaea3014e2ed6d472",
           "index": "4",
           "backing": "52448a870116e5bf229e814782da34763408289d47559d5bcbbd644443124b72",
           "segment": "edef302c754802d2760062555c57067340b2ee4f09edf2242063147619bbb86f",
           "position": "1",
           "length": "2",
-          "evidence": "f5b3eb6376bfd71cc462bb46cb11b1391c44c1a431c732c1b32aced1e82c664e",
+          "evidence": "e316104dc181f07f3a44bcaffd5e47911000606c867627cda116243940600e98",
           "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
           "check": "PROOF",
           "classification": "not-established",
           "statementHash": "9f5f57ef4cd9a918f9d301a4833e9a24c184ce6095f4fa5f63a9793a02d0334d",
-          "proofHash": "5b9bbedce4feb8d5b7ca4c2feb5a8f7e9745d5a7a14e9d8726444efc7e0c2cdf",
+          "proofHash": "36dd2c862467b4b2c5662011bb63da42993787ff0770bcf86a9ae206d1958c8a",
           "signatureHash": "908547f1b2d4982bd41c61aa3c2f7c72d090320cfaaddeecbcee2fb47858742f"
         }
       ],
@@ -6755,8 +6755,8 @@
         "outstanding": "10",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
-        "historyHash": "40ffe2acfd4c989610eb058917791eef9e12ca9d21621cb8d5c4c0a80e5ecb57",
-        "evidenceHash": "a2170cc575e2078cbfd88783608a3d7a879aa587a9bc41f05df67ae8b7acd2bf",
+        "historyHash": "75d38216a7cacbba1c20aabbaf34bff2b252295fe1a12e42297f60d743d0676b",
+        "evidenceHash": "8d63a45ab3d6c0a74c7108b157285539346ca1ac9e11b28b1d43ae980780b49f",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -6815,18 +6815,18 @@
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "3",
-          "root": "46b388976881029678edaa573c841177002453587ae10ce90960830a7ef339a0",
+          "root": "24ada90ae4b927a7f427d0b5c34587c0172e3ffce61645527cebb19562cf2ca8",
           "index": "7",
           "backing": "e545cc7363107dc856e656b9a7d886aee618a50cce5d3696d9b64ca12020bbf6",
           "segment": "a510120e7e164e4fbb58ca10d388804c9604f14e619a5f1680643074f26aafef",
           "position": "2",
           "length": "2",
-          "evidence": "4787838cfc4c68197c77115677b1a3fa458e5845b0c95e9f5bd3145921c65fc9",
+          "evidence": "866c49c365b993cbd67b98ba8e2e1b8c47f9a2deb16b199224f448913ff900ab",
           "configuration": "7ddbb7e86dbfaf5e7bbc28541be28fdef04da02b30214109420d840fe664a618",
           "check": "PROOF",
           "classification": "not-established",
           "statementHash": "bf3c970a64b7c2ed071cc64e7bb34602e9083467fb0453b4482db12c95346191",
-          "proofHash": "e8c7c41d0d12b6919afc54dc2bb7dec3ee26246f45fd0e6cb58117580f168a16",
+          "proofHash": "031cba23579545a1847ec7a592d7c26bb40b7440508e6deba0448170cc344453",
           "signatureHash": "353324e6a6c8c749f0dd1a0da894af4dd968185fe120de171f7381ffa682ecc2"
         }
       ],
@@ -6847,8 +6847,8 @@
         "outstanding": "20",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
-        "historyHash": "4347dce72da3978de89cc96989fadf7ea52c181b8307063d29dd1f4132808e40",
-        "evidenceHash": "ea70d69467af0ce49013874b42d39beac8cfb45f7b7cd9c758b08572c341e298",
+        "historyHash": "d9caff8026156300a8dcf5ae9c16953d28cde33466671b81241eae023b0f50ba",
+        "evidenceHash": "5da388b548abeabf9bf558276f81c34dd399eb518b4e6ed28be0ce1c17f4f338",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -7062,6 +7062,7 @@
     "Silence: publication closure must be answered independently; malformed records have no force at any index",
     "compact shared-scope clocks, predecessor refusal and repair agree in portable packages",
     "history-free term and silence lapse agree in portable packages",
+    "the runtime package reader reads every multi-backing scope group to the harness verdict",
     "Recovery: compact proof faults exclude a target after the adopted block and agree with its complete trail",
     "Recovery: the first continuation after a return excludes a compact fault after its block from the opening alone",
     "Recovery: compact faults inside the adopted block are unsupported and refuse without ordinary evidence",
@@ -7166,391 +7167,391 @@
       "label": "issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1252.721944
+      "elapsedMs": 1230.650392999999
     },
     {
       "label": "pay 7, change 3",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3448.8636099999994
+      "elapsedMs": 3219.220320999999
     },
     {
       "label": "burn 5, change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 2888.550988000001
+      "elapsedMs": 2696.6743210000004
     },
     {
       "label": "pay 2, change 1",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3416.3533479999987
+      "elapsedMs": 3191.5876190000017
     },
     {
       "label": "valid maximum issuance",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1122.780663999998
+      "elapsedMs": 1074.3337070000016
     },
     {
       "label": "valid proof, different scope",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1122.0566240000007
+      "elapsedMs": 1074.643297999999
     },
     {
       "label": "valid proof, unaccepted anchor",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3417.3691929999986
+      "elapsedMs": 3169.1384739999994
     },
     {
       "label": "valid proof, spent input",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3418.3724729999994
+      "elapsedMs": 3167.447731
     },
     {
       "label": "valid proof, duplicate output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3420.1708580000013
+      "elapsedMs": 3164.9034669999965
     },
     {
       "label": "scope shared issue x 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1131.215645999997
+      "elapsedMs": 1089.1474329999983
     },
     {
       "label": "scope shared issue y 20",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1119.8350890000002
+      "elapsedMs": 1073.4565969999967
     },
     {
       "label": "scope independent x payment",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3413.0462810000026
+      "elapsedMs": 3205.023390999995
     },
     {
       "label": "scope independent y payment",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3413.976509
+      "elapsedMs": 3185.6904619999987
     },
     {
       "label": "scope joined mixed spend with distinct anchors",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3406.3005089999933
+      "elapsedMs": 3201.856930000009
     },
     {
       "label": "scope joined continuation burns x 1",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 2879.3580070000025
+      "elapsedMs": 2688.711332000006
     },
     {
       "label": "scope valid proof reuses a nullifier from a split history",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3414.137090999997
+      "elapsedMs": 3166.7227859999985
     },
     {
       "label": "scope valid issue proof repeats an output from a split history",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1117.0189679999894
+      "elapsedMs": 1073.1023600000044
     },
     {
       "label": "scope non-service shared anchor",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1572.8307760000025
+      "elapsedMs": 1486.0832559999835
     },
     {
       "label": "scope non-service holder refresh",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1582.1835819999978
+      "elapsedMs": 1481.2772209999966
     },
     {
       "label": "scope non-service imported payment anchor",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1571.5003350000043
+      "elapsedMs": 1484.644782999996
     },
     {
       "label": "recovery scope issue x",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1117.959899999987
+      "elapsedMs": 1078.1391099999892
     },
     {
       "label": "recovery scope issue y",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1117.330077000006
+      "elapsedMs": 1074.7498360000027
     },
     {
       "label": "shared compact silence rejoin payment",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3417.1446989999968
+      "elapsedMs": 3217.6920620000164
     },
     {
       "label": "scope x first gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2876.665846000018
+      "elapsedMs": 2710.0986269999994
     },
     {
       "label": "scope y first gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2872.8613590000023
+      "elapsedMs": 2720.951065000001
     },
     {
       "label": "scope x release demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2875.9155929999833
+      "elapsedMs": 2722.9402230000123
     },
     {
       "label": "scope y release demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2881.1852159999835
+      "elapsedMs": 2716.5616950000112
     },
     {
       "label": "scope x issuer settlement",
       "kind": 6,
       "proofBytes": 14656,
-      "elapsedMs": 2876.458268999995
+      "elapsedMs": 2691.8747030000086
     },
     {
       "label": "scope y issuer settlement",
       "kind": 6,
       "proofBytes": 14656,
-      "elapsedMs": 2881.83638600001
+      "elapsedMs": 2700.21766699999
     },
     {
       "label": "scope joined issuer note continuation",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3414.0189240000036
+      "elapsedMs": 3203.5665379999846
     },
     {
       "label": "scope y alternative valid settlement proof",
       "kind": 6,
       "proofBytes": 14656,
-      "elapsedMs": 2841.1568230000266
+      "elapsedMs": 2642.1752280000073
     },
     {
       "label": "scope standing ordinary y demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2837.0204139999987
+      "elapsedMs": 2630.911466999998
     },
     {
       "label": "scope isolated demand against issuer note spend",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2836.4250889999967
+      "elapsedMs": 2641.761239000014
     },
     {
       "label": "scope recovery non-service x",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1535.5303720000084
+      "elapsedMs": 1404.5726150000119
     },
     {
       "label": "scope recovery non-service y",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1536.8007209999778
+      "elapsedMs": 1406.9555129999935
     },
     {
       "label": "scope recovery non-service issuer note",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1534.8076349999756
+      "elapsedMs": 1411.5409900000086
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1084.4320289999887
+      "elapsedMs": 994.0544719999889
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3376.09096099998
+      "elapsedMs": 3171.6234140000015
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 2840.130971000006
+      "elapsedMs": 2635.6272039999894
     },
     {
       "label": "valid compact proof cannot replace absent capsule history",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1083.2072969999863
+      "elapsedMs": 994.7988199999672
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3372.60248999999
+      "elapsedMs": 3113.932816000015
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1083.742958000017
+      "elapsedMs": 994.290159999975
     },
     {
       "label": "import A issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1084.8388470000064
+      "elapsedMs": 992.5782880000188
     },
     {
       "label": "import B spends A note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3368.8513770000136
+      "elapsedMs": 3126.3618819999974
     },
     {
       "label": "import B continuation burns 1 with change 2",
       "kind": 3,
       "proofBytes": 14656,
-      "elapsedMs": 2835.122399999993
+      "elapsedMs": 2616.4620409999625
     },
     {
       "label": "import C valid proof for imported spent note",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3368.860783000011
+      "elapsedMs": 3123.36230800004
     },
     {
       "label": "import C valid issuance proof for imported duplicate output",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1083.4119090000167
+      "elapsedMs": 1006.8363590000081
     },
     {
       "label": "recovery issue 10",
       "kind": 1,
       "proofBytes": 14656,
-      "elapsedMs": 1085.3633810000028
+      "elapsedMs": 993.3240559999831
     },
     {
       "label": "gap demand then withdrawal",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2831.1417150000343
+      "elapsedMs": 2621.173476999975
     },
     {
       "label": "gap demand then release",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2834.1201889999793
+      "elapsedMs": 2660.5318449999904
     },
     {
       "label": "gap settlement pays issuer-owned output",
       "kind": 6,
       "proofBytes": 14656,
-      "elapsedMs": 2837.009583999985
+      "elapsedMs": 2626.299912000017
     },
     {
       "label": "returned segment pays settlement output",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3369.1725809999625
+      "elapsedMs": 3170.6152379999985
     },
     {
       "label": "closed-gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2839.76883299998
+      "elapsedMs": 2661.1023570000543
     },
     {
       "label": "wrong-time gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2836.9255620000185
+      "elapsedMs": 2663.1740280000377
     },
     {
       "label": "future-anchor gap demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2839.7475919999997
+      "elapsedMs": 2656.421597000037
     },
     {
       "label": "short recovery lock",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2830.148940000043
+      "elapsedMs": 2592.408725999994
     },
     {
       "label": "live recovery lock spend",
       "kind": 2,
       "proofBytes": 14656,
-      "elapsedMs": 3371.1318109999993
+      "elapsedMs": 3173.307468999992
     },
     {
       "label": "spent imported note demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2834.2440589999896
+      "elapsedMs": 2628.561199000047
     },
     {
       "label": "local settlement demand",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2833.468242999981
+      "elapsedMs": 2654.494507000025
     },
     {
       "label": "non-service original request",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1533.4928809999838
+      "elapsedMs": 1414.7994029999827
     },
     {
       "label": "non-service holder refresh",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1535.8713080000016
+      "elapsedMs": 1418.477211999998
     },
     {
       "label": "non-service uncertified future anchor",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1532.0168670000276
+      "elapsedMs": 1406.817704999994
     },
     {
       "label": "non-service canonical expiring lock",
       "kind": 4,
       "proofBytes": 14656,
-      "elapsedMs": 2839.15807200002
+      "elapsedMs": 2633.659304999979
     },
     {
       "label": "non-service paid output",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1534.0625429999782
+      "elapsedMs": 1400.5875619999715
     },
     {
       "label": "non-service change output",
       "kind": 7,
       "proofBytes": 14656,
-      "elapsedMs": 1533.4794380000094
+      "elapsedMs": 1401.1783099999884
     }
   ],
   "sourceSha256Lf": {
@@ -7576,16 +7577,17 @@
     "dist/pool/v3/fault-observer.js": "8e451cc37aacc78f3fd40b348d6b968650eb3a9925e64c3ce9ab1633d2db510f",
     "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
     "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
-    "dist/pool/v3/import-reader.js": "9711c8e718d6806cf216e0ba42cd52b271f7a137b7519f51c1f8c69a85440257",
+    "dist/pool/v3/import-reader.js": "da726955fb069669c678dbc2f72b6dc5f18fb0041301686cad7cef462ce412db",
     "dist/pool/v3/non-service.js": "769032123e29fef40b8a2d665aa887e97685104158f123e5abde024ff7119156",
-    "dist/pool/v3/package-reader.js": "eeeda307de67c152f4b0f836c9ba082873614f07448c6d3fda78090d8ccd07a3",
+    "dist/pool/v3/package-reader.js": "e2e6927cb3cb65d23ef8e7e66c936e75c3a4ae8e0eb547e94a361d46064b71f4",
     "dist/pool/v3/package.js": "5a0073c9068342854b8368a48a2423d3a56f42ba3639524d07995c2875abada6",
-    "dist/pool/v3/reader.js": "2300b7cf93a9d0680d7c3d005378df2de54e013cb8b7bab509857202e864f65b",
+    "dist/pool/v3/reader.js": "81872fd1b59dd0d13ac226905435214feec86cfb54b16bd77c24188b5c2d50d9",
     "dist/pool/v3/receipt-state.js": "0b1266c0a69d889e6a6c1833b41cb87a2687bd2db68366ae5712034896812ec5",
     "dist/pool/v3/records.js": "61be901b5a91950785c06f46679f90f689e5eea86d1a1450d3c3f5c36d17069b",
     "dist/pool/v3/recovery.js": "49e55f564b0f1434c305e951a62dee5d479b73bb15f29a5af5cefcf07e95b497",
     "dist/pool/v3/refusals.js": "afa71e4c26b186239740950d00e012eec821d75c3f17423d07db2806478be904",
     "dist/pool/v3/scope-evidence.js": "c123f379f17e44f0e9a76bc292820d93149898fdb87c68f280061caa41681d22",
+    "dist/pool/v3/scope-reader.js": "2052e078177f014a0a2d476d89e905bd62f43c91d1d8520b5cf02adb1898368d",
     "dist/pool/v3/served-trail.js": "c63f5c82e0e641994ac5a525a89af8675468d1d07fbbc50fa1e654b2c51faafd",
     "dist/pool/v3/spent-set.js": "c98a2825f8dbaac330ea6ce4c2ff655a468b9d143ba822f6848700886fb85a45",
     "dist/pool/v3/state.js": "1ccaf2fa7929071bf51db76960f318cf8de97f6a67e9f94e31f3cc01e39daceb",
@@ -7615,23 +7617,20 @@
     "scripts/pool/v3/fault-check.mjs": "5f694723002de03ab0dac18a5ad9a1bf823730659b163ae502b889419747ff7d",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
     "scripts/pool/v3/import-check.mjs": "140995af5ad42b5ec0a37eb39ab4c71ba2a5de43f18c6cc911f2ee0bf4caad57",
-    "scripts/pool/v3/local-check.mjs": "aa10e66d35541c8228dd789598537f58388fe32fdeec2501715ba510f4456db7",
-    "scripts/pool/v3/local-replay.mjs": "4612bd8790cd5fbfbc3a0f4f6c627e2d8e7f92ff8f99637c44b368439660ca54",
+    "scripts/pool/v3/local-check.mjs": "9fbd50c26a450c46b52c0edf6fb258985384535d0025b3196900557c1e9552a4",
+    "scripts/pool/v3/local-replay.mjs": "83996e945213e54cf2965948ada6427e8d1a98019dc5696863ad3ad3bd598392",
     "scripts/pool/v3/local-worker.mjs": "964a9c911b52e994d263fd387071a743d2910d3a4bead286a614f1dff157e5ae",
     "scripts/pool/v3/non-service-check.mjs": "91dd06d69eb1f146946830d50b62dc5598a388eb242e55e4f96e82d9eeb0a826",
-    "scripts/pool/v3/non-service.mjs": "ffdcb87bbfba72829a1e8697e938ed0cc906b7acfcb15893623660399b903327",
     "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
     "scripts/pool/v3/receipt-check.mjs": "38e5147dff49aba05df6f20d4aee3f4c79c4bfab618b1afffba3ad00e3d14e52",
-    "scripts/pool/v3/receipt-state.mjs": "5171b1510e8a805e1ae2f4f2492cce37ec1de596109e7f416438788cfd004e0c",
     "scripts/pool/v3/recovery-check.mjs": "a4756b73ce285650e63df8c362c2e80632bd000f6c285c2c329d67f70e0dff78",
-    "scripts/pool/v3/scope-check.mjs": "f1b9944f83ed724efdfe8a4654123d8f91fcfb61bcbdd335a66fbf4dd25d3cac",
+    "scripts/pool/v3/scope-check.mjs": "5d446589ab4079524262cb095ecdf25720bce953b0f5198d513697b4f90fd924",
     "scripts/pool/v3/scope-count-check.mjs": "bfcd81253c4e6752730e0863afaad2589d57be3d22ce2c47688cf951161f502f",
     "scripts/pool/v3/scope-evidence.mjs": "bdb32a7d393cd77263c6d1b60f3503905fbe229387d7b348a1a902d160aacaed",
     "scripts/pool/v3/scope-intrinsic-check.mjs": "7ec839847c7ddf727fcdf565a5c655a76bdbdd80a21ccdacc35d6170355e16ca",
     "scripts/pool/v3/scope-receipt-check.mjs": "15092754310b026bb0f31a335145640895b5870df467d488110982bf3761ae35",
-    "scripts/pool/v3/scope-recovery-check.mjs": "2f7e82dafc0cfb6fcca7c1604ca70c4d0edbc97b7b657e6ff2e60f00d87b4811",
-    "scripts/pool/v3/scope-recovery.mjs": "8b0f1f29c1a649f4f0420de91ee1f341437690788e5688a93c692d7454386260",
-    "scripts/pool/v3/scope-replay.mjs": "7bcb1e89a94dfbfb57deb05ca1ae1f3ea33b7f1fef6968e831e6f6a9780fd103",
+    "scripts/pool/v3/scope-recovery-check.mjs": "ea2b3acc8fb5ffa55f3ad25fa3908029e1b5c89b25e563c502d56788e5a3511a",
+    "scripts/pool/v3/scope-runtime-check.mjs": "9a7a800d3fb8df107047a589c6698d0b97c108b194f7400b7f735ff645add967",
     "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
     "src/bytes.ts": "f6904c1a8701538f6fda5963500b460611e5f18fd4ea0c925ef8dc098cce55fd",
     "src/contexts.ts": "555dcc03061a6c451ffd6dc63f2486ad920014186e4ec01d164ec7282b27764b",
@@ -7657,16 +7656,17 @@
     "src/pool/v3/fault-observer.ts": "1e46252e83438d024b8b42fac837e924bc7be3b01147c94d24e30646abe08f26",
     "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
-    "src/pool/v3/import-reader.ts": "ae19e4dec2c8cfa0b7ff34f592f59dd1a40b1a014f70f2976b565d1b8567c3d1",
+    "src/pool/v3/import-reader.ts": "920a917ba29645e2bc27720097d99737bf6e9e192c9adc2fb646e11bad52e006",
     "src/pool/v3/non-service.ts": "fe5dae1935d54c6214071e536f30eec049cd6e3f4b63995e5ba1ec5a675140e5",
-    "src/pool/v3/package-reader.ts": "3c053f878e90ff13646d36316cb454963085b2d86ec90023c07d476917ba8a83",
+    "src/pool/v3/package-reader.ts": "1677138397272bdefc427ae6404b10a91d16ea3647e971ecfa38ce855aeba0e4",
     "src/pool/v3/package.ts": "80429cf017eb2c8b09bfc8afe2ae0f3b15c5dccb92a0e812eb189672318561ce",
-    "src/pool/v3/reader.ts": "6860f39de51b5fe05493f1d9f63c87d62b5a0da8d25bd0121b02504d222137d3",
+    "src/pool/v3/reader.ts": "2c9d1daed77402838f9090a160ac4613d8518f539e836c548931fa840005a353",
     "src/pool/v3/receipt-state.ts": "aed27d4b23968ebed4be82cd098f19f8451a316d2f26286cf601c968aad7d7ad",
     "src/pool/v3/records.ts": "5cb68ec45d9babeb147ea60b592470fac5d08096df137993257b933718ac36f6",
     "src/pool/v3/recovery.ts": "5ab123a6052ddb0c4fe62595ff59a4009cc6cc923d5ac180c68ed34e7aabb4a7",
     "src/pool/v3/refusals.ts": "3a95f2631f87aff52b6e6434fe8c3a7ce91c5c78d06ed14be3cf9ef2936a5b90",
     "src/pool/v3/scope-evidence.ts": "1820e97eafaad7f682750bc6b8f3f25a7c40e74ac03911f7c79d1e76073f9fff",
+    "src/pool/v3/scope-reader.ts": "62d6f26e91af9d06978a4ee937c581f81fafb6870251f0d361c547c056f5c25c",
     "src/pool/v3/served-trail.ts": "7e03a0f71795828b0574a21087fd32910bd09d74280d900cababdd7bf361a3d8",
     "src/pool/v3/spent-set.ts": "66d4531c9b227fb31b21fca10e65983a7c303b22cb2c84f6e33febe273973239",
     "src/pool/v3/state.ts": "5da700faeae83a99db8591247e4c9dad82a6a40f7e3f44f05972dfd2e3d155a4",
@@ -7698,7 +7698,7 @@
       "noteRoot": "20443935148224867603230880275088970543543412031378399632921713710302866437366",
       "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
       "historyHash": "10495e6af228b242713ce2c626e48c8665a3660e466e3d81a297b212d7ff3f8e",
-      "evidenceHash": "6f4dde880817849acf5a41adaa335d83664885831afac29141a9d3fb763cd878",
+      "evidenceHash": "ed3d7fde58f5de86b09a4f645745671184f5bc785ab8500c64cfbc7c537beba0",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -7750,7 +7750,7 @@
       "noteRoot": "20443935148224867603230880275088970543543412031378399632921713710302866437366",
       "spentRoot": "41e94caf3396dda075e9a2387c9b08df36128abf54b7ca339fe569498c8c4196",
       "historyHash": "10495e6af228b242713ce2c626e48c8665a3660e466e3d81a297b212d7ff3f8e",
-      "evidenceHash": "6f4dde880817849acf5a41adaa335d83664885831afac29141a9d3fb763cd878",
+      "evidenceHash": "ed3d7fde58f5de86b09a4f645745671184f5bc785ab8500c64cfbc7c537beba0",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -7880,7 +7880,7 @@
       "noteRoot": "129039348862363191311142839103781103919806904058754957420067664334283169335",
       "spentRoot": "5954366ac86a54c0a2d2447304bda3313a2e861489e820138ea2613df72c339d",
       "historyHash": "45cc5133744ed3944d79d51b46fab58be7fb04f70db13ac91ac0133b1c418f3d",
-      "evidenceHash": "bafe56797d6f8c1af46e53528b620bc5437ef0c05e25838001bf7a1fa0cfa6d1",
+      "evidenceHash": "3681146a1c7d1f92d9ae8197069351d873b1ba55217b45f1c6f9cbdd2b48b110",
       "range": {
         "judgingIndex": "20",
         "lag": "2",
@@ -7938,8 +7938,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "d3dfde14e110d61603458b6deadbcd17a228ab907d5c825027e855e19a79361f",
-        "historyHash": "4ba598fe27b010f1f267ed9dd7251d3717094a1622ec33782bc9eb8bb852f1f1",
-        "evidenceHash": "b4ff891d5967a390180fa3575e06b1bbf299124b06bc72b45c7cfce5d2171f71",
+        "historyHash": "9c82a0ab9749b282e631f4cc5a14b0eb87229779d2c497341316b221d6f0a1a1",
+        "evidenceHash": "56ce8fb5a5df51deeafa57d8508de41059600933ec0fc8a21d51e07d1a0bbd5b",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -8039,8 +8039,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "d3dfde14e110d61603458b6deadbcd17a228ab907d5c825027e855e19a79361f",
-        "historyHash": "4ba598fe27b010f1f267ed9dd7251d3717094a1622ec33782bc9eb8bb852f1f1",
-        "evidenceHash": "b4ff891d5967a390180fa3575e06b1bbf299124b06bc72b45c7cfce5d2171f71",
+        "historyHash": "9c82a0ab9749b282e631f4cc5a14b0eb87229779d2c497341316b221d6f0a1a1",
+        "evidenceHash": "56ce8fb5a5df51deeafa57d8508de41059600933ec0fc8a21d51e07d1a0bbd5b",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -8298,8 +8298,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "277a0920e5cb63cc5e6cd6669ed438f5d06198a8259727cbbd5b9a748127abe1",
-        "historyHash": "0fcb65f4fbac1b902f3a3dddd6726aed70ea746b9ae7a1c45bfb18f34799b760",
-        "evidenceHash": "d1d0af9cf1e5eac15e120be2056a871cacc90b6a990faade21b5e15d21ae5486",
+        "historyHash": "91414a130ad183aaef45d79a5237460ee64205a1c2d5e452eeecd56ca4f44e89",
+        "evidenceHash": "b202303be741d31a824f84734b5298b52a14bd61e7f503275a6d6728fdf9222b",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -8406,8 +8406,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "277a0920e5cb63cc5e6cd6669ed438f5d06198a8259727cbbd5b9a748127abe1",
-        "historyHash": "0fcb65f4fbac1b902f3a3dddd6726aed70ea746b9ae7a1c45bfb18f34799b760",
-        "evidenceHash": "d1d0af9cf1e5eac15e120be2056a871cacc90b6a990faade21b5e15d21ae5486",
+        "historyHash": "91414a130ad183aaef45d79a5237460ee64205a1c2d5e452eeecd56ca4f44e89",
+        "evidenceHash": "b202303be741d31a824f84734b5298b52a14bd61e7f503275a6d6728fdf9222b",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -8651,6 +8651,9 @@
       ]
     }
   },
+  "scopeRuntime": {
+    "compared": 23
+  },
   "scopeImports": {
     "packageBytes": 119659,
     "audit": {
@@ -8672,8 +8675,8 @@
         "outstanding": "9",
         "noteRoot": "13960783451364451726379112286293998421052329171811762642661697827439902403320",
         "spentRoot": "7425700d44de41da3332075a3e89500330a3caef0649eed6c120b8ed61dd8a95",
-        "historyHash": "df59d32dd4226abf50666aefcb9b271eb5aecac8ffe38a86231a4f07ed4ab7aa",
-        "evidenceHash": "7a087b42e5781137946891fb94ac4894921ddb18add6370453de20da133f0410",
+        "historyHash": "7bdcfd7f01788b7d54abf0264984415ec1c9830ff6846f39ad1b4b480cd9a791",
+        "evidenceHash": "24b3fa809feb87c913e6c98af0628bc340b8b19fe690d3a47e9c0100c2595311",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -8788,8 +8791,8 @@
         "outstanding": "9",
         "noteRoot": "13960783451364451726379112286293998421052329171811762642661697827439902403320",
         "spentRoot": "7425700d44de41da3332075a3e89500330a3caef0649eed6c120b8ed61dd8a95",
-        "historyHash": "df59d32dd4226abf50666aefcb9b271eb5aecac8ffe38a86231a4f07ed4ab7aa",
-        "evidenceHash": "7a087b42e5781137946891fb94ac4894921ddb18add6370453de20da133f0410",
+        "historyHash": "7bdcfd7f01788b7d54abf0264984415ec1c9830ff6846f39ad1b4b480cd9a791",
+        "evidenceHash": "24b3fa809feb87c913e6c98af0628bc340b8b19fe690d3a47e9c0100c2595311",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -8982,8 +8985,8 @@
         "outstanding": "20",
         "noteRoot": "13960783451364451726379112286293998421052329171811762642661697827439902403320",
         "spentRoot": "7425700d44de41da3332075a3e89500330a3caef0649eed6c120b8ed61dd8a95",
-        "historyHash": "df59d32dd4226abf50666aefcb9b271eb5aecac8ffe38a86231a4f07ed4ab7aa",
-        "evidenceHash": "7a087b42e5781137946891fb94ac4894921ddb18add6370453de20da133f0410",
+        "historyHash": "7bdcfd7f01788b7d54abf0264984415ec1c9830ff6846f39ad1b4b480cd9a791",
+        "evidenceHash": "24b3fa809feb87c913e6c98af0628bc340b8b19fe690d3a47e9c0100c2595311",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
@@ -9158,10 +9161,10 @@
         "issued": "10",
         "burned": "0",
         "outstanding": "10",
-        "noteRoot": "2063429697875912498939049649207032793649835809518540092512182792305828591050",
-        "spentRoot": "96c90fc1067969cb82a0fe77b440aef54f966fecfdcae15bcd13e516bca41e48",
-        "historyHash": "bc0fbdeb11590a2e517f516519bfed32b2be7523e4317e3a2441592d94b035d9",
-        "evidenceHash": "a0c5c9c4c3d500817ea7f183cda6c125c803029c7e4f0a1552e788abc81f41b2",
+        "noteRoot": "4683113830524732257061116335560190216157037070952143809262298216083617364362",
+        "spentRoot": "963bce6acbbd070a82ab91ac9df324f9e95ae58a2f8302762dd7ea8fb9445b29",
+        "historyHash": "e6cf74b78ebd25a05e6672c79ee834bf1bb089d6f79f1ecbbf19132abda6dc8d",
+        "evidenceHash": "31102f5dde06610c2ab1395f151747d3cd88fe423ca1cf560ccab774d904ea75",
         "range": {
           "judgingIndex": "14",
           "lag": "2",
@@ -9320,10 +9323,10 @@
         "issued": "20",
         "burned": "0",
         "outstanding": "20",
-        "noteRoot": "2063429697875912498939049649207032793649835809518540092512182792305828591050",
-        "spentRoot": "96c90fc1067969cb82a0fe77b440aef54f966fecfdcae15bcd13e516bca41e48",
-        "historyHash": "bc0fbdeb11590a2e517f516519bfed32b2be7523e4317e3a2441592d94b035d9",
-        "evidenceHash": "a0c5c9c4c3d500817ea7f183cda6c125c803029c7e4f0a1552e788abc81f41b2",
+        "noteRoot": "4683113830524732257061116335560190216157037070952143809262298216083617364362",
+        "spentRoot": "963bce6acbbd070a82ab91ac9df324f9e95ae58a2f8302762dd7ea8fb9445b29",
+        "historyHash": "e6cf74b78ebd25a05e6672c79ee834bf1bb089d6f79f1ecbbf19132abda6dc8d",
+        "evidenceHash": "31102f5dde06610c2ab1395f151747d3cd88fe423ca1cf560ccab774d904ea75",
         "range": {
           "judgingIndex": "14",
           "lag": "2",
@@ -9482,10 +9485,10 @@
         "issued": "10",
         "burned": "0",
         "outstanding": "10",
-        "noteRoot": "2063429697875912498939049649207032793649835809518540092512182792305828591050",
-        "spentRoot": "96c90fc1067969cb82a0fe77b440aef54f966fecfdcae15bcd13e516bca41e48",
-        "historyHash": "bc0fbdeb11590a2e517f516519bfed32b2be7523e4317e3a2441592d94b035d9",
-        "evidenceHash": "a0c5c9c4c3d500817ea7f183cda6c125c803029c7e4f0a1552e788abc81f41b2",
+        "noteRoot": "4683113830524732257061116335560190216157037070952143809262298216083617364362",
+        "spentRoot": "963bce6acbbd070a82ab91ac9df324f9e95ae58a2f8302762dd7ea8fb9445b29",
+        "historyHash": "e6cf74b78ebd25a05e6672c79ee834bf1bb089d6f79f1ecbbf19132abda6dc8d",
+        "evidenceHash": "31102f5dde06610c2ab1395f151747d3cd88fe423ca1cf560ccab774d904ea75",
         "range": {
           "judgingIndex": "14",
           "lag": "2",
@@ -9631,10 +9634,10 @@
           "nf": "3455721166838696803524206700502332845884586793723133811270264312051786099351",
           "value": "7",
           "leaf": "2",
-          "anchor": "2063429697875912498939049649207032793649835809518540092512182792305828591050",
+          "anchor": "4683113830524732257061116335560190216157037070952143809262298216083617364362",
           "siblings": [
             "1598782174785071603387241805019560750660026358008918562669860434127067165210",
-            "17778506128513869078627473623496701353643699769176426979048367013002350570713",
+            "14343596038546015179337162846202707918438337516519192724535940951554965645665",
             "7986513074916225214424905454836574168546438643957369140010275147662059290613",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
             "18383913181606838331795460117774658566856597132399717689821053927504534850729",
@@ -9722,10 +9725,10 @@
         "issued": "10",
         "burned": "0",
         "outstanding": "10",
-        "noteRoot": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+        "noteRoot": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
         "spentRoot": "950aa5d0cdf7465c43dbbc2b2de9dfb1b69b56df8fd1b213239ca594b0298a85",
-        "historyHash": "e11589819a930b27ef968234150925decc40338364d579c450c46101a2b7719a",
-        "evidenceHash": "8c6fd2e8bd977d813afe79dc0f06878003851d32fd58151183b65a9e00d24400",
+        "historyHash": "b68db2a2dcd9dcc47228c9120fc490be7e4677f1a09f14700e24ce013352cb9a",
+        "evidenceHash": "269bb4e169618b21f44d0d667c8e1dfbeedd95b04c346ba6238a2b6aa7232ac0",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -9861,13 +9864,13 @@
       },
       "candidates": [
         {
-          "cm": "8136364847473056586853884293962434604843930448240371725079875260266768569410",
-          "nf": "8570950750428325890192993985348299855502329970006154869820620128062655175613",
+          "cm": "2511963007103894497637846067843146140252960442762134522114664355015939115814",
+          "nf": "10473387441435337107651950748806272891226515494959884461420761316018035235201",
           "value": "10",
           "leaf": "0",
-          "anchor": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+          "anchor": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
           "siblings": [
-            "17632624004193811200602438782490798371258769314338201037222860565716861028824",
+            "10011270784624461759483300378667123248862269664194603025666871404772915240877",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
             "18512210749048123247642993997959185422374521570323643912234746702547156445707",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
@@ -9956,10 +9959,10 @@
         "issued": "20",
         "burned": "0",
         "outstanding": "20",
-        "noteRoot": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+        "noteRoot": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
         "spentRoot": "950aa5d0cdf7465c43dbbc2b2de9dfb1b69b56df8fd1b213239ca594b0298a85",
-        "historyHash": "e11589819a930b27ef968234150925decc40338364d579c450c46101a2b7719a",
-        "evidenceHash": "8c6fd2e8bd977d813afe79dc0f06878003851d32fd58151183b65a9e00d24400",
+        "historyHash": "b68db2a2dcd9dcc47228c9120fc490be7e4677f1a09f14700e24ce013352cb9a",
+        "evidenceHash": "269bb4e169618b21f44d0d667c8e1dfbeedd95b04c346ba6238a2b6aa7232ac0",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -10095,13 +10098,13 @@
       },
       "candidates": [
         {
-          "cm": "17632624004193811200602438782490798371258769314338201037222860565716861028824",
-          "nf": "17057037965615616214907857142319807622361044159933218144530912832351377128880",
+          "cm": "10011270784624461759483300378667123248862269664194603025666871404772915240877",
+          "nf": "10699381945531797305868023539969673324755293547362786524265437920256055164649",
           "value": "20",
           "leaf": "1",
-          "anchor": "12374160420701876770341079870961722344869168670852183332841391268003880904083",
+          "anchor": "19599722942220396859491533253518542767503119210455872987932944897612956122018",
           "siblings": [
-            "8136364847473056586853884293962434604843930448240371725079875260266768569410",
+            "2511963007103894497637846067843146140252960442762134522114664355015939115814",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
             "18512210749048123247642993997959185422374521570323643912234746702547156445707",
             "1935094829533267935830464563796710052445228582946993128186972021230315590035",
@@ -10190,10 +10193,10 @@
         "issued": "10",
         "burned": "0",
         "outstanding": "10",
-        "noteRoot": "2440423086801047728035734537598288322699716779033333853044931791343381315200",
+        "noteRoot": "15118274479825675479111818187427956462949688364407821702591211492786022284521",
         "spentRoot": "950aa5d0cdf7465c43dbbc2b2de9dfb1b69b56df8fd1b213239ca594b0298a85",
-        "historyHash": "0f81f5ab12bb681d4e9cfbeb8fb3a1a5ae6c5661e2243f20e10dd64e650a0fbf",
-        "evidenceHash": "2f8af3d7b5ed6f513cccdc8c48ceb4778e8707baa6bcf3807f3ae759687a3639",
+        "historyHash": "7c9e018467ebc9573b6b536f295c0ab33b76431c4c63cfc7c87fb88f48a7b86e",
+        "evidenceHash": "e673a321c96848d397543e5820e90510471a43dcc307dcff7fc50b6f9c05bf34",
         "range": {
           "judgingIndex": "14",
           "lag": "2",
@@ -10352,10 +10355,10 @@
         "issued": "10",
         "burned": "0",
         "outstanding": "10",
-        "noteRoot": "2440423086801047728035734537598288322699716779033333853044931791343381315200",
+        "noteRoot": "15118274479825675479111818187427956462949688364407821702591211492786022284521",
         "spentRoot": "950aa5d0cdf7465c43dbbc2b2de9dfb1b69b56df8fd1b213239ca594b0298a85",
-        "historyHash": "0f81f5ab12bb681d4e9cfbeb8fb3a1a5ae6c5661e2243f20e10dd64e650a0fbf",
-        "evidenceHash": "2f8af3d7b5ed6f513cccdc8c48ceb4778e8707baa6bcf3807f3ae759687a3639",
+        "historyHash": "7c9e018467ebc9573b6b536f295c0ab33b76431c4c63cfc7c87fb88f48a7b86e",
+        "evidenceHash": "e673a321c96848d397543e5820e90510471a43dcc307dcff7fc50b6f9c05bf34",
         "range": {
           "judgingIndex": "14",
           "lag": "2",
@@ -10497,11 +10500,11 @@
       },
       "candidates": [
         {
-          "cm": "8136364847473056586853884293962434604843930448240371725079875260266768569410",
-          "nf": "8570950750428325890192993985348299855502329970006154869820620128062655175613",
+          "cm": "2511963007103894497637846067843146140252960442762134522114664355015939115814",
+          "nf": "10473387441435337107651950748806272891226515494959884461420761316018035235201",
           "value": "10",
           "leaf": "0",
-          "anchor": "19739785896647818875483227578729509346441909571117241622811383291985430375048",
+          "anchor": "7547456157428465929245292532062052771992423784314304799380722877022266668411",
           "siblings": [
             "0",
             "16257989699773466206393016511488115181357775227253857822747532441271299011144",
@@ -10597,8 +10600,8 @@
         "outstanding": "10",
         "noteRoot": "10108188562429482647684554883702571781800114237214233927831584904393318391471",
         "spentRoot": "67d1dce65282784314a71875b0bff4b981b8173f3f2ba09d83bfeaa4e37b0ea3",
-        "historyHash": "6874f8373c5c39d7fc17e466b1fea1b5e6fab563223fc58c05127916b66b6405",
-        "evidenceHash": "ba46d70bd67a6c43ed76790cb60841cbc8cdf3d8a42406e99952c55b1f8e8e90",
+        "historyHash": "12d52fadcc19dd48f3b4991d3e196150026b07f93e26e6df0f3e2a7bb7a4b896",
+        "evidenceHash": "e4d6f9318340d01e5711817a3623c99418e8aecde28c5740d71383fa67f4b9fb",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -10707,8 +10710,8 @@
         "outstanding": "10",
         "noteRoot": "10108188562429482647684554883702571781800114237214233927831584904393318391471",
         "spentRoot": "67d1dce65282784314a71875b0bff4b981b8173f3f2ba09d83bfeaa4e37b0ea3",
-        "historyHash": "6874f8373c5c39d7fc17e466b1fea1b5e6fab563223fc58c05127916b66b6405",
-        "evidenceHash": "ba46d70bd67a6c43ed76790cb60841cbc8cdf3d8a42406e99952c55b1f8e8e90",
+        "historyHash": "12d52fadcc19dd48f3b4991d3e196150026b07f93e26e6df0f3e2a7bb7a4b896",
+        "evidenceHash": "e4d6f9318340d01e5711817a3623c99418e8aecde28c5740d71383fa67f4b9fb",
         "range": {
           "judgingIndex": "13",
           "lag": "2",
@@ -10895,8 +10898,8 @@
         "outstanding": "10",
         "noteRoot": "15403308777318549563935722631043855072599054033769839329332322327627147064497",
         "spentRoot": "b092dec1da7992704be8a027f7941bf56654f94e8511a5d4e4bd62fbbd0f1917",
-        "historyHash": "7b03ab64d82f127f63caefe0cf750c1fb1d41fda83e33f7a9f6e23ce0f8de288",
-        "evidenceHash": "5f4ae42a99d208466ed8682caa9bc83120b0ac4ba71206ea656f9a6bbfe6bcf3",
+        "historyHash": "0f86ac8f93045be273c2e9c69504182d1f88ea07aefe4e1bbfeaefde606ed0c1",
+        "evidenceHash": "8cdcf79361bd35bf871a68dd240477729e8f35c0e3cbd25857d341a4e5e0f9e0",
         "range": {
           "judgingIndex": "12",
           "lag": "2",
@@ -11080,8 +11083,8 @@
         "outstanding": "10",
         "noteRoot": "15403308777318549563935722631043855072599054033769839329332322327627147064497",
         "spentRoot": "b092dec1da7992704be8a027f7941bf56654f94e8511a5d4e4bd62fbbd0f1917",
-        "historyHash": "70c182d7131bb82578e3cd26825008efe1722a31ca68a9357e5ae9662da66b87",
-        "evidenceHash": "19444c2eafbb41a658ddfbec5326488d3f287dea6649bc3b6f51bcc151921dd3",
+        "historyHash": "4f2cc14efab6884b2ecdcd4e9748da16d0ee95367a5078bc1bf46b01e1d35b35",
+        "evidenceHash": "5cb4cc5623b4adac65868e51350af7b32794254079d013ba02a1c4f79bae719e",
         "range": {
           "judgingIndex": "12",
           "lag": "2",
@@ -11196,8 +11199,8 @@
         "outstanding": "10",
         "noteRoot": "15403308777318549563935722631043855072599054033769839329332322327627147064497",
         "spentRoot": "b092dec1da7992704be8a027f7941bf56654f94e8511a5d4e4bd62fbbd0f1917",
-        "historyHash": "70c182d7131bb82578e3cd26825008efe1722a31ca68a9357e5ae9662da66b87",
-        "evidenceHash": "19444c2eafbb41a658ddfbec5326488d3f287dea6649bc3b6f51bcc151921dd3",
+        "historyHash": "4f2cc14efab6884b2ecdcd4e9748da16d0ee95367a5078bc1bf46b01e1d35b35",
+        "evidenceHash": "5cb4cc5623b4adac65868e51350af7b32794254079d013ba02a1c4f79bae719e",
         "range": {
           "judgingIndex": "12",
           "lag": "2",
@@ -11568,7 +11571,7 @@
         "noteRoot": "3710247521623509061827618063720235822995566777720837174538550528807984177844",
         "spentRoot": "297a3d4fe3f42cb4d5031d36cfafdea9e15fa9c3e47eb4d5f09ac40ada282b1b",
         "historyHash": "a22e5eb9b5fc4d4ef7d812604b19550e8246b07a6a400d18c231d5b4dbf4e14a",
-        "evidenceHash": "f9b6177c3eeedfb3fd8c5730b20823db1e5c4fcb06667b5bcb5eee988d79c179",
+        "evidenceHash": "752ab4df1db4f240b1bfd14eddec7115e155a940c02764d302dfdbcd1c4f0aa8",
         "range": {
           "judgingIndex": "7",
           "lag": "2",
@@ -11687,8 +11690,8 @@
         "outstanding": "9",
         "noteRoot": "1093894372244554682699028366576473011516259153418007044672357605410254658448",
         "spentRoot": "277a0920e5cb63cc5e6cd6669ed438f5d06198a8259727cbbd5b9a748127abe1",
-        "historyHash": "0fcb65f4fbac1b902f3a3dddd6726aed70ea746b9ae7a1c45bfb18f34799b760",
-        "evidenceHash": "d1d0af9cf1e5eac15e120be2056a871cacc90b6a990faade21b5e15d21ae5486",
+        "historyHash": "91414a130ad183aaef45d79a5237460ee64205a1c2d5e452eeecd56ca4f44e89",
+        "evidenceHash": "b202303be741d31a824f84734b5298b52a14bd61e7f503275a6d6728fdf9222b",
         "range": {
           "judgingIndex": "20",
           "lag": "2",
