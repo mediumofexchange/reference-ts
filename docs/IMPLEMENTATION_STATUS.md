@@ -15,8 +15,8 @@ proof verifier). It implements issue, payment, burn, single-backing recovery
 and Ergo publication with bounded venue/publisher process persistence. The [v3 wallet](POOL_V3_WALLET.md) now persists C4.1–2 exact
 requests and C4.5 final fulfillment after independent current-frontier replay,
 including forced spends and locks. It pays exact requests and direct fee
-requests (pool-fees C1.2.3–5) from single-backing holdings found by the C4.6
-seed scan, saving the exact record with its reservations before submission,
+requests (pool-fees C1.2.3–5) from one backing's holdings found by the C4.6
+seed scan, in single- or multi-backing segments, saving the exact record with its reservations before submission,
 re-proving it with the same outputs after its segment lapses, and reconciling
 it from canonical evidence. The
 [v3 loopback service](POOL_V3_SERVICE.md) adds bounded journal operations and
@@ -360,8 +360,10 @@ backings, drop the rest; an elective change waits for the witnessed tail); silen
 return keeps the whole scope. `npm run check:pool:v3-scope` runs the two-backing
 split/rejoin with real proofs and fresh per-backing readers on local and synthetic
 Ergo venues ([local](pool-v3-scope-store-verification.json),
-[synthetic Ergo](pool-v3-scope-store-ergo-verification.json)); a two-backing testnet
-drill is M3.
+[synthetic Ergo](pool-v3-scope-store-ergo-verification.json)). Slice 7 M3 lets the wallet hold,
+pay and re-prove one backing in any scope; the same acceptance pays a wallet request in the
+rejoined scope. The live two-backing drill runs after configuration adoption
+([decision](../decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
 
 Slice 5 adds the [durable venue and journal-owned publisher](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
 Synthetic fresh-process crash checks reproduce ranges and exact publication retries;

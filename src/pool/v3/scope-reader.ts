@@ -5,7 +5,7 @@
 // single-backing read throws ScopeRequired where this reader takes over.
 // Candidate until adoption: reference venues only, no finality verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex as hex } from "@noble/hashes/utils.js";
+import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { linkInForce, type HeldCommitment, type RangeEntry } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
@@ -349,7 +349,9 @@ export async function classifyScopeFrontier(context: FrontierContext, directorie
   const { selection, terms } = context, walk = scopeWalk(context, directories, record, evidence);
   const view = await walk.viewFor(selection.backing, terms), canonical = await walk.latest(selection.backing, terms);
   const around = await walk.around(canonical, terms, view), { carrying } = await walk.carrying();
-  return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, work: await walk.work(terms), carrying,
+  const scopeChains = new Map<string, RecordView["chain"]>();
+  for (const [name, scoped] of canonical?.scopedTerms ?? []) scopeChains.set(name, (await walk.viewFor(hexToBytes(name), scoped)).chain);
+  return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, work: await walk.work(terms), carrying, scopeChains,
     clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
       chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
 }

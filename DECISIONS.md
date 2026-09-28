@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-28` [Pay one backing in any scope and run the live two-backing drill after adoption](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)
 - `2026-09-28` [Change a journal's scope with one command at a committed boundary](decisions/2026-09.md#2026-09-28--change-a-journals-scope-with-one-command-at-a-committed-boundary)
 - `2026-09-28` [Retire v2 against a case map of its checks](decisions/2026-09.md#2026-09-28--retire-v2-against-a-case-map-of-its-checks)
 - `2026-09-28` [Restore the v3 wallet from its seed or an encrypted handoff that freezes its source](decisions/2026-09.md#2026-09-28--restore-the-v3-wallet-from-its-seed-or-an-encrypted-handoff-that-freezes-its-source)
