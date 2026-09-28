@@ -80,11 +80,6 @@ both venues (CI). Next run: M3 (Next 1).
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- 2026-09-28, non-blocking: `site/index.html` says the wallet and external witness
-  write side "remain to be built". Approved and committed in `site` (70034cb, "…multi-backing
-  operator pools and Ergo publication run as unadopted candidates; configuration
-  adoption and multi-backing wallets remain."); the permission check refuses the
-  deploying push, so it waits for `git -C site push origin main` by the maintainer.
 - No service delivery blocker remains. Server timeout followed by eventual
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
