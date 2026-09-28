@@ -1,4 +1,4 @@
-// Single-backing candidate §12 evidence and §13 record reader. Configuration,
+// Candidate §12 evidence and §13 record readers, single- and multi-backing. Configuration,
 // verifier, selection and reference venue are independently held by the reader.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
@@ -10,11 +10,12 @@ import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { classifyFrontier, classifyImports, importLimitsOf, type FrontierResult, type ImportLimits, type ImportResult } from "./import-reader.js";
+import { classifyFrontier, classifyImports, importLimitsOf, type FrontierResult, type ImportContext, type ImportLimits, type ImportResult } from "./import-reader.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage, type PackageLimits } from "./package.js";
 import { decodedTrails, type ReaderSelection, type SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay, ScopeRequired } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
+import { classifyScopes, type ScopeResult } from "./scope-reader.js";
 import type { ProofCheck } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
@@ -48,8 +49,29 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
  * refusal. Never returns a partial state or treats unavailable ancestry as empty.
  * The internal state is newly replayed per call; no asserted state is an input.
  * Compact faults replace only dependency-resolved non-opening target trails;
- * the selected envelope remains complete. Multi-backing reads are unsupported. */
+ * the selected envelope remains complete. A multi-backing scope throws
+ * ScopeRequired; readPackage reads any scope. */
 export async function readSingleBackingPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ImportResult & FaultResult> {
+  const { context, directories, evidence, faults, venue } = openPackage(bytes, selected, options, false);
+  const result = await classifyImports(context, directories, venue, evidence);
+  return { ...result, ...faults.result() };
+}
+
+/** As readSingleBackingPackage for a selection in any scope: a checkpoint scoping
+ * several backings, the selection's or one in its ancestry, is read by the scope
+ * reader (C2.10.3–7) with the same refusals. Carries no canonical frontier. */
+export async function readPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
+  const { context, directories, evidence, faults, header, venue } = openPackage(bytes, selected, options, true);
+  let result: ScopeResult | undefined;
+  if (header.entries.length === 1) {
+    try { result = await classifyImports(context, directories, venue, evidence); }
+    catch (error) { if (!(error instanceof ScopeRequired)) throw error; }
+  }
+  result ??= await classifyScopes(context, directories, venue, evidence);
+  return { ...result, ...faults.result() };
+}
+
+function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader, anyScope: boolean) {
   const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn, importLimits: limitsIn } = options;
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
@@ -84,16 +106,16 @@ export async function readSingleBackingPackage(bytes: Uint8Array, selected: Read
   if (snapshotBytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const snapshot = decodeSnapshot(snapshotBytes), scope = checkpointScope(decodedTrails(trails), selection.backing, entry.digest, snapshot);
   const { header } = scope;
-  if (header.entries.length !== 1) throw new ScopeRequired();
+  if (!anyScope && header.entries.length !== 1) throw new ScopeRequired();
   scope.fullTrail();
   requireReplay(same(header.domain, domain) && same(header.venue, selection.venue) && same(header.operator, selection.operator) &&
     header.sequence <= selection.sequence, "CONTEXT");
-  const terms = scope.rootTerms[0]!;
+  const terms = scope.rootTerms[header.entries.findIndex(scoped => same(scoped.backing, selection.backing))]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
   const faults = faultObserver(payloads(7), selection, verifier);
-  const result = await classifyImports({ selection, terms, header, verifier, reference, importLimits, faults,
-    ...(payloads(10).length === 0 ? {} : { receiptBytes: payloads(10)[0]! }) }, directories, venue, { snapshots, trails });
-  return { ...result, ...faults.result() };
+  const context: ImportContext = { selection, terms, header, verifier, reference, importLimits, faults,
+    ...(payloads(10).length === 0 ? {} : { receiptBytes: payloads(10)[0]! }) };
+  return { context, directories, evidence: { snapshots, trails }, faults, header, venue };
 }
 
 /** Descend every witnessed term for independently authenticated root terms.

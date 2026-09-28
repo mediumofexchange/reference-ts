@@ -3,23 +3,18 @@
 Updated: 2026-09-28
 
 ## Goal
-Review-code pass (done) over main since `3b9db9f` plus slice 6f's v2 deletion (PR #37,
-merged `8cf66cb`; slice 6f delivered). Acceptance: each confirmed defect fixed with a
-regression test on `fix/review-code-2026-09-28`, independently reviewed, CI green, seven
-current v3 reports re-recorded from CI, deferred findings in Next. No new features.
+Slice 7 M1 (done, PR #39): the multi-backing reader in `src/`. Acceptance: local-check's
+scope groups pass through `src/` on both venues with identical verdicts, `readPackage`
+agrees with them, independent review, reports re-recorded. Next run: slice 7 M2.
 
 ## Status
-- Six read-only lanes reviewed Ergo reading, Ergo publishing, v3 state/reader, the
-  operator journal, wallet/service and evidence/spec agreement. Fixed, with tests: a
-  supplier repeating the anchor made the durable Ergo view unopenable (`ergo.ts`); one
-  supplier claiming every transaction stopped resends to honest nodes
-  (`ergo-publisher.ts`); a committed kind-7 record left reads unresolved instead of
-  failing replay (`state.ts`, check `KIND`); sync throws and caller errors in the
-  publish path; stale Ergo, v2 and wallet docs; unused v2 tags. Refuted: wrong-length
-  proofs verify false. The fix review's three read-backs shaped the publisher's
-  per-supplier parent walk (tests pin its query and submit counts).
-- Delivered in PR #38: seven current reports re-recorded from CI run 36442873841,
-  `check:evidence` current for the six file-bound ones. Next run: pick from Next.
+- `src/pool/v3/scope-reader.ts` replaces `scope-{replay,recovery}.mjs` (same reads,
+  charges and checks; resume identity kept). `readPackage` reads any scope, falling back
+  from the single-backing walk on `ScopeRequired`. `scope-runtime-check.mjs` compared
+  it with 23 multi-backing selections; `test/pool-v3-scope-reader.test.ts` is the
+  oracle-proof fixture. The replay report's verdict fields equal main's (only
+  proof-randomized hashes differ). An opus review found no blockers; its coverage and
+  doc findings are fixed, the refusal-evidence gap is Next 5(h).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -36,7 +31,9 @@ current v3 reports re-recorded from CI, deferred findings in Next. No new featur
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Multi-backing, including compact fault orchestration (slice 7).
+1. Multi-backing (slice 7, M1 reader done): M2 operator activation and succession of
+   multi-backing segments in the journal (`store.ts` opens single-backing only; its
+   reads move to `readPackage`); M3 two-backing testnet drill. Stop: no adoption.
 2. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
@@ -57,7 +54,9 @@ current v3 reports re-recorded from CI, deferred findings in Next. No new featur
    return an old-segment receipt for an adopted forced record (traced only). (d) Ergo
    reports bind pool-v3 `786f962` but no `venue-ergo.md` revision; the CRS is unbound.
    (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
-   `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit.
+   `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit. (h) Runtime
+   package-reader refusals drop the receipt walk's proven contradictions and fault facts
+   (the harness keeps them); attach them to the refusal if a runtime caller needs them.
 6. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
    Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
@@ -91,7 +90,9 @@ current v3 reports re-recorded from CI, deferred findings in Next. No new featur
 - No service delivery blocker remains. Server timeout followed by eventual
   journal completion has source review, without a direct timed acceptance case.
 - Disk streaming and physical custody remain separate persistence boundaries.
+- Deletions refused by the classifier (non-blocking): `git rm` the unused shims
+  `scripts/pool/v3/{receipt-state,non-service}.mjs` and, after `local-replay.mjs` imports
+  from `dist/pool/v3/{scope-evidence,terms}.js`, `scope-evidence.mjs`.
 
-Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28.
-The single-backing wallet path is complete and v2 is retired, within that rounding;
-configuration adoption, multi-backing runtime, qualified deployment storage and mainnet remain.
+Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28 (the
+multi-backing reader is in; operator activation, configuration adoption, qualified storage, mainnet remain).

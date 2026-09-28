@@ -13,7 +13,7 @@ import { prepareExactOutput, deriveSettlementOwnerSecret } from "../../../dist/p
 import { LIMITS } from "./evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
-import { mergeFinalizedPrefixes } from "./scope-replay.mjs";
+import { mergeFinalizedPrefixes } from "../../../dist/pool/v3/scope-reader.js";
 import { FixtureVenue } from "../../../dist/record-venue.js";
 import { checkRecoveryScopeReceipts } from "./scope-receipt-check.mjs";
 import { checkRecoveryScopeCounts } from "./scope-count-check.mjs";
@@ -455,8 +455,7 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const event = (record, segment, position, ancestry, tags = [], demand) => ({ identity: hex(codec.statementHash(record)),
       record, segment, position, ancestry: new Map(ancestry), tags, ...(demand === undefined ? {} : { demand }) });
     const parent = events => ({ state: { events: new Map(events), anchors: new Set(), scanOutputs: [], outputPositions: new Map() } });
-    const check = (condition, code) => { if (!condition) throw Object.assign(new Error(code), { check: code }); };
-    const merge = parents => mergeFinalizedPrefixes(parents, { codec, check, chargeEvents: () => {} });
+    const merge = parents => mergeFinalizedPrefixes(parents, () => {});
     const d = event(dx2, "common", 1n, [], [tagOf(fundedX.nf)], demandId);
     const withdraw = withdrawal(splitX, dx2, presenterX);
     const w = event(withdraw, "left", 1n, [["common", 1n]], [tagOf(fundedX.nf)], demandId);

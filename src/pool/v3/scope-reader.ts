@@ -1,0 +1,518 @@
+// Multi-backing C2.10.3–7, C2b.3.1–4.2 and C2b.5 reads: whole-scope
+// classification, merged finalized prefixes with per-backing totals and
+// adoption indices, publication force and silence clocks per backing, receipt
+// reads across a scope, the non-service count and compact faults. A
+// single-backing read throws ScopeRequired where this reader takes over.
+// Candidate until adoption: reference venues only, no finality verdict.
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex as hex } from "@noble/hashes/utils.js";
+import { compareBytes, EncodingError } from "../../bytes.js";
+import { linkInForce, type HeldCommitment, type RangeEntry } from "../../record-range.js";
+import type { RecordVenue } from "../../record-venue.js";
+import type { Commitment } from "../../venue-records.js";
+import { identifierOf, VALUE_BOUND } from "../field.js";
+import { EMPTY_NOTE_ROOT } from "../note-tree.js";
+import { ScopeTree } from "../scope.js";
+import { decodeReceipt, decodeSnapshot, type Snapshot } from "./commitments.js";
+import type { SegmentHeader } from "./headers.js";
+import { importLimitsOf, NO_FAULTS, type ImportCarryingVerdict, type ImportContext, type ImportEvidence,
+  type PublicationVerdict } from "./import-reader.js";
+import { countNonService, type NonServiceCount } from "./non-service.js";
+import { decodedTrails, readRecordView, replayTrail, type Directories, type RecordView, type ReplayResult,
+  type ValidCheckpoint } from "./reader.js";
+import { receiptWalk, type ReceiptFact, type ReceiptVerdict } from "./receipt-state.js";
+import { decodePublication, encodeRecord, type Record } from "./records.js";
+import { applyRecovery, effectOf, type Demand } from "./recovery.js";
+import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
+import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
+import { applyForceEffects, applyForceRecord, openForceState, type OutputLocation, type ReplayEvent, type ScanOutput,
+  type Totals } from "./state.js";
+import type { RootTerms } from "./terms.js";
+
+const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
+type Identity = Pick<Commitment, "operator" | "sequence" | "root">;
+const keyOf = (c: Identity): string => `${hex(c.operator)}:${c.sequence}:${hex(c.root)}`;
+const matches = (a: Identity | undefined, b: Identity | undefined): boolean => a !== undefined && b !== undefined && keyOf(a) === keyOf(b);
+const byIndex = (a: bigint, b: bigint): number => (a < b ? -1 : a > b ? 1 : 0);
+export const venueOrder = (a: { readonly index: bigint; readonly ordinal: bigint }, b: { readonly index: bigint; readonly ordinal: bigint }): number =>
+  a.index < b.index ? -1 : a.index > b.index ? 1 : a.ordinal < b.ordinal ? -1 : a.ordinal > b.ordinal ? 1 : 0;
+
+/** A descent's bound: strictly before an index, or before a held checkpoint in rank order. */
+type Child = { readonly index: bigint; readonly strict: true } | (HeldCommitment & { readonly strict?: undefined });
+const before = (held: { readonly index: bigint; readonly commitment: Identity }, child: Child | undefined): boolean =>
+  child === undefined || held.index < child.index || (held.index === child.index && child.strict === undefined &&
+    same(held.commitment.operator, child.commitment.operator) && held.commitment.sequence < child.commitment.sequence);
+
+/** Imported finalized prefixes merged for a new multi-backing segment. */
+export interface MergedPrefixes {
+  readonly events: Map<string, ReplayEvent>;
+  readonly totals: Map<string, Totals>;
+  readonly nullifiers: Set<bigint>;
+  readonly outputsSeen: Set<bigint>;
+  readonly anchors: Set<bigint>;
+  scanOutputs: ScanOutput[];
+  readonly outputPositions: Map<bigint, OutputLocation>;
+  readonly demands: Map<string, Demand>;
+  readonly effective: Set<string>;
+  readonly spentTags: Set<bigint>;
+  readonly adoptionIndices: Map<string, bigint>;
+}
+type MergeSource = Pick<ReplayResult, "events" | "anchors" | "scanOutputs" | "outputPositions">;
+
+/** C2.10.5–6: imported roots retain their original trees. Repeated events
+ * agree by statement identity; distinct events may never share nullifiers or
+ * outputs, and two touching one tag or demand must be ordered by ancestry.
+ * Supply is checked per backing after the whole union. */
+export function mergeFinalizedPrefixes(parents: readonly ({ readonly state: MergeSource } | undefined)[],
+  chargeEvents: (amount: bigint) => void): MergedPrefixes {
+  const result: MergedPrefixes = { events: new Map(), totals: new Map(), nullifiers: new Set(), outputsSeen: new Set(),
+    anchors: new Set([EMPTY_NOTE_ROOT]), scanOutputs: [], outputPositions: new Map(),
+    demands: new Map(), effective: new Set(), spentTags: new Set(), adoptionIndices: new Map() };
+  const scans = new Map<bigint, ScanOutput>(), touched = new Map<string, ReplayEvent[]>();
+  const precedes = (a: ReplayEvent, b: ReplayEvent): boolean =>
+    a.segment === b.segment ? a.position < b.position : (b.ancestry.get(a.segment) ?? 0n) >= a.position;
+  for (const parent of new Set(parents)) {
+    if (parent === undefined) continue;
+    for (const [id, event] of parent.state.events) {
+      chargeEvents(1n);
+      const prior = result.events.get(id);
+      if (prior !== undefined) { requireReplay(prior.identity === event.identity, "CONTINUITY"); continue; }
+      for (const key of [...event.tags.map(tag => `tag:${tag}`), ...(event.demand === undefined ? [] : [`demand:${event.demand}`])]) {
+        const previous = touched.get(key) ?? [];
+        for (const other of previous) { chargeEvents(1n); requireReplay(precedes(other, event) || precedes(event, other), "RECOVERY_CONFLICT"); }
+        previous.push(event); touched.set(key, previous);
+      }
+      const { nfs, outputs } = effectOf(event.record);
+      requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !result.nullifiers.has(nf)), "SPENT");
+      requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !result.outputsSeen.has(cm)), "OUTPUT");
+      nfs.forEach(nf => result.nullifiers.add(nf)); outputs.forEach(cm => result.outputsSeen.add(cm));
+      const { kind, publicInputs: p } = event.record;
+      if (kind === 1 || kind === 3) {
+        const backing = hex(identifierOf(p[5]!, p[6]!)), total = result.totals.get(backing) ?? { issued: 0n, burned: 0n };
+        if (kind === 1) total.issued += p[7]!; else total.burned += p[7]!;
+        result.totals.set(backing, total);
+      }
+      result.events.set(id, event);
+      if (kind >= 4) requireReplay(!result.effective.has(event.identity), "REPEATED_STATEMENT");
+      applyRecovery(event.record, result);
+    }
+    for (const root of parent.state.anchors) result.anchors.add(root);
+    for (const output of parent.state.scanOutputs) if (!scans.has(output.cm)) scans.set(output.cm, output);
+    for (const [cm, path] of parent.state.outputPositions) {
+      const previous = result.outputPositions.get(cm);
+      if (previous === undefined || path.tree.size > previous.tree.size) result.outputPositions.set(cm, path);
+    }
+  }
+  for (const total of result.totals.values()) requireReplay(total.burned <= total.issued && total.issued < VALUE_BOUND, "SUPPLY");
+  result.scanOutputs = [...scans.values()];
+  return result;
+}
+
+interface Classified {
+  readonly commitment: Commitment; readonly index: bigint; readonly segment: Uint8Array;
+  readonly header: SegmentHeader; readonly snapshot: Snapshot;
+}
+interface ValidScope extends Classified {
+  readonly class: "valid"; readonly state: ReplayResult; readonly block: readonly ScopeForce[];
+  readonly scopedTerms: ReadonlyMap<string, RootTerms>; readonly openingIndex: bigint;
+}
+type ScopeVerdict = ValidScope | (Classified & { readonly class: "lapsed" }) | (Classified & { readonly class: "excluded"; readonly check: string });
+interface ScopeForce { readonly backing: string; readonly index: bigint; readonly ordinal: bigint; readonly record: Record; readonly bytes: Uint8Array }
+interface ScopeClock {
+  readonly duration: bigint; readonly snapshotIndex: bigint; readonly gap: bigint; readonly open: boolean;
+  boundary: bigint | undefined; readonly opening: bigint;
+}
+export interface ScopePublicationVerdict extends PublicationVerdict { readonly backing: string }
+export interface ScopeRanges {
+  readonly judgingIndex: bigint; readonly lag: bigint; readonly checkpointIndex: bigint; readonly revokedAt: bigint | undefined;
+  readonly chain: RecordView["chain"]; readonly heldBefore: number; readonly heldAfter: number;
+  /** A scope read names each publication's backing; a single-backing read has one. */
+  readonly publications: readonly (PublicationVerdict & { readonly backing?: string })[]; readonly nonService?: NonServiceCount;
+}
+export type ScopeResult = { readonly receipt: ReceiptVerdict; readonly state?: undefined } | {
+  readonly receipt?: undefined; readonly state: ReplayResult; readonly carrying: readonly ImportCarryingVerdict[];
+  readonly clock: ClockRecord | null; readonly ranges: ScopeRanges;
+};
+type Latest = (backing: Uint8Array, terms: RootTerms, child?: Child) => Promise<ValidScope | undefined>;
+
+/** C2b.3.1–4.2 per backing. Snapshots exclude the entire publication index;
+ * canonical opening predecessors additionally include lower same-key sequences. */
+function scopeRecovery(context: ImportContext, viewFor: (backing: Uint8Array, terms: RootTerms) => Promise<RecordView>,
+  latest: Latest, charge: (amount: bigint) => void) {
+  const { selection, verifier } = context;
+  const answers = new Map<string, Promise<readonly RangeEntry[]>>(), positions = new Map<string, string>();
+  const progress = new Map<string, { force: ScopeForce[]; verdicts: ScopePublicationVerdict[]; next: number; busy: boolean }>();
+  const heldIndices = new Map<string, Promise<bigint[]>>(), clocks = new Map<string, Promise<ScopeClock>>();
+  const snapshotAt = (backing: Uint8Array, terms: RootTerms, index: bigint): Promise<ValidScope | undefined> =>
+    latest(backing, terms, { index, strict: true });
+  // Each publication is charged once, when its answer is read; forces and
+  // counts then pass over the same entries without charging them again.
+  const publications = (backing: Uint8Array, terms: RootTerms): Promise<readonly RangeEntry[]> => {
+    const name = hex(backing);
+    if (!answers.has(name)) answers.set(name, (async () => {
+      const view = await viewFor(backing, terms), answer = await view.ask(4, backing);
+      for (const entry of answer.entries) {
+        charge(1n);
+        const position = `${entry.index}:${entry.ordinal}`;
+        if (positions.has(position)) throw new EvidenceRefusal("unresolved-evidence");
+        positions.set(position, name);
+      }
+      return answer.entries;
+    })());
+    return answers.get(name)!;
+  };
+  const classifyPublication = async (backing: Uint8Array, terms: RootTerms, view: RecordView, duration: bigint,
+    entry: RangeEntry, item: ScopePublicationVerdict, force: ScopeForce[]): Promise<void> => {
+    const name = hex(backing);
+    let publication;
+    try { publication = decodePublication(entry.record); }
+    catch (error) {
+      if (error instanceof EncodingError) return;
+      throw error;
+    }
+    if (!same(publication.domain, selection.domain) || !same(publication.backing, backing) ||
+        publication.kind === 2 || publication.kind === 5) return;
+    const snapshot = await snapshotAt(backing, terms, entry.index);
+    if (snapshot === undefined || entry.index - snapshot.index <= duration) return;
+    const source = snapshot.state;
+    const state = openForceState(source);
+    for (const prior of force) if (prior.index > (source.adoptionIndices.get(name) ?? 0n)) {
+      charge(1n); applyForceEffects(state, prior.record);
+    }
+    const record = publication.record;
+    try {
+      await applyForceRecord(state, encodeRecord(record), { mode: "force", domain: selection.domain, backing,
+        segment: snapshot.segment, scope: new ScopeTree(snapshot.header.entries).root(), issuer: terms.obligor,
+        index: entry.index, lag: view.lag, verifier });
+      force.push({ backing: name, index: entry.index, ordinal: entry.ordinal, record, bytes: encodeRecord(record) });
+      item.force = true;
+    } catch (error) {
+      if (!(error instanceof ReplayRefusal)) throw error;
+      item.check = error.check;
+    }
+  };
+  // A publication's verdict depends on its own index, the snapshot strictly
+  // before it and the force of earlier publications, never on how far a caller
+  // reads. Each backing's publications are therefore classified once, in venue
+  // order, and a read through an index returns that prefix.
+  const forces = async (backing: Uint8Array, terms: RootTerms, through: bigint):
+    Promise<{ force: ScopeForce[]; verdicts: ScopePublicationVerdict[] }> => {
+    const name = hex(backing), duration = terms.silence?.noCommitmentDuration;
+    if (duration === undefined) return { force: [], verdicts: [] };
+    // Earlier receipt inclusion must not depend on publication availability
+    // after the first gap. Strict-prefix clock reads descend in index here.
+    if (context.receiptBytes !== undefined && (await clock(backing, terms, 0n, through))!.boundary === undefined) return { force: [], verdicts: [] };
+    const view = await viewFor(backing, terms), entries = await publications(backing, terms);
+    if (!progress.has(name)) progress.set(name, { force: [], verdicts: [], next: 0, busy: false });
+    const read = progress.get(name)!, { force, verdicts } = read;
+    while (read.next < entries.length && entries[read.next]!.index <= through) {
+      // Nested reads come from snapshots strictly before the entry in progress.
+      if (read.busy) throw new Error("publication prefix order");
+      read.busy = true;
+      try {
+        const entry = entries[read.next]!;
+        const item: ScopePublicationVerdict = { backing: name, index: entry.index.toString(), ordinal: entry.ordinal.toString(), force: false };
+        verdicts.push(item);
+        await classifyPublication(backing, terms, view, duration, entry, item, force);
+      } finally { read.busy = false; }
+      read.next++;
+    }
+    const after = verdicts.findIndex(item => BigInt(item.index) > through);
+    return { force: force.filter(event => event.index <= through),
+      verdicts: verdicts.slice(0, after < 0 ? verdicts.length : after).map(item => ({ ...item })) };
+  };
+  // Every held index within its own term, scanned and charged once per backing.
+  const termIndices = (backing: Uint8Array, terms: RootTerms): Promise<bigint[]> => {
+    const name = hex(backing);
+    if (!heldIndices.has(name)) heldIndices.set(name, (async () => {
+      const view = await viewFor(backing, terms), indices = new Set<bigint>();
+      for (let i = 0; i < view.chain.length; i++) for (const held of await view.heldBy(view.chain[i]!.operator)) {
+        charge(1n);
+        if (held.index >= view.chain[i]!.from && held.index <= view.termEnd(i)) indices.add(held.index);
+      }
+      return [...indices].sort(byIndex);
+    })());
+    return heldIndices.get(name)!;
+  };
+  // One clock per backing, opening and index; each caller receives its own copy.
+  const clock = async (backing: Uint8Array, terms: RootTerms, opening: bigint, through: bigint): Promise<ScopeClock | null> => {
+    const duration = terms.silence?.noCommitmentDuration;
+    if (duration === undefined) return null;
+    const key = `${hex(backing)}:${opening}:${through}`;
+    if (!clocks.has(key)) clocks.set(key, (async () => {
+      // A reset is a breakpoint even if the gap's first index has no record.
+      const points = new Set([through]);
+      for (const at of await termIndices(backing, terms)) if (at > opening && at <= through) points.add(at);
+      let boundary: bigint | undefined, last = 0n;
+      for (const at of [...points].sort(byIndex)) {
+        last = (await snapshotAt(backing, terms, at))?.index ?? 0n;
+        if (at > opening && at - last > duration && boundary === undefined) {
+          const first = last + duration + 1n;
+          boundary = first > opening ? first : opening + 1n;
+        }
+      }
+      return { duration, snapshotIndex: last, gap: through - last, open: through - last > duration, boundary, opening };
+    })());
+    return { ...await clocks.get(key)! };
+  };
+  return { forces, clock, publications };
+}
+
+/** C2.10.3–7 over a scope of several backings. Each checkpoint is classified
+ * once from its own committed evidence: its authenticated header fixes the
+ * scope, every scoped backing's canonical predecessor is found by descending
+ * that backing's terms in reverse rank order, and an opening imports their
+ * merged finalized prefixes with each backing's adoption index. Continuations
+ * resume from their segment's opening. Unrelated old trails are not read.
+ * A receipt instead returns its verdict at the deciding checkpoint or boundary. */
+export async function classifyScopes(context: ImportContext, directories: Directories, record: RecordVenue,
+  evidence: ImportEvidence): Promise<ScopeResult> {
+  const { selection } = context, faults = context.faults ?? NO_FAULTS, limits = importLimitsOf(context.importLimits);
+  const trails = decodedTrails(evidence.trails), snapshots = new Map(evidence.snapshots.map(bytes => [hex(sha256(bytes)), bytes]));
+  const views = new Map<string, Promise<RecordView>>(), verified = new Map<string, Promise<ScopeVerdict>>();
+  const heldSeen = new Set<string>(), latestCache = new Map<string, Promise<ValidScope | undefined>>();
+  let eventWork = 0n;
+  const chargeEvents = (amount: bigint): void => {
+    eventWork += amount;
+    if (eventWork > limits.maxEvents) throw new EvidenceRefusal("resource-refusal");
+  };
+  const inspect = (held: HeldCommitment): void => {
+    heldSeen.add(keyOf(held.commitment));
+    if (BigInt(heldSeen.size) > limits.maxCheckpoints) throw new EvidenceRefusal("resource-refusal");
+  };
+  const viewFor = (backing: Uint8Array, terms: RootTerms): Promise<RecordView> => {
+    const id = hex(backing);
+    if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, directories, record, context.reference));
+    return views.get(id)!;
+  };
+  const snapshotFor = (digest: Uint8Array): Snapshot => {
+    const bytes = snapshots.get(hex(digest));
+    if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    return decodeSnapshot(bytes);
+  };
+  // Descend authenticated carriage in reverse rank order. A valid candidate
+  // recursively resolves its own predecessors; unrelated old trails are not read.
+  const latest: Latest = (backing, terms, child) => {
+    const cacheKey = `${hex(backing)}:${child === undefined ? "current" : child.strict ? `before:${child.index}` : keyOf(child.commitment)}`;
+    if (latestCache.has(cacheKey)) return latestCache.get(cacheKey)!;
+    const pending = (async () => {
+      const view = await viewFor(backing, terms);
+      for (let i = view.chain.length - 1; i >= 0; i--) {
+        const term = view.chain[i]!;
+        if (child !== undefined && (term.from > child.index ||
+            (term.from === child.index && (child.strict || !same(term.operator, child.commitment.operator))))) continue;
+        const held = await view.heldBy(term.operator);
+        for (let j = held.length - 1; j >= 0; j--) {
+          const candidate = held[j]!;
+          inspect(candidate);
+          if (candidate.index < term.from || candidate.index > view.termEnd(i) || !before(candidate, child)) continue;
+          if (view.carries(candidate) === undefined) continue;
+          const result = await classify(candidate, backing);
+          if (result.class === "valid") return result;
+        }
+      }
+      return undefined;
+    })();
+    latestCache.set(cacheKey, pending);
+    return pending;
+  };
+  const recovery = scopeRecovery(context, viewFor, latest, chargeEvents);
+  const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
+    const id = keyOf(held.commitment);
+    if (verified.has(id)) return verified.get(id)!;
+    const pending = (async (): Promise<ScopeVerdict> => {
+      inspect(held);
+      const c = held.commitment, directory = directories.get(hex(c.root));
+      if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
+      const entry = directory.find(item => same(item.name, backing));
+      if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
+      const snapshot = snapshotFor(entry.digest);
+      const scope = checkpointScope(trails, backing, entry.digest, snapshot), { header } = scope;
+      await faults.inspect(held, directory, scope);
+      // Required scope is discovered only after its header is authenticated;
+      // checkpointScope resolved and verified every scoped terms field.
+      const scopedTerms = new Map(header.entries.map((scoped, i) => [hex(scoped.backing), scope.rootTerms[i]!]));
+      const scopeViews = new Map<string, RecordView>();
+      const base: Classified = { commitment: c, index: held.index, segment: snapshot.segment, header, snapshot };
+      try {
+        requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
+          same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
+        let lapsed = false, termsInForce = true;
+        for (const scoped of header.entries) {
+          const terms = scopedTerms.get(hex(scoped.backing))!;
+          requireReplay(same(terms.configuration, selection.domain) && same(terms.venue, selection.venue), "TERMS_CONTEXT");
+          const view = await viewFor(scoped.backing, terms); scopeViews.set(hex(scoped.backing), view);
+          const own = view.chain.find(term => same(term.link, scoped.link));
+          const current = linkInForce(view.chain, held.index);
+          if (own !== undefined && same(own.operator, c.operator) && own.from < current.from) lapsed = true;
+          if (own === undefined || !same(own.operator, c.operator) || !same(own.link, current.link)) termsInForce = false;
+        }
+        if (lapsed) return { ...base, class: "lapsed" };
+        requireReplay(termsInForce, "TERMS_SCOPE");
+        const durations = [...scopedTerms.values()].map(terms => terms.silence?.noCommitmentDuration);
+        requireReplay(durations.every(duration => duration === durations[0]), "SILENCE_SCOPE");
+        const parents: (ValidScope | undefined)[] = [];
+        for (const scoped of header.entries) parents.push(await latest(scoped.backing, scopedTerms.get(hex(scoped.backing))!, held));
+        let imported: MergedPrefixes | ReplayResult, lastValid: ValidCheckpoint | undefined, block: readonly ScopeForce[], openingIndex: bigint;
+        const opening = c.sequence === header.sequence;
+        if (opening) {
+          requireReplay(scope.fullTrail().records.length === 0, "OPENING");
+          for (let i = 0; i < header.entries.length; i++) {
+            const scoped = header.entries[i]!, parent = parents[i];
+            requireReplay(parent === undefined ? scoped.opening === undefined : matches(scoped.opening, parent.commitment), "IMPORT");
+            if (parent !== undefined && !same(parent.commitment.operator, c.operator)) {
+              const view = scopeViews.get(hex(scoped.backing))!;
+              requireReplay(parent.index < linkInForce(view.chain, held.index).from, "IMPORT_RANK");
+            }
+          }
+          const merged = mergeFinalizedPrefixes(parents, chargeEvents), adopted: ScopeForce[] = [];
+          for (let i = 0; i < header.entries.length; i++) {
+            const scoped = header.entries[i]!, name = hex(scoped.backing);
+            merged.adoptionIndices.set(name, parents[i]?.state.adoptionIndices.get(name) ?? 0n);
+            const published = await recovery.forces(scoped.backing, scopedTerms.get(name)!, held.index);
+            adopted.push(...published.force.filter(event => event.index > merged.adoptionIndices.get(name)!));
+          }
+          block = adopted.sort(venueOrder); openingIndex = held.index; imported = merged;
+        } else {
+          const firstView = scopeViews.values().next().value!;
+          const openingHeld = (await firstView.heldBy(c.operator)).find(item => item.commitment.sequence === header.sequence);
+          if (openingHeld === undefined) throw new EvidenceRefusal("unresolved-evidence");
+          requireReplay(before(openingHeld, held), "IMPORT_RANK");
+          const openingDirectory = directories.get(hex(openingHeld.commitment.root));
+          if (openingDirectory === undefined) throw new EvidenceRefusal("unresolved-evidence");
+          requireReplay(openingDirectory.some(item => same(item.name, backing)), "OPENING");
+          const opened = await classify(openingHeld, backing);
+          requireReplay(opened.class === "valid" && same(opened.segment, snapshot.segment), "OPENING");
+          for (const scoped of header.entries) {
+            const clock = await recovery.clock(scoped.backing, scopedTerms.get(hex(scoped.backing))!, opened.index, held.index);
+            if (clock !== null && (clock.open || (clock.boundary !== undefined && clock.boundary < held.index))) return { ...base, class: "lapsed" };
+          }
+          requireReplay(parents.every(parent => parent !== undefined && same(parent.segment, snapshot.segment) &&
+            matches(parent.commitment, parents[0]!.commitment)), "CONTINUITY");
+          imported = opened.state;
+          // The opening's own block and imported state: a continuation resumes against them by identity.
+          block = opened.block; openingIndex = opened.index;
+          const previous = parents[0]!;
+          lastValid = { position: previous.state.position, historyHash: previous.snapshot.historyHash,
+            evidenceHash: previous.snapshot.evidenceHash, eventIndices: previous.state.eventIndices, state: previous.state };
+        }
+        // One carried snapshot authenticates the full scope for lapse even
+        // when this directory omits a sibling. Complete carriage and matching
+        // sibling snapshots are finalization conditions, checked after lapse.
+        requireReplay(directory.length === header.entries.length && header.entries.every(scoped =>
+          directory.some(item => same(item.name, scoped.backing))), "SCOPE");
+        const scopedSnapshots = header.entries.map(scoped => {
+          const s = snapshotFor(directory.find(item => same(item.name, scoped.backing))!.digest);
+          requireReplay(same(s.backing, scoped.backing) && same(s.segment, snapshot.segment) &&
+            same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
+          return s;
+        });
+        // §9.1: the opening's record-derived block bounds compact exclusion to later positions.
+        const intrinsic = !opening && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
+        const classification = scope.classificationEvidence(intrinsic);
+        if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
+        const revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
+        const state = await replayTrail({ ...context, selection: { ...selection, backing }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
+          snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
+            block: opening ? [] : block, openingIndex, chargeEvents });
+        for (const s of scopedSnapshots) {
+          const total = state.totals.get(hex(s.backing)) ?? { issued: 0n, burned: 0n };
+          requireReplay(s.issued === total.issued && s.burned === total.burned, "SNAPSHOT");
+        }
+        return { ...base, state, block, scopedTerms, openingIndex, class: "valid" };
+      } catch (error) {
+        if (!(error instanceof ReplayRefusal)) throw error;
+        scope.fullTrail(); // Header-only faults are not exclusion certificates.
+        return { ...base, class: "excluded", check: error.check };
+      }
+    })();
+    verified.set(id, pending);
+    return pending;
+  };
+  const view = await viewFor(selection.backing, context.terms);
+  const selectedHeld = (await view.heldBy(selection.operator)).find(held => matches(held.commitment, selection));
+  if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
+  if (context.receiptBytes !== undefined) {
+    const receipt = decodeReceipt(context.receiptBytes);
+    const original = authenticatedScope(trails, receipt.segment);
+    const { header } = original, scopeViews = new Map<string, RecordView>(), termsByBacking = new Map<string, RootTerms>();
+    // authenticatedScope resolved and verified every scoped terms field.
+    for (let i = 0; i < header.entries.length; i++) {
+      const scoped = header.entries[i]!, terms = original.rootTerms[i]!;
+      if (!same(terms.configuration, selection.domain) || !same(terms.venue, selection.venue)) throw new EvidenceRefusal("invalid-receipt");
+      termsByBacking.set(hex(scoped.backing), terms);
+      scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
+    }
+    const walk = await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots, scopeViews);
+    // A fallback can already have established contradictions. Keep these facts
+    // if a newly required complete-scope dependency refuses the repeated walk.
+    const prior = context.receiptWalk;
+    context.receiptWalk = { evidence: () => {
+      const facts: ReceiptFact[] = [...(prior?.evidence().contradictedAt ?? []), ...walk.evidence().contradictedAt];
+      return { contradictedAt: facts.filter((fact, i) => facts.findIndex(other =>
+        other.operator === fact.operator && other.sequence === fact.sequence) === i) };
+    } };
+    context.contextReceipt = walk.receipt;
+    let openingIndex: bigint | undefined;
+    const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
+      if (openingIndex === undefined) return undefined;
+      const through = walk.termBoundary !== undefined && walk.termBoundary < at ? walk.termBoundary : at;
+      let earliest: bigint | undefined;
+      for (const scoped of header.entries) {
+        const clock = await recovery.clock(scoped.backing, termsByBacking.get(hex(scoped.backing))!, openingIndex, through);
+        if (clock?.boundary !== undefined && (earliest === undefined || clock.boundary < earliest)) earliest = clock.boundary;
+      }
+      return walk.boundary(at, { boundary: earliest });
+    };
+    for (const held of await view.heldBy(header.operator)) {
+      if (held.commitment.sequence < header.sequence) continue;
+      inspect(held);
+      const ended = await boundary(held.index);
+      if (ended !== undefined) return { receipt: ended };
+      const scoped = header.entries.find(entry => scopeViews.get(hex(entry.backing))!.carries(held) !== undefined);
+      if (scoped === undefined) { walk.checkpoint(held, undefined, undefined, undefined, "other"); continue; }
+      const result = await classify(held, scoped.backing);
+      const verdict = walk.checkpoint(held, result.segment, result.class === "valid" ? result.state : undefined, result.header, result.class);
+      if (result.class === "valid" && same(result.segment, receipt.segment) && held.commitment.sequence === header.sequence) openingIndex = held.index;
+      if (verdict !== undefined) return { receipt: verdict };
+    }
+    return { receipt: await boundary(view.t) ?? walk.finish() };
+  }
+  if (!same(linkInForce(view.chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
+  const selected = await classify(selectedHeld, selection.backing);
+  if (selected.class === "lapsed") throw new EvidenceRefusal("lapsed-selection");
+  if (selected.class === "excluded") throw new ReplayRefusal(selected.check);
+  const current = await latest(selection.backing, context.terms);
+  if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
+  const publications: ScopePublicationVerdict[] = [], clocks: (ScopeClock | null)[] = [];
+  for (const scoped of selected.header.entries) {
+    const terms = selected.scopedTerms.get(hex(scoped.backing))!;
+    publications.push(...(await recovery.forces(scoped.backing, terms, selection.judgingIndex)).verdicts);
+    clocks.push(await recovery.clock(scoped.backing, terms, selected.openingIndex, selection.judgingIndex));
+  }
+  const selectedClock = clocks[selected.header.entries.findIndex(entry => same(entry.backing, selection.backing))]!;
+  if (selectedClock !== null) for (const scopedClock of clocks) {
+    if (scopedClock!.boundary !== undefined && (selectedClock.boundary === undefined || scopedClock!.boundary < selectedClock.boundary)) {
+      selectedClock.boundary = scopedClock!.boundary;
+    }
+  }
+  const clock: ClockRecord | null = selectedClock === null ? null : { duration: selectedClock.duration.toString(),
+    snapshotIndex: selectedClock.snapshotIndex.toString(), gap: selectedClock.gap.toString(), open: selectedClock.open,
+    boundary: selectedClock.boundary === undefined ? null : selectedClock.boundary.toString(), opening: selectedClock.opening.toString() };
+  publications.sort((a, b) => venueOrder({ index: BigInt(a.index), ordinal: BigInt(a.ordinal) }, { index: BigInt(b.index), ordinal: BigInt(b.ordinal) }));
+  // The audit may select a checkpoint at t; C2b.5.2 instead reads the whole
+  // canonical scope strictly before t. Unadopted force never mutates it.
+  const nonService = context.terms.nonService === undefined ? undefined : await countNonService(context, view,
+    await latest(selection.backing, context.terms, { index: view.t, strict: true }),
+    await recovery.publications(selection.backing, context.terms), () => chargeEvents(1n));
+  const results = await Promise.all(verified.values());
+  const carrying = results.sort((a, b) => a.index < b.index ? -1 : a.index > b.index ? 1 :
+    a.commitment.sequence < b.commitment.sequence ? -1 : a.commitment.sequence > b.commitment.sequence ? 1 : 0)
+    .map(item => ({ operator: hex(item.commitment.operator), sequence: item.commitment.sequence.toString(), index: item.index.toString(),
+      class: item.class, ...(item.class === "excluded" ? { check: item.check } : {}) }));
+  return { state: selected.state, carrying, clock, ranges: { judgingIndex: view.t, lag: view.lag,
+    checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
+    heldBefore: results.filter(item => before(item, selectedHeld)).length,
+    heldAfter: results.filter(item => before(selectedHeld, item)).length, publications,
+    ...(nonService === undefined ? {} : { nonService }) } };
+}
