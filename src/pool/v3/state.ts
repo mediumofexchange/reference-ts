@@ -241,13 +241,14 @@ export function modeAt(replay: SegmentReplay, position: bigint): Exclude<StepMod
  * guard reads the same pre-state and the state changes only after all of them
  * pass, but for the last check, which compares the new history hash with the
  * last valid checkpoint's; a caller discards the state on any refusal. A deterministic failure throws
- * ReplayRefusal with its check, an unsupported kind or an unindexed recovery
- * record EvidenceRefusal; the verifier's own failures propagate.
+ * ReplayRefusal with its check, an unindexed recovery record EvidenceRefusal;
+ * the verifier's own failures propagate.
  */
 export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Promise<void> {
   const { position } = state, mode = modeAt(replay, position), adopted = replay.block[Number(position)];
   const record = decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
-  if (![1, 2, 3, 4, 5, 6].includes(kind)) throw new EvidenceRefusal("unsupported-scope");
+  // A request (kind 7) decodes but is never a history event (§7): a trail carrying one fails replay (§10.1).
+  requireReplay([1, 2, 3, 4, 5, 6].includes(kind), "KIND");
   if (mode === "admission") {
     if (replay.index === undefined) throw new TypeError("admission is judged at the horizon");
     if (kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");

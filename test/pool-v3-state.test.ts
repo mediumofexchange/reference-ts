@@ -80,10 +80,14 @@ describe("the v3 state machine in replay mode", () => {
     expect(state.scanOutputs.map(o => o.cm)).toEqual([101n, 102n, 103n, 104n, 105n, 106n]);
   });
 
-  it("names each refusal: context, scope, backing, repeat, proof, signature, supply, anchor, spent, output, revocation", async () => {
+  it("names each refusal: kind, context, scope, backing, repeat, proof, signature, supply, anchor, spent, output, revocation", async () => {
     const state = fresh(), context = replay();
     await applyRecord(state, issue(10n, 101n), context);
     const root = state.tree.root();
+    // A committed request decodes but is never a history event: its trail fails replay, not the read (§§7, 10.1).
+    const request = encodeRecord({ domain: DOMAIN, kind: 7, publicInputs: [...limbsOf(DOMAIN), ...limbsOf(BACKING), 5n, 6n, 7n],
+      proof: new Uint8Array(32), authorization: new Uint8Array(0), capsules: [] });
+    expect(await refusal(state, request, context)).toBe("KIND");
     expect(await refusal(state, issue(1n, 110n, { domain: b(9) }), context)).toBe("CONTEXT");
     expect(await refusal(state, issue(1n, 110n, { segment: b(9) }), context)).toBe("CONTEXT");
     expect(await refusal(state, issue(1n, 110n, { scope: 78n }), context)).toBe("SCOPE");
