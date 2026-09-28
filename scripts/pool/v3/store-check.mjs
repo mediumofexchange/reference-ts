@@ -6,7 +6,7 @@
 // a fresh seedless process verifies supply from the package and the venue alone.
 // --testnet explicitly publishes on the own live testnet node, never in CI.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -22,7 +22,9 @@ import { MiningSupplier, plainBox } from "../../../dist/ergo-synthetic.js";
 import { prepareExactOutput, recoverCapsule } from "../../../dist/pool/v3/capsules.js";
 import { V3ReceiverWallet } from "../../../dist/pool/v3/wallet-store.js";
 import { copyPaymentRequest } from "../../../dist/pool/v3/wallet-request.js";
-import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
+import { decodeReceipt, encodeReceipt } from "../../../dist/pool/v3/commitments.js";
+import { createV3Service } from "../../../dist/pool/v3/service-http.js";
+import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
 import { CandidateVenueError } from "../../../dist/pool/v3/guard.js";
 import { openV3Prover, ProverError } from "../../../dist/pool/v3/prover.js";
 import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
@@ -60,7 +62,12 @@ const sources = sourceClosure(["scripts/pool/v3/store-check.mjs", "scripts/pool/
   ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
   "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
 const sourceSha256Lf = sourceHashes(sources), runStarted = performance.now();
-let api, journal, receiverWallet;
+let api, journal, receiverWallet, serviceServer, serviceClient;
+async function stopService() {
+  if (serviceServer === undefined) return;
+  const server = serviceServer; serviceServer = undefined;
+  await new Promise((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); });
+}
 try {
   const live = withTestnet ? await testnet.openTestnet() : undefined;
   const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
@@ -131,10 +138,19 @@ try {
   const change = request(payerSeed, 34, 2n), zero = request(payerSeed, 35, 0n), pad = request(payerSeed, 36, 0n);
   const burnChange = request(receiverSeed, 37, 2n), receiverPad = request(receiverSeed, 38, 0n);
   const journalPath = join(build, "journal.db"), options = { configuration, secret: operatorSecret, venue, reference, verifier: prover.verifier };
+  const credentials = { walletToken: randomBytes(32).toString("hex"), adminToken: randomBytes(32).toString("hex") };
+  async function serve() {
+    await stopService();
+    serviceServer = createV3Service(journal, credentials);
+    await new Promise((resolve, reject) => serviceServer.listen(0, "127.0.0.1", resolve).once("error", reject));
+    serviceClient = new V3ServiceClient(`http://127.0.0.1:${serviceServer.address().port}/`, credentials.walletToken,
+      { domain, operator, reference }, credentials.adminToken);
+  }
+  const submit = async bytes => encodeReceipt(await serviceClient.submit(bytes));
 
   /** The reader's own input: the served package, its selection judged at the venue's current index, and the venue's records. */
   async function served(seed) {
-    const { selection, package: bytes } = await journal.package();
+    const { selection, package: bytes } = await serviceClient.package(backing);
     return { selection: { ...selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" }, package: bytes,
       ...(withTestnet ? {} : { venue: withErgo ? { tip: supplier.tip } : venue.export() }), ...(seed === undefined ? {} : { seed }) };
   }
@@ -148,7 +164,7 @@ try {
     return { note: prepared, anchor: BigInt(found.anchor), path: { siblings: found.siblings.map(BigInt), right: found.right } };
   }
   async function publish() {
-    const before = venue.witnessedIndex(), commitment = await journal.publish();
+    const before = venue.witnessedIndex(), commitment = await serviceClient.publish();
     if (withErgo) {
       assert.equal(venue.witnessedIndex(), before, "mempool acceptance cannot advance the venue's clock");
       assert.equal(supplier.mempool.pool.length, 1, "one actual signed transaction per new commitment");
@@ -164,7 +180,7 @@ try {
     }
     return commitment;
   }
-  async function checkpoint(id) { await journal.commit(id); return publish(); }
+  async function checkpoint(id) { await serviceClient.commit(id); return publish(); }
 
   const records = {}, receipts = {};
   let spent;
@@ -182,23 +198,24 @@ try {
   await test("the operator opens and publishes the genesis segment the backer's terms name", async () => {
     const opening = await journal.open("genesis", signed);
     assert.equal(opening.sequence, 1n);
+    await serve();
     await refusal(journal.submit(new Uint8Array(0)), "REFUSED", "MALFORMED");
     await publish();
   });
   await test("the backer proves and signs issue 10 to the payer's request; the journal admits, commits and publishes", async () => {
     records.issue = encodeRecord(authorizeIssue(await prove(issueTask(context, funded), "issue 10"), issuerSecret));
-    receipts.issue = await journal.submit(records.issue);
+    receipts.issue = await submit(records.issue);
     assert.equal(decodeReceipt(receipts.issue).position, 1n);
     await checkpoint("after-issue");
   });
   await test("the payer spends its restored note: 7 to the receiver, a fee of 1 to the operator's request, change 2", async () => {
     const input = spent = await restored(payerSeed, funded);
     records.pay = encodeRecord(await prove(spendTask(context, [input, { ...input, note: pad }], [payerRequest, fee, change, zero]), "pay 7, fee 1, change 2"));
-    receipts.pay = await journal.submit(records.pay);
+    receipts.pay = await submit(records.pay);
     assert.equal(decodeReceipt(receipts.pay).position, 2n);
     await checkpoint("after-pay");
   });
-  await test("the receiver replays the complete current package and durably fulfills its saved exact request once", async () => {
+  await test("the receiver independently replays the HTTP service package and durably fulfills its saved exact request once", async () => {
     const input = await served();
     const fulfillment = await receiverWallet.fulfill("payment", input.package, signed);
     assert.deepEqual(fulfillment.request, paidRequest);
@@ -211,7 +228,7 @@ try {
   await test("the receiver burns 5 of its restored 7 with change 2", async () => {
     const input = await restored(receiverSeed, paid);
     records.burn = encodeRecord(await prove(burnTask(context, 5n, [input, { ...input, note: receiverPad }], burnChange), "burn 5, change 2"));
-    receipts.burn = await journal.submit(records.burn);
+    receipts.burn = await submit(records.burn);
     assert.equal(decodeReceipt(receipts.burn).position, 3n);
     await checkpoint("after-burn");
   });
@@ -227,11 +244,11 @@ try {
     await refusal(journal.submit(encodeRecord(double)), "REFUSED", "SPENT");
   });
   await test("exact retries return original replies, a new proof of an admitted statement included", async () => {
-    for (const kind of ["issue", "pay", "burn"]) assert.deepEqual(await journal.submit(records[kind]), receipts[kind]);
+    for (const kind of ["issue", "pay", "burn"]) assert.deepEqual(await submit(records[kind]), receipts[kind]);
     const again = encodeRecord(authorizeIssue(await prove(issueTask(context, funded), "issue 10 again"), issuerSecret));
     assert.notDeepEqual(again, records.issue);
-    assert.deepEqual(await journal.submit(again), receipts.issue);
-    assert.deepEqual(await journal.commit("after-burn"), await journal.publish());
+    assert.deepEqual(await submit(again), receipts.issue);
+    assert.deepEqual(await serviceClient.commit("after-burn"), await serviceClient.publish());
     if (withTestnet) {
       assert.equal(live.submitted.length, 4, "exactly four live commitments, no transaction for retries");
       assert.equal(new Set(live.submitted).size, 4);
@@ -315,7 +332,7 @@ try {
     fresh.withheldSection = refused(worker({ ...input,
       venue: { tip: { ...input.venue.tip, parent: { ...input.venue.tip.parent, section: [] } } } }));
   });
-  const finalPackage = await journal.package();
+  const finalPackage = await serviceClient.package(backing);
   await test("a reopened journal replays its commands to the same package and replies", async () => {
     journal.close();
     // Reopening re-verifies every admitted proof: under a verifier that accepts none the journal does not load.
@@ -327,8 +344,9 @@ try {
       const again = await openV3Prover(reopenApi, programs, configuration, { crsPath });
       try {
         journal = new V3OperatorJournal(journalPath, { ...options, verifier: again.verifier });
-        assert.deepEqual(await journal.package(), finalPackage);
-        for (const kind of ["issue", "pay", "burn"]) assert.deepEqual(await journal.submit(records[kind]), receipts[kind]);
+        await serve();
+        assert.deepEqual(await serviceClient.package(backing), finalPackage);
+        for (const kind of ["issue", "pay", "burn"]) assert.deepEqual(await submit(records[kind]), receipts[kind]);
       } finally { await again.close(); }
     } finally { await reopenApi.destroy(); }
   });
@@ -379,12 +397,13 @@ try {
       ? "Candidate configuration from the independently held manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment, adopted domain or real-chain finality."
       : "Candidate configuration from the independently held manifest and a local reference venue whose identity the guard recomputes; no adopted domain, chain venue or finality.",
       "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
-      "The receiver wallet persists an exact request and final fulfillment across reopening. Payer custody, request transport and fee quotes remain outside this fixture; holders restore paths and prove through the existing reader/prover.",
+      "The receiver wallet persists an exact request and final fulfillment across reopening. Submission, commitment, publication and evidence retrieval use the authenticated loopback v3 service. Payer custody, receiver invitation transport and fee quotes remain outside this fixture; holders restore paths and prove through the existing reader/prover.",
       "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."] };
   const reportName = withTestnet ? "pool-v3-testnet-results.json" : "pool-v3-store-results.json";
   writeFileSync(join(scratch, reportName), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} operator journal checks, ${metrics.length} real proofs; scratch/${reportName}`);
 } finally {
+  await stopService();
   receiverWallet?.close();
   try { journal?.close(); } catch { /* already closed */ }
   if (api) await api.destroy();

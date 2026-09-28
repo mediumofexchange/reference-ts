@@ -40,6 +40,8 @@ import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSi
 import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
 import { POOL_SERVICE_PROFILE } from '@mediumofexchange/reference/pool/service-wire';
 import { PoolServiceClient } from '@mediumofexchange/reference/pool/service-client';
+import { V3_SERVICE_PROFILE } from '@mediumofexchange/reference/pool/v3/service-wire';
+import { V3ServiceClient } from '@mediumofexchange/reference/pool/v3/service-client';
 import { deriveWalletField } from '@mediumofexchange/reference/pool/wallet';
 import { createWalletBackupKey, walletBackupDigest, MAX_WALLET_BACKUP_BYTES } from '@mediumofexchange/reference/pool/wallet-backup';
 import { WalletDeliveryClient, createWalletDeliveryServer } from '@mediumofexchange/reference/pool/wallet-delivery-http';
@@ -82,6 +84,9 @@ assert.equal(typeof core.signPoolReceipt, 'function');
 assert.equal(typeof core.poolReceiptInHistory, 'function');
 assert.equal(PILOT_PROFILE, 'transparent-pilot/v0-directory-v1');
 assert.equal(POOL_SERVICE_PROFILE, 'pool-store/v2');
+assert.equal(V3_SERVICE_PROFILE, 'pool-store/v3');
+assert.equal(typeof V3ServiceClient, 'function');
+assert.equal(core.V3ServiceClient, undefined);
 assert.equal(new PoolServiceClient('http://127.0.0.1:9031/', '11'.repeat(32)).baseUrl, 'http://127.0.0.1:9031/');
 assert.equal(typeof deriveWalletField, 'function');
 assert.equal(createWalletBackupKey().length, 32);
@@ -101,6 +106,9 @@ if (Number(process.versions.node.split('.')[0]) >= 24) {
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
   const { PoolStore, PoolStoreError } = await import('@mediumofexchange/reference/pool/store');
   const { createPoolService } = await import('@mediumofexchange/reference/pool/service-http');
+  const { createV3Service } = await import('@mediumofexchange/reference/pool/v3/service-http');
+  assert.equal(typeof createV3Service, 'function');
+  assert.equal(core.createV3Service, undefined);
   const { PoolWalletStore } = await import('@mediumofexchange/reference/pool/wallet-store');
   assert.equal(typeof PoolWalletStore, 'function');
   assert.equal(core.PoolWalletStore, undefined);
