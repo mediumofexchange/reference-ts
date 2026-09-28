@@ -7,7 +7,7 @@
 // obligations; this module supplies neither transport nor physical
 // storage/rollback protection.
 import { randomBytes, randomInt } from "node:crypto";
-import { closeSync, existsSync, openSync } from "node:fs";
+import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
@@ -53,6 +53,28 @@ function identifier(value: Uint8Array): Uint8Array {
   const result = copyUnshared(value);
   requireThat(result.length === 32, "INVALID", "expected a 32-byte identifier"); return result;
 }
+/** The whole schema: created from here and, at export, compared with the
+ * stored definitions (whitespace aside), so a database of any other shape
+ * refuses before its source freezes. */
+const SCHEMA = `
+  CREATE TABLE IF NOT EXISTS wallet_identity (id INTEGER PRIMARY KEY CHECK(id=1),
+    profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS receiver_requests (alias TEXT PRIMARY KEY, request_id BLOB NOT NULL UNIQUE,
+    backing BLOB NOT NULL, value TEXT NOT NULL, cm TEXT NOT NULL UNIQUE) STRICT;
+  CREATE TABLE IF NOT EXISTS receiver_fulfilled (alias TEXT PRIMARY KEY, cm TEXT NOT NULL UNIQUE,
+    checkpoint BLOB NOT NULL, judging_index TEXT NOT NULL, package BLOB NOT NULL, terms BLOB NOT NULL, signature BLOB NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS payer_payments (alias TEXT PRIMARY KEY, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL,
+    backing BLOB NOT NULL, operator BLOB NOT NULL, payee TEXT NOT NULL, value TEXT NOT NULL, fee TEXT, fee_value TEXT,
+    status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
+    zero BLOB, judged TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS payer_inputs (nf TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias)) STRICT;
+  CREATE TABLE IF NOT EXISTS payer_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias),
+    value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS payer_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES payer_payments(alias),
+    record BLOB NOT NULL, receipt BLOB) STRICT;
+  CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`;
+const DEFINITIONS = new Map(SCHEMA.split(";").map(s => s.replace(/\s+/g, " ").trim()).filter(s => s !== "")
+  .map(s => { const sql = s.replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE "); return [sql.split(" ")[2]!, sql] as const; }));
 /** The wallet's state tables and columns in export order; fixed names, never SQL
  * supplied by a backup. Identity and custody rows are not transferred: the
  * destination takes the seed, a fresh owner fence and its own provenance. */
@@ -65,18 +87,26 @@ const TABLES = [
   ["payer_outputs", ["cm", "alias", "value", "owner", "rho"]],
   ["payer_superseded", ["statement", "alias", "record", "receipt"]],
 ] as const;
-/** A restoration the constructor consumes synchronously: the seed and, for an
- * encrypted handoff, the state rows and the envelope's digest. */
-interface Installation { readonly seed: Uint8Array; readonly tables: WalletSnapshot["tables"]; readonly digest: string | null }
+/** A restoration the constructor consumes synchronously: the seed, the state
+ * rows, the envelope's digest, and the domain and venue it was opened under. */
+interface Installation {
+  readonly seed: Uint8Array; readonly tables: WalletSnapshot["tables"]; readonly digest: string | null;
+  readonly domain: Uint8Array; readonly venue: Uint8Array;
+}
 let installing: Installation | undefined;
 function persistentPath(path: string): void {
   requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"),
     "STORAGE", "a persistent filesystem path is required");
 }
-/** The domain and guarded venue identity a wallet under these options belongs to. */
-function walletIdentity(options: PackageReader) {
-  const reference = structuredClone(options.reference), venue = requireReferenceVenue(reference, options.venue);
-  return { reference, venue, configuration: decodeConfiguration(configurationBytes(options.configuration)) };
+/** Each caller field read once: the wallet's domain, guarded venue identity and
+ * the owned reader options every later step uses. */
+function ownOptions(options: PackageReader) {
+  const { configuration, verifier, venue, reference, importLimits } = options;
+  const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
+  const ownConfiguration = decodeConfiguration(configurationBytes(configuration)), verify = verifier.verify.bind(verifier);
+  const reader: PackageReader = { configuration: ownConfiguration, verifier: { verify }, venue, reference: ownReference,
+    ...(importLimits === undefined ? {} : { importLimits: { ...importLimits } }) };
+  return { domain: configurationHash(ownConfiguration), venueId, reader };
 }
 export interface Fulfillment {
   readonly request: PaymentRequest;
@@ -179,12 +209,10 @@ export class V3Wallet {
 
   constructor(path: string, options: PackageReader) {
     const restore = installing; installing = undefined;
-    const { verifier, venue, importLimits } = options;
-    const own = walletIdentity(options);
-    this.venueId = own.venue;
-    this.domain = configurationHash(own.configuration);
-    this.options = { configuration: own.configuration, verifier: { verify: verifier.verify.bind(verifier) }, venue, reference: own.reference,
-      ...(importLimits === undefined ? {} : { importLimits: { ...importLimits } }) };
+    const own = ownOptions(options);
+    this.venueId = own.venueId; this.domain = own.domain; this.options = own.reader;
+    requireThat(restore === undefined || (same(restore.domain, this.domain) && same(restore.venue, this.venueId)),
+      "CONFLICT", "wallet configuration or venue changed");
     persistentPath(path);
     this.db = new DatabaseSync(path, { timeout: 5000 });
     try {
@@ -195,23 +223,7 @@ export class V3Wallet {
       // An earlier receiver-only profile's seed is never silently replaced.
       requireThat(this.db.prepare("SELECT 1 FROM sqlite_schema WHERE name='receiver_identity'").get() === undefined,
         "CONFLICT", "wallet database has an earlier profile");
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS wallet_identity (id INTEGER PRIMARY KEY CHECK(id=1),
-          profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL) STRICT;
-        CREATE TABLE IF NOT EXISTS receiver_requests (alias TEXT PRIMARY KEY, request_id BLOB NOT NULL UNIQUE,
-          backing BLOB NOT NULL, value TEXT NOT NULL, cm TEXT NOT NULL UNIQUE) STRICT;
-        CREATE TABLE IF NOT EXISTS receiver_fulfilled (alias TEXT PRIMARY KEY, cm TEXT NOT NULL UNIQUE,
-          checkpoint BLOB NOT NULL, judging_index TEXT NOT NULL, package BLOB NOT NULL, terms BLOB NOT NULL, signature BLOB NOT NULL) STRICT;
-        CREATE TABLE IF NOT EXISTS payer_payments (alias TEXT PRIMARY KEY, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL,
-          backing BLOB NOT NULL, operator BLOB NOT NULL, payee TEXT NOT NULL, value TEXT NOT NULL, fee TEXT, fee_value TEXT,
-          status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
-          zero BLOB, judged TEXT NOT NULL) STRICT;
-        CREATE TABLE IF NOT EXISTS payer_inputs (nf TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias)) STRICT;
-        CREATE TABLE IF NOT EXISTS payer_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias),
-          value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
-        CREATE TABLE IF NOT EXISTS payer_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES payer_payments(alias),
-          record BLOB NOT NULL, receipt BLOB) STRICT;
-        CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`);
+      this.db.exec(SCHEMA);
       let meta = this.metadata();
       requireThat(restore === undefined || meta === undefined, "CONFLICT", "recovery destination is no longer pristine");
       if (meta === undefined) {
@@ -361,6 +373,8 @@ export class V3Wallet {
   }
   /** The prover's record must be exactly the task and verify under the wallet's own verifier. */
   private async proven(task: ProofTask, prove: LocalProver): Promise<Uint8Array> {
+    // The evidence read awaited: an export or another handle may have taken over meanwhile.
+    this.mutable();
     const proven = await prove(task);
     let bytes: Uint8Array;
     try { bytes = encodeRecord(proven); } catch (error) {
@@ -417,13 +431,13 @@ export class V3Wallet {
           catch { throw new V3WalletError("INVALID", "invalid wallet backup or recovery credentials"); }
           return bytes;
         }
-        const names = this.db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map(row => row.name as string).sort();
-        requireThat(JSON.stringify(names) === JSON.stringify([...TABLES.map(([table]) => table), "wallet_custody", "wallet_identity"].sort()),
+        // Exact definitions, not only names: any other shape could export, freeze and then never restore.
+        const stored = new Map(this.db.prepare("SELECT name, sql FROM sqlite_schema WHERE type='table'").all()
+          .map(row => [row.name as string, String(row.sql).replace(/\s+/g, " ").trim()]));
+        requireThat(stored.size === DEFINITIONS.size && [...DEFINITIONS].every(([name, sql]) => stored.get(name) === sql),
           "INVALID", "unsupported wallet schema");
         let size = WALLET_BACKUP_OVERHEAD + 4 + Buffer.byteLength(PROFILE) + 32;
         const tables = TABLES.map(([table, columns]) => {
-          const actual = this.db.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name);
-          requireThat(JSON.stringify(actual) === JSON.stringify(columns), "INVALID", "unsupported wallet columns");
           const rows: WalletCell[][] = [];
           size += 4;
           for (const row of this.db.prepare(`SELECT ${columns.join(",")} FROM ${table} ORDER BY rowid`).iterate()) {
@@ -448,20 +462,20 @@ export class V3Wallet {
   /** Restore an encrypted handoff into a new destination for the same
    * configuration and venue. The envelope must hash to the independently kept
    * digest and open under the key; the state commits in one transaction with
-   * that digest as provenance. A failed or interrupted restore can leave a fresh
-   * database at `path`: reconcile by opening it and reading `custody()`, never by
-   * restoring again elsewhere while one may have succeeded. */
+   * that digest as provenance, in a staging file linked to `path` only once
+   * complete. A refused or interrupted restore leaves nothing at `path`; if a
+   * reply is lost and `path` exists, `custody().restoredFrom` confirms it. */
   static restoreBackup(path: string, options: PackageReader, bytes: Uint8Array, key: Uint8Array, expectedDigest: string): V3Wallet {
-    const own = walletIdentity(options), domain = configurationHash(own.configuration);
+    const own = ownOptions(options);
     let plaintext: Uint8Array;
-    try { plaintext = openWalletBackup(bytes, key, domain, own.venue, expectedDigest); }
+    try { plaintext = openWalletBackup(bytes, key, own.domain, own.venueId, expectedDigest); }
     catch { throw new V3WalletError("INVALID", "invalid wallet backup or recovery credentials"); }
     let snapshot: WalletSnapshot;
     try { snapshot = decodeWalletSnapshot(plaintext, TABLES.map(([, columns]) => columns.length)); }
     catch { throw new V3WalletError("INVALID", "invalid wallet snapshot"); }
     finally { plaintext.fill(0); }
     requireThat(snapshot.profile === PROFILE, "INVALID", "wallet snapshot has another profile");
-    try { return V3Wallet.create(path, options, { seed: snapshot.seed, tables: snapshot.tables, digest: expectedDigest }); }
+    try { return V3Wallet.create(path, own, { seed: snapshot.seed, tables: snapshot.tables, digest: expectedDigest }); }
     finally { snapshot.seed.fill(0); }
   }
 
@@ -473,21 +487,39 @@ export class V3Wallet {
    * copy of a seed remains the holder's precondition. */
   static restoreSeed(path: string, options: PackageReader, seed: Uint8Array): V3Wallet {
     const own = identifier(seed);
-    try { return V3Wallet.create(path, options, { seed: own, tables: TABLES.map(() => []), digest: null }); }
+    try { return V3Wallet.create(path, ownOptions(options), { seed: own, tables: TABLES.map(() => []), digest: null }); }
     finally { own.fill(0); }
   }
 
-  /** Exclusive creation refuses an existing file or link; the parent is trusted
-   * local storage. No destructive cleanup: an interrupted destination stays inspectable. */
-  private static create(path: string, options: PackageReader, restore: Installation): V3Wallet {
-    walletIdentity(options); persistentPath(path);
-    requireThat(!existsSync(`${path}-wal`) && !existsSync(`${path}-shm`), "CONFLICT", "recovery requires a new destination");
-    try { closeSync(openSync(path, "wx", 0o600)); } catch (error) {
-      requireThat((error as NodeJS.ErrnoException).code !== "EEXIST", "CONFLICT", "recovery requires a new destination");
-      throw new V3WalletError("STORAGE", "cannot create the recovery destination");
+  /** The wallet is built and committed in an exclusively created staging file
+   * beside `path`, checkpointed and closed, then hard-linked to `path`, which
+   * fails if anything exists there; the parent is trusted local storage. So
+   * `path` either does not exist or holds the complete restore, and a
+   * destination another process created first is never touched. The staging
+   * name is removed in every case; only a crash can leave it, holding
+   * plaintext wallet state for the holder to delete. */
+  private static create(path: string, own: ReturnType<typeof ownOptions>, restore: Omit<Installation, "domain" | "venue">): V3Wallet {
+    persistentPath(path);
+    const fresh = () => requireThat(!existsSync(path) && !existsSync(`${path}-wal`) && !existsSync(`${path}-shm`),
+      "CONFLICT", "recovery requires a new destination");
+    fresh();
+    const staging = `${path}.restore-${hex(randomBytes(8))}`;
+    try { closeSync(openSync(staging, "wx", 0o600)); }
+    catch { throw new V3WalletError("STORAGE", "cannot create the recovery destination"); }
+    try {
+      installing = { ...restore, domain: own.domain, venue: own.venueId };
+      let wallet: V3Wallet;
+      try { wallet = new V3Wallet(staging, own.reader); } finally { installing = undefined; }
+      try { wallet.db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } finally { wallet.close(); }
+      fresh();
+      try { linkSync(staging, path); } catch (error) {
+        requireThat((error as NodeJS.ErrnoException).code !== "EEXIST", "CONFLICT", "recovery requires a new destination");
+        throw new V3WalletError("STORAGE", "cannot create the recovery destination");
+      }
+    } finally {
+      for (const file of [staging, `${staging}-wal`, `${staging}-shm`]) rmSync(file, { force: true });
     }
-    installing = restore;
-    try { return new V3Wallet(path, options); } finally { installing = undefined; }
+    return new V3Wallet(path, own.reader);
   }
 
   /** C4.2: commit fresh randomness and parameters before returning public bytes.

@@ -206,8 +206,9 @@ records. `exportBackup(key)` takes a random 32-byte key (for example from
 snapshot and marks the source frozen, so no later request, reservation or
 fulfillment can be missing from the backup. From then on no handle of the
 source, before or after a restart, can request, fulfill, sync, prepare,
-reprove or submit (`FENCED`). A submission or fulfillment still in flight at
-the freeze fails when it tries to save its result. Saved results stay readable. A
+reprove or submit (`FENCED`). A preparation or reproof still reading evidence
+at the freeze refuses before proving; a submission or fulfillment in flight
+fails when it tries to save its result. Saved results stay readable. A
 repeated export, including after restart for a lost reply, returns the same
 bytes, and only to the same key. The holder keeps the key and
 `walletBackupDigest(bytes)` separately from the encrypted bytes.
@@ -217,13 +218,24 @@ digest, the key and the same configuration and venue. The envelope's associated
 data binds the tag `moe/wallet/v3/backup`, the domain and the venue. The
 restore writes the state rows in their original order, in one transaction,
 with the digest as `custody().restoredFrom`. SQLite's strict column types,
-uniqueness, status and reference constraints refuse state that no wallet could
-have written. The destination must be new. An existing file (the source
-included), `:memory:` and leftover `-wal`/`-shm` files are refused, and a
-destination that another process initialized first is never overwritten. An
-interrupted restore can leave a fresh database without provenance at `path`.
-Reconcile by opening it and reading `custody()`, then restore to another new
-path only if no restore committed. The restored wallet continues the saved work.
+uniqueness, status and reference constraints refuse rows that do not fit the
+schema. Beyond that, the authenticated content is trusted as the holder's own
+state; the wallet's usual checks (request reproduction, reproof output
+reproduction) apply when each row is used. Export compares the stored table
+definitions with the wallet's own, so a database of any other shape refuses
+before freezing rather than exporting a backup that could not be restored.
+
+The destination must be new. An existing file (the source included),
+`:memory:` and leftover `-wal`/`-shm` files are refused. The wallet is built in
+an exclusively created staging file beside `path`, checkpointed, closed and
+then hard-linked to `path`, which fails if anything appeared there meanwhile.
+So `path` either does not exist or holds the complete restore, and a
+destination another process created first is never touched. A refused or
+interrupted restore leaves nothing at `path` and is simply retried there; after
+a lost reply, an existing `path` with `custody().restoredFrom` equal to the
+digest confirms success. Only a crash can leave the staging file
+(`<path>.restore-<hex>`), which holds plaintext wallet state and should be
+deleted. The restored wallet continues the saved work.
 Exact retries return the saved records. Reservations hold. A receipt lost to
 the freeze is recovered by resubmitting the identical bytes, which the journal
 answers with its original receipt. `sync` and `reprove` resolve the rest.

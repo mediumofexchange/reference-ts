@@ -52,17 +52,18 @@ export function openWalletBackup(bytes: Uint8Array, key: Uint8Array, domain: Uin
   if (typeof expectedDigest !== "string" || !/^[0-9a-f]{64}$/.test(expectedDigest) ||
     createHash("sha256").update(frame).digest("hex") !== expectedDigest) invalid();
   const ownedKey = keyBytes(key);
-  let plaintext: Buffer | undefined;
+  let plaintext: Buffer | undefined, final: Buffer | undefined, joined: Buffer | undefined;
   try {
     if (!frame.subarray(0, HEADER.length).equals(HEADER)) invalid();
     const decipher = createDecipheriv("aes-256-gcm", ownedKey, frame.subarray(HEADER.length, HEADER.length + NONCE), { authTagLength: TAG });
     decipher.setAAD(aad);
     decipher.setAuthTag(frame.subarray(frame.length - TAG));
     plaintext = decipher.update(frame.subarray(HEADER.length + NONCE, frame.length - TAG));
-    const final = decipher.final();
-    return Uint8Array.from(Buffer.concat([plaintext, final]));
+    final = decipher.final();
+    joined = Buffer.concat([plaintext, final]);
+    return Uint8Array.from(joined);
   } catch { return invalid(); }
-  finally { ownedKey.fill(0); plaintext?.fill(0); }
+  finally { ownedKey.fill(0); plaintext?.fill(0); final?.fill(0); joined?.fill(0); frame.fill(0); }
 }
 
 /** A stored cell: TEXT, BLOB or NULL. */

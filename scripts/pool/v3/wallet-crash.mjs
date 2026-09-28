@@ -4,7 +4,7 @@
 // physical custody, rollback resistance, real proofs or live venue operation.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -128,7 +128,7 @@ async function worker(directory, operation, phase, action) {
     else if (operation === 'payment') await wallet.prepare('shop', order(fixture), fixture.package, fixture.signed, prove);
     else if (operation === 'reproof') await wallet.reprove('shop', fixture.package, fixture.signed, prove);
     else if (operation === 'export') wallet.exportBackup(backupKey);
-    // The restore's one COMMIT installs the destination's identity, state and provenance together.
+    // The restore's one COMMIT installs identity, state and provenance together in its staging file.
     else if (operation === 'import') V3Wallet.restoreBackup(`${path}.restored`, reader, fixture.backup, backupKey, fixture.digest);
     else await wallet.fulfill('invoice', fixture.package, fixture.signed);
     assert.fail('operation did not reach its crash boundary');
@@ -140,13 +140,10 @@ async function worker(directory, operation, phase, action) {
       assert.equal(wallet.custody().frozen, !(action === 'restore' && phase === 'before'));
       save(`${path}.${action}`, wallet.exportBackup(backupKey));
     } else if (operation === 'import') {
-      // An interrupted restore leaves a destination without provenance: it is
-      // recognised by reading custody, and the handoff goes to a new destination.
-      const target = phase === 'before' ? `${path}.second` : `${path}.restored`;
-      if (phase === 'before' && action === 'restore') {
-        const interrupted = new V3Wallet(`${path}.restored`, reader);
-        try { assert.equal(interrupted.custody().restoredFrom, undefined); } finally { interrupted.close(); }
-      }
+      // An interrupted restore leaves nothing at the destination, so it is retried
+      // there; once it exists, custody's provenance confirms a lost reply.
+      const target = `${path}.restored`;
+      assert.equal(existsSync(target), action === 'retry');
       const restored = existsSync(target) ? new V3Wallet(target, reader) : V3Wallet.restoreBackup(target, reader, fixture.backup, backupKey, fixture.digest);
       try {
         assert.deepEqual(restored.custody(), { frozen: false, restoredFrom: fixture.digest });
@@ -206,7 +203,12 @@ if (process.argv[2] === '--worker') {
     for (const operation of ['request', 'fulfillment', 'payment', 'reproof', 'export', 'import']) for (const phase of ['before', 'after']) {
       const path = join(directory, `${operation}-${phase}.sqlite`);
       await run(operation, phase, 'setup'); await run(operation, phase, 'crash');
-      const fixture = load(`${path}.fixture`), db = new DatabaseSync(operation === 'import' ? `${path}.restored` : path);
+      const staged = operation === 'import' ? readdirSync(directory).filter(name => name.startsWith(`${operation}-${phase}.sqlite.restored.restore-`) && !/-(wal|shm)$/.test(name)) : [];
+      if (operation === 'import') {
+        // Only the staging file, never the destination, survives a crash; it holds plaintext state.
+        assert.equal(existsSync(`${path}.restored`), false); assert.equal(staged.length, 1);
+      }
+      const fixture = load(`${path}.fixture`), db = new DatabaseSync(operation === 'import' ? join(directory, staged[0]) : path);
       try {
         if (operation === 'export') {
           assert.equal(db.prepare('SELECT export IS NOT NULL AS frozen FROM wallet_custody').get().frozen, phase === 'before' ? 0 : 1);

@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
@@ -201,6 +201,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     throws(() => later.request("blocked", f.backing, 1n), fenced);
     await expect(later.submit("pending", spy)).rejects.toEqual(fenced);
     await expect(later.sync(f.served, f.signed)).rejects.toEqual(fenced);
+    await expect(later.fulfill("fund-0", f.served, f.signed)).rejects.toEqual(fenced);
     await expect(later.prepare("pending", { request: f.second, value: 3n }, new Uint8Array(), f.signed, prove)).rejects.toEqual(fenced);
     await expect(later.reprove("pending", f.served, f.signed, prove)).rejects.toEqual(fenced);
     expect(sent).toBe(false);
@@ -272,9 +273,13 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     throws(() => V3Wallet.restoreBackup(occupied, f.reader, backup, key, digest), conflict);
     throws(() => V3Wallet.restoreBackup(f.path("payer"), f.reader, backup, key, digest), conflict);
     throws(() => V3Wallet.restoreBackup(":memory:", f.reader, backup, key, digest), expect.objectContaining({ code: "STORAGE" }));
-    const sidecar = f.path("sidecar"); writeFileSync(`${sidecar}-wal`, "keep");
-    throws(() => V3Wallet.restoreBackup(sidecar, f.reader, backup, key, digest), conflict);
-    expect(existsSync(sidecar)).toBe(false);
+    for (const suffix of ["-wal", "-shm"]) {
+      const sidecar = f.path(`sidecar${suffix}`); writeFileSync(`${sidecar}${suffix}`, "keep");
+      throws(() => V3Wallet.restoreBackup(sidecar, f.reader, backup, key, digest), conflict);
+      expect(existsSync(sidecar)).toBe(false);
+    }
+    // A refused restore leaves nothing a later open could turn into a wallet, and no staging file.
+    expect(readdirSync(f.directory).filter(name => name.startsWith("bad-") || name.includes(".restore-"))).toEqual([]);
     // Caller buffers are read once: a restore owns what it was given.
     const ownedBytes = backup.slice(), ownedKey = key.slice();
     const owned = track(V3Wallet.restoreBackup(f.path("owned"), f.reader, ownedBytes, ownedKey, digest));
@@ -336,12 +341,33 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     await expect(restored.fulfill("second", served, f.signed)).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
-  it("does not erase a destination another process initialized first", async () => {
+  it("refuses to prove a payment whose evidence read spanned the freeze", async () => {
+    let gate: Promise<void> | undefined, release = () => {}, entered = () => {};
+    const started = new Promise<void>(r => { entered = r; });
+    const f = await fixture({ verify: async (...args) => {
+      const held = gate;
+      if (held !== undefined) { gate = undefined; entered(); await held; }
+      return verifier.verify(...args);
+    } });
+    const other = f.receiver.request("late", f.backing, 2n);
+    let proved = false;
+    gate = new Promise(r => { release = r; });
+    const preparing = f.payer.prepare("late", { request: other, value: 2n }, f.served, f.signed, async task => { proved = true; return prove(task); });
+    await started;
+    const key = createWalletBackupKey(), backup = f.payer.exportBackup(key);
+    release();
+    await expect(preparing).rejects.toMatchObject({ code: "FENCED" });
+    expect(proved).toBe(false);
+    const restored = track(V3Wallet.restoreBackup(f.path("late-restored"), f.reader, backup, key, walletBackupDigest(backup)));
+    expect(restored.payment("late")).toBeUndefined();
+  });
+
+  it("does not erase a destination another process created during the restore", async () => {
     const f = await fixture(), key = createWalletBackupKey(), backup = f.payer.exportBackup(key);
     const destination = f.path("raced"), original = DatabaseSync.prototype.exec;
     let injected = false;
     DatabaseSync.prototype.exec = function (sql: string): void {
-      if (!injected && sql === "BEGIN IMMEDIATE" && existsSync(destination)) {
+      if (!injected && sql === "BEGIN IMMEDIATE") {
         injected = true;
         const other = new V3Wallet(destination, f.reader); other.request("interleaved", f.backing, 1n); other.close();
       }
@@ -349,9 +375,10 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     };
     try {
       throws(() => V3Wallet.restoreBackup(destination, f.reader, backup, key, walletBackupDigest(backup)),
-        expect.objectContaining({ code: "CONFLICT", message: "recovery destination is no longer pristine" }));
+        expect.objectContaining({ code: "CONFLICT", message: "recovery requires a new destination" }));
     } finally { DatabaseSync.prototype.exec = original; }
     expect(injected).toBe(true);
+    expect(readdirSync(f.directory).filter(name => name.includes(".restore-"))).toEqual([]);
     const reopened = f.open("raced");
     expect(reopened.custody()).toEqual({ frozen: false });
     expect(reopened.payment("pending")).toBeUndefined();
