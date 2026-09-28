@@ -3,7 +3,7 @@
 Updated: 2026-09-28
 
 ## Goal
-Review-code pass over main since `3b9db9f` plus slice 6f's v2 deletion (PR #37,
+Review-code pass (done) over main since `3b9db9f` plus slice 6f's v2 deletion (PR #37,
 merged `8cf66cb`; slice 6f delivered). Acceptance: each confirmed defect fixed with a
 regression test on `fix/review-code-2026-09-28`, independently reviewed, CI green, seven
 current v3 reports re-recorded from CI, deferred findings in Next. No new features.
@@ -15,13 +15,11 @@ current v3 reports re-recorded from CI, deferred findings in Next. No new featur
   supplier claiming every transaction stopped resends to honest nodes
   (`ergo-publisher.ts`); a committed kind-7 record left reads unresolved instead of
   failing replay (`state.ts`, check `KIND`); sync throws and caller errors in the
-  publish path; stale Ergo, v2 and wallet docs. Refuted: wrong-length proofs verify false.
-- **Open:** after the fix review and CI, `gh run download <run> -n
-  pool-v3-reports-ubuntu-latest -D scratch/ci-artifact`; copy `scratch/pool-v3-results.json`,
-  `pool-v3-store-results.json` and `pool-v3-local-replay-results.json` to
-  `docs/pool-v3-{conformance,store,local-replay}-verification.json` and the four `docs/`
-  recovery/succession ones as they are; `npm run build && npm run check:evidence` must
-  show all seven current; commit, CI, merge, delete the branch/worktree/`scratch/review-*`.
+  publish path; stale Ergo, v2 and wallet docs; unused v2 tags. Refuted: wrong-length
+  proofs verify false. The fix review's three read-backs shaped the publisher's
+  per-supplier parent walk (tests pin its query and submit counts).
+- Delivered in PR #38: seven current reports re-recorded from CI run 36442873841,
+  `check:evidence` current for the six file-bound ones. Next run: pick from Next.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
