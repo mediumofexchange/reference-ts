@@ -46,8 +46,8 @@ export interface ImportContext extends ReplayContext {
   readonly importLimits?: ImportLimits | undefined;
   readonly faults?: FaultObserver | undefined;
   readonly receiptBytes?: Uint8Array | undefined;
-  /** Receipt evidence remains available to the harness after a later refusal. */
-  receiptWalk?: ReceiptWalk | undefined;
+  /** Receipt evidence remains available to the caller after a later refusal. */
+  receiptWalk?: Pick<ReceiptWalk, "evidence"> | undefined;
   contextReceipt?: ReplayContext["contextReceipt"];
 }
 export interface ImportEvidence { readonly snapshots: readonly Uint8Array[]; readonly trails: readonly Uint8Array[] }
@@ -92,7 +92,7 @@ interface ImportSegment {
   lastValid: ValidCheckpoint | undefined; readonly openingIndex: bigint; readonly block: readonly ForcedPublication[];
   openingValid?: boolean;
 }
-const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
+export const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
 
 /** C2.10.3–7 for a single backing. Its canonical
  * ancestry is linear: each new segment imports the last valid checkpoint's

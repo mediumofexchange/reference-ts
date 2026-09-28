@@ -1,6 +1,6 @@
-// Conditional replay harness over the runtime's v3 reader (src/pool/v3/reader.ts,
-// state.ts): imports, multiple backings, receipts, recovery force and
-// non-service counts are read here until their slices promote them.
+// Conditional replay harness over the runtime's v3 readers (src/pool/v3/reader.ts,
+// import-reader.ts, scope-reader.ts): it owns the harness input shapes, the
+// original-segment dispatch, note scanning and the report's audit fields.
 // pool-v3 §§3,5,7,10,12,13; pool-v2 §8 host checks; pool-spent C1.2.8–9.
 import { createHash } from "node:crypto";
 import { compareBytes, copyBytes, EncodingError } from "../../../dist/bytes.js";
@@ -9,13 +9,13 @@ import { fieldToBytes, identifierOf, isValue } from "../../../dist/pool/field.js
 import { ScopeTree } from "../../../dist/pool/scope.js";
 import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js";
 import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationError, CapsuleFormatError } from "../../../dist/pool/v3/capsules.js";
-import { classifyCarrying, decodedTrails, RANGE_LIMITS, readRecordRanges, readRecordView, replayTrail } from "../../../dist/pool/v3/reader.js";
+import { classifyCarrying, decodedTrails, RANGE_LIMITS, readRecordRanges, replayTrail } from "../../../dist/pool/v3/reader.js";
 import { CandidateVenueError, referenceVenue } from "../../../dist/pool/v3/guard.js";
 import { EvidenceRefusal, ReplayRefusal, ScopeRequired, requireReplay } from "../../../dist/pool/v3/refusals.js";
+import { classifyScopes } from "../../../dist/pool/v3/scope-reader.js";
 import { classifyImports } from "../../../dist/pool/v3/import-reader.js";
 import { servedTrail } from "../../../dist/pool/v3/served-trail.js";
 import { LIMITS, readLocalEvidence } from "./evidence-reader.mjs";
-import { classifyScopes } from "./scope-replay.mjs";
 import { resolveTerms, rootTermsOf } from "./scope-evidence.mjs";
 import { boundFaultInputs, faultObserver } from "./fault-evidence.mjs";
 
@@ -167,8 +167,7 @@ export async function replayLocalPackage(input, verifier, codec) {
         }
       } catch (error) {
         if (!(error instanceof ScopeRequired)) throw error;
-        const result = await classifyScopes(context, directories, record, { snapshots, trails },
-          { readRecordView: (...args) => readRecordView(...args, reference), decodedTrails, replayTrail, requireReplay, ReplayRefusal, IMPORT_LIMITS: context.importLimits });
+        const result = await classifyScopes(context, directories, record, { snapshots, trails });
         if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
           candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
           currentRangeAuthenticated: selection.mode !== "historical-fixture" };

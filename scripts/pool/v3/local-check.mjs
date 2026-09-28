@@ -30,6 +30,7 @@ import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidate
 import { v3Codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { checkCompactRuntime } from "./compact-runtime-check.mjs";
+import { checkScopeRuntime } from "./scope-runtime-check.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
 assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
@@ -1091,6 +1092,12 @@ try {
   await test("history-free term and silence lapse agree in portable packages", async () => {
     for (const { payload, result } of lapsePairs) assert.deepEqual(await replayEvidencePackage(portable(payload), verifier, codec), result);
   });
+  const scopeRuntime = await checkScopeRuntime({ portable, configuration, verifier, reference, codec, test, pairs: [
+    { payload: scoped.payload, result: scoped.result },
+    { payload: scopeRecovery.payload, result: scopeRecovery.result }, { payload: scopeRecovery.payloadY, result: scopeRecovery.resultY },
+    scopeRecovery.unequal, scoped.compact, scoped.lapse, scopeRecovery.lapse, ...scoped.intrinsicCases, ...scopeRecovery.intrinsicCases,
+    ...[...scopeReceiptPairs, ...scopeCountPairs].map(([payload, result]) => ({ payload, result })),
+  ] });
   const recovery = await checkRecovery({ codec, verifier, configurationBytes, domain, venue, prove,
     test: (name, fn) => test(`Recovery: ${name}`, fn), operatorSecret, issuerSecret, receiverSeed, payerSeed });
   intrinsicPairs.push(...recovery.intrinsicCases);
@@ -1261,7 +1268,7 @@ try {
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   checkCandidateSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-23", specification: V3_SPECIFICATION, node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-24", specification: V3_SPECIFICATION, node: process.version,
     compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactAuthorizations: authorizationPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactFaults: { faultRecordBytes: imported.compact.faultBytes,
@@ -1277,6 +1284,7 @@ try {
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
+    scopeRuntime,
     scopeImports: { packageBytes: portable(scoped.payload).package.length,
       audit: scoped.result, receiver: scoped.receiver, receiverOtherBacking: scoped.receiverY },
     scopeRecovery: { packageBytes: portable(scopeRecovery.payload).package.length,
