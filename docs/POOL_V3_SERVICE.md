@@ -47,7 +47,7 @@ are local journal keys, not fields in the signed commitment.
 
 `package(backing)` checks framing and pinned context, then returns untrusted
 bytes and metadata. It exposes the journal's published package and excludes
-its unpublished tail. The receiver calls `V3ReceiverWallet.fulfill` with the
+its unpublished tail. The receiver calls `V3Wallet.fulfill` with the
 bytes and independently held signed root terms, configuration, verifier and
 venue. The venue supplies the judging index and complete range answers. Server
 metadata cannot select those inputs. Missing or changed evidence refuses
@@ -87,8 +87,9 @@ records stay excluded. Proofs are synthetic in this process test.
 The real-proof `scripts/pool/v3/store-check.mjs` also submits issue, four-output
 payment and burn over HTTP, commits/publishes, fetches the package and verifies
 receiver fulfillment independently. Its evidence is retained in the
-[journal report](pool-v3-store-verification.json). The harness still prepares
-payer inputs, proofs, change and fee outputs. Authenticated receiver invitation
-delivery, payer custody/reservations, fee selection, holder recovery, restoration
-and encrypted backup remain open. V2 checks stay until their remaining wallet
+[journal report](pool-v3-store-verification.json). The payment is prepared,
+saved and submitted by the [v3 wallet](POOL_V3_WALLET.md); issue, burn and the
+hostile cases are still prepared by the harness. Authenticated receiver invitation
+delivery, reproof after lapse, restoration drills and encrypted backup remain
+open. V2 checks stay until their remaining wallet
 and service cases pass on v3. No live service or physical custody is qualified.

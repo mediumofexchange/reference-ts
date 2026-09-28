@@ -51,14 +51,17 @@ operator journal or signing another scope. Local ledger authentication, device
 custody and continuous recovery remain deployment preconditions and open work.
 This v2 wallet has no runtime silence recovery. The v3 runtime implements
 single-backing recovery and Ergo publication with bounded venue/publisher process
-persistence. The [v3 receiver wallet](POOL_V3_WALLET.md) now persists C4.1–2 exact
+persistence. The [v3 wallet](POOL_V3_WALLET.md) now persists C4.1–2 exact
 requests and C4.5 final fulfillment after independent current-frontier replay,
-including forced spends and locks. The [v3 loopback service](POOL_V3_SERVICE.md)
-adds bounded journal operations and public package retrieval, with independently
-verified receiver fulfillment and process retry/restart/fencing acceptance.
-Payer custody, authenticated receiver invitation transport,
-restoration, backup and physical qualification remain open;
-this receiving capability does not retire the v2 checks.
+including forced spends and locks. It pays exact requests and direct fee
+requests (pool-fees C1.2.3–5) from single-backing holdings found by the C4.6
+seed scan, saving the exact record with permanent reservations before
+submission and reconciling it from canonical evidence. The
+[v3 loopback service](POOL_V3_SERVICE.md) adds bounded journal operations and
+public package retrieval, with independently verified receiver fulfillment and
+process retry/restart/fencing acceptance. Authenticated receiver invitation
+transport, reproof after lapse, multi-backing payment, backup and physical
+qualification remain open; these capabilities do not yet retire the v2 checks.
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The duplicate private-payment experiment is retired;
