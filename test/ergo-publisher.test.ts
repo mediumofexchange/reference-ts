@@ -445,6 +445,21 @@ describe("a publication is sent once, and publications chain", () => {
     expect(n.submitted.filter(id => id === hex(first.id))).toHaveLength(1); // once it holds the parent, it is not sent again
   });
 
+  it("walks unsettled parents only for a supplier that answers it lacks the child", async () => {
+    const n = funded([10_000_000n]), asked: string[] = [], sent: string[] = [];
+    const counting = (name: string, fail: boolean): ErgoPublishingSupplier => ({ name, unspentBoxes: t => n.unspentBoxes(t),
+      hasBox: id => { asked.push(`${name} box`); return fail ? Promise.reject(new Error("no answer")) : n.hasBox(id); },
+      hasTransaction: id => { asked.push(`${name} tx`); return fail ? Promise.reject(new Error("no answer")) : n.hasTransaction(id); },
+      submit: (s, id) => { sent.push(`${name} ${hex(id)}`); return n.submit(s, id); } });
+    const p = publisher([counting("holder", false), counting("mute", true)]);
+    for (let i = 1; i <= 3; i++) await p.publish(request(new Uint8Array(136).fill(i)));
+    asked.length = 0; sent.length = 0;
+    const last = await p.publish(request(new Uint8Array(136).fill(3)));
+    // The holder shows the child, so none of its ancestry is asked about; the mute supplier is sent the child alone.
+    expect(asked).toEqual(["holder box", "mute box", "mute tx"]);
+    expect(sent).toEqual([`mute ${hex(last.id)}`]);
+  });
+
   it("sends a dropped transaction again before the one that spends its change", async () => {
     const funding = plainBox(TREE, 10_000_000n, HEIGHT - 5n), n = node();
     n.fund(funding);

@@ -602,7 +602,7 @@ export class ErgoPublisher {
     const kept = (): never => { throw new VenueError("no supplier accepted the publication; it is kept and sent again on the next attempt"); };
     let pending = this.#pending.get(key);
     if (pending !== undefined) {
-      if (await this.#send(pending, new Set())) return copyPublication(pending.publication);
+      if (await this.#send(pending)) return copyPublication(pending.publication);
       const { live, gone } = await this.#inspect(pending);
       if (gone.length > 0) {
         this.#forget(pending, gone);
@@ -620,7 +620,7 @@ export class ErgoPublisher {
       if (this.#pending.size >= PENDING_LIMIT) throw new VenueError("the publisher holds too many unsettled publications; settle it from a view");
       pending = await this.#build(key, request, [], new Set());
     }
-    if (!await this.#send(pending, new Set())) kept();
+    if (!await this.#send(pending)) kept();
     return copyPublication(pending.publication);
   }
 
@@ -660,36 +660,43 @@ export class ErgoPublisher {
     for (const box of gone) this.#created.delete(bytesToHex(box.id));
   }
 
-  /** Send a publication after the unsettled ones whose change it spends and no supplier shows. */
-  async #send(pending: Pending, visited: Set<string>): Promise<boolean> {
-    visited.add(pending.key);
-    for (const input of pending.publication.inputs) {
-      const parent = this.#byChange.get(bytesToHex(input));
-      if (parent !== undefined && !visited.has(parent.key)) await this.#send(parent, visited);
-    }
+  /** Send a publication to each supplier that does not itself show it. A supplier's claim spares only that
+   * supplier: another that missed the transaction is still sent it. Whether any accepted or shows it. */
+  async #send(pending: Pending): Promise<boolean> {
     let accepted = false;
-    for (const supplier of this.#suppliers) {
-      // A supplier's claim spares only that supplier: another that missed the transaction is still sent it.
-      if (await this.#shown(supplier, pending)) { accepted = true; continue; }
-      let guardError: unknown;
-      const answer = await this.#call(() => {
-        try { this.#guard(); } catch (error) { guardError = error; throw error; }
-        return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id));
-      });
-      if (guardError !== undefined) throw guardError;
-      this.#guard();
-      accepted ||= answer.ok;
-    }
+    for (const supplier of this.#suppliers) accepted = await this.#sendTo(supplier, pending, new Set()) || accepted;
     return accepted;
   }
 
-  /** Whether `supplier` shows the record box or holds the transaction: it is pending or it landed there, and
-   * its inputs, spent by it, are not gone. */
-  async #shown(supplier: ErgoPublishingSupplier, pending: Pending): Promise<boolean> {
+  /** Send to `supplier` after the unsettled publications whose change it spends and that supplier lacks. A
+   * supplier holding a transaction holds its parents, so its ancestry is walked only where it answers that it
+   * lacks the child; one that fails to answer is sent the transaction alone, so it cannot stall a walk. */
+  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, visited: Set<string>): Promise<boolean> {
+    visited.add(pending.key);
+    const shown = await this.#shown(supplier, pending);
+    if (shown === true) return true;
+    if (shown === false) for (const input of pending.publication.inputs) {
+      const parent = this.#byChange.get(bytesToHex(input));
+      if (parent !== undefined && !visited.has(parent.key)) await this.#sendTo(supplier, parent, visited);
+    }
+    let guardError: unknown;
+    const answer = await this.#call(() => {
+      try { this.#guard(); } catch (error) { guardError = error; throw error; }
+      return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id));
+    });
+    if (guardError !== undefined) throw guardError;
+    this.#guard();
+    return answer.ok;
+  }
+
+  /** Whether `supplier` shows the record box or holds the transaction (it is pending or it landed there, and
+   * its inputs, spent by it, are not gone); undefined where it fails to answer. */
+  async #shown(supplier: ErgoPublishingSupplier, pending: Pending): Promise<boolean | undefined> {
     const box = await this.#call(() => supplier.hasBox(copyBytes(pending.publication.recordBox)));
     if (box.ok && box.value === true) return true;
     const held = await this.#call(() => supplier.hasTransaction(copyBytes(pending.publication.id)));
-    return held.ok && held.value === true;
+    if (held.ok && held.value === true) return true;
+    return box.ok && held.ok ? false : undefined;
   }
 
   /**
