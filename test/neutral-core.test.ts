@@ -12,6 +12,7 @@ const NEUTRAL = [
   "src/bytes.ts", "src/keys.ts", "src/contexts.ts",
   "src/venue-error.ts", "src/venue-records.ts", "src/record-range.ts", "src/record-venue.ts",
   "src/ergo-profile.ts", "src/ergo-headers.ts", "src/ergo-supplier.ts", "src/ergo-publisher.ts", "src/ergo-synthetic.ts",
+  "src/ergo.ts", "src/ergo-store.ts",
   "src/pool/field.ts", "src/pool/poseidon2.ts", "src/pool/notes.ts", "src/pool/note-tree.ts",
   "src/pool/scope.ts", "src/pool/schedule.ts", "src/pool/proof-verifier.ts",
 ];

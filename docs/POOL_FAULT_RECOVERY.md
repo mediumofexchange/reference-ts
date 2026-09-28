@@ -5,7 +5,8 @@ exclusion, the snapshot clock, continuation
 from the last valid prefix, and existing receipt precedence. The normative
 [contract](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-fault.md)
 amends Construction, authority and recovery for a later construction version.
-Runtime remains pinned to v2.
+The guarded pool-v3 runtime implements it; the model below remains its
+executable reference with ideal cryptography.
 
 ## Selected rules and limits
 
@@ -85,20 +86,21 @@ abandoned tail. No intrinsic rule can distinguish withheld preimages from
 honest replica loss. Availability, retention and bounded cold reads remain
 separate gates; cached verdicts cannot replace evidence or fresh snapshots.
 
-## What the actual v2 bytes establish
+## What real bytes establish
 
-`pool-fault-evidence.test.ts` uses real SHA-256 and Ed25519 with the oracle
-proof verifier. It establishes that substituted failing proof/signature bytes
-reject replay while the original trail still validates the checkpoint; a
-separate signed receipt does not attribute its bytes to that checkpoint; and
-alternate valid proofs preserve semantic history while idempotent admission
-returns original receipts and evidence. It does not test proof-system soundness.
+On pool-v2 bytes, a retired test
+([at a020215](https://github.com/mediumofexchange/reference-ts/blob/a020215/model/pool-fault-evidence.test.ts))
+showed with real SHA-256 and Ed25519 that substituted failing proof/signature
+bytes reject replay while the original trail still validates the checkpoint;
+that a separate signed receipt does not attribute its bytes to that checkpoint;
+and that alternate valid proofs preserve semantic history while idempotent
+admission returns original receipts and evidence. The v3 frames below carry
+those distinctions.
 
 C2.10.10 selects a separate evidence chain beside semantic history. A linear
 chain needs later recurrence inputs for an interior-event certificate: three
 32-byte digests per later evidence event, before target bytes, framing,
-directory proof and ancestry. A tree could reduce suffix cost. No v3 encoding,
-production retention bound or node acceptance is established by those v2 tests.
+directory proof and ancestry. A tree could reduce suffix cost.
 
 The successor's [pool-v3 §7 frames](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts)
 are implemented in `src/pool/v3/commitments.ts`, candidate runtime code.
@@ -145,7 +147,7 @@ evidence with otherwise valid alternate proofs.
 | `pool-fault-boundary.test.ts`, `pool-fault.test.ts` | Original failure, selected remedy, unresolved rollback and reversed-verdict departures. |
 | `pool-fault-reader.test.ts` | Independent readers, arrival order, retention, scope evidence, repair and same-index revocation. |
 | `pool-fault-clock.test.ts`, `pool-fault-dependency.test.ts` | Historical clock costs, strict boundaries, term lapse, force and adoption. |
-| `pool-fault-liability.test.ts`, `pool-fault-evidence.test.ts` | Receipt precedence, stale twins and real v2 authentication limits. |
+| `pool-fault-liability.test.ts` | Receipt precedence and stale twins. |
 | `pool-fault-alternatives.test.ts` | Selected defaults versus historical departures: drop, redemption, return, disjoint scopes, silence, continuation and statement replacement. |
 | `pool-recovery-return.test.ts`, `pool-silence.test.ts` | Historical retirement, adoption, receipt precedence and unsafe return under `forgetSilence`. |
 | `pool-evidence.test.ts` | Complete public-field framing, exact hashes, order/context binding, missing evidence, canonical inputs and immutable copies. |

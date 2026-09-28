@@ -9,49 +9,10 @@ pin changes; dated decisions retain the reasoning behind those changes.
 way to try the implementation. There is no published npm release, no
 deployment, and no completed security audit.
 
-Active development is the guarded candidate in `src/pool/v3/`, with ordinary
-payments and single-backing recovery described below. The frozen v2 implementation
-in `src/pool/` retains pinned v2
-circuits and proofs, private notes, public supply replay, record-derived
-authority and canonical history, receipt readers, and durable sequencing.
-The [local service/client transport](POOL_SERVICE.md) exposes durable submission,
-commitment and publication retry, with separate-process lost-response, fencing
-and restart evidence. The [local wallet fixture](POOL_WALLET.md) retains receiver
-requests, pending payments, private HTTPS inbox deliveries and verified local
-fulfillment through restarts. Scoped durable capabilities and exact retry protect
-inbox admission; checkpoint verification remains separate from acknowledgment.
-The same flow uses pinned real v2 proofs with a separate public supply audit;
-abrupt wallet-process tests cover eleven transaction boundaries. Encrypted offline
-exports freeze the source and retain complete state and reservations; fresh
-restores require the exact independently retained digest and record provenance.
-Protected device storage and one active restore remain explicit preconditions.
-Private TLS credentials and digest-authenticated invoice bindings now persist
-with the wallet; rotation revokes capabilities and fences obsolete servers.
-Independent digest authentication is modeled locally; a user authentication
-channel and external venue remain unqualified. Receiver note checks distinguish spent/unspent at an exact
-verified checkpoint; saved fulfillment lookup recovers historical records.
-The [ordinary local operation](POOL_WALLET_OPERATION.md) accepts caller-selected
-invoices, selects up to two verified unreserved notes, persists one payment per
-authenticated alias and spends verified change in another payment. Both CLIs
-share its builder. Historical status, reservations and fulfillment remain
-distinct; imported-note selection and automatic consolidation remain open.
-The [caller-configured local profile](POOL_LOCAL_PROFILE.md) supplies authenticated
-signed terms and initial authority to holder, receiver and operator commands,
-using the pinned real verifier. Holder processes have no fixture issuance keys.
-Configured encrypted offline handoff freezes and restores both wallets with
-independently retained profile/recovery digests; exact payment retry and receiver
-credential rotation continue into another verified payment. No custody schema
-or protocol bytes change; one active copy remains a precondition.
-The [device custody profile](POOL_WALLET_DEVICE.md) selects Windows protected
-storage and a manual current recovery record. Its read-only preflight refuses
-adverse/unknown observations and never qualifies a device. Provisioned target
-hardware, physical failure drills and continuous recovery remain open.
-An exact segment constraint prevents another profile from fencing an existing
-operator journal or signing another scope. Local ledger authentication, device
-custody and continuous recovery remain deployment preconditions and open work.
-This v2 wallet has no runtime silence recovery. The v3 runtime implements
-single-backing recovery and Ergo publication with bounded venue/publisher process
-persistence. The [v3 wallet](POOL_V3_WALLET.md) now persists C4.1–2 exact
+The pool runtime is the guarded pool-v3 candidate in `src/pool/v3/`, over the
+shared primitives in `src/pool/` (field, Poseidon2, notes, note tree, scope and
+proof verifier). It implements issue, payment, burn, single-backing recovery
+and Ergo publication with bounded venue/publisher process persistence. The [v3 wallet](POOL_V3_WALLET.md) now persists C4.1–2 exact
 requests and C4.5 final fulfillment after independent current-frontier replay,
 including forced spends and locks. It pays exact requests and direct fee
 requests (pool-fees C1.2.3–5) from single-backing holdings found by the C4.6
@@ -65,7 +26,13 @@ canonical frames authenticated by an independently obtained digest; v3 needs
 no receiver endpoint. A wallet restores holdings from its seed alone, or its
 complete local state from an encrypted offline handoff that freezes the source.
 Cancellation/release, multi-backing payment, continuous backup and physical
-qualification remain open; these capabilities do not yet retire the v2 checks.
+qualification remain open.
+
+Pool-v2 is retired: every remaining v2 check was mapped to a v3 case, a v2-only
+mechanism or a later slice
+([case map](../decisions/2026-09.md#2026-09-28--retire-v2-against-a-case-map-of-its-checks)),
+and its runtime, guides and reports remain at
+[a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The duplicate private-payment experiment is retired;
@@ -78,16 +45,13 @@ selected rules and model limits of the companion's
 [fault contract](https://github.com/mediumofexchange/money-from-first-principles/blob/23af0f5/pool-fault.md).
 ## Proof and deployment probes
 
-`npm run check:pool` exercises the
-pinned real circuits and multi-segment replay separately from the ordinary
-test suite. With Node 24, `npm run check:pool:restoration` exercises
-[candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence);
-`npm run check:pool:v3` proves the capsule digest's binding in the successor
-relations, which retired the earlier
+`npm run check:pool:v3` exercises the real circuits and multi-segment replay
+separately from the ordinary test suite, and proves the capsule digest's binding
+in the successor relations, which retired the earlier
 [delivery binding probe](POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration).
-Restoration authenticates local record bytes and refuses stale or substituted
-packages against an independent fixture selection; all candidates remain
-unspendable without full replay, authenticated ranges and certified paths.
+[Candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence)
+retired once the v3 wallet took over its cases; the wallet restores from its seed
+with full replay.
 The [conditional initial-segment replay](POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay)
 adds real successor proof/signature checks, replayed roots/totals and local note
 paths, with a fresh seedless audit process. It checks candidate configuration
@@ -195,7 +159,7 @@ two-in, four-out spend. These probes do not implement a pool wallet or v3 finali
 `npm test` checks the successor's
 [canonical compressed spent root](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
 (`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys;
-`npm run bench:pool:spent` compares per-insert replay cost with pinned v2.
+its per-insert replay cost against pinned v2 was measured before v2 retired.
 
 The [Ergo full-block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility)
 reproduces real transaction roots and retains serializer counterexamples.
@@ -401,15 +365,15 @@ physical power-loss or wallet custody evidence is added.
 ## Runtime pin and recovery models
 
 The runtime follows specification revision
-[`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09),
-whose `pool-v2.md` pins the construction bit for bit and records the
-implemented circuits and keys. `docs/PROTOCOL_RULES.md` maps each binding
+[`01d8db2dadad0e3ef343ddf3b0ee60e1f386095f`](https://github.com/mediumofexchange/money-from-first-principles/tree/01d8db2dadad0e3ef343ddf3b0ee60e1f386095f):
+`pool-v3.md` for the construction, with the Ergo venue profile's
+`venue-ergo.md`; the v3 reports bind the pool-v3 revision they check
+(`V3_SPECIFICATION` in `scripts/pool/v3/provenance.mjs`). Earlier revisions
+pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is frozen.
-That revision's `pool-recovery.md` specifies presentation, the non-service
-count, snapshot redemption at the venue and the return from silence over the
-pool; `model/pool-recovery.ts` is its executable model with counterexamples.
-Those objects belong to a later construction version and remain outside the
-v2 runtime.
+`pool-recovery.md` specifies presentation, the non-service count, snapshot
+redemption at the venue and the return from silence over the pool;
+`model/pool-recovery.ts` is its executable model with counterexamples.
 
 The recovery model follows the later [silence-retirement decision](../decisions/2026-09.md#2026-09-08--intervening-silence-retires-a-pool-segment-and-lapses-its-unfinished-receipts)
 and specification revision [`c5f5464`](https://github.com/mediumofexchange/money-from-first-principles/commit/c5f5464).

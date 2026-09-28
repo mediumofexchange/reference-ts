@@ -7,8 +7,8 @@ Poseidon2 helper. It implements the proof layouts in
 
 V3 is an incomplete construction: no approved configuration hash, artifact
 identity or backing adoption is defined. Its candidate runtime in `src/pool/v3/`
-runs on reference venues only; these scripts are conformance tooling and do
-not replace the frozen v2 circuits.
+runs on reference venues only; these scripts are its conformance tooling and
+hold the only circuit sources (pool-v2's are retired to Git history).
 The compiler writes temporary projects only under ignored `scratch/` and
 the check records observed source/bytecode/key hashes, checks and metrics in
 `scratch/pool-v3-results.json`. It reuses the existing parameter cache and
@@ -175,8 +175,8 @@ See the [Ergo venue guide](../../../docs/ERGO_VENUE_PROFILE.md#local-replay-thro
 The npm command verifies parameter cache/download lengths and SHA-256 hashes
 with `../prepare-crs.mjs` before starting the suite. It checks both upstream
 hosts on download failure; an empty or corrupt successful HTTP response is
-never cached. These are the existing bb.js 5.2.0 test parameters recorded in
-`docs/pool-v2-verification.json`; Barretenberg's own validation remains active.
+never cached. These are the existing bb.js 5.2.0 test parameters whose lengths
+and hashes that script pins; Barretenberg's own validation remains active.
 A mismatched uncompressed cache fails explicitly. This does not establish
 ceremony trust or approve a v3 configuration.
 

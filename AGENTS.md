@@ -32,9 +32,9 @@ one-clause summary, not numbers or dated status. `CLAUDE.md` contains exactly `@
 ## Direction and authority
 
 The shielded pool is the active claim layer (Construction C1.2). Develop v3 in `src/pool/v3/`:
-one moded state machine and one reader over the neutral core, guarded to recomputed local/synthetic
-or testnet reference identities. Freeze v2-specific `src/pool/` code (no features or fixes); retain its checks
-until the v3 wallet/service pass the ported cases and v2 retires. PoolStore refuses silence clauses.
+one moded state machine and one reader over the neutral core and the shared primitives in
+`src/pool/`, guarded to recomputed local/synthetic or testnet reference identities. Pool-v2 is
+retired (Git history at `a020215`); do not restore its mechanisms without a decision.
 V3 is unadopted; remaining model/harness work is conditional evidence. See implementation status.
 
 The transparent path is frozen as a differential oracle and adversarial case library. Port cases as
@@ -130,10 +130,8 @@ commands are in `package.json`.
 | Documentation only | `npm run check:docs`; check affected companion links |
 | Isolated experiment/tooling | Syntax, focused tests and its acceptance command |
 | Shared runtime/protocol, public API, dependencies/toolchain, packaging, broad CI/build, or uncertain impact | `npm run check` |
-| v2 circuits/proof relations/keys/configuration | Relevant real-proof `npm run check:pool` evidence |
-| v3 relations/keys/configuration | `npm run check:pool:v3` (add `-- --ergo` for its adapter) |
+| v3 relations/keys/configuration, shared primitives, Ergo adapter | `npm run check:pool:v3` (add `-- --ergo` for its adapter) |
 | v3 replay-only experiment | `npm run check:pool:ergo-replay` |
-| Real-proof wallet flow | `npm run check:pool-wallet-real` |
 | Sources bound by a retained report | `npm run check:evidence`; re-record reports cited as current |
 
 Add the smallest regression test for changed behavior; hostile witnesses must otherwise satisfy the

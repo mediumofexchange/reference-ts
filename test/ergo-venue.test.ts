@@ -349,7 +349,7 @@ describe("no supplier is trusted", () => {
     expect(report.unresolvedIndex).toBe(4n);
     expect(v.witnessedIndex()).toBe(3n);
     // Stale, never empty: the record before the missing section stands, and the clock does not pass it.
-    expect(held(v, KEYS.operator).at(-1)?.commitment).toBeUndefined();
+    expect(held(v, KEYS.operator)).toEqual([]);
     await v.sync([withholding, serving(blocks, "other")]);
     expect(v.witnessedIndex()).toBe(8n);
     expect(held(v, KEYS.operator).at(-1)?.index).toBe(6n);

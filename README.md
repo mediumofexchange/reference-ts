@@ -19,26 +19,17 @@ reference venues. A [v3 wallet](docs/POOL_V3_WALLET.md) persists exact
 requests and independently verified final fulfillment, and pays exact requests
 from holdings it restores from public evidence with reserved exact statements.
 A [v3 loopback service](docs/POOL_V3_SERVICE.md) transports journal operations
-and public evidence for independent replay. Qualified deployment storage remains open.
+and public evidence for independent replay, and an Ergo adapter reads and
+publishes venue records under the selected profile. Qualified deployment
+storage, multi-backing payment and an end-user wallet remain open. The API and
+wire format are experimental, the package is not published to npm, and no
+completed security audit or live deployment is claimed. The earlier pool-v2
+runtime is retired and remains in Git history.
 
-A frozen v2 [local Node 24 service and client](docs/POOL_SERVICE.md) expose durable
-pool submission, commitment and publication retry. A [local wallet fixture](docs/POOL_WALLET.md)
-adds durable requests, private HTTPS delivery, payment retries and verified,
-once-only invoice records.
-The [configured local commands](docs/POOL_LOCAL_PROFILE.md) use caller-held signed
-terms and pinned real proofs, with separate holder and operator credentials.
-They support encrypted offline wallet handoff and receiver credential rotation.
-Its real-proof mode checks public supply in a separate process, and crash
-tests cover wallet commits. This wallet still uses a local venue; v3 supplies
-the Ergo read/write adapter, while a usable wallet and qualified device custody
-remain open. The API and wire format are experimental, the
-package is not published to npm, and no completed security audit or live
-deployment is claimed.
-
-The frozen v2 runtime tracks specification revision
-[`3676757a1c8ddc0df607352c6bddbb48f6d85a09`](https://github.com/mediumofexchange/money-from-first-principles/tree/3676757a1c8ddc0df607352c6bddbb48f6d85a09).
+The runtime tracks specification revision
+[`01d8db2dadad0e3ef343ddf3b0ee60e1f386095f`](https://github.com/mediumofexchange/money-from-first-principles/tree/01d8db2dadad0e3ef343ddf3b0ee60e1f386095f).
 See [implementation status](docs/IMPLEMENTATION_STATUS.md) for component
-evidence and later v3 pins, and [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
+evidence and the pins of individual rules, and [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
 for the remaining acceptance criteria.
 
 ## Build and verify
@@ -57,13 +48,12 @@ This checks documentation, types, tests, the built package and applicable
 process/crash scenarios. Real-proof checks run separately:
 
 ```sh
-npm run check:pool       # pinned v2 circuits and real proofs
-npm run check:pool:v3    # successor relations; no adopted v3 configuration
+npm run check:pool:v3    # six relations, real proofs and store acceptance; no adopted configuration
 ```
 
-These are developer verification commands; the repository does not yet provide
-an end-user payment application. See the [v2 circuit guide](src/pool/circuits/README.md)
-and [v3 conformance guide](scripts/pool/v3/README.md) for proof setup and limits.
+This is a developer verification command; the repository does not yet provide
+an end-user payment application. See the [v3 conformance guide](scripts/pool/v3/README.md)
+for proof setup and limits.
 
 ## Explore the implementation
 

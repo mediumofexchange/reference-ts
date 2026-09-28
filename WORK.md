@@ -3,27 +3,29 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6f, retire v2, on `feat/retire-v2` (no companion branch or normative change;
+Slice 6f, retire v2 (no companion branch or normative change;
 [decision and case map](decisions/2026-09.md#2026-09-28--retire-v2-against-a-case-map-of-its-checks)).
-M1, delivered by this branch's PR: every remaining v2 wallet, service, real-proof, crash
-and store check mapped by behavior to a v3 case, a v2-only mechanism or a later slice,
-and the gaps ported. M2, next: delete v2 (Next 1). Acceptance for the slice: `npm run
-check` and CI `check:pool:v3 -- --ergo` pass without v2, docs agree, the `ErgoVenue`
-face removal reviewed. Stop boundary: no transparent-path retirement, multi-backing or adoption.
+M1 (PR #36, merged `0182d36`) mapped every v2 check and ported the gaps. M2, on
+`feat/delete-v2`: delete v2. Acceptance: `npm run check` and CI `check:pool:v3 -- --ergo`
+pass without v2, docs agree, the `ErgoVenue` face removal independently reviewed, the six
+current v3 reports re-recorded. Stop boundary: no transparent-path retirement,
+multi-backing or adoption.
 
 ## Status
-- M1 commits: `765a6e4` (journal crash drill `check:pool:v3-journal`, receipt crash boundary,
-  journal, verifier and cross-backing refusals) and `a020215` (range opcodes on all six
-  relations, ten type-escape attacks, malformed proofs through `proofVerifier`).
-- Local: typecheck, full vitest (2246 pass; exit 1 only from the low-memory worker-RPC
-  flake), the wallet and journal drills and `scripts/pool/v3/check.mjs` (335 checks) pass;
-  the six current reports match. Tests/tooling only, self-reviewed; no runtime change.
-  **Open:** PR #36 CI was pending when the watcher was reaped for low memory. Next run:
-  `gh pr checks 36`, merge if green (else fix), delete the branch, then M2 on a new branch.
+- `9c8b353` deletes the v2 runtime, circuits, tests, harnesses, package scripts, CI `pool`
+  job and device-storage step; `ErgoVenue` keeps only `RecordVenue`/`RecordPublisher`
+  and its tests read range answers through `record-range.ts`; the package ships `dist`
+  only; `scripts/pool/v3/check.mjs` reads `candidate-manifest.json`; the evidence reader
+  moved to `scripts/pool/v3/`. A docs commit retires the v2 guides and five v2 reports as
+  permalinks at `a020215` and updates README (runtime pin `01d8db2`), AGENTS.md, status,
+  architecture, rules, requirements and fault guide.
+- Local: typecheck and the affected tests (156) pass; low memory (~2 GB) rules out a full
+  local run, so CI is the acceptance run.
+- **Open:** STATUS_PLACEHOLDER
 
 ## Evidence
-- Guides: [wallet](docs/POOL_V3_WALLET.md) (reproof resolves unpredicted handovers),
-  [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
+- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
+  [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
   (full checkpoints still rewrite retained history; raw sections stay in memory).
 - Current reports: [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json),
@@ -33,44 +35,27 @@ face removal reviewed. Stop boundary: no transparent-path retirement, multi-back
   Live recovery is historical at
   [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
   live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
+  Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. M2, delete v2 (one branch, then review of the ErgoVenue change):
-   - `scripts/pool/v3/check.mjs`: read toolchain and helper pins from
-     `candidate-manifest.json`, not `src/pool/circuits/manifest.json`; keep
-     `scripts/pool/{constraints,fixtures,prepare-crs}.mjs`; fix the comment in
-     `src/pool/proof-verifier.ts` naming `scripts/pool/check.mjs`.
-   - Delete `src/pool/` except `field`, `poseidon2`, `notes`, `note-tree`,
-     `scope`, `schedule`, `proof-verifier`, `v3/` and `circuits/vendor/`; the
-     v2 tests (`pool-*` without v3 successors, `pool-support.ts`,
-     `pool-record-support.ts`, `model/pool-fault-evidence.test.ts`); v2 scripts
-     (`pool/{check,admission,compile,store-crash*}`, `browser`, `service`,
-     `wallet`, `local`, `delivery`, `spent-set`, `scripts/compile-noir.mjs`);
-     their package scripts, CI `pool` job and device-storage step.
-   - Keep v3's bytes distinct from v2's in `pool-v3-headers`/`records` tests by
-     tag, not by the v2 decoder. `ErgoVenue` drops its transparent `Venue` face
-     (`ergo-venue.test.ts` PoolAuthorityView cases, `ergo-publisher.test.ts` type).
-   - Package: root barrel exports the shared primitives; v3 stays on subpaths;
-     `check-package.mjs` imports `pool/v3/store`; `files` keeps the vendor helper.
-   - Docs: retire the v2 guides (POOL_{SERVICE,STORE,WALLET*,LOCAL_PROFILE,RECEIPTS})
-     and v2 reports as permalinks at `a020215`; update README, AGENTS.md (v2 freeze,
-     check table), IMPLEMENTATION_STATUS, architecture map, PROTOCOL_RULES rows,
-     PRODUCTION_REQUIREMENTS. `backing.ts`/`contexts.ts` keep v2 names (transparent
-     path, reserved tags). Same-segment repair and cancellation stay in item 6.
-2. Multi-backing, including compact fault orchestration (slice 7).
-3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
+1. Multi-backing, including compact fault orchestration (slice 7).
+2. Configuration adoption: provenance, ACIR identities/certificates, replay/import
    bounds, one-transaction condition and BN254 margin. Mainnet needs separate authority.
-4. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
+3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
    existing dependencies (size-only probe); lifetime streaming is separate design.
-5. On touching affected files: `local-replay.mjs` candidates should call
+4. On touching affected files: `local-replay.mjs` candidates should call
    `holdings.ts` (re-records six reports); fold `fulfill` into `sync`; shared
    byte helpers/caller ownership; Ergo section versus transaction charging; applyRecord history check follows effects;
-   served-trail caller-object cache. Check v3 successors for v2 intake issues.
-6. Only when a gate needs them: cancellation, batching, index-free box source,
+   served-trail caller-object cache; drop the explicit `vite` dev pin (served the
+   retired browser probe) at the next dependency change. Untested on v3 (source holds
+   them): a second commit refused while one is in flight (`store.ts` `ready`), and
+   `IMPORT_RANK` (`import-reader.ts`).
+5. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
    Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
    a text/QR form of the request frame, receipt handoff for C4.5 pending
-   acceptance, and routing store-check's request through the frame.
+   acceptance, routing store-check's request through the frame, and same-segment
+   repair/rescoping.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under
@@ -94,6 +79,5 @@ face removal reviewed. Stop boundary: no transparent-path retirement, multi-back
 - Disk streaming and physical custody remain separate persistence boundaries.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28.
-Payer custody, reproof, request exchange and backup/restoration complete the
-single-backing wallet path, within that rounding; v2 retirement, configuration
-adoption, multi-backing runtime, qualified deployment storage and mainnet remain.
+The single-backing wallet path is complete and v2 is retired, within that rounding;
+configuration adoption, multi-backing runtime, qualified deployment storage and mainnet remain.
