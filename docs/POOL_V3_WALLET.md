@@ -83,7 +83,10 @@ operator term has ended at the witnessed index (`CONFLICT`), or, where the
 backing declares silence, a boundary is witnessed or the witnessing horizon
 (index plus lag since the canonical checkpoint) exceeds the clock's duration
 (`SILENCE`), the journal's own admission rule. A published handover not yet
-effective is not predicted; such a payment is resolved by reproof.
+effective is not predicted; such a payment is resolved by reproof. The venue
+answers behind these decisions are rechecked before proving, so a venue that
+advances during the read refuses `CHANGED_VIEW` with nothing reserved; callers
+on a live venue retry.
 
 A direct fee is the fee recipient's own exact request (pool-fees C1.2.4). That
 recipient learns the backing, its fee output and its association with the

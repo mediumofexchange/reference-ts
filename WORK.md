@@ -3,43 +3,38 @@
 Updated: 2026-09-28
 
 ## Goal
-Slice 6c on `feat/v3-reproof` (no companion branch or normative change): a
-pending `V3Wallet` payment whose segment stopped being canonical (term end or
-silence lapse; C1.2.5, C4.4) is re-proven in the canonical successor with the
-same input nullifiers, outputs and capsules, so its reservation resolves instead
-of staying permanent. Acceptance: `reprove` refuses while the saved segment is
-canonical, resolves final/failed payments without proving, keeps superseded
-records and receipts, and a submission racing a reproof cannot attach a stale
-receipt; preparation and reproof refuse when the canonical segment's silence
-clock refuses admission. Oracle tests cover takeover and silence return; the
-crash check covers the reproof commit. Stop boundary: no release/cancellation
-with other outputs, same-segment tail repair, multi-backing, transport or backup.
-Slice 6b (PR #31) delivered paying: seed-scanned holdings, selection, exact
-records with reservations, first matching receipt, final/failed `sync`.
+Slice 6c delivered by PR #32 from `feat/v3-reproof` (no companion branch or
+normative change): a pending `V3Wallet` payment whose segment stopped being
+canonical (term end or silence lapse) is re-proven by `reprove` in the canonical
+successor with the same input nullifiers, outputs, capsules and order (pool-fees
+C1.2.5, C4.4), so its reservation resolves instead of staying permanent. Final or
+failed payments resolve without proving; superseded records and receipts
+(including one racing the reproof) are kept; a lagging venue view is refused.
+Preparation and reproof refuse an ended term (`CONFLICT`) or a silence clock
+that closes admission (`SILENCE`, the journal's own rule). Stop boundary kept:
+no cancellation/release with other outputs, same-segment tail repair,
+multi-backing, transport or backup. Wallet profile is now `moe/wallet/v3/2`.
 
 ## Status
-- Commits `74f7a89` (wallet), `9ea0feb` (review fixes), `886cd1e` (concurrent
-  retry fix), `b9ea5d3` (harness, docs). Independent adversarial review found two
-  major issues (finality across succession, alias retry with another order) and
-  five minor ones. All were fixed and read back, with regression tests that fail
-  on the old code where deterministic.
-- Oracle tests: 13 payer and 11 receiver cases; `check:pool:v3-wallet` passes six
-  abrupt exits including payment before/after COMMIT. Real-proof `store-check.mjs`
-  paid through the wallet over HTTP locally (14 checks, 5 proofs, before the last
-  retry fix). Its fresh-process worker is now asynchronous: `spawnSync` blocked the
-  in-process service, so an overdue keep-alive close raced the next fetch.
-- PR #31 at `b9ea5d3`: all seven jobs passed in
-  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36389184603)
-  (Node 20/24 checks, v2 pool and v3 real-proof suites on Linux/Windows). A local
-  re-record/`npm run check` chain was reaped under host memory pressure (2.3 of
-  15.9 GB free), so the journal report is that run's Linux `--ergo` artifact; all
-  six current reports match their bound sources. The delivery commit changes
-  only this handoff and that report. V2 remains frozen.
+- Commits `b963013` (reproof, silence refusal, crash case, docs) and `ff5bbdb`
+  (review fixes). Independent adversarial review found no blocker/major; four
+  minor findings (racing receipt dropped, lagging view could move a record back,
+  no venue recheck before proving, stuck payments looked live) were fixed with
+  tests; the lagging-view test fails with its guard disabled.
+- Oracle tests: 16 payer and 11 receiver cases; `check:pool:v3-wallet` passes
+  eight abrupt exits including reproof before/after COMMIT. Reproof is not run
+  under real proofs; the succession check proves a successor-segment spend of
+  inherited notes, which is the same relation instance shape.
+- Local full `npm run check` and real-proof re-recording were not run (host at
+  ~0.9 of 15.9 GB free, 5.8 GB held by the archive node). PR #32 at `ff5bbdb`:
+  all seven jobs passed in
+  [CI](https://github.com/mediumofexchange/reference-ts/actions/runs/36397521221);
+  the journal report is its Linux `--ergo` artifact and all six current reports
+  match their bound sources. The delivery commit changes only docs and that report.
 
 ## Evidence
-- Wallet API, custody preconditions and payment limits: [guide](docs/POOL_V3_WALLET.md).
-  Open silence clocks and published-but-not-yet-effective handovers are not
-  refused before preparation; such inputs stay reserved until reproof/release.
+- Wallet API, custody preconditions, reproof and payment limits: [guide](docs/POOL_V3_WALLET.md).
+  Published-but-not-yet-effective handovers are not predicted; reproof resolves them.
 - Service API and interrupted-operation limits: [guide](docs/POOL_V3_SERVICE.md).
 - Persistence design and scalability plan:
   [decision](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox);
@@ -55,11 +50,10 @@ records with reservations, first matching receipt, final/failed `sync`.
   live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
 
 ## Next
-1. Continue slice 6: reproof of a pending payment after lapse or term end (same
-   inputs and outputs in the successor segment, pool-fees C1.2.5) and an explicit
-   open-silence-clock refusal before preparation. Reservations are permanent
-   today; then authenticated receiver invitation transport, encrypted backup and
-   restoration drills; port the remaining frozen v2 delivery/pairing/backup cases.
+1. Continue slice 6: authenticated receiver invitation transport, then encrypted
+   backup and restoration drills; port the remaining frozen v2 delivery/pairing/
+   backup cases. Same-segment tail repair (C2.10.9a resubmission) and release of
+   never-admitted inputs stay with cancellation in item 6 until a gate needs them.
 2. Retire v2 only after its wallet/service cases pass on v3; then
    multi-backing including compact fault orchestration (slice 7).
 3. Configuration adoption: provenance, ACIR identities/certificates, replay/import
@@ -94,6 +88,6 @@ records with reservations, first matching receipt, final/failed `sync`.
 - Disk streaming and physical custody remain separate persistence boundaries.
 
 Roughly **60% done / 40% remaining**, plausible range **50–70%**, reassessed 2026-09-28.
-Payer custody adds the ordinary payment path, still within that rounding;
-configuration adoption, reproof/transport/backup, multi-backing runtime,
+Payer custody and reproof add the ordinary payment path, within that rounding;
+configuration adoption, transport/backup, multi-backing runtime,
 qualified deployment storage and mainnet remain.
