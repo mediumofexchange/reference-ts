@@ -60,9 +60,10 @@ re-proving it with the same outputs after its segment lapses, and reconciling
 it from canonical evidence. The
 [v3 loopback service](POOL_V3_SERVICE.md) adds bounded journal operations and
 public package retrieval, with independently verified receiver fulfillment and
-process retry/restart/fencing acceptance. Authenticated receiver invitation
-transport, cancellation/release, multi-backing payment, backup and physical
-qualification remain open; these capabilities do not yet retire the v2 checks.
+process retry/restart/fencing acceptance. Requests pass between wallets as
+canonical frames authenticated by an independently obtained digest; v3 needs
+no receiver endpoint. Cancellation/release, multi-backing payment, backup and
+physical qualification remain open; these capabilities do not yet retire the v2 checks.
 
 The frozen transparent implementation and its local pilot remain adversarial
 and integration evidence. The duplicate private-payment experiment is retired;

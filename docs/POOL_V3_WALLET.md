@@ -25,6 +25,50 @@ capsule framing. The receiver authenticates the capsule itself; the payer cannot
 prove that it decrypts. The caller must authenticate the intended recipient on
 the request channel. A request is neither payment nor an invoice signature.
 
+### Request exchange
+
+`encodePaymentRequest` writes one canonical 246-byte frame: the
+`moe/wallet/v3/request` tag, domain, backing, `u64` value, owner, rho and the
+89-byte capsule; the commitment is recomputed, not carried. The receiver shows
+`paymentRequestDigest(frame)`, the SHA-256 of those exact bytes, on the channel
+by which the payer authenticates it (for example a displayed code the payer
+scans). The frame itself may travel any private way. The payer calls
+`authenticatePaymentRequest(frame, trustedDigest)`, which hashes and decodes one
+private copy and refuses unless the digest matches; `prepare` then checks the
+agreed domain, backing and amount. The trusted digest must never come from the
+frame's own carrier: hashing the received frame to obtain the digest
+authenticates it only when those exact bytes themselves arrived over the
+authenticated channel. The digest is compared in full by machine (scanned or
+pasted), never by a person checking a prefix or suffix, which a substituted
+request can be ground to match. `readPaymentRequest` decodes strictly for
+display and authenticates nothing; it returns the domain, backing, value and
+commitment without the capsule, so `prepare` refuses its result. An exact
+request retry, also after restart, yields the same frame and digest.
+
+The frame contains no secret, but it links its output commitment and value to
+whoever holds it, so it travels privately. Anyone holding it can also pay it
+first, at the full amount, after which the intended payer's `prepare` refuses it
+as already paid. It carries no endpoint, credential, expiry, label or receiver
+identity key: a stable signing key would link a receiver's requests, which C4.3
+avoids, and the payer learns nothing else it needs. V3 has no payer-to-receiver
+delivery. The payee's output and capsule are in the public statement, and the
+receiver finds the payment with `fulfill` from public evidence (C4.5, C4.8).
+Until operator fee quotes exist, an operator's fee request is authenticated the
+same way; a quote signed under the operator's already pinned key would be a new
+signed message and is left for that work.
+
+The frozen v2 [pairing](POOL_WALLET_PAIRING.md) and delivery cases map to v3 as
+follows. Canonical bounded framing, malformed fields, independent exact digest,
+domain and every invoice term, and mismatch refusal before any network or proof
+use are covered by `test/pool-v3-request.test.ts` and the payer's request
+exchange case. One alias per receiver output corresponds to `prepare` refusing a
+request already saved or already paid. Credential install, rotation and
+compare-and-swap, capability revocation, leaf pinning, generation fencing,
+post-handshake custody checks, the HTTPS inbox (TLS version, plaintext, headers,
+bodies, redirects, acknowledgments, deadlines) and the delivery envelope have no
+v3 counterpart, because v3 has no receiver endpoint, credential or private
+delivery. Restoration of wallet state belongs to encrypted backup.
+
 `fulfill(alias, packageBytes, signedRootTerms)` reads the complete canonical
 single-backing frontier through the venue's current witnessed index. It accepts
 only the saved exact positive output and capsule in verified finalized history,
@@ -170,7 +214,9 @@ evidence downloaded over HTTP. The source-bound
 Reproof is oracle-tested only; a real-proof spend of inherited notes in a
 successor segment is covered by the succession check.
 
-Authenticated request transport, cancellation/release, multi-backing
-payment, encrypted backup and restoration drills remain open. Existing v2
+That harness hands the request object across directly; the request frame and
+digest are oracle-tested. A human authentication channel is not qualified.
+Cancellation/release, multi-backing payment, encrypted backup and
+restoration drills remain open. Existing v2
 wallet/service code and checks remain until all their replacement cases pass.
 This library establishes no mainnet readiness or physical custody qualification.
