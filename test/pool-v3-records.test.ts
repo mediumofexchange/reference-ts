@@ -5,7 +5,6 @@ import * as codec from "../src/pool/v3/records.js";
 import { EncodingError } from "../src/bytes.js";
 import { FIELD_MODULUS } from "../src/pool/field.js";
 import { verifySignatureStrict } from "../src/keys.js";
-import { decodeStatement as decodeV2 } from "../src/pool/statement.js";
 
 // Independent byte oracle: Node Buffer and node:crypto, no ByteWriter, field
 // encoder or production digest helper. Synthetic domains and shape-only proof
@@ -100,7 +99,7 @@ describe("unadopted v3 canonical records", () => {
     expect(values(codec.decodeRecord(expected))).toEqual(values(s));
     for (let i = 0; i < expected.length; i++) expect(() => codec.decodeRecord(expected.subarray(0, i))).toThrow(EncodingError);
     expect(() => codec.decodeRecord(join(expected, Uint8Array.of(0)))).toThrow(EncodingError);
-    expect(() => decodeV2(expected)).toThrow(EncodingError);
+    // The same bytes under pool-v2's statement tag are not a v3 record.
     const v2 = Buffer.from(expected); v2[10] = 50;
     expect(() => codec.decodeRecord(v2)).toThrow(EncodingError);
   });

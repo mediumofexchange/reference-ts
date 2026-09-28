@@ -25,14 +25,14 @@ const sha = b => createHash('sha256').update(b).digest('hex');
 const kinds = ['issue','spend','burn','demand','settle','request'];
 const counts = { issue: 11, spend: 15, burn: 15, demand: 16, settle: 17, request: 7 };
 const options = Object.freeze({ verifierTarget: 'noir-recursive' });
-const manifest = json(join(root, 'src/pool/circuits/manifest.json'));
+const manifest = json(join(here, 'candidate-manifest.json'));
 for (const [name, version] of Object.entries(manifest.toolchain)) assert.equal(json(join(root, 'node_modules', name, 'package.json')).version, version);
 const checks = [], metrics = [], identities = {}, circuits = {}, proofs = {};
 let api;
 try {
   execFileSync(process.execPath, [join(here, 'compile.mjs'), build], { cwd: root, windowsHide: true, stdio: 'inherit', timeout: 300000 });
   const compiledSourceHashes = json(join(build, 'source-hashes.json'));
-  assert.equal(compiledSourceHashes.poseidon2, manifest.sources['vendor/poseidon2.nr']);
+  assert.equal(compiledSourceHashes.poseidon2, manifest.sources['poseidon2.nr']);
   const crsPath = join(root, 'scratch/private-payment-crs');
   api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
   for (const kind of kinds) {

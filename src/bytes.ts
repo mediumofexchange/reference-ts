@@ -208,9 +208,9 @@ export class ByteWriter {
    * encoding. Every byte write takes its own copy first (copyBytes), so the
    * width asserted is the width written: a string, a plain array or a subclass
    * reporting another length is refused or framed by its real bytes. The
-   * spent sets (`pool/spent-set.ts`, `pool/v3/spent-set.ts`) fill preallocated
-   * frames instead, hashed hundreds of times per nullifier, and assert each
-   * field's width and type themselves.
+   * spent set (`pool/v3/spent-set.ts`) fills preallocated frames instead,
+   * hashed hundreds of times per nullifier, and asserts each field's width and
+   * type itself.
    */
   fixed(bytes: Uint8Array, length: number, what: string): void {
     const own = copyBytes(bytes);

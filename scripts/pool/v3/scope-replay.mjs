@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { compareBytes } from "../../../dist/bytes.js";
 import { identifierOf, VALUE_BOUND } from "../../../dist/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../../../dist/pool/note-tree.js";
-import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
+import { EvidenceRefusal } from "./evidence-reader.mjs";
 import { effectOf, applyRecovery } from "../../../dist/pool/v3/recovery.js";
 import { scopeRecovery, venueOrder } from "./scope-recovery.mjs";
 import { receiptWalk } from "./receipt-state.mjs";

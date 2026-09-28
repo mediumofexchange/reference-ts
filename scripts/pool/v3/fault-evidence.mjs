@@ -1,7 +1,7 @@
 // The observer now shares the runtime implementation. Extra legacy codec
 // arguments are ignored. Replay's pre-clone allocation bound stays local.
 import { EncodingError } from "../../../dist/bytes.js";
-import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
+import { EvidenceRefusal } from "./evidence-reader.mjs";
 import { FAULT_LIMITS } from "../../../dist/pool/v3/fault-observer.js";
 export { FAULT_LIMITS, faultObserver } from "../../../dist/pool/v3/fault-observer.js";
 

@@ -10,7 +10,7 @@ import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js"
 import { poseidon2Hash } from "../../../dist/pool/poseidon2.js";
 import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../../../dist/pool/v3/capsules.js";
-import { LIMITS } from "../delivery/evidence-reader.mjs";
+import { LIMITS } from "./evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { mergeFinalizedPrefixes } from "./scope-replay.mjs";

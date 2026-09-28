@@ -20,10 +20,8 @@ try {
   if (packed[0].files.some(file => file.path.startsWith('experiments/'))) {
     throw new Error('Research code must not ship as a supported package API');
   }
-  for (const name of ['issue.nr', 'spend.nr', 'burn.nr', 'notes.nr', 'manifest.json', 'vendor/poseidon2.nr', 'vendor/LICENSE']) {
-    if (!packed[0].files.some(file => file.path === 'src/pool/circuits/' + name)) {
-      throw new Error('Missing pinned pool circuit source: ' + name);
-    }
+  if (packed[0].files.some(file => file.path.startsWith('src/'))) {
+    throw new Error('The package ships built modules, not sources');
   }
   const consumer = join(directory, 'consumer');
   mkdirSync(consumer);
@@ -32,36 +30,17 @@ try {
   writeFileSync(join(consumer, 'check.mjs'), `
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { sep, dirname, join } from 'node:path';
-import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { sep } from 'node:path';
 import * as core from '@mediumofexchange/reference';
 import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSignature } from '@mediumofexchange/reference/backing';
 import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
-import { POOL_SERVICE_PROFILE } from '@mediumofexchange/reference/pool/service-wire';
-import { PoolServiceClient } from '@mediumofexchange/reference/pool/service-client';
 import { V3_SERVICE_PROFILE } from '@mediumofexchange/reference/pool/v3/service-wire';
 import { V3ServiceClient } from '@mediumofexchange/reference/pool/v3/service-client';
-import { deriveWalletField } from '@mediumofexchange/reference/pool/wallet';
-import { createWalletBackupKey, walletBackupDigest, MAX_WALLET_BACKUP_BYTES } from '@mediumofexchange/reference/pool/wallet-backup';
-import { WalletDeliveryClient, createWalletDeliveryServer } from '@mediumofexchange/reference/pool/wallet-delivery-http';
-import { WALLET_DELIVERY_PROFILE, MAX_WALLET_DELIVERY_BYTES } from '@mediumofexchange/reference/pool/wallet-delivery-wire';
-import { WALLET_PAIRING_PROFILE, MAX_WALLET_PAIRING_BYTES } from '@mediumofexchange/reference/pool/wallet-pairing';
-import { poolReceiptBytes } from '@mediumofexchange/reference/pool/receipt';
-import { readPoolReceiptRecord, readPoolReceiptCheckpoint } from '@mediumofexchange/reference/pool/receipt-record';
-import { readPoolReceiptRepair } from '@mediumofexchange/reference/pool/receipt-repair';
-import { readPoolReceiptStatus } from '@mediumofexchange/reference/pool/receipt-status';
-import { readPoolPredecessor, readPoolCurrent } from '@mediumofexchange/reference/pool/descent';
-import { readPoolCheckpoint, readPoolCheckpoints } from '@mediumofexchange/reference/pool/checkpoint';
-import { preparePoolOpening } from '@mediumofexchange/reference/pool/opening';
+import { commitmentOf } from '@mediumofexchange/reference/pool/notes';
+import { MAX_WALLET_BACKUP_BYTES } from '@mediumofexchange/reference/pool/v3/wallet-backup';
 import { ErgoVenue, DEFAULT_ERGO_DEPTH } from '@mediumofexchange/reference/ergo';
 import { ergoNodeSupplier } from '@mediumofexchange/reference/ergo-supplier';
 import { ed25519 } from '@noble/curves/ed25519.js';
-const circuits = join(dirname(fileURLToPath(import.meta.resolve('@mediumofexchange/reference/package.json'))), 'src/pool/circuits');
-const manifest = JSON.parse(readFileSync(join(circuits, 'manifest.json'), 'utf8'));
-for (const [name, expected] of Object.entries(manifest.sources)) {
-  assert.equal(createHash('sha256').update(readFileSync(join(circuits, name))).digest('hex'), expected, name);
-}
 for (const specifier of ['@mediumofexchange/reference', '@noble/curves/ed25519.js', '@noble/hashes/sha2.js']) {
   assert.ok(fileURLToPath(import.meta.resolve(specifier)).startsWith(process.cwd() + sep), 'dependency escaped installed consumer: ' + specifier);
 }
@@ -70,54 +49,31 @@ const backing = makeBacking({ obligor: key, payout: { thing: 'test', quantumExpo
 assert.equal(decodeBacking(encodeBacking(backing)).nameHex, backing.nameHex);
 assert.ok(verifyBackingSignature(backing, signBacking(secret, backing)));
 assert.equal(typeof core.makeBacking, 'function');
-assert.equal(core.poolReceiptBytes, poolReceiptBytes);
-assert.equal(core.readPoolReceiptRecord, readPoolReceiptRecord);
-assert.equal(core.readPoolReceiptCheckpoint, readPoolReceiptCheckpoint);
-assert.equal(core.readPoolReceiptRepair, readPoolReceiptRepair);
-assert.equal(core.readPoolReceiptStatus, readPoolReceiptStatus);
-assert.equal(core.readPoolPredecessor, readPoolPredecessor);
-assert.equal(core.readPoolCheckpoint, readPoolCheckpoint);
-assert.equal(core.readPoolCheckpoints, readPoolCheckpoints);
-assert.equal(core.readPoolCurrent, readPoolCurrent);
-assert.equal(core.preparePoolOpening, preparePoolOpening);
-assert.equal(typeof core.signPoolReceipt, 'function');
-assert.equal(typeof core.poolReceiptInHistory, 'function');
+assert.equal(core.commitmentOf, commitmentOf);
+assert.equal(core.proofVerifier, undefined);
 assert.equal(PILOT_PROFILE, 'transparent-pilot/v0-directory-v1');
-assert.equal(POOL_SERVICE_PROFILE, 'pool-store/v2');
 assert.equal(V3_SERVICE_PROFILE, 'pool-store/v3');
 assert.equal(typeof V3ServiceClient, 'function');
 assert.equal(core.V3ServiceClient, undefined);
-assert.equal(new PoolServiceClient('http://127.0.0.1:9031/', '11'.repeat(32)).baseUrl, 'http://127.0.0.1:9031/');
-assert.equal(typeof deriveWalletField, 'function');
-assert.equal(createWalletBackupKey().length, 32);
-assert.equal(typeof walletBackupDigest, 'function');
-assert.equal(MAX_WALLET_BACKUP_BYTES, 16 * 1024 * 1024);
-assert.equal(typeof WalletDeliveryClient, 'function');
-assert.equal(typeof createWalletDeliveryServer, 'function');
-assert.equal(WALLET_DELIVERY_PROFILE, 'wallet-delivery/v2');
-assert.equal(WALLET_PAIRING_PROFILE, 'moe/wallet-pairing/v1');
-assert.equal(MAX_WALLET_PAIRING_BYTES, 16384);
-assert.equal(MAX_WALLET_DELIVERY_BYTES, 300_000);
+assert.equal(MAX_WALLET_BACKUP_BYTES, 64 * 1024 * 1024);
 assert.equal(typeof ErgoVenue, 'function');
 assert.equal(DEFAULT_ERGO_DEPTH, 10n);
 assert.equal(ergoNodeSupplier('http://127.0.0.1:9053/').name, 'http://127.0.0.1:9053');
 assert.equal(core.ErgoVenue, undefined);
 if (Number(process.versions.node.split('.')[0]) >= 24) {
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
-  const { PoolStore, PoolStoreError } = await import('@mediumofexchange/reference/pool/store');
-  const { createPoolService } = await import('@mediumofexchange/reference/pool/service-http');
+  const { V3OperatorJournal, V3StoreError } = await import('@mediumofexchange/reference/pool/v3/store');
+  const { V3Wallet } = await import('@mediumofexchange/reference/pool/v3/wallet-store');
   const { createV3Service } = await import('@mediumofexchange/reference/pool/v3/service-http');
   assert.equal(typeof createV3Service, 'function');
   assert.equal(core.createV3Service, undefined);
-  const { PoolWalletStore } = await import('@mediumofexchange/reference/pool/wallet-store');
-  assert.equal(typeof PoolWalletStore, 'function');
-  assert.equal(core.PoolWalletStore, undefined);
-  assert.equal(typeof createPoolService, 'function');
+  assert.equal(typeof V3Wallet, 'function');
+  assert.equal(core.V3Wallet, undefined);
   const { createPilotServer } = await import('@mediumofexchange/reference/pilot-http');
   assert.equal(typeof PilotStore, 'function');
-  assert.equal(typeof PoolStore, 'function');
-  assert.equal(typeof PoolStoreError, 'function');
-  assert.equal(core.PoolStore, undefined);
+  assert.equal(typeof V3OperatorJournal, 'function');
+  assert.equal(typeof V3StoreError, 'function');
+  assert.equal(core.V3OperatorJournal, undefined);
   assert.equal(typeof createPilotServer, 'function');
 }
 console.log('Built tarball consumer: imports, canonical round trip and signature passed');

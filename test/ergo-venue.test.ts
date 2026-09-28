@@ -1,19 +1,19 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
-import { makeBacking, signBacking, type Backing } from "../src/backing.js";
+import { makeBacking, type Backing } from "../src/backing.js";
 import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
 import { DEFAULT_ERGO_DEPTH, ergoAnchorContext, ergoProfile, ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
 import { ergoProfileIdentity, type ErgoTransactionView } from "../src/ergo-profile.js";
-import { decodeRangeAnswer, RangeLimitError, type RangeRequest, type RecordKind } from "../src/record-range.js";
-import { isSilent, quietFor } from "../src/recovery.js";
-import { encodeReplacement, operatorAt, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
+import {
+  admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, revocationIndex,
+  type HeldCommitment, type RangeAnswer, type RangeRequest, type RecordKind,
+} from "../src/record-range.js";
+import { encodeReplacement, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { encodeRevocation, signRevocation } from "../src/revocation.js";
-import { answering, VenueError } from "../src/venue.js";
-import { PoolAuthorityView } from "../src/pool/authority.js";
+import { VenueError } from "../src/venue-error.js";
 import {
   ANCHOR_HEIGHT, BranchSupplier, Chain, hex, plainOutput, rawOutput, recordOutput, SCRIPTS, transaction, type Block, type Output,
 } from "./ergo-chain.js";
-import { CONFIG, DOMAIN } from "./pool-support.js";
 import { KEYS, SECRETS } from "./support.js";
 
 // Ergo read as a witness venue under the selected profile (venue-ergo.md),
@@ -26,10 +26,14 @@ import { KEYS, SECRETS } from "./support.js";
 // witnessed index is the block that included the transaction, never a box's
 // creation height; nothing inside the depth is read; a record rests on its
 // signature, not its location; a key's record rises in sequence as it rises
-// in index; reads see only a complete snapshot; the seam takes the existing
-// predicates. And the ones this view adds: no supplier is trusted, a missing
-// section stops the clock rather than reading as silence, the heaviest chain
-// is followed within the depth and a reorganization past it fails the venue.
+// in index; reads see only a complete snapshot. And the ones this view adds:
+// no supplier is trusted, a missing section stops the clock rather than
+// reading as silence, the heaviest chain is followed within the depth and a
+// reorganization past it fails the venue.
+//
+// The view answers pool-v3 §13's ranges and judges nothing; the tests read it
+// as a v3 reader does, deriving held commitments, revocations and admitted
+// replacements from its answers with `record-range.ts`.
 
 const chain = new Chain();
 const DEPTH = 3n;
@@ -46,6 +50,17 @@ async function synced(count: number, at: Records = {}, policy?: Partial<ErgoRead
   await v.sync([serving(blocks)]);
   return { v, blocks };
 }
+
+const WIDE = { maxBytes: 1n << 30n, maxEntries: 1n << 20n };
+/** The view's §13 answer for one subject over [0, toIndex], the clock by default. */
+function answer(v: ErgoVenue, kind: RecordKind, subject: Uint8Array, toIndex = v.witnessedIndex()): RangeAnswer {
+  const request: RangeRequest = { venue: VENUE_ID, kind, subject, fromIndex: 0n, toIndex };
+  return decodeRangeAnswer(v.range(request, WIDE)!, request, WIDE);
+}
+/** A key's held commitments through `asOf` (the clock by default), as a v3 reader derives them (C2.3.3). */
+const held = (v: ErgoVenue, key: Uint8Array, asOf?: bigint): readonly HeldCommitment[] => heldCommitments(answer(v, 1, key, asOf)).held;
+const sequences = (v: ErgoVenue, key: Uint8Array, asOf?: bigint): [bigint, bigint][] =>
+  held(v, key, asOf).map(h => [h.index, h.commitment.sequence]);
 
 const commitment = (sequence: bigint, fill: number, secret = SECRETS.operator): Commitment =>
   signCommitment(secret, sequence, new Uint8Array(32).fill(fill));
@@ -144,8 +159,7 @@ describe("the witnessed index is the block that included the transaction", () =>
     const early = commitment(1n, 0xaa);
     const v = venue(), blocks = chain.extend(chain.anchor, 12, i => i === 7 ? [transaction([committed(early)], 0n)] : []);
     await v.sync([serving(blocks)]);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(7n);
-    expect(v.latestFor(KEYS.operator)).toEqual(early);
+    expect(held(v, KEYS.operator)).toEqual([{ index: 7n, commitment: early }]);
   });
 
   it("reads nothing inside the finality depth", async () => {
@@ -153,27 +167,23 @@ describe("the witnessed index is the block that included the transaction", () =>
     const v = venue();
     await v.sync([serving(blocks)]);
     expect(v.witnessedIndex()).toBe(8n);
-    expect(v.latestFor(KEYS.operator)).toBeUndefined();
+    expect(held(v, KEYS.operator)).toEqual([]);
     const more = [...blocks, ...branch(1, {}, blocks.at(-1)!)];
     await v.sync([serving(more)]);
     expect(v.witnessedIndex()).toBe(9n);
-    expect(v.latestFor(KEYS.operator)?.sequence).toBe(1n);
+    expect(sequences(v, KEYS.operator)).toEqual([[9n, 1n]]);
   });
 
-  it("answers about the past, which is what four of the nine reads need", async () => {
+  it("answers about the past: a range ending before the clock holds what was held then", async () => {
     const { v } = await synced(16, { 2: [[committed(commitment(1n, 0xaa))]], 9: [[committed(commitment(2n, 0xbb))]] });
-    expect(v.latestFor(KEYS.operator)?.sequence).toBe(2n);
-    expect(v.latestFor(KEYS.operator, 8n)?.sequence).toBe(1n);
-    expect(v.witnessedAtFor(KEYS.operator, 8n)).toBe(2n);
-    expect(v.latestFor(KEYS.operator, 1n)).toBeUndefined();
-    expect(v.firstCommitmentFor(KEYS.operator)).toBe(2n);
-    expect(v.firstCommitmentFor(KEYS.operator, 3n)).toBe(9n);
-    expect(v.nextSequenceFor(KEYS.operator)).toBe(3n);
+    expect(sequences(v, KEYS.operator)).toEqual([[2n, 1n], [9n, 2n]]);
+    expect(sequences(v, KEYS.operator, 8n)).toEqual([[2n, 1n]]);
+    expect(sequences(v, KEYS.operator, 1n)).toEqual([]);
   });
 });
 
 describe("nothing rests on the location alone", () => {
-  it("skips a commitment filed under this key that another key signed, one that does not verify, and noise", async () => {
+  it("carries a commitment filed under this key that another key signed, one that does not verify, and noise; none is held", async () => {
     const stranger = commitment(1n, 0xcc, SECRETS.mallory);
     const torn = { ...commitment(2n, 0xaa), signature: new Uint8Array(64) };
     const { v } = await synced(12, {
@@ -182,38 +192,38 @@ describe("nothing rests on the location alone", () => {
         [recordOutput(1, KEYS.operator, new Uint8Array(135))], [plainOutput]],
       3: [[committed(commitment(3n, 0xa2))]],
     });
-    expect(v.latestFor(KEYS.operator)?.sequence).toBe(3n);
-    expect(v.witnessedAtSequence(KEYS.operator, 1n)).toBeUndefined();
-    expect(v.witnessedAtSequence(KEYS.operator, 2n)).toBeUndefined();
-    expect(v.firstCommitmentFor(KEYS.operator)).toBe(3n);
+    // The view judges nothing: both well-sized records at index 1 are answered, and the reader skips them.
+    expect(answer(v, 1, KEYS.operator).entries.map(e => e.index)).toEqual([1n, 1n, 3n]);
+    expect(sequences(v, KEYS.operator)).toEqual([[3n, 3n]]);
     // Absence is proven for every key by exhaustion: no key needs to be named before the sync.
-    expect(v.latestFor(KEYS.alice)).toBeUndefined();
+    expect(answer(v, 1, KEYS.alice).entries).toEqual([]);
   });
 
-  it("reads revocations that name and are signed by the key, and replacements that decode and name the backing", async () => {
+  it("carries every revocation and replacement filed under a subject; the reader counts only those that name it and verify", async () => {
     const r = replacement(ruled, KEYS.alice, SECRETS.alice, SECRETS.backer2, 30n);
     const { v } = await synced(12, {
-      1: [[revoked(SECRETS.backer, KEYS.backer)], [revoked(SECRETS.mallory, KEYS.backer)]],
+      1: [[revoked(SECRETS.mallory, KEYS.backer)], [revoked(SECRETS.backer, KEYS.backer)]],
       2: [[replaced(ruled, r)], [recordOutput(2, backing.name, encodeReplacement(ruled.name, r))], [recordOutput(2, ruled.name, new Uint8Array(233))]],
     });
-    expect(v.revocationsFor(KEYS.backer)).toEqual([{ revocation: signRevocation(SECRETS.backer), at: 1n }]);
-    expect(v.revocationsFor(KEYS.mallory)).toEqual([]);
-    expect(v.replacementsFor(ruled.name)).toEqual([{ replacement: r, at: 2n }]);
-    expect(v.replacementsFor(backing.name)).toEqual([]);
+    expect(answer(v, 3, KEYS.backer).entries).toHaveLength(2);
+    expect(revocationIndex(answer(v, 3, KEYS.backer))).toBe(1n);
+    expect(revocationIndex(answer(v, 3, KEYS.mallory))).toBeUndefined();
+    expect(answer(v, 2, ruled.name).entries).toHaveLength(2);
+    expect(admittedReplacements(answer(v, 2, ruled.name), KEYS.backer2).map(a => [a.index, a.replacement])).toEqual([[2n, r]]);
+    expect(answer(v, 2, backing.name).entries).toHaveLength(1);
+    expect(admittedReplacements(answer(v, 2, backing.name), KEYS.backer2)).toEqual([]);
   });
 
-  it("hands out copies: a reader that overwrites what it was given changes nothing", async () => {
-    const original = commitment(1n, 0xaa), r = replacement(ruled, KEYS.alice, SECRETS.alice, SECRETS.backer2, 30n);
-    const { v } = await synced(12, { 2: [[committed(original), revoked(SECRETS.backer, KEYS.backer), replaced(ruled, r)]] });
-    const read = v.latestFor(KEYS.operator)!;
-    read.root.fill(0); read.operator.fill(0); read.signature.fill(0);
-    const revocation = v.revocationsFor(KEYS.backer)[0]!.revocation;
-    revocation.obligor.fill(0); revocation.signature.fill(0);
-    const held = v.replacementsFor(ruled.name)[0]!.replacement;
-    held.successor.fill(0); held.signature.fill(0);
-    expect(v.latestFor(KEYS.operator)).toEqual(original);
-    expect(v.revocationsFor(KEYS.backer)).toEqual([{ revocation: signRevocation(SECRETS.backer), at: 2n }]);
-    expect(v.replacementsFor(ruled.name)).toEqual([{ replacement: r, at: 2n }]);
+  it("hands out copies: a reader that overwrites an answer changes nothing", async () => {
+    const original = commitment(1n, 0xaa);
+    const { v } = await synced(12, { 2: [[committed(original), revoked(SECRETS.backer, KEYS.backer)]] });
+    const request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: v.witnessedIndex() };
+    const bytes = v.range(request, WIDE)!, first = Uint8Array.from(bytes);
+    bytes.fill(0);
+    const decoded = answer(v, 1, KEYS.operator);
+    decoded.entries[0]!.record.fill(0);
+    expect(v.range(request, WIDE)).toEqual(first);
+    expect(held(v, KEYS.operator)).toEqual([{ index: 2n, commitment: original }]);
   });
 });
 
@@ -223,18 +233,15 @@ describe("§C2.3.3: a key's record rises in sequence as it rises in index (pool-
     const { v } = await synced(14, {
       1: [[committed(one)]], 2: [[committed(commitment(2n, 0xa1))]], 3: [[committed(commitment(3n, 0xa2))]], 4: [[committed(one)]],
     });
-    expect(v.latestFor(KEYS.operator)?.sequence).toBe(3n);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(3n);
-    expect(v.nextSequenceFor(KEYS.operator)).toBe(4n);
-    expect(v.witnessedAtSequence(KEYS.operator, 1n)).toBe(1n);
+    expect(sequences(v, KEYS.operator)).toEqual([[1n, 1n], [2n, 2n], [3n, 3n]]);
   });
 
   it("holds one sequence once: a later root at a held sequence is skipped, two at one index keep the lesser bytes", async () => {
     const a = commitment(2n, 0xc1), b = commitment(2n, 0xc9);
     const lesser = Buffer.compare(encodeCommitment(a), encodeCommitment(b)) < 0 ? a : b;
     const { v } = await synced(14, { 1: [[committed(commitment(1n, 0xc0))]], 2: [[committed(b)], [committed(a)]], 3: [[committed(commitment(2n, 0xcc))]] });
-    expect(v.latestFor(KEYS.operator)).toEqual(lesser);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(2n);
+    expect(held(v, KEYS.operator).at(-1)).toEqual({ index: 2n, commitment: lesser });
+    expect(held(v, KEYS.operator)).toHaveLength(2);
   });
 
   it("reads two commitments of one key in one block the same way whatever their order in it", async () => {
@@ -242,35 +249,26 @@ describe("§C2.3.3: a key's record rises in sequence as it rises in index (pool-
     const forward = await synced(12, { 1: [[committed(commitment(1n, 0xb0))]], 2: [[committed(two)], [committed(three)]] });
     const backward = await synced(12, { 1: [[committed(commitment(1n, 0xb0))]], 2: [[committed(three), committed(two)]] });
     for (const { v } of [forward, backward]) {
-      expect(v.latestFor(KEYS.operator)?.sequence).toBe(3n);
-      expect(v.witnessedAtSequence(KEYS.operator, 1n)).toBe(1n);
-      expect(v.witnessedAtSequence(KEYS.operator, 2n)).toBe(2n);
-      expect(v.witnessedAtSequence(KEYS.operator, 3n)).toBe(2n);
-      expect(v.previousFor(KEYS.operator, 3n)).toEqual(two);
+      expect(sequences(v, KEYS.operator)).toEqual([[1n, 1n], [2n, 2n], [2n, 3n]]);
+      expect(held(v, KEYS.operator)[1]!.commitment).toEqual(two);
     }
   });
 });
 
-describe("pool readers see only a complete Ergo snapshot", () => {
-  const x = makeBacking({ ...backing, evidence: { setting: "pool", operator: KEYS.operator,
-    construction: "moe/pool/v2", configuration: DOMAIN, replacementRule: KEYS.backer,
-    witnessing: { venue: VENUE_ID, interval: 1n } } });
-  const signed = { backing: x, signature: signBacking(SECRETS.backer, x) };
-  const r = replacement(x, KEYS.bob, SECRETS.bob, SECRETS.backer, 21n);
+describe("readers see only a complete Ergo snapshot", () => {
+  const r = replacement(backing, KEYS.bob, SECRETS.bob, SECRETS.backer, 21n);
   const first = commitment(1n, 1), second = commitment(2n, 2);
-  // Twelve blocks witness 0..8; twenty-six witness 0..22, adding the replacement witnessed at 12 (in force at
-  // 21, its floor of twice the lag plus one), the second commitment and a revocation.
+  // Twelve blocks witness 0..8; twenty-six witness 0..22, adding the replacement witnessed at 12,
+  // the second commitment and a revocation, both at 15.
   const old = branch(12, { 2: [[committed(first)]] });
-  const grown = [...old, ...branch(14, { 0: [[replaced(x, r)]], 3: [[committed(second), revoked(SECRETS.backer, KEYS.backer)]] }, old.at(-1)!)];
+  const grown = [...old, ...branch(14, { 0: [[replaced(backing, r)]], 3: [[committed(second), revoked(SECRETS.backer, KEYS.backer)]] }, old.at(-1)!)];
+  const replacements = (v: ErgoVenue) => admittedReplacements(answer(v, 2, backing.name), KEYS.backer).length;
+  const revokedAt = (v: ErgoVenue) => revocationIndex(answer(v, 3, KEYS.backer));
   for (const initial of [true, false]) {
     for (const fail of [true, false]) {
       it.each(["headers", "section"] as const)(`${initial ? "first sync" : "refresh"} ${fail ? "failure" : "success"} at %s exposes no partial records`, async phase => {
         const v = venue(), entered = signal(), resume = signal();
-        if (!initial) {
-          await v.sync([serving(old)]);
-          // Prime the memo that must survive failure and be invalidated on success.
-          expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(KEYS.operator);
-        }
+        if (!initial) await v.sync([serving(old)]);
         const supplier = serving(grown);
         let paused = false;
         supplier.before = async call => {
@@ -280,21 +278,16 @@ describe("pool readers see only a complete Ergo snapshot", () => {
         };
         const pending = v.sync([supplier]);
         await entered.promise;
-        const reads = [
-          () => v.witnessedIndex(), () => v.latestFor(KEYS.operator),
-          () => v.previousFor(KEYS.operator, 3n), () => v.witnessedAtFor(KEYS.operator),
-          () => v.witnessedAtSequence(KEYS.operator, 1n), () => v.firstCommitmentFor(KEYS.operator),
-          () => v.nextSequenceFor(KEYS.operator), () => v.replacementsFor(x.name), () => v.revocationsFor(x.obligor),
-          () => new PoolAuthorityView(CONFIG, v, [signed]),
-        ];
+        const request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: 0n };
+        const reads = [() => v.witnessedIndex(), () => v.range(request, WIDE)];
         try {
           // Mid-sync, reads answer from the previous snapshot, or refuse where there is none.
           if (initial) for (const read of reads) expect(read).toThrow(VenueError);
           else {
             expect(v.witnessedIndex()).toBe(8n);
-            expect(v.latestFor(KEYS.operator)).toEqual(first);
-            expect(v.replacementsFor(x.name)).toHaveLength(0);
-            expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(KEYS.operator);
+            expect(held(v, KEYS.operator)).toEqual([{ index: 2n, commitment: first }]);
+            expect(replacements(v)).toBe(0);
+            expect(v.range({ ...request, toIndex: 9n }, WIDE)).toBeUndefined();
           }
           expect(v.id).toEqual(VENUE_ID); expect(v.lag()).toBe(4n);
         } finally { resume.resolve(); }
@@ -304,16 +297,14 @@ describe("pool readers see only a complete Ergo snapshot", () => {
           for (const read of reads) expect(read).toThrow(VenueError);
         } else {
           expect(v.witnessedIndex()).toBe(fail ? 8n : 22n);
-          expect(v.latestFor(KEYS.operator)).toEqual(fail ? first : second);
-          expect(v.witnessedAtSequence(KEYS.operator, 2n)).toBe(fail ? undefined : 15n);
-          expect(v.replacementsFor(x.name)).toHaveLength(fail ? 0 : 1);
-          expect(v.revocationsFor(x.obligor)).toHaveLength(fail ? 0 : 1);
-          expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(fail ? KEYS.operator : KEYS.bob);
+          expect(sequences(v, KEYS.operator)).toEqual(fail ? [[2n, 1n]] : [[2n, 1n], [15n, 2n]]);
+          expect(replacements(v)).toBe(fail ? 0 : 1);
+          expect(revokedAt(v)).toBe(fail ? undefined : 15n);
         }
         if (fail) {
           await v.sync([serving(grown)]);
           expect(v.witnessedIndex()).toBe(22n);
-          expect(new PoolAuthorityView(CONFIG, v, [signed]).term(x.name)?.operator).toEqual(KEYS.bob);
+          expect(replacements(v)).toBe(1);
         }
       });
     }
@@ -346,7 +337,7 @@ describe("no supplier is trusted", () => {
     expect(report.suppliers.map(s => [s.name, s.headersAdded, s.stopped])).toEqual([
       ["forger", 4, "refused header: difficulty"], ["honest", 8, undefined]]);
     expect(v.witnessedIndex()).toBe(8n);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(2n);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(2n);
   });
 
   it("a withheld section stops the clock before it; another supplier's section, or a later sync, resumes it", async () => {
@@ -358,10 +349,10 @@ describe("no supplier is trusted", () => {
     expect(report.unresolvedIndex).toBe(4n);
     expect(v.witnessedIndex()).toBe(3n);
     // Stale, never empty: the record before the missing section stands, and the clock does not pass it.
-    expect(v.latestFor(KEYS.operator)).toBeUndefined();
+    expect(held(v, KEYS.operator).at(-1)?.commitment).toBeUndefined();
     await v.sync([withholding, serving(blocks, "other")]);
     expect(v.witnessedIndex()).toBe(8n);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(6n);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(6n);
   });
 
   it("a section that does not reproduce its header's root is passed over", async () => {
@@ -372,7 +363,7 @@ describe("no supplier is trusted", () => {
     expect((await v.sync([lying])).unresolvedIndex).toBe(3n);
     expect(v.witnessedIndex()).toBe(2n);
     await v.sync([lying, serving(blocks, "honest")]);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(3n);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(3n);
   });
 
   it("follows the heaviest chain inside the depth, reading only its blocks", async () => {
@@ -384,7 +375,7 @@ describe("no supplier is trusted", () => {
     expect(v.witnessedIndex()).toBe(7n);
     await v.sync([serving(light, "light"), serving(heavy, "heavy")]);
     expect(v.witnessedIndex()).toBe(9n);
-    expect(v.latestFor(KEYS.operator)?.root).toEqual(new Uint8Array(32).fill(0xbb));
+    expect(held(v, KEYS.operator).at(-1)?.commitment?.root).toEqual(new Uint8Array(32).fill(0xbb));
   });
 
   it("a reorganization past the depth fails the venue: every read and every later sync refuses", async () => {
@@ -393,10 +384,10 @@ describe("no supplier is trusted", () => {
     const deeper = [...trunk, ...branch(12, {}, trunk.at(-1)!, 2)];
     const v = venue();
     await v.sync([serving(first)]);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(5n);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(5n);
     await expect(v.sync([serving(deeper, "heavier fork")])).rejects.toThrow(/venue failure/);
     expect(() => v.witnessedIndex()).toThrow(/venue failure/);
-    expect(() => v.latestFor(KEYS.operator)).toThrow(VenueError);
+    expect(() => v.range({ venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: 0n }, WIDE)).toThrow(/venue failure/);
     await expect(v.sync([serving(first)])).rejects.toThrow(/venue failure/);
   });
 
@@ -410,7 +401,7 @@ describe("no supplier is trusted", () => {
     expect(report.suppliers.map(s => [s.headersAdded, s.stopped])).toEqual([[5, "header budget"], [5, "header budget"]]);
     for (let i = 0; i < 3 && report.witnessedIndex !== 10n; i++) report = await v.sync([serving(side, "side"), serving(blocks, "honest")]);
     expect(v.witnessedIndex()).toBe(10n);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(9n);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(9n);
   });
 
   // Serving the known headers from the anchor's child (below the clock) or from the clock's own height (above it).
@@ -438,7 +429,7 @@ describe("no supplier is trusted", () => {
     expect(servedKnown).toBe(true);
     expect(report.suppliers.map(s => [s.headersAdded, s.stopped])).toEqual([[0, "failed: gone"], [8, undefined]]);
     expect(v.witnessedIndex()).toBe(16n);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(14n);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(14n);
   });
 
   it("a supplier whose budget stops it on a heavier fork above the clock holds the clock at the fork until the fork arrives", async () => {
@@ -459,7 +450,7 @@ describe("no supplier is trusted", () => {
     expect(v.witnessedIndex()).toBe(9n);
     await v.sync([serving(light, "light"), serving(heavy, "heavy")]);
     expect(v.witnessedIndex()).toBe(18n);
-    expect(v.latestFor(KEYS.operator)?.root).toEqual(new Uint8Array(32).fill(0xbb));
+    expect(held(v, KEYS.operator).at(-1)?.commitment?.root).toEqual(new Uint8Array(32).fill(0xbb));
   });
 
   it("a supplier whose chain keeps ending off the best chain spends its side-branch quota and then withholds", async () => {
@@ -477,7 +468,7 @@ describe("no supplier is trusted", () => {
     const third = await v.sync(suppliers());
     expect(third.suppliers[1]!.stopped).toBe("side-branch quota");
     expect(v.witnessedIndex()).toBe(10n);
-    expect(v.witnessedAtFor(KEYS.operator)).toBe(9n);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(9n);
   });
 
   it("a branch that briefly leads with two mined blocks each sync charges an honest supplier only its headers past the fork", async () => {
@@ -560,39 +551,19 @@ describe("its answers are §13's", () => {
 });
 
 describe("this view reads; publishing is a wallet handed to it", () => {
-  it("refuses to publish without a publisher, and refuses the records the profile does not carry rather than answering empty", async () => {
+  it("refuses to publish any kind without a publisher", async () => {
     const { v } = await synced(5);
-    for (const call of [() => v.publishOp(), () => v.publishCommit(), () => v.publishedOpsFor(), () => v.commitsFor()]) expect(call).toThrow(VenueError);
-    expect(() => v.publish(commitment(1n, 0xaa))).toThrow(/no publisher/);
-    expect(() => v.publishRevocation(signRevocation(SECRETS.backer))).toThrow(/no publisher/);
-    expect(() => v.publishReplacement(ruled.name, replacement(ruled, KEYS.carol, SECRETS.carol, SECRETS.backer2, 5n))).toThrow(/no publisher/);
+    const records: [RecordKind, Uint8Array, Uint8Array][] = [
+      [1, KEYS.operator, encodeCommitment(commitment(1n, 0xaa))],
+      [2, ruled.name, encodeReplacement(ruled.name, replacement(ruled, KEYS.carol, SECRETS.carol, SECRETS.backer2, 5n))],
+      [3, KEYS.backer, encodeRevocation(signRevocation(SECRETS.backer))],
+      [4, backing.name, new Uint8Array(40)],
+    ];
+    for (const [kind, subject, record] of records) expect(() => v.publishRecord(kind, subject, record)).toThrow(/no publisher/);
   });
 });
 
-describe("the seam is real: the existing predicates take this venue", () => {
-  it("grades silence off the chain's own indices", async () => {
-    const blocks = branch(26, { 4: [[committed(commitment(1n, 0xaa))]] });
-    const v = venue();
-    await v.sync([serving(blocks)]);
-    expect(quietFor(v, KEYS.operator)).toBe(18n);
-    expect(isSilent(v, backing)).toBe(true);
-    await v.sync([serving([...blocks, ...branch(1, { 0: [[committed(commitment(2n, 0xbb))]] }, blocks.at(-1)!)])]);
-    expect(v.witnessedIndex()).toBe(23n);
-    // The commitment at index 26 is inside the depth; the clock moved one, and the grade is unchanged.
-    expect(isSilent(v, backing)).toBe(true);
-  });
-
-  it("a record witnessed at 4 takes force at 13 and not at 12: the lead is floored at twice the lag plus one", async () => {
-    const at = (effective: bigint): Records => ({ 1: [[committed(commitment(1n, 0xaa))]],
-      4: [[replaced(ruled, replacement(ruled, KEYS.alice, SECRETS.alice, SECRETS.backer2, effective))]] });
-    const short = await synced(18, at(12n));
-    expect(operatorAt(ruled, short.v, short.v.witnessedIndex())).toEqual(KEYS.operator);
-    const enough = await synced(18, at(13n));
-    expect(operatorAt(ruled, enough.v, enough.v.witnessedIndex())).toEqual(KEYS.alice);
-  });
-});
-
-describe("C2.7.2 bounded held-record descent on this venue", () => {
+describe("held records on this venue", () => {
   const MAX = (1n << 64n) - 1n, SPARSE = (1n << 53n) + 7n;
   const records = [
     { at: 0, commitment: signCommitment(SECRETS.operator, 1n, new Uint8Array(32).fill(1)) },
@@ -603,47 +574,36 @@ describe("C2.7.2 bounded held-record descent on this venue", () => {
   const other = signCommitment(SECRETS.alice, 2n, new Uint8Array(32).fill(5));
   const at: Records = { 0: [[committed(records[0]!.commitment)]], 3: [[committed(records[2]!.commitment), committed(other)], [committed(records[1]!.commitment)]],
     8: [[committed(records[3]!.commitment)]] };
-  it("matches record selection across inclusive indices and exclusive sparse sequence bounds, and visits every held predecessor", async () => {
+  it("holds sparse sequences up to 2^64 − 1 at their indices, and each range ending before the clock holds its prefix", async () => {
     const { v } = await synced(13, at);
     expect(v.witnessedIndex()).toBe(9n);
-    for (const asOf of [undefined, 0n, 2n, 3n, 7n, 8n, 9n, 100n]) {
-      for (const bound of [0n, 1n, 5n, 6n, SPARSE, SPARSE + 1n, MAX, MAX + 1n]) {
-        const expected = records.filter(r => BigInt(r.at) <= (asOf ?? 9n) && r.commitment.sequence < bound).at(-1);
-        expect(v.previousFor(KEYS.operator, bound, asOf)).toEqual(expected?.commitment);
-      }
+    for (const asOf of [0n, 2n, 3n, 7n, 8n, 9n]) {
+      expect(held(v, KEYS.operator, asOf)).toEqual(records.filter(r => BigInt(r.at) <= asOf).map(r => ({ index: BigInt(r.at), commitment: r.commitment })));
     }
-    const seen: bigint[] = [];
-    for (let current = v.latestFor(KEYS.operator); current !== undefined; current = v.previousFor(KEYS.operator, current.sequence)) {
-      seen.push(current.sequence);
-    }
-    expect(seen).toEqual([MAX, SPARSE, 5n, 1n]);
-    expect(v.previousFor(KEYS.alice, MAX)).toEqual(other);
-    expect(v.previousFor(KEYS.backer, MAX)).toBeUndefined();
-    for (const record of records) expect(v.witnessedAtSequence(KEYS.operator, record.commitment.sequence)).toBe(BigInt(record.at));
-    for (const hole of [0n, 2n, 6n, SPARSE - 1n, MAX - 1n]) expect(v.witnessedAtSequence(KEYS.operator, hole)).toBeUndefined();
+    expect(held(v, KEYS.alice)).toEqual([{ index: 3n, commitment: other }]);
+    expect(held(v, KEYS.backer)).toEqual([]);
   });
 
-  it("uses only held, verified, witnessed records", async () => {
+  it("holds only verified records rising in sequence", async () => {
     const signed = (sequence: bigint) => signCommitment(SECRETS.operator, sequence, new Uint8Array(32).fill(6));
     const invalid = signed(4n); invalid.signature.fill(0);
     const { v } = await synced(14, { 1: [[committed(signed(1n))]], 2: [[committed(invalid)]], 3: [[committed(signed(5n))]],
       5: [[committed(signed(2n))]], 11: [[committed(signed(6n))]] });
     expect(v.witnessedIndex()).toBe(10n);
-    expect(v.previousFor(KEYS.operator, 7n, 100n)?.sequence).toBe(5n);
-    expect(v.previousFor(KEYS.operator, 5n)?.sequence).toBe(1n);
-    for (const sequence of [2n, 4n, 6n]) expect(v.witnessedAtSequence(KEYS.operator, sequence)).toBeUndefined();
+    expect(sequences(v, KEYS.operator)).toEqual([[1n, 1n], [3n, 5n]]);
   });
 
-  it("keeps unavailable reads VenueError, even for an empty sequence range, and a failed refresh keeps the snapshot", async () => {
-    const v = venue(), read = () => answering(() => v.previousFor(KEYS.operator, 0n), undefined);
-    expect(read).toThrow(VenueError);
+  it("keeps unavailable reads VenueError, and a failed refresh keeps the snapshot", async () => {
+    const v = venue(), request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: 0n };
+    expect(() => v.range(request, WIDE)).toThrow(VenueError);
     const blocks = branch(8);
     await v.sync([serving(blocks)]);
-    expect(read()).toBeUndefined();
+    const before = v.range(request, WIDE);
+    expect(decodeRangeAnswer(before!, request, WIDE).entries).toEqual([]);
     const offline = serving([...blocks, ...branch(4, {}, blocks.at(-1)!)]);
     offline.before = async () => { throw new Error("offline"); };
     expect((await v.sync([offline])).suppliers[0]!.stopped).toBe("failed: offline");
-    expect(read()).toBeUndefined();
+    expect(v.range(request, WIDE)).toEqual(before);
     expect(v.witnessedIndex()).toBe(4n);
   });
 });

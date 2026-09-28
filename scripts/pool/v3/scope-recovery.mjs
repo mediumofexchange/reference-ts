@@ -2,7 +2,7 @@
 // canonical opening predecessors additionally include lower same-key sequences.
 import { compareBytes, EncodingError } from "../../../dist/bytes.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
-import { EvidenceRefusal } from "../delivery/evidence-reader.mjs";
+import { EvidenceRefusal } from "./evidence-reader.mjs";
 import { openForceState, applyForceRecord, applyForceEffects } from "../../../dist/pool/v3/state.js";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");

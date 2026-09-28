@@ -5,7 +5,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { limbsOf } from "../../../dist/pool/field.js";
 import { poseidon2Hash } from "../../../dist/pool/poseidon2.js";
 import { directoryRoot, encodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR, signCommitment } from "../../../dist/venue-records.js";
-import { LIMITS } from "../delivery/evidence-reader.mjs";
+import { LIMITS } from "./evidence-reader.mjs";
 import { replayLocalPackage } from "./local-replay.mjs";
 
 const b = n => new Uint8Array(32).fill(n);

@@ -16,7 +16,7 @@ import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { poseidon2Hash, poseidon2Permutation } from "../../../dist/pool/poseidon2.js";
 import { BarretenbergSync } from "@aztec/bb.js";
 import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
-import { LIMITS } from "../delivery/evidence-reader.mjs";
+import { LIMITS } from "./evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { recordReader, replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../../../dist/record-venue.js";

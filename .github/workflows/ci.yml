@@ -63,29 +63,6 @@ jobs:
           }
           JS
 
-  pool:
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: Pinned pool-v2 circuits and real ZK proofs
-        run: npm run check:pool
-      - name: Real-proof wallets and separate public supply audit
-        run: npm run check:pool-wallet-real
-      - name: Caller-configured real-proof holder and operator
-        run: npm run check:pool-local-real
-      - name: Seed restoration from signed delivery evidence
-        run: npm run check:pool:restoration
-
   check:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -113,8 +90,3 @@ jobs:
 
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
-
-      - name: Wallet device custody observations with synthetic providers
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: ./scripts/pool/local/device-storage-runner.test.ps1

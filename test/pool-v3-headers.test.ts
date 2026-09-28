@@ -5,7 +5,6 @@ import * as h from "../src/pool/v3/headers.js";
 import { snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
-import { segmentBytes as v2Bytes, decodeSegmentHeader as decodeV2 } from "../src/pool/statement.js";
 import { flipping, iterating, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 // Independent wire/hash oracle; domains, roots and links are synthetic.
@@ -58,11 +57,10 @@ describe("v3 canonical segment headers", () => {
       expect(h.isWellFormedHeader(variant)).toBe(true);
       expect(h.segmentIdentity(variant)).not.toEqual(original);
     }
-    const old = v2Bytes(x);
-    expect(Buffer.from(old.subarray(19))).toEqual(raw(x).subarray(19));
+    // pool-v2's header carried the same fields under its own tag; the tag alone keeps the identities apart.
+    const old = cat(Buffer.from("moe/pool/v2/segment"), raw(x).subarray(19));
     expect(sha(old)).not.toEqual(original);
     expect(() => h.decodeSegmentHeader(old)).toThrow(EncodingError);
-    expect(() => decodeV2(h.segmentBytes(x))).toThrow(EncodingError);
   });
 
   it("rejects every truncated prefix, extra bytes and a mutated context", () => {
