@@ -433,8 +433,11 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         fetched++;
         const outcome = bytes === undefined ? "malformed" : this.store.add(bytes);
         if (outcome === "added" || outcome === "known") {
-          if (outcome === "added") { added++; ids.push(blake2b(bytes!, { dkLen: 32 })); }
-          last = bytes!;
+          const id = blake2b(bytes!, { dkLen: 32 });
+          if (outcome === "added") { added++; ids.push(id); }
+          // Only a header above the anchor can be protected: the anchor and its context are never retained,
+          // so a supplier repeating them would leave a protected id no reopen can reproduce.
+          if ((this.store.heightOf(id) ?? anchorHeight) > anchorHeight) last = bytes!;
         } else if (outcome === "unknown-parent" && position === 0 && from > anchorHeight + 1n) {
           // The supplier's chain leaves ours below `from`: step back until it connects.
           from = from - back > anchorHeight ? from - back : anchorHeight + 1n;
