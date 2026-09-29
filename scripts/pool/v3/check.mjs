@@ -8,7 +8,7 @@ import { performance } from 'node:perf_hooks';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
-import { asFields, bypass, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
+import { asFields, assertions, bypass, failedOpcode, FRAME, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
 import { EncodingError } from '../../../dist/bytes.js';
 import { proofVerifier } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
@@ -114,8 +114,8 @@ try {
   const bases = { issue: structuredClone(f.issue), spend, burn: structuredClone(f.burn), demand, settle, request };
   for (const kind of ['issue','burn']) delivery(kind, bases[kind]);
 
-  async function accepts(kind, v, label, prove = false, noir = circuits[kind].noir) {
-    const start = performance.now(), { witness } = await noir.execute(v);
+  async function accepts(kind, v, label, prove = false) {
+    const start = performance.now(), { witness } = await circuits[kind].noir.execute(v);
     if (prove) {
       const executed = performance.now(), proof = await circuits[kind].backend.generateProof(witness, options), proved = performance.now();
       assert.equal(await verifier.verifyProof({ ...proof, verificationKey: circuits[kind].vk }, options), true, label);
@@ -127,9 +127,16 @@ try {
     }
     checks.push(label);
   }
-  async function rejects(kind, label, mutate, base = bases[kind], recompute = false, noir = circuits[kind].noir) {
-    const v = structuredClone(base); await mutate(v); if (recompute) await rebuild(kind,v);
-    await assert.rejects(noir.execute(v), undefined, label); checks.push(label);
+  // Each hostile witness names the constraint it must fail: `range <input>` for an
+  // input's range check, otherwise the call chain from main to the failing assertion,
+  // each frame given by a prefix of its source text (constraints.mjs). It runs through
+  // the field-typed ABI, so the circuit refuses it, not noir_js's encoder.
+  const refused = [];
+  async function rejects(kind, label, mutate, expected, base = bases[kind], recompute = false) {
+    const v = structuredClone(base); await mutate(v); if (recompute) await rebuild(kind, v);
+    const { actual, at } = await circuits[kind].hostile.execute(asFields(v)).then(() => ({ actual: 'solved' }),
+      error => ({ actual: refusal(circuits[kind].widened, error), at: failedOpcode(error) }));
+    refused.push({ kind, label, expected, actual, at }); checks.push(`${label}: refused by ${expected}`);
   }
   for (const kind of kinds) proofs[kind] = await accepts(kind, bases[kind], kind + ': exact public order and real proof', true);
 
@@ -178,26 +185,22 @@ try {
     checks.push(from + ': rejected under ' + to + ' key with both original and independently valid target inputs');
   }
 
-  // Range constraints below the ABI encoder for metadata not otherwise read.
+  // Metadata no constraint reads but its range: the maximum solves, one past it is
+  // refused by that input's own range check.
   for (const kind of kinds) {
+    await circuits[kind].hostile.execute(asFields(bases[kind]));
+    checks.push(kind + ': the field-typed ABI, booleans included, solves the valid witness');
     const fields = kind === 'request' ? [['refresh',64]] : [['segment',128]];
     if (['issue','spend','burn'].includes(kind)) fields.push(['delivery',128]);
     if (kind === 'demand') fields.push(['presenter',128],['instant',64],['deadline',64]);
     if (kind === 'settle') fields.push(['demand',128]);
     for (const [name,bits] of fields) {
-      const program = structuredClone(circuits[kind].program), parameter = program.abi.parameters.find(p => p.name === name);
-      const array = parameter.type.kind === 'array';
-      if (array) parameter.type.type = { kind: 'field' }; else parameter.type = { kind: 'field' };
-      assert.equal(program.bytecode, circuits[kind].program.bytecode);
-      const noir = new Noir(program);
-      await accepts(kind, bases[kind], kind + ': unchanged ACIR valid control ' + name, false, noir);
-      for (const index of array ? [0,1] : [null]) {
-        const maximum = structuredClone(bases[kind]);
-        if (array) maximum[name][index] = field((1n << BigInt(bits)) - 1n); else maximum[name] = field((1n << BigInt(bits)) - 1n);
-        await accepts(kind, maximum, kind + ': maximum ' + name + index, false, noir);
-        await rejects(kind, kind + ': ACIR overflow ' + name + index, v => {
-          if (array) v[name][index] = field(1n << BigInt(bits)); else v[name] = field(1n << BigInt(bits));
-        }, bases[kind], false, noir);
+      for (const index of Array.isArray(bases[kind][name]) ? [0,1] : [null]) {
+        const set = (v, value) => { if (index === null) v[name] = field(value); else v[name][index] = field(value); };
+        const path = index === null ? name : `${name}[${index}]`, maximum = structuredClone(bases[kind]);
+        set(maximum, (1n << BigInt(bits)) - 1n);
+        await accepts(kind, maximum, `${kind}: maximum ${path}`);
+        await rejects(kind, `${kind}: ${path} overflow`, v => set(v, 1n << BigInt(bits)), `range ${path}`);
       }
     }
   }
@@ -211,127 +214,242 @@ try {
     checks.push(kind + ': original proof cannot bind alternative metadata');
   }
 
-  // Scope, ownership, membership and conservation with recomputed witnesses.
-  for (const kind of ['issue','spend','burn','demand','settle']) {
-    await rejects(kind, kind + ': wrong scope root', v => { v.scope = field(1); });
-    await rejects(kind, kind + ': wrong scope link', v => { if (v.links) v.links[0] = [...f.linkB]; else v.link = [...f.linkB]; });
-  }
-  for (const kind of ['spend','burn','demand','settle']) {
-    for (const i of [0,1]) {
-      if (kind !== 'demand') await rejects(kind, kind + ': wrong public nullifier ' + i, v => { v.nullifiers[i] = field(1); });
-      await rejects(kind, kind + ': unauthorized input ' + i, v => { v.secrets[i] = field(999); }, bases[kind], true);
-      await rejects(kind, kind + ': zero secret ' + i, async v => { v.secrets[i] = field(0); v.inputs[i].owner = await f.hash([1001,0]); }, bases[kind], true);
-    }
-    await rejects(kind, kind + ': wrong real anchor', v => { v.anchors[0] = field(1); });
-    await rejects(kind, kind + ': wrong path bit 31', v => { v.right[0][31] = !v.right[0][31]; });
-    await rejects(kind, kind + ': foreign padding backing', v => {
-      v.inputs[1].backing = [...f.b];
-      if (kind === 'spend') { v.links[1] = [...f.linkB]; v.scope_siblings[1] = f.scope.path(1n).siblings; v.scope_right[1] = f.scope.path(1n).right; }
-    }, bases[kind], true);
-    await rejects(kind, kind + ': duplicate input with conserved quantity', v => {
-      v.inputs[1] = structuredClone(v.inputs[0]); v.secrets[1] = v.secrets[0];
-      if (kind === 'spend') { v.output_notes[0].value = '140'; }
-      else if (kind === 'burn') v.quantity = '170'; else v.quantity = '200';
-    }, bases[kind], true);
-  }
-  for (const kind of ['issue','burn','demand','settle']) {
-    await rejects(kind, kind + ': zero quantity', v => {
-      v.quantity = '0';
-      if (kind === 'burn') v.change.value = '100';
-      if (kind === 'demand' || kind === 'settle') v.inputs.forEach(n => { n.value = '0'; });
-    }, bases[kind], true);
-    if (kind !== 'issue') await rejects(kind, kind + ': wrong conserved quantity', v => { v.quantity = '99'; }, bases[kind], true);
-  }
-  for (const kind of ['issue','burn','settle']) {
-    for (const name of ['owner','rho']) await rejects(kind, kind + ': zero output ' + name, v => {
-      if (kind === 'burn') v.change[name] = field(0); else v[name === 'rho' && kind === 'settle' ? 'rho_out' : name] = field(0);
-    }, bases[kind], true);
-  }
-  for (let i=0;i<4;i++) {
-    for (const name of ['owner','rho']) await rejects('spend', 'spend: zero output '+name+' '+i, v => { v.output_notes[i][name] = field(0); }, spend, true);
-    await rejects('spend', 'spend: wrong output commitment '+i, v => { v.outputs[i] = field(1); });
-    // A foreign zero output violates only membership in the input backing set.
-    await rejects('spend', 'spend: foreign zero output '+i, v => {
-      const value = BigInt(v.output_notes[i].value); v.output_notes[i].value = '0'; v.output_notes[i].backing = [...f.foreign];
-      const j = (i+1)%4; v.output_notes[j].value = (BigInt(v.output_notes[j].value)+value).toString();
-    }, spend, true);
-    for (let j=i+1;j<4;j++) await rejects('spend', 'spend: duplicate output pair '+i+','+j, v => {
-      v.output_notes.forEach(n => { n.value = '25'; }); v.output_notes[j] = structuredClone(v.output_notes[i]);
-    }, spend, true);
-  }
-  await rejects('spend','spend: inflated output with recomputed commitments',v=>{v.output_notes[3].value='1';},spend,true);
-  await rejects('spend','spend: shaved output with recomputed commitments',v=>{v.output_notes[0].value='39';},spend,true);
-  await rejects('spend', 'spend: all-zero inputs and outputs with conserved value', v => {
-    v.inputs.forEach(n => { n.value = '0'; });
-    v.output_notes.forEach(n => { n.value = '0'; });
-  }, spend, true);
-  for (const i of [0,1]) await rejects('demand', 'demand: wrong positive-position tag ' + i, v => { v.tags[i] = field(1); }, demandTwo);
-  for (const kind of ['burn','demand','settle']) await rejects(kind, kind + ': foreign real input under public backing', v => {
-    v.inputs[0].backing = [...f.b];
-  }, bases[kind], true);
-  for (const i of [0,1]) {
-    const v=structuredClone(demand);
-    if(i===0) for(const key of ['inputs','secrets','anchors','tags','siblings','right']) v[key].reverse();
-    await accepts('demand',v,'demand: canonical padding slot '+i);
-    await rejects('demand','demand: nonzero padding anchor '+i,x=>{x.anchors[i]=p.anchors[0];},v);
-    await rejects('demand','demand: nonzero padding tag '+i,x=>{x.tags[i]=field(1);},v);
-  }
-  await rejects('request','request: zero value with recomputed membership',v=>{v.note.value='0';},request,true);
-  await rejects('request','request: unauthorized note',v=>{v.secret=field(999);},request,true);
-  await rejects('request','request: wrong backing',v=>{v.backing=[...f.b];});
-  await rejects('request','request: wrong tag',v=>{v.tag=field(1);});
-  await rejects('request','request: wrong anchor',v=>{v.anchor=field(1);});
-
-  // Bypass all integer ABI encodings while retaining byte-for-byte ACIR.
-  // Recompute dependent hashes/paths/sums, so ABI/range failures cannot hide
-  // behind an unrelated commitment or conservation failure.
-  function fieldAbi(program) {
-    const copy=structuredClone(program);
-    function visit(type) {
-      if(type.kind==='integer') return {kind:'field'};
-      if(type.kind==='array') type.type=visit(type.type);
-      if(type.kind==='struct') for(const member of type.fields) member.type=visit(member.type);
-      return type;
-    }
-    for(const parameter of copy.abi.parameters) parameter.type=visit(parameter.type);
-    assert.equal(copy.bytecode,program.bytecode); return new Noir(copy);
-  }
-  for(const kind of kinds) {
-    const noir=fieldAbi(circuits[kind].program);
-    await accepts(kind,bases[kind],kind+': all-Field ABI valid control',false,noir);
-    for(const i of [0,1]) await rejects(kind,kind+': domain limb overflow with recomputed relation '+i,v=>{v.domain[i]=(1n<<128n).toString();},bases[kind],true,noir);
-    if(['issue','burn','demand','settle'].includes(kind)) await rejects(kind,kind+': quantity overflow with exact widened sum',v=>{
-      v.quantity=(1n<<64n).toString();
-      if(v.inputs) {v.inputs[0].value=(1n<<63n).toString();v.inputs[1].value=(1n<<63n).toString();}
-      if(v.change) v.change.value='0';
-    },bases[kind],true,noir);
-    if(kind==='spend') {
-      await rejects(kind,'spend: input u64 overflow with conserved outputs',v=>{
-        v.inputs[0].value=(1n<<64n).toString();v.output_notes[0].value=(1n<<63n).toString();v.output_notes[1].value=(1n<<63n).toString();
-      },spend,true,noir);
-      await rejects(kind,'spend: output u64 overflow with two valid inputs',v=>{
-        v.inputs[0].value=(1n<<63n).toString();v.inputs[1].value=(1n<<63n).toString();
-        v.output_notes[0].value=(1n<<64n).toString();v.output_notes[1].value='0';
-      },spend,true,noir);
-    }
-  }
-
   // Positive widened and two-backing controls are proved, not just executed.
   const cross=structuredClone(spend), crossInput=await f.note(f.b,10n);
   cross.inputs[1]=crossInput.opening; cross.secrets[1]=crossInput.secret;
   cross.links[1]=[...f.linkB]; cross.scope_siblings[1]=f.scope.path(1n).siblings; cross.scope_right[1]=f.scope.path(1n).right;
   cross.output_notes=await Promise.all([[f.a,73n],[f.a,27n],[f.b,2n],[f.b,8n]].map(async([b,n])=>(await f.note(b,n)).opening));
   await rebuild('spend',cross); await accepts('spend',cross,'spend: two backings with ordinary fee and both changes',true);
-  await rejects('spend', 'spend: second input wrong scope link', v => { v.links[1] = [...f.linkA]; }, cross);
-  await rejects('spend', 'spend: second input wrong scope path', v => { v.scope_siblings[1][0] = field(1); }, cross);
-  await rejects('spend','spend: backing conversion preserves global total',v=>{v.output_notes[1].value='26';v.output_notes[3].value='9';},cross,true);
   const maxima=structuredClone(spend);
   for(let i=0;i<2;i++){const n=await f.note(f.a,U64_MAX);maxima.inputs[i]=n.opening;maxima.secrets[i]=n.secret;}
   maxima.output_notes[0].value=U64_MAX.toString();maxima.output_notes[1].value=U64_MAX.toString();
   await rebuild('spend',maxima); await accepts('spend',maxima,'spend: two maximum u64 inputs conserve in u128',true);
-  await rejects('spend','spend: wrapped u64 conservation',v=>{v.output_notes[0].value=(U64_MAX-1n).toString();v.output_notes[1].value='0';},maxima,true);
   const full=structuredClone(bases.burn);full.quantity='100';full.change.value='0';await rebuild('burn',full);
   await accepts('burn',full,'burn: full value with ordinary zero change',true);
+
+  // Refusal names: notes.nr's assertions under the call that reaches them from main.
+  const chain = (...frames) => frames.join(FRAME);
+  const N = {
+    owner: 'notes.nr assert(note.owner == owner(secret))', secret: 'notes.nr assert(secret != 0)',
+    ownerZero: 'notes.nr assert(note.owner != 0)', rho: 'notes.nr assert(note.rho != 0)',
+    anchor: 'notes.nr assert((note.value == 0) | (node == anchor))', root: 'notes.nr assert(node == root)',
+  };
+  const held = (...call) => ({ owner: chain(...call, N.owner), secret: chain(...call, 'notes.nr owner(secret)', N.secret),
+    rho: chain(...call, 'notes.nr commitment(domain, note)', N.rho), anchor: chain(...call, N.anchor) });
+  // Spend, burn and settle authenticate a public nullifier; demand and request keep it private.
+  const INPUT = { ...held('main.nr notes::authenticate(', 'notes.nr holding('),
+    nullifier: chain('main.nr notes::authenticate(', 'notes.nr assert(nf == holding(') };
+  const HELD = held('main.nr notes::holding(');
+  const SCOPE = chain('main.nr notes::scoped(scope, backing,', N.root), INPUT_SCOPE = chain('main.nr notes::scoped(scope, inputs[i].backing,', N.root);
+  const created = call => ({ owner: chain(call, N.ownerZero), rho: chain(call, N.rho) });
+  const Q = { positive: 'main.nr assert(quantity > 0)', backing: 'main.nr assert(inputs[i].backing == backing)',
+    nullifiers: 'main.nr assert(nullifiers[0] != nullifiers[1])',
+    whole: 'main.nr assert(inputs[0].value as u128 + inputs[1].value as u128 == quantity as u128)' };
+  const S = { padding: 'main.nr assert((inputs[i].value > 0) | (inputs[i].backing == inputs[1 - i].backing))',
+    outputBacking: 'main.nr assert((output_notes[i].backing == inputs[0].backing) | (output_notes[i].backing == inputs[1].backing))',
+    output: 'main.nr assert(outputs[i] == notes::commitment(domain, output_notes[i]))', ...created('main.nr notes::commitment(domain, output_notes[i])'),
+    positive: 'main.nr assert(inputs[0].value as u128 + inputs[1].value as u128 > 0)', conserve: 'main.nr assert(incoming == outgoing)' };
+  const B = { change: 'main.nr assert(change.backing == backing)', commitment: 'main.nr assert(cm_change == notes::commitment(domain, change))',
+    ...created('main.nr notes::commitment(domain, change)'),
+    conserve: 'main.nr assert(inputs[0].value as u128 + inputs[1].value as u128 == quantity as u128 + change.value as u128)' };
+  const I = { commitment: 'main.nr assert(cm == notes::commitment(', ...created('main.nr notes::commitment(domain, notes::Note { backing, value: quantity, owner, rho })') };
+  const T = { commitment: 'main.nr assert(cm_out == notes::commitment(', ...created('main.nr notes::commitment(domain, notes::Note { backing, value: quantity, owner, rho: rho_out })') };
+  const D = { padding: 'main.nr assert((inputs[i].value > 0) | (anchors[i] == 0))', tag: 'main.nr assert(tags[i] == expected)',
+    nullifiers: 'main.nr assert(nfs[0] != nfs[1])' };
+  const R = { value: 'main.nr assert(note.value > 0)', backing: 'main.nr assert(note.backing == backing)', tag: 'main.nr assert(tag == notes::tag(nf))' };
+  const otherEntry = v => { const s = f.scope.path(1n); v.backing = [...f.b]; v.link = [...f.linkB]; v.scope_siblings = s.siblings; v.scope_right = s.right; };
+
+  for (const kind of kinds) for (const i of [0,1]) {
+    await rejects(kind, `${kind}: domain limb ${i} overflow with recomputed relation`, v => { v.domain[i] = (1n << 128n).toString(); }, `range domain[${i}]`, bases[kind], true);
+  }
+  for (const [label, mutate, expected, recompute = false] of [
+    ['zero quantity', v => { v.quantity = '0'; }, Q.positive, true],
+    ['quantity overflow', v => { v.quantity = (1n << 64n).toString(); }, 'range quantity', true],
+    ['wrong commitment', v => { v.cm = field(1); }, I.commitment],
+    ['zero commitment', v => { v.cm = field(0); }, I.commitment],
+    ['zero owner', v => { v.owner = field(0); }, I.owner, true],
+    ['zero rho', v => { v.rho = field(0); }, I.rho, true],
+    ['the other scoped entry under the first backing\'s commitment', otherEntry, I.commitment],
+    ['backing outside the scope', v => { v.backing = [...f.foreign]; }, SCOPE, true],
+    ['wrong scope root', v => { v.scope = field(1); }, SCOPE],
+    ['wrong link', v => { v.link = [...f.linkB]; }, SCOPE],
+    ['wrong scope sibling', v => { v.scope_siblings[15] = field(1); }, SCOPE],
+    ['wrong scope direction', v => { v.scope_right[0] = !v.scope_right[0]; }, SCOPE],
+    ['scope path of the other entry', v => { const s = f.scope.path(1n); v.scope_siblings = s.siblings; v.scope_right = s.right; }, SCOPE],
+    ['backing limb overflow', v => { v.backing[1] = (1n << 128n).toString(); }, 'range backing[1]', true],
+    ['link limb overflow', v => { v.link[0] = (1n << 128n).toString(); }, 'range link[0]'],
+  ]) await rejects('issue', `issue: ${label}`, mutate, expected, bases.issue, recompute);
+
+  // Each input slot's ownership, nullifier and ranges; slot 1 is padding in each base.
+  for (const kind of ['spend','burn','demand','settle']) for (const i of [0,1]) {
+    const input = kind === 'demand' ? HELD : INPUT;
+    for (const [label, mutate, expected, recompute = false] of [
+      ['unauthorized input', v => { v.secrets[i] = field(999); }, input.owner, true],
+      ['zero secret', async v => { v.secrets[i] = field(0); v.inputs[i].owner = await f.hash([1001,0]); }, input.secret, true],
+      ['zero input rho', v => { v.inputs[i].rho = field(0); }, input.rho, true],
+      ...(kind === 'demand' ? [] : [['wrong nullifier', v => { v.nullifiers[i] = field(1); }, INPUT.nullifier],
+        ['zero nullifier', v => { v.nullifiers[i] = field(0); }, INPUT.nullifier]]),
+      ['input value overflow', v => { v.inputs[i].value = (1n << 64n).toString(); }, `range inputs[${i}].value`],
+      ['input limb overflow', v => { v.inputs[i].backing[0] = (1n << 128n).toString(); }, `range inputs[${i}].backing[0]`],
+    ]) await rejects(kind, `${kind}: ${label} ${i}`, mutate, expected, bases[kind], recompute);
+  }
+  // Membership of the real slot 0, and of a real slot 1 in the two-note bases.
+  const twos = { spend: spendTwo, burn: burnTwo, demand: demandTwo, settle: settleTwo };
+  for (const kind of ['spend','burn','demand','settle']) for (const [label, mutate, base] of [
+    ['wrong anchor', v => { v.anchors[0] = field(1); }, bases[kind]],
+    ['wrong low sibling', v => { v.siblings[0][0] = field(1); }, bases[kind]],
+    ['wrong high sibling', v => { v.siblings[0][31] = field(1); }, bases[kind]],
+    ['wrong low direction', v => { v.right[0][0] = !v.right[0][0]; }, bases[kind]],
+    ['wrong high direction', v => { v.right[0][31] = !v.right[0][31]; }, bases[kind]],
+    ['second real input under the first anchor', v => { v.anchors[1] = v.anchors[0]; }, twos[kind]],
+    ['second real input wrong sibling', v => { v.siblings[1][7] = field(1); }, twos[kind]],
+    ['second real input wrong direction', v => { v.right[1][31] = !v.right[1][31]; }, twos[kind]],
+  ]) await rejects(kind, `${kind}: ${label}`, mutate, kind === 'demand' ? HELD.anchor : INPUT.anchor, base);
+  // One public backing: its scope path, every note naming it, and its quantity.
+  for (const kind of ['burn','demand','settle']) {
+    for (const [label, mutate, expected, recompute = false] of [
+      ['wrong scope root', v => { v.scope = field(1); }, SCOPE],
+      ['wrong link', v => { v.link = [...f.linkB]; }, SCOPE],
+      ['wrong scope sibling', v => { v.scope_siblings[3] = field(1); }, SCOPE],
+      ['wrong scope direction', v => { v.scope_right[0] = !v.scope_right[0]; }, SCOPE],
+      ['link limb overflow', v => { v.link[1] = (1n << 128n).toString(); }, 'range link[1]'],
+      ['backing outside the scope with recomputed notes', v => {
+        v.backing = [...f.foreign]; v.inputs.forEach(n => { n.backing = [...f.foreign]; }); if (v.change) v.change.backing = [...f.foreign];
+      }, SCOPE, true],
+      // The other scoped entry under its own valid link and path: the notes name the first.
+      ['the other scoped entry as public backing', otherEntry, Q.backing],
+      ['padding under the other scoped backing', v => { v.inputs[1].backing = [...f.b]; }, Q.backing, true],
+      ['real input under the other scoped backing', v => { v.inputs[0].backing = [...f.b]; }, Q.backing, true],
+      ['zero quantity', v => { v.quantity = '0'; if (v.change) v.change.value = '100'; else v.inputs.forEach(n => { n.value = '0'; }); }, Q.positive, true],
+      ['quantity overflow with exact widened sum', v => {
+        v.quantity = (1n << 64n).toString(); v.inputs[0].value = v.inputs[1].value = (1n << 63n).toString(); if (v.change) v.change.value = '0';
+      }, 'range quantity', true],
+      ['wrong conserved quantity', v => { v.quantity = '99'; }, kind === 'burn' ? B.conserve : Q.whole, true],
+      ['duplicate input with conserved quantity', v => {
+        v.inputs[1] = structuredClone(v.inputs[0]); v.secrets[1] = v.secrets[0]; v.quantity = kind === 'burn' ? '170' : '200';
+      }, kind === 'demand' ? D.nullifiers : Q.nullifiers, true],
+    ]) await rejects(kind, `${kind}: ${label}`, mutate, expected, bases[kind], recompute);
+  }
+
+  // The padding in the first slot, so each slot's padding rule is reached.
+  const paddedFirst = structuredClone(spend);
+  for (const key of ['inputs','secrets','anchors','nullifiers','siblings','right','links','scope_siblings','scope_right']) paddedFirst[key].reverse();
+  await rebuild('spend', paddedFirst); await accepts('spend', paddedFirst, 'spend: padding in the first slot');
+  for (const [i, base] of [[0, paddedFirst], [1, spend]]) {
+    // The other scoped backing under its own valid link and scope path: only the padding rule refuses it.
+    await rejects('spend', `spend: padding from another scoped backing ${i}`, v => {
+      const s = f.scope.path(1n); v.inputs[i].backing = [...f.b]; v.links[i] = [...f.linkB]; v.scope_siblings[i] = s.siblings; v.scope_right[i] = s.right;
+    }, S.padding, base, true);
+  }
+  for (const [label, mutate, expected, base = spend, recompute = false] of [
+    ['wrong scope root', v => { v.scope = field(1); }, INPUT_SCOPE],
+    ['both inputs outside the scope with recomputed hashes', v => {
+      v.inputs.forEach(n => { n.backing = [...f.foreign]; }); v.output_notes.forEach(n => { n.backing = [...f.foreign]; });
+    }, INPUT_SCOPE, spend, true],
+    ['inflated output', v => { v.output_notes[3].value = '1'; }, S.conserve, spend, true],
+    ['shaved output', v => { v.output_notes[0].value = '39'; }, S.conserve, spend, true],
+    ['all-zero inputs and outputs', v => { v.inputs.forEach(n => { n.value = '0'; }); v.output_notes.forEach(n => { n.value = '0'; }); }, S.positive, spend, true],
+    ['duplicate input with conserved value', v => {
+      v.inputs[1] = structuredClone(v.inputs[0]); v.secrets[1] = v.secrets[0]; v.output_notes[0].value = '140';
+    }, Q.nullifiers, spend, true],
+    ['changed domain with recomputed nullifiers and outputs', async v => { v.domain[0] = '18'; await f.refresh(v); delivery('spend', v); }, INPUT.anchor],
+    ['second input wrong scope link', v => { v.links[1] = [...f.linkA]; }, INPUT_SCOPE, cross],
+    ['second input wrong scope path', v => { v.scope_siblings[1][0] = field(1); }, INPUT_SCOPE, cross],
+    ['second input wrong scope direction', v => { v.scope_right[1][0] = !v.scope_right[1][0]; }, INPUT_SCOPE, cross],
+    ['backing conversion preserves the global total', v => { v.output_notes[1].value = '26'; v.output_notes[3].value = '9'; }, S.conserve, cross, true],
+    // Each input backing's own conservation, the other's holding.
+    ['first backing inflated beside a conserved second', v => { v.output_notes[1].value = '28'; }, S.conserve, cross, true],
+    ['second backing inflated beside a conserved first', v => { v.output_notes[3].value = '9'; }, S.conserve, cross, true],
+    ['wrapped u64 conservation', v => { v.output_notes[0].value = (U64_MAX - 1n).toString(); v.output_notes[1].value = '0'; }, S.conserve, maxima, true],
+    ['input u64 overflow with conserved outputs', v => {
+      v.inputs[0].value = (1n << 64n).toString(); v.output_notes[0].value = v.output_notes[1].value = (1n << 63n).toString();
+    }, 'range inputs[0].value', spend, true],
+    ['output u64 overflow with two valid inputs', v => {
+      v.inputs[0].value = v.inputs[1].value = (1n << 63n).toString(); v.output_notes[0].value = (1n << 64n).toString(); v.output_notes[1].value = '0';
+    }, 'range output_notes[0].value', spend, true],
+  ]) await rejects('spend', `spend: ${label}`, mutate, expected, base, recompute);
+  for (const i of [0,1]) for (const [label, mutate, expected] of [
+    ['input wrong link', v => { v.links[i] = [...f.linkB]; }, INPUT_SCOPE],
+    ['input wrong scope sibling', v => { v.scope_siblings[i][15] = field(1); }, INPUT_SCOPE],
+    ['input link limb overflow', v => { v.links[i][1] = (1n << 128n).toString(); }, `range links[${i}][1]`],
+  ]) await rejects('spend', `spend: ${label} ${i}`, mutate, expected);
+  for (let j = 0; j < 4; j++) {
+    const moveValue = (v, backing, value) => {
+      const k = (j + 1) % 4; v.output_notes[k].value = (BigInt(v.output_notes[k].value) + BigInt(v.output_notes[j].value)).toString();
+      v.output_notes[j].value = value; v.output_notes[j].backing = [...backing];
+    };
+    for (const [label, mutate, expected, recompute = false] of [
+      ['wrong output commitment', v => { v.outputs[j] = field(1); }, S.output],
+      ['zero output commitment', v => { v.outputs[j] = field(0); }, S.output],
+      ['zero output owner', v => { v.output_notes[j].owner = field(0); }, S.owner, true],
+      ['zero output rho', v => { v.output_notes[j].rho = field(0); }, S.rho, true],
+      ['output value overflow', v => { v.output_notes[j].value = (1n << 64n).toString(); }, `range output_notes[${j}].value`],
+      ['output limb overflow', v => { v.output_notes[j].backing[1] = (1n << 128n).toString(); }, `range output_notes[${j}].backing[1]`],
+      // The input backing's sums still agree: only membership in the input backing set refuses these.
+      ['zero output outside the scope', v => moveValue(v, f.foreign, '0'), S.outputBacking, true],
+      ['mint of a scoped backing no input names', v => moveValue(v, f.b, '1000'), S.outputBacking, true],
+    ]) await rejects('spend', `spend: ${label} ${j}`, mutate, expected, spend, recompute);
+    for (let k = j + 1; k < 4; k++) await rejects('spend', `spend: duplicate outputs ${j},${k}`, v => {
+      v.output_notes.forEach(n => { n.value = '25'; }); v.output_notes[k] = structuredClone(v.output_notes[j]);
+    }, `main.nr assert(outputs[${j}] != outputs[${k}])`, spend, true);
+  }
+
+  for (const [label, mutate, expected, recompute = false] of [
+    ['excessive burn', v => { v.quantity = '101'; }, B.conserve],
+    // Change under the other scoped backing would turn 30 of the burned backing into 30 of another.
+    ['change under another scoped backing', v => { v.change.backing = [...f.b]; }, B.change, true],
+    ['change outside the scope', v => { v.change.backing = [...f.foreign]; }, B.change, true],
+    ['wrong change commitment', v => { v.cm_change = field(1); }, B.commitment],
+    ['zero change owner', v => { v.change.owner = field(0); }, B.owner, true],
+    ['zero change rho', v => { v.change.rho = field(0); }, B.rho, true],
+    ['change limb overflow', v => { v.change.backing[0] = (1n << 128n).toString(); }, 'range change.backing[0]'],
+  ]) await rejects('burn', `burn: ${label}`, mutate, expected, bases.burn, recompute);
+  for (const [label, mutate, expected, recompute = false] of [
+    ['wrong output commitment', v => { v.cm_out = field(1); }, T.commitment],
+    ['output to another owner under the same commitment', v => { v.owner = field(12345); }, T.commitment],
+    ['zero output owner', v => { v.owner = field(0); }, T.owner, true],
+    ['zero output rho', v => { v.rho_out = field(0); }, T.rho, true],
+  ]) await rejects('settle', `settle: ${label}`, mutate, expected, bases.settle, recompute);
+  for (const i of [0,1]) await rejects('demand', `demand: wrong positive-position tag ${i}`, v => { v.tags[i] = field(1); }, D.tag, demandTwo);
+  // A real note publishing no tag would escape its lock; one claiming the zero anchor, its membership.
+  await rejects('demand', 'demand: real position with a zero tag', v => { v.tags[0] = field(0); }, D.tag);
+  await rejects('demand', 'demand: real position under the zero anchor', v => { v.anchors[0] = field(0); }, HELD.anchor);
+  for (const i of [0,1]) {
+    const v=structuredClone(demand);
+    if(i===0) for(const key of ['inputs','secrets','anchors','tags','siblings','right']) v[key].reverse();
+    await accepts('demand',v,'demand: canonical padding slot '+i);
+    await rejects('demand','demand: nonzero padding anchor '+i,x=>{x.anchors[i]=p.anchors[0];},D.padding,v);
+    await rejects('demand','demand: nonzero padding tag '+i,x=>{x.tags[i]=field(1);},D.tag,v);
+  }
+  for (const [label, mutate, expected, recompute = false] of [
+    ['zero value with recomputed membership', v => { v.note.value = '0'; }, R.value, true],
+    ['unauthorized note', v => { v.secret = field(999); }, HELD.owner, true],
+    ['zero secret', async v => { v.secret = field(0); v.note.owner = await f.hash([1001,0]); }, HELD.secret, true],
+    ['zero rho', v => { v.note.rho = field(0); }, HELD.rho, true],
+    ['wrong backing', v => { v.backing = [...f.b]; }, R.backing],
+    ['wrong tag', v => { v.tag = field(1); }, R.tag],
+    ['zero tag', v => { v.tag = field(0); }, R.tag],
+    ['wrong anchor', v => { v.anchor = field(1); }, HELD.anchor],
+    ['wrong sibling', v => { v.siblings[0] = field(1); }, HELD.anchor],
+    ['wrong direction', v => { v.right[31] = !v.right[31]; }, HELD.anchor],
+    ['value overflow', v => { v.note.value = (1n << 64n).toString(); }, 'range note.value'],
+    ['backing limb overflow', v => { v.backing[0] = (1n << 128n).toString(); }, 'range backing[0]'],
+  ]) await rejects('request', `request: ${label}`, mutate, expected, request, recompute);
+
+  // Each hostile witness fails the constraint it names, and every assertion instance of
+  // each relation (each call site and loop iteration) is some witness's failing
+  // constraint, but those only a zero Poseidon2 output reaches: a zero commitment,
+  // nullifier or scope leaf, or an input owner already equal to H(T_OWNER, secret).
+  const misnamed = refused.filter(r => !names(r.expected, r.actual));
+  assert.deepEqual(misnamed, [], 'each hostile witness fails the constraint it names');
+  const unreachable = a => /notes\.nr assert\((cm|nf|leaf) != 0\)$/.test(a) || (a.includes('holding(') && a.endsWith(N.ownerZero));
+  for (const kind of kinds) {
+    const failed = refused.filter(r => r.kind === kind && r.at !== undefined).map(r => r.at);
+    const unnamed = assertions(circuits[kind].program).filter(({ first, last }) => !failed.some(at => first <= at && at <= last));
+    assert.deepEqual(unnamed.filter(a => !unreachable(a.chain)), [], `${kind}: every reachable assertion instance is a named refusal`);
+    checks.push(`${kind}: every assertion instance is a named hostile refusal but ${unnamed.length} only a zero Poseidon2 output reaches`);
+  }
+
   for(const kind of ['issue','spend','burn']) {
     const v=structuredClone(bases[kind]), {vector,digest}=delivery(kind,v), domain=bytes32(v.domain);
     assert.equal(vector.length,{issue:1,spend:4,burn:1}[kind]);
@@ -348,10 +466,6 @@ try {
   // that input's range check, solves once only that check is removed, and, proven from
   // that solution with the real program and key, does not verify; the valid control,
   // solved and proven the same way, does.
-  for (const kind of kinds) {
-    await circuits[kind].hostile.execute(asFields(bases[kind]));
-    checks.push(kind + ': the field-typed ABI, booleans included, solves the valid witness');
-  }
   async function beyondTypes(label, kind, base, mutate, expected) {
     assert(expected.startsWith('range '));
     const input = structuredClone(base); await mutate(input);

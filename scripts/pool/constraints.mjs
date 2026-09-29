@@ -135,10 +135,14 @@ export function refusal(program, error) {
   const range = rangeOf(opcodes[Number(at)]);
   const leaves = inputsOf(program.abi);
   if (range !== undefined && range.witness < leaves.length) return `range ${leaves[range.witness].path}`;
-  const debug = infos[cause.acirFunctionId ?? 0];
+  assert.equal(cause.acirFunctionId ?? 0, 0, 'one ACIR function');
+  return chainOf(program, infos[0], at);
+}
+
+/** The call chain from main's call site to the source at ACIR opcode `at`, outermost first. */
+function chainOf(program, debug, at) {
   const id = debug.acir_locations[at];
   assert.notEqual(id, undefined, `opcode ${at} has a source location`);
-  // The call chain from main's call site to the failing assertion, outermost first.
   const frames = [];
   for (let node = debug.location_tree.locations[id]; node.parent !== null; node = debug.location_tree.locations[node.parent]) {
     const { file, span } = node.value, { path, source } = program.file_map[file];
@@ -147,6 +151,33 @@ export function refusal(program, error) {
   }
   assert.notEqual(frames.length, 0, `opcode ${at} has a source location`);
   return frames.join(FRAME);
+}
+
+/** The ACIR opcode a failed constraint's error names; `refusal` checks the error's shape. */
+export function failedOpcode(error) {
+  return Number((error?.cause ?? error).callStack[0]);
+}
+
+/**
+ * Every assertion instance the program's ACIR carries: a maximal run of consecutive
+ * opcodes at one assertion's call chain, as `refusal` names it, from `first` to `last`.
+ * Each call site and each unrolled loop iteration is its own instance, although
+ * iterations share the chain, unless a loop body is that assertion alone: its
+ * iterations' runs then join. An opcode without a source location must be an ABI
+ * input's range check.
+ */
+export function assertions(program) {
+  const { opcodes, debug: [debug] } = decode(program), leaves = inputsOf(program.abi), runs = [];
+  opcodes.forEach((opcode, at) => {
+    if (debug.acir_locations[at] === undefined) {
+      assert((rangeOf(opcode)?.witness ?? Infinity) < leaves.length, `opcode ${at} without a location is an input's range check`);
+      return;
+    }
+    const chain = chainOf(program, debug, at), run = runs.at(-1);
+    if (run?.chain === chain && run.last === at - 1) run.last = at;
+    else runs.push({ chain, first: at, last: at });
+  });
+  return runs.filter(({ chain }) => /^\S+\.nr assert(_eq)?\(/.test(chain.split(FRAME).pop()));
 }
 
 /** Between the frames of a refusal's call chain; source text holds `>` but not this. */
