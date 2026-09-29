@@ -16,8 +16,8 @@ import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
 import { classifyScopeFrontier, classifyScopes, type FrontierContext, type FrontierResult, type ImportContext,
   type ScopeResult } from "./scope-reader.js";
-import { ReplayStore } from "./replay-store.js";
-import type { ProofCheck, ScanOutput } from "./state.js";
+import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
+import type { ProofCheck, WitnessPredicate } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
 /** A §12 package as a reader receives it: bytes in memory or a stream of chunks. */
@@ -34,7 +34,7 @@ export interface PackageReader {
    * in-memory store by default, closed when the read ends. A file keeps memory flat. */
   readonly evidence?: EvidenceStore | undefined;
   /** Outputs to keep incremental witnesses for (a wallet's own), so their paths can be read from the result. */
-  readonly witness?: ((output: ScanOutput) => boolean) | undefined;
+  readonly witness?: WitnessPredicate | undefined;
 }
 
 /** Own selection bytes and primitive fields before any asynchronous proof check. */
@@ -51,6 +51,22 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
     return result;
   };
   return { mode, sequence, judgingIndex, backing: fixed(backing), domain: fixed(domain), operator: fixed(operator), root: fixed(root), venue: fixed(venue) };
+}
+
+/** The caller's verifier bound once, with a copy of the circuit identities it declares, which name it in kept state (§14). */
+function ownVerifier(verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
+  const declared = verifierIn.identities;
+  if (declared === undefined) return { verify: verify.bind(verifierIn) };
+  if (declared === null || typeof declared !== "object") throw new TypeError("invalid verifier identities");
+  const identities: { [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array } } = {};
+  for (const name of Object.keys(declared)) {
+    const entry = declared[name];
+    if (entry === null || typeof entry !== "object") throw new TypeError("invalid verifier identities");
+    const bytecode = copyBytes(entry.bytecode), vk = copyBytes(entry.vk);
+    if (bytecode.length !== 32 || vk.length !== 32) throw new TypeError("invalid verifier identities");
+    identities[name] = Object.freeze({ bytecode, vk });
+  }
+  return { verify: verify.bind(verifierIn), identities: Object.freeze(identities) };
 }
 
 /** Copy the package into the reader's evidence storage, then read only the copy.
@@ -84,11 +100,21 @@ function directoriesOf(batch: EvidenceBatch): void {
  * scope in its ancestry may name one backing or several (C2.10.3–7). */
 export async function readPackage(source: PackageSource, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
   const owned = ownPackageRead(selected, options);
-  return withEvidence(source, options, async batch => {
+  return withEvidence(source, options, batch => keptOrAgain(options, async () => {
     const { context, faults, venue } = openPackage(batch, owned, options);
     const result = await classifyScopes(context, venue, batch);
     return { ...result, ...faults.result() };
-  });
+  }));
+}
+
+/** §14: kept state that fails a check before reuse is discarded, and the read classifies again from the evidence.
+ * A second mismatch, with nothing kept, is a programming failure and stays visible. */
+async function keptOrAgain<T>(options: PackageReader, read: () => Promise<T>): Promise<T> {
+  try { return await read(); } catch (error) {
+    if (!(error instanceof KeptStateMismatch) || options.store === undefined) throw error;
+    options.store.discardKept();
+    return read();
+  }
 }
 
 /** The reader's own inputs, checked before the package is read. */
@@ -97,7 +123,7 @@ function ownPackageRead(selected: ReaderSelection, options: PackageReader) {
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier: ProofCheck = { verify: verify.bind(verifierIn) };
+  const verifier = ownVerifier(verifierIn, verify);
   const reference = structuredClone(referenceIn), expectedVenue = requireReferenceVenue(reference, venue);
   const selection = ownSelection(selected);
   requireReplay(same(selection.venue, expectedVenue), "VENUE_REFERENCE");
@@ -141,11 +167,11 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
 export async function readFrontier(source: PackageSource, signed: SignedTerms, judgingIndex: bigint,
   options: PackageReader): Promise<FrontierResult & FaultResult> {
   const owned = ownFrontierRead(signed, judgingIndex, options);
-  return withEvidence(source, options, async batch => {
+  return withEvidence(source, options, batch => keptOrAgain(options, async () => {
     const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
     const result = await classifyScopeFrontier(context, venue, batch);
     return { ...result, ...faults.result() };
-  });
+  }));
 }
 
 /** The reader's own inputs and the authenticated terms, checked before the package is read. */
@@ -154,7 +180,7 @@ function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: Pac
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier: ProofCheck = { verify: verify.bind(verifierIn) };
+  const verifier = ownVerifier(verifierIn, verify);
   const reference = structuredClone(referenceIn);
   if (!isValue(judgingIndex)) throw new EncodingError("invalid judging index");
   const termsBytes = copyUnshared(signed.terms), signature = copyUnshared(signed.signature);

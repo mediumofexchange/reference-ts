@@ -127,7 +127,7 @@ function canonicalEvidence(canonical: CanonicalCheckpoint | undefined) {
 }
 
 describe("single-backing complete frontier reader", () => {
-  it("rolls an excluded checkpoint's writes back and drops a scratch replay, continuing in one namespace", async () => {
+  it("rolls an excluded checkpoint's writes back and excludes a rewritten prefix without replay, continuing in one namespace", async () => {
     const f = fixture(), segment = f.segment(); f.checkpoint(segment, 1n);
     await f.issue(segment, 101n); f.checkpoint(segment, 2n);
     const chain = (records: readonly Uint8Array[]): Uint8Array => records.reduce((previous, bytes, i) =>
@@ -135,8 +135,8 @@ describe("single-backing complete frontier reader", () => {
     // Checkpoint 3 appends a valid issue, then one with a foreign signature: excluded, its valid record undone.
     const hostile = [...segment.records, f.issued(segment, 102n), f.issued(segment, 103n, b(9))];
     f.checkpoint({ ...segment, records: hostile, evidence: chain(hostile) }, 3n);
-    // Checkpoint 4 rewrites the first record: its prefix does not reproduce, so it replays from the seed in a
-    // scratch namespace, which fails CONTINUITY at the last valid position and is dropped.
+    // Checkpoint 4 rewrites the first record: its evidence value at the last valid position is not that
+    // checkpoint's, so it is excluded for CONTINUITY without replaying a record (pool-v3 §7.1).
     const rewritten = [f.issued(segment, 104n), f.issued(segment, 105n)];
     f.checkpoint({ ...segment, records: rewritten, evidence: chain(rewritten) }, 4n);
     await f.issue(segment, 106n); const valid = f.checkpoint(segment, 5n);
