@@ -1,6 +1,7 @@
-// moe/pool/v2 §§1, 3–5 carried over, plus the candidate v3 additions of
-// docs/POOL_V3_RECOVERY_MAP.md: T_TAG = 1007 (C3.1) and a holding relation
-// whose nullifier stays private (C3.2). PROBE ONLY: not the normative source.
+// The helpers shared by pool-v3's six relations (pool-v3 §2): notes, owners,
+// nullifiers and paths as pool-v2 §§1, 3–5, plus the claim tag
+// (pool-recovery C3.1) and the holding proof, which keeps the nullifier
+// private (C3.2).
 use crate::poseidon2::Poseidon2;
 
 pub struct Note {
@@ -28,18 +29,20 @@ pub fn commitment(domain: [u128; 2], note: Note) -> Field {
 }
 
 pub fn nullifier(domain: [u128; 2], cm: Field, secret: Field) -> Field {
-    // §3: neither operator, segment, anchor nor path enters this immutable identity.
+    // pool-v2 §3: neither operator, segment, anchor nor path enters this
+    // immutable identity.
     Poseidon2::hash([1003, domain[0] as Field, domain[1] as Field, cm, secret], 5)
 }
 
-// Candidate v3, C3.1: a claim's public name is the hash of its nullifier.
+// pool-recovery C3.1: a claim's public name is the hash of its nullifier.
 pub fn tag(nf: Field) -> Field {
     Poseidon2::hash([1007, nf], 2)
 }
 
-// The holding relation with the nullifier returned rather than public
-// (C3.2): ownership, the nullifier, and membership at the anchor where the
-// value is positive. Padding proves ownership and its nullifier only.
+// The holding proof with the nullifier returned rather than public
+// (pool-recovery C3.2): ownership, the nullifier, and membership at the
+// anchor where the value is positive. Padding proves ownership and its
+// nullifier only.
 pub fn holding(
     domain: [u128; 2], note: Note, secret: Field,
     siblings: [Field; 32], right: [bool; 32], anchor: Field,
@@ -54,7 +57,7 @@ pub fn holding(
         let other = if right[level] { node } else { siblings[level] };
         node = Poseidon2::hash([1004, level as Field, left, other], 4);
     }
-    // §7.2: zero-value padding still proves ownership and its nullifier.
+    // pool-v2 §7.2: zero-value padding still proves ownership and its nullifier.
     assert((note.value == 0) | (node == anchor));
     nf
 }
@@ -66,8 +69,8 @@ pub fn authenticate(
     assert(nf == holding(domain, note, secret, siblings, right, anchor));
 }
 
-// §5: the backing is an entry of the scope whose root the statement names,
-// under the link the operator holds it by; which entry stays private.
+// pool-v2 §5: the backing is an entry of the scope whose root the statement
+// names, under the link the operator holds it by; which entry stays private.
 pub fn scoped(
     root: Field, backing: [u128; 2], link: [u128; 2],
     siblings: [Field; 16], right: [bool; 16],
