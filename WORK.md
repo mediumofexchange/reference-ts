@@ -12,8 +12,8 @@ measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the dec
 
 **Next: M5b.3b, checkpoints and venue age** ("M5b.3 split" in the decision): one forward walk in rank order with
 verdict rows (the walk recurses and caches every verdict per read), windowed range reads, directories/snapshots
-read from the evidence store, per-object work bounds for `IMPORT_LIMITS` (and the journal's reservations),
-event rows without record bytes. *Acceptance:* the probe's `read` mode with many checkpoints, memory flat.
+and faults read from the evidence store, per-object work bounds for `IMPORT_LIMITS` (and the journal's reservations),
+an aggregate object quota per read, event rows without record bytes. *Acceptance:* the probe's `read` mode with many checkpoints, memory flat.
 
 ## Status
 - M5b.3a (branch `feat/m5b3-streamed-evidence`): readers copy a package, bytes or stream, into `evidence-store.ts`
@@ -48,7 +48,7 @@ event rows without record bytes. *Acceptance:* the probe's `read` mode with many
    and, against a case map, the transparent path in or right after it.
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
-4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller
+4. On touching affected files: fold `fulfill` into `sync` and take its canonical header from the reader's evidence (not a re-decode); shared byte helpers/caller
    ownership; Ergo section versus transaction charging; served-trail caller-object cache; drop the explicit `vite` dev pin (served the
    retired browser probe) at the next dependency change. Untested on v3: a second
    commit refused while one is in flight (`store.ts` `ready`; a probe traced it holding).
