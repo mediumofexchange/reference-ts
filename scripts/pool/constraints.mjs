@@ -162,7 +162,8 @@ export function failedOpcode(error) {
  * Every assertion instance the program's ACIR carries: a maximal run of consecutive
  * opcodes at one assertion's call chain, as `refusal` names it, from `first` to `last`.
  * Each call site and each unrolled loop iteration is its own instance, although
- * iterations share the chain. An opcode without a source location must be an ABI
+ * iterations share the chain, unless a loop body is that assertion alone: its
+ * iterations' runs then join. An opcode without a source location must be an ABI
  * input's range check.
  */
 export function assertions(program) {
