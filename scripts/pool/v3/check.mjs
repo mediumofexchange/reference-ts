@@ -3,18 +3,19 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { gunzipSync } from 'node:zlib';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
 import { asFields, assertions, bypass, failedOpcode, FRAME, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
 import { EncodingError } from '../../../dist/bytes.js';
-import { proofVerifier } from '../../../dist/pool/proof-verifier.js';
+import { BN254_PARAMETERS, proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
 import { V3_SPECIFICATION } from './provenance.mjs';
-import { BN254_PARAMETERS } from '../prepare-crs.mjs';
+import { PARAMETER_DIRECTORY, readParameters } from '../prepare-crs.mjs';
 
 const here = import.meta.dirname, root = resolve(here, '../../..');
 mkdirSync(join(root, 'scratch'), { recursive: true });
@@ -34,12 +35,17 @@ try {
   execFileSync(process.execPath, [join(here, 'compile.mjs'), build], { cwd: root, windowsHide: true, stdio: 'inherit', timeout: 300000 });
   const compiledSourceHashes = json(join(build, 'source-hashes.json'));
   assert.equal(compiledSourceHashes.poseidon2, manifest.sources['poseidon2.nr']);
-  const crsPath = join(root, 'scratch/private-payment-crs');
-  api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
-  // The files the backend now proves and verifies from: Ignition's leading BN254 points (pool-v3 §4).
-  const parameters = Object.fromEntries(Object.keys(BN254_PARAMETERS).map(name => [name, sha(readFileSync(join(crsPath, name)))]));
-  assert.deepEqual(parameters, BN254_PARAMETERS);
-  checks.push('the backend loaded the recorded Ignition BN254 G1 points and [x]_2');
+  // The bytes every instance here proves and verifies from, checked before loading (pool-v3 §4):
+  // Ignition's leading 2^15 BN254 G1 points and [x]_2, and where they were read.
+  const parameterBytes = await readParameters(PARAMETER_DIRECTORY);
+  const parameters = { points: BN254_PARAMETERS.points, g1: sha(parameterBytes.g1), g2: sha(parameterBytes.g2),
+    source: { directory: relative(root, parameterBytes.source.directory).split(sep).join('/'), files: parameterBytes.source.files } };
+  const flipped = { g1: Uint8Array.from(parameterBytes.g1), g2: parameterBytes.g2 };
+  flipped.g1[flipped.g1.length - 1] ^= 1;
+  await assert.rejects(startBackend(flipped), { name: 'ParameterError', code: 'G1', message: 'the BN254 G1 parameters are not the manifest\'s' });
+  api = await startBackend(parameterBytes);
+  assert.deepEqual({ g1: parameters.g1, g2: parameters.g2 }, { g1: BN254_PARAMETERS.g1, g2: BN254_PARAMETERS.g2 });
+  checks.push('every instance loads only the checked Ignition G1 prefix and [x]_2; a G1 copy differing in its last byte is refused before any backend starts');
   for (const kind of kinds) {
     const program = json(join(build, kind + '.json'));
     assert.equal(program.noir_version, '1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905');
@@ -50,7 +56,11 @@ try {
     circuits[kind] = { program, backend, vk, noir: new Noir(program), widened, hostile: new Noir(widened) };
     identities[kind] = { source: sha(readFileSync(join(here, 'circuits', kind + '.nr'))), bytecode: sha(Buffer.from(program.bytecode, 'base64')), vk: sha(vk), vkBytes: vk.length };
     assert.equal(identities[kind].source, compiledSourceHashes[kind], kind + ': source changed during build');
+    // Each relation fits the loaded G1 prefix, so a larger one fails here by name, not inside the prover.
+    [, identities[kind].dyadicSize] = await api.acirGetCircuitSizes(gunzipSync(Buffer.from(program.bytecode, 'base64')), true, true);
+    assert(identities[kind].dyadicSize <= BN254_PARAMETERS.points, kind + ': circuit larger than the loaded G1 points');
   }
+  checks.push(`every relation's dyadic size is at most the ${BN254_PARAMETERS.points} G1 points loaded`);
   assert.equal(new Set(kinds.map(k => identities[k].vk)).size, 6);
   // Limbs below 2^128, values below 2^64 and direction bits are the circuit's own
   // constraints, not the ABI encoder's; public inputs are exactly their ABI witnesses.
@@ -578,14 +588,20 @@ try {
   // backend instance fails every verification leaves a valid proof verifying.
   {
     const programs = Object.fromEntries(kinds.map(k => [k, circuits[k].program]));
-    const shared = await proofVerifier(api, POOL_V3_CIRCUITS, programs, { crsPath });
+    const unchecked = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, skipSrsInit: true });
+    try {
+      await assert.rejects(proofVerifier(unchecked, POOL_V3_CIRCUITS, programs),
+        { name: 'ParameterError', code: 'UNCHECKED', message: 'the backend instance was not started from checked parameters' });
+    } finally { await unchecked.destroy(); }
+    checks.push('the shared verifier refuses a backend instance startBackend did not start');
+    const shared = await proofVerifier(api, POOL_V3_CIRCUITS, programs);
     const hex = b => Buffer.from(b).toString('hex'), kindOf = Object.fromEntries(POOL_V3_CIRCUITS.circuits.map(c => [c.name, c.kind]));
     assert.deepEqual(POOL_V3_CIRCUITS.circuits.map(c => [c.name, c.publicInputs]), kinds.map(k => [k, counts[k]]));
     for (const kind of kinds) {
       assert.deepEqual([hex(shared.identities[kind].bytecode), hex(shared.identities[kind].vk)], [identities[kind].bytecode, identities[kind].vk], kind);
       assert.equal(await shared.verify(kindOf[kind], proofs[kind].publicInputs.map(BigInt), proofs[kind].proof), true, kind);
     }
-    checks.push('the shared verifier derives the six identities from this build and verifies each relation\'s proof under its kind');
+    checks.push('the shared verifier derives the six identities from this build and verifies each relation\'s proof under its kind on its own instances, which hold only [1]_1 and [x]_2');
     const valid = proofs.issue, inputs = valid.publicInputs.map(BigInt), vk = circuits.issue.vk;
     const word = (i, value) => { const p = new Uint8Array(valid.proof); p.set(Buffer.from(value.toString(16).padStart(64, '0'), 'hex'), i * 32); return p; };
     const malformed = [
@@ -595,7 +611,7 @@ try {
       ['a commitment off the curve', word(8, 1n), 'Deserialized point is not on the curve'],
       ['pairing points at infinity', new Uint8Array(valid.proof.length), 'Cannot aggregate: incoming pairing points are at infinity'],
     ];
-    const raw = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
+    const raw = await startBackend(parameterBytes);
     try {
       const reused = new UltraHonkVerifierBackend(raw);
       const rawVerify = proof => reused.verifyProof({ proof, publicInputs: valid.publicInputs, verificationKey: vk }, options);

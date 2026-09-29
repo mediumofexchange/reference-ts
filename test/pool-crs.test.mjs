@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ensureParameter, prepareCrs } from '../scripts/pool/prepare-crs.mjs';
+import { ensureParameter, PARAMETER_FILES, readParameters } from '../scripts/pool/prepare-crs.mjs';
+import { BN254_PARAMETERS } from '../src/pool/proof-verifier.js';
 
 const good = Buffer.from([1, 2, 3, 4]);
 const parameter = { name: 'test.dat', source: 'test.dat', bytes: 4, range: true,
@@ -51,11 +52,28 @@ describe('verified proving parameter download', () => {
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 
-  it('rejects an unverified uncompressed cache that bb.js would prefer', async () => {
+  it('accepts a longer cached copy by its leading bytes, and reads only those', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'moe-crs-test-'));
     try {
+      await writeFile(join(directory, parameter.name), Buffer.concat([good, Buffer.from([9, 9])]));
+      await ensureParameter(directory, parameter, options(() => { throw new Error('a matching prefix should not fetch'); }));
+      await writeFile(join(directory, parameter.name), Buffer.concat([Buffer.from([4, 3, 2, 1]), good]));
+      await ensureParameter(directory, parameter, options(async () => response()));
+      expect(await readFile(join(directory, parameter.name))).toEqual(good);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+
+  it('pins the files the runtime checks, and hands their leading bytes over unjudged', async () => {
+    expect(PARAMETER_FILES.map(p => [p.name, p.bytes, p.sha256])).toEqual([
+      ['bn254_g1.dat', BN254_PARAMETERS.points * 64, BN254_PARAMETERS.g1], ['bn254_g2.dat', 128, BN254_PARAMETERS.g2]]);
+    const directory = await mkdtemp(join(tmpdir(), 'moe-crs-test-'));
+    try {
+      await expect(readParameters(directory)).rejects.toThrow('No proving parameters');
       await writeFile(join(directory, 'bn254_g1.dat'), good);
-      await expect(prepareCrs(directory)).rejects.toThrow('Uncompressed G1 cache differs');
+      await writeFile(join(directory, 'bn254_g2.dat'), Buffer.alloc(200, 7));
+      const { g1, g2 } = await readParameters(directory);
+      expect(g1).toEqual(good);
+      expect(g2).toEqual(Buffer.alloc(128, 7));
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 });

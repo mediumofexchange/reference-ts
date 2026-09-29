@@ -172,14 +172,16 @@ the clock and leave the range unresolved. Successful results carry
 authentication or spendability.
 See the [Ergo venue guide](../../../docs/ERGO_VENUE_PROFILE.md#local-replay-through-the-venue).
 
-The npm command verifies parameter cache/download lengths and SHA-256 hashes
-with `../prepare-crs.mjs` before starting the suite. It checks both upstream
-hosts on download failure; an empty or corrupt successful HTTP response is
-never cached. These are the existing bb.js 5.2.0 test parameters whose lengths
-and hashes that script pins; Barretenberg's own validation remains active.
-A mismatched uncompressed cache fails explicitly, and `check.mjs` records the
-BN254 files the backend loaded. They equal Aztec Ignition transcript00's leading
-points ([proving parameters](../../../docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters));
+The npm command fetches the proving parameters with `../prepare-crs.mjs` before
+starting the suite: the leading 2 MiB of the CDN's uncompressed `g1.dat` (2^15
+BN254 G1 points, the largest relation's size) and `g2.dat`. It checks both
+upstream hosts on download failure, verifies length and SHA-256 before caching,
+and accepts a longer cached copy by its leading bytes. Every harness then proves
+and verifies only on instances from `startBackend`, which checks the same hashes
+again before loading and never lets bb.js read a directory or download (nor run
+while `BB_WASM_PATH` would replace its WASM); `check.mjs` records
+the hashes it loaded. They equal Aztec Ignition transcript00's leading points
+([proving parameters](../../../docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters));
 that establishes their source, not ceremony trust or an approved v3 configuration.
 
 The suite verifies every public-input position under each amended key,

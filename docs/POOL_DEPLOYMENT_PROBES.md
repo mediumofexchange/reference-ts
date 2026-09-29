@@ -1891,11 +1891,24 @@ least significant first; after reordering them:
 - `noir_wasm` 1.0.0-rc.3 compiles all six relations to the manifest's bytecode
   identities, and bb.js 5.2.0 derives the manifest's keys from them.
 
-The conformance check now records the two BN254 files it proved with and requires
-the values `prepare-crs.mjs` pins. *Limits:* this compares against one published
-transcript copy and does not re-verify the ceremony's contribution chain.
-Soundness still assumes one honest participant. The G1 comparison covers only the
-2^19 points loaded.
+*Limits:* this compares against one published transcript copy and does not
+re-verify the ceremony's contribution chain. Soundness still assumes one honest
+participant. The G1 comparison covers the 2^19 points compared; the runtime loads the
+first 2^15.
+
+The runtime loader (slice 8 M2, [decision](../decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters))
+rests on a disposable probe of bb.js 5.2.0, one desktop, one thread:
+
+- dyadic circuit sizes are 2^13 (issue), 2^15 (spend) and 2^14 (the other four).
+  Spend derives the manifest's key and proves with exactly 2^15 points loaded; with
+  2^15 − 1 the backend refuses ("prover trying to get too many points"). The
+  leading 2^15 points (2 MiB, SHA-256 `50d2f4e9…`) are the same bytes as a 2 MiB
+  range of both CDN hosts' `g1.dat`;
+- loading all 2^19 points takes 0.8 s uncompressed and 19.6 s from the compressed
+  layout (the backend decompresses each start); reading and hashing 32 MiB takes
+  0.24 s;
+- a verifier instance given `[1]_1` alone verifies the spend proof and refuses it
+  under a changed public input; with no G1 point the loader refuses.
 
 ## Venue and restoration work still required
 

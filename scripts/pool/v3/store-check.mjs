@@ -31,7 +31,8 @@ import { openV3Prover, ProverError } from "../../../dist/pool/v3/prover.js";
 import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { authorizeIssue, burnTask, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
 import { encodeRecord } from "../../../dist/pool/v3/records.js";
-import { PROOF_OPTIONS } from "../../../dist/pool/proof-verifier.js";
+import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
+import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { PACKAGE_LIMITS, recordReader, replayEvidencePackage } from "./local-replay.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
 import { v3Codec as codec } from "./codec.mjs";
@@ -75,15 +76,15 @@ try {
   const configuration = candidateConfiguration(manifest, codec);
   execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
   checkCandidateSources(manifest);
-  const crsPath = join(scratch, "private-payment-crs");
-  api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
+  const parameters = await readParameters(PARAMETER_DIRECTORY);
+  api = await startBackend(parameters);
   const programs = Object.fromEntries(RELATION_KINDS.map(([, name]) => [name, JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"))]));
   // The fresh reader process reads the keys from the build directory and checks them against the manifest itself.
   for (const [kind, name] of RELATION_KINDS) {
     writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
   }
   readCandidateKeys(build, manifest);
-  const prover = await openV3Prover(api, programs, configuration, { crsPath });
+  const prover = await openV3Prover(api, programs, configuration);
   async function prove(task, label) {
     const start = performance.now(), record = await prover.prove(task);
     metrics.push({ label, kind: task.kind, proofBytes: record.proof.length, elapsedMs: Math.round(performance.now() - start) });
@@ -192,8 +193,15 @@ try {
   let spent;
   await test("the prover refuses artifacts whose keys are not the configuration's", async () => {
     const changed = { ...configuration, circuits: { ...configuration.circuits, spend: { ...configuration.circuits.spend, vk: b(9) } } };
-    const error = await openV3Prover(api, programs, changed, { crsPath }).then(() => undefined, e => e);
+    const error = await openV3Prover(api, programs, changed).then(() => undefined, e => e);
     assert(error instanceof ProverError); assert.equal(error.code, "IDENTITY");
+  });
+  await test("the prover refuses a backend instance startBackend did not start (pool-v3 §4)", async () => {
+    const unchecked = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, skipSrsInit: true });
+    try {
+      await assert.rejects(openV3Prover(unchecked, programs, configuration),
+        { name: "ParameterError", code: "UNCHECKED", message: "the backend instance was not started from checked parameters" });
+    } finally { await unchecked.destroy(); }
   });
   await test("the journal runs only on a venue whose identity recomputes from its reference preimage", () => {
     assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, venue: new FixtureVenue(b(12), 0n, lag) }), CandidateVenueError);
@@ -361,9 +369,9 @@ try {
     journal = new V3OperatorJournal(journalPath, { ...options, verifier: { verify: () => false } });
     await refusal(journal.package(), "STORAGE");
     journal.close();
-    const reopenApi = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
+    const reopenApi = await startBackend(parameters);
     try {
-      const again = await openV3Prover(reopenApi, programs, configuration, { crsPath });
+      const again = await openV3Prover(reopenApi, programs, configuration);
       try {
         journal = new V3OperatorJournal(journalPath, { ...options, verifier: again.verifier });
         await serve();

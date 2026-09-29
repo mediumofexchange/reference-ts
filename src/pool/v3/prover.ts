@@ -49,8 +49,9 @@ export interface V3Prover {
 }
 
 /**
- * Build the prover over the caller's backend instance: derive the six keys,
- * refuse unless every identity is the configuration's, and keep the programs.
+ * Build the prover over the caller's backend instance, which `startBackend`
+ * must have started from checked parameters: derive the six keys, refuse
+ * unless every identity is the configuration's, and keep the programs.
  * Proving runs on the caller's instance; verification on the verifier's own.
  */
 export async function openV3Prover(api: Barretenberg, programs: Readonly<{ [name in Relation]: NoirProgram }>,

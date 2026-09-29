@@ -415,9 +415,11 @@ and proves them together, including delivery on issue/burn, four spend
 outputs, canonical demand padding, refresh binding and equal-count cross-key
 rejection. See the [conformance suite](../scripts/pool/v3/README.md). The
 [proving parameters](https://github.com/mediumofexchange/money-from-first-principles/blob/85655a5/pool-v3.md#4-proof-and-conformance-obligations)
-are Ignition's. The suite records the files it proved with, which equal Ignition's
-([probe](POOL_DEPLOYMENT_PROBES.md#proving-parameters)); the runtime does not yet
-check parameter hashes before loading (slice 8 M2). V3 remains
+are Ignition's ([probe](POOL_DEPLOYMENT_PROBES.md#proving-parameters)). Every
+backend instance starts through `startBackend` (`src/pool/proof-verifier.ts`),
+which loads only the leading 2^15 G1 points and `[x]_2` whose hashes are
+`BN254_PARAMETERS`; the verifier and prover refuse any other instance, and the
+suite records the hashes it loaded. V3 remains
 an incomplete construction: no approved configuration hash or artifact pins,
 backing adoption or deployment support is defined; the runtime candidate
 remains guarded to reference venues.
