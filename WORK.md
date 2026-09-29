@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-28
+Updated: 2026-09-29
 
 ## Goal
 Slice 7 M3 (done, PR #42): `V3Wallet` receives, holds, pays and re-proves one backing
@@ -12,9 +12,11 @@ two-backing drill runs after adoption ([decision](decisions/2026-09.md#2026-09-2
 Next run: Next 1.
 
 ## Status
-- Opus review: a blocker (one ended scoped term ends admission for every scoped backing)
-  and a should-fix (scope openings have no single adoption index) fixed in 2c95f68, read
-  back with no blockers. Reports from CI run 36483555469; scope reports add the wallet.
+- Slice 7 M3 review findings fixed in 2c95f68; its reports are from CI run 36483555469.
+- Audit 2026-09-29, v3 proof relations (PR #43): circuits match pool-v3 §§2–4. `check.mjs`
+  names every hostile refusal and covers each reachable ACIR assertion instance; first
+  cases for burn change backing, demand zero tag, per-backing conservation, slot-0
+  padding and settle `QUANTITY`. Conformance report from CI run 36499628288.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -34,6 +36,8 @@ Next run: Next 1.
 1. Configuration adoption (plan slice 8): provenance, ACIR identities/certificates,
    replay/import bounds, one-transaction condition and BN254 margin; then the live
    two-backing drill under the adopted configuration. Mainnet needs separate authority.
+   With the source pin, rewrite circuit comments citing the retired recovery map ("§2.6",
+   "PROBE ONLY", bare v2 sections, "A5"): edits change source hashes and every v3 report.
 2. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
@@ -57,6 +61,11 @@ Next run: Next 1.
    `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit. (h) Runtime
    package-reader refusals drop the receipt walk's proven contradictions and fault facts
    (the harness keeps them); attach them to the refusal if a runtime caller needs them.
+   (i) For the recovery-contract audit (2026-09-29): a settlement publishes its output
+   opening (C3.5), so a backer seeing it before witnessing can issue the same `cm_out` first;
+   it is refused `OUTPUT` (`state.ts`) and the acceptance may read as the holder's lapse
+   (C3.8). A retry needs a fresh `rho_out` and release; each pre-emption costs a visible
+   issuance. The runtime wallet builds no settlements yet.
 6. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
    Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
