@@ -3,19 +3,17 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 8 M2 on `feat/v3-parameter-loader`: pool-v3 §4's load check at runtime.
-Acceptance: `startBackend(parameters)` is the one way `src/` and every v3 harness start
-bb.js; it copies and hashes the leading 2^15 uncompressed Ignition G1 points (2 MiB, the
-largest relation's size) and `[x]_2` against `BN254_PARAMETERS` and refuses before any
-backend starts; no `crsPath`, download, compressed file or Grumpkin. `proofVerifier` and
-`openV3Prover` refuse other instances; the verifier's own hold G2 and `[1]_1` only.
-`prepare-crs.mjs` fetches only those bytes, verified before caching. Hostile cases name
-their refusal; reports re-recorded from CI; one adversarial review resolved. Stop: M2 only.
+Slice 8 (adoption), M2 delivered (PR #45): pool-v3 §4's load check at runtime. Next run:
+M3, the source pin (Next 1): state its acceptance here before starting.
 
 ## Status
-- Audit 2026-09-29 (PR #43): circuits match pool-v3 §§2–4; `check.mjs` names every hostile
-  refusal and covers each reachable ACIR assertion instance. Conformance report from CI
-  run 36508150640 (445 checks, 18 proofs, identities unchanged; records the BN254 files).
+- M2 (PR #45, [decision](decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters)):
+  `startBackend` checks Ignition's leading 2^15 G1 points (2 MiB) and `[x]_2` against
+  `BN254_PARAMETERS` before loading them itself (`skipSrsInit`, `srsInitSrs`); no
+  `crsPath`, download, compressed file or Grumpkin; refuses while `BB_WASM_PATH` is set.
+  Verifier/prover refuse other instances; verifier instances hold `[1]_1`, `[x]_2` only.
+  One adversarial review: no blockers, two material points fixed. Reports re-recorded
+  from CI run 36515533471 (447 checks, 18 proofs; identities unchanged).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -33,7 +31,7 @@ their refusal; reports re-recorded from CI; one adversarial review resolved. Sto
 
 ## Next
 1. Slice 8, adoption, in the [decided order](decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters).
-   After M2 (Goal): M3 source pin
+   M3 source pin
    (circuit comments citing "§2.6", "PROBE ONLY", bare v2 sections, "A5"; no configuration
    byte changes), M4 certificates/kind-11, M5 replay/import rules and bounds, M6 Next
    5(i), M7 one-transaction condition, M8 adoption, every report re-recorded, live
@@ -66,6 +64,8 @@ their refusal; reports re-recorded from CI; one adversarial review resolved. Sto
    it is refused `OUTPUT` (`state.ts`) and the acceptance may read as the holder's lapse
    (C3.8). A retry needs a fresh `rho_out` and release; each pre-emption costs a visible
    issuance. The runtime wallet builds no settlements yet.
+   (j) Verify-only parties could take key bytes checked against the configuration's key
+   identities (as the reader workers do) instead of deriving keys, needing no G1 file.
 6. Only when a gate needs them: cancellation, batching, index-free box source,
    venue-moving record, slowest-supplier clock, multi-entry extension fixture,
    Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
@@ -78,7 +78,7 @@ their refusal; reports re-recorded from CI; one adversarial review resolved. Sto
   `scratch/ergo-nodes/`; approved WMI launcher `experiments/ergo-range/nodes.mjs`.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public
   `pool-v3-testnet-reader/` and `pool-v3-recovery-testnet-reader/` bundles,
-  `testnet-header-probe/`, `private-payment-crs/`, `jdk/` and `ergo-headers/` under scratch.
+  `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/` and `ergo-headers/` under scratch.
 - Retain stopped contained-sync node's 20 GiB
   `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd` and
   `node-startup/`, `sync-preparation/` caches; do not allocate another.
