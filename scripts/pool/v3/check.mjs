@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { gunzipSync } from 'node:zlib';
 import { Noir } from '@noir-lang/noir_js';
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from '@aztec/bb.js';
 import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
@@ -38,7 +39,7 @@ try {
   // Ignition's leading 2^15 BN254 G1 points and [x]_2, and where they were read.
   const parameterBytes = await readParameters(PARAMETER_DIRECTORY);
   const parameters = { points: BN254_PARAMETERS.points, g1: sha(parameterBytes.g1), g2: sha(parameterBytes.g2),
-    source: 'scratch/private-payment-crs: leading bytes of bn254_g1.dat and bn254_g2.dat' };
+    source: { directory: relative(root, parameterBytes.source.directory).split(sep).join('/'), files: parameterBytes.source.files } };
   const flipped = { g1: Uint8Array.from(parameterBytes.g1), g2: parameterBytes.g2 };
   flipped.g1[flipped.g1.length - 1] ^= 1;
   await assert.rejects(startBackend(flipped), { name: 'ParameterError', code: 'G1', message: 'the BN254 G1 parameters are not the manifest\'s' });
@@ -55,7 +56,11 @@ try {
     circuits[kind] = { program, backend, vk, noir: new Noir(program), widened, hostile: new Noir(widened) };
     identities[kind] = { source: sha(readFileSync(join(here, 'circuits', kind + '.nr'))), bytecode: sha(Buffer.from(program.bytecode, 'base64')), vk: sha(vk), vkBytes: vk.length };
     assert.equal(identities[kind].source, compiledSourceHashes[kind], kind + ': source changed during build');
+    // Each relation fits the loaded G1 prefix, so a larger one fails here by name, not inside the prover.
+    [, identities[kind].dyadicSize] = await api.acirGetCircuitSizes(gunzipSync(Buffer.from(program.bytecode, 'base64')), true, true);
+    assert(identities[kind].dyadicSize <= BN254_PARAMETERS.points, kind + ': circuit larger than the loaded G1 points');
   }
+  checks.push(`every relation's dyadic size is at most the ${BN254_PARAMETERS.points} G1 points loaded`);
   assert.equal(new Set(kinds.map(k => identities[k].vk)).size, 6);
   // Limbs below 2^128, values below 2^64 and direction bits are the circuit's own
   // constraints, not the ABI encoder's; public inputs are exactly their ABI witnesses.

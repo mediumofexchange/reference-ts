@@ -1893,7 +1893,8 @@ least significant first; after reordering them:
 
 *Limits:* this compares against one published transcript copy and does not
 re-verify the ceremony's contribution chain. Soundness still assumes one honest
-participant. The G1 comparison covers only the 2^19 points loaded.
+participant. The G1 comparison covers the 2^19 points compared; the runtime loads the
+first 2^15.
 
 The runtime loader (slice 8 M2, [decision](../decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters))
 rests on a disposable probe of bb.js 5.2.0, one desktop, one thread:

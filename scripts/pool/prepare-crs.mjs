@@ -90,11 +90,14 @@ export async function prepareCrs(directory) {
 /**
  * The parameter bytes as `startBackend` takes them: each file's leading bytes,
  * unjudged here (the runtime checks them), with where they were read from.
+ * The cache keeps the bytes, not the host that served them; either host's
+ * bytes are the same, which the hash shows.
  */
 export async function readParameters(directory) {
   const [g1, g2] = await Promise.all(PARAMETER_FILES.map(p => leading(join(directory, p.name), p.bytes)));
   if (g1 === undefined || g2 === undefined) throw new Error(`No proving parameters in ${directory}; run scripts/pool/prepare-crs.mjs`);
-  return { g1, g2 };
+  const source = { directory, files: Object.fromEntries(PARAMETER_FILES.map((p, i) => [p.name, { leadingBytes: [g1, g2][i].length }])) };
+  return { g1, g2, source };
 }
 
 /** The reference's parameter directory. */

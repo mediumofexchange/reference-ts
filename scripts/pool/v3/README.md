@@ -176,9 +176,10 @@ The npm command fetches the proving parameters with `../prepare-crs.mjs` before
 starting the suite: the leading 2 MiB of the CDN's uncompressed `g1.dat` (2^15
 BN254 G1 points, the largest relation's size) and `g2.dat`. It checks both
 upstream hosts on download failure, verifies length and SHA-256 before caching,
-and accepts a longer cached copy by its leading bytes. Every harness then starts
-bb.js only through `startBackend`, which checks the same hashes again before
-loading and never lets bb.js read a directory or download; `check.mjs` records
+and accepts a longer cached copy by its leading bytes. Every harness then proves
+and verifies only on instances from `startBackend`, which checks the same hashes
+again before loading and never lets bb.js read a directory or download (nor run
+while `BB_WASM_PATH` would replace its WASM); `check.mjs` records
 the hashes it loaded. They equal Aztec Ignition transcript00's leading points
 ([proving parameters](../../../docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters));
 that establishes their source, not ceremony trust or an approved v3 configuration.

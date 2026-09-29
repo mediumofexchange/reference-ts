@@ -66,7 +66,7 @@ describe("proving parameters before loading (proof-verifier.ts, pool-v3 §4)", (
 
   it("refuses G1 or G2 bytes of another length or hash, or that are not bytes", async () => {
     expect(bytesToHex(sha256(g2))).toBe(BN254_PARAMETERS.g2);
-    await expect(startBackend(null as never)).rejects.toThrow(new ParameterError("G2", "no BN254 parameters"));
+    await refused(null, "G2", "are not bytes");
     const flipped = g2.slice(); flipped[127]! ^= 1;
     await refused({ g1, g2: flipped }, "G2", "are not the manifest's");
     await refused({ g1, g2: g2.subarray(0, 64) }, "G2", "are not the manifest's");
@@ -77,5 +77,16 @@ describe("proving parameters before loading (proof-verifier.ts, pool-v3 §4)", (
     await refused({ g1: g1.subarray(64), g2 }, "G1", "are not the manifest's");
     await refused({ g1: "00".repeat(g1.length), g2 }, "G1", "are not bytes");
     await refused({ g1: new Uint8Array(new SharedArrayBuffer(g1.length)), g2 }, "G1", "are not bytes");
+  });
+});
+
+describe("the pinned backend binary (proof-verifier.ts)", () => {
+  it("refuses to start while BB_WASM_PATH would replace the backend's WASM", async () => {
+    process.env.BB_WASM_PATH = "elsewhere.wasm";
+    try {
+      const start = startBackend(null as never);
+      await expect(start).rejects.toThrow(new ParameterError("BACKEND", "BB_WASM_PATH would replace the pinned backend's WASM"));
+      await expect(start).rejects.toMatchObject({ code: "BACKEND" });
+    } finally { delete process.env.BB_WASM_PATH; }
   });
 });

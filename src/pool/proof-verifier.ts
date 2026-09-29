@@ -84,9 +84,9 @@ export interface ProvingParameters {
   readonly g2: Uint8Array;
 }
 
-/** Parameter bytes that are not `BN254_PARAMETERS`' layout, or an instance not started from them. */
+/** Parameter bytes that are not `BN254_PARAMETERS`' layout, an instance not started from them, or a replaced backend binary. */
 export class ParameterError extends Error {
-  constructor(readonly code: "G1" | "G2" | "UNCHECKED", message: string) {
+  constructor(readonly code: "G1" | "G2" | "UNCHECKED" | "BACKEND", message: string) {
     super(message); this.name = "ParameterError";
   }
 }
@@ -115,8 +115,21 @@ function checked(value: unknown, code: "G1" | "G2", length: number, expected: st
   return own;
 }
 
+/**
+ * bb.js runs the WASM binary `BB_WASM_PATH` names instead of its own, and
+ * that binary is what refuses any other `[x]_2` and derives the keys (§4), so
+ * a backend starts only without it. Checked at every start, since the
+ * environment can change between them.
+ */
+function pinnedBackend(): void {
+  if (typeof process !== "undefined" && process.env?.BB_WASM_PATH !== undefined) {
+    throw new ParameterError("BACKEND", "BB_WASM_PATH would replace the pinned backend's WASM");
+  }
+}
+
 /** A WASM worker instance holding `count` G1 points and G2, and no Grumpkin points (UltraHonk reads none). */
 async function load(points: Uint8Array, count: number, g2: Uint8Array, threads: number | undefined): Promise<Barretenberg> {
+  pinnedBackend();
   const api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: threads ?? 1, skipSrsInit: true });
   try {
     await api.srsInitSrs({ pointsBuf: copyBytes(points), numPoints: count, g2Point: copyBytes(g2) });
@@ -134,7 +147,8 @@ async function load(points: Uint8Array, count: number, g2: Uint8Array, threads: 
  * backend's own API is outside what this check can stop.
  */
 export async function startBackend(parameters: ProvingParameters, options: BackendOptions = {}): Promise<Barretenberg> {
-  if (parameters === null || typeof parameters !== "object") throw new ParameterError("G2", "no BN254 parameters");
+  pinnedBackend();
+  if (parameters === null || typeof parameters !== "object") throw new ParameterError("G2", "the BN254 G2 parameters are not bytes");
   const g2 = checked(parameters.g2, "G2", G2_BYTES, BN254_PARAMETERS.g2);
   const g1 = checked(parameters.g1, "G1", BN254_PARAMETERS.points * POINT_BYTES, BN254_PARAMETERS.g1);
   const api = await load(g1, BN254_PARAMETERS.points, g2, options.threads);
