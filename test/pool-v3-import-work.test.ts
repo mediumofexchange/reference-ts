@@ -7,9 +7,9 @@ import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
+import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { classifyScopes, type ImportLimits } from "../src/pool/v3/scope-reader.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { deliveryHash, encodePublication, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
@@ -59,7 +59,7 @@ function fixture(proofVerifier: ProofCheck = verifier) {
     const directory = [{ name: backing, digest: snapshotDigest(snapshot) }], root = directoryRoot(directory);
     const commitment = signCommitment(operatorSecret, sequence, root);
     directories.set(hex(root), directory);
-    const encodedSnapshot = snapshotBytes(snapshot), encodedTrail = encodeTrail({ header: segmentBytes(target.header), terms: [signed], records: target.records }, TRAIL_LIMITS);
+    const encodedSnapshot = snapshotBytes(snapshot), encodedTrail = encodeTrail({ header: segmentBytes(target.header), terms: [signed], records: target.records });
     if (!snapshotIds.has(hex(encodedSnapshot))) { snapshotIds.add(hex(encodedSnapshot)); snapshots.push(encodedSnapshot); }
     if (!trailIds.has(hex(encodedTrail))) { trailIds.add(hex(encodedTrail)); trails.push(encodedTrail); }
     venue.witness(1, operator, index, encodeCommitment(commitment)); return commitment;
@@ -68,7 +68,7 @@ function fixture(proofVerifier: ProofCheck = verifier) {
     selection: { mode: "current-fixture", domain, venue: venueId, backing, operator, sequence: selected.sequence,
       root: selected.root, judgingIndex: venue.witnessedIndex() }, terms, header: target.header, verifier: proofVerifier,
     reference: { context: LOCAL_REFERENCE, label, lag }, importLimits: limits,
-  }, directories, venue, { snapshots, trails });
+  }, directories, venue, { snapshots, trails: new EvidenceStore().importTrails(trails) });
   return { checkpoint, read, venue };
 }
 

@@ -13,9 +13,8 @@ import { configurationBytes, configurationHash, RELATIONS, type CandidateConfigu
 import { decodeFaultEvidence, encodeFaultEvidence } from "../src/pool/v3/fault-evidence.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import type { CanonicalCheckpoint } from "../src/pool/v3/scope-reader.js";
-import { readFrontier, readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
@@ -31,7 +30,7 @@ const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7
 const domain = configurationHash(configuration), label = b(2), lag = 2n;
 const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true };
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
-  a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))), PACKAGE_LIMITS);
+  a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))));
 interface Segment { header: SegmentHeader; id: Uint8Array; state: SegmentState; records: Uint8Array[]; secret: Uint8Array; evidence?: Uint8Array }
 
 function fixture() {
@@ -55,8 +54,8 @@ function fixture() {
     const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.evidence ?? target.state.evidence, ...total };
     const directory = [{ name: backing, digest: snapshotDigest(snapshot) }];
     const commitment = signCommitment(target.secret, sequence, directoryRoot(directory));
-    add(3, encodeEvidenceDirectory(directory, PACKAGE_LIMITS)); add(4, snapshotBytes(snapshot));
-    add(6, encodeTrail({ header: segmentBytes(target.header), terms: [signed], records: target.records }, TRAIL_LIMITS));
+    add(3, encodeEvidenceDirectory(directory)); add(4, snapshotBytes(snapshot));
+    add(6, encodeTrail({ header: segmentBytes(target.header), terms: [signed], records: target.records }));
     venue.witness(1, target.header.operator, index, encodeCommitment(commitment));
     return commitment;
   }
@@ -100,7 +99,7 @@ async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTai
   segment.evidence = records.reduce((previous, record, i) => nextEvidenceHash(previous, evidenceHashes(record), BigInt(i + 1)),
     genesisEvidenceHash(segment.id));
   const hostile = f.checkpoint(segment, 3n), fullTrail = encodeTrail({ header: segmentBytes(segment.header), terms: [f.signed],
-    records: segment.records }, TRAIL_LIMITS);
+    records: segment.records });
   const snapshot = f.items.filter(item => item.kind === 4).map(item => decodeSnapshot(item.payload))
     .find(value => compareBytes(value.evidenceHash, segment.evidence!) === 0)!;
   const fault = encodeFaultEvidence({ snapshot, position: 2n, length: 3n,
@@ -177,7 +176,7 @@ describe("single-backing complete frontier reader", () => {
     const held = signCommitment(originalSecret, 1n, directoryRoot(directory));
     f.venue.witness(1, original, 1n, encodeCommitment(held));
     await expect(f.read(pack([]))).rejects.toMatchObject({ status: "unresolved-evidence" });
-    const result = await f.read(pack([{ kind: 3, payload: encodeEvidenceDirectory(directory, PACKAGE_LIMITS) }]));
+    const result = await f.read(pack([{ kind: 3, payload: encodeEvidenceDirectory(directory) }]));
     expect(result.canonical).toBeUndefined(); expect(result.work.checkpoints).toBe(1n);
   });
 
@@ -210,7 +209,7 @@ describe("single-backing complete frontier reader", () => {
     const result = await f.read();
     expect(result.canonical!.commitment).toEqual(funded);
     expect(result.carrying.at(-1)).toMatchObject({ class: "excluded", check: "IMPORT" });
-    const rollbackTrail = encodeTrail({ header: segmentBytes(rollback.header), terms: [f.signed], records: [] }, TRAIL_LIMITS);
+    const rollbackTrail = encodeTrail({ header: segmentBytes(rollback.header), terms: [f.signed], records: [] });
     await expect(f.read(pack(f.items.filter(item => item.kind !== 6 || compareBytes(item.payload, rollbackTrail) !== 0))))
       .rejects.toMatchObject({ status: "unresolved-evidence" });
   });
@@ -301,7 +300,7 @@ describe("single-backing compact fault packages", () => {
       await expect(f.readCompact(items)).rejects.toMatchObject({ status: "unresolved-evidence" });
       await expect(f.readSelected(items)).rejects.toMatchObject({ status: "unresolved-evidence" });
     }
-    const withheldPrefix = f.compactItems.filter(item => item.kind !== 6 || decodeTrail(item.payload, TRAIL_LIMITS).records.length !== 1);
+    const withheldPrefix = f.compactItems.filter(item => item.kind !== 6 || decodeTrail(item.payload).records.length !== 1);
     await expect(f.readCompact(withheldPrefix)).rejects.toMatchObject({ status: "unresolved-evidence" });
     await expect(f.readSelected(withheldPrefix)).rejects.toMatchObject({ status: "unresolved-evidence" });
   });

@@ -15,7 +15,8 @@ import { decodeReceipt, decodeSnapshot, type Snapshot } from "./commitments.js";
 import type { SegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
-import { decodedTrails, lastValidOf, readRecordView, replayTrail, type CarryingVerdict, type Directories, type FaultObserver,
+import type { TrailEvidence } from "./evidence-store.js";
+import { lastValidOf, readRecordView, replayTrail, type CarryingVerdict, type Directories, type FaultObserver,
   type ReaderSelection, type RecordView, type ReplayContext, type ReplayResult, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
 import { decodePublication, encodeRecord, type Record } from "./records.js";
@@ -53,7 +54,8 @@ export interface ImportContext extends ReplayContext {
   /** Receipt evidence remains available to the caller after a later refusal. */
   receiptWalk?: Pick<ReceiptWalk, "evidence"> | undefined;
 }
-export interface ImportEvidence { readonly snapshots: readonly Uint8Array[]; readonly trails: readonly Uint8Array[] }
+/** A read's snapshots, and its trails in the reader's own storage. */
+export interface ImportEvidence { readonly snapshots: readonly Uint8Array[]; readonly trails: TrailEvidence }
 export interface CanonicalCheckpoint {
   readonly commitment: Commitment; readonly index: bigint; readonly segment: Uint8Array; readonly scope: bigint;
   readonly state: ReplayResult;
@@ -319,7 +321,7 @@ export async function classifyScopes(context: ImportContext, directories: Direct
   evidence: ImportEvidence): Promise<ScopeResult> {
   const { selection } = context;
   const walk = scopeWalk(context, directories, record, evidence), { viewFor, latest, recovery, classify, inspect, chargeEvents } = walk;
-  const trails = decodedTrails(evidence.trails);
+  const { trails } = evidence;
   const view = await viewFor(selection.backing, context.terms);
   const selectedHeld = (await view.heldBy(selection.operator)).find(held => matches(held.commitment, selection));
   if (selectedHeld === undefined) throw new EvidenceRefusal("selection-mismatch");
@@ -409,7 +411,7 @@ type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
  * checkpoint is classified once; work is charged against the reader's limits. */
 function scopeWalk(context: WalkContext, directories: Directories, record: RecordVenue, evidence: ImportEvidence) {
   const { selection } = context, faults = context.faults ?? NO_FAULTS, limits = importLimitsOf(context.importLimits);
-  const trails = decodedTrails(evidence.trails), snapshots = new Map(evidence.snapshots.map(bytes => [hex(sha256(bytes)), bytes]));
+  const { trails } = evidence, snapshots = new Map(evidence.snapshots.map(bytes => [hex(sha256(bytes)), bytes]));
   const views = new Map<string, Promise<RecordView>>(), verified = new Map<string, Promise<ScopeVerdict>>();
   const heldSeen = new Set<string>(), latestCache = new Map<string, Promise<ValidScope | undefined>>();
   let eventWork = 0n, requestProofs = 0n;
@@ -535,7 +537,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
           if (!bases.has(hex(snapshot.segment))) bases.set(hex(snapshot.segment), segmentBase);
           // The segment stands from here even if this opening's own evidence fails below:
           // a later valid checkpoint of it finalizes (C2.10.12).
-          requireReplay(scope.fullTrail().records.length === 0, "OPENING");
+          requireReplay(scope.fullTrail().length === 0n, "OPENING");
           openingValid = true;
         } else {
           const firstView = scopeViews.values().next().value!;

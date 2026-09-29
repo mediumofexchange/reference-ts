@@ -18,13 +18,14 @@ const cat = (...parts: Uint8Array[]): Buffer => Buffer.concat(parts);
 const integer = (value: bigint, width: number): Buffer =>
   Buffer.from(value.toString(16).padStart(width * 2, "0"), "hex");
 const u32 = (value: number | bigint): Buffer => integer(BigInt(value), 4);
+const u64 = (value: number | bigint): Buffer => integer(BigInt(value), 8);
 const sha = (bytes: Uint8Array): Buffer => createHash("sha256").update(bytes).digest();
 const b = (fill: number): Buffer => Buffer.alloc(32, fill);
 const generous = { maxBytes: 1_000_000n, maxItems: 1_000n };
 
 function rawPackage(items: readonly p.EvidenceItem[]): Buffer {
   return cat(context, u32(items.length), ...items.map(item =>
-    cat(Uint8Array.of(item.kind), u32(item.payload.length), item.payload)));
+    cat(Uint8Array.of(item.kind), u64(item.payload.length), item.payload)));
 }
 
 function rawDirectory(entries: readonly SnapshotDigest[]): Buffer {
@@ -109,8 +110,10 @@ describe("v3 evidence package", () => {
     }
     const hugeCount = Buffer.from(encoded); hugeCount.set(u32(0xffff_ffff), 19);
     expect(() => p.decodeEvidencePackage(hugeCount, generous)).toThrow(/budget|count/);
-    const hugeLength = Buffer.from(encoded); hugeLength.set(u32(0xffff_ffff), 24);
-    expect(() => p.decodeEvidencePackage(hugeLength, generous)).toThrow(/truncated evidence payload/);
+    for (const length of [0xffff_ffffn, (1n << 64n) - 1n]) {
+      const hugeLength = Buffer.from(encoded); hugeLength.set(u64(length), 24);
+      expect(() => p.decodeEvidencePackage(hugeLength, generous)).toThrow(/truncated evidence payload/);
+    }
     const wrongContext = Buffer.from(encoded); wrongContext[0] = wrongContext[0]! ^ 1;
     expect(() => p.decodeEvidencePackage(wrongContext, generous)).toThrow(/context/);
   });
@@ -125,8 +128,8 @@ describe("v3 evidence package", () => {
     ]) expect(action).toThrow(p.PackageLimitError);
 
     const one = [{ kind: 1, payload: new Uint8Array(0) }], encoded = rawPackage(one);
-    expect(p.decodeEvidencePackage(encoded, { maxBytes: 28n, maxItems: 1n })).toHaveLength(1);
-    for (const limits of [{ maxBytes: 27n, maxItems: 1n }, { maxBytes: 28n, maxItems: 0n }]) {
+    expect(p.decodeEvidencePackage(encoded, { maxBytes: 32n, maxItems: 1n })).toHaveLength(1);
+    for (const limits of [{ maxBytes: 31n, maxItems: 1n }, { maxBytes: 32n, maxItems: 0n }]) {
       expect(() => p.encodeEvidencePackage(one, limits)).toThrow(p.PackageLimitError);
       expect(() => p.decodeEvidencePackage(encoded, limits)).toThrow(p.PackageLimitError);
     }
@@ -136,24 +139,26 @@ describe("v3 evidence package", () => {
     }
   });
 
-  it("does not hash payloads before outer shape, boundary and budget checks finish", () => {
+  it("checks the count and each item's kind and length against the remaining bytes before hashing its payload", () => {
     const mocked = vi.mocked(packageSha256);
     mocked.mockClear();
     expect(() => p.encodeEvidencePackage([{ kind: 1, payload: Uint8Array.of(1) }],
-      { maxBytes: 28n, maxItems: 1n })).toThrow(p.PackageLimitError);
+      { maxBytes: 32n, maxItems: 1n })).toThrow(p.PackageLimitError);
     expect(mocked).not.toHaveBeenCalled();
 
-    for (const malformed of [
-      cat(context, u32(1), Uint8Array.of(0), u32(0)),
-      cat(context, u32(1), Uint8Array.of(1), u32(2), Uint8Array.of(7)),
-      cat(context, u32(0), Uint8Array.of(9)),
-      cat(context, u32(2), Uint8Array.of(1), u32(1), Uint8Array.of(42),
-        Uint8Array.of(2), u32(2), Uint8Array.of(7)),
-      cat(rawPackage([{ kind: 1, payload: Uint8Array.of(42) }]), Uint8Array.of(9)),
-    ]) {
+    // One reader serves memory and streams, so a payload is hashed once it is read,
+    // and a fault after it is found after that hash; nothing before it is.
+    for (const [malformed, hashed] of [
+      [cat(context, u32(1), Uint8Array.of(0), u64(0)), 0],
+      [cat(context, u32(1), Uint8Array.of(1), u64(2), Uint8Array.of(7)), 0],
+      [cat(context, u32(1), Uint8Array.of(9)), 0],
+      [cat(context, u32(0), Uint8Array.of(9)), 0],
+      [cat(context, u32(2), Uint8Array.of(1), u64(1), Uint8Array.of(42), Uint8Array.of(2), u64(2), Uint8Array.of(7)), 1],
+      [cat(rawPackage([{ kind: 1, payload: Uint8Array.of(42) }]), Uint8Array.of(9)), 1],
+    ] as const) {
       mocked.mockClear();
       expect(() => p.decodeEvidencePackage(malformed, generous)).toThrow(EncodingError);
-      expect(mocked).not.toHaveBeenCalled();
+      expect(mocked).toHaveBeenCalledTimes(hashed);
     }
   });
 

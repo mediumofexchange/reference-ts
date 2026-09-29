@@ -26,8 +26,9 @@ import { requireReferenceVenue } from "./guard.js";
 import { decodeSegmentHeader, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { decodeEvidencePackage } from "./package.js";
-import { PACKAGE_LIMITS, readFrontier, type PackageReader } from "./package-reader.js";
-import { decodedTrails, type SignedTerms } from "./reader.js";
+import { decodeTrail } from "./trail.js";
+import { readFrontier, type PackageReader } from "./package-reader.js";
+import type { SignedTerms } from "./reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
 import { locked, tagOf } from "./recovery.js";
 import { applyForceEffects, openForceState, type ForceState } from "./state.js";
@@ -814,8 +815,10 @@ export class V3Wallet {
   /** The canonical segment's header from the package's own trails, bound by
    * identity and scoping this backing (C2.10.2). */
   private headerOf(bytes: Uint8Array, segment: Uint8Array, scope: bigint, backing: Uint8Array) {
-    const trails = decodedTrails(decodeEvidencePackage(bytes, PACKAGE_LIMITS).filter(item => item.kind === 6).map(item => item.payload));
-    const found = trails.find(trail => same(sha256(trail.header), segment));
+    // A trail that does not frame is no evidence (§10.1) and is passed over.
+    const found = decodeEvidencePackage(bytes).filter(item => item.kind === 6).map(item => {
+      try { return decodeTrail(item.payload); } catch (error) { if (error instanceof EncodingError) return undefined; throw error; }
+    }).find(trail => trail !== undefined && same(sha256(trail.header), segment));
     requireThat(found !== undefined, "ABSENT", "canonical segment header is absent");
     const header = decodeSegmentHeader(found.header);
     requireThat(same(segmentIdentity(header), segment) && new ScopeTree(header.entries).root() === scope &&

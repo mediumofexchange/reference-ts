@@ -14,7 +14,6 @@ import { configurationHash, RELATIONS, type CandidateConfiguration } from "../sr
 import { CandidateVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
 import { segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage } from "../src/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { encodeRecord, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal, V3StoreError as StoreError } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
@@ -243,7 +242,7 @@ describe("the v3 operator journal", () => {
     const snapshots = items.filter(i => i.kind === 4).map(i => decodeSnapshot(i.payload));
     expect(snapshots.map(s => [s.issued, s.burned])).toContainEqual([10n, 5n]);
     expect(snapshots.map(s => [s.issued, s.burned])).toContainEqual([0n, 0n]);
-    const trail = decodeTrail(items.find(i => i.kind === 6)!.payload, TRAIL_LIMITS);
+    const trail = decodeTrail(items.find(i => i.kind === 6)!.payload);
     expect(trail.records.length).toBe(3);
     const directories = items.filter(i => i.kind === 3).map(i => decodeEvidenceDirectory(i.payload, { maxBytes: 1n << 20n, maxItems: 64n }));
     expect(directories.every(d => d.length === 1 && Buffer.from(d[0]!.name).equals(Buffer.from(backing)))).toBe(true);

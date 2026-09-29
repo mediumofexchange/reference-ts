@@ -8,9 +8,8 @@ import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
-import { readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import { readPackage } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal, ServedPackage } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -177,15 +176,15 @@ describe("v3 recovery journal and independent package reader", () => {
     expect(result.state.issued - result.state.burned).toBe(10n);
     expect(result.state.hasNullifier(f.input.note.nf)).toBe(true);
     expect(result.state.adoptionIndices.get(hex(f.backing))).toBe(11n);
-    const items = decodeEvidencePackage(served.package, PACKAGE_LIMITS);
-    expect(items.filter(item => item.kind === 6).map(item => decodeTrail(item.payload, TRAIL_LIMITS).records)).toContainEqual(expected);
+    const items = decodeEvidencePackage(served.package);
+    expect(items.filter(item => item.kind === 6).map(item => decodeTrail(item.payload).records)).toContainEqual(expected);
     for (const kind of [3, 4, 6]) {
-      const packageBytes = encodeEvidencePackage(items.filter(item => item.kind !== kind), PACKAGE_LIMITS);
+      const packageBytes = encodeEvidencePackage(items.filter(item => item.kind !== kind));
       await expect(f.read({ ...served, package: packageBytes })).rejects.toMatchObject({ status: "unresolved-evidence" });
     }
     // Removing one old snapshot leaves the selected one available but loses ancestry.
     const old = items.findIndex(item => item.kind === 4);
-    await expect(f.read({ ...served, package: encodeEvidencePackage(items.filter((_, i) => i !== old), PACKAGE_LIMITS) }))
+    await expect(f.read({ ...served, package: encodeEvidencePackage(items.filter((_, i) => i !== old)) }))
       .rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 

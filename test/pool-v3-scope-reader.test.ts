@@ -10,9 +10,8 @@ import { ScopeTree } from "../src/pool/scope.js";
 import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import { readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
 import { ReplayResult } from "../src/pool/v3/reader.js";
@@ -35,7 +34,7 @@ const stateOf = <T extends { readonly receipt?: unknown }>(result: T): Exclude<T
   return result as Exclude<T, { readonly receipt: object }>;
 };
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
-  a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))), PACKAGE_LIMITS);
+  a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))));
 
 /** One operator opens a segment scoping two backings and issues into the first;
  * a successor segment may then import the first backing alone. */
@@ -66,8 +65,8 @@ async function twoBackings() {
     const snapshots = alter(snapshotsNow());
     const directory = snapshots.map(snapshot => ({ name: snapshot.backing, digest: snapshotDigest(snapshot) }));
     for (const snapshot of snapshots) add(4, snapshotBytes(snapshot));
-    add(3, encodeEvidenceDirectory(directory, PACKAGE_LIMITS));
-    add(6, encodeTrail({ header: segmentBytes(current.header), terms: current.scoped.map(item => item.signed), records: current.records }, TRAIL_LIMITS));
+    add(3, encodeEvidenceDirectory(directory));
+    add(6, encodeTrail({ header: segmentBytes(current.header), terms: current.scoped.map(item => item.signed), records: current.records }));
     const commitment = signCommitment(operatorSecret, sequence, directoryRoot(directory));
     venue.witness(1, operator, index, encodeCommitment(commitment));
     return commitment;

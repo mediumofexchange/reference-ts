@@ -5,10 +5,10 @@ import { compareBytes } from "../../bytes.js";
 import type { HeldCommitment } from "../../record-range.js";
 import { ScopeTree } from "../scope.js";
 import { decodeReceipt, decodeSnapshot, receiptMatchesEvent, verifyReceipt, type Receipt } from "./commitments.js";
+import type { TrailEvidence } from "./evidence-store.js";
 import { decodeSegmentHeader, type SegmentHeader } from "./headers.js";
 import type { ReaderSelection, RecordView, ReplayResult } from "./reader.js";
 import { EvidenceRefusal } from "./refusals.js";
-import type { ServedTrail } from "./trail.js";
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 function requireReceipt(condition: boolean): asserts condition { if (!condition) throw new EvidenceRefusal("invalid-receipt"); }
 export interface ReceiptFact { readonly operator: string; readonly sequence: string; readonly index: string }
@@ -28,15 +28,15 @@ export interface ReceiptWalk {
   finish(): ReceiptVerdict;
 }
 export async function receiptWalk(bytes: Uint8Array, context: { readonly selection: ReaderSelection }, view: RecordView,
-  trails: readonly ServedTrail[], snapshots: readonly Uint8Array[], scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
+  trails: TrailEvidence, snapshots: readonly Uint8Array[], scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
   const { selection } = context, receipt = decodeReceipt(bytes);
-  const trail = trails.find(tr => same(sha256(tr.header), receipt.segment));
+  const trail = trails.heads(receipt.segment)[0];
   if (trail === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const header = decodeSegmentHeader(trail.header);
   if (header.entries.length !== 1 && scopeViews === undefined) throw new EvidenceRefusal("unsupported-scope");
   requireReceipt(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
     header.entries.some(scope => same(scope.backing, selection.backing)) && receipt.after >= header.sequence &&
-    verifyReceipt({ domain: selection.domain, segment: sha256(trail.header), scopeRoot: new ScopeTree(header.entries).root(), operator: header.operator }, receipt));
+    verifyReceipt({ domain: selection.domain, segment: receipt.segment, scopeRoot: new ScopeTree(header.entries).root(), operator: header.operator }, receipt));
   let termBoundary: bigint | undefined;
   for (const scope of header.entries) {
     const scopedView = scopeViews?.get(hex(scope.backing)) ?? view;

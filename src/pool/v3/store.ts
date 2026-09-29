@@ -34,7 +34,7 @@ import { configurationBytes, configurationHash, decodeConfiguration, type Candid
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
-import { RANGE_LIMITS, TRAIL_LIMITS, type SignedTerms } from "./reader.js";
+import { RANGE_LIMITS, type SignedTerms } from "./reader.js";
 import { readFrontier, readPackage } from "./package-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
@@ -1198,8 +1198,8 @@ export class V3OperatorJournal {
   /**
    * The served §12 package: the configuration, `selected`, every directory and
    * snapshot of `signed`, and the one trail through `records`, whose prefixes
-   * serve each earlier checkpoint (§12.1). A package past the reader's budget
-   * (`TRAIL_LIMITS`, `SERVED_PACKAGE_LIMITS` with room for one receipt) refuses as RESOURCE, so the
+   * serve each earlier checkpoint (§12.1). A package past the served package
+   * limit (`SERVED_PACKAGE_LIMITS` with room for one receipt) refuses as RESOURCE, so the
    * journal admits and signs only what it can still serve.
    */
   private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshots">[], selected: Commitment,
@@ -1210,8 +1210,8 @@ export class V3OperatorJournal {
       for (const item of evidence) add(item.kind, item.payload);
       add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected));
       const termsOf = (scope: Opened): SignedTerms[] => scope.entries.map(entry => entry.signed);
-      add(6, encodeTrail({ header: opened.headerBytes, terms: termsOf(opened), records }, TRAIL_LIMITS));
-      for (const archive of archives) add(6, encodeTrail({ header: archive.opened.headerBytes, terms: termsOf(archive.opened), records: archive.records }, TRAIL_LIMITS));
+      add(6, encodeTrail({ header: opened.headerBytes, terms: termsOf(opened), records }));
+      for (const archive of archives) add(6, encodeTrail({ header: archive.opened.headerBytes, terms: termsOf(archive.opened), records: archive.records }));
       for (const s of signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); for (const snapshot of s.snapshots) add(4, snapshot); }
       const items = [...payloads.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload)));
       return encodeEvidencePackage(items, SERVED_ROOM);

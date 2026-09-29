@@ -19,14 +19,13 @@ import { BranchSupplier, MiningSupplier, plainBox } from "../../../dist/ergo-syn
 import { encodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR } from "../../../dist/venue-records.js";
 import { NoteTree } from "../../../dist/pool/note-tree.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
-import { readPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
+import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { decodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { decodeSegmentHeader, segmentIdentity } from "../../../dist/pool/v3/headers.js";
-import { TRAIL_LIMITS } from "../../../dist/pool/v3/reader.js";
 import { decodeTrail } from "../../../dist/pool/v3/trail.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
-import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
+import { SERVED_PACKAGE_LIMITS, V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 import { authorizeIssue, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
 import { decodeRecord, encodeRecord } from "../../../dist/pool/v3/records.js";
@@ -147,8 +146,8 @@ async function acceptance(ergo) {
     // The served commitment's segment: the operator's latest header opened at or before its sequence.
     const contextOf = async (journal, backing) => {
       const input = await served(journal, backing);
-      const header = decodeEvidencePackage(input.package, PACKAGE_LIMITS).filter(item => item.kind === 6)
-        .map(item => decodeSegmentHeader(decodeTrail(item.payload, TRAIL_LIMITS).header))
+      const header = decodeEvidencePackage(input.package).filter(item => item.kind === 6)
+        .map(item => decodeSegmentHeader(decodeTrail(item.payload).header))
         .filter(h => hex(h.operator) === hex(input.selection.operator) && h.sequence <= input.selection.sequence)
         .reduce((best, h) => best === undefined || h.sequence > best.sequence ? h : best, undefined);
       assert(header !== undefined, "the served commitment must have its segment header");
@@ -245,7 +244,7 @@ async function acceptance(ergo) {
       assert(final.every(result => result.position === "2" && result.carrying.every(item => item.class === "valid")));
     });
     checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
-    assert(Math.max(...packages) + 360 <= Number(PACKAGE_LIMITS.maxBytes));
+    assert(Math.max(...packages) + 360 <= Number(SERVED_PACKAGE_LIMITS.maxBytes));
     const report = { status: "passed", specification: V3_SPECIFICATION,
       evidence: ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
       limits: ["candidate configuration only", "two backings, one operator per term", "one wallet payment, in the rejoined scope", "no live broadcasts",

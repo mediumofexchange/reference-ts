@@ -18,14 +18,13 @@ import { directoryRoot, encodeCommitment, encodeReplacement, replacementHash, re
   signCommitment, encodeRevocation, signRevocation } from "../../../dist/venue-records.js";
 import { NoteTree } from "../../../dist/pool/note-tree.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
-import { readPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
+import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest } from "../../../dist/pool/v3/commitments.js";
 import { decodeEvidencePackage, encodeEvidencePackage, encodeEvidenceDirectory } from "../../../dist/pool/v3/package.js";
 import { decodeSegmentHeader } from "../../../dist/pool/v3/headers.js";
-import { TRAIL_LIMITS } from "../../../dist/pool/v3/reader.js";
 import { decodeTrail } from "../../../dist/pool/v3/trail.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
-import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
+import { SERVED_PACKAGE_LIMITS, V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { authorizeIssue, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
 import { encodeRecord } from "../../../dist/pool/v3/records.js";
 import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
@@ -127,7 +126,7 @@ async function acceptance(ergo) {
       assert.equal(child.error, undefined); assert.equal(child.status, 0, child.stderr.toString()); return JSON.parse(child.stdout.toString());
     };
     const contextOf = input => {
-      const trail = decodeEvidencePackage(input.package, PACKAGE_LIMITS).filter(item => item.kind === 6).map(item => decodeTrail(item.payload, TRAIL_LIMITS))
+      const trail = decodeEvidencePackage(input.package).filter(item => item.kind === 6).map(item => decodeTrail(item.payload))
         .find(item => { const header = decodeSegmentHeader(item.header); return hex(header.operator) === hex(input.selection.operator) && header.sequence === input.selection.sequence; });
       assert(trail !== undefined, "the selected empty opening must have its exact segment header");
       return { domain, header: decodeSegmentHeader(trail.header) };
@@ -164,9 +163,9 @@ async function acceptance(ergo) {
     await test("B takes over only at force from complete public ancestry and witnesses before service", async () => {
       toB = await replace(bSecret, backing); await force(toB);
       await refusal(a.commit("ended-a"), "STALE");
-      const items = decodeEvidencePackage(publicA.package, PACKAGE_LIMITS);
+      const items = decodeEvidencePackage(publicA.package);
       for (const kind of [3, 4, 6]) await refusal(successor.takeover(`missing-${kind}`, signed,
-        encodeEvidencePackage(items.filter(item => item.kind !== kind), PACKAGE_LIMITS)), "UNAVAILABLE");
+        encodeEvidencePackage(items.filter(item => item.kind !== kind))), "UNAVAILABLE");
       const opening = await successor.takeover("takeover-b", signed, publicA.package);
       assert.equal(opening.sequence, 1n, "B has its own signed counter");
       assert.deepEqual(await successor.takeover("takeover-b", signed, publicA.package), opening);
@@ -203,26 +202,26 @@ async function acceptance(ergo) {
       assert.equal(final.supply, "10"); assert.equal(final.position, "0"); assert.deepEqual(fresh(finalInput), final);
     });
     await test("an authentic hostile checkpoint is excluded only with complete authenticated evidence", async () => {
-      const items = decodeEvidencePackage(finalInput.package, PACKAGE_LIMITS), state = await read(finalInput);
+      const items = decodeEvidencePackage(finalInput.package), state = await read(finalInput);
       const original = items.filter(item => item.kind === 4).map(item => decodeSnapshot(item.payload)).find(snapshot => hex(snapshot.segment) === hex(state.canonical.segment));
       assert(original !== undefined);
       const invalid = { ...original, issued: original.issued + 1n }, directory = [{ name: backing, digest: snapshotDigest(invalid) }];
       const hostile = signCommitment(aSecret, finalInput.selection.sequence + 1n, directoryRoot(directory));
       await publishRecord(1, aKey, encodeCommitment(hostile));
-      const extra = [{ kind: 3, payload: encodeEvidenceDirectory(directory, PACKAGE_LIMITS) }, { kind: 4, payload: snapshotBytes(invalid) }];
+      const extra = [{ kind: 3, payload: encodeEvidenceDirectory(directory) }, { kind: 4, payload: snapshotBytes(invalid) }];
       const all = [...items, ...extra].sort((left, right) => left.kind - right.kind || hash(left.payload).localeCompare(hash(right.payload)));
-      const evidence = { ...finalInput, package: encodeEvidencePackage(all, PACKAGE_LIMITS),
+      const evidence = { ...finalInput, package: encodeEvidencePackage(all),
         selection: { ...finalInput.selection, judgingIndex: venue.witnessedIndex() }, venue: ergo ? { tip: supplier.tip } : venue.export() };
       const answer = await read(evidence); assert.equal(answer.carrying.at(-1).class, "excluded"); assert.equal(answer.carrying.at(-1).check, "SNAPSHOT");
       assert.equal(answer.state.issued, 10n); assert.deepEqual(fresh(evidence), summary(answer));
-      const inherited = all.find(item => item.kind === 6 && hex(decodeSegmentHeader(decodeTrail(item.payload, TRAIL_LIMITS).header).operator) === hex(bKey));
+      const inherited = all.find(item => item.kind === 6 && hex(decodeSegmentHeader(decodeTrail(item.payload).header).operator) === hex(bKey));
       assert(inherited !== undefined);
-      await assert.rejects(read({ ...evidence, package: encodeEvidencePackage(all.filter(item => item !== inherited), PACKAGE_LIMITS) }),
+      await assert.rejects(read({ ...evidence, package: encodeEvidencePackage(all.filter(item => item !== inherited)) }),
         error => error.status === "unresolved-evidence");
       packages.push(evidence.package.length); final = summary(answer);
     });
     checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
-    assert(Math.max(...packages) + 360 <= Number(PACKAGE_LIMITS.maxBytes));
+    assert(Math.max(...packages) + 360 <= Number(SERVED_PACKAGE_LIMITS.maxBytes));
     const report = { status: "passed", specification: V3_SPECIFICATION,
       evidence: ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
       limits: ["candidate configuration only", "single backing", "no live broadcasts", "no persistence or configuration adoption claim", "empty recovery block; forced recovery acceptance is separate"],

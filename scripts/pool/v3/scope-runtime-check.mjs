@@ -8,7 +8,6 @@ import { EncodingError } from "../../../dist/bytes.js";
 import { FixtureVenue } from "../../../dist/record-venue.js";
 import { decodeSegmentHeader } from "../../../dist/pool/v3/headers.js";
 import { readPackage } from "../../../dist/pool/v3/package-reader.js";
-import { decodedTrails } from "../../../dist/pool/v3/reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "../../../dist/pool/v3/refusals.js";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -40,7 +39,7 @@ export async function checkScopeRuntime({ pairs, portable, configuration, verifi
   let compared = 0;
   await test("the runtime package reader reads every multi-backing scope group to the harness verdict", async () => {
     for (const { payload, result } of pairs) {
-      const header = decodeSegmentHeader(decodedTrails([payload.package.trail])[0].header);
+      const header = decodeSegmentHeader(codec.decodeTrail(payload.package.trail).header);
       if (header.entries.length < 2 || payload.seed !== undefined) continue;
       const { package: bytes, selection, venue } = portable(payload);
       let actual;

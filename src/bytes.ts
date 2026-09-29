@@ -319,3 +319,83 @@ export class ByteReader {
     }
   }
 }
+
+/**
+ * A frame reader written as a coroutine: it yields how many bytes it needs
+ * next (n > 0 for exactly n, -n for at least one and at most n, 0 for none)
+ * and is resumed with them as an array it owns. One reader serves a buffer
+ * already in memory and a stream alike, so a frame has one parser.
+ */
+export type FrameReader<T> = Generator<number, T, Uint8Array>;
+
+/**
+ * Feeds a FrameReader from chunks. Each chunk is copied once on arrival
+ * (copyUnshared), so a caller or stream that reuses its buffer cannot change
+ * bytes already fed, and a request is answered as soon as enough are held.
+ * Bytes past the reader's end, or an end before it, are malformed; the
+ * reader's own failures propagate from `feed` or `end`.
+ */
+export class FrameFeed<T> {
+  readonly #reader: FrameReader<T>;
+  readonly #chunks: Uint8Array[] = [];
+  #offset = 0;
+  #held = 0;
+  #need = 0;
+  #done = false;
+  #result: T | undefined;
+
+  constructor(reader: FrameReader<T>) {
+    this.#reader = reader;
+    this.#resume(new Uint8Array(0));
+  }
+
+  feed(chunk: Uint8Array): void {
+    const own = copyUnshared(chunk);
+    if (own.length === 0) return;
+    if (this.#done) throw new EncodingError("trailing frame bytes");
+    this.#chunks.push(own); this.#held += own.length;
+    while (!this.#done) {
+      const n = this.#need;
+      if (n > 0 ? this.#held < n : this.#held === 0) return;
+      this.#resume(this.#take(n > 0 ? n : Math.min(-n, this.#held)));
+    }
+    if (this.#held > 0) throw new EncodingError("trailing frame bytes");
+  }
+
+  /** The reader's result once it has read its whole frame and nothing more. */
+  end(): T {
+    if (!this.#done) throw new EncodingError("truncated frame");
+    return this.#result as T;
+  }
+
+  #resume(bytes: Uint8Array): void {
+    for (let next = bytes; ;) {
+      const step = this.#reader.next(next);
+      if (step.done === true) { this.#done = true; this.#result = step.value; return; }
+      const n = step.value;
+      if (!Number.isSafeInteger(n)) throw new RangeError("frame request is not a byte count");
+      if (n !== 0) { this.#need = n; return; }
+      next = new Uint8Array(0);
+    }
+  }
+
+  #take(n: number): Uint8Array {
+    const first = this.#chunks[0]!;
+    this.#held -= n;
+    if (this.#offset === 0 && first.length === n) { this.#chunks.shift(); return first; }
+    if (first.length - this.#offset >= n) {
+      const out = first.slice(this.#offset, this.#offset + n);
+      this.#offset += n;
+      if (this.#offset === first.length) { this.#chunks.shift(); this.#offset = 0; }
+      return out;
+    }
+    const out = new Uint8Array(n);
+    for (let at = 0; at < n;) {
+      const chunk = this.#chunks[0]!, part = Math.min(n - at, chunk.length - this.#offset);
+      out.set(chunk.subarray(this.#offset, this.#offset + part), at);
+      at += part; this.#offset += part;
+      if (this.#offset === chunk.length) { this.#chunks.shift(); this.#offset = 0; }
+    }
+    return out;
+  }
+}

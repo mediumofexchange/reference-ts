@@ -8,11 +8,11 @@ import * as trailCodec from "../../../dist/pool/v3/trail.js";
 import * as recordCodec from "../../../dist/pool/v3/records.js";
 import * as headerCodec from "../../../dist/pool/v3/headers.js";
 import * as commitmentCodec from "../../../dist/pool/v3/commitments.js";
-import { TRAIL_LIMITS } from "../../../dist/pool/v3/reader.js";
 import { EvidenceRefusal } from "../../../dist/pool/v3/refusals.js";
 
 export { EvidenceRefusal };
-export const LIMITS = TRAIL_LIMITS;
+/** The harness's own budget for one trail held in memory; the runtime reader streams trails with per-object bounds only. */
+export const LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxEvents: 1024n });
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const same = (a, b) => compareBytes(a, b) === 0;
 
