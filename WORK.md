@@ -83,7 +83,7 @@ stub replay with memory flat against history). Start from the probe's evidence s
   bundles, `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/` and `ergo-headers/` under scratch.
 - Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`
   and `node-startup/`, `sync-preparation/` caches; do not allocate another.
-- Archive node `C:SERSBOBERGO-NODE` (OUTSIDE THIS PROJECT): SYNCED WITH INDEX, STOPPED 2026-09-29; NOTHING USES IT. DELETE
+- Archive node `C:\Users\Bob\ergo-node` (outside this project): synced with its index, stopped 2026-09-29; nothing uses it. Delete
   slice scratch after delivery; preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified hardware/device custody, theft/power-loss/backup drills and continuous
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
