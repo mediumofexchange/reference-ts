@@ -44,11 +44,13 @@ export function byteLength(bytes: Uint8Array): number {
   return lengthOf.call(bytes) as number;
 }
 
-// SharedArrayBuffer's own byteLength getter answers only for a shared buffer,
-// from any realm; instanceof would miss another realm's.
-const sharedLength = Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, "byteLength")!.get!;
+// A typed array's buffer is an ArrayBuffer or a SharedArrayBuffer. ArrayBuffer's
+// own byteLength getter answers only for an unshared one, from any realm
+// (instanceof would miss another realm's), and throws only for a shared one,
+// so the common case costs no exception.
+const unsharedLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")!.get!;
 function isShared(buffer: unknown): boolean {
-  try { sharedLength.call(buffer); return true; } catch { return false; }
+  try { unsharedLength.call(buffer); return false; } catch { return true; }
 }
 
 /**
@@ -330,16 +332,18 @@ export type FrameReader<T> = Generator<number, T, Uint8Array>;
 
 /**
  * Feeds a FrameReader from chunks. Each chunk is copied once on arrival
- * (copyUnshared), so a caller or stream that reuses its buffer cannot change
- * bytes already fed, and a request is answered as soon as enough are held.
+ * (copyUnshared) into one buffer, so a caller or stream that reuses its buffer
+ * cannot change bytes already fed, the cost of a chunk does not depend on how
+ * many came before it, and a request is answered as soon as enough are held.
  * Bytes past the reader's end, or an end before it, are malformed; the
  * reader's own failures propagate from `feed` or `end`.
  */
 export class FrameFeed<T> {
   readonly #reader: FrameReader<T>;
-  readonly #chunks: Uint8Array[] = [];
-  #offset = 0;
-  #held = 0;
+  // Held bytes are #buffer[#start, #end).
+  #buffer = new Uint8Array(0);
+  #start = 0;
+  #end = 0;
   #need = 0;
   #done = false;
   #result: T | undefined;
@@ -353,19 +357,38 @@ export class FrameFeed<T> {
     const own = copyUnshared(chunk);
     if (own.length === 0) return;
     if (this.#done) throw new EncodingError("trailing frame bytes");
-    this.#chunks.push(own); this.#held += own.length;
+    this.#hold(own);
     while (!this.#done) {
-      const n = this.#need;
-      if (n > 0 ? this.#held < n : this.#held === 0) return;
-      this.#resume(this.#take(n > 0 ? n : Math.min(-n, this.#held)));
+      const n = this.#need, held = this.#end - this.#start;
+      if (n > 0 ? held < n : held === 0) return;
+      const take = n > 0 ? n : Math.min(-n, held);
+      const bytes = this.#buffer.slice(this.#start, this.#start + take);
+      this.#start += take;
+      this.#resume(bytes);
     }
-    if (this.#held > 0) throw new EncodingError("trailing frame bytes");
+    if (this.#end > this.#start) throw new EncodingError("trailing frame bytes");
   }
 
   /** The reader's result once it has read its whole frame and nothing more. */
   end(): T {
     if (!this.#done) throw new EncodingError("truncated frame");
     return this.#result as T;
+  }
+
+  /** Append after the held bytes, moving them to the front or doubling the buffer when it is full. */
+  #hold(bytes: Uint8Array): void {
+    const held = this.#end - this.#start;
+    if (this.#end + bytes.length > this.#buffer.length) {
+      if (held + bytes.length <= this.#buffer.length) this.#buffer.copyWithin(0, this.#start, this.#end);
+      else {
+        const grown = new Uint8Array(Math.max(2 * this.#buffer.length, held + bytes.length));
+        grown.set(this.#buffer.subarray(this.#start, this.#end));
+        this.#buffer = grown;
+      }
+      this.#start = 0; this.#end = held;
+    }
+    this.#buffer.set(bytes, this.#end);
+    this.#end += bytes.length;
   }
 
   #resume(bytes: Uint8Array): void {
@@ -377,25 +400,5 @@ export class FrameFeed<T> {
       if (n !== 0) { this.#need = n; return; }
       next = new Uint8Array(0);
     }
-  }
-
-  #take(n: number): Uint8Array {
-    const first = this.#chunks[0]!;
-    this.#held -= n;
-    if (this.#offset === 0 && first.length === n) { this.#chunks.shift(); return first; }
-    if (first.length - this.#offset >= n) {
-      const out = first.slice(this.#offset, this.#offset + n);
-      this.#offset += n;
-      if (this.#offset === first.length) { this.#chunks.shift(); this.#offset = 0; }
-      return out;
-    }
-    const out = new Uint8Array(n);
-    for (let at = 0; at < n;) {
-      const chunk = this.#chunks[0]!, part = Math.min(n - at, chunk.length - this.#offset);
-      out.set(chunk.subarray(this.#offset, this.#offset + part), at);
-      at += part; this.#offset += part;
-      if (this.#offset === chunk.length) { this.#chunks.shift(); this.#offset = 0; }
-    }
-    return out;
   }
 }

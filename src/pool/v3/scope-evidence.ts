@@ -15,7 +15,7 @@ const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0
 export function resolveTerms(trails: TrailEvidence, segment: Uint8Array,
   entry: Pick<SegmentEntry, "backing">, index: number): SignedTerms | undefined {
   for (const trail of trails.heads(segment)) {
-    const signed = trail.terms[index];
+    const signed = trail.term(index);
     if (signed !== undefined && verifyRootTermsSignature(signed.terms, signed.signature) &&
         same(rootTermsName(signed.terms), entry.backing)) return signed;
   }
@@ -29,7 +29,7 @@ export interface AuthenticatedScope {
 }
 
 export function authenticatedScope(trails: TrailEvidence, segment: Uint8Array): AuthenticatedScope {
-  const carrier = trails.heads(segment)[0];
+  const [carrier] = trails.heads(segment);
   if (carrier === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const header = decodeSegmentHeader(carrier.header);
   const terms = header.entries.map((entry, i) => {

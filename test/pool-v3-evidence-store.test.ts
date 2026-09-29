@@ -6,10 +6,10 @@ import { limbsOf } from "../src/pool/field.js";
 import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
 import { EvidenceStore, MAX_ITEM_BYTES } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
+import { decodeEvidencePackage, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { MAX_ROOT_TERMS_BYTES } from "../src/pool/v3/terms.js";
-import { decodeTrail, encodeTrail, type ServedTrail } from "../src/pool/v3/trail.js";
+import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
 
 // The store's own contract: one copy of the supplied bytes, each trail's
 // decodable prefix by evidence position, and nothing kept of what does not frame.
@@ -48,7 +48,7 @@ describe("v3 evidence store", () => {
       const store = new EvidenceStore(), batch = await load(store);
       expect(batch.count(6)).toBe(2);
       expect(batch.payloads(4)).toEqual([Uint8Array.of(1)]);
-      expect(batch.heads(segment).map(head => [...head.header])).toEqual([[...headerBytes], [...headerBytes]]);
+      expect([...batch.heads(segment)].map(head => [...head.header])).toEqual([[...headerBytes], [...headerBytes]]);
       for (let n = 0; n <= 6; n++) {
         const served = batch.served(expectedAt(n), snapshotAt(n))!;
         expect(served.length).toBe(BigInt(n));
@@ -71,14 +71,14 @@ describe("v3 evidence store", () => {
     const batch = store.importBytes(pack([{ kind: 6, payload: trail(0, { records: broken }) }, { kind: 6, payload: truncated },
       { kind: 6, payload: Uint8Array.of(9) }]));
     expect(batch.count(6)).toBe(3);
-    expect(batch.heads(segment)).toHaveLength(1);
+    expect([...batch.heads(segment)]).toHaveLength(1);
     expect(recordsOf(batch.served(expectedAt(2), snapshotAt(2)))).toEqual(records.slice(0, 2).map(r => [...r]));
     // Past the undecodable record no position reproduces an evidence hash (§12.1).
     expect(batch.served(expectedAt(3), snapshotAt(3))).toBeUndefined();
     // The same frames as bare trails, as a harness supplies them.
     const bare = store.importTrails([truncated, trail(4)]);
     expect(bare.count(6)).toBe(2);
-    expect(bare.heads(segment)).toHaveLength(1);
+    expect([...bare.heads(segment)]).toHaveLength(1);
     expect(recordsOf(bare.served(expectedAt(4), snapshotAt(4)))).toEqual(records.slice(0, 4).map(r => [...r]));
     store.close();
   });
@@ -100,7 +100,8 @@ describe("v3 evidence store", () => {
   it("bounds each whole item, not a trail, and passes over kinds a reader does not read", () => {
     const store = new EvidenceStore(), big = new Uint8Array(Number(MAX_ITEM_BYTES) + 1);
     expect(() => store.importBytes(pack([{ kind: 4, payload: big }]))).toThrow(PackageLimitError);
-    const batch = store.importBytes(pack([{ kind: 11, payload: big }, { kind: 5, payload: Uint8Array.of(1) }, { kind: 3, payload: Uint8Array.of(2) }]));
+    expect(() => store.importBytes(pack([{ kind: 11, payload: big }]))).toThrow(PackageLimitError);
+    const batch = store.importBytes(pack([{ kind: 11, payload: Uint8Array.of(9) }, { kind: 5, payload: Uint8Array.of(1) }, { kind: 3, payload: Uint8Array.of(2) }]));
     expect(batch.kinds().sort((a, z) => a - z)).toEqual([3, 5, 11]);
     expect(batch.count(11)).toBe(1);
     expect(batch.payloads(11)).toEqual([]);
@@ -113,7 +114,7 @@ describe("v3 evidence store", () => {
     const bytes = trail(1, { terms: long }), store = new EvidenceStore();
     expect(decodeTrail(bytes).terms[0]!.terms).toHaveLength(MAX_ROOT_TERMS_BYTES + 1);
     const batch = store.importBytes(pack([{ kind: 6, payload: bytes }, { kind: 6, payload: trail(1) }]));
-    expect(batch.heads(segment).map(head => head.terms[0]?.terms.length)).toEqual(
+    expect([...batch.heads(segment)].map(head => head.term(0)?.terms.length)).toEqual(
       compareBytes(sha256(bytes), sha256(trail(1))) < 0 ? [undefined, 3] : [3, undefined]);
     store.close();
   });
@@ -130,6 +131,21 @@ describe("v3 evidence store", () => {
     }
     const batch = await store.importStream(reused());
     expect(recordsOf(batch.served(expectedAt(3), snapshotAt(3)))).toEqual(records.slice(0, 3).map(r => [...r]));
+    store.close();
+  });
+
+  it("refuses a length past the known end as malformed, as the in-memory decoder does", () => {
+    const bytes = Buffer.from(pack([{ kind: 4, payload: Uint8Array.of(1, 2, 3) }]));
+    bytes.writeBigUInt64BE(2n * MAX_ITEM_BYTES, 24);
+    expect(() => decodeEvidencePackage(bytes)).toThrow(EncodingError);
+    expect(() => new EvidenceStore().importBytes(bytes)).toThrow(EncodingError);
+  });
+
+  it("takes a stream of one-byte chunks at the record bound in time linear in its bytes", async () => {
+    const record = new Uint8Array(MAX_TRAIL_RECORD_BYTES).fill(3), bytes = pack([{ kind: 6, payload: trail(0, { records: [record] }) }]);
+    const store = new EvidenceStore(), batch = await store.importStream(chunks(bytes, 1));
+    expect(batch.count(6)).toBe(1);
+    expect([...batch.heads(segment)]).toHaveLength(1);
     store.close();
   });
 });

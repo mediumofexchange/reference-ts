@@ -30,7 +30,7 @@ export interface ReceiptWalk {
 export async function receiptWalk(bytes: Uint8Array, context: { readonly selection: ReaderSelection }, view: RecordView,
   trails: TrailEvidence, snapshots: readonly Uint8Array[], scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
   const { selection } = context, receipt = decodeReceipt(bytes);
-  const trail = trails.heads(receipt.segment)[0];
+  const [trail] = trails.heads(receipt.segment);
   if (trail === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const header = decodeSegmentHeader(trail.header);
   if (header.entries.length !== 1 && scopeViews === undefined) throw new EvidenceRefusal("unsupported-scope");

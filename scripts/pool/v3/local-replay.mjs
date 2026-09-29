@@ -67,6 +67,12 @@ function ownInputs(input) {
   }
   return copy;
 }
+/** The harness's own trail budget over supplied trails: one that does not frame is passed over,
+ * and one past the budget refuses the read as a resource limit, as before the evidence store. */
+function budgeted(trails, codec) {
+  return trails.filter(bytes => { try { codec.decodeTrail(bytes, LIMITS); return true; } catch (error) {
+    if (error instanceof EncodingError) return false; throw error; } });
+}
 function byteList(value, name) {
   const list = value === undefined ? [] : value;
   if (!Array.isArray(list) || list.some(item => !(item instanceof Uint8Array))) throw new EncodingError(`invalid ${name}`);
@@ -126,7 +132,7 @@ export async function replayLocalPackage(input, verifier, codec) {
     // verifying supplied field; a failing one is ignored, and without any the
     // terms are missing evidence, so the read is unresolved.
     // The harness copies its trails into its own evidence storage, as the runtime reader does.
-    const suppliedTrails = new EvidenceStore().importTrails([supplied.trail, ...byteList(supplied.trails, "trails")]);
+    const suppliedTrails = new EvidenceStore().importTrails(budgeted([supplied.trail, ...byteList(supplied.trails, "trails")], codec));
     const signedTerms = header.entries.map((entry, i) => resolveTerms(suppliedTrails, sha256(trail.header), entry, i));
     if (signedTerms.some(field => field === undefined)) throw new EvidenceRefusal("unresolved-evidence");
     // Resolution verified the selected field's signature and its name as the
@@ -156,7 +162,7 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      const result = await classifyScopes(context, directories, record, { snapshots, trails: new EvidenceStore().importTrails(trails) });
+      const result = await classifyScopes(context, directories, record, { snapshots, trails: new EvidenceStore().importTrails(budgeted(trails, codec)) });
       if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
         candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
         currentRangeAuthenticated: selection.mode !== "historical-fixture" };
@@ -257,7 +263,9 @@ export async function replayEvidencePackage(input, verifier, codec) {
       if (error instanceof EncodingError) return false; throw error; } });
     const served = new EvidenceStore().importTrails(trailed).served(expected, snapshot);
     if (served === undefined) return refused("unresolved-evidence");
-    const encoded = codec.encodeTrail({ header: served.header, terms: served.terms, records: [...served.records()] }, LIMITS);
+    const scoped = codec.decodeSegmentHeader(served.header).entries.length;
+    const encoded = codec.encodeTrail({ header: served.header, terms: Array.from({ length: scoped }, (_, i) => served.term(i)),
+      records: [...served.records()] }, LIMITS);
     const trailBytes = [payloads(6).find(payload => same(payload, encoded)) ?? encoded];
     const others = directories.filter(entries => entries !== directory);
     const snapshots = payloads(4).filter(payload => payload !== snapshotBytes), trails = payloads(6).filter(payload => payload !== trailBytes[0]);
