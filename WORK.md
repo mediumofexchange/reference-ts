@@ -3,47 +3,47 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 8 (adoption), reordered by the
-[direction check](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands).
-Next run: M5 lifetime evidence and resource bounds (Next 1); state its acceptance here.
+Slice 8 (adoption), ordered by the [direction check](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands)
+and M5. Next run: **M5b streaming evidence** (Next 1); restate its acceptance here.
 
 ## Status
-- M3 (PR #46, [decision](decisions/2026-09.md#2026-09-29--pin-the-relation-sources-final-text)):
-  circuit sources carry final text (comments only; bytecode, keys and configuration
-  unchanged); manifest, `V3_SPECIFICATION` and README pin spec `85655a5`. M2 (PR #45):
-  `startBackend` loads only hash-checked parameters. Reports from CI run 36519561119.
-- Direction check (docs only): every reader holds one complete package in memory under
-  fixed 1 MiB limits, so a pool serves about 67 spend-sized statements over its life;
-  deciding that model can add a relation, so it now precedes the pin. No `bin` exists.
+- [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay) (docs/spec only): complete replay, streamed and resumed; no seventh relation,
+  configuration unchanged. Pool-v3 §12 items take a u64 length (u32 capped a trail near
+  276,000 spends); §14 consolidates replay and retention. [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
+  10⁶ statements over three years, memory ≤ 1 GiB independent of history, reader first
+  sync ≤ 24 h. The runtime still pins spec `85655a5` (u32 codec) until M5b.
+- M3 (PR #46) pinned final circuit text at spec `85655a5`; M2 (PR #45) hash-checks
+  parameters. Reports from CI run 36519561119.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
   (full checkpoints still rewrite retained history; raw sections stay in memory).
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
-  [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json),
-  [Ergo recovery](docs/pool-v3-recovery-store-ergo-verification.json),
-  [succession](docs/pool-v3-succession-store-verification.json), [Ergo succession](docs/pool-v3-succession-store-ergo-verification.json),
-  [scope](docs/pool-v3-scope-store-verification.json) and [Ergo scope](docs/pool-v3-scope-store-ergo-verification.json).
-  Live recovery is historical at
+  [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json)/[Ergo](docs/pool-v3-recovery-store-ergo-verification.json),
+  [succession](docs/pool-v3-succession-store-verification.json)/[Ergo](docs/pool-v3-succession-store-ergo-verification.json),
+  [scope](docs/pool-v3-scope-store-verification.json)/[Ergo](docs/pool-v3-scope-store-ergo-verification.json). Historical: live recovery
   [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
-  live journal at `2c6b20c`; header and mainnet reader reports at `6e4cea8`.
-  Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
+  live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption, [reordered](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands):
-   **M5 first**: declare a target scale and per-party budgets (operator, reader,
-   wallet first sync/steady state, holder recovery package); decide complete replay
-   behind a streaming disk-backed reader/journal with resumed verification versus a
-   succinct history relation (a configuration change, so built before M8); record
-   bounds and the replay/import consolidation. Probe only numbers the cost model lacks.
-   Then M6 Next 5(i) (confirm a host rule), M4 certificates/kind-11 fitted to the
-   retention model, M7 one-transaction condition, M8 adoption (one manifest holding
-   §11.1's parameter identities too, now `BN254_PARAMETERS`), every report
-   re-recorded, live two-backing drill. Mainnet needs separate authority.
+1. Slice 8, adoption. **M5b streaming evidence** ([M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay)):
+   reader, wallet and journal keep evidence (per-segment records, venue evidence) and
+   replay state (note-tree frontier, spent set, tags, standing demands) on disk, read
+   input under pool-v3 §14's one-set-of-bytes rule, resume from checked kept state, and
+   sync only records after their position. u64 package codec, pin move; per-object
+   bounds replace the 1 MiB totals. *Acceptance:* memory flat against history on a
+   stub-verifier run of at least 10⁵ statements; resumed/incremental verdicts equal full
+   replay, corrupt kept state falls back; real proofs past the old ceiling through
+   journal, wallet sync and offline-operator recovery; first sync measured against its
+   budget (Barretenberg Poseidon2 if over); reports re-recorded. Then M6 Next 5(i) (confirm a host
+   rule), M4 certificates/kind-11 fitted to this retention, M7 one-transaction
+   condition, M8 adoption (one manifest holding §11.1's parameter identities too, now
+   `BN254_PARAMETERS`), every report re-recorded, live two-backing drill. Mainnet needs
+   separate authority.
 2. Slice 9, installable commands on the testnet: holder wallet, operator service and
    supply reader from a packed install (`bin`), fresh processes and data directories,
    issue → pay → receive → fulfill → redeem and an offline-operator recovery past the
-   67-statement ceiling. Close Next 5 (a)–(c), (e) before its drill. Retire the pilot CLI
+   old 67-statement ceiling. Close Next 5 (a)–(c), (e) before its drill. Retire the pilot CLI
    and, against a case map, the transparent path in or right after it.
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
@@ -54,11 +54,9 @@ Next run: M5 lifetime evidence and resource bounds (Next 1); state its acceptanc
    retired browser probe) at the next dependency change. Untested on v3: a second
    commit refused while one is in flight (`store.ts` `ready`; a probe traced it holding);
    `IMPORT_RANK` holds by construction (held commitments arrive in order).
-5. Review findings deferred 2026-09-28: (a) `guard.ts` accepts a testnet-context
-   profile anchored on a mainnet header, which the header store follows until the next
-   epoch boundary (<=127 blocks); `testnet.mjs` checks `/info` network, so only a new
-   caller is exposed; fix by a difficulty bound like the synthetic one or a testnet
-   context long enough to check its last boundary. (b) `store.ts` `package()` serves a
+5. Review findings deferred 2026-09-28: (a) `guard.ts` accepts a testnet-context profile
+   anchored on a mainnet header until the next epoch boundary (<=127 blocks; `testnet.mjs`
+   checks `/info`, so only a new caller is exposed); fix by a difficulty bound. (b) `store.ts` `package()` serves a
    published commitment never held after the lag (C2.4.3). (c) `store.ts` `submit` may
    return an old-segment receipt for an adopted forced record (traced only).
    (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
@@ -69,10 +67,12 @@ Next run: M5 lifetime evidence and resource bounds (Next 1); state its acceptanc
    acceptance may read as the holder's lapse (C3.8). A retry needs a fresh `rho_out` and
    release; each pre-emption costs a visible issuance. The wallet builds no settlements yet.
    (j) Verify-only parties could take identity-checked key bytes, needing no G1 file.
-6. Only when a gate needs them: cancellation, batching, index-free box source, venue-moving
+6. Only when a gate needs them: cancellation, batching, venue-moving
    record, slowest-supplier clock, multi-entry extension fixture, Poseidon2 on Barretenberg,
    sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-
    acceptance receipt handoff, store-check's request through the frame, same-segment rescoping.
+   Phone-first wallet: first a venue range source proportional to the subject's records
+   (index-free box source, a new venue identity; M5), then a succinct relation if needed.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under
@@ -93,7 +93,7 @@ Next run: M5 lifetime evidence and resource bounds (Next 1); state its acceptanc
 ## Open questions
 - No service delivery blocker remains. Server timeout followed by eventual journal
   completion has source review, without a direct timed acceptance case.
-- Physical custody remains a separate boundary (disk streaming is now Next 1–2).
+- Physical custody remains a separate boundary.
 
 Roughly **55% done / 45% remaining**, range **45–65%**, reassessed 2026-09-29 (lifetime evidence
 and installable commands were missing from the remainder; adoption, qualified storage, mainnet remain).

@@ -161,6 +161,43 @@ them, including when the issuer, operator and witness collude.
   account-recovery convenience may introduce a privileged spend path. Loss of
   every key, opening and backup must be explained as unrecoverable.
 
+## Target scale and budgets
+
+These were declared before testing
+([decision](../decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay)).
+The design point is one scope of a community deployment (paper §20): **10⁶
+statements over three years of venue time**, about 900 a day, with peaks of
+10⁴ a day. Beyond it costs grow linearly, and no party refuses at a lifetime
+ceiling below pool-v3 §14's format bounds. Verification is complete replay,
+resumed from state the party replayed itself (pool-v3 §14).
+
+| Party and hardware | Memory | First sync or restore | Steady state | Storage |
+|---|---|---|---|---|
+| Operator: 4 cores, 8 GiB, SSD | ≤ 1 GiB, independent of history length | Restart resumes from its journal without re-verifying retained history | Admission ≤ 1 s per statement at peak, venue wait excluded | Retains its closure, about 20 GB |
+| Independent, supply or backer reader: 8 cores, 16 GiB, 100 Mbit/s | ≤ 1 GiB, independent of history length | ≤ 24 h | ≤ 10 CPU-minutes and ≤ 50 MB transferred a day | Retains the closure it judged, about 20 GB |
+| Holder wallet (release command): as the reader | ≤ 1 GiB, independent of history length | ≤ 24 h, seed restore included | As the reader | The closure for its scopes |
+| A holder's own recovery evidence | | | | Openings, seed, receipts, own requests and publications, and the last state it was given (C2.7.2). The trail comes from replicas (C2b.3.3) |
+
+The design point's cost, modelled from the [replay](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost),
+[chain-cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
+and [header](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) measurements:
+- *Bytes:* 15.6 GB of records. Venue ranges from index zero add about 4.2 GB
+  of Ergo sections (3.8 GB kept) and 0.17 GB of headers.
+- *Compute:* sequential host replay takes 10–13 h. The JavaScript note tree
+  is about 26 ms of each event; Barretenberg's Poseidon2 would cut the note
+  tree's share to about 1.1 h, and the replay to roughly 4–6 h. Proof
+  verification takes 21–36 core-hours and the header check about 4.5 h once;
+  both are assumed to run on the other cores beside the replay.
+- *Result:* a first sync takes about 10–13 h on a quiet host, and load can
+  double it. Steady state is about 2.5 CPU-minutes a day, with about 33 MB
+  transferred through node JSON and 18 MB kept.
+
+A phone wallet is outside the release target, as a scope choice. It
+verifies independently only through a reader its holder runs. Its own first
+sync would read about 20 GB under complete replay. A succinct history
+relation would still leave about 4.4 GB of venue ranges and restoring scans,
+and phone rates are unmeasured.
+
 ## Release gates
 
 Every gate needs a named owner, a pinned artifact and reproducible evidence in
@@ -176,7 +213,7 @@ is not evidence.
 | Usable payment | A wallet completes issue → pay → receive → fulfill → redeem, including interruption and exact retry; replaying payment evidence cannot fulfill another invoice | The [v3 wallet](POOL_V3_WALLET.md) requests, pays, re-proves and fulfills once from public evidence, with fresh-process crash drills across its commit boundaries, and exchanges requests as digest-authenticated frames with no receiver endpoint; it restores from its seed or from an encrypted handoff that freezes its source. V3 runtime redemption has candidate acceptance. Qualified device custody, a qualified human authentication channel, cancellation and statements spending several backings remain open; the wallet pays one backing in any scope. |
 | Durable operation | Abrupt termination, lost responses, concurrent writers, disk faults, restored backups and obsolete instances cannot cause conflicting exposed signatures or silently lose accepted operations | The v3 candidate journal persists openings, ordinary/recovery admission, original receipts, witnessed return/adoption and the publication outbox under one owner, with restart fencing and a separate-process crash drill; its [loopback service](POOL_V3_SERVICE.md) demonstrates exact retries after lost replies, old-process fencing and restart. Ergo publication supports kinds 1–4 with historical live testnet acceptance, with optional [durable venue and journal-owned publisher state](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher) preserving exact retries in synthetic process-crash checks. Full-history memory/checkpoint costs, coordinated backup rollback, physical storage qualification, custody procedures and mainnet publication remain open. |
 | Available, recoverable state | With the original operator offline, an independent reader retrieves and verifies the promised evidence and executes each supported remedy; selective withholding fails explicitly | The guarded single-backing runtime verifies publication force, exact return/adoption, receipts and non-service counts with real proofs on [local](pool-v3-recovery-store-verification.json) and [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) reference venues. [Historical live testnet recovery at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json) includes independent public-bundle readback and authenticated venue retrieval. Complete bounded ancestry is required; missing evidence refuses a verdict. Succession and multi-backing scopes have local and synthetic Ergo real-proof acceptance ([succession](pool-v3-succession-store-ergo-verification.json), [scope](pool-v3-scope-store-ergo-verification.json)). Readers hold a complete package in a fixed in-memory budget, so evidence past a few dozen statements over a pool's life, durable evidence availability, a live multi-backing drill and an adopted configuration remain open. |
-| Practical deployment | Repeatable measurements of proof creation, verification, resync, startup, storage growth, bandwidth and finality on declared target devices and network conditions, against budgets agreed before testing | Node proving and verification timings exist for v2 and the six v3 relations. The first [desktop browser baseline](pool-browser-verification.json) verifies nine spends: 4.28–9.30 s proving, 91–195 ms verification, 14,656-byte proofs. Mobile, whole-browser peak memory and wallet resync are unmeasured, and no target-scale budgets are declared yet. On Ergo, testnet publication and reassembly were [accepted on a node](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node), with mainnet [inclusion latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet), [chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) and [replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost) measured. The [Ergo profile](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md) is selected with a runtime default depth of 10, and its reader needs no decoder. |
+| Practical deployment | Repeatable measurements of proof creation, verification, resync, startup, storage growth, bandwidth and finality on declared target devices and network conditions, against budgets agreed before testing | Node proving and verification timings exist for v2 and the six v3 relations. The first [desktop browser baseline](pool-browser-verification.json) verifies nine spends: 4.28–9.30 s proving, 91–195 ms verification, 14,656-byte proofs. [Target-scale budgets](#target-scale-and-budgets) are declared; nothing is measured against them yet, and mobile, whole-browser peak memory and wallet resync are unmeasured. On Ergo, testnet publication and reassembly were [accepted on a node](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node), with mainnet [inclusion latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet), [chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) and [replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost) measured. The [Ergo profile](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md) is selected with a runtime default depth of 10, and its reader needs no decoder. |
 | Release assurance | Reproducible builds, installed-package interoperability, pinned dependencies and specification, migration by successor, independent security review and documented disposition of every material finding | Package checks and focused defensive review exist. |
 
 ## What carries forward, what is frozen, what is retired
