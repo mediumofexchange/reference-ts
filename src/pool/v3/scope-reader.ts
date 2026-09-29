@@ -299,7 +299,10 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
  * A receipt instead returns its verdict at the deciding checkpoint or boundary. */
 export async function classifyScopes(context: ImportContext, record: RecordVenue, evidence: WalkEvidence): Promise<ScopeResult> {
   const walk = scopeWalk(context, record, evidence);
-  try { return await selectedRead(context, evidence, walk); } finally { walk.close(); }
+  try { return await selectedRead(context, evidence, walk); } catch (error) {
+    if (error instanceof EvidenceRefusal && context.receiptBytes === undefined) await walk.inspectRefused(context.selection.backing, context.terms);
+    throw error;
+  } finally { walk.close(); }
 }
 
 async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk: ReturnType<typeof scopeWalk>): Promise<ScopeResult> {
@@ -383,6 +386,9 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
     return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
         chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
+  } catch (error) {
+    if (error instanceof EvidenceRefusal) await walk.inspectRefused(selection.backing, terms);
+    throw error;
   } finally { walk.close(); }
 }
 
@@ -642,8 +648,33 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       await latest(selection.backing, terms, { index: view.t, strict: true }), view.publications());
     return { clock, publications, force, nonService };
   };
+  // Reports survive a later refusal (decision 2026-09-20). The descent met a backing's newest checkpoints
+  // before an older refusal and reported their compact faults, so a refused read authenticates the backing's
+  // unclassified carrying checkpoints newest first and inspects them, stopping at the first classified one or
+  // the first whose directory, snapshot or scope does not authenticate. Nothing here classifies.
+  const inspectRefused = async (backing: Uint8Array, terms: RootTerms): Promise<void> => {
+    if (faults === NO_FAULTS) return;
+    try {
+      const view = await viewFor(backing, terms);
+      for (let i = view.chain.length - 1; i >= 0; i--) {
+        const term = view.chain[i]!, end = view.termEnd(i);
+        for (let held = view.previousHeld(term.operator, end); held !== undefined && held.index >= term.from;
+          held = view.previousHeld(term.operator, end, held.commitment.sequence)) {
+          if (store.verdict(walk, rowKey(held.commitment)) !== undefined) return;
+          const directory = evidence.directory(held.commitment.root);
+          if (directory === undefined) return;
+          const entry = directory.find(item => same(item.name, backing));
+          if (entry === undefined) continue;
+          const snapshot = snapshotFor(entry.digest);
+          await faults.inspect(held, directory, checkpointScope(trails, backing, entry.digest, snapshot));
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof EvidenceRefusal)) throw error;
+    }
+  };
   const carrying = (): ImportCarryingVerdict[] => [...store.verdicts(walk)].map(item => ({ operator: hex(item.operator),
     sequence: item.sequence.toString(), index: item.index.toString(), class: item.class, ...(item.class === "excluded" ? { check: item.detail! } : {}) }));
-  return { viewFor, latest, recovery, classify, around, carrying, close: (): void => { store.closeWalk(walk); } };
+  return { viewFor, latest, recovery, classify, around, carrying, inspectRefused, close: (): void => { store.closeWalk(walk); } };
 }
 

@@ -56,6 +56,8 @@ export interface RecordView {
   heldAbove(operator: Uint8Array, sequence: bigint): boolean;
   /** The first held commitment of `operator` at or after `fromIndex` whose sequence exceeds `after`, if given. */
   nextHeld(operator: Uint8Array, fromIndex: bigint, after?: bigint): HeldCommitment | undefined;
+  /** The last held commitment of `operator` at or below `toIndex` whose sequence is below `before`, if given. */
+  previousHeld(operator: Uint8Array, toIndex: bigint, before?: bigint): HeldCommitment | undefined;
   /** The least index in [from, to] at which `operator` holds a commitment. */
   firstHeldIndex(operator: Uint8Array, from: bigint, to: bigint): bigint | undefined;
   termEnd(i: number): bigint;
@@ -160,6 +162,7 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
     heldAt: (operator, sequence) => heldOf(operator).heldAt(operator, sequence),
     heldAbove: (operator, sequence) => heldOf(operator).heldAbove(operator, sequence),
     nextHeld: (operator, fromIndex, after) => heldOf(operator).nextHeld(operator, fromIndex, after),
+    previousHeld: (operator, toIndex, before) => heldOf(operator).previousHeld(operator, toIndex, before),
     firstHeldIndex: (operator, from, to) => heldOf(operator).firstHeldIndex(operator, from, to),
     nextPublication: after => publicationsKept().nextPublication(backing, after),
     publications: () => publicationsKept().publications(backing),

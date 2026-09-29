@@ -350,7 +350,7 @@ at `a72888b`; later journal changes need their own acceptance evidence.
 [Measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
 distinguish this single-backing candidate drill from deployment acceptance.
 Complete trails remain bounded; imports do not erase ancestry or reset the
-package/work budgets. No replacement service, wallet custody, persistence,
+package budgets. No replacement service, wallet custody, persistence,
 live deployment or adopted configuration is supplied by this slice.
 
 Slice 4 adds public-evidence successor activation through `store.ts` `takeover`.

@@ -72,6 +72,8 @@ export interface KeptAnswers {
   /** The first kept held commitment of `operator` at or after `fromIndex` whose sequence exceeds `after`, if given.
    * Index and sequence rise together (C2.3.3), so `after` at or past `fromIndex` bounds both. */
   nextHeld(operator: Uint8Array, fromIndex: bigint, after?: bigint): HeldCommitment | undefined;
+  /** The last kept held commitment of `operator` at or below `toIndex` whose sequence is below `before`, if given. */
+  previousHeld(operator: Uint8Array, toIndex: bigint, before?: bigint): HeldCommitment | undefined;
   /** The least index of a kept held commitment of `operator` in [from, to]. */
   firstHeldIndex(operator: Uint8Array, from: bigint, to: bigint): bigint | undefined;
   /** The kept publication of `backing` after `after` in venue order, or the first. */
@@ -156,6 +158,8 @@ export class EvidenceStore {
       heldAbove: "SELECT 1 FROM held WHERE batch = ? AND operator = ? AND seq > ? LIMIT 1",
       heldAfter: "SELECT seq, idx, root, signature FROM held WHERE batch = ? AND operator = ? AND seq > ? ORDER BY seq LIMIT 1",
       heldFrom: "SELECT seq, idx, root, signature FROM held WHERE batch = ? AND operator = ? AND idx >= ? ORDER BY idx, seq LIMIT 1",
+      heldBefore: "SELECT seq, idx, root, signature FROM held WHERE batch = ? AND operator = ? AND seq < ? AND idx <= ? ORDER BY seq DESC LIMIT 1",
+      heldTo: "SELECT seq, idx, root, signature FROM held WHERE batch = ? AND operator = ? AND idx <= ? ORDER BY idx DESC, seq DESC LIMIT 1",
       heldIndex: "SELECT idx FROM held WHERE batch = ? AND operator = ? AND idx >= ? AND idx <= ? ORDER BY idx LIMIT 1",
       putPublication: "INSERT INTO publication VALUES (?, ?, ?, ?, ?)",
       firstPublication: "SELECT idx, ordinal, record FROM publication WHERE batch = ? AND backing = ? ORDER BY idx, ordinal LIMIT 1",
@@ -430,7 +434,8 @@ export class EvidenceBatch implements WalkEvidence, KeptAnswers {
       this.charge(BigInt(record.length), EvidenceRefusalQuota);
       try { this.#q.putPublication!.run(this.id, backing, u64be(index), u64be(ordinal), record); }
       catch (error) {
-        // One venue position answered for two subjects cannot be both (§13.1); only that index names it.
+        // One venue position answered for two subjects cannot be both (§13.1). SQLite names this index for any repeat of a
+        // position, so a same-subject repeat reads the same; keepAnswer keeps each answer once, so none arises.
         if (error instanceof Error && /UNIQUE constraint failed: publication\.batch, publication\.idx, publication\.ordinal$/.test(error.message)) {
           throw new EvidenceRefusal("unresolved-evidence");
         }
@@ -457,6 +462,11 @@ export class EvidenceBatch implements WalkEvidence, KeptAnswers {
     if (row === undefined) return undefined;
     const held = this.#held(operator, row);
     return held.index >= fromIndex ? held : this.nextHeld(operator, fromIndex);
+  }
+  previousHeld(operator: Uint8Array, toIndex: bigint, before?: bigint): HeldCommitment | undefined {
+    const row = (before === undefined ? this.#q.heldTo!.get(this.id, operator, u64be(toIndex)) :
+      this.#q.heldBefore!.get(this.id, operator, u64be(before), u64be(toIndex))) as Record<string, unknown> | undefined;
+    return row === undefined ? undefined : this.#held(operator, row);
   }
   firstHeldIndex(operator: Uint8Array, from: bigint, to: bigint): bigint | undefined {
     if (from > to) return undefined;
