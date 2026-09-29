@@ -231,7 +231,9 @@ export async function checkRecovery({ codec, verifier, configurationBytes, domai
       const { complete, partial } = withheld(ancestry.slice(0, 4), adopted, target, records, position, 13n);
       const full = await replayLocalPackage(complete, verifier, codec);
       assert.equal(full.status, "selected-local-replay");
-      assert.equal(full.audit.range.carrying.at(-1).check, "ADOPTION");
+      // The faulted position lies inside the adopted checkpoint's prefix, so the evidence recurrence
+      // excludes the target for non-extension before any record is replayed (pool-v3 §7.1).
+      assert.equal(full.audit.range.carrying.at(-1).check, "CONTINUITY");
       const result = await replayLocalPackage(partial, verifier, codec);
       assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null);
       assert.deepEqual(result.candidates, []); assert.equal(result.spendable, false);

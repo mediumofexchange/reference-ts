@@ -15,7 +15,7 @@
 //   context (pool-v3 §14 kept classes). A party's kept file is reopened only where its
 //   digest, recorded at each keep point outside the file, still matches.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, writeSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
@@ -167,6 +167,9 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 const SCHEMA_VERSION = 1;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
+/** Every table holding a namespace's rows. */
+const NAMESPACE_TABLES = ["namespace", "import", "event", "event_key", "nullifier", "output", "anchor", "demand", "demand_tag", "demand_end",
+  "total", "spent", "witness"];
 
 /** A u64 as eight big-endian bytes, so stored order is numeric order. */
 const be = (value: bigint): Uint8Array => { const out = new Uint8Array(8); new DataView(out.buffer).setBigUint64(0, value); return out; };
@@ -267,7 +270,7 @@ function fileDigest(path: string): string {
 }
 /** Replace a small file durably: a crash leaves the old contents or the new, never a torn one. */
 function replaceFile(path: string, text: string): void {
-  const partial = `${path}.partial`, fd = openSync(partial, "w");
+  const partial = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.partial`, fd = openSync(partial, "w");
   try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(partial, path);
 }
@@ -280,7 +283,11 @@ function keptFileHolds(path: string, digest: string): boolean {
     let version: bigint;
     try { version = (db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version; } finally { db.close(); }
     return version === BigInt(SCHEMA_VERSION) && existsSync(digest) && readFileSync(digest, "utf8") === fileDigest(path);
-  } catch { return false; }
+  } catch (error) {
+    // Another store holding the file is the caller's error, never damage to discard.
+    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");
+    return false;
+  }
 }
 
 export class ReplayStore {
@@ -370,8 +377,7 @@ export class ReplayStore {
     if (kept === undefined || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
         this.#sinceKeep < (kept.every ?? KEEP_EVERY)) return;
     this.#db.exec("COMMIT");
-    this.#recordDigest();
-    this.#db.exec("BEGIN");
+    try { this.#recordDigest(); } finally { this.#db.exec("BEGIN"); }
   }
   /** Forget every kept row (§14: kept state that fails a check is discarded); a kept file also drops its namespaces. */
   discardKept(): void {
@@ -503,8 +509,7 @@ export class ReplayStore {
     const dead = (this.#db.prepare("SELECT ns FROM namespace").all() as { ns: bigint }[]).map(r => Number(r.ns)).filter(ns => !live.has(ns));
     if (dead.length === 0) return;
     this.#atomic(() => {
-      for (const table of ["namespace", "import", "event", "event_key", "nullifier", "output", "anchor", "demand", "demand_tag", "demand_end",
-        "total", "spent", "witness"]) {
+      for (const table of NAMESPACE_TABLES) {
         const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
         for (const ns of dead) drop.run(ns);
       }
@@ -658,12 +663,15 @@ export class ReplayStore {
     const kept = this.#db.prepare("SELECT key FROM kept_context WHERE id = 1").get() as { key: unknown } | undefined;
     if (kept === undefined || !equal(bytes(kept.key), context)) {
       for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
+      // A kept file's namespaces were replayed under the old context and can never resume under this one.
+      if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
       this.#db.prepare("INSERT OR REPLACE INTO kept_context VALUES (1, ?)").run(context);
     }
     return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id);
   }
   /** Drop the walk's own rows and commit what it kept, refused read or not; a kept file records its digest
-   * (a keep point). If the commit fails, nothing of the walk commits and no transaction stays open. */
+   * (a keep point). If the commit fails, what the walk wrote since its last keep point is rolled back and no
+   * transaction stays open. */
   closeWalk(walk: number): void {
     try {
       for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
@@ -691,7 +699,7 @@ export class ReplayStore {
   /** Keep a class the walk judged, and count it as classified by the walk. */
   putVerdict(walk: number, v: WalkVerdict): void {
     const s = v.state;
-    this.#db.prepare("INSERT INTO verdict VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(v.key, v.operator,
+    this.#db.prepare("INSERT OR REPLACE INTO verdict VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(v.key, v.operator,
       be(v.sequence), v.root, v.signature, be(v.index), v.class, v.detail ?? null, v.segment, v.snapshot, s?.ns ?? null, s?.position ?? null,
       s?.identity ?? null, s === undefined ? null : u64(s.issued), s === undefined ? null : u64(s.burned),
       s === undefined ? null : mapJson(s.adoption), s === undefined ? null : be(s.opening));
@@ -745,7 +753,8 @@ export class ReplayStore {
 
   /** A segment's authenticated header (i = -1) and scoped signed terms. */
   putScope(segment: Uint8Array, header: Uint8Array, terms: readonly { readonly terms: Uint8Array; readonly signature: Uint8Array }[]): void {
-    const put = this.#db.prepare("INSERT OR IGNORE INTO scope VALUES (?, ?, ?, ?)");
+    // This read's authenticated scope replaces a kept one.
+    const put = this.#db.prepare("INSERT OR REPLACE INTO scope VALUES (?, ?, ?, ?)");
     put.run(segment, -1, header, null);
     terms.forEach((signed, i) => put.run(segment, i, signed.terms, signed.signature));
   }

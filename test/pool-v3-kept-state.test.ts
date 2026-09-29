@@ -22,7 +22,7 @@ import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
-import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
+import { applyRecord, openSegmentState, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
@@ -77,8 +77,9 @@ function fixture() {
     await applyRecord(segment.state, bytes, { domain, backing, segment: id, scope, terms: fields, verifier: accept, index: 2n, block: [] });
     segment.records.push(bytes);
   }
-  const read = (verifier: ProofCheck, store?: ReplayStore) =>
-    readFrontier(pack(items), signed, venue.witnessedIndex(), { configuration, verifier, reference, venue, ...(store === undefined ? {} : { store }) });
+  const read = (verifier: ProofCheck, store?: ReplayStore, options: { at?: bigint; witness?: WitnessPredicate; withoutTrails?: boolean } = {}) =>
+    readFrontier(pack(options.withoutTrails === true ? items.filter(item => item.kind !== 6) : items), signed, options.at ?? venue.witnessedIndex(),
+      { configuration, verifier, reference, venue, ...(store === undefined ? {} : { store }), ...(options.witness === undefined ? {} : { witness: options.witness }) });
   // The first history: a valid opening and issue, a checkpoint excluded for a foreign signature, one that
   // rewrites the valid prefix (its first record carries a proof the verifier refuses), then a valid one.
   async function first() {
@@ -99,6 +100,11 @@ const outcome = (read: Awaited<ReturnType<typeof readFrontier>>) => ({ carrying:
   ranges: read.ranges, faults: read.faultEvidence });
 
 const directories: string[] = [], stores: ReplayStore[] = [];
+/** Namespaces in a kept file, read once the store has committed. */
+const namespaceCount = (path: string): number => {
+  const db = new DatabaseSync(path, { readBigInts: true });
+  try { return Number((db.prepare("SELECT count(*) AS c FROM namespace").get() as { c: bigint }).c); } finally { db.close(); }
+};
 /** A store closed after the test, pass or fail, so its files can be removed. */
 const opened = (path: string, kept: { digest: string; every?: number }): ReplayStore => { const store = new ReplayStore(path, kept); stores.push(store); return store; };
 function files() {
@@ -170,12 +176,12 @@ describe("pool-v3 §14 kept classes across reads", () => {
       writeFileSync(kept.digest, createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
     };
     for (const sql of [
-      // A kept class's snapshot no longer authenticates against its directory.
-      "UPDATE verdict SET snapshot = zeroblob(length(snapshot)) WHERE class = 'valid'",
       // A valid class below its namespace's tip: its stored chain value is not its snapshot's.
       "UPDATE event SET history = zeroblob(32) WHERE position = 1",
       // The tip's note frontier: the recomputed root is not the snapshot's.
       "UPDATE namespace SET ommers = zeroblob(length(ommers))",
+      // A segment base: not the one the opening's judgment derives.
+      "UPDATE base SET adoption = '[]'",
     ]) {
       const f = fixture(), kept = files();
       await f.first();
@@ -191,6 +197,19 @@ describe("pool-v3 §14 kept classes across reads", () => {
     }
   });
 
+  it("takes a kept class's snapshot from this read's directory, not from its row", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    let store = opened(kept.path, kept);
+    await f.read(counting(), store); store.close();
+    const db = new DatabaseSync(kept.path); db.exec("UPDATE verdict SET snapshot = zeroblob(length(snapshot))"); db.close();
+    writeFileSync(kept.digest, createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
+    store = opened(kept.path, kept);
+    const verifier = counting(), again = await f.read(verifier, store);
+    expect(outcome(again)).toEqual(outcome(await f.read(counting())));
+    expect(verifier.checks).toBe(0);
+  });
+
   it("reuses kept classes only under the same verifier identities", async () => {
     const f = fixture(), kept = files();
     await f.first();
@@ -199,10 +218,12 @@ describe("pool-v3 §14 kept classes across reads", () => {
     const other = counting(b(41)), again = await f.read(other, store);
     expect(outcome(again)).toEqual(outcome(await f.read(counting())));
     expect(other.checks).toBe(4);
-    // A verifier that declares no identities is named per object: nothing kept is reused for it.
-    const unnamed = { checks: 0, verify() { unnamed.checks++; return true; } };
-    await f.read(unnamed, store); await f.read(unnamed, store);
-    expect(unnamed.checks).toBe(8);
+    // The old context's namespaces went with its classes.
+    expect(namespaceCount(kept.path)).toBe(1);
+    // A verifier or witness predicate that declares no name could never be reused across processes.
+    await expect(f.read({ verify: () => true }, store)).rejects.toThrow("a kept store needs");
+    const anonymous: WitnessPredicate = () => true;
+    await expect(f.read(counting(), store, { witness: anonymous })).rejects.toThrow("a kept store needs");
     store.close();
   });
 
@@ -220,6 +241,77 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(seen[0]).toBe(false);
     expect(seen.slice(1).some(Boolean)).toBe(true);
     store.close();
+  });
+
+  it("needs the evidence a fresh read needs: a kept class grounds nothing its package does not carry", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    const store = opened(kept.path, kept);
+    await f.read(counting(), store);
+    const refusal = (read: Promise<unknown>) => read.then(() => "read", (error: Error) => error.message);
+    expect(await refusal(f.read(counting(), store, { withoutTrails: true }))).toBe(await refusal(f.read(counting(), undefined, { withoutTrails: true })));
+    expect(await refusal(f.read(counting(), undefined, { withoutTrails: true }))).toContain("unresolved-evidence");
+  });
+
+  it("gives a witnessing read at a lower index the paths a fresh read gives", async () => {
+    const f = fixture(), kept = files(), witness: WitnessPredicate = Object.assign(() => true, { identity: b(77) });
+    await f.first();
+    f.venue.advance(12n); await f.issue(107n); await f.issue(108n); f.checkpoint(f.segment, 6n, 11n);
+    const store = opened(kept.path, kept);
+    await f.read(counting(), store, { witness });
+    const lower = await f.read(counting(), store, { at: 10n, witness }), fresh = await f.read(counting(), undefined, { at: 10n, witness });
+    expect(outcome(lower)).toEqual(outcome(fresh));
+    const path = lower.canonical!.state.path(106n), expected = fresh.canonical!.state.path(106n);
+    expect(path).toBeDefined();
+    expect(path).toEqual(expected);
+  });
+
+  it("classifies a scope's dependencies on a kept read as a fresh read does (two backings)", async () => {
+    const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
+    const backings = ["kept x", "kept y"].map(thing => {
+      const fields = { configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n, payout: { thing, quantumExponent: 0, perUnit: 1n } };
+      const terms = encodeRootTerms(fields);
+      return { fields, name: rootTermsName(terms), signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) } };
+    }).sort((a, z) => compareBytes(a.name, z.name));
+    const [x, y] = backings as [typeof backings[0], typeof backings[0]];
+    const items: EvidenceItem[] = [];
+    const add = (kind: number, payload: Uint8Array) => {
+      if (!items.some(item => item.kind === kind && compareBytes(item.payload, payload) === 0)) items.push({ kind, payload });
+    };
+    type Scoped = { header: SegmentHeader; id: Uint8Array; scoped: typeof backings; state: SegmentState; records: Uint8Array[] };
+    function checkpoint(seg: Scoped, sequence: bigint, index: bigint): Commitment {
+      const snapshots = seg.scoped.map(item => ({ backing: item.name, segment: seg.id, historyHash: seg.state.history,
+        evidenceHash: seg.state.evidence, ...seg.state.total(hex(item.name)) }));
+      const directory = snapshots.map(s => ({ name: s.backing, digest: snapshotDigest(s) }));
+      for (const s of snapshots) add(4, snapshotBytes(s));
+      add(3, encodeEvidenceDirectory(directory));
+      add(6, encodeTrail({ header: segmentBytes(seg.header), terms: seg.scoped.map(item => item.signed), records: seg.records }));
+      const commitment = signCommitment(operatorSecret, sequence, directoryRoot(directory));
+      venue.witness(1, operator, index, encodeCommitment(commitment));
+      return commitment;
+    }
+    // S0 scopes y alone, and its valid opening C is what S1's y entry imports; S1 also scopes x.
+    const h0: SegmentHeader = { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing: y.name, link: y.name }] };
+    const s0: Scoped = { header: h0, id: segmentIdentity(h0), scoped: [y], state: openSegmentState(operatorStore, segmentIdentity(h0), b(90), undefined), records: [] };
+    const c = checkpoint(s0, 1n, 1n);
+    const h1: SegmentHeader = { domain, venue: venue.id, operator, sequence: 2n, entries: [x, y].map(item => ({ backing: item.name, link: item.name,
+      ...(item === y ? { opening: { operator, sequence: c.sequence, root: c.root } } : {}) })) };
+    const s1: Scoped = { header: h1, id: segmentIdentity(h1), scoped: [x, y], state: openSegmentState(operatorStore, segmentIdentity(h1), b(91), s0.state), records: [] };
+    checkpoint(s1, 2n, 2n);
+    const scope = new ScopeTree(h1.entries).root(), capsules = [new Uint8Array(89).fill(1)], outputs = [201n];
+    const record: Record = { domain, kind: 1, publicInputs: [...limbsOf(domain), ...limbsOf(s1.id), scope, ...limbsOf(x.name),
+      5n, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(64), capsules };
+    const bytes = encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
+    await applyRecord(s1.state, bytes, { domain, backing: x.name, segment: s1.id, scope, terms: x.fields,
+      scopedTerms: new Map([x, y].map(item => [hex(item.name), item.fields])), verifier: { verify: () => true }, index: 2n, block: [] });
+    s1.records.push(bytes);
+    checkpoint(s1, 3n, 3n);
+    const read = (store?: ReplayStore) => readFrontier(pack(items), x.signed, venue.witnessedIndex(),
+      { configuration, verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }) });
+    const kept = files(), store = opened(kept.path, kept), fresh = outcome(await read());
+    expect(fresh.carrying.map(item => item.sequence)).toEqual(["1", "2", "3"]);
+    expect(outcome(await read(store))).toEqual(fresh);
+    expect(outcome(await read(store))).toEqual(fresh);
   });
 
   it("refuses a kept store without a file or its own digest path", () => {

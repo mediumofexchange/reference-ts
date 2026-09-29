@@ -5,7 +5,7 @@
 // imports, receipts, force and counts is scope-reader.ts; package-reader.ts is its entry.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { createHash, randomBytes } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
@@ -280,18 +280,23 @@ let rules: Uint8Array | undefined;
 function replayRules(): Uint8Array {
   if (rules === undefined) {
     const root = join(dirname(fileURLToPath(import.meta.url)), "..", ".."), hash = createHash("sha256");
+    const add = (name: string, path: string): void => { hash.update(identityFrame([name, readFileSync(path)])); };
     const walk = (dir: string): void => {
-      for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
-        const path = join(dir, entry.name);
-        if (entry.isDirectory()) walk(path);
-        else if (entry.isFile()) hash.update(identityFrame([relative(root, path).split(sep).join("/"), readFileSync(path)]));
+      for (const name of readdirSync(dir).sort()) {
+        const path = join(dir, name), stat = statSync(path);
+        if (stat.isDirectory()) walk(path);
+        else if (stat.isFile()) add(relative(root, path).split(sep).join("/"), path);
       }
     };
     walk(root);
+    // The package's manifest and lockfile, where present, name the dependencies the code runs on.
+    for (const name of ["package.json", "package-lock.json"]) if (existsSync(join(root, "..", name))) add(`../${name}`, join(root, "..", name));
     rules = sha256(identityFrame(["v3-replay-rules", SPECIFICATION, new Uint8Array(hash.digest())]));
   }
   return rules;
 }
+// Named when the module loads, so a later rebuild cannot give old code the new name.
+replayRules();
 /** Objects the reader cannot name by content are named once per process, never equal to another process's. */
 const PROCESS = randomBytes(32);
 const unnamed = new WeakMap<object, Uint8Array>();
