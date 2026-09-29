@@ -91,8 +91,8 @@ stub replay with memory flat against history). Start from the probe's evidence s
 ## Open questions
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
-- Non-blocking deletions (merged branches; maintainer-only in unattended runs): `git branch -d chore/one-reader-walk;
-  git push origin --delete chore/one-reader-walk feat/m5b2-stored-reader-state`.
+- Non-blocking deletions (merged branches; maintainer-only in unattended runs): `git branch -d chore/one-reader-walk docs/one-walk-handoff;
+  git push origin --delete chore/one-reader-walk docs/one-walk-handoff feat/m5b2-stored-reader-state`.
 
 Roughly **57% done / 43% remaining**, range **47–66%**, reassessed 2026-09-29 after M5b.2 (every
 party's state now in storage; streaming, kept state, first sync, adoption, qualified storage, mainnet remain).
