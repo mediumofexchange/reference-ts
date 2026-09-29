@@ -22,7 +22,9 @@ const UNCOMPRESSED_G1 = 'ea7b37bb4e1840b5632675fb2d79873ac0a1598374d3087344ba0e9
 /** The BN254 files the backend proves and verifies from once it has loaded them
  * (it caches the uncompressed G1 layout). Both equal Aztec Ignition transcript00's
  * leading points (pool-v3 §4; docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters). */
-export const BN254_PARAMETERS = Object.freeze({ 'bn254_g1.dat': UNCOMPRESSED_G1, 'bn254_g2.dat': parameters[1].sha256 });
+export const BN254_PARAMETERS = Object.freeze({
+  'bn254_g1.dat': UNCOMPRESSED_G1, 'bn254_g2.dat': parameters.find(p => p.name === 'bn254_g2.dat').sha256,
+});
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const matches = (bytes, parameter) => bytes.length === parameter.bytes && sha(bytes) === parameter.sha256;
 

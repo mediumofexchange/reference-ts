@@ -1864,6 +1864,39 @@ bytes peers and node APIs serve for a rewritten transaction; inputs beyond
 single-byte mutations and splices of these 29 transactions. The stateless
 verdict uses the node's initial validation settings.
 
+## Proving parameters
+
+The [probe report](https://github.com/mediumofexchange/reference-ts/blob/b4ea7cf/docs/pool-v3-parameter-provenance.json)
+and [its script](https://github.com/mediumofexchange/reference-ts/blob/b4ea7cf/scripts/pool/v3/parameter-provenance.mjs)
+serve adoption slice 8 M1 ([decision](../decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters),
+pool-v3 §4). Both were retired once recorded. It range-fetched Aztec Ignition's
+`MAIN IGNITION/monomial/transcript00.dat` (322,560,412 bytes; its header gives
+5,040,001 G1 and 2 G2 points). Transcript coordinates are four big-endian u64 limbs,
+least significant first; after reordering them:
+
+- the 2^19 uncompressed G1 points bb.js 5.2.0 loads by default (`bn254_g1.dat`,
+  the prefix of the CDN's `g1.dat` with the same hash) equal the transcript's first
+  2^19 points, and the 128-byte `bn254_g2.dat` equals its first G2 point;
+- `[x]_2` is a valid G2 point. Every G1 point is on the curve, and a random
+  128-bit linear combination shows the points are consecutive powers of the `x`
+  in `[x]_2` (one pairing equation; about 8 minutes in `@noble/curves`, so it is
+  not a CI check);
+- issue proves and verifies with only these BN254 points loaded by the caller
+  (`skipSrsInit`, `srsInitSrs`), with no Grumpkin points. The key it derives is
+  the manifest's. A verifier instance holding G2 and the single G1 point `[1]_1`
+  verifies the proof and refuses it under a changed public input;
+- `srsInitSrs` refuses a G2 point differing in one byte ("g2_point bytes do not
+  match the canonical Aztec [x]_2 SHA-256"). The default download path loads G2
+  through the same call;
+- `noir_wasm` 1.0.0-rc.3 compiles all six relations to the manifest's bytecode
+  identities, and bb.js 5.2.0 derives the manifest's keys from them.
+
+The conformance check now records the two BN254 files it proved with and requires
+the values `prepare-crs.mjs` pins. *Limits:* this compares against one published
+transcript copy and does not re-verify the ceremony's contribution chain.
+Soundness still assumes one honest participant. The G1 comparison covers only the
+2^19 points loaded.
+
 ## Venue and restoration work still required
 
 The [publication experiment](#venue-publication-and-reassembly-on-a-node)
