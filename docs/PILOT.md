@@ -22,8 +22,7 @@ The demo creates disposable keys and a journal under ignored `scratch/`, issues
 100 claims, transfers 40 between two wallets, checks pending and final evidence,
 kills and restarts the service, retries the saved request, and redeems 40 claims.
 It also terminates a writer at three transaction checkpoints. It removes its
-files afterward. Node 20 checks the core and installed package; Node 24 also
-checks SQLite and the process scenario.
+files afterward. It runs on the package's Node 24 floor.
 
 ## Profile
 

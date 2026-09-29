@@ -16,6 +16,8 @@ import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ScopeRequired } from "../src/pool/v3/refusals.js";
 import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
+import { ReplayResult } from "../src/pool/v3/reader.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { encodeTrail } from "../src/pool/v3/trail.js";
@@ -39,7 +41,7 @@ const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items
 /** One operator opens a segment scoping two backings and issues into the first;
  * a successor segment may then import the first backing alone. */
 async function twoBackings() {
-  const venue = FixtureVenue.reference(label, lag, 10n);
+  const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
   const termsOf = (thing: string): RootTerms => ({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
     payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)) });
   const backings = ["scope test x", "scope test y"].map(thing => {
@@ -53,7 +55,7 @@ async function twoBackings() {
     const id = segmentIdentity(header);
     return { header, id, scoped, scope: new ScopeTree(header.entries).root(), records: [] as Uint8Array[],
       scopedTerms: new Map(scoped.map(item => [hex(item.name), item.fields])),
-      state: openSegmentState(id, undefined, imported, undefined, () => {}) };
+      state: openSegmentState(operatorStore, id, b(90), imported, () => {}) };
   };
   let current = open(backings, 1n);
   const items: EvidenceItem[] = [];
@@ -74,15 +76,27 @@ async function twoBackings() {
   function snapshotsNow() {
     const { id, state } = current;
     return current.scoped.map(item => ({ backing: item.name, segment: id, historyHash: state.history, evidenceHash: state.evidence,
-      ...(state.totals.get(hex(item.name)) ?? { issued: 0n, burned: 0n }) }));
+      ...state.total(hex(item.name)) }));
   }
-  async function issue(value: bigint, output: bigint) {
-    const { id, scope, scopedTerms, state, records } = current, capsules = [new Uint8Array(89).fill(1)], outputs = [output];
+  function issued(value: bigint, output: bigint, id = current.id): Uint8Array {
+    const { scope } = current, capsules = [new Uint8Array(89).fill(1)], outputs = [output];
     const record: Record = { domain, kind: 1, publicInputs: [...limbsOf(domain), ...limbsOf(id), scope, ...limbsOf(x.name),
       value, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(64), capsules };
-    const bytes = encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
-    await applyRecord(state, bytes, { domain, backing: x.name, segment: id, scope, terms: x.fields, scopedTerms, verifier, index: 2n, block: [] });
-    records.push(bytes);
+    return encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
+  }
+  const replayOf = (id: Uint8Array) => ({ domain, backing: x.name, segment: id, scope: current.scope, terms: x.fields,
+    scopedTerms: current.scopedTerms, verifier, index: 2n, block: [] });
+  async function issue(value: bigint, output: bigint) {
+    const bytes = issued(value, output);
+    await applyRecord(current.state, bytes, replayOf(current.id));
+    current.records.push(bytes);
+  }
+  /** A reader's replay of `records` for segment `id` in `store`, under its own identity. */
+  async function replayInto(store: ReplayStore, identity: Uint8Array, records: Uint8Array[], id = current.id): Promise<ReplayResult> {
+    const state = openSegmentState(store, id, identity, undefined, () => {});
+    for (const bytes of records) await applyRecord(state, bytes, replayOf(id));
+    const { issued: total, burned } = state.total(hex(x.name));
+    return new ReplayResult(store, state.ns, state.position, { issued: total, burned, adoptionIndices: new Map(), adoptionIndex: 0n, identity });
   }
   const selection = (backing: Uint8Array, commitment: Commitment) => ({ mode: "current-fixture" as const, domain, venue: venue.id,
     backing, operator, sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
@@ -91,7 +105,7 @@ async function twoBackings() {
   selection(backing, commitment), { configuration, verifier, reference, venue });
   /** An empty successor opening scoping the first backing alone, importing `predecessor`. */
   const successor = (sequence: bigint, predecessor: Commitment) => { current = open([x], sequence, predecessor, current.state); };
-  return { venue, x, y, items, checkpoint, issue, successor, selection, read };
+  return { venue, x, y, items, checkpoint, issue, issued, replayInto, successor, selection, read };
 }
 
 describe("multi-backing scope reader", () => {
@@ -147,15 +161,20 @@ describe("multi-backing scope reader", () => {
     f.checkpoint(1n, 1n); await f.issue(5n, 101n);
     const read = await f.read(f.x.name, f.checkpoint(2n, 3n));
     let charged = 0n;
-    const merged = mergeFinalizedPrefixes([{ state: read.state! }, { state: read.state! }, undefined], amount => { charged += amount; });
+    const store = read.state!.store;
+    const merged = mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: read.state! }, undefined], amount => { charged += amount; });
     // Each parent's events are charged when read, even when they repeat.
-    expect(merged.events.size).toBe(1); expect(charged).toBe(2n);
-    expect(merged.totals.get(hex(f.x.name))).toEqual({ issued: 5n, burned: 0n });
-    const [id, event] = [...read.state!.events][0]!;
-    const conflicting = { ...read.state!, events: new Map([[id, { ...event, identity: "other" }]]) };
-    expect(() => mergeFinalizedPrefixes([{ state: read.state! }, { state: conflicting }], () => {})).toThrow(expect.objectContaining({ check: "CONTINUITY" }));
+    expect(merged.events).toBe(1n); expect(charged).toBe(2n);
+    expect(merged.frontier.totals.get(hex(f.x.name))).toEqual({ issued: 5n, burned: 0n });
+    // Another replay of the same segment agreeing on the shared prefix merges into the longer one.
+    const longer = await f.replayInto(store, b(91), [f.issued(5n, 101n), f.issued(1n, 103n)]);
+    const joined = mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: longer }], () => {});
+    expect(joined.events).toBe(2n); expect(joined.frontier.totals.get(hex(f.x.name))).toEqual({ issued: 6n, burned: 0n });
+    // Two replays of one segment disagreeing at a shared position are conflicting histories.
+    const conflicting = await f.replayInto(store, b(92), [f.issued(5n, 102n)]);
+    expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: conflicting }], () => {})).toThrow(expect.objectContaining({ check: "CONTINUITY" }));
     // A distinct event repeating an imported output is a conflicting history.
-    const repeated = { ...read.state!, events: new Map([["other:1", { ...event, segment: "other" }]]) };
-    expect(() => mergeFinalizedPrefixes([{ state: read.state! }, { state: repeated }], () => {})).toThrow(expect.objectContaining({ check: "OUTPUT" }));
+    const repeated = await f.replayInto(store, b(93), [f.issued(5n, 101n, b(94))], b(94));
+    expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: repeated }], () => {})).toThrow(expect.objectContaining({ check: "OUTPUT" }));
   });
 });

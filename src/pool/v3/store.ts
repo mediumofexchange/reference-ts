@@ -16,7 +16,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
 import {
@@ -40,7 +40,8 @@ import { IMPORT_LIMITS, type CanonicalCheckpoint, type FrontierResult } from "./
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type ScopeForcedPublication, type ScopeResult } from "./scope-reader.js";
-import { applyRecord, openSegmentState, type ImportedState, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
+import { ReplayStore } from "./replay-store.js";
+import { applyRecord, openSegmentState, type ImportSource, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
 import { encodeTrail, TrailLimitError } from "./trail.js";
 
@@ -228,6 +229,8 @@ export class V3OperatorJournal {
   /** Set once an action changes memory or writes the journal; see run(). */
   private diverging = false;
   private closed = false;
+  /** The operator's replay state and its own reads' (M5b.5 moves it into the journal database). */
+  private readonly replays = new ReplayStore();
 
   constructor(path: string, options: V3StoreOptions) {
     requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"), "STORAGE", "a persistent filesystem path is required");
@@ -362,7 +365,11 @@ export class V3OperatorJournal {
       if (this.diverging || !(error instanceof V3StoreError || error instanceof EncodingError)) this.engine = undefined;
       throw error;
     }
-    finally { this.busy = false; }
+    finally {
+      this.busy = false;
+      // Reads made during the action are dropped; the segment's state and what it imports stay.
+      if (!this.closed) this.replays.collect(this.engine?.state === undefined ? [] : [this.engine.state.ns]);
+    }
   }
 
   private async load(): Promise<void> {
@@ -401,7 +408,7 @@ export class V3OperatorJournal {
         throw error;
       }
       engine.opened = opened;
-      engine.state = openSegmentState(opened.segment, undefined, undefined, undefined, () => {});
+      engine.state = this.segmentState(opened.segment, undefined);
       this.replaySigned(engine, command, at(command.at), response);
     } else if (command.kind === "rescope") {
       requireThat(/^command:/.test(id) && request === this.rescopeRequest(command.take, command.keep, command.evidence),
@@ -556,7 +563,11 @@ export class V3OperatorJournal {
     return { opened: openedOf(header, all), taken, links };
   }
   private readerOptions() {
-    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference };
+    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference, store: this.replays };
+  }
+  /** A fresh admission state for the active segment over its import, kept under the journal's own identity. */
+  private segmentState(segment: Uint8Array, imported: ImportSource | undefined): SegmentState {
+    return openSegmentState(this.replays, segment, sha256(concatBytes(utf8ToBytes("v3-journal-admission"), segment)), imported, () => {});
   }
   /** Read every opening from bytes: a taken term by the public reader's
    * complete descent of the evidence, including proof of an empty book, and a
@@ -617,7 +628,7 @@ export class V3OperatorJournal {
     }
     engine.records.splice(0);
     engine.opened = opened;
-    engine.state = openSegmentState(opened.segment, undefined, imported, undefined, () => {});
+    engine.state = this.segmentState(opened.segment, imported);
     engine.pendingReturn = true;
   }
   /**
@@ -627,14 +638,14 @@ export class V3OperatorJournal {
    * ancestry once more; a single-backing reader reads one parent's ancestry only.
    * Both are counted, so the reservation never falls short of either reader.
    */
-  private openingImports(parents: readonly CanonicalCheckpoint[]): { readonly imported: ImportedState | undefined; readonly work: bigint } {
+  private openingImports(parents: readonly CanonicalCheckpoint[]): { readonly imported: ImportSource | undefined; readonly work: bigint } {
     let work = 0n, merged;
-    try { merged = mergeFinalizedPrefixes(parents.map(parent => ({ state: parent.state })), amount => { work += amount; }); } catch (error) {
+    try { merged = mergeFinalizedPrefixes(this.replays, parents.map(parent => ({ state: parent.state })), amount => { work += amount; }); } catch (error) {
       if (error instanceof ReplayRefusal) throw new V3StoreError("UNAVAILABLE", "the imported histories conflict");
       throw error;
     }
     const imported = parents.length === 0 ? undefined : parents.length === 1 ? parents[0]!.state : merged;
-    return { imported, work: work + BigInt(merged.events.size) };
+    return { imported, work: work + merged.events };
   }
   /** Each scoped K's revocation index as witnessed through `at`. */
   private revocations(opened: Opened, at: bigint): Map<string, bigint | undefined> {
@@ -652,7 +663,7 @@ export class V3OperatorJournal {
   private checkpoint(engine: Engine): { readonly directory: readonly SnapshotDigest[]; readonly snapshots: readonly Uint8Array[] } {
     const opened = engine.opened!, state = engine.state!;
     const snapshots: Snapshot[] = opened.entries.map(({ backing }) => {
-      const totals = state.totals.get(bytesToHex(backing)) ?? { issued: 0n, burned: 0n };
+      const totals = state.total(bytesToHex(backing));
       return { backing, segment: opened.segment, historyHash: state.history, evidenceHash: state.evidence, issued: totals.issued, burned: totals.burned };
     });
     return { directory: snapshots.map(s => ({ name: copyBytes(s.backing), digest: snapshotDigest(s) })), snapshots: snapshots.map(snapshotBytes) };
@@ -831,7 +842,7 @@ export class V3OperatorJournal {
   private reserveEvents(engine: Engine, source: StateRead, extra: bigint): void {
     const unadopted = this.unadopted(source);
     const rebuild = source.canonical.commitment.sequence === engine.opened!.header.sequence && unadopted.length > 0;
-    const ancestry = rebuild ? BigInt(new Map(source.state.resumeKey.imported?.events).size) : 0n;
+    const ancestry = rebuild ? source.state.importedEventCount() : 0n;
     const records = BigInt(engine.records.length) + extra - (rebuild ? 0n : source.state.position);
     if (this.reservedEventWork(source) + ancestry + records > IMPORT_LIMITS.maxEvents) {
       throw new V3StoreError("REFUSED", "the continuation exceeds the reader's event budget", "RESOURCE");
@@ -874,7 +885,7 @@ export class V3OperatorJournal {
     engine.archives.push({ opened: old, records: [...engine.records] });
     engine.records.splice(0);
     engine.opened = opened;
-    engine.state = openSegmentState(opened.segment, undefined, source.state, undefined, () => {});
+    engine.state = this.segmentState(opened.segment, source.state);
     engine.pendingReturn = true;
   }
 
@@ -1019,7 +1030,7 @@ export class V3OperatorJournal {
       const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries,
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(schedule.commitNow, "SCHEDULE", "the opening's signing schedule is closed");
-      const state = openSegmentState(opened.segment, undefined, undefined, undefined, () => {});
+      const state = this.segmentState(opened.segment, undefined);
       const { directory, snapshots } = this.checkpoint({ ...engine, opened, state });
       this.encodePackage(opened, [{ directory, snapshots }], this.unsigned(1n, directory), []);
       const commitment = this.transaction(() => {
@@ -1238,6 +1249,6 @@ export class V3OperatorJournal {
 
   close(): void {
     requireThat(!this.busy, "BUSY", "cannot close during a journal operation");
-    if (!this.closed) { this.db.close(); this.secret.fill(0); this.engine = undefined; this.closed = true; }
+    if (!this.closed) { this.db.close(); this.replays.close(); this.secret.fill(0); this.engine = undefined; this.closed = true; }
   }
 }

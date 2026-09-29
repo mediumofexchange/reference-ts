@@ -29,7 +29,7 @@ The client is `V3ServiceClient(baseUrl, walletToken, expected, adminToken?)` fro
 `service-client.ts`. `expected` independently supplies the configuration domain,
 operator and reference venue preimage. Only an HTTP `127.0.0.1` root URL is
 accepted. Identity inputs and submitted bytes are copied. These modules are
-subpath APIs, not root exports; the wire/client modules can load on Node 20.
+subpath APIs, not root exports.
 
 `submit(record)` checks the receipt signature, expected domain/operator, source
 segment, scope and statement identity under

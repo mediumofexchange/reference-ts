@@ -22,7 +22,7 @@ import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 
 // Journal and reader integration with explicit stand-in proofs. The companion
 // recovery-store-check.mjs runs these recovery builders under all real keys.
-const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
+const b = (n: number) => new Uint8Array(32).fill(n);
 const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
   circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), presenterSecret = b(17);
@@ -32,7 +32,7 @@ const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uin
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: new Uint8Array(32).fill(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 
-describe.skipIf(!supported)("v3 recovery journal and independent package reader", () => {
+describe("v3 recovery journal and independent package reader", () => {
   let V3OperatorJournal: typeof import("../src/pool/v3/store.js").V3OperatorJournal;
   const journals: Journal[] = [], directories: string[] = [], scratch = resolve("scratch");
   beforeAll(async () => { ({ V3OperatorJournal } = await import("../src/pool/v3/store.js")); });
@@ -91,8 +91,8 @@ describe.skipIf(!supported)("v3 recovery journal and independent package reader"
     await f.j.commit("settled"); await f.j.publish();
     const result = await f.read(await f.j.package());
     expect(result.state.issued - result.state.burned).toBe(10n);
-    expect(result.state.demands.size).toBe(0);
-    expect(result.state.nullifiers.has(f.input.note.nf)).toBe(true);
+    expect(result.state.demands().length).toBe(0);
+    expect(result.state.hasNullifier(f.input.note.nf)).toBe(true);
     expect(result.state.position).toBe(5n);
   });
 
@@ -175,7 +175,7 @@ describe.skipIf(!supported)("v3 recovery journal and independent package reader"
     const served = await f.j.package(), result = await f.read(served);
     expect(result.state.position).toBe(4n);
     expect(result.state.issued - result.state.burned).toBe(10n);
-    expect(result.state.nullifiers.has(f.input.note.nf)).toBe(true);
+    expect(result.state.hasNullifier(f.input.note.nf)).toBe(true);
     expect(result.state.adoptionIndex).toBe(11n);
     const items = decodeEvidencePackage(served.package, PACKAGE_LIMITS);
     expect(items.filter(item => item.kind === 6).map(item => decodeTrail(item.payload, TRAIL_LIMITS).records)).toContainEqual(expected);

@@ -45,7 +45,7 @@ const referenceFor = ergo => ergo ? { context: ERGO_SYNTHETIC_REFERENCE, profile
 const summary = result => {
   assert(result.state !== undefined, "expected a complete state, not a receipt-only result");
   return { supply: String(result.state.issued - result.state.burned), position: String(result.state.position),
-    adoptionIndex: String(result.state.adoptionIndex), spentRoot: hex(result.state.spent.root()),
+    adoptionIndex: String(result.state.adoptionIndex), spentRoot: hex(result.state.spentRoot()),
     history: hex(result.state.history), canonicalIndex: String(result.canonical.index),
     force: result.force.map(f => ({ index: String(f.index), kind: f.record.kind, sha256: digest(f.bytes) })),
     clock: result.clock, nonService: result.ranges.nonService };
@@ -227,7 +227,7 @@ async function acceptance(ergo, liveMode = false) {
     await test("fresh runtime reader verifies exact adoption and refuses missing ancestry", async () => {
       const input = await served(), result = await read(input); final = summary(result);
       assert.equal(final.supply, "20"); assert.equal(final.position, "4");
-      assert(result.state.nullifiers.has(funded[1].nf)); assert.deepEqual(fresh(input), final);
+      assert(result.state.hasNullifier(funded[1].nf)); assert.deepEqual(fresh(input), final);
       const items = decodeEvidencePackage(input.package, PACKAGE_LIMITS);
       assert(items.filter(item => item.kind === 6).some(item => {
         const records = decodeTrail(item.payload, TRAIL_LIMITS).records;

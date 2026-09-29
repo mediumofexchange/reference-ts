@@ -11,7 +11,7 @@ import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
 import { LIMITS } from "./evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage } from "./local-replay.mjs";
-import { mergeFinalizedPrefixes } from "../../../dist/pool/v3/scope-reader.js";
+import { mergeFixture } from "./merge-fixture.mjs";
 import { FixtureVenue } from "../../../dist/record-venue.js";
 import { compactFault } from "./fault-check.mjs";
 import { faultObserver } from "./fault-evidence.mjs";
@@ -503,18 +503,17 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   await test("isolated finalized-prefix merge deduplicates common events and rejects conflicting histories", async () => {
     // These deliberately conflicting parent states probe the merger directly;
     // they do not claim that canonical disjoint scopes can finalize a conflict.
-    const parent = (id, record) => ({ state: { events: new Map([[id, { identity: hex(codec.statementHash(record)), record,
-      segment: id.split(":")[0], position: 1n, ancestry: new Map(), tags: [] }]]),
-      anchors: new Set(), scanOutputs: [], outputPositions: new Map() } });
+    // Keys are left out so the spent and output checks are reached apart from C2.10.6's ordering check.
+    const fixture = mergeFixture(), parent = (name, record) => fixture.segment(name, [record], [], { keys: false });
     let charged = 0n;
-    const common = mergeFinalizedPrefixes([parent("shared:1", issuanceX), parent("shared:1", issuanceX)], count => { charged += count; });
-    assert.equal(common.events.size, 1); assert.equal(common.outputsSeen.size, 1); assert.equal(charged, 2n);
-    assert.deepEqual(common.totals.get(hex(x)), { issued: 10n, burned: 0n });
+    const common = fixture.merge([parent("shared", issuanceX), parent("shared", issuanceX)], count => { charged += count; });
+    assert.equal(common.events, 1n); assert.equal(fixture.opened(common).outputs, 1); assert.equal(charged, 2n);
+    assert.deepEqual(common.frontier.totals.get(hex(x)), { issued: 10n, burned: 0n });
     for (const [left, right, expected] of [
-      [parent("shared:1", issuanceX), parent("shared:1", issuanceY), "CONTINUITY"],
-      [parent("left:1", paymentX), parent("right:1", paymentX), "SPENT"],
-      [parent("left:1", issuanceX), parent("right:1", issuanceX), "OUTPUT"],
-    ]) assert.throws(() => mergeFinalizedPrefixes([left, right], () => {}), error => error.check === expected);
+      [parent("shared", issuanceX), parent("shared", issuanceY), "CONTINUITY"],
+      [parent("left", paymentX), parent("right", paymentX), "SPENT"],
+      [parent("left", issuanceX), parent("right", issuanceX), "OUTPUT"],
+    ]) assert.throws(() => fixture.merge([left, right]), error => error.check === expected);
   });
   const receipts = await checkNormalScopeReceipts({ codec, verifier, test, operatorSecret, checkpoint, compose, segment, entry,
     x, y, a0, a1, y1, j0, j1, j2, history, payload, payloadY, toB });

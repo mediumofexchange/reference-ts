@@ -10,10 +10,6 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { deserialize, serialize } from 'node:v8';
 
-if (Number(process.versions.node.split('.')[0]) < 24) {
-  console.log('SKIP v3 wallet crash check: Node.js 24 or newer is required.');
-  process.exit(0);
-}
 const { DatabaseSync } = await import('node:sqlite');
 const { ed25519 } = await import('@noble/curves/ed25519.js');
 const { hexToBytes } = await import('@noble/hashes/utils.js');

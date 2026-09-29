@@ -124,7 +124,6 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
     poseidon2HashMs: +timed(500, i => poseidon2Hash([1n, 2n, BigInt(i ?? 0), 4n])).toFixed(3),
     noteTreeFourLeafAppendMs: +(() => { const tree = new NoteTree(); return timed(50, () => tree.appendAll([fieldOf(), fieldOf(), fieldOf(), fieldOf()])); })().toFixed(2),
     spentSetTwoInsertMs: +(() => { const set = new RadixSpentSet(); return timed(500, () => { set.insert(fieldToBytes(fieldOf())); set.insert(fieldToBytes(fieldOf())); }); })().toFixed(3),
-    noteTreeCloneMsPer1000Leaves: +(() => { const tree = new NoteTree(); for (let i = 0; i < 250; i++) tree.appendAll([fieldOf(), fieldOf(), fieldOf(), fieldOf()]); return timed(20, () => tree.clone()); })().toFixed(3),
     ...await (async () => {
       // The same permutation in Barretenberg's wasm, called synchronously, for comparison only.
       const bb = await BarretenbergSync.new(), be = v => fieldToBytes(v), value = bytes => BigInt("0x" + hex(bytes));

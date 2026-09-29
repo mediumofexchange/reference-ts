@@ -16,7 +16,8 @@ import { decodedTrails, type ReaderSelection, type SignedTerms } from "./reader.
 import { EvidenceRefusal, requireReplay, ScopeRequired } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
 import { classifyScopeFrontier, classifyScopes, type ScopeResult } from "./scope-reader.js";
-import type { ProofCheck } from "./state.js";
+import { ReplayStore } from "./replay-store.js";
+import type { ProofCheck, ScanOutput } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
 export const PACKAGE_LIMITS: PackageLimits = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
@@ -27,6 +28,10 @@ export interface PackageReader {
   readonly venue: RecordVenue;
   readonly reference: VenueReference;
   readonly importLimits?: ImportLimits;
+  /** The party's replay storage; a private in-memory store by default, kept alive by the result. */
+  readonly store?: ReplayStore | undefined;
+  /** Outputs to keep incremental witnesses for (a wallet's own), so their paths can be read from the result. */
+  readonly witness?: ((output: ScanOutput) => boolean) | undefined;
 }
 
 /** Own selection bytes and primitive fields before any asynchronous proof check. */
@@ -113,7 +118,7 @@ function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: Pack
   const terms = scope.rootTerms[header.entries.findIndex(scoped => same(scoped.backing, selection.backing))]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
   const faults = faultObserver(payloads(7), selection, verifier);
-  const context: ImportContext = { selection, terms, header, verifier, reference, importLimits, faults,
+  const context: ImportContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, header, verifier, reference, importLimits, faults,
     ...(payloads(10).length === 0 ? {} : { receiptBytes: payloads(10)[0]! }) };
   return { context, directories, evidence: { snapshots, trails }, faults, header, venue };
 }
@@ -169,6 +174,6 @@ function openFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigi
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
   const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
   const faults = faultObserver(payloads(7), selection, verifier);
-  const context: FrontierContext = { selection, terms, verifier, reference, importLimits, faults };
+  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, verifier, reference, importLimits, faults };
   return { context, directories, evidence: { snapshots: payloads(4), trails: payloads(6) }, faults, venue };
 }

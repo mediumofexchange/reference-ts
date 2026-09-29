@@ -11,6 +11,7 @@ import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v
 import { classifyImports, type ImportLimits } from "../src/pool/v3/import-reader.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { deliveryHash, encodePublication, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { encodeTrail } from "../src/pool/v3/trail.js";
@@ -23,18 +24,27 @@ const terms: RootTerms = { configuration: domain, venue: venueId, obligor: issue
   payout: { thing: "budget test", quantumExponent: 0, perUnit: 1n }, nonService: { duration: 2n, count: 1n, window: 10n } };
 const encodedTerms = encodeRootTerms(terms), signed = { terms: encodedTerms, signature: ed25519.sign(rootTermsSignatureMessage(encodedTerms), issuerSecret) };
 const backing = rootTermsName(encodedTerms), verifier = { verify: () => true };
+const operatorStore = new ReplayStore();
 interface Segment { header: SegmentHeader; id: Uint8Array; state: SegmentState; records: Uint8Array[] }
 function segment(sequence: bigint, predecessor?: Commitment, imported?: SegmentState): Segment {
   const header: SegmentHeader = { domain, venue: venueId, operator, sequence, entries: [{ backing, link: backing,
     ...(predecessor === undefined ? {} : { opening: { operator, sequence: predecessor.sequence, root: predecessor.root } }) }] };
   const id = segmentIdentity(header);
-  return { header, id, state: openSegmentState(id, undefined, imported, undefined, () => {}), records: [] };
+  return { header, id, state: openSegmentState(operatorStore, id, b(90), imported, () => {}), records: [] };
 }
 async function issue(target: Segment, output?: { readonly cm: bigint; readonly capsule: Uint8Array }): Promise<void> {
   const capsules = [output?.capsule ?? new Uint8Array(89).fill(1)], outputs = [output?.cm ?? 101n], scope = new ScopeTree(target.header.entries).root();
   const record: Record = { domain, kind: 1, publicInputs: [...limbsOf(domain), ...limbsOf(target.id), scope, ...limbsOf(backing),
     5n, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(64), capsules };
   const bytes = encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
+  await applyRecord(target.state, bytes, { domain, backing, segment: target.id, scope, terms, verifier, index: 2n, block: [], witness: () => true });
+  target.records.push(bytes);
+}
+/** A payment spending `nfs` under `anchor` into four fresh outputs. */
+async function spend(target: Segment, nfs: readonly [bigint, bigint], anchor: bigint, outputs: readonly bigint[]): Promise<void> {
+  const capsules = outputs.map(() => new Uint8Array(89).fill(1)), scope = new ScopeTree(target.header.entries).root();
+  const bytes = encodeRecord({ domain, kind: 2, publicInputs: [...limbsOf(domain), ...limbsOf(target.id), scope, anchor, anchor, ...nfs, ...outputs,
+    ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(), capsules });
   await applyRecord(target.state, bytes, { domain, backing, segment: target.id, scope, terms, verifier, index: 2n, block: [] });
   target.records.push(bytes);
 }
@@ -42,8 +52,8 @@ function fixture(proofVerifier: ProofCheck = verifier) {
   const venue = FixtureVenue.reference(label, lag, 200n), directories = new Map<string, readonly SnapshotDigest[]>();
   const snapshots: Uint8Array[] = [], trails: Uint8Array[] = [];
   const snapshotIds = new Set<string>(), trailIds = new Set<string>();
-  function checkpoint(target: Segment, sequence: bigint): Commitment {
-    const total = target.state.totals.get(hex(backing)) ?? { issued: 0n, burned: 0n };
+  function checkpoint(target: Segment, sequence: bigint, index = sequence): Commitment {
+    const total = target.state.total(hex(backing));
     const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.state.evidence, ...total };
     const directory = [{ name: backing, digest: snapshotDigest(snapshot) }], root = directoryRoot(directory);
     const commitment = signCommitment(operatorSecret, sequence, root);
@@ -51,9 +61,9 @@ function fixture(proofVerifier: ProofCheck = verifier) {
     const encodedSnapshot = snapshotBytes(snapshot), encodedTrail = encodeTrail({ header: segmentBytes(target.header), terms: [signed], records: target.records }, TRAIL_LIMITS);
     if (!snapshotIds.has(hex(encodedSnapshot))) { snapshotIds.add(hex(encodedSnapshot)); snapshots.push(encodedSnapshot); }
     if (!trailIds.has(hex(encodedTrail))) { trailIds.add(hex(encodedTrail)); trails.push(encodedTrail); }
-    venue.witness(1, operator, sequence, encodeCommitment(commitment)); return commitment;
+    venue.witness(1, operator, index, encodeCommitment(commitment)); return commitment;
   }
-  const read = (target: Segment, selected: Commitment, limits: ImportLimits) => classifyImports({
+  const read = (target: Segment, selected: Commitment, limits: ImportLimits) => classifyImports({ store: new ReplayStore(),
     selection: { mode: "current-fixture", domain, venue: venueId, backing, operator, sequence: selected.sequence,
       root: selected.root, judgingIndex: venue.witnessedIndex() }, terms, header: target.header, verifier: proofVerifier,
     reference: { context: LOCAL_REFERENCE, label, lag }, importLimits: limits,
@@ -71,7 +81,7 @@ describe("single-backing reader work budgets", () => {
     f.checkpoint(original, 1n);
     const note = prepareExactOutput(b(21), domain, b(22), backing, 5n);
     await issue(original, note); const selected = f.checkpoint(original, 2n);
-    const task = requestTask(domain, { note, anchor: original.state.tree.root(), path: original.state.tree.path(0n) }, 0n);
+    const placed = original.state.path(note.cm)!, task = requestTask(domain, { note, anchor: placed.anchor, path: placed.path }, 0n);
     const request: Record = { domain, kind: task.kind, publicInputs: task.publicInputs,
       proof: b(7), authorization: new Uint8Array(), capsules: task.capsules };
     // One statement identity, first a rejected proof variant and then a valid
@@ -94,6 +104,22 @@ describe("single-backing reader work budgets", () => {
     // Reserving only the former actual work would fail with no new bytes.
     await expect(f.read(original, selected, { maxCheckpoints: 2n, maxEvents: before.work!.events }))
       .rejects.toMatchObject({ status: "resource-refusal" });
+  });
+
+  it("counts at the judging index against the snapshot strictly before it, though the selection there moved the segment on", async () => {
+    const f = fixture(), original = segment(1n); f.checkpoint(original, 1n);
+    const note = prepareExactOutput(b(21), domain, b(22), backing, 5n);
+    await issue(original, note); f.checkpoint(original, 2n);
+    const placed = original.state.path(note.cm)!, task = requestTask(domain, { note, anchor: placed.anchor, path: placed.path }, 0n);
+    f.venue.witness(4, backing, 195n, encodePublication({ domain, backing, kind: 5, record: { domain, kind: task.kind,
+      publicInputs: task.publicInputs, proof: b(7), authorization: new Uint8Array(), capsules: task.capsules } }));
+    // The checkpoint selected at t spends the requested note, in the same segment's
+    // state; C2b.5.2 reads that segment at its position strictly before t, where it is unspent.
+    await spend(original, [note.nf, 777n], placed.anchor, [201n, 202n, 203n, 204n]);
+    const selected = f.checkpoint(original, 3n, 200n);
+    const result = await f.read(original, selected, { maxCheckpoints: 3n, maxEvents: 16n });
+    expect(result.state!.hasNullifier(note.nf)).toBe(true);
+    expect(result.ranges?.nonService).toMatchObject({ count: "1", fires: true, snapshotIndex: "2" });
   });
 
   it("charges every fresh imported ancestry scan and no repeated work for a resumable empty continuation", async () => {

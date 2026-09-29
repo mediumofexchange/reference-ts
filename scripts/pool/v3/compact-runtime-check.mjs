@@ -49,7 +49,7 @@ export async function checkCompactRuntime({ payload, result, verifier, codec, po
   }
   const state = selected.state, audit = result.audit;
   assert.deepEqual({ records: String(state.position), issued: String(state.issued), burned: String(state.burned),
-    noteRoot: String(state.tree.root()), spentRoot: hex(state.spent.root()), historyHash: hex(state.history) }, Object.fromEntries(
+    noteRoot: String(state.noteRoot()), spentRoot: hex(state.spentRoot()), historyHash: hex(state.history) }, Object.fromEntries(
     ["records", "issued", "burned", "noteRoot", "spentRoot", "historyHash"].map(key => [key, audit[key]])), label);
   // The original-segment harness omits operator on carrying diagnostics.
   const normalized = items => items.map(({ operator, ...item }) => item);
@@ -60,6 +60,6 @@ export async function checkCompactRuntime({ payload, result, verifier, codec, po
   assert.deepEqual(frontier.faultEvidence, selected.faultEvidence, `${label}: frontier facts`);
   assert.deepEqual(frontier.canonical.commitment, selected.canonical.commitment, `${label}: canonical checkpoint`);
   assert.deepEqual(frontier.canonical.state.history, state.history, `${label}: canonical history`);
-  assert.deepEqual(frontier.canonical.state.spent.root(), state.spent.root(), `${label}: spent state`);
+  assert.deepEqual(frontier.canonical.state.spentRoot(), state.spentRoot(), `${label}: spent state`);
   return true;
 }

@@ -11,22 +11,20 @@ import { linkInForce, type HeldCommitment, type RangeEntry } from "../../record-
 import type { RecordVenue } from "../../record-venue.js";
 import type { Commitment } from "../../venue-records.js";
 import { identifierOf, VALUE_BOUND } from "../field.js";
-import { EMPTY_NOTE_ROOT } from "../note-tree.js";
 import { ScopeTree } from "../scope.js";
 import { decodeReceipt, decodeSnapshot, type Snapshot } from "./commitments.js";
 import type { SegmentHeader } from "./headers.js";
 import { importLimitsOf, NO_FAULTS, type CanonicalCheckpoint, type ForcedPublication, type FrontierContext, type FrontierResult,
   type ImportCarryingVerdict, type ImportContext, type ImportEvidence, type ImportWork, type PublicationVerdict } from "./import-reader.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
-import { decodedTrails, readRecordView, replayTrail, type Directories, type RecordView, type ReplayResult,
+import { decodedTrails, lastValidOf, readRecordView, replayTrail, type Directories, type RecordView, type ReplayResult,
   type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptFact, type ReceiptVerdict } from "./receipt-state.js";
 import { decodePublication, encodeRecord, type Record } from "./records.js";
-import { applyRecovery, effectOf, type Demand } from "./recovery.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
-import { applyForceEffects, applyForceRecord, openForceState, type OutputLocation, type ReplayEvent, type ScanOutput,
-  type Totals } from "./state.js";
+import type { ImportEntry, ReplayStore } from "./replay-store.js";
+import { applyForceEffects, applyForceRecord, openForceState, type MergedImport } from "./state.js";
 import type { RootTerms } from "./terms.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
@@ -43,69 +41,50 @@ const before = (held: { readonly index: bigint; readonly commitment: Identity },
   child === undefined || held.index < child.index || (held.index === child.index && child.strict === undefined &&
     same(held.commitment.operator, child.commitment.operator) && held.commitment.sequence < child.commitment.sequence);
 
-/** Imported finalized prefixes merged for a new multi-backing segment. */
-export interface MergedPrefixes {
-  readonly events: Map<string, ReplayEvent>;
-  readonly totals: Map<string, Totals>;
-  readonly nullifiers: Set<bigint>;
-  readonly outputsSeen: Set<bigint>;
-  readonly anchors: Set<bigint>;
-  scanOutputs: ScanOutput[];
-  readonly outputPositions: Map<bigint, OutputLocation>;
-  readonly demands: Map<string, Demand>;
-  readonly effective: Set<string>;
-  readonly spentTags: Set<bigint>;
+/** Imported finalized prefixes merged for a new multi-backing segment: one
+ * namespace per imported segment, read to the furthest position any parent
+ * imports, with the union's per-backing totals. */
+export interface MergedPrefixes extends MergedImport {
   readonly adoptionIndices: Map<string, bigint>;
 }
-type MergeSource = Pick<ReplayResult, "events" | "anchors" | "scanOutputs" | "outputPositions">;
 
-/** C2.10.5–6: imported roots retain their original trees. Repeated events
- * agree by statement identity; distinct events may never share nullifiers or
- * outputs, and two touching one tag or demand must be ordered by ancestry.
- * Supply is checked per backing after the whole union. */
-export function mergeFinalizedPrefixes(parents: readonly ({ readonly state: MergeSource } | undefined)[],
+/** C2.10.5–6: imported roots retain their original trees. Parents agree on
+ * each segment they share, up to the shorter prefix, by its history hash;
+ * distinct events may never share nullifiers or outputs, and two touching one
+ * tag or demand must be ordered by ancestry. Supply is checked per backing
+ * over the whole union. Each parent's events are charged, then each compared pair. */
+export function mergeFinalizedPrefixes(store: ReplayStore, parents: readonly ({ readonly state: ReplayResult } | undefined)[],
   chargeEvents: (amount: bigint) => void): MergedPrefixes {
-  const result: MergedPrefixes = { events: new Map(), totals: new Map(), nullifiers: new Set(), outputsSeen: new Set(),
-    anchors: new Set([EMPTY_NOTE_ROOT]), scanOutputs: [], outputPositions: new Map(),
-    demands: new Map(), effective: new Set(), spentTags: new Set(), adoptionIndices: new Map() };
-  const scans = new Map<bigint, ScanOutput>(), touched = new Map<string, ReplayEvent[]>();
-  const precedes = (a: ReplayEvent, b: ReplayEvent): boolean =>
-    a.segment === b.segment ? a.position < b.position : (b.ancestry.get(a.segment) ?? 0n) >= a.position;
+  const segments = new Map<string, ImportEntry>();
   for (const parent of new Set(parents)) {
     if (parent === undefined) continue;
-    for (const [id, event] of parent.state.events) {
-      chargeEvents(1n);
-      const prior = result.events.get(id);
-      if (prior !== undefined) { requireReplay(prior.identity === event.identity, "CONTINUITY"); continue; }
-      for (const key of [...event.tags.map(tag => `tag:${tag}`), ...(event.demand === undefined ? [] : [`demand:${event.demand}`])]) {
-        const previous = touched.get(key) ?? [];
-        for (const other of previous) { chargeEvents(1n); requireReplay(precedes(other, event) || precedes(event, other), "RECOVERY_CONFLICT"); }
-        previous.push(event); touched.set(key, previous);
-      }
-      const { nfs, outputs } = effectOf(event.record);
-      requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !result.nullifiers.has(nf)), "SPENT");
-      requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !result.outputsSeen.has(cm)), "OUTPUT");
-      nfs.forEach(nf => result.nullifiers.add(nf)); outputs.forEach(cm => result.outputsSeen.add(cm));
-      const { kind, publicInputs: p } = event.record;
-      if (kind === 1 || kind === 3) {
-        const backing = hex(identifierOf(p[5]!, p[6]!)), total = result.totals.get(backing) ?? { issued: 0n, burned: 0n };
-        if (kind === 1) total.issued += p[7]!; else total.burned += p[7]!;
-        result.totals.set(backing, total);
-      }
-      result.events.set(id, event);
-      if (kind >= 4) requireReplay(!result.effective.has(event.identity), "REPEATED_STATEMENT");
-      applyRecovery(event.record, result);
-    }
-    for (const root of parent.state.anchors) result.anchors.add(root);
-    for (const output of parent.state.scanOutputs) if (!scans.has(output.cm)) scans.set(output.cm, output);
-    for (const [cm, path] of parent.state.outputPositions) {
-      const previous = result.outputPositions.get(cm);
-      if (previous === undefined || path.tree.size > previous.tree.size) result.outputPositions.set(cm, path);
+    if (parent.state.store !== store) throw new Error("an import is read from its own store");
+    chargeEvents(parent.state.eventCount());
+    for (const [name, entry] of parent.state.frontier().segments) {
+      const prior = segments.get(name);
+      if (prior === undefined) { segments.set(name, entry); continue; }
+      const [low, high] = prior.upto <= entry.upto ? [prior, entry] : [entry, prior];
+      // Two replays of one segment agree on every event up to the shorter prefix exactly when their history hashes there agree.
+      if (low.ns !== high.ns && low.upto > 0n) requireReplay(same(store.event(low.ns, low.upto)!.history, store.event(high.ns, low.upto)!.history), "CONTINUITY");
+      segments.set(name, high);
     }
   }
-  for (const total of result.totals.values()) requireReplay(total.burned <= total.issued && total.issued < VALUE_BOUND, "SUPPLY");
-  result.scanOutputs = [...scans.values()];
-  return result;
+  const facts = store.unionFacts([...segments.values()]);
+  const precedes = (a: { ns: number; position: bigint; segment: string }, b: { ns: number; position: bigint; segment: string }): boolean =>
+    a.segment === b.segment ? a.position < b.position : (store.imports(b.ns).get(a.segment)?.upto ?? 0n) >= a.position;
+  for (const events of facts.shared.values()) {
+    for (let j = 1; j < events.length; j++) for (let i = 0; i < j; i++) {
+      chargeEvents(1n);
+      requireReplay(precedes(events[i]!, events[j]!) || precedes(events[j]!, events[i]!), "RECOVERY_CONFLICT");
+    }
+  }
+  requireReplay(!facts.repeatedNullifier, "SPENT");
+  requireReplay(!facts.repeatedOutput, "OUTPUT");
+  requireReplay(!facts.repeatedRecovery, "REPEATED_STATEMENT");
+  for (const total of facts.supply.values()) requireReplay(total.burned <= total.issued && total.issued < VALUE_BOUND, "SUPPLY");
+  let events = 0n;
+  for (const entry of segments.values()) events += store.eventCount(entry.ns, entry.upto) - store.eventCount(entry.ns, 0n);
+  return { store, frontier: { segments, totals: facts.supply }, events, adoptionIndices: new Map() };
 }
 
 interface Classified {
@@ -300,7 +279,6 @@ export async function classifyScopes(context: ImportContext, directories: Direct
       return { contradictedAt: facts.filter((fact, i) => facts.findIndex(other =>
         other.operator === fact.operator && other.sequence === fact.sequence) === i) };
     } };
-    context.contextReceipt = walk.receipt;
     let openingIndex: bigint | undefined;
     const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
       if (openingIndex === undefined) return undefined;
@@ -360,7 +338,7 @@ const canonicalOf = (valid: ValidScope): CanonicalCheckpoint => ({ commitment: v
   scope: new ScopeTree(valid.header.entries).root(), state: valid.state });
 
 /** What a scope read needs besides a selected checkpoint or backing. */
-type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes" | "contextReceipt">;
+type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
 
 /** Whole-scope classification, shared by selected and frontier reads. Every
  * checkpoint is classified once; work is charged against the reader's limits. */
@@ -463,7 +441,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
               requireReplay(parent.index < linkInForce(view.chain, held.index).from, "IMPORT_RANK");
             }
           }
-          const merged = mergeFinalizedPrefixes(parents, chargeEvents), adopted: ScopeForce[] = [];
+          const merged = mergeFinalizedPrefixes(context.store, parents, chargeEvents), adopted: ScopeForce[] = [];
           for (let i = 0; i < header.entries.length; i++) {
             const scoped = header.entries[i]!, name = hex(scoped.backing);
             merged.adoptionIndices.set(name, parents[i]?.state.adoptionIndices.get(name) ?? 0n);
@@ -491,8 +469,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
           // The opening's own block and imported state: a continuation resumes against them by identity.
           block = opened.block; openingIndex = opened.index;
           const previous = parents[0]!;
-          lastValid = { position: previous.state.position, historyHash: previous.snapshot.historyHash,
-            evidenceHash: previous.snapshot.evidenceHash, eventIndices: previous.state.eventIndices, state: previous.state };
+          lastValid = lastValidOf(previous.state, previous.snapshot);
         }
         // One carried snapshot authenticates the full scope for lapse even
         // when this directory omits a sibling. Complete carriage and matching
@@ -514,7 +491,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
           snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
             block: opening ? [] : block, openingIndex, chargeEvents });
         for (const s of scopedSnapshots) {
-          const total = state.totals.get(hex(s.backing)) ?? { issued: 0n, burned: 0n };
+          const total = state.total(hex(s.backing));
           requireReplay(s.issued === total.issued && s.burned === total.burned, "SNAPSHOT");
         }
         return { ...base, state, block, scopedTerms, openingIndex, class: "valid" };

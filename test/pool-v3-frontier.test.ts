@@ -17,7 +17,9 @@ import { readSingleBackingFrontier, readSingleBackingPackage, PACKAGE_LIMITS } f
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
+import { describeState } from "./pool-v3-state-description.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 
@@ -30,10 +32,10 @@ const domain = configurationHash(configuration), label = b(2), lag = 2n;
 const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true };
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
   a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))), PACKAGE_LIMITS);
-interface Segment { header: SegmentHeader; id: Uint8Array; state: SegmentState; records: Uint8Array[]; secret: Uint8Array }
+interface Segment { header: SegmentHeader; id: Uint8Array; state: SegmentState; records: Uint8Array[]; secret: Uint8Array; evidence?: Uint8Array }
 
 function fixture() {
-  const venue = FixtureVenue.reference(label, lag, 10n);
+  const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
   const fields = { configuration: domain, venue: venue.id, obligor: issuer, operator: original, interval: 10n,
     payout: { thing: "frontier test", quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret) };
   const terms = encodeRootTerms(fields), backing = rootTermsName(terms);
@@ -46,11 +48,11 @@ function fixture() {
     const header: SegmentHeader = { domain, venue: venue.id, operator: ed25519.getPublicKey(secret), sequence,
       entries: [{ backing, link, ...(predecessor === undefined ? {} : { opening: predecessor }) }] };
     const id = segmentIdentity(header);
-    return { header, id, state: openSegmentState(id, undefined, imported, undefined, () => {}), records: [], secret };
+    return { header, id, state: openSegmentState(operatorStore, id, b(90), imported, () => {}), records: [], secret };
   }
   function checkpoint(target: Segment, sequence: bigint, index = sequence): Commitment {
-    const total = target.state.totals.get(hex(backing)) ?? { issued: 0n, burned: 0n };
-    const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.state.evidence, ...total };
+    const total = target.state.total(hex(backing));
+    const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.evidence ?? target.state.evidence, ...total };
     const directory = [{ name: backing, digest: snapshotDigest(snapshot) }];
     const commitment = signCommitment(target.secret, sequence, directoryRoot(directory));
     add(3, encodeEvidenceDirectory(directory, PACKAGE_LIMITS)); add(4, snapshotBytes(snapshot));
@@ -58,11 +60,14 @@ function fixture() {
     venue.witness(1, target.header.operator, index, encodeCommitment(commitment));
     return commitment;
   }
-  async function issue(target: Segment, output = 101n) {
+  function issued(target: Segment, output = 101n, signer = issuerSecret): Uint8Array {
     const scope = new ScopeTree(target.header.entries).root(), capsules = [new Uint8Array(89).fill(1)], outputs = [output];
     const record: Record = { domain, kind: 1, publicInputs: [...limbsOf(domain), ...limbsOf(target.id), scope, ...limbsOf(backing),
       5n, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(64), capsules };
-    const bytes = encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
+    return encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), signer) });
+  }
+  async function issue(target: Segment, output = 101n) {
+    const bytes = issued(target, output), scope = new ScopeTree(target.header.entries).root();
     await applyRecord(target.state, bytes, { domain, backing, segment: target.id, scope, terms: fields, verifier, index: 2n, block: [] });
     target.records.push(bytes);
   }
@@ -79,7 +84,7 @@ function fixture() {
   const selectedPackage = (commitment: Commitment) => pack([...items,
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]);
   const read = (evidence = pack(items)) => readSingleBackingFrontier(evidence, signed, venue.witnessedIndex(), options);
-  return { venue, fields, signed, backing, items, options, segment, checkpoint, issue, replace, selection, selectedPackage, read };
+  return { venue, fields, signed, backing, items, options, segment, checkpoint, issued, issue, replace, selection, selectedPackage, read };
 }
 
 // Oracle proofs isolate the reader's evidence contract. The invalid checkpoint
@@ -92,12 +97,12 @@ async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTai
   const records = segment.records.map(decodeRecord), target = records[1]!;
   records[1] = failure === "PROOF" ? { ...target, proof: b(99) } : { ...target, authorization: new Uint8Array(64) };
   segment.records = records.map(encodeRecord);
-  segment.state.evidence = records.reduce((previous, record, i) => nextEvidenceHash(previous, evidenceHashes(record), BigInt(i + 1)),
+  segment.evidence = records.reduce((previous, record, i) => nextEvidenceHash(previous, evidenceHashes(record), BigInt(i + 1)),
     genesisEvidenceHash(segment.id));
   const hostile = f.checkpoint(segment, 3n), fullTrail = encodeTrail({ header: segmentBytes(segment.header), terms: [f.signed],
     records: segment.records }, TRAIL_LIMITS);
   const snapshot = f.items.filter(item => item.kind === 4).map(item => decodeSnapshot(item.payload))
-    .find(value => compareBytes(value.evidenceHash, segment.state.evidence) === 0)!;
+    .find(value => compareBytes(value.evidenceHash, segment.evidence!) === 0)!;
   const fault = encodeFaultEvidence({ snapshot, position: 2n, length: 3n,
     previous: nextEvidenceHash(genesisEvidenceHash(segment.id), evidenceHashes(records[0]!), 1n),
     statement: statementBytes(records[1]!), proof: records[1]!.proof, authorization: records[1]!.authorization,
@@ -115,15 +120,38 @@ async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTai
   return { f, opening, predecessor, hostile, selected, fault, compactItems, readFrontier, readSelected };
 }
 
-// Resume keys contain per-read bound verifier functions, whose identity is
-// intentionally different. Compare the replayed values and private spent root.
+// Each read keeps its state in its own store under its own verifier. Compare
+// what the replayed state holds.
 function canonicalEvidence(canonical: CanonicalCheckpoint | undefined) {
   if (canonical === undefined) return undefined;
-  const { resumeKey: _resumeKey, spent, ...state } = canonical.state;
-  return { ...canonical, state: { ...state, spent: { root: spent.root(), size: spent.size } } };
+  return { ...canonical, state: describeState(canonical.state) };
 }
 
 describe("single-backing complete frontier reader", () => {
+  it("rolls an excluded checkpoint's writes back and drops a scratch replay, continuing in one namespace", async () => {
+    const f = fixture(), segment = f.segment(); f.checkpoint(segment, 1n);
+    await f.issue(segment, 101n); f.checkpoint(segment, 2n);
+    const chain = (records: readonly Uint8Array[]): Uint8Array => records.reduce((previous, bytes, i) =>
+      nextEvidenceHash(previous, evidenceHashes(decodeRecord(bytes)), BigInt(i + 1)), genesisEvidenceHash(segment.id));
+    // Checkpoint 3 appends a valid issue, then one with a foreign signature: excluded, its valid record undone.
+    const hostile = [...segment.records, f.issued(segment, 102n), f.issued(segment, 103n, b(9))];
+    f.checkpoint({ ...segment, records: hostile, evidence: chain(hostile) }, 3n);
+    // Checkpoint 4 rewrites the first record: its prefix does not reproduce, so it replays from the seed in a
+    // scratch namespace, which fails CONTINUITY at the last valid position and is dropped.
+    const rewritten = [f.issued(segment, 104n), f.issued(segment, 105n)];
+    f.checkpoint({ ...segment, records: rewritten, evidence: chain(rewritten) }, 4n);
+    await f.issue(segment, 106n); const valid = f.checkpoint(segment, 5n);
+    const store = new ReplayStore();
+    const read = await readSingleBackingFrontier(pack(f.items), f.signed, f.venue.witnessedIndex(), { ...f.options, store });
+    expect(read.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "valid", undefined], ["2", "valid", undefined],
+      ["3", "excluded", "SIGNATURE"], ["4", "excluded", "CONTINUITY"], ["5", "valid", undefined]]);
+    const state = read.canonical!.state;
+    expect(read.canonical!.commitment).toEqual(valid);
+    expect([101n, 102n, 103n, 104n, 105n, 106n].map(cm => state.hasOutput(cm))).toEqual([true, false, false, false, false, true]);
+    // Each valid checkpoint resumed in the one namespace its replay identity names; neither refused replay left one behind.
+    expect(store.namespaces(state.identity)).toEqual([state.ns]);
+  });
+
   it("proves an empty frontier and pending replacement from complete venue answers", async () => {
     const f = fixture(); f.replace();
     const empty = await readSingleBackingFrontier(pack([]), f.signed, 4n, f.options);

@@ -43,7 +43,7 @@ const referenceFor = ergo => ergo ? { context: ERGO_SYNTHETIC_REFERENCE, profile
 const summary = result => {
   assert(result.state !== undefined);
   return { supply: String(result.state.issued - result.state.burned), position: String(result.state.position),
-    spentRoot: hex(result.state.spent.root()), history: hex(result.state.history),
+    spentRoot: hex(result.state.spentRoot()), history: hex(result.state.history),
     canonical: { operator: hex(result.canonical.commitment.operator), sequence: String(result.canonical.commitment.sequence),
       index: String(result.canonical.index) }, carrying: result.carrying };
 };
@@ -119,7 +119,7 @@ async function acceptance(ergo) {
     const served = async journal => { const value = await journal.package(); packages.push(value.package.length); return {
       package: value.package, selection: { ...value.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       venue: ergo ? { tip: supplier.tip } : venue.export() }; };
-    const read = input => readSingleBackingPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference });
+    const read = input => readSingleBackingPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference, witness: () => true });
     const fresh = input => {
       if (ergo) writeFileSync(join(build, "ergo-pin.bin"), pin);
       const child = spawnSync(process.execPath, [import.meta.filename, "--worker", build, ...(ergo ? ["--ergo"] : [])],
@@ -177,14 +177,14 @@ async function acceptance(ergo) {
       assert.deepEqual(fresh(publicB), summary(await read(publicB)));
     });
     await test("B spends the inherited note with a real proof and preserves A's finality", async () => {
-      const result = await read(publicB), location = result.state.outputPositions.get(funded.cm);
-      assert(location !== undefined); assert.equal(location.tree.root(), tree.root());
-      assert.deepEqual(location.tree.path(location.leaf), input.path);
+      const result = await read(publicB), placed = result.state.path(funded.cm);
+      assert(placed !== undefined); assert.equal(placed.anchor, tree.root());
+      assert.deepEqual(placed.path, input.path);
       const context = contextOf(publicB), paid = outputs(b(22), 40, [7n, 3n, 0n, 0n]);
       const receipt = await successor.submit(encodeRecord(await prove(spendTask(context, inputs, paid), "B inherited spend")));
       assert.equal(decodeReceipt(receipt).after, 1n);
       await checkpoint(successor, "spent"); publicB = await served(successor);
-      const state = await read(publicB); assert(state.state.nullifiers.has(funded.nf)); assert.equal(state.state.issued, 10n);
+      const state = await read(publicB); assert(state.state.hasNullifier(funded.nf)); assert.equal(state.state.issued, 10n);
       assert.deepEqual(fresh(publicB), summary(state));
       assert(state.carrying.filter(item => item.operator === hex(aKey)).every(item => item.class === "valid"));
     });

@@ -8,9 +8,6 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-if (Number(process.versions.node.split('.')[0]) < 24) {
-  console.log('SKIP v3 service acceptance: Node.js 24 or newer is required.'); process.exit(0);
-}
 const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../..'));
 const scratchPath = join(root, 'scratch'); mkdirSync(scratchPath, { recursive: true });
 const scratch = realpathSync(scratchPath); assert.equal(scratch, scratchPath, 'scratch must not be redirected');

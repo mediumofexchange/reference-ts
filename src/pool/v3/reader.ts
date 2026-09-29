@@ -21,8 +21,9 @@ import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { ReplayRefusal, EvidenceRefusal, ScopeRequired, requireReplay, type ClockRecord } from "./refusals.js";
 import { servedTrail, trailEvidenceChain } from "./served-trail.js";
+import type { ReplayStore } from "./replay-store.js";
 import {
-  applyRecord, openSegmentState, type Adopted, type ImportedState, type LastValid, type ProofCheck, type ReplayedState, type SegmentReplay,
+  applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type ScanOutput, type SegmentReplay,
 } from "./state.js";
 import type { RootTerms } from "./terms.js";
 import { decodeTrail, type ServedTrail, type TrailLimits } from "./trail.js";
@@ -187,34 +188,40 @@ export function decodedTrails(trails: readonly Uint8Array[]): ServedTrail[] {
   return decoded;
 }
 
-/** What a trail replay reads besides its records: the selection, the
- * selected backing's terms (and each scoped backing's), the segment's header,
- * the proof verifier and a receipt's position to record. */
+/** What a trail replay reads besides its records: the store its state lives
+ * in, the selection, the selected backing's terms (and each scoped backing's),
+ * the segment's header, the proof verifier and the outputs to witness. */
 export interface ReplayContext {
+  readonly store: ReplayStore;
   readonly selection: ReaderSelection;
   readonly terms: RootTerms;
   readonly scopedTerms?: ReadonlyMap<string, RootTerms | undefined> | undefined;
   readonly header: SegmentHeader;
   readonly verifier: ProofCheck;
-  readonly contextReceipt?: { readonly position: bigint; readonly segment: Uint8Array } | undefined;
+  readonly witness?: ((output: ScanOutput) => boolean) | undefined;
 }
-/** A replayed checkpoint's state, as a later replay resumes or imports it. */
-export interface ReplayResult extends ReplayedState {
+/** A replayed checkpoint's state at its position, as a later replay resumes or imports it. */
+export class ReplayResult extends StateHandle {
   readonly issued: bigint;
   readonly burned: bigint;
   readonly adoptionIndices: ReadonlyMap<string, bigint>;
   readonly adoptionIndex: bigint;
-  readonly resumeKey: ResumeKey;
+  /** The replay identity its namespace is kept under (storage decision item 5). */
+  readonly identity: Uint8Array;
+  constructor(store: ReplayStore, ns: number, position: bigint, facts: Pick<ReplayResult, "issued" | "burned" | "adoptionIndices" | "adoptionIndex" | "identity">) {
+    super(store, ns, position);
+    this.issued = facts.issued; this.burned = facts.burned; this.adoptionIndices = facts.adoptionIndices;
+    this.adoptionIndex = facts.adoptionIndex; this.identity = facts.identity;
+  }
+  /** Events this segment's opening imported. */
+  importedEventCount(): bigint { return this.store.eventCount(this.ns, 0n); }
 }
 /** A segment's last valid checkpoint, carrying its replayed state for resumption. */
 export interface ValidCheckpoint extends LastValid {
   readonly state?: ReplayResult | undefined;
 }
 /** A predecessor's replayed state or merged finalized prefixes, as imported by a new segment. */
-export interface ImportedFrontier extends ImportedState {
-  readonly adoptionIndex?: bigint;
-  readonly adoptionIndices?: ReadonlyMap<string, bigint>;
-}
+export type ImportedFrontier = ReplayResult | (MergedImport & { readonly adoptionIndex?: bigint; readonly adoptionIndices?: ReadonlyMap<string, bigint> });
 export interface TrailOptions {
   /** The checkpoint's witnessed index; undefined for a read without venue answers. */
   readonly index?: bigint | undefined;
@@ -229,75 +236,104 @@ export interface TrailOptions {
   readonly chargeRecords?: (amount: bigint) => void;
 }
 
+/** A valid checkpoint as the next one's last valid checkpoint. */
+export function lastValidOf(state: ReplayResult, snapshot: Pick<Snapshot, "historyHash" | "evidenceHash">): ValidCheckpoint {
+  return { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash,
+    judgedIndex: position => state.judgedIndex(position), state };
+}
+
 /** One checkpoint's trail under the segment's scope and terms, through the
  * state machine. A deterministic failure, a kind-7 record included, throws
  * ReplayRefusal with its check; an unindexed recovery record throws
  * EvidenceRefusal; the verifier's own failures propagate. `lastValid` is the segment's last valid checkpoint
  * before this one: the trail must reach its length and reproduce its evidence
  * and history hashes there (C2.10.12, pool-v3 §7.1), the evidence before any
- * verification. */
+ * verification. The replay runs in one savepoint of the store: a refusal
+ * leaves nothing behind, and a new namespace it opened disappears. */
 export async function replayTrail(context: ReplayContext, snapshot: Snapshot, trail: ServedTrail, options: TrailOptions): Promise<ReplayResult> {
-  const { selection, terms, scopedTerms, header, verifier, contextReceipt } = context;
+  const { store, selection, terms, scopedTerms, header, verifier, witness } = context;
   const { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false } = options;
   const chargeEvents = options.chargeEvents ?? ((): void => {}), chargeRecords = options.chargeRecords ?? chargeEvents;
   const scope = new ScopeTree(header.entries).root();
-  const resumeKey = resumeKeyOf(context, snapshot, { imported, block, openingIndex });
-  const base = isOpening ? undefined : resumable(snapshot.segment, trail, lastValid, resumeKey);
-  const state = openSegmentState(snapshot.segment, base, imported, lastValid, chargeEvents);
-  if (!isOpening) requireReplay(trail.records.length >= block.length, "ADOPTION");
-  chargeRecords(BigInt(trail.records.length) - (base?.position ?? 0n));
-  const replay: SegmentReplay = { domain: selection.domain, backing: selection.backing, segment: snapshot.segment, scope, terms, scopedTerms,
-    verifier, index, revokedAt, revocations, lastValid, block, contextReceipt };
-  for (const bytes of base === undefined ? trail.records : trail.records.slice(Number(base.position))) await applyRecord(state, bytes, replay);
-  requireReplay(lastValid === undefined || state.position >= lastValid.position, "CONTINUITY");
-  const own = state.totals.get(hex(snapshot.backing)) ?? { issued: 0n, burned: 0n };
-  if (!state.totals.has(hex(snapshot.backing))) state.totals.set(hex(snapshot.backing), own);
-  const { issued, burned } = own;
-  requireReplay(same(state.history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
-  const adoptionIndices = new Map(imported?.adoptionIndices);
-  for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
-    imported?.adoptionIndices?.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
-  return { tree: state.tree, spent: state.spent, issued, burned, position: state.position, history: state.history,
-    scanOutputs: state.scanOutputs, outputPositions: state.outputPositions, anchors: state.anchors, nullifiers: state.nullifiers,
-    outputsSeen: state.outputsSeen, adoptionIndices, demands: state.demands, effective: state.effective, spentTags: state.spentTags,
-    events: state.events, totals: state.totals, receiptEvent: state.receiptEvent, eventIndices: state.eventIndices,
-    adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n, statements: state.statements,
-    ancestry: state.ancestry, resumeKey };
+  const identity = replayIdentity(context, snapshot, { imported, block, openingIndex, revokedAt, revocations });
+  return store.replay(async () => {
+    const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid);
+    const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported, chargeEvents);
+    if (!isOpening) requireReplay(trail.records.length >= block.length, "ADOPTION");
+    chargeRecords(BigInt(trail.records.length) - (resumed?.position ?? 0n));
+    const replay: SegmentReplay = { domain: selection.domain, backing: selection.backing, segment: snapshot.segment, scope, terms, scopedTerms,
+      verifier, index, revokedAt, revocations, lastValid, block, witness };
+    for (const bytes of trail.records.slice(Number(state.position))) await applyRecord(state, bytes, replay);
+    const position = state.position;
+    requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
+    const { issued, burned } = state.total(hex(snapshot.backing));
+    requireReplay(same(state.history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
+    const adoptionIndices = new Map(imported?.adoptionIndices);
+    for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
+      imported?.adoptionIndices?.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
+    return new ReplayResult(store, state.ns, position, { issued, burned, adoptionIndices,
+      adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n, identity });
+  });
 }
 
-/** Everything a replayed prefix's state depends on besides its records and
- * their indices. Revocation and the checkpoint's own index bear only on
- * positions after the last valid checkpoint, so they are not part of it. */
-export interface ResumeKey {
-  readonly text: string;
-  readonly verifier: ProofCheck;
-  readonly contextReceipt: ReplayContext["contextReceipt"];
-  readonly imported: ImportedFrontier | undefined;
-  readonly block: readonly Adopted[];
+// Framed fields of the replay identity: no delimiter concatenation.
+const verifierIds = new WeakMap<object, number>();
+let verifiers = 0;
+function identityFrame(parts: readonly (Uint8Array | bigint | string | undefined)[]): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  for (const part of parts) {
+    const bytes = part === undefined ? new Uint8Array() : part instanceof Uint8Array ? part :
+      new TextEncoder().encode(typeof part === "bigint" ? `n${part}` : `s${part}`);
+    const length = new Uint8Array(5); length[0] = part === undefined ? 0 : 1; new DataView(length.buffer).setUint32(1, bytes.length);
+    chunks.push(length, bytes);
+  }
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0; for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
 }
-function resumeKeyOf({ selection, terms, scopedTerms, verifier, contextReceipt }: ReplayContext, snapshot: Snapshot,
-  { imported, block, openingIndex }: { imported: ImportedFrontier | undefined; block: readonly Adopted[]; openingIndex: bigint | undefined }): ResumeKey {
-  const obligors = scopedTerms === undefined ? `selected:${hex(terms.obligor)}` :
-    [...scopedTerms].map(([name, t]) => `${name}:${t === undefined ? "" : hex(t.obligor)}`).sort().join(",");
-  return { text: [hex(selection.domain), hex(selection.backing), hex(snapshot.segment), obligors, String(openingIndex)].join("|"),
-    verifier, contextReceipt, imported, block };
+
+/** The digest of everything a replayed prefix's state depends on besides its
+ * records and the index each was judged at (kept in its event rows): the
+ * configuration and backing, the segment and scoped terms, the imported
+ * frontier by segment, position and history hash, the adopted block and
+ * opening index, the verifier and the revocation indices. Within one process
+ * the verifier is named by object; M5b.4 names it by its circuit identities. */
+function replayIdentity({ selection, terms, scopedTerms, verifier }: ReplayContext, snapshot: Snapshot,
+  { imported, block, openingIndex, revokedAt, revocations }: { imported: ImportedFrontier | undefined; block: readonly Adopted[];
+    openingIndex: bigint | undefined; revokedAt: bigint | undefined; revocations: ReadonlyMap<string, bigint | undefined> | undefined }): Uint8Array {
+  if (!verifierIds.has(verifier)) verifierIds.set(verifier, ++verifiers);
+  const parts: (Uint8Array | bigint | string | undefined)[] = ["v3-replay-identity", selection.domain, selection.backing, snapshot.segment,
+    openingIndex, BigInt(verifierIds.get(verifier)!), revokedAt];
+  const obligors = scopedTerms === undefined ? [["selected", terms.obligor] as const] : [...scopedTerms].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, t]) => [name, t?.obligor] as const);
+  for (const [name, obligor] of obligors) parts.push(name, obligor);
+  for (const [name, at] of [...(revocations ?? [])].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) parts.push(name, at);
+  if (imported !== undefined) {
+    const frontier = imported instanceof StateHandle ? imported.frontier() : imported.frontier;
+    for (const [name, entry] of [...frontier.segments].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      parts.push(name, entry.upto, entry.upto === 0n ? undefined : imported.store.event(entry.ns, entry.upto)!.history);
+    }
+  }
+  for (const adopted of block) parts.push(sha256(adopted.bytes), adopted.index);
+  return sha256(identityFrame(parts));
 }
-const sameResumeKey = (a: ResumeKey, b: ResumeKey): boolean => a.text === b.text && a.verifier === b.verifier &&
-  a.contextReceipt === b.contextReceipt && a.imported === b.imported && (a.block === b.block || (a.block.length === 0 && b.block.length === 0));
 
 /** C2.10.12, pool-v3 §7.1: a trail whose first n records reproduce the last
  * valid checkpoint's evidence hash carries that checkpoint's exact statement,
- * proof and authorization bytes. Under the same replay context their replayed
- * state is that checkpoint's, so the replay resumes from a copy of it instead
- * of verifying the prefix again. Anything else replays in full, keeping the
- * first failing check and its order. */
-function resumable(segment: Uint8Array, trail: ServedTrail, lastValid: ValidCheckpoint | undefined, key: ResumeKey): ReplayResult | undefined {
-  const base = lastValid?.state;
-  if (base?.resumeKey === undefined || !sameResumeKey(base.resumeKey, key) || base.position !== lastValid!.position ||
-      BigInt(trail.records.length) < base.position || !same(sha256(trail.header), segment)) return undefined;
-  const chain = trailEvidenceChain(trail);
-  return chain.length > Number(base.position) && same(chain[Number(base.position)]!, lastValid!.evidenceHash) &&
-    same(base.history, lastValid!.historyHash) ? base : undefined;
+ * proof and authorization bytes. Under the same replay identity their
+ * replayed state is that checkpoint's, so the replay resumes in the
+ * namespace whose tip is that checkpoint instead of verifying the prefix
+ * again. Anything else replays in a fresh namespace, keeping the first failing
+ * check and its order. */
+function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array, trail: ServedTrail, lastValid: LastValid | undefined): StateHandle | undefined {
+  if (lastValid === undefined || BigInt(trail.records.length) < lastValid.position || !same(sha256(trail.header), segment)) return undefined;
+  for (const ns of store.namespaces(identity)) {
+    const tip = store.tip(ns);
+    if (tip.position !== lastValid.position || !same(tip.history, lastValid.historyHash) || !same(tip.evidence, lastValid.evidenceHash)) continue;
+    const chain = trailEvidenceChain(trail);
+    return chain.length > Number(tip.position) && same(chain[Number(tip.position)]!, lastValid.evidenceHash) ? new StateHandle(store, ns) : undefined;
+  }
+  return undefined;
 }
 
 /** §9's compact fault evidence as the reader observes it: facts recorded per
@@ -412,8 +448,7 @@ export async function classifyCarrying(context: ClassifyContext, ranges: Origina
       requireReplay(c.sequence !== header.sequence || tr!.records.length === 0, "OPENING");
       const replayed = await replayTrail(context, s, tr!, { index: c.index, revokedAt: ranges.revokedAt, lastValid });
       verdict = { class: "valid" };
-      lastValid = { position: replayed.position, historyHash: s.historyHash, evidenceHash: s.evidenceHash,
-        eventIndices: replayed.eventIndices, state: replayed };
+      lastValid = lastValidOf(replayed, s);
       latestValid = c.index;
       if (c.sequence === header.sequence) openingValid = true;
       if (c.position === "selected") state = replayed;

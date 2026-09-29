@@ -71,14 +71,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 20 is the floor package.json declares; 24 is what the work is done on.
-        # If the floor ever stops holding, the engines field is the thing that
-        # is wrong, not the test.
-        node: [20, 24]
-        os: [ubuntu-latest]
-        include:
-          - node: 24
-            os: windows-latest
+        # 24 is the floor package.json declares: every party's replay state is
+        # node:sqlite (storage decision 2026-09-29). If the floor ever stops
+        # holding, the engines field is the thing that is wrong, not the test.
+        node: [24]
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4

@@ -44,11 +44,6 @@ async function freePort() {
 }
 
 async function main() {
-  if (Number(process.versions.node.split('.')[0]) < 24) {
-    console.log('SKIP pilot demo: the optional durable pilot requires Node.js 24 or newer.');
-    return;
-  }
-  // Dynamic imports keep the Node 20 core check independent of this Node 24 profile.
   const { decodeBacking } = await import('@mediumofexchange/reference/backing');
   const { decodePublishedOp, opHashOfEntry } = await import('@mediumofexchange/reference/oplog');
   const { replayServedState } = await import('@mediumofexchange/reference/recovery');

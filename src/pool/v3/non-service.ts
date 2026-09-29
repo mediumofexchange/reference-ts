@@ -40,8 +40,8 @@ export async function countNonService(context: CountContext, view: RecordView,
     const state = canonical.state;
     for (const { at, records } of identities.values()) {
       const p = records[0]!.publicInputs, anchor = p[4]!, tag = p[5]!;
-      if (at < t - window || at > t - duration || tags.has(tag) || !state.anchors.has(anchor) ||
-          state.spentTags.has(tag) || locked(state, tag, t)) continue;
+      if (at < t - window || at > t - duration || tags.has(tag) || !state.hasAnchor(anchor) ||
+          state.hasSpentTag(tag) || locked(state, tag, t)) continue;
       for (const record of records) {
         charge();
         if (await verifier.verify(7, [...record.publicInputs], new Uint8Array(record.proof)) === true) { tags.add(tag); break; }

@@ -134,13 +134,13 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     // the parent read itself; the journal reserves both passes (C2.10.6).
     const parent = await f.read(await f.a.package(f.y.name), f.y.name);
     let merging = 0n;
-    const merged = mergeFinalizedPrefixes([{ state: parent.state }], amount => { merging += amount; });
+    const merged = mergeFinalizedPrefixes(parent.state.store, [{ state: parent.state }], amount => { merging += amount; });
     expect((await f.a.rescope("split", { keep: [f.y.name] })).sequence).toBe(3n);
     await expect(f.a.submit(f.issue(await f.context(f.a), f.output(f.y.name, 33, 1n), f.y.issuer))).rejects.toMatchObject({ code: "STALE" });
     for (const j of [bj, f.a]) { await j.publish(); expect(await j.adopt()).toEqual([]); }
     const split = await f.read(await f.a.package(f.y.name), f.y.name);
-    expect(split.work.events).toBeGreaterThan(parent.work.events + BigInt(parent.state.events.size));
-    expect(split.work.events).toBeLessThanOrEqual(parent.work.events + merging + BigInt(merged.events.size));
+    expect(split.work.events).toBeGreaterThan(parent.work.events + parent.state.eventCount());
+    expect(split.work.events).toBeLessThanOrEqual(parent.work.events + merging + merged.events);
     const [ctxB, ctxA] = [await f.context(bj), await f.context(f.a)];
     expect(ctxB.header.entries).toEqual([{ backing: f.x.name, link: toB.link, opening: { operator: aKey, sequence: 2n, root: f.held.selection.root } }]);
     expect(ctxA.header.entries).toEqual([{ backing: f.y.name, link: f.y.name, opening: { operator: aKey, sequence: 2n, root: f.held.selection.root } }]);
@@ -180,7 +180,7 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     const [readX, readY] = [await f.read(served, f.x.name), await f.read(served, f.y.name)];
     expect([readX.state.issued, readY.state.issued]).toEqual([10n, 25n]);
     expect(readX.state.history).toEqual(readY.state.history);
-    for (const note of [paidX[0]!, paidY[0]!, f.fundedX, f.fundedY]) expect(readX.state.nullifiers.has(note.nf)).toBe(true);
+    for (const note of [paidX[0]!, paidY[0]!, f.fundedX, f.fundedY]) expect(readX.state.hasNullifier(note.nf)).toBe(true);
     expect(readY.carrying.filter(item => item.class !== "valid")).toEqual([]);
 
     // A fresh process derives the same journal from its command log.
@@ -211,7 +211,7 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     const served = await f.a.package();
     for (const [name, issued] of [[f.x.name, 10n], [f.y.name, 20n]] as const) {
       const read = await f.read(served, name);
-      expect([read.state.issued, read.state.position, read.state.demands.size]).toEqual([issued, 1n, 1]);
+      expect([read.state.issued, read.state.position, read.state.demands().length]).toEqual([issued, 1n, 1]);
       // The continuation resumes after the opening's adopted block for every scoped backing.
       const openedAt = BigInt(read.carrying.find(item => item.sequence === "3")!.index);
       expect([...read.state.adoptionIndices.values()]).toEqual([openedAt, openedAt]);

@@ -60,7 +60,12 @@ assert.equal(typeof ErgoVenue, 'function');
 assert.equal(DEFAULT_ERGO_DEPTH, 10n);
 assert.equal(ergoNodeSupplier('http://127.0.0.1:9053/').name, 'http://127.0.0.1:9053');
 assert.equal(core.ErgoVenue, undefined);
-if (Number(process.versions.node.split('.')[0]) >= 24) {
+{
+  // Every reader keeps its replay state in node:sqlite (storage decision 2026-09-29).
+  const { ReplayStore } = await import('@mediumofexchange/reference/pool/v3/replay-store');
+  const replay = new ReplayStore();
+  assert.equal(replay.namespaces(new Uint8Array(32)).length, 0);
+  replay.close();
   const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
   const { V3OperatorJournal, V3StoreError } = await import('@mediumofexchange/reference/pool/v3/store');
   const { V3Wallet } = await import('@mediumofexchange/reference/pool/v3/wallet-store');

@@ -20,7 +20,7 @@ import { encodeReplacement, replacementMessage, type Replacement } from "../src/
 // Stand-in proofs isolate payer custody; store-check.mjs proves the same flow
 // under the candidate keys. v2 cases ported: selection, padding, reservation,
 // exact and concurrent retry, proof failure, receipt checks and restart.
-const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
+const b = (n: number) => new Uint8Array(32).fill(n);
 const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
   circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
@@ -32,7 +32,7 @@ const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicIn
 const prove: LocalProver = async task => record(task);
 const outputsOf = (bytes: Uint8Array) => decodeRecord(bytes).publicInputs.slice(9, 13);
 
-describe.skipIf(!supported)("v3 payer custody over restored holdings", () => {
+describe("v3 payer custody over restored holdings", () => {
   let V3Wallet: typeof import("../src/pool/v3/wallet-store.js").V3Wallet;
   let V3OperatorJournal: typeof import("../src/pool/v3/store.js").V3OperatorJournal;
   const wallets: Wallet[] = [], journals: Journal[] = [], directories: string[] = [], scratch = resolve("scratch");

@@ -13,7 +13,6 @@ import {
 } from "../src/pilot-wire.js";
 import type { PilotStore as Store } from "../src/pilot-store.js";
 
-const supported = Number(process.versions.node.split(".")[0]) >= 24;
 const operatorSecret = new Uint8Array(32).fill(31), issuerSecret = new Uint8Array(32).fill(32);
 const aliceSecret = new Uint8Array(32).fill(33), bobSecret = new Uint8Array(32).fill(34);
 const operator = ed25519.getPublicKey(operatorSecret), issuer = ed25519.getPublicKey(issuerSecret);
@@ -34,7 +33,7 @@ function accepted(reply: PilotReply) {
   return receiptFromWire(reply.receipt);
 }
 
-describe.skipIf(!supported)("durable local pilot (Node 24)", () => {
+describe("durable local pilot", () => {
   let PilotStore: typeof import("../src/pilot-store.js").PilotStore;
   let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
   const stores: Store[] = [], directories: string[] = [];

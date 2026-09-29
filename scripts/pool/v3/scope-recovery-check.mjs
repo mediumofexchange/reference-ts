@@ -13,7 +13,7 @@ import { prepareExactOutput, deriveSettlementOwnerSecret } from "../../../dist/p
 import { LIMITS } from "./evidence-reader.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage, RANGE_LIMITS } from "./local-replay.mjs";
-import { mergeFinalizedPrefixes } from "../../../dist/pool/v3/scope-reader.js";
+import { mergeFixture } from "./merge-fixture.mjs";
 import { FixtureVenue } from "../../../dist/record-venue.js";
 import { checkRecoveryScopeReceipts } from "./scope-receipt-check.mjs";
 import { checkRecoveryScopeCounts } from "./scope-count-check.mjs";
@@ -451,55 +451,37 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
   await test("isolated recovery merges reject incomparable conflicts in either parent order", async () => {
     // Synthetic event ancestry isolates the merger. This is a conflict probe,
     // not evidence that disjoint canonical scopes can finalize these forks.
-    const demandId = hex(codec.statementHash(dx2));
-    const event = (record, segment, position, ancestry, tags = [], demand) => ({ identity: hex(codec.statementHash(record)),
-      record, segment, position, ancestry: new Map(ancestry), tags, ...(demand === undefined ? {} : { demand }) });
-    const parent = events => ({ state: { events: new Map(events), anchors: new Set(), scanOutputs: [], outputPositions: new Map() } });
-    const merge = parents => mergeFinalizedPrefixes(parents, () => {});
-    const d = event(dx2, "common", 1n, [], [tagOf(fundedX.nf)], demandId);
+    const fixture = mergeFixture(), segment = fixture.segment, merge = parents => fixture.merge(parents);
     const withdraw = withdrawal(splitX, dx2, presenterX);
-    const w = event(withdraw, "left", 1n, [["common", 1n]], [tagOf(fundedX.nf)], demandId);
-    const s = event(sx.record, "right", 1n, [["common", 1n]], sx.inputs.map(o => tagOf(o.nf)), demandId);
-    const conflictDemand = event(dx1, "left", 1n, [], [tagOf(fundedX.nf)], hex(codec.statementHash(dx1)));
+    // A demand in a common segment, then its withdrawal and its settlement in two branches importing it.
+    const branches = () => [segment("common", [dx2]) && segment("left", [withdraw], [["common", 1n]]),
+      segment("common", [dx2]) && segment("right", [sx.record], [["common", 1n]])];
     // The settlement's nullifier effect also serves as a spend conflict. Its
     // source demand belongs to that branch and does not order the other one.
-    const conflictSpend = event(sx.record, "right", 1n, [], sx.inputs.map(o => tagOf(o.nf)), demandId);
-    for (const parents of [
-      [parent([["common:1", d], ["left:1", w]]), parent([["common:1", d], ["right:1", s]])],
-      [parent([["left:1", conflictDemand]]), parent([["right:1", conflictSpend]])],
-    ]) for (const order of [parents, [...parents].reverse()]) {
+    const unrelated = () => [segment("left", [dx1]), segment("right", [sx.record])];
+    for (const parents of [branches(), unrelated()]) for (const order of [parents, [...parents].reverse()]) {
       assert.throws(() => merge(order), error => error.check === "RECOVERY_CONFLICT");
     }
     const heldSettlement = await demand(joined, sx.output, 0n, adopted.tree, presenterX, 10n,
       "scope isolated demand against issuer note spend");
-    const pending = event(heldSettlement, "pending", 1n, [], [tagOf(sx.output.nf)], hex(codec.statementHash(heldSettlement)));
-    const debit = event(payment.record, "debit", 1n, [], payment.inputs.map(o => tagOf(o.nf)));
-    const spendConflict = [parent([["pending:1", pending]]), parent([["debit:1", debit]])];
+    const spendConflict = [segment("pending", [heldSettlement]), segment("debit", [payment.record])];
     for (const order of [spendConflict, [...spendConflict].reverse()]) {
       assert.throws(() => merge(order), error => error.check === "RECOVERY_CONFLICT");
     }
     // Expiry never makes two incomparable touches of the same tag compatible.
     const expired = structuredClone(dx1); expired.publicInputs[15] = 1n;
-    const expiredEvent = event(expired, "left", 1n, [], [tagOf(fundedX.nf)], hex(codec.statementHash(expired)));
-    for (const order of [[parent([["left:1", expiredEvent]]), parent([["right:1", conflictSpend]])],
-      [parent([["right:1", conflictSpend]]), parent([["left:1", expiredEvent]])]]) {
+    for (const order of [[segment("left", [expired]), segment("right", [sx.record])], [segment("right", [sx.record]), segment("left", [expired])]]) {
       assert.throws(() => merge(order), error => error.check === "RECOVERY_CONFLICT");
     }
-    const common = parent([["common:1", d]]), advanced = parent([["common:1", d], ["left:1", w]]);
+    const common = segment("common", [dx2]), advanced = segment("left", [withdraw], [["common", 1n]]);
     for (const order of [[common, advanced], [advanced, common]]) {
-      const merged = merge(order); assert.equal(merged.events.size, 2); assert.equal(merged.demands.size, 0);
-      assert.equal(merged.effective.size, 2);
+      const merged = merge(order), seen = fixture.opened(merged);
+      assert.equal(merged.events, 2n); assert.equal(seen.demands, 0); assert.equal(seen.effective, 2);
     }
-    const firstId = hex(codec.statementHash(dx1));
-    const first = event(dx1, "earlier", 1n, [], [tagOf(fundedX.nf)], firstId);
-    const firstWithdrawal = event(wx, "earlier", 2n, [], [tagOf(fundedX.nf)], firstId);
-    const repeated = event(dx2, "later", 1n, [["earlier", 2n]], [tagOf(fundedX.nf)], demandId);
-    const repeatedWithdrawal = event(withdraw, "later", 2n, [["earlier", 2n]], [tagOf(fundedX.nf)], demandId);
-    const old = parent([["earlier:1", first], ["earlier:2", firstWithdrawal]]);
-    const newer = parent([...old.state.events, ["later:1", repeated], ["later:2", repeatedWithdrawal]]);
+    const old = segment("earlier", [dx1, wx]), newer = segment("later", [dx2, withdraw], [["earlier", 2n]]);
     for (const order of [[old, newer], [newer, old]]) {
-      const merged = merge(order); assert.equal(merged.events.size, 4); assert.equal(merged.demands.size, 0);
-      assert.equal(merged.effective.size, 4);
+      const merged = merge(order), seen = fixture.opened(merged);
+      assert.equal(merged.events, 4n); assert.equal(seen.demands, 0); assert.equal(seen.effective, 4);
     }
   });
   const receipts = await checkRecoveryScopeReceipts({ codec, verifier, test, operatorSecret, checkpoint, compose,

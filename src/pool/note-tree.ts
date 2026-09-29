@@ -12,16 +12,12 @@
 // is refused before it changes state, and there is no pruning or rollover
 // under one pool identity.
 //
-// A wallet syncs the full leaf list and builds its own paths with this same
-// class; it never asks a server for one leaf's path or index (§C1.5). So the
-// tree here is both the operator's accumulator and the wallet's, and it
-// stores every node on every leaf's path rather than only a frontier: paths
-// for arbitrary leaves are what a wallet needs, and the reference
-// implementation prefers one structure with an obvious proof of correctness.
-// `appendAll` builds a synced list with about two hashes per leaf; at the
-// host hash's cost (about a millisecond) a million leaves is minutes, and a
-// faster field arithmetic or the backend's hash behind the same interface
-// is the remedy when a deployment needs more.
+// This class stores every node on every leaf's path: the reference structure
+// with an obvious proof of correctness, which tests, fixtures and probes
+// compare against. Runtime replay keeps only a frontier and the incremental
+// witnesses of chosen outputs in its storage (v3/replay-store.ts, storage
+// decision 2026-09-29), so no party's memory grows with the tree; a wallet
+// still never asks a server for one leaf's path or index (§C1.5).
 
 import { EncodingError } from "../bytes.js";
 import { isField, requireField } from "./field.js";
@@ -172,15 +168,6 @@ export class NoteTree {
       high = parentHigh;
     }
     return commitments.map((_, i) => BigInt(first + i));
-  }
-
-  /** An independent copy of the same leaves and nodes, with no hashing; later appends to either leave the other unchanged. */
-  clone(): NoteTree {
-    const copy = new NoteTree();
-    for (const leaf of this.leafList) copy.leafList.push(leaf);
-    for (const leaf of this.present) copy.present.add(leaf);
-    for (const [key, node] of this.nodes) copy.nodes.set(key, node);
-    return copy;
   }
 
   /** The path for a used leaf, against the current root. */

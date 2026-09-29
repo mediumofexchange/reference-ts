@@ -10,9 +10,8 @@ import { decodeRangeAnswer, heldCommitments } from "../src/record-range.js";
 import { BranchSupplier, Chain, recordOutput, transaction, type Block } from "./ergo-chain.js";
 import type { ErgoVenueJournal as Journal } from "../src/ergo-store.js";
 
-const supported = Number(process.versions.node.split(".")[0]) >= 24;
 let ErgoVenueJournal: typeof import("../src/ergo-store.js").ErgoVenueJournal;
-beforeAll(async () => { if (supported) ({ ErgoVenueJournal } = await import("../src/ergo-store.js")); });
+beforeAll(async () => { ({ ErgoVenueJournal } = await import("../src/ergo-store.js")); });
 const directories: string[] = [], journals: Journal[] = [];
 afterEach(() => {
   for (const journal of journals.splice(0)) journal.close();
@@ -40,7 +39,7 @@ function answer(venue: ErgoVenue, subject = first.operator, kind: 1 | 4 = 1, toI
   return venue.range({ venue: venue.id, kind, subject, fromIndex: 0n, toIndex }, limits)!;
 }
 
-describe.skipIf(!supported)("durable independently replayed Ergo view", () => {
+describe("durable independently replayed Ergo view", () => {
   it("reopens offline with byte-identical ranges, empty answers and non-held twins, then continues only new sections", async () => {
     const path = file(), blocks = records(), old = opened(path);
     await old.venue.sync([supplier(blocks)]);
