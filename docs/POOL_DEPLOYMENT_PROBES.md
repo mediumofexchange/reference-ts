@@ -688,11 +688,13 @@ for N > 0. This closes the A22 shape decision, not v3 runtime integration.
 ## Replay and retention cost
 
 Recovery map A13 asks what the redemption reader's full replay (C2b.3.3) and
-the operator's exact-byte retention cost. `node scripts/pool/v3/replay-cost.mjs
---out docs/pool-replay-cost-verification.json` replays synthetic single-backing
+the operator's exact-byte retention cost. The probe
+[`replay-cost.mjs`](https://github.com/mediumofexchange/reference-ts/blob/0969845/scripts/pool/v3/replay-cost.mjs),
+retired once A13 was recorded and the [replay-state probe](#replay-state-storage)
+measured the stored runtime, replayed synthetic single-backing
 segments (one issue, then spends with fresh nullifiers and four outputs) through
 the conditional local replay, with a checkpoint every K events and the last one
-selected. A counting stub stands in for proof verification; the
+selected. A counting stub stood in for proof verification; the
 [conformance report](pool-v3-conformance-verification.json) supplies real
 single-thread verification times. The
 [recorded report](pool-replay-cost-verification.json) binds LF-normalized source

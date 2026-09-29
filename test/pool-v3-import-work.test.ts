@@ -8,7 +8,7 @@ import { ScopeTree } from "../src/pool/scope.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { classifyImports, type ImportLimits } from "../src/pool/v3/import-reader.js";
+import { classifyScopes, type ImportLimits } from "../src/pool/v3/scope-reader.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { deliveryHash, encodePublication, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -52,9 +52,10 @@ function fixture(proofVerifier: ProofCheck = verifier) {
   const venue = FixtureVenue.reference(label, lag, 200n), directories = new Map<string, readonly SnapshotDigest[]>();
   const snapshots: Uint8Array[] = [], trails: Uint8Array[] = [];
   const snapshotIds = new Set<string>(), trailIds = new Set<string>();
-  function checkpoint(target: Segment, sequence: bigint, index = sequence): Commitment {
+  function checkpoint(target: Segment, sequence: bigint, index = sequence, misstated = 0n): Commitment {
     const total = target.state.total(hex(backing));
-    const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.state.evidence, ...total };
+    const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.state.evidence,
+      ...total, issued: total.issued + misstated };
     const directory = [{ name: backing, digest: snapshotDigest(snapshot) }], root = directoryRoot(directory);
     const commitment = signCommitment(operatorSecret, sequence, root);
     directories.set(hex(root), directory);
@@ -63,7 +64,7 @@ function fixture(proofVerifier: ProofCheck = verifier) {
     if (!trailIds.has(hex(encodedTrail))) { trailIds.add(hex(encodedTrail)); trails.push(encodedTrail); }
     venue.witness(1, operator, index, encodeCommitment(commitment)); return commitment;
   }
-  const read = (target: Segment, selected: Commitment, limits: ImportLimits) => classifyImports({ store: new ReplayStore(),
+  const read = (target: Segment, selected: Commitment, limits: ImportLimits) => classifyScopes({ store: new ReplayStore(),
     selection: { mode: "current-fixture", domain, venue: venueId, backing, operator, sequence: selected.sequence,
       root: selected.root, judgingIndex: venue.witnessedIndex() }, terms, header: target.header, verifier: proofVerifier,
     reference: { context: LOCAL_REFERENCE, label, lag }, importLimits: limits,
@@ -128,12 +129,23 @@ describe("single-backing reader work budgets", () => {
     const next = segment(3n, a1, a.state); f.checkpoint(next, 3n);
     const continued = f.checkpoint(next, 4n);
     const last = segment(5n, continued, next.state), selected = f.checkpoint(last, 5n);
-    const result = await f.read(last, selected, { maxCheckpoints: 5n, maxEvents: 3n });
-    expect(result.work).toEqual({ checkpoints: 5n, events: 3n, requestProofs: 0n, requestProofReserve: 0n });
-    // One issue plus two fresh scans of that inherited event. A budget that
-    // covers only the local records must refuse, never publish partial state.
-    await expect(f.read(last, selected, { maxCheckpoints: 5n, maxEvents: 2n })).rejects.toMatchObject({ status: "resource-refusal" });
+    const result = await f.read(last, selected, { maxCheckpoints: 5n, maxEvents: 5n });
+    expect(result.work).toEqual({ checkpoints: 5n, events: 5n, requestProofs: 0n, requestProofReserve: 0n });
+    // One issue, then at each of the two fresh openings a merge pass over its
+    // parent and a scan of that inherited event; the empty continuation resumes
+    // in its opening's namespace and charges nothing. A budget that covers only
+    // the local records must refuse, never publish partial state.
+    await expect(f.read(last, selected, { maxCheckpoints: 5n, maxEvents: 4n })).rejects.toMatchObject({ status: "resource-refusal" });
     await expect(f.read(last, selected, { maxCheckpoints: 4n, maxEvents: 3n })).rejects.toMatchObject({ status: "resource-refusal" });
+  });
+
+  it("founds a segment on an opening excluded for its own snapshot, so a later valid checkpoint of it finalizes (C2.10.12)", async () => {
+    const f = fixture(), original = segment(1n);
+    f.checkpoint(original, 1n, 1n, 1n); // The opening misstates its supply.
+    await issue(original); const selected = f.checkpoint(original, 2n);
+    const result = await f.read(original, selected, { maxCheckpoints: 2n, maxEvents: 1n });
+    expect(result.carrying!.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "excluded", "SNAPSHOT"], ["2", "valid", undefined]]);
+    expect(result.state!.issued).toBe(5n);
   });
 
   it("counts identical held checkpoints even when their public objects deduplicate", async () => {

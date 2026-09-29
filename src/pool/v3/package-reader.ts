@@ -1,4 +1,4 @@
-// Candidate §12 evidence and §13 record readers, single- and multi-backing. Configuration,
+// Candidate §12 evidence and §13 record readers for any scope. Configuration,
 // verifier, selection and reference venue are independently held by the reader.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
@@ -10,12 +10,12 @@ import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { classifyFrontier, classifyImports, importLimitsOf, type FrontierContext, type FrontierResult, type ImportContext, type ImportLimits, type ImportResult } from "./import-reader.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage, type PackageLimits } from "./package.js";
 import { decodedTrails, type ReaderSelection, type SignedTerms } from "./reader.js";
-import { EvidenceRefusal, requireReplay, ScopeRequired } from "./refusals.js";
+import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
-import { classifyScopeFrontier, classifyScopes, type ScopeResult } from "./scope-reader.js";
+import { classifyScopeFrontier, classifyScopes, importLimitsOf, type FrontierContext, type FrontierResult, type ImportContext,
+  type ImportLimits, type ScopeResult } from "./scope-reader.js";
 import { ReplayStore } from "./replay-store.js";
 import type { ProofCheck, ScanOutput } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
@@ -54,29 +54,15 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
  * refusal. Never returns a partial state or treats unavailable ancestry as empty.
  * The internal state is newly replayed per call; no asserted state is an input.
  * Compact faults replace only dependency-resolved non-opening target trails;
- * the selected envelope remains complete. A multi-backing scope throws
- * ScopeRequired; readPackage reads any scope. */
-export async function readSingleBackingPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ImportResult & FaultResult> {
-  const { context, directories, evidence, faults, venue } = openPackage(bytes, selected, options, false);
-  const result = await classifyImports(context, directories, venue, evidence);
-  return { ...result, ...faults.result() };
-}
-
-/** As readSingleBackingPackage for a selection in any scope: a checkpoint scoping
- * several backings, the selection's or one in its ancestry, is read by the scope
- * reader (C2.10.3–7) with the same refusals. Carries no canonical frontier. */
+ * the selected envelope remains complete. The selection's scope and every
+ * scope in its ancestry may name one backing or several (C2.10.3–7). */
 export async function readPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
-  const { context, directories, evidence, faults, header, venue } = openPackage(bytes, selected, options, true);
-  let result: ScopeResult | undefined;
-  if (header.entries.length === 1) {
-    try { result = await classifyImports(context, directories, venue, evidence); }
-    catch (error) { if (!(error instanceof ScopeRequired)) throw error; }
-  }
-  result ??= await classifyScopes(context, directories, venue, evidence);
+  const { context, directories, evidence, faults, venue } = openPackage(bytes, selected, options);
+  const result = await classifyScopes(context, directories, venue, evidence);
   return { ...result, ...faults.result() };
 }
 
-function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader, anyScope: boolean) {
+function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: PackageReader) {
   const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn, importLimits: limitsIn } = options;
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
@@ -86,9 +72,7 @@ function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: Pack
   const selection = ownSelection(selected);
   requireReplay(same(selection.venue, expectedVenue), "VENUE_REFERENCE");
   requireReplay(same(selection.domain, domain), "CONFIGURATION");
-  const importLimits = limitsIn === undefined ? { maxCheckpoints: 128n, maxEvents: 8192n } :
-    { maxCheckpoints: limitsIn.maxCheckpoints, maxEvents: limitsIn.maxEvents };
-  if (!isValue(importLimits.maxCheckpoints) || !isValue(importLimits.maxEvents)) throw new TypeError("invalid import limits");
+  const importLimits = importLimitsOf(limitsIn);
   const items = decodeEvidencePackage(bytes, PACKAGE_LIMITS);
   if (items.some(item => ![1, 2, 3, 4, 6, 7, 10].includes(item.kind)) ||
       [1, 2, 10].some(kind => items.filter(item => item.kind === kind).length > 1)) throw new EvidenceRefusal("unsupported-scope");
@@ -111,7 +95,6 @@ function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: Pack
   if (snapshotBytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const snapshot = decodeSnapshot(snapshotBytes), scope = checkpointScope(decodedTrails(trails), selection.backing, entry.digest, snapshot);
   const { header } = scope;
-  if (!anyScope && header.entries.length !== 1) throw new ScopeRequired();
   scope.fullTrail();
   requireReplay(same(header.domain, domain) && same(header.venue, selection.venue) && same(header.operator, selection.operator) &&
     header.sequence <= selection.sequence, "CONTEXT");
@@ -120,30 +103,17 @@ function openPackage(bytes: Uint8Array, selected: ReaderSelection, options: Pack
   const faults = faultObserver(payloads(7), selection, verifier);
   const context: ImportContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, header, verifier, reference, importLimits, faults,
     ...(payloads(10).length === 0 ? {} : { receiptBytes: payloads(10)[0]! }) };
-  return { context, directories, evidence: { snapshots, trails }, faults, header, venue };
+  return { context, directories, evidence: { snapshots, trails }, faults, venue };
 }
 
-/** Descend every witnessed term for independently authenticated root terms.
- * An empty result is proved by the complete venue descent, never by missing
- * package objects. Selection and receipt metadata supply no frontier authority. */
-export async function readSingleBackingFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigint,
-  options: PackageReader): Promise<FrontierResult & FaultResult> {
-  const { context, directories, evidence, faults, venue } = openFrontier(bytes, signed, judgingIndex, options);
-  const result = await classifyFrontier(context, directories, venue, evidence);
-  return { ...result, ...faults.result() };
-}
-
-/** As readSingleBackingFrontier where the backing's ancestry may scope several
- * backings: the scope reader descends it (C2.10.3–7) with the same refusals. */
+/** Descend every witnessed term for independently authenticated root terms,
+ * through ancestry scoping one backing or several (C2.10.3–7). An empty result
+ * is proved by the complete venue descent, never by missing package objects.
+ * Selection and receipt metadata supply no frontier authority. */
 export async function readFrontier(bytes: Uint8Array, signed: SignedTerms, judgingIndex: bigint,
   options: PackageReader): Promise<FrontierResult & FaultResult> {
   const { context, directories, evidence, faults, venue } = openFrontier(bytes, signed, judgingIndex, options);
-  let result: FrontierResult;
-  try { result = await classifyFrontier(context, directories, venue, evidence); }
-  catch (error) {
-    if (!(error instanceof ScopeRequired)) throw error;
-    result = await classifyScopeFrontier(context, directories, venue, evidence);
-  }
+  const result = await classifyScopeFrontier(context, directories, venue, evidence);
   return { ...result, ...faults.result() };
 }
 

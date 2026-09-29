@@ -1,26 +1,24 @@
 // The v3 reader over one segment: pool-v3 §13 record reads through a
-// RecordVenue, a checkpoint's trail replayed record by record through the
-// state machine (state.ts), and the original segment's carrying checkpoints
-// classified in held order with the C2b.6.1 clock and C2b.4.1 lapse.
-// Candidate until adoption: no approved configuration or authenticated-chain
-// finality verdict. Single-backing imports, receipts, force and counts use
-// import-reader.ts and package-reader.ts; multi-backing scopes use scope-reader.ts.
+// RecordVenue and a checkpoint's trail replayed record by record through the
+// state machine (state.ts). Candidate until adoption: no approved configuration
+// or authenticated-chain finality verdict. The walk that classifies checkpoints,
+// imports, receipts, force and counts is scope-reader.ts; package-reader.ts is its entry.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
-  admittedReplacements, decodeRangeAnswer, heldCommitments, linkInForce, replacementChain, revocationIndex,
+  admittedReplacements, decodeRangeAnswer, heldCommitments, replacementChain, revocationIndex,
   type ChainLink, type HeldCommitment, type RangeAnswer, type RangeLimits, type RecordKind,
 } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import type { Commitment, SnapshotDigest } from "../../venue-records.js";
 import { ScopeTree } from "../scope.js";
-import { decodeSnapshot, type Snapshot } from "./commitments.js";
+import type { Snapshot } from "./commitments.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
-import { ReplayRefusal, EvidenceRefusal, ScopeRequired, requireReplay, type ClockRecord } from "./refusals.js";
-import { servedTrail, trailEvidenceChain } from "./served-trail.js";
+import { ReplayRefusal, EvidenceRefusal, requireReplay } from "./refusals.js";
+import { trailEvidenceChain } from "./served-trail.js";
 import type { ReplayStore } from "./replay-store.js";
 import {
   applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type ScanOutput, type SegmentReplay,
@@ -117,65 +115,6 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
   return { t, lag, chain, revokedAt, heldBy, termEnd, carries, ask };
 }
 
-/** A carrying checkpoint of the original operator's first term, in held order. */
-export interface CarryingCheckpoint {
-  readonly commitment: Commitment;
-  readonly index: bigint;
-  readonly sequence: bigint;
-  readonly digest: Uint8Array;
-  readonly position: "before" | "selected" | "after";
-}
-export interface OriginalRanges {
-  readonly judgingIndex: bigint;
-  readonly lag: bigint;
-  readonly checkpointIndex: bigint;
-  readonly revokedAt: bigint | undefined;
-  readonly heldBefore: number;
-  readonly heldAfter: number;
-  readonly chain: readonly ChainLink[];
-  readonly carrying: readonly CarryingCheckpoint[];
-  /** The segment's opening checkpoint's index, if the record holds it carrying the backing. */
-  readonly opening: bigint | undefined;
-  /** Whether the record holds a commitment at the header's opening sequence at all. */
-  readonly openingHeld: boolean;
-}
-
-/** Original-segment selection: its opening checkpoint anchors the silence
- * boundary. Successor and import selections take the import walk instead. */
-export async function readRecordRanges(selection: ReaderSelection, terms: RootTerms, header: SegmentHeader,
-  directories: Directories, venue: RecordVenue, reference: VenueReference): Promise<OriginalRanges> {
-  const { t, lag, chain, revokedAt, heldBy, termEnd, carries } = await readRecordView(selection, terms, directories, venue, reference);
-  const held = await heldBy(chain[0]!.operator);
-  const at = held.findIndex(h => h.commitment.sequence === selection.sequence && same(h.commitment.root, selection.root));
-  if (at < 0) throw new EvidenceRefusal("selection-mismatch");
-  // Witnessed in another party's term the selection is lapsed (C2.10.11); in a
-  // later term of its own key it opens a new segment (C2.10.4), unsupported here.
-  const inForce = linkInForce(chain, held[at]!.index);
-  if (!same(inForce.operator, chain[0]!.operator)) throw new EvidenceRefusal("lapsed-selection");
-  if (inForce.from !== 0n) throw new EvidenceRefusal("unsupported-scope");
-  // The original's first term: past it, its commitments are not read for the backing (C2.7.1).
-  const term = held.filter(h => h.index <= termEnd(0)), carrying: CarryingCheckpoint[] = [];
-  for (const [i, h] of term.entries()) {
-    const entry = carries(h);
-    if (entry === undefined) continue;
-    // A carrying checkpoint is read under the one-backing scope, as the selection is.
-    if (directories.get(hex(h.commitment.root))!.length !== 1) throw new ScopeRequired();
-    carrying.push({ commitment: h.commitment, index: h.index, sequence: h.commitment.sequence, digest: entry.digest,
-      position: i < at ? "before" : i === at ? "selected" : "after" });
-  }
-  for (let i = 1; i < chain.length; i++) {
-    for (const h of await heldBy(chain[i]!.operator)) {
-      if (h.index < chain[i]!.from || h.index > termEnd(i)) continue;
-      if (carries(h) !== undefined) throw new EvidenceRefusal("unsupported-scope");
-    }
-  }
-  // The segment's opening checkpoint is the carrying checkpoint at the header's opening sequence (C2b.4.1).
-  const opening = carrying.find(c => c.sequence === header.sequence)?.index;
-  const openingHeld = term.some(h => h.commitment.sequence === header.sequence);
-  return { judgingIndex: t, lag, checkpointIndex: held[at]!.index, revokedAt, heldBefore: at, heldAfter: term.length - at - 1,
-    chain, carrying, opening, openingHeld };
-}
-
 /** Trails that decode under the budget; one that does not decode is no
  * evidence for any checkpoint (§10.1) and is not read, while the budget holds. */
 export function decodedTrails(trails: readonly Uint8Array[]): ServedTrail[] {
@@ -204,14 +143,13 @@ export interface ReplayContext {
 export class ReplayResult extends StateHandle {
   readonly issued: bigint;
   readonly burned: bigint;
+  /** Each scoped backing's adoption index, keyed by hex name. */
   readonly adoptionIndices: ReadonlyMap<string, bigint>;
-  readonly adoptionIndex: bigint;
   /** The replay identity its namespace is kept under (storage decision item 5). */
   readonly identity: Uint8Array;
-  constructor(store: ReplayStore, ns: number, position: bigint, facts: Pick<ReplayResult, "issued" | "burned" | "adoptionIndices" | "adoptionIndex" | "identity">) {
+  constructor(store: ReplayStore, ns: number, position: bigint, facts: Pick<ReplayResult, "issued" | "burned" | "adoptionIndices" | "identity">) {
     super(store, ns, position);
-    this.issued = facts.issued; this.burned = facts.burned; this.adoptionIndices = facts.adoptionIndices;
-    this.adoptionIndex = facts.adoptionIndex; this.identity = facts.identity;
+    this.issued = facts.issued; this.burned = facts.burned; this.adoptionIndices = facts.adoptionIndices; this.identity = facts.identity;
   }
   /** Events this segment's opening imported. */
   importedEventCount(): bigint { return this.store.eventCount(this.ns, 0n); }
@@ -221,7 +159,7 @@ export interface ValidCheckpoint extends LastValid {
   readonly state?: ReplayResult | undefined;
 }
 /** A predecessor's replayed state or merged finalized prefixes, as imported by a new segment. */
-export type ImportedFrontier = ReplayResult | (MergedImport & { readonly adoptionIndex?: bigint; readonly adoptionIndices?: ReadonlyMap<string, bigint> });
+export type ImportedFrontier = ReplayResult | (MergedImport & { readonly adoptionIndices: ReadonlyMap<string, bigint> });
 export interface TrailOptions {
   /** The checkpoint's witnessed index; undefined for a read without venue answers. */
   readonly index?: bigint | undefined;
@@ -277,9 +215,8 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     }
     const adoptionIndices = new Map(imported?.adoptionIndices);
     for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
-      imported?.adoptionIndices?.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
-    return new ReplayResult(store, state.ns, position, { issued, burned, adoptionIndices,
-      adoptionIndex: isOpening ? imported?.adoptionIndex ?? 0n : openingIndex ?? 0n, identity });
+      imported?.adoptionIndices.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
+    return new ReplayResult(store, state.ns, position, { issued, burned, adoptionIndices, identity });
   });
 }
 
@@ -365,120 +302,4 @@ export interface CarryingVerdict {
   readonly index: string;
   readonly class: "valid" | "excluded" | "lapsed";
   readonly check?: string;
-}
-export interface ClassifyContext extends ReplayContext {
-  readonly signedTerms: readonly SignedTerms[];
-  readonly faults: FaultObserver;
-}
-export interface OriginalEvidence {
-  readonly snapshot: Snapshot;
-  readonly trail: ServedTrail;
-  readonly snapshots: readonly Uint8Array[];
-  readonly trails: readonly Uint8Array[];
-}
-
-/** C2.10.11 over the original operator's carrying checkpoints in held order,
- * each at its own record prefix. Lapse by term is settled by the chain; lapse
- * by silence is read here (C2b.6.1, C2b.4.1): under a declared clause, c(i)
- * is the last valid carrying checkpoint strictly before index i, the gap is
- * open at i where i − c(i) exceeds the duration, the segment's silence
- * boundary is the first index strictly after its opening at which the gap
- * is open, and a non-opening checkpoint of this segment witnessed while the
- * gap is open or after the boundary is lapsed for its whole scope: held,
- * its snapshot resolved to establish the segment but its trail neither
- * resolved nor replayed, closing nothing. Otherwise each is valid, excluded
- * or unresolved from its own snapshot and evidence, with §9.1's bounded
- * intrinsic replacement after a valid opening, and the segment continues
- * from its last valid checkpoint (C2.10.12). A carrying checkpoint of
- * another segment contradicts the header's empty opening before the
- * selection (C2.7.3) and is an unsupported segment after it, whatever the
- * clock says. A valid later checkpoint supersedes the selection (C2.7.5);
- * an excluded or lapsed one is passed. Unresolved evidence anywhere in the
- * order stops the read. The clock at the judging index follows from the
- * same walk; a lapsed selection refuses with the clock record proving the
- * lapse; without a clause there is no gap. */
-export async function classifyCarrying(context: ClassifyContext, ranges: OriginalRanges, evidence: OriginalEvidence):
-  Promise<{ carrying: CarryingVerdict[]; state: ReplayResult | undefined; clock: ClockRecord | null }> {
-  const { selection, header, terms } = context, { snapshot, trail, snapshots } = evidence;
-  const trails = decodedTrails(evidence.trails), carrying: CarryingVerdict[] = [];
-  const duration = terms.silence?.noCommitmentDuration, opening = ranges.opening;
-  const later = (a: bigint, b: bigint): bigint => (a > b ? a : b);
-  // The segment's opening checkpoint carries every scoped backing (C2b.4.1, C2.10.9a), clause or not: a held
-  // commitment at the opening sequence carrying nothing for the backing contradicts the header; an opening
-  // sequence the record does not hold is missing evidence.
-  if (opening === undefined) {
-    if (ranges.openingHeld) throw new ReplayRefusal("OPENING");
-    throw new EvidenceRefusal("unresolved-evidence");
-  }
-  const clockRecord = (at: bigint, snapshotIndex: bigint, boundaryAt: bigint | undefined): ClockRecord => ({
-    duration: duration!.toString(), snapshotIndex: snapshotIndex.toString(), gap: (at - snapshotIndex).toString(),
-    open: at - snapshotIndex > duration!, boundary: boundaryAt === undefined ? null : boundaryAt.toString(), opening: opening.toString() });
-  let lastValid: ValidCheckpoint | undefined, state: ReplayResult | undefined, openingValid = false;
-  let latestValid = 0n, closing = 0n, currentIndex = -1n, boundary: bigint | undefined;
-  for (const c of ranges.carrying) {
-    await context.faults.inspect(c, [{ name: selection.backing, digest: c.digest }], { header, terms: context.signedTerms });
-    // c(i) reads only checkpoints strictly before i: two at one index do not close each other's gap.
-    if (c.index !== currentIndex) { closing = latestValid; currentIndex = c.index; }
-    let s = snapshot, tr: ServedTrail | undefined = trail;
-    if (c.position !== "selected") {
-      // The record pins an earlier state of this operator that the header's empty opening denies.
-      if (c.sequence < header.sequence) throw new ReplayRefusal("OPENING");
-      const bytes = snapshots.find(x => same(sha256(x), c.digest));
-      if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
-      s = decodeSnapshot(bytes);
-      if (!same(s.segment, snapshot.segment) || !same(s.backing, selection.backing)) {
-        if (c.position === "before") throw new ReplayRefusal("OPENING");
-        throw new EvidenceRefusal("unsupported-scope");
-      }
-    }
-    // Lapse by silence (C2b.4.1): a non-opening checkpoint of this segment witnessed while the gap is open or past the boundary.
-    if (duration !== undefined && c.sequence !== header.sequence) {
-      const open = c.index - closing > duration;
-      if (open && boundary === undefined && c.index > opening) boundary = later(closing + duration + 1n, opening + 1n);
-      if (open || (boundary !== undefined && boundary < c.index)) {
-        carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "lapsed" });
-        if (c.position === "selected") throw Object.assign(new EvidenceRefusal("lapsed-selection"), { clock: clockRecord(c.index, closing, boundary) });
-        continue;
-      }
-    }
-    if (c.position !== "selected") {
-      // Its served trail authenticates its committed evidence (§10.1), from any supplied trail's prefix (§12.1).
-      tr = servedTrail({ backing: selection.backing, segment: s.segment, digest: c.digest }, s, trails);
-      // This original-only path proves a valid empty opening with no earlier
-      // carrying checkpoint. No pre-opening snapshot can give a publication
-      // force (C2b.3.2), so its adopted block is empty even with silence.
-      if (tr === undefined && openingValid && lastValid !== undefined) {
-        const intrinsic = context.faults.intrinsicFailure(c, { header, terms: context.signedTerms }, 0n);
-        if (intrinsic !== undefined) {
-          carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), class: "excluded", check: intrinsic });
-          continue;
-        }
-      }
-      // Same segment and scope as the selection, whose terms are already resolved (§12.1).
-      if (tr === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    }
-    let verdict: { class: "valid" } | { class: "excluded"; check: string };
-    try {
-      requireReplay(c.sequence !== header.sequence || tr!.records.length === 0, "OPENING");
-      const replayed = await replayTrail(context, s, tr!, { index: c.index, revokedAt: ranges.revokedAt, lastValid });
-      verdict = { class: "valid" };
-      lastValid = lastValidOf(replayed, s);
-      latestValid = c.index;
-      if (c.sequence === header.sequence) openingValid = true;
-      if (c.position === "selected") state = replayed;
-    } catch (error) {
-      if (!(error instanceof ReplayRefusal) || c.position === "selected") throw error;
-      verdict = { class: "excluded", check: error.check };
-    }
-    carrying.push({ sequence: c.sequence.toString(), index: c.index.toString(), ...verdict });
-    if (verdict.class === "valid" && c.position === "after") throw new EvidenceRefusal("superseded-selection");
-  }
-  let clock: ClockRecord | null = null;
-  if (duration !== undefined) {
-    // The gap at the judging index t: c(t) is the last valid carrying checkpoint strictly before t.
-    const t = ranges.judgingIndex, snapshotIndex = latestValid < t ? latestValid : closing;
-    if (t - snapshotIndex > duration && boundary === undefined && t > opening) boundary = later(snapshotIndex + duration + 1n, opening + 1n);
-    clock = clockRecord(t, snapshotIndex, boundary);
-  }
-  return { carrying, state, clock };
 }

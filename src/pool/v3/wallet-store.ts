@@ -336,8 +336,8 @@ export class V3Wallet {
     let force: ForceState | undefined, notes: OwnedNote[] = [];
     if (canonical !== undefined) {
       force = openForceState(canonical.state);
-      // This backing's own adoption index: a scope opening's merged import has no single one.
-      const adopted = canonical.state.adoptionIndices.get(hex(backing)) ?? canonical.state.adoptionIndex;
+      // This backing's own adoption index: each scoped backing has its own.
+      const adopted = canonical.state.adoptionIndices.get(hex(backing)) ?? 0n;
       for (const publication of result.force) if (publication.index > adopted) applyForceEffects(force, publication.record);
       const spent = force;
       notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));

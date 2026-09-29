@@ -9,7 +9,7 @@ import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { readSingleBackingPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import { readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { encodePublication, encodeRecord, type Record } from "../src/pool/v3/records.js";
@@ -76,7 +76,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     const spend = (ctx: SegmentContext, offset = 60) => encodeRecord(record(spendTask(ctx, inputs,
       [10n, 0n, 0n, 0n].map((value, i) => prepareExactOutput(b(22), domain, b(offset + i), backing, value)))));
     const read = async (served: ServedPackage) => {
-      const result = await readSingleBackingPackage(served.package,
+      const result = await readPackage(served.package,
         { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" }, { configuration, verifier, venue, reference });
       if (result.state === undefined) throw new Error("unexpected receipt verdict");
       return result;

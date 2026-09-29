@@ -18,7 +18,7 @@ import { directoryRoot, encodeCommitment, encodeReplacement, replacementHash, re
   signCommitment, encodeRevocation, signRevocation } from "../../../dist/venue-records.js";
 import { NoteTree } from "../../../dist/pool/note-tree.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
-import { readSingleBackingPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
+import { readPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest } from "../../../dist/pool/v3/commitments.js";
 import { decodeEvidencePackage, encodeEvidencePackage, encodeEvidenceDirectory } from "../../../dist/pool/v3/package.js";
 import { decodeSegmentHeader } from "../../../dist/pool/v3/headers.js";
@@ -65,7 +65,7 @@ async function worker(directory, ergo) {
       const answer = await venue.sync([new BranchSupplier("succession-holder", input.venue.tip, ERGO_CHAIN)]);
       assert.equal(hex(answer.witnessedHeaderId), hex(readFileSync(join(directory, "ergo-pin.bin"))));
     } else venue = FixtureVenue.from(input.venue);
-    process.stdout.write(JSON.stringify(summary(await readSingleBackingPackage(input.package, input.selection,
+    process.stdout.write(JSON.stringify(summary(await readPackage(input.package, input.selection,
       { configuration, verifier, venue, reference: referenceFor(ergo) }))));
   } finally { await api.destroy(); }
 }
@@ -119,7 +119,7 @@ async function acceptance(ergo) {
     const served = async journal => { const value = await journal.package(); packages.push(value.package.length); return {
       package: value.package, selection: { ...value.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       venue: ergo ? { tip: supplier.tip } : venue.export() }; };
-    const read = input => readSingleBackingPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference, witness: () => true });
+    const read = input => readPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference, witness: () => true });
     const fresh = input => {
       if (ergo) writeFileSync(join(build, "ergo-pin.bin"), pin);
       const child = spawnSync(process.execPath, [import.meta.filename, "--worker", build, ...(ergo ? ["--ergo"] : [])],

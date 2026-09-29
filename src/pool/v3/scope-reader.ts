@@ -1,31 +1,83 @@
-// Multi-backing C2.10.3–7, C2b.3.1–4.2 and C2b.5 reads: whole-scope
-// classification, merged finalized prefixes with per-backing totals and
-// adoption indices, publication force and silence clocks per backing, receipt
-// reads across a scope, the non-service count and compact faults. A
-// single-backing read throws ScopeRequired where this reader takes over.
-// Candidate until adoption: reference venues only, no finality verdict.
+// The one C2.10.3–7, C2b.3.1–4.2 and C2b.5 reader walk, for a scope of one
+// backing or several: whole-scope classification, merged finalized prefixes
+// with per-backing totals and adoption indices, publication force and silence
+// clocks per backing, receipt reads across a scope, the non-service count and
+// compact faults. Candidate until adoption: reference venues only, no finality verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { linkInForce, type HeldCommitment, type RangeEntry } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
 import type { Commitment } from "../../venue-records.js";
-import { identifierOf, VALUE_BOUND } from "../field.js";
+import { isValue, VALUE_BOUND } from "../field.js";
 import { ScopeTree } from "../scope.js";
 import { decodeReceipt, decodeSnapshot, type Snapshot } from "./commitments.js";
 import type { SegmentHeader } from "./headers.js";
-import { importLimitsOf, NO_FAULTS, type CanonicalCheckpoint, type ForcedPublication, type FrontierContext, type FrontierResult,
-  type ImportCarryingVerdict, type ImportContext, type ImportEvidence, type ImportWork, type PublicationVerdict } from "./import-reader.js";
+import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
-import { decodedTrails, lastValidOf, readRecordView, replayTrail, type Directories, type RecordView, type ReplayResult,
-  type ValidCheckpoint } from "./reader.js";
-import { receiptWalk, type ReceiptFact, type ReceiptVerdict } from "./receipt-state.js";
+import { decodedTrails, lastValidOf, readRecordView, replayTrail, type CarryingVerdict, type Directories, type FaultObserver,
+  type ReaderSelection, type RecordView, type ReplayContext, type ReplayResult, type ValidCheckpoint } from "./reader.js";
+import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
 import { decodePublication, encodeRecord, type Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import type { ImportEntry, ReplayStore } from "./replay-store.js";
 import { applyForceEffects, applyForceRecord, openForceState, type MergedImport } from "./state.js";
 import type { RootTerms } from "./terms.js";
+
+export interface ImportLimits { readonly maxCheckpoints: bigint; readonly maxEvents: bigint }
+/** Actual work consumed by a successful read, under that read's independent limits. */
+export interface ImportWork {
+  readonly checkpoints: bigint;
+  readonly events: bigint;
+  /** The part of events spent verifying non-service request proof variants. */
+  readonly requestProofs: bigint;
+  /** At most one request-proof check per already-known publication. Reserve
+   * this instead of requestProofs when later windows/state can admit more
+   * known requests; it makes no allowance for future publication bytes. */
+  readonly requestProofReserve: bigint;
+}
+export const IMPORT_LIMITS: ImportLimits = Object.freeze({ maxCheckpoints: 128n, maxEvents: 8192n });
+export function importLimitsOf(value?: ImportLimits): ImportLimits {
+  if (value === undefined) return IMPORT_LIMITS;
+  if (value === null || typeof value !== "object") throw new TypeError("invalid import limits");
+  const { maxCheckpoints, maxEvents } = value;
+  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new TypeError("invalid import limits");
+  return Object.freeze({ maxCheckpoints, maxEvents });
+}
+export interface ImportContext extends ReplayContext {
+  readonly reference: VenueReference;
+  readonly importLimits?: ImportLimits | undefined;
+  readonly faults?: FaultObserver | undefined;
+  readonly receiptBytes?: Uint8Array | undefined;
+  /** Receipt evidence remains available to the caller after a later refusal. */
+  receiptWalk?: Pick<ReceiptWalk, "evidence"> | undefined;
+}
+export interface ImportEvidence { readonly snapshots: readonly Uint8Array[]; readonly trails: readonly Uint8Array[] }
+export interface CanonicalCheckpoint {
+  readonly commitment: Commitment; readonly index: bigint; readonly segment: Uint8Array; readonly scope: bigint;
+  readonly state: ReplayResult;
+}
+export interface ForcedPublication { readonly index: bigint; readonly record: Record; readonly bytes: Uint8Array }
+export interface PublicationVerdict { readonly index: string; readonly ordinal: string; force: boolean; check?: string }
+export interface ImportCarryingVerdict extends CarryingVerdict { readonly operator: string }
+/** A complete backing descent without an asserted selected checkpoint. */
+export interface FrontierContext extends Omit<ImportContext, "selection" | "header" | "receiptBytes" | "receiptWalk"> {
+  readonly selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">;
+}
+export interface FrontierResult {
+  readonly canonical: CanonicalCheckpoint | undefined;
+  readonly force: readonly ScopeForcedPublication[];
+  readonly work: ImportWork;
+  readonly carrying: readonly ImportCarryingVerdict[];
+  readonly clock: ClockRecord | null | undefined;
+  readonly ranges: Omit<ScopeRanges, "checkpointIndex" | "heldBefore" | "heldAfter">;
+  /** The replacement chain through the judging index of every backing the
+   * canonical segment scopes, keyed by hex name. One ended term ends the
+   * segment for all of them (C2.10.9). */
+  readonly scopeChains: ReadonlyMap<string, RecordView["chain"]>;
+}
+export const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 type Identity = Pick<Commitment, "operator" | "sequence" | "root">;
@@ -95,7 +147,17 @@ interface ValidScope extends Classified {
   readonly class: "valid"; readonly state: ReplayResult; readonly block: readonly ScopeForce[];
   readonly scopedTerms: ReadonlyMap<string, RootTerms>; readonly openingIndex: bigint;
 }
-type ScopeVerdict = ValidScope | (Classified & { readonly class: "lapsed" }) | (Classified & { readonly class: "excluded"; readonly check: string });
+/** A lapse by silence carries the clock record proving it (C2b.4.1); a lapse by term needs none. */
+type ScopeVerdict = ValidScope | (Classified & { readonly class: "lapsed"; readonly clock?: ClockRecord }) |
+  (Classified & { readonly class: "excluded"; readonly check: string });
+/** What a segment's opening fixes once it passes the segment-wide checks (context, terms,
+ * IMPORT, IMPORT_RANK and the merge), whether or not its own evidence is then valid:
+ * the imported base and adopted block every checkpoint of the segment replays from, the
+ * opening index its clock runs from, and each scoped backing's imported predecessor. */
+interface SegmentBase {
+  readonly imported: MergedPrefixes; readonly block: readonly ScopeForce[]; readonly openingIndex: bigint;
+  readonly parents: readonly (ValidScope | undefined)[];
+}
 interface ScopeForce { readonly backing: string; readonly index: bigint; readonly ordinal: bigint; readonly record: Record; readonly bytes: Uint8Array }
 interface ScopeClock {
   readonly duration: bigint; readonly snapshotIndex: bigint; readonly gap: bigint; readonly open: boolean;
@@ -105,12 +167,14 @@ export interface ScopePublicationVerdict extends PublicationVerdict { readonly b
 export interface ScopeRanges {
   readonly judgingIndex: bigint; readonly lag: bigint; readonly checkpointIndex: bigint; readonly revokedAt: bigint | undefined;
   readonly chain: RecordView["chain"]; readonly heldBefore: number; readonly heldAfter: number;
-  /** A scope read names each publication's backing; a single-backing read has one. */
-  readonly publications: readonly (PublicationVerdict & { readonly backing?: string })[]; readonly nonService?: NonServiceCount;
+  readonly publications: readonly ScopePublicationVerdict[]; readonly nonService?: NonServiceCount;
 }
-/** A forced publication; a scope read names its backing. */
-export interface ScopeForcedPublication extends ForcedPublication { readonly backing?: string }
-export type ScopeResult = { readonly receipt: ReceiptVerdict; readonly state?: undefined } | {
+/** A forced publication and the backing it names. */
+export interface ScopeForcedPublication extends ForcedPublication { readonly backing: string }
+export type ScopeResult = {
+  readonly receipt: ReceiptVerdict; readonly state?: undefined; readonly carrying?: undefined; readonly clock?: undefined;
+  readonly ranges?: undefined; readonly canonical?: undefined; readonly force?: undefined; readonly work?: undefined;
+} | {
   readonly receipt?: undefined; readonly state: ReplayResult; readonly carrying: readonly ImportCarryingVerdict[];
   readonly clock: ClockRecord | null; readonly ranges: ScopeRanges;
   /** The selected checkpoint, which a successful read establishes as the backing's canonical one. */
@@ -271,14 +335,7 @@ export async function classifyScopes(context: ImportContext, directories: Direct
       scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
     }
     const walk = await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots, scopeViews);
-    // A fallback can already have established contradictions. Keep these facts
-    // if a newly required complete-scope dependency refuses the repeated walk.
-    const prior = context.receiptWalk;
-    context.receiptWalk = { evidence: () => {
-      const facts: ReceiptFact[] = [...(prior?.evidence().contradictedAt ?? []), ...walk.evidence().contradictedAt];
-      return { contradictedAt: facts.filter((fact, i) => facts.findIndex(other =>
-        other.operator === fact.operator && other.sequence === fact.sequence) === i) };
-    } };
+    context.receiptWalk = walk;
     let openingIndex: bigint | undefined;
     const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
       if (openingIndex === undefined) return undefined;
@@ -299,29 +356,37 @@ export async function classifyScopes(context: ImportContext, directories: Direct
       if (scoped === undefined) { walk.checkpoint(held, undefined, undefined, undefined, "other"); continue; }
       const result = await classify(held, scoped.backing);
       const verdict = walk.checkpoint(held, result.segment, result.class === "valid" ? result.state : undefined, result.header, result.class);
-      if (result.class === "valid" && same(result.segment, receipt.segment) && held.commitment.sequence === header.sequence) openingIndex = held.index;
+      // The original opening as witnessed anchors the boundary, valid or excluded (C2b.4.1).
+      if (result.class !== "lapsed" && same(result.segment, receipt.segment) && held.commitment.sequence === header.sequence) openingIndex = held.index;
       if (verdict !== undefined) return { receipt: verdict };
     }
     return { receipt: await boundary(view.t) ?? walk.finish() };
   }
   if (!same(linkInForce(view.chain, selectedHeld.index).operator, selection.operator)) throw new EvidenceRefusal("lapsed-selection");
+  // Every held commitment in the backing's terms, carrying or not, counted around the
+  // selection. Those after it are placed by their directories before any proof is
+  // checked, so evidence withheld there refuses before the selection's trail is verified.
+  let heldBefore = 0, heldAfter = 0, passed = false;
+  for (let i = 0; i < view.chain.length; i++) for (const held of await view.heldBy(view.chain[i]!.operator)) {
+    if (held.index < view.chain[i]!.from || held.index > view.termEnd(i)) continue;
+    if (matches(held.commitment, selection)) passed = true;
+    else if (passed) { heldAfter++; view.carries(held); } else heldBefore++;
+  }
   const selected = await classify(selectedHeld, selection.backing);
-  if (selected.class === "lapsed") throw new EvidenceRefusal("lapsed-selection");
+  if (selected.class === "lapsed") throw Object.assign(new EvidenceRefusal("lapsed-selection"), selected.clock === undefined ? {} : { clock: selected.clock });
   if (selected.class === "excluded") throw new ReplayRefusal(selected.check);
   const current = await latest(selection.backing, context.terms);
   if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
   const { clock, publications, force, nonService } = await walk.around(selected, context.terms, view);
-  const { carrying, results } = await walk.carrying();
+  const { carrying } = await walk.carrying();
   return { state: selected.state, carrying, clock, canonical: canonicalOf(selected), force, work: await walk.work(context.terms), ranges: {
     judgingIndex: view.t, lag: view.lag, checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
-    heldBefore: results.filter(item => before(item, selectedHeld)).length,
-    heldAfter: results.filter(item => before(selectedHeld, item)).length, publications,
-    ...(nonService === undefined ? {} : { nonService }) } };
+    heldBefore, heldAfter, publications, ...(nonService === undefined ? {} : { nonService }) } };
 }
 
 /** C2.7 descent for one backing's independently authenticated terms in any
- * scope: its canonical checkpoint, if the record holds one, with the forced
- * publications, clock and work a single-backing frontier read reports. */
+ * scope: its canonical checkpoint, if the record holds one, with every scoped
+ * backing's forced publications, the clock and the work. */
 export async function classifyScopeFrontier(context: FrontierContext, directories: Directories, record: RecordVenue,
   evidence: ImportEvidence): Promise<FrontierResult> {
   const { selection, terms } = context, walk = scopeWalk(context, directories, record, evidence);
@@ -393,7 +458,21 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
     return pending;
   };
   const recovery = scopeRecovery(context, viewFor, latest, chargeEvents);
-  const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
+  const bases = new Map<string, SegmentBase>();
+  // Every scoped backing's clock from a segment's opening through an index, and one
+  // backing's record carrying the scope's earliest boundary (C2b.4.1, C2.10.9).
+  const scopeClocks = async (header: SegmentHeader, termsOf: (backing: Uint8Array) => RootTerms, backing: Uint8Array,
+    opening: bigint, through: bigint): Promise<{ clocks: (ScopeClock | null)[]; record: ClockRecord | null }> => {
+    const clocks: (ScopeClock | null)[] = [];
+    for (const scoped of header.entries) clocks.push(await recovery.clock(scoped.backing, termsOf(scoped.backing), opening, through));
+    const own = clocks[header.entries.findIndex(entry => same(entry.backing, backing))];
+    if (own === null || own === undefined) return { clocks, record: null };
+    let boundary = own.boundary;
+    for (const clock of clocks) if (clock?.boundary !== undefined && (boundary === undefined || clock.boundary < boundary)) boundary = clock.boundary;
+    return { clocks, record: { duration: own.duration.toString(), snapshotIndex: own.snapshotIndex.toString(), gap: own.gap.toString(),
+      open: own.open, boundary: boundary === undefined ? null : boundary.toString(), opening: own.opening.toString() } };
+  };
+  const classify =(held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
     const id = keyOf(held.commitment);
     if (verified.has(id)) return verified.get(id)!;
     const pending = (async (): Promise<ScopeVerdict> => {
@@ -427,12 +506,16 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
         requireReplay(termsInForce, "TERMS_SCOPE");
         const durations = [...scopedTerms.values()].map(terms => terms.silence?.noCommitmentDuration);
         requireReplay(durations.every(duration => duration === durations[0]), "SILENCE_SCOPE");
-        const parents: (ValidScope | undefined)[] = [];
-        for (const scoped of header.entries) parents.push(await latest(scoped.backing, scopedTerms.get(hex(scoped.backing))!, held));
-        let imported: MergedPrefixes | ReplayResult, lastValid: ValidCheckpoint | undefined, block: readonly ScopeForce[], openingIndex: bigint;
+        // Each scoped backing's last valid checkpoint before this one, in rank order.
+        const parentsOf = async (): Promise<(ValidScope | undefined)[]> => {
+          const found: (ValidScope | undefined)[] = [];
+          for (const scoped of header.entries) found.push(await latest(scoped.backing, scopedTerms.get(hex(scoped.backing))!, held));
+          return found;
+        };
+        let segmentBase: SegmentBase, lastValid: ValidCheckpoint | undefined, openingValid: boolean;
         const opening = c.sequence === header.sequence;
         if (opening) {
-          requireReplay(scope.fullTrail().records.length === 0, "OPENING");
+          const parents = await parentsOf();
           for (let i = 0; i < header.entries.length; i++) {
             const scoped = header.entries[i]!, parent = parents[i];
             requireReplay(parent === undefined ? scoped.opening === undefined : matches(scoped.opening, parent.commitment), "IMPORT");
@@ -448,7 +531,12 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
             const published = await recovery.forces(scoped.backing, scopedTerms.get(name)!, held.index);
             adopted.push(...published.force.filter(event => event.index > merged.adoptionIndices.get(name)!));
           }
-          block = adopted.sort(venueOrder); openingIndex = held.index; imported = merged;
+          segmentBase = { imported: merged, block: adopted.sort(venueOrder), openingIndex: held.index, parents };
+          if (!bases.has(hex(snapshot.segment))) bases.set(hex(snapshot.segment), segmentBase);
+          // The segment stands from here even if this opening's own evidence fails below:
+          // a later valid checkpoint of it finalizes (C2.10.12).
+          requireReplay(scope.fullTrail().records.length === 0, "OPENING");
+          openingValid = true;
         } else {
           const firstView = scopeViews.values().next().value!;
           const openingHeld = (await firstView.heldBy(c.operator)).find(item => item.commitment.sequence === header.sequence);
@@ -456,21 +544,36 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
           requireReplay(before(openingHeld, held), "IMPORT_RANK");
           const openingDirectory = directories.get(hex(openingHeld.commitment.root));
           if (openingDirectory === undefined) throw new EvidenceRefusal("unresolved-evidence");
-          requireReplay(openingDirectory.some(item => same(item.name, backing)), "OPENING");
-          const opened = await classify(openingHeld, backing);
-          requireReplay(opened.class === "valid" && same(opened.segment, snapshot.segment), "OPENING");
-          for (const scoped of header.entries) {
-            const clock = await recovery.clock(scoped.backing, scopedTerms.get(hex(scoped.backing))!, opened.index, held.index);
-            if (clock !== null && (clock.open || (clock.boundary !== undefined && clock.boundary < held.index))) return { ...base, class: "lapsed" };
+          const openingEntry = openingDirectory.find(item => same(item.name, backing));
+          requireReplay(openingEntry !== undefined && same(snapshotFor(openingEntry.digest).segment, snapshot.segment), "OPENING");
+          // Lapse is judged before validity (C2.10.11), on the clock from the opening as
+          // witnessed, valid or not (C2b.4.1).
+          const termsOf = (name: Uint8Array): RootTerms => scopedTerms.get(hex(name))!;
+          const { clocks } = await scopeClocks(header, termsOf, backing, openingHeld.index, held.index);
+          const lapses = (clock: ScopeClock | null | undefined): boolean =>
+            clock != null && (clock.open || (clock.boundary !== undefined && clock.boundary < held.index));
+          const own = header.entries.findIndex(entry => same(entry.backing, backing)), cause = lapses(clocks[own]) ? own : clocks.findIndex(lapses);
+          if (cause >= 0) {
+            // The record is the clock of a backing whose gap proves the lapse (its own first).
+            const { record } = await scopeClocks(header, termsOf, header.entries[cause]!.backing, openingHeld.index, held.index);
+            return { ...base, class: "lapsed", ...(record === null ? {} : { clock: record }) };
           }
-          requireReplay(parents.every(parent => parent !== undefined && same(parent.segment, snapshot.segment) &&
-            matches(parent.commitment, parents[0]!.commitment)), "CONTINUITY");
-          imported = opened.state;
-          // The opening's own block and imported state: a continuation resumes against them by identity.
-          block = opened.block; openingIndex = opened.index;
-          const previous = parents[0]!;
-          lastValid = lastValidOf(previous.state, previous.snapshot);
+          openingValid = (await classify(openingHeld, backing)).class === "valid";
+          const parents = await parentsOf(), established = bases.get(hex(snapshot.segment));
+          requireReplay(established !== undefined && established.openingIndex === openingHeld.index, "OPENING");
+          segmentBase = established;
+          // Returning to an older segment cannot abandon a valid newer one: the last valid checkpoint
+          // before this one is in this segment for every scoped backing, or else each backing's
+          // predecessor that the opening imported.
+          const inSegment = parents.every(parent => parent !== undefined && same(parent.segment, snapshot.segment) &&
+            matches(parent.commitment, parents[0]!.commitment));
+          requireReplay(inSegment || parents.every((parent, i) => parent === undefined ? segmentBase.parents[i] === undefined :
+            matches(parent.commitment, segmentBase.parents[i]?.commitment)), "CONTINUITY");
+          if (inSegment) lastValid = lastValidOf(parents[0]!.state, parents[0]!.snapshot);
         }
+        // The segment's fixed imported base and block (C2.10.12): with an empty block a
+        // continuation's replay identity is the opening's, so it resumes in that namespace.
+        const { imported, block, openingIndex } = segmentBase;
         // One carried snapshot authenticates the full scope for lapse even
         // when this directory omits a sibling. Complete carriage and matching
         // sibling snapshots are finalization conditions, checked after lapse.
@@ -483,7 +586,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
           return s;
         });
         // §9.1: the opening's record-derived block bounds compact exclusion to later positions.
-        const intrinsic = !opening && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
+        const intrinsic = !opening && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
         const classification = scope.classificationEvidence(intrinsic);
         if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
         const revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
@@ -504,26 +607,15 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
   // t, the clock from its segment's opening with the scope's earliest boundary,
   // and the selected backing's non-service count strictly before t.
   const around = async (valid: ValidScope | undefined, terms: RootTerms, view: RecordView) => {
-    const publications: ScopePublicationVerdict[] = [], force: ScopeForce[] = [], clocks: (ScopeClock | null)[] = [];
+    const publications: ScopePublicationVerdict[] = [], force: ScopeForce[] = [];
     for (const scoped of valid?.header.entries ?? [{ backing: selection.backing }]) {
       const scopedTerms = valid?.scopedTerms.get(hex(scoped.backing)) ?? terms;
       const published = await recovery.forces(scoped.backing, scopedTerms, selection.judgingIndex);
       publications.push(...published.verdicts);
       force.push(...published.force);
-      if (valid !== undefined) clocks.push(await recovery.clock(scoped.backing, scopedTerms, valid.openingIndex, selection.judgingIndex));
     }
-    let clock: ClockRecord | null = null;
-    if (valid !== undefined) {
-      const selectedClock = clocks[valid.header.entries.findIndex(entry => same(entry.backing, selection.backing))]!;
-      if (selectedClock !== null) for (const scopedClock of clocks) {
-        if (scopedClock!.boundary !== undefined && (selectedClock.boundary === undefined || scopedClock!.boundary < selectedClock.boundary)) {
-          selectedClock.boundary = scopedClock!.boundary;
-        }
-      }
-      clock = selectedClock === null ? null : { duration: selectedClock.duration.toString(),
-        snapshotIndex: selectedClock.snapshotIndex.toString(), gap: selectedClock.gap.toString(), open: selectedClock.open,
-        boundary: selectedClock.boundary === undefined ? null : selectedClock.boundary.toString(), opening: selectedClock.opening.toString() };
-    }
+    const clock = valid === undefined ? null : (await scopeClocks(valid.header, name => valid.scopedTerms.get(hex(name))!,
+      selection.backing, valid.openingIndex, selection.judgingIndex)).record;
     publications.sort((a, b) => venueOrder({ index: BigInt(a.index), ordinal: BigInt(a.ordinal) }, { index: BigInt(b.index), ordinal: BigInt(b.ordinal) }));
     force.sort(venueOrder);
     // The audit may select a checkpoint at t; C2b.5.2 instead reads the whole
@@ -541,7 +633,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
         class: item.class, ...(item.class === "excluded" ? { check: item.check } : {}) })) };
   };
   // Known requests may enter a later counting window: at most one proof check
-  // per already-known publication of the selected backing (import-reader.ts).
+  // per already-known publication of the selected backing (ImportWork).
   const work = async (terms: RootTerms): Promise<ImportWork> => ({ checkpoints: BigInt(heldSeen.size), events: eventWork, requestProofs,
     requestProofReserve: terms.nonService === undefined ? 0n : BigInt((await recovery.publications(selection.backing, terms)).length) });
   return { viewFor, latest, recovery, classify, inspect, chargeEvents, around, carrying, work };

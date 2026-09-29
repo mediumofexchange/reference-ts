@@ -65,12 +65,12 @@ checkpoints' directories, snapshots and trails are its dependencies, with
 byte/item budgets and no first-match selection of conflicting objects. The
 same local replay engine checks the contents; package framing cannot
 establish complete dependencies, authenticated ranges or spendability.
-With a fixture venue, every carrying checkpoint of the original segment is
-classified from its own trail, and under a declared silence clause the
+With a fixture venue, the runtime's one reader walk (`scope-reader.ts`, for a
+scope of one backing or several) classifies each carrying checkpoint the read
+depends on from its own trail, and under a declared silence clause the
 no-commitment clock, the silence boundary and lapse by silence are read
-from that walk (C2b.6.1, C2b.4.1). For a selection with imports,
-a single-backing walk classifies all operator terms and requires each
-segment's exact finalized predecessor. It imports the validated spent set,
+from that walk (C2b.6.1, C2b.4.1). For a selection with imports, the walk
+descends every operator term and requires each segment's exact finalized predecessor. It imports the validated spent set,
 output commitments, accepted roots and totals, then starts an empty local
 output tree. Reappointment and same-operator restart use the same rule.
 Imported wallet paths retain their source trees. Whole-read budgets cap this
@@ -84,8 +84,7 @@ replays in full with unchanged checks. A checkpoint's served trail may be the
 prefix of any longer supplied trail of its segment whose decodable first n
 records reproduce its evidence hash, and signed terms are resolved by backing
 name from any strictly verifying field ([pool-v3 §12.1 at 786f962](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#121-a-package-is-not-a-complete-certificate)),
-so a package needs one trail per chain of prefixes. `node scripts/pool/v3/replay-cost.mjs`
-measures this path's time and bytes ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)).
+so a package needs one trail per chain of prefixes ([time and bytes](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)).
 `node --expose-gc scripts/pool/v3/replay-store-probe.mjs` measures this state's
 memory against the storage layout M5b moves it to ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage)).
 Silence-bearing imports read the independently answered publication

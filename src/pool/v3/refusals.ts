@@ -34,9 +34,6 @@ export class EvidenceRefusal extends Error {
   }
 }
 
-/** A single-backing read met a checkpoint scoping several backings: the scope reader takes over. */
-export class ScopeRequired extends Error {}
-
 export function requireReplay(condition: boolean, check: string): asserts condition {
   if (!condition) throw new ReplayRefusal(check);
 }

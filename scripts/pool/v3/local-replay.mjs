@@ -1,6 +1,6 @@
-// Conditional replay harness over the runtime's v3 readers (src/pool/v3/reader.ts,
-// import-reader.ts, scope-reader.ts): it owns the harness input shapes, the
-// original-segment dispatch, note scanning and the report's audit fields.
+// Conditional replay harness over the runtime's v3 reader walk (src/pool/v3/reader.ts,
+// scope-reader.ts): it owns the harness input shapes, note scanning and the
+// report's audit fields.
 // pool-v3 §§3,5,7,10,12,13; pool-v2 §8 host checks; pool-spent C1.2.8–9.
 import { createHash } from "node:crypto";
 import { compareBytes, copyBytes, EncodingError } from "../../../dist/bytes.js";
@@ -10,11 +10,10 @@ import { ScopeTree } from "../../../dist/pool/scope.js";
 import { CapsuleAssociationError, CapsuleFormatError } from "../../../dist/pool/v3/capsules.js";
 import { ownedNotes, seedWitness } from "../../../dist/pool/v3/holdings.js";
 import { ReplayStore } from "../../../dist/pool/v3/replay-store.js";
-import { classifyCarrying, decodedTrails, RANGE_LIMITS, readRecordRanges, replayTrail } from "../../../dist/pool/v3/reader.js";
+import { decodedTrails, RANGE_LIMITS, replayTrail } from "../../../dist/pool/v3/reader.js";
 import { CandidateVenueError, referenceVenue } from "../../../dist/pool/v3/guard.js";
-import { EvidenceRefusal, ReplayRefusal, ScopeRequired, requireReplay } from "../../../dist/pool/v3/refusals.js";
+import { EvidenceRefusal, ReplayRefusal, requireReplay } from "../../../dist/pool/v3/refusals.js";
 import { classifyScopes } from "../../../dist/pool/v3/scope-reader.js";
-import { classifyImports } from "../../../dist/pool/v3/import-reader.js";
 import { servedTrail } from "../../../dist/pool/v3/served-trail.js";
 import { LIMITS, readLocalEvidence } from "./evidence-reader.mjs";
 import { resolveTerms } from "../../../dist/pool/v3/scope-evidence.js";
@@ -156,26 +155,11 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      try {
-        if (header.entries.length !== 1) throw new ScopeRequired();
-        if (imports || !same(header.entries[0].link, selection.backing) || supplied.receipt !== undefined || terms.nonService !== undefined) {
-          const result = await classifyImports(context, directories, record, { snapshots, trails });
-          if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
-            candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
-            currentRangeAuthenticated: selection.mode !== "historical-fixture" };
-          ({ carrying, state, clock, ranges } = result);
-        } else {
-          ranges = await readRecordRanges(selection, terms, header, directories, record, reference);
-          ({ carrying, state, clock } = await classifyCarrying(context, ranges, { snapshot, trail, snapshots, trails }));
-        }
-      } catch (error) {
-        if (!(error instanceof ScopeRequired)) throw error;
-        const result = await classifyScopes(context, directories, record, { snapshots, trails });
-        if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
-          candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
-          currentRangeAuthenticated: selection.mode !== "historical-fixture" };
-        ({ carrying, state, clock, ranges } = result);
-      }
+      const result = await classifyScopes(context, directories, record, { snapshots, trails });
+      if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
+        candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
+        currentRangeAuthenticated: selection.mode !== "historical-fixture" };
+      ({ carrying, state, clock, ranges } = result);
     } else {
       // Both grades need the independently answered record ranges.
       if (terms.silence !== undefined || terms.nonService !== undefined) throw new EvidenceRefusal("unsupported-scope");

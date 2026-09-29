@@ -901,7 +901,7 @@ None changes `src/`, the pinned v2 identities or the specification.
   measured; a first retention budget. **Started 2026-09-08**:
   `node scratch/pool-v3/nm-size.mjs` measured proof bytes and the spent-set
   build cost in §7. **Replay measured 2026-09-23** by
-  `scripts/pool/v3/replay-cost.mjs` ([evidence](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)):
+  [`replay-cost.mjs`](https://github.com/mediumofexchange/reference-ts/blob/0969845/scripts/pool/v3/replay-cost.mjs) ([evidence](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)):
   time, trail and package bytes up to 1,024 events. Real verification, imports
   and demands are outside it, and no retention budget is selected.
 - **P4 Range reads, network.** Against a public Ergo node, compare the

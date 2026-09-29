@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-29` [Read every scope with one reader walk](decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)
 - `2026-09-29` [Keep replay state in each party's SQLite storage, committed at keep points](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)
 - `2026-09-29` [Verify pool lifetimes by complete, streamed and resumed replay](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay)
 - `2026-09-29` [Decide lifetime evidence before adoption, then ship installable commands](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands)
