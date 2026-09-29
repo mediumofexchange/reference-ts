@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-29
+Updated: 2026-09-30
 
 ## Goal
 Slice 8 (adoption), M5b: every party's memory independent of history
@@ -17,7 +17,7 @@ force, fault facts) from kept rows; excluding a non-reproducing continuation wit
 *Acceptance:* resumed and incremental verdicts equal full replay; corrupted, truncated or undigested state falls back.
 
 ## Status
-- M5b.3b (PR pending on `feat/m5b3b-checkpoint-walk`): one forward walk over rows in the replay store (no recursion,
+- M5b.3b (PR #51): one forward walk over rows in the replay store (no recursion,
   no verdict cache), running clocks and force states, §13 answers in windows kept in the evidence batch, no import
   totals or journal reservations, per-batch evidence quota; [10⁴ checkpoints at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-over-many-checkpoints-m5b3b).
 - M5b.3a (PR #50): packages, bytes or stream, copied into `evidence-store.ts`, one frame reader per frame, u64 items,
@@ -95,5 +95,5 @@ force, fault facts) from kept rows; excluding a non-reproducing continuation wit
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
 
-Roughly **58% done / 42% remaining**, range **48–67%**, reassessed 2026-09-29 after M5b.3a (the reader streams a
-segment at flat memory; checkpoint axis, kept state, first sync, adoption, qualified storage, mainnet remain).
+Roughly **59% done / 41% remaining**, range **49–68%**, reassessed 2026-09-30 after M5b.3b (the reader holds flat memory
+against statements and checkpoints; kept state, journal and wallet, first sync, adoption, qualified storage, mainnet remain).
