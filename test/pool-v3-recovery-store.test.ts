@@ -2,13 +2,13 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
-import { readSingleBackingPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import { readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
@@ -62,7 +62,7 @@ describe("v3 recovery journal and independent package reader", () => {
     await j.commit("issued"); await j.publish();
     const held = await j.package();
     const read = async (served: ServedPackage = held) => {
-      const result = await readSingleBackingPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+      const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
         { configuration, verifier, venue, reference });
       if (result.state === undefined) throw new Error("unexpected receipt verdict");
       return result;
@@ -112,9 +112,9 @@ describe("v3 recovery journal and independent package reader", () => {
     const f = await fixture(); f.venue.advance(5n);
     await expect(f.j.submit(encodeRecord(f.demand(5n)))).rejects.toMatchObject({ code: "SCHEDULE", check: "SILENCE" });
     await expect(f.j.return("too-early")).rejects.toMatchObject({ code: "STALE" });
-    expect((await f.read()).selectedClock.boundary).toBeUndefined();
+    expect((await f.read()).clock!.boundary).toBeNull();
     f.venue.advance(7n);
-    expect((await f.read()).selectedClock.boundary).toBe(7n);
+    expect((await f.read()).clock!.boundary).toBe("7");
     const opening = await f.j.return("returned");
     expect(await f.j.return("returned")).toEqual(opening);
     await expect(f.j.adopt()).rejects.toMatchObject({ code: "UNAVAILABLE" });
@@ -176,7 +176,7 @@ describe("v3 recovery journal and independent package reader", () => {
     expect(result.state.position).toBe(4n);
     expect(result.state.issued - result.state.burned).toBe(10n);
     expect(result.state.hasNullifier(f.input.note.nf)).toBe(true);
-    expect(result.state.adoptionIndex).toBe(11n);
+    expect(result.state.adoptionIndices.get(hex(f.backing))).toBe(11n);
     const items = decodeEvidencePackage(served.package, PACKAGE_LIMITS);
     expect(items.filter(item => item.kind === 6).map(item => decodeTrail(item.payload, TRAIL_LIMITS).records)).toContainEqual(expected);
     for (const kind of [3, 4, 6]) {
@@ -198,7 +198,7 @@ describe("v3 recovery journal and independent package reader", () => {
     f.venue.witness(4, f.backing, 3n, f.publication(5, refresh));
     expect((await f.read()).ranges.nonService?.count).toBe("1");
     const unavailable = { id: f.venue.id, lag: () => lag, witnessedIndex: () => 5n, range: () => undefined };
-    await expect(readSingleBackingPackage(f.held.package, { ...f.held.selection, judgingIndex: 5n, mode: "current-fixture" },
+    await expect(readPackage(f.held.package, { ...f.held.selection, judgingIndex: 5n, mode: "current-fixture" },
       { configuration, verifier, venue: unavailable, reference })).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 });

@@ -44,7 +44,7 @@ export function mergeFixture() {
     }
     built.set(name, ns);
     const position = store.tip(ns).position;
-    return { state: new ReplayResult(store, ns, position, { issued: 0n, burned: 0n, adoptionIndices: new Map(), adoptionIndex: 0n, identity: new Uint8Array(32) }) };
+    return { state: new ReplayResult(store, ns, position, { issued: 0n, burned: 0n, adoptionIndices: new Map(), identity: new Uint8Array(32) }) };
   };
   const merge = (parents, charge = () => {}) => mergeFinalizedPrefixes(store, parents, charge);
   /** What a segment opened over `merged` sees: its standing demands, effective recovery statements and outputs. */

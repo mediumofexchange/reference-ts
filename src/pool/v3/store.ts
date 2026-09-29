@@ -36,10 +36,10 @@ import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js"
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
 import { RANGE_LIMITS, TRAIL_LIMITS, type SignedTerms } from "./reader.js";
 import { readFrontier, readPackage } from "./package-reader.js";
-import { IMPORT_LIMITS, type CanonicalCheckpoint, type FrontierResult } from "./import-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
-import { mergeFinalizedPrefixes, type ScopeForcedPublication, type ScopeResult } from "./scope-reader.js";
+import { IMPORT_LIMITS, mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
+  type ScopeResult } from "./scope-reader.js";
 import { ReplayStore } from "./replay-store.js";
 import { applyRecord, openSegmentState, type ImportSource, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
@@ -854,7 +854,7 @@ export class V3OperatorJournal {
   private unadopted(source: StateRead): readonly ScopeForcedPublication[] {
     const { state, canonical } = source;
     return source.force.filter(event => event.index <= canonical.index &&
-      event.index > (event.backing === undefined ? state.adoptionIndex : state.adoptionIndices.get(event.backing) ?? 0n));
+      event.index > (state.adoptionIndices.get(event.backing) ?? 0n));
   }
 
   /** The journal reads the scope's first backing. A reader selecting another

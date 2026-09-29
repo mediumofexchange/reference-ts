@@ -811,7 +811,7 @@ try {
     const earlierRead = clone(behind); earlierRead.selection.mode = "historical-fixture"; earlierRead.selection.judgingIndex = 5n;
     const then = await replayLocalPackage(earlierRead, verifier, codec);
     assert.equal(then.status, "historical-local-replay");
-    assert.deepEqual(then.audit.range.carrying, [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }]);
+    assert.deepEqual(then.audit.range.carrying.map(({ operator, ...c }) => c), [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }]);
     // At one index the lower sequence is the higher one's own prefix (C2.10.4).
     const sameIndex = [{ checkpoint: third, at: 7n }, { checkpoint: fourth, at: 7n }];
     const together = await replayLocalPackage(compose(sameIndex, 1), verifier, codec);
@@ -850,7 +850,7 @@ try {
     for (const [checkpoint, check] of [[twin, "CONTINUITY"], [diverging, "CONTINUITY"], [badSuffix, "PROOF"]]) {
       const passed = await replayLocalPackage(compose([{ checkpoint: third, at: 3n }, { checkpoint, at: 7n }], 0), verifier, codec);
       assert.equal(passed.status, "selected-local-replay"); assert.equal(passed.currentRangeAuthenticated, true);
-      assert.deepEqual(passed.audit.range.carrying, [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }, { sequence: "4", index: "7", class: "excluded", check }]);
+      assert.deepEqual(passed.audit.range.carrying.map(({ operator, ...c }) => c), [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "valid" }, { sequence: "4", index: "7", class: "excluded", check }]);
       assert.deepEqual(passed.audit, { ...audit.audit, range: passed.audit.range });
       // Selected, the same checkpoint refuses on its own check.
       await reject(compose([{ checkpoint: third, at: 3n }, { checkpoint, at: 7n }], 1), check);
@@ -859,7 +859,7 @@ try {
     const badThird = checkpointOf([issue, payment, corrupt(burn)], effects, 3n);
     const repaired = await replayLocalPackage(compose([{ checkpoint: badThird, at: 3n }, { checkpoint: fourth, at: 7n }], 1), verifier, codec);
     assert.equal(repaired.status, "selected-local-replay");
-    assert.deepEqual(repaired.audit.range.carrying, [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "excluded", check: "PROOF" }, { sequence: "4", index: "7", class: "valid" }]);
+    assert.deepEqual(repaired.audit.range.carrying.map(({ operator, ...c }) => c), [{ sequence: "1", index: "1", class: "valid" }, { sequence: "3", index: "3", class: "excluded", check: "PROOF" }, { sequence: "4", index: "7", class: "valid" }]);
     assert.deepEqual({ ...repaired.audit, range: null }, { ...dependency.audit, range: null });
     const shorter = await replayLocalPackage(compose([{ checkpoint: badThird, at: 3n }, { checkpoint: twin, at: 7n }], 1), verifier, codec);
     assert.equal(shorter.status, "selected-local-replay"); assert.equal(shorter.audit.records, "2");

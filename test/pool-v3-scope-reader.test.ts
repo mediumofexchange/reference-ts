@@ -10,11 +10,10 @@ import { ScopeTree } from "../src/pool/scope.js";
 import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { readPackage, readSingleBackingPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import { readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
-import { ScopeRequired } from "../src/pool/v3/refusals.js";
 import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
 import { ReplayResult } from "../src/pool/v3/reader.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -96,7 +95,7 @@ async function twoBackings() {
     const state = openSegmentState(store, id, identity, undefined, () => {});
     for (const bytes of records) await applyRecord(state, bytes, replayOf(id));
     const { issued: total, burned } = state.total(hex(x.name));
-    return new ReplayResult(store, state.ns, state.position, { issued: total, burned, adoptionIndices: new Map(), adoptionIndex: 0n, identity });
+    return new ReplayResult(store, state.ns, state.position, { issued: total, burned, adoptionIndices: new Map(), identity });
   }
   const selection = (backing: Uint8Array, commitment: Commitment) => ({ mode: "current-fixture" as const, domain, venue: venue.id,
     backing, operator, sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
@@ -120,9 +119,6 @@ describe("multi-backing scope reader", () => {
     expect(readX.carrying.map(item => [item.sequence, item.class])).toEqual([["1", "valid"], ["2", "valid"]]);
     expect(readX.ranges.heldBefore).toBe(1);
     await expect(f.read(f.x.name, opening)).rejects.toMatchObject({ status: "superseded-selection" });
-    const selected = pack([...f.items, { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(latest) }]);
-    await expect(readSingleBackingPackage(selected, f.selection(f.x.name, latest), { configuration, verifier, reference, venue: f.venue }))
-      .rejects.toBeInstanceOf(ScopeRequired);
   });
 
   it("reads a single-backing successor whose predecessor scoped two backings through the scope reader", async () => {
@@ -134,9 +130,6 @@ describe("multi-backing scope reader", () => {
     const read = stateOf(await f.read(f.x.name, opening));
     expect(read.state.issued).toBe(5n); expect(read.state.position).toBe(0n);
     expect(read.carrying.map(item => [item.sequence, item.class])).toEqual([["1", "valid"], ["2", "valid"], ["3", "valid"]]);
-    const selected = pack([...f.items, { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(opening) }]);
-    await expect(readSingleBackingPackage(selected, f.selection(f.x.name, opening), { configuration, verifier, reference, venue: f.venue }))
-      .rejects.toBeInstanceOf(ScopeRequired);
     // The successor must import the scoped predecessor, not the segment's older opening.
     const stale = await twoBackings();
     const first = stale.checkpoint(1n, 1n); await stale.issue(5n, 101n); stale.checkpoint(2n, 3n);

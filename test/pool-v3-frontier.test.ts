@@ -12,8 +12,8 @@ import { decodeSnapshot, genesisEvidenceHash, nextEvidenceHash, snapshotBytes, s
 import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeFaultEvidence, encodeFaultEvidence } from "../src/pool/v3/fault-evidence.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import type { CanonicalCheckpoint } from "../src/pool/v3/import-reader.js";
-import { readSingleBackingFrontier, readSingleBackingPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import type { CanonicalCheckpoint } from "../src/pool/v3/scope-reader.js";
+import { readFrontier, readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
@@ -83,7 +83,7 @@ function fixture() {
     operator: commitment.operator, sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
   const selectedPackage = (commitment: Commitment) => pack([...items,
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]);
-  const read = (evidence = pack(items)) => readSingleBackingFrontier(evidence, signed, venue.witnessedIndex(), options);
+  const read = (evidence = pack(items)) => readFrontier(evidence, signed, venue.witnessedIndex(), options);
   return { venue, fields, signed, backing, items, options, segment, checkpoint, issued, issue, replace, selection, selectedPackage, read };
 }
 
@@ -111,13 +111,13 @@ async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTai
   const compactItems = f.items.filter(item => item.kind !== 6 || compareBytes(item.payload, fullTrail) !== 0);
   const proofVerifier: ProofCheck = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0 };
   const options = { ...f.options, verifier: proofVerifier };
-  const readFrontier = (items = compactItems, faults = [fault], custom = proofVerifier) =>
-    readSingleBackingFrontier(pack([...items, ...faults.map(payload => ({ kind: 7, payload }))]), f.signed, 10n, { ...options, verifier: custom });
+  const readCompact = (items = compactItems, faults = [fault], custom = proofVerifier) =>
+    readFrontier(pack([...items, ...faults.map(payload => ({ kind: 7, payload }))]), f.signed, 10n, { ...options, verifier: custom });
   const readSelected = (items = compactItems, faults = [fault], commitment = selected) =>
-    readSingleBackingPackage(pack([...items, ...faults.map(payload => ({ kind: 7, payload })),
+    readPackage(pack([...items, ...faults.map(payload => ({ kind: 7, payload })),
       { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
     f.selection(commitment), options);
-  return { f, opening, predecessor, hostile, selected, fault, compactItems, readFrontier, readSelected };
+  return { f, opening, predecessor, hostile, selected, fault, compactItems, readCompact, readSelected };
 }
 
 // Each read keeps its state in its own store under its own verifier. Compare
@@ -142,7 +142,7 @@ describe("single-backing complete frontier reader", () => {
     f.checkpoint({ ...segment, records: rewritten, evidence: chain(rewritten) }, 4n);
     await f.issue(segment, 106n); const valid = f.checkpoint(segment, 5n);
     const store = new ReplayStore();
-    const read = await readSingleBackingFrontier(pack(f.items), f.signed, f.venue.witnessedIndex(), { ...f.options, store });
+    const read = await readFrontier(pack(f.items), f.signed, f.venue.witnessedIndex(), { ...f.options, store });
     expect(read.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "valid", undefined], ["2", "valid", undefined],
       ["3", "excluded", "SIGNATURE"], ["4", "excluded", "CONTINUITY"], ["5", "valid", undefined]]);
     const state = read.canonical!.state;
@@ -154,7 +154,7 @@ describe("single-backing complete frontier reader", () => {
 
   it("proves an empty frontier and pending replacement from complete venue answers", async () => {
     const f = fixture(); f.replace();
-    const empty = await readSingleBackingFrontier(pack([]), f.signed, 4n, f.options);
+    const empty = await readFrontier(pack([]), f.signed, 4n, f.options);
     expect(empty.canonical).toBeUndefined(); expect(empty.clock).toBeUndefined();
     expect(empty.ranges).not.toHaveProperty("checkpointIndex");
     expect(empty.ranges.chain).toHaveLength(1);
@@ -167,7 +167,7 @@ describe("single-backing complete frontier reader", () => {
     const opening = f.checkpoint(segment, 1n, 8n), frontier = await f.read();
     expect(frontier.canonical!.commitment).toEqual(opening);
     expect(frontier.canonical!.state.position).toBe(0n);
-    const selected = await readSingleBackingPackage(f.selectedPackage(opening), f.selection(opening), f.options);
+    const selected = await readPackage(f.selectedPackage(opening), f.selection(opening), f.options);
     expect(selected.canonical!.commitment).toEqual(opening);
     expect(selected.carrying).toEqual(frontier.carrying);
   });
@@ -185,12 +185,12 @@ describe("single-backing complete frontier reader", () => {
     const f = fixture(), segment = f.segment(), opening = f.checkpoint(segment, 1n);
     await f.issue(segment); const latest = f.checkpoint(segment, 2n);
     const frontier = await f.read(pack([...f.items, { kind: 2, payload: new Uint8Array() }, { kind: 10, payload: b(90) }]));
-    const selected = await readSingleBackingPackage(f.selectedPackage(latest), f.selection(latest), f.options);
+    const selected = await readPackage(f.selectedPackage(latest), f.selection(latest), f.options);
     expect(frontier.canonical!.commitment).toEqual(latest);
     expect(frontier.canonical!.state.issued).toBe(5n);
     expect(frontier.canonical!.state.history).toEqual(selected.state!.history);
     expect(frontier.carrying).toEqual(selected.carrying); expect(frontier.work).toEqual(selected.work);
-    await expect(readSingleBackingPackage(f.selectedPackage(opening), f.selection(opening), f.options))
+    await expect(readPackage(f.selectedPackage(opening), f.selection(opening), f.options))
       .rejects.toMatchObject({ status: "superseded-selection" });
   });
 
@@ -217,12 +217,12 @@ describe("single-backing complete frontier reader", () => {
 
   it("validates independent terms, configuration, venue and package scope", async () => {
     const f = fixture();
-    await expect(readSingleBackingFrontier(pack([]), { ...f.signed, signature: new Uint8Array(64) }, 10n, f.options))
+    await expect(readFrontier(pack([]), { ...f.signed, signature: new Uint8Array(64) }, 10n, f.options))
       .rejects.toMatchObject({ check: "TERMS_SIGNATURE" });
     for (const [fields, check] of [[{ ...f.fields, configuration: b(99) }, "CONFIGURATION"],
       [{ ...f.fields, venue: b(99) }, "VENUE_REFERENCE"]] as const) {
       const terms = encodeRootTerms(fields), signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
-      await expect(readSingleBackingFrontier(pack([]), signed, 10n, f.options)).rejects.toMatchObject({ check });
+      await expect(readFrontier(pack([]), signed, 10n, f.options)).rejects.toMatchObject({ check });
     }
     await expect(f.read(pack([{ kind: 5, payload: b(1) }]))).rejects.toMatchObject({ status: "unsupported-scope" });
     await expect(f.read(pack([{ kind: 1, payload: b(1) }]))).rejects.toMatchObject({ check: "CONFIGURATION" });
@@ -233,7 +233,7 @@ describe("single-backing complete frontier reader", () => {
     const bytes = Buffer.from(pack(f.items)), signed = { terms: Buffer.from(f.signed.terms), signature: Buffer.from(f.signed.signature) };
     const options = { ...f.options, configuration: structuredClone(configuration), reference: structuredClone(reference),
       importLimits: { maxCheckpoints: 1n, maxEvents: 0n } };
-    const pending = readSingleBackingFrontier(bytes, signed, 10n, options);
+    const pending = readFrontier(bytes, signed, 10n, options);
     bytes.fill(0); signed.terms.fill(0); signed.signature.fill(0); options.configuration.helper.fill(0);
     options.reference.label.fill(0); options.importLimits.maxCheckpoints = 0n;
     expect((await pending).canonical!.commitment).toEqual(opening);
@@ -249,7 +249,7 @@ describe("single-backing complete frontier reader", () => {
       options.configuration.helper.fill(0); options.reference.label.fill(0); options.importLimits.maxCheckpoints = 0n;
       return venueId;
     } });
-    expect((await readSingleBackingFrontier(bytes, signed, 10n, options)).canonical!.commitment).toEqual(opening);
+    expect((await readFrontier(bytes, signed, 10n, options)).canonical!.commitment).toEqual(opening);
   });
 
   it("charges both checkpoint descent and record replay under independent limits", async () => {
@@ -257,7 +257,7 @@ describe("single-backing complete frontier reader", () => {
     const bytes = pack(f.items);
     expect((await f.read()).work).toMatchObject({ checkpoints: 2n, events: 1n });
     for (const importLimits of [{ maxCheckpoints: 1n, maxEvents: 1n }, { maxCheckpoints: 2n, maxEvents: 0n }]) {
-      await expect(readSingleBackingFrontier(bytes, f.signed, 10n, { ...f.options, importLimits }))
+      await expect(readFrontier(bytes, f.signed, 10n, { ...f.options, importLimits }))
         .rejects.toMatchObject({ status: "resource-refusal" });
     }
   });
@@ -266,7 +266,7 @@ describe("single-backing complete frontier reader", () => {
 describe("single-backing compact fault packages", () => {
   it.each(["PROOF", "SIGNATURE"] as const)("agrees with complete replay for an intrinsic %s failure", async failure => {
     const f = await compactFixture(failure);
-    const compact = await f.readFrontier(), complete = await f.readFrontier(f.f.items);
+    const compact = await f.readCompact(), complete = await f.readCompact(f.f.items);
     expect(canonicalEvidence(compact.canonical)).toEqual(canonicalEvidence(complete.canonical));
     expect(compact.canonical!.commitment).toEqual(f.predecessor);
     expect(compact.carrying).toEqual(complete.carrying);
@@ -280,12 +280,12 @@ describe("single-backing compact fault packages", () => {
     expect(canonicalEvidence(selected.canonical)).toEqual(canonicalEvidence(fullSelected.canonical));
     expect(selected.carrying).toEqual(fullSelected.carrying);
     expect(selected.faultEvidence).toEqual(compact.faultEvidence);
-    expect((await f.readFrontier(f.f.items, [])).faultEvidence).toBeUndefined();
-    await expect(f.readFrontier(f.compactItems, [])).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect((await f.readCompact(f.f.items, [])).faultEvidence).toBeUndefined();
+    await expect(f.readCompact(f.compactItems, [])).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 
   it("preserves a valid later opening's inherited state after excluding a compact target", async () => {
-    const f = await compactFixture("PROOF", true), compact = await f.readFrontier(), complete = await f.readFrontier(f.f.items);
+    const f = await compactFixture("PROOF", true), compact = await f.readCompact(), complete = await f.readCompact(f.f.items);
     expect(canonicalEvidence(compact.canonical)).toEqual(canonicalEvidence(complete.canonical));
     expect(compact.canonical!.commitment).toEqual(f.selected);
     expect(compact.canonical!.state.issued).toBe(5n);
@@ -298,11 +298,11 @@ describe("single-backing compact fault packages", () => {
     const snapshots = f.f.items.filter(item => item.kind === 4);
     for (const missing of snapshots.slice(0, 2)) {
       const items = f.compactItems.filter(item => item !== missing);
-      await expect(f.readFrontier(items)).rejects.toMatchObject({ status: "unresolved-evidence" });
+      await expect(f.readCompact(items)).rejects.toMatchObject({ status: "unresolved-evidence" });
       await expect(f.readSelected(items)).rejects.toMatchObject({ status: "unresolved-evidence" });
     }
     const withheldPrefix = f.compactItems.filter(item => item.kind !== 6 || decodeTrail(item.payload, TRAIL_LIMITS).records.length !== 1);
-    await expect(f.readFrontier(withheldPrefix)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    await expect(f.readCompact(withheldPrefix)).rejects.toMatchObject({ status: "unresolved-evidence" });
     await expect(f.readSelected(withheldPrefix)).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 
@@ -324,7 +324,7 @@ describe("single-backing compact fault packages", () => {
     variants.push(encodeFaultEvidence(suffix, 1024n), encodeFaultEvidence({ ...value, position: 1n, length: 2n }, 1024n),
       f.fault.subarray(0, f.fault.length - 1));
     for (const changed of variants) {
-      await expect(f.readFrontier(f.compactItems, [changed])).rejects.toMatchObject({ status: "unresolved-evidence" });
+      await expect(f.readCompact(f.compactItems, [changed])).rejects.toMatchObject({ status: "unresolved-evidence" });
       await expect(f.readSelected(f.compactItems, [changed])).rejects.toMatchObject({ status: "unresolved-evidence" });
     }
   });
@@ -333,12 +333,12 @@ describe("single-backing compact fault packages", () => {
     const f = await compactFixture();
     for (const outcome of [true, undefined, null, 0]) {
       const custom = { verify: (_kind: number, _inputs: bigint[], proof: Uint8Array) => compareBytes(proof, b(99)) === 0 ? outcome : true };
-      await expect(f.readFrontier(f.compactItems, [f.fault], custom as ProofCheck))
+      await expect(f.readCompact(f.compactItems, [f.fault], custom as ProofCheck))
         .rejects.toMatchObject({ status: "unresolved-evidence" });
     }
     for (const cause of [new Error("verifier failed"), new EncodingError("verifier encoding failed")]) {
       const custom: ProofCheck = { verify(_kind, _inputs, proof) { if (compareBytes(proof, b(99)) === 0) throw cause; return true; } };
-      await expect(f.readFrontier(f.compactItems, [f.fault], custom)).rejects.toMatchObject({ cause });
+      await expect(f.readCompact(f.compactItems, [f.fault], custom)).rejects.toMatchObject({ cause });
     }
   });
 
@@ -350,15 +350,15 @@ describe("single-backing compact fault packages", () => {
       suffix: Array.from({ length: 1025 }, () => value.suffix[0]!) }, 1025n);
     const custom: ProofCheck = { verify() { throw new Error("resource refusal must precede proof verification"); } };
     for (const faults of [excessiveItems, [excessiveSuffix]]) {
-      await expect(f.readFrontier(f.compactItems, faults, custom)).rejects.toMatchObject({ status: "resource-refusal" });
+      await expect(f.readCompact(f.compactItems, faults, custom)).rejects.toMatchObject({ status: "resource-refusal" });
       await expect(f.readSelected(f.compactItems, faults)).rejects.toMatchObject({ status: "resource-refusal" });
     }
   });
 
   it("owns compact bytes across the first asynchronous venue descent and proof check", async () => {
-    const f = await compactFixture(), expected = await f.readFrontier();
+    const f = await compactFixture(), expected = await f.readCompact();
     const bytes = Buffer.from(pack([...f.compactItems, { kind: 7, payload: f.fault }]));
-    const pending = readSingleBackingFrontier(bytes, f.f.signed, 10n, { ...f.f.options,
+    const pending = readFrontier(bytes, f.f.signed, 10n, { ...f.f.options,
       verifier: { async verify(_kind, _inputs, proof) { await Promise.resolve(); return compareBytes(proof, b(99)) !== 0; } } });
     bytes.fill(0);
     const actual = await pending;

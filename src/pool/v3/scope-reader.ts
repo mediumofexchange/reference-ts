@@ -1,31 +1,83 @@
-// Multi-backing C2.10.3–7, C2b.3.1–4.2 and C2b.5 reads: whole-scope
-// classification, merged finalized prefixes with per-backing totals and
-// adoption indices, publication force and silence clocks per backing, receipt
-// reads across a scope, the non-service count and compact faults. A
-// single-backing read throws ScopeRequired where this reader takes over.
-// Candidate until adoption: reference venues only, no finality verdict.
+// The one C2.10.3–7, C2b.3.1–4.2 and C2b.5 reader walk, for a scope of one
+// backing or several: whole-scope classification, merged finalized prefixes
+// with per-backing totals and adoption indices, publication force and silence
+// clocks per backing, receipt reads across a scope, the non-service count and
+// compact faults. Candidate until adoption: reference venues only, no finality verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { linkInForce, type HeldCommitment, type RangeEntry } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
 import type { Commitment } from "../../venue-records.js";
-import { identifierOf, VALUE_BOUND } from "../field.js";
+import { isValue, VALUE_BOUND } from "../field.js";
 import { ScopeTree } from "../scope.js";
 import { decodeReceipt, decodeSnapshot, type Snapshot } from "./commitments.js";
 import type { SegmentHeader } from "./headers.js";
-import { importLimitsOf, NO_FAULTS, type CanonicalCheckpoint, type ForcedPublication, type FrontierContext, type FrontierResult,
-  type ImportCarryingVerdict, type ImportContext, type ImportEvidence, type ImportWork, type PublicationVerdict } from "./import-reader.js";
+import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
-import { decodedTrails, lastValidOf, readRecordView, replayTrail, type Directories, type RecordView, type ReplayResult,
-  type ValidCheckpoint } from "./reader.js";
-import { receiptWalk, type ReceiptFact, type ReceiptVerdict } from "./receipt-state.js";
+import { decodedTrails, lastValidOf, readRecordView, replayTrail, type CarryingVerdict, type Directories, type FaultObserver,
+  type ReaderSelection, type RecordView, type ReplayContext, type ReplayResult, type ValidCheckpoint } from "./reader.js";
+import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
 import { decodePublication, encodeRecord, type Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import type { ImportEntry, ReplayStore } from "./replay-store.js";
 import { applyForceEffects, applyForceRecord, openForceState, type MergedImport } from "./state.js";
 import type { RootTerms } from "./terms.js";
+
+export interface ImportLimits { readonly maxCheckpoints: bigint; readonly maxEvents: bigint }
+/** Actual work consumed by a successful read, under that read's independent limits. */
+export interface ImportWork {
+  readonly checkpoints: bigint;
+  readonly events: bigint;
+  /** The part of events spent verifying non-service request proof variants. */
+  readonly requestProofs: bigint;
+  /** At most one request-proof check per already-known publication. Reserve
+   * this instead of requestProofs when later windows/state can admit more
+   * known requests; it makes no allowance for future publication bytes. */
+  readonly requestProofReserve: bigint;
+}
+export const IMPORT_LIMITS: ImportLimits = Object.freeze({ maxCheckpoints: 128n, maxEvents: 8192n });
+export function importLimitsOf(value?: ImportLimits): ImportLimits {
+  if (value === undefined) return IMPORT_LIMITS;
+  if (value === null || typeof value !== "object") throw new TypeError("invalid import limits");
+  const { maxCheckpoints, maxEvents } = value;
+  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new TypeError("invalid import limits");
+  return Object.freeze({ maxCheckpoints, maxEvents });
+}
+export interface ImportContext extends ReplayContext {
+  readonly reference: VenueReference;
+  readonly importLimits?: ImportLimits | undefined;
+  readonly faults?: FaultObserver | undefined;
+  readonly receiptBytes?: Uint8Array | undefined;
+  /** Receipt evidence remains available to the caller after a later refusal. */
+  receiptWalk?: Pick<ReceiptWalk, "evidence"> | undefined;
+}
+export interface ImportEvidence { readonly snapshots: readonly Uint8Array[]; readonly trails: readonly Uint8Array[] }
+export interface CanonicalCheckpoint {
+  readonly commitment: Commitment; readonly index: bigint; readonly segment: Uint8Array; readonly scope: bigint;
+  readonly state: ReplayResult;
+}
+export interface ForcedPublication { readonly index: bigint; readonly record: Record; readonly bytes: Uint8Array }
+export interface PublicationVerdict { readonly index: string; readonly ordinal: string; force: boolean; check?: string }
+export interface ImportCarryingVerdict extends CarryingVerdict { readonly operator: string }
+/** A complete backing descent without an asserted selected checkpoint. */
+export interface FrontierContext extends Omit<ImportContext, "selection" | "header" | "receiptBytes" | "receiptWalk"> {
+  readonly selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">;
+}
+export interface FrontierResult {
+  readonly canonical: CanonicalCheckpoint | undefined;
+  readonly force: readonly ScopeForcedPublication[];
+  readonly work: ImportWork;
+  readonly carrying: readonly ImportCarryingVerdict[];
+  readonly clock: ClockRecord | null | undefined;
+  readonly ranges: Omit<ScopeRanges, "checkpointIndex" | "heldBefore" | "heldAfter">;
+  /** The replacement chain through the judging index of every backing the
+   * canonical segment scopes, keyed by hex name. One ended term ends the
+   * segment for all of them (C2.10.9). */
+  readonly scopeChains: ReadonlyMap<string, RecordView["chain"]>;
+}
+export const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 type Identity = Pick<Commitment, "operator" | "sequence" | "root">;
@@ -94,6 +146,8 @@ interface Classified {
 interface ValidScope extends Classified {
   readonly class: "valid"; readonly state: ReplayResult; readonly block: readonly ScopeForce[];
   readonly scopedTerms: ReadonlyMap<string, RootTerms>; readonly openingIndex: bigint;
+  /** The segment's fixed imported base, which its opening and every continuation replay from. */
+  readonly imported: MergedPrefixes | ReplayResult;
 }
 type ScopeVerdict = ValidScope | (Classified & { readonly class: "lapsed" }) | (Classified & { readonly class: "excluded"; readonly check: string });
 interface ScopeForce { readonly backing: string; readonly index: bigint; readonly ordinal: bigint; readonly record: Record; readonly bytes: Uint8Array }
@@ -105,12 +159,14 @@ export interface ScopePublicationVerdict extends PublicationVerdict { readonly b
 export interface ScopeRanges {
   readonly judgingIndex: bigint; readonly lag: bigint; readonly checkpointIndex: bigint; readonly revokedAt: bigint | undefined;
   readonly chain: RecordView["chain"]; readonly heldBefore: number; readonly heldAfter: number;
-  /** A scope read names each publication's backing; a single-backing read has one. */
-  readonly publications: readonly (PublicationVerdict & { readonly backing?: string })[]; readonly nonService?: NonServiceCount;
+  readonly publications: readonly ScopePublicationVerdict[]; readonly nonService?: NonServiceCount;
 }
-/** A forced publication; a scope read names its backing. */
-export interface ScopeForcedPublication extends ForcedPublication { readonly backing?: string }
-export type ScopeResult = { readonly receipt: ReceiptVerdict; readonly state?: undefined } | {
+/** A forced publication and the backing it names. */
+export interface ScopeForcedPublication extends ForcedPublication { readonly backing: string }
+export type ScopeResult = {
+  readonly receipt: ReceiptVerdict; readonly state?: undefined; readonly carrying?: undefined; readonly clock?: undefined;
+  readonly ranges?: undefined; readonly canonical?: undefined; readonly force?: undefined; readonly work?: undefined;
+} | {
   readonly receipt?: undefined; readonly state: ReplayResult; readonly carrying: readonly ImportCarryingVerdict[];
   readonly clock: ClockRecord | null; readonly ranges: ScopeRanges;
   /** The selected checkpoint, which a successful read establishes as the backing's canonical one. */
@@ -271,14 +327,7 @@ export async function classifyScopes(context: ImportContext, directories: Direct
       scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
     }
     const walk = await receiptWalk(context.receiptBytes, context, view, trails, evidence.snapshots, scopeViews);
-    // A fallback can already have established contradictions. Keep these facts
-    // if a newly required complete-scope dependency refuses the repeated walk.
-    const prior = context.receiptWalk;
-    context.receiptWalk = { evidence: () => {
-      const facts: ReceiptFact[] = [...(prior?.evidence().contradictedAt ?? []), ...walk.evidence().contradictedAt];
-      return { contradictedAt: facts.filter((fact, i) => facts.findIndex(other =>
-        other.operator === fact.operator && other.sequence === fact.sequence) === i) };
-    } };
+    context.receiptWalk = walk;
     let openingIndex: bigint | undefined;
     const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
       if (openingIndex === undefined) return undefined;
@@ -320,8 +369,8 @@ export async function classifyScopes(context: ImportContext, directories: Direct
 }
 
 /** C2.7 descent for one backing's independently authenticated terms in any
- * scope: its canonical checkpoint, if the record holds one, with the forced
- * publications, clock and work a single-backing frontier read reports. */
+ * scope: its canonical checkpoint, if the record holds one, with every scoped
+ * backing's forced publications, the clock and the work. */
 export async function classifyScopeFrontier(context: FrontierContext, directories: Directories, record: RecordVenue,
   evidence: ImportEvidence): Promise<FrontierResult> {
   const { selection, terms } = context, walk = scopeWalk(context, directories, record, evidence);
@@ -465,9 +514,10 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
           }
           requireReplay(parents.every(parent => parent !== undefined && same(parent.segment, snapshot.segment) &&
             matches(parent.commitment, parents[0]!.commitment)), "CONTINUITY");
-          imported = opened.state;
-          // The opening's own block and imported state: a continuation resumes against them by identity.
-          block = opened.block; openingIndex = opened.index;
+          // The opening's own imported base and block (C2.10.12): with an empty
+          // block the replay identity is the opening's, so a continuation resumes
+          // in its namespace instead of scanning the imported ancestry again.
+          imported = opened.imported; block = opened.block; openingIndex = opened.index;
           const previous = parents[0]!;
           lastValid = lastValidOf(previous.state, previous.snapshot);
         }
@@ -490,7 +540,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
         const state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
           snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
             block: opening ? [] : block, openingIndex, chargeEvents, scopedSnapshots });
-        return { ...base, state, block, scopedTerms, openingIndex, class: "valid" };
+        return { ...base, state, block, scopedTerms, openingIndex, imported, class: "valid" };
       } catch (error) {
         if (!(error instanceof ReplayRefusal)) throw error;
         scope.fullTrail(); // Header-only faults are not exclusion certificates.
@@ -541,7 +591,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
         class: item.class, ...(item.class === "excluded" ? { check: item.check } : {}) })) };
   };
   // Known requests may enter a later counting window: at most one proof check
-  // per already-known publication of the selected backing (import-reader.ts).
+  // per already-known publication of the selected backing (ImportWork).
   const work = async (terms: RootTerms): Promise<ImportWork> => ({ checkpoints: BigInt(heldSeen.size), events: eventWork, requestProofs,
     requestProofReserve: terms.nonService === undefined ? 0n : BigInt((await recovery.publications(selection.backing, terms)).length) });
   return { viewFor, latest, recovery, classify, inspect, chargeEvents, around, carrying, work };

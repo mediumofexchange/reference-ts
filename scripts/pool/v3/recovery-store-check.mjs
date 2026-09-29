@@ -19,7 +19,7 @@ import { BranchSupplier, MiningSupplier, plainBox } from "../../../dist/ergo-syn
 import { NoteTree } from "../../../dist/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../../../dist/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../../../dist/pool/v3/capsules.js";
-import { readSingleBackingPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
+import { readPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
 import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { TRAIL_LIMITS } from "../../../dist/pool/v3/reader.js";
@@ -42,10 +42,12 @@ const here = import.meta.dirname, root = resolve(here, "../../.."), b = n => new
 const hex = bytes => Buffer.from(bytes).toString("hex"), digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const label = b(12), lag = 2n;
 const referenceFor = ergo => ergo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE } : { context: LOCAL_REFERENCE, label, lag };
+// This report reads one backing, so its state carries exactly one adoption index.
+const onlyAdoptionIndex = state => { assert.equal(state.adoptionIndices.size, 1); return [...state.adoptionIndices.values()][0]; };
 const summary = result => {
   assert(result.state !== undefined, "expected a complete state, not a receipt-only result");
   return { supply: String(result.state.issued - result.state.burned), position: String(result.state.position),
-    adoptionIndex: String(result.state.adoptionIndex), spentRoot: hex(result.state.spentRoot()),
+    adoptionIndex: String(onlyAdoptionIndex(result.state)), spentRoot: hex(result.state.spentRoot()),
     history: hex(result.state.history), canonicalIndex: String(result.canonical.index),
     force: result.force.map(f => ({ index: String(f.index), kind: f.record.kind, sha256: digest(f.bytes) })),
     clock: result.clock, nonService: result.ranges.nonService };
@@ -74,7 +76,7 @@ async function worker(directory, ergo, liveMode = false) {
       const answer = await venue.sync([new BranchSupplier("holder-only", input.venue.tip, ERGO_CHAIN)]);
       assert.equal(hex(answer.witnessedHeaderId), hex(readFileSync(join(directory, "ergo-pin.bin"))));
     } else venue = FixtureVenue.from(input.venue);
-    process.stdout.write(JSON.stringify(summary(await readSingleBackingPackage(input.package, input.selection,
+    process.stdout.write(JSON.stringify(summary(await readPackage(input.package, input.selection,
       { configuration, verifier, venue, reference }))));
   } finally { await api.destroy(); }
 }
@@ -151,7 +153,7 @@ async function acceptance(ergo, liveMode = false) {
     const served = async () => { const s = await journal.package(); packages.push(s.package.length); return {
       package: s.package, selection: { ...s.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       ...(liveMode ? {} : { venue: ergo ? { tip: supplier.tip } : venue.export() }) }; };
-    const read = input => readSingleBackingPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference });
+    const read = input => readPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference });
     const fresh = input => {
       if (liveMode) { writeFileSync(join(build, "ergo-pin.bin"), live.pin); writeFileSync(join(build, "testnet-reader.json"), JSON.stringify(live.readerConfig())); }
       else if (ergo) writeFileSync(join(build, "ergo-pin.bin"), pin);
