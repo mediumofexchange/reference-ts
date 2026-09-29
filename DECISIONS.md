@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-29` [Decide lifetime evidence before adoption, then ship installable commands](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands)
 - `2026-09-29` [Pin the relation sources' final text](decisions/2026-09.md#2026-09-29--pin-the-relation-sources-final-text)
 - `2026-09-29` [Load only hash-checked proving parameters](decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters)
 - `2026-09-29` [Order configuration adoption and state its proving parameters](decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters)

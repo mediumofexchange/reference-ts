@@ -3,24 +3,21 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 8 (adoption), M3 source pin delivered (branch `feat/v3-source-pin`). Next run:
-M4, complete certificates and kind-11 venue evidence (Next 1): state its acceptance here.
+Slice 8 (adoption), reordered by the
+[direction check](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands).
+Next run: M5 lifetime evidence and resource bounds (Next 1); state its acceptance here.
 
 ## Status
-- M3 ([decision](decisions/2026-09.md#2026-09-29--pin-the-relation-sources-final-text)):
-  the seven circuit sources carry final text, citing rules by document and section
-  (no "candidate", "PROBE ONLY", "§2.6", "A5"); comments only, so bytecode, keys and
-  the configuration are unchanged (local compile reproduced all six bytecode hashes).
-  Manifest source hashes updated; manifest, `V3_SPECIFICATION` and the README runtime
-  pin are spec `85655a5`, whose tree also names venue-ergo.md for Ergo reports (closes
-  former Next 5(d)). One fresh review: nothing material; precision points applied.
-  Reports re-recorded from CI run 36519561119 (447 checks; identities unchanged).
-- M2 (PR #45): `startBackend` loads only hash-checked parameters
-  ([decision](decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters)).
+- M3 (PR #46, [decision](decisions/2026-09.md#2026-09-29--pin-the-relation-sources-final-text)):
+  circuit sources carry final text (comments only; bytecode, keys and configuration
+  unchanged); manifest, `V3_SPECIFICATION` and README pin spec `85655a5`. M2 (PR #45):
+  `startBackend` loads only hash-checked parameters. Reports from CI run 36519561119.
+- Direction check (docs only): every reader holds one complete package in memory under
+  fixed 1 MiB limits, so a pool serves about 67 spend-sized statements over its life;
+  deciding that model can add a relation, so it now precedes the pin. No `bin` exists.
 
 ## Evidence
-- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
-  [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
+- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
   (full checkpoints still rewrite retained history; raw sections stay in memory).
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json),
@@ -33,15 +30,23 @@ M4, complete certificates and kind-11 venue evidence (Next 1): state its accepta
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption, in the [decided order](decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters).
-   M4 certificates/kind-11, M5 replay/import rules and bounds, M6 Next 5(i), M7
-   one-transaction condition, M8 adoption (one manifest holding §11.1's parameter
-   identities too, now `BN254_PARAMETERS`), every report re-recorded, live two-backing
-   drill. Mainnet needs separate authority.
-2. Multi-backing leftovers: adding an original-term backing to a live scope; statements
+1. Slice 8, adoption, [reordered](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands):
+   **M5 first**: declare a target scale and per-party budgets (operator, reader,
+   wallet first sync/steady state, holder recovery package); decide complete replay
+   behind a streaming disk-backed reader/journal with resumed verification versus a
+   succinct history relation (a configuration change, so built before M8); record
+   bounds and the replay/import consolidation. Probe only numbers the cost model lacks.
+   Then M6 Next 5(i) (confirm a host rule), M4 certificates/kind-11 fitted to the
+   retention model, M7 one-transaction condition, M8 adoption (one manifest holding
+   §11.1's parameter identities too, now `BN254_PARAMETERS`), every report
+   re-recorded, live two-backing drill. Mainnet needs separate authority.
+2. Slice 9, installable commands on the testnet: holder wallet, operator service and
+   supply reader from a packed install (`bin`), fresh processes and data directories,
+   issue → pay → receive → fulfill → redeem and an offline-operator recovery past the
+   67-statement ceiling. Close Next 5 (a)–(c), (e) before its drill. Retire the pilot CLI
+   and, against a case map, the transparent path in or right after it.
+3. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
-3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
-   existing dependencies (size-only probe); lifetime streaming is separate design.
 4. On touching affected files: `local-replay.mjs` candidates should call
    `holdings.ts` (re-records six reports); fold `fulfill` into `sync`; shared
    byte helpers/caller ownership; Ergo section versus transaction charging; applyRecord history check follows effects;
@@ -58,21 +63,16 @@ M4, complete certificates and kind-11 venue evidence (Next 1): state its accepta
    return an old-segment receipt for an adopted forced record (traced only).
    (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
    `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit. (h) Runtime
-   package-reader refusals drop the receipt walk's proven contradictions and fault facts
-   (the harness keeps them); attach them to the refusal if a runtime caller needs them.
-   (i) For the recovery-contract audit (2026-09-29): a settlement publishes its output
-   opening (C3.5), so a backer seeing it before witnessing can issue the same `cm_out` first;
-   it is refused `OUTPUT` (`state.ts`) and the acceptance may read as the holder's lapse
-   (C3.8). A retry needs a fresh `rho_out` and release; each pre-emption costs a visible
-   issuance. The runtime wallet builds no settlements yet.
-   (j) Verify-only parties could take key bytes checked against the configuration's key
-   identities (as the reader workers do) instead of deriving keys, needing no G1 file.
-6. Only when a gate needs them: cancellation, batching, index-free box source,
-   venue-moving record, slowest-supplier clock, multi-entry extension fixture,
-   Poseidon2 on Barretenberg and sponsored holder funding; operator fee quotes,
-   a text/QR form of the request frame, receipt handoff for C4.5 pending
-   acceptance, routing store-check's request through the frame, and same-segment
-   repair/rescoping.
+   package-reader refusals drop the receipt walk's contradictions and fault facts.
+   (i) (M6) A settlement publishes its output opening (C3.5), so a backer seeing it before
+   witnessing can issue the same `cm_out` first; it is refused `OUTPUT` (`state.ts`) and the
+   acceptance may read as the holder's lapse (C3.8). A retry needs a fresh `rho_out` and
+   release; each pre-emption costs a visible issuance. The wallet builds no settlements yet.
+   (j) Verify-only parties could take identity-checked key bytes, needing no G1 file.
+6. Only when a gate needs them: cancellation, batching, index-free box source, venue-moving
+   record, slowest-supplier clock, multi-entry extension fixture, Poseidon2 on Barretenberg,
+   sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-
+   acceptance receipt handoff, store-check's request through the frame, same-segment rescoping.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under
@@ -91,9 +91,9 @@ M4, complete certificates and kind-11 venue evidence (Next 1): state its accepta
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- No service delivery blocker remains. Server timeout followed by eventual
-  journal completion has source review, without a direct timed acceptance case.
-- Disk streaming and physical custody remain separate persistence boundaries.
+- No service delivery blocker remains. Server timeout followed by eventual journal
+  completion has source review, without a direct timed acceptance case.
+- Physical custody remains a separate boundary (disk streaming is now Next 1–2).
 
-Roughly **63% done / 37% remaining**, plausible range **53–73%**, reassessed 2026-09-28 (the
-multi-backing reader, journal and wallet are in; configuration adoption, qualified storage, mainnet remain).
+Roughly **55% done / 45% remaining**, range **45–65%**, reassessed 2026-09-29 (lifetime evidence
+and installable commands were missing from the remainder; adoption, qualified storage, mainnet remain).
