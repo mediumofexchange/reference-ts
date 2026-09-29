@@ -1,6 +1,6 @@
 {
   "purpose": "conformance-only",
-  "specification": "916bffb",
+  "specification": "85655a5",
   "toolchain": {
     "@aztec/bb.js": "5.2.0",
     "@noir-lang/noir_js": "1.0.0-beta.26",
@@ -8,13 +8,13 @@
   },
   "verifierTarget": "noir-recursive",
   "sources": {
-    "issue.nr": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
-    "spend.nr": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
-    "burn.nr": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5",
-    "demand.nr": "c0fe4af4fb64f8494b16a40f49a526b048e9c41b68924c471e99ef898c15c349",
-    "settle.nr": "5c7ed9ce647fa4440a11b6e43d62d889bd65f26016d9267b702bbac5393ad92d",
-    "request.nr": "d6abd650c01efb37bd5ced2c38068ab64c99e62f3cba02468ec1107f985dca27",
-    "notes.nr": "c606dd994e523631a969de861b909128b834be8f6fba4be11a4e2a217262270d",
+    "issue.nr": "0160497d77500bec7a62548b13908f46be122dfaf6f54cc0b720cf328a9c6ad6",
+    "spend.nr": "920c4702d2ae0c3e2d0f251fe298c39c0d658a390220b0c4d68b4e06c31ae695",
+    "burn.nr": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",
+    "demand.nr": "b48f7f86c8ee80aa5fea7e6d2ea0b709d2a95f670b3473b2a1abc7a0afd5bf9e",
+    "settle.nr": "cb865bea2f8087213f3d79d2eee5e07c5221cc1511d72ae6f5ee727bd690fadd",
+    "request.nr": "2da922cbc425297aa09d231562de48eaf6f55fd392a1e060c523bd2ac981baee",
+    "notes.nr": "034f123da4aafbac55ecaa75a3d37bbb016b70f06040a8c7092f598fbc1662d3",
     "poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
   },
   "circuits": {

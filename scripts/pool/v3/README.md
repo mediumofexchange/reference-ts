@@ -12,8 +12,10 @@ hold the only circuit sources (pool-v2's are retired to Git history).
 The compiler writes temporary projects only under ignored `scratch/` and
 the check records observed source/bytecode/key hashes, checks and metrics in
 `scratch/pool-v3-results.json`. It reuses the existing parameter cache and
-runs Barretenberg with one worker thread. The hashes are observations, not
-configuration pins. Final pinning requires separate review.
+runs Barretenberg with one worker thread. The sources hold final text: their
+comments cite pool-v3, pool-v2, pool-recovery, pool-delivery and pool-fees
+rules by section, so adoption changes no source byte. Their hashes are the
+manifest's candidate identities until pool-v3 adopts a configuration.
 
 `store-check.mjs` (also `npm run check:pool:v3-store`) runs the runtime's
 operator journal, prover and guard (`src/pool/v3/store.ts`, `prover.ts`,

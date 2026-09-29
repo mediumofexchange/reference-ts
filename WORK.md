@@ -3,17 +3,20 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 8 (adoption), M2 delivered (PR #45): pool-v3 §4's load check at runtime. Next run:
-M3, the source pin (Next 1): state its acceptance here before starting.
+Slice 8 (adoption), M3 source pin delivered (branch `feat/v3-source-pin`). Next run:
+M4, complete certificates and kind-11 venue evidence (Next 1): state its acceptance here.
 
 ## Status
-- M2 (PR #45, [decision](decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters)):
-  `startBackend` checks Ignition's leading 2^15 G1 points (2 MiB) and `[x]_2` against
-  `BN254_PARAMETERS` before loading them itself (`skipSrsInit`, `srsInitSrs`); no
-  `crsPath`, download, compressed file or Grumpkin; refuses while `BB_WASM_PATH` is set.
-  Verifier/prover refuse other instances; verifier instances hold `[1]_1`, `[x]_2` only.
-  One adversarial review: no blockers, two material points fixed. Reports re-recorded
-  from CI run 36515533471 (447 checks, 18 proofs; identities unchanged).
+- M3 ([decision](decisions/2026-09.md#2026-09-29--pin-the-relation-sources-final-text)):
+  the seven circuit sources carry final text, citing rules by document and section
+  (no "candidate", "PROBE ONLY", "§2.6", "A5"); comments only, so bytecode, keys and
+  the configuration are unchanged (local compile reproduced all six bytecode hashes).
+  Manifest source hashes updated; manifest, `V3_SPECIFICATION` and the README runtime
+  pin are spec `85655a5`, whose tree also names venue-ergo.md for Ergo reports (closes
+  former Next 5(d)). One fresh review: nothing material; precision points applied.
+  Reports re-recorded from CI run PENDING.
+- M2 (PR #45): `startBackend` loads only hash-checked parameters
+  ([decision](decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters)).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -31,11 +34,10 @@ M3, the source pin (Next 1): state its acceptance here before starting.
 
 ## Next
 1. Slice 8, adoption, in the [decided order](decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters).
-   M3 source pin
-   (circuit comments citing "§2.6", "PROBE ONLY", bare v2 sections, "A5"; no configuration
-   byte changes), M4 certificates/kind-11, M5 replay/import rules and bounds, M6 Next
-   5(i), M7 one-transaction condition, M8 adoption, every report re-recorded, live
-   two-backing drill. Mainnet needs separate authority.
+   M4 certificates/kind-11, M5 replay/import rules and bounds, M6 Next 5(i), M7
+   one-transaction condition, M8 adoption (one manifest holding §11.1's parameter
+   identities too, now `BN254_PARAMETERS`), every report re-recorded, live two-backing
+   drill. Mainnet needs separate authority.
 2. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
@@ -53,8 +55,7 @@ M3, the source pin (Next 1): state its acceptance here before starting.
    caller is exposed; fix by a difficulty bound like the synthetic one or a testnet
    context long enough to check its last boundary. (b) `store.ts` `package()` serves a
    published commitment never held after the lag (C2.4.3). (c) `store.ts` `submit` may
-   return an old-segment receipt for an adopted forced record (traced only). (d) Ergo
-   reports bind pool-v3 `786f962` but no `venue-ergo.md` revision.
+   return an old-segment receipt for an adopted forced record (traced only).
    (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
    `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit. (h) Runtime
    package-reader refusals drop the receipt walk's proven contradictions and fault facts

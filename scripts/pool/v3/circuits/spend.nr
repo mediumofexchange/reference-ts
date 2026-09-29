@@ -1,9 +1,10 @@
 mod notes;
 mod poseidon2;
+// The vendored Poseidon2 helper calls crate::poseidon2_permutation.
 use std::hash::poseidon2_permutation;
 
-// Successor candidate spend: exactly fifteen public fields in §2.6 order.
-// Candidate evidence only; not pool-v2 normative source or a final configuration.
+// Spend, kind 2: exactly the fifteen public inputs of pool-v3 §3.2, in order.
+// The relation is pool-fees C1.2.3's.
 fn main(domain: pub [u128; 2], segment: pub [u128; 2], scope: pub Field,
         anchors: pub [Field; 2], nullifiers: pub [Field; 2], outputs: pub [Field; 4],
         delivery: pub [u128; 2],
@@ -11,9 +12,11 @@ fn main(domain: pub [u128; 2], segment: pub [u128; 2], scope: pub Field,
         siblings: [[Field; 32]; 2], right: [[bool; 32]; 2],
         links: [[u128; 2]; 2], scope_siblings: [[Field; 16]; 2], scope_right: [[bool; 16]; 2],
         output_notes: [notes::Note; 4]) {
-    // §7: a proof is for one segment. The identity is bound as a public
-    // input; nothing is computed from it.
+    // pool-v2 §7: a proof is for one segment. The identity is bound as a
+    // public input; nothing is computed from it.
     let _ = segment;
+    // pool-delivery C4.4: the digest is proof-bound here; the host checks
+    // the capsules' count, widths, profile, output association and hash.
     let _ = delivery;
     for i in 0..2 {
         // Each input against its own anchor; padding proves ownership, its
