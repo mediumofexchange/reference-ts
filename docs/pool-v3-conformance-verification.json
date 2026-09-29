@@ -1,8 +1,8 @@
 {
   "candidate": "combined six successor relations",
-  "referenceBase": "e1d48f183df6d664673bf59c0db3acca12eea0e9",
+  "referenceBase": "b95ec7ad96dc3e07a75f09341a4b27468adccefc",
   "referenceTreeClean": true,
-  "companionSpec": "786f962",
+  "companionSpec": "85655a5",
   "environment": {
     "node": "v24.21.0",
     "platform": "linux",
@@ -41,42 +41,42 @@
   },
   "identities": {
     "issue": {
-      "source": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
+      "source": "0160497d77500bec7a62548b13908f46be122dfaf6f54cc0b720cf328a9c6ad6",
       "bytecode": "0c6c904321ff16bc8fdce2298257f3cd54035bc20e53bc6e711d0be5356d211c",
       "vk": "65cc0ada6618c79df403d8276cd6a201e36936fb6264e516a34c4bf225729da0",
       "vkBytes": 3680,
       "dyadicSize": 8192
     },
     "spend": {
-      "source": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
+      "source": "920c4702d2ae0c3e2d0f251fe298c39c0d658a390220b0c4d68b4e06c31ae695",
       "bytecode": "47f3a125a0fcfc22cd15e482db2c75173ed70eb413f5df43b38ec00f5fa51087",
       "vk": "850131fcd564ce15a238142051a0780623c8c759ccaffb4e389aad5a5056acba",
       "vkBytes": 3680,
       "dyadicSize": 32768
     },
     "burn": {
-      "source": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5",
+      "source": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",
       "bytecode": "d36344f2b2424fa6569c01bb7d8450da98fab641251ee385914332f5437c4b72",
       "vk": "ce55384238c5448505f7c34b938ae92152ea75c3c412c779b20aea57bf82f3be",
       "vkBytes": 3680,
       "dyadicSize": 16384
     },
     "demand": {
-      "source": "c0fe4af4fb64f8494b16a40f49a526b048e9c41b68924c471e99ef898c15c349",
+      "source": "b48f7f86c8ee80aa5fea7e6d2ea0b709d2a95f670b3473b2a1abc7a0afd5bf9e",
       "bytecode": "cab1f519db1b93cb5e2b6ec89052c5c69706990960fc3c0e617f996d843e5187",
       "vk": "cf3912b74b1c72eef4114049f792b76462cb3cf38f19181a90dd279175b61aa4",
       "vkBytes": 3680,
       "dyadicSize": 16384
     },
     "settle": {
-      "source": "5c7ed9ce647fa4440a11b6e43d62d889bd65f26016d9267b702bbac5393ad92d",
+      "source": "cb865bea2f8087213f3d79d2eee5e07c5221cc1511d72ae6f5ee727bd690fadd",
       "bytecode": "ccad2b665539a22c1be4692e05a87bae01ccd6756ce464fc327d8a41b7938b23",
       "vk": "ea5b3e66ced10ded8cd72bae33c6cf4dd7d2704735713ce3b7f2f76126967654",
       "vkBytes": 3680,
       "dyadicSize": 16384
     },
     "request": {
-      "source": "d6abd650c01efb37bd5ced2c38068ab64c99e62f3cba02468ec1107f985dca27",
+      "source": "2da922cbc425297aa09d231562de48eaf6f55fd392a1e060c523bd2ac981baee",
       "bytecode": "4b1a0e76a48b651a33f19a25dcad2e45e708aabd70d757528153a2098a929084",
       "vk": "1f048f189568b0b6ffdac39c71957aee34ed3485490d8594aba86d800e2aeaf4",
       "vkBytes": 3680,
@@ -84,7 +84,7 @@
     }
   },
   "sharedSources": {
-    "notes.nr": "c606dd994e523631a969de861b909128b834be8f6fba4be11a4e2a217262270d",
+    "notes.nr": "034f123da4aafbac55ecaa75a3d37bbb016b70f06040a8c7092f598fbc1662d3",
     "poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"
   },
   "publicInputs": {
@@ -635,162 +635,162 @@
     {
       "kind": "issue",
       "label": "issue: exact public order and real proof",
-      "executeMs": 59.59782499999983,
-      "proveMs": 1032.565568,
-      "verifyMs": 30.66983000000073,
+      "executeMs": 59.9738499999994,
+      "proveMs": 1151.654797000001,
+      "verifyMs": 32.837938999999096,
       "proofBytes": 14656,
       "publicInputs": 11
     },
     {
       "kind": "spend",
       "label": "spend: exact public order and real proof",
-      "executeMs": 54.880356000001484,
-      "proveMs": 3069.596663999999,
-      "verifyMs": 23.465416000000914,
+      "executeMs": 54.559698000000935,
+      "proveMs": 3351.278966,
+      "verifyMs": 22.6216459999996,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: exact public order and real proof",
-      "executeMs": 35.86168499999985,
-      "proveMs": 2575.148711,
-      "verifyMs": 18.796152000000802,
+      "executeMs": 29.562095999999656,
+      "proveMs": 2809.9193750000013,
+      "verifyMs": 19.81824400000005,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "demand",
       "label": "demand: exact public order and real proof",
-      "executeMs": 24.217569000000367,
-      "proveMs": 2564.1868570000006,
-      "verifyMs": 18.715001000000484,
+      "executeMs": 21.502728000001298,
+      "proveMs": 2806.9235929999995,
+      "verifyMs": 19.93279800000164,
       "proofBytes": 14656,
       "publicInputs": 16
     },
     {
       "kind": "settle",
       "label": "settle: exact public order and real proof",
-      "executeMs": 23.249621999999363,
-      "proveMs": 2553.7318259999993,
-      "verifyMs": 19.5723100000032,
+      "executeMs": 21.55055899999934,
+      "proveMs": 2802.1811400000006,
+      "verifyMs": 20.96631299999717,
       "proofBytes": 14656,
       "publicInputs": 17
     },
     {
       "kind": "request",
       "label": "request: exact public order and real proof",
-      "executeMs": 8.823111999998218,
-      "proveMs": 1377.8098089999985,
-      "verifyMs": 18.624942000002193,
+      "executeMs": 9.029897000000346,
+      "proveMs": 1512.7199980000005,
+      "verifyMs": 20.363579999997455,
       "proofBytes": 14656,
       "publicInputs": 7
     },
     {
       "kind": "demand",
       "label": "demand: two real notes with distinct anchors and tags",
-      "executeMs": 22.15998699999909,
-      "proveMs": 2558.8147080000017,
-      "verifyMs": 18.249095999999554,
+      "executeMs": 21.99113600000055,
+      "proveMs": 2810.1611520000006,
+      "verifyMs": 19.76187099999879,
       "proofBytes": 14656,
       "publicInputs": 16
     },
     {
       "kind": "settle",
       "label": "settle: two real notes with distinct anchors and nullifiers",
-      "executeMs": 23.51743500000157,
-      "proveMs": 2554.7501999999986,
-      "verifyMs": 18.3618970000025,
+      "executeMs": 23.336013000000094,
+      "proveMs": 2815.209235999999,
+      "verifyMs": 19.718077000001358,
       "proofBytes": 14656,
       "publicInputs": 17
     },
     {
       "kind": "spend",
       "label": "spend: two real inputs with distinct anchors",
-      "executeMs": 28.371354999999312,
-      "proveMs": 3039.8607709999997,
-      "verifyMs": 18.71063100000174,
+      "executeMs": 29.369832000000315,
+      "proveMs": 3351.3110960000013,
+      "verifyMs": 19.96871999999712,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: two real inputs with distinct anchors",
-      "executeMs": 23.172794999998587,
-      "proveMs": 2553.3927750000003,
-      "verifyMs": 18.14225400000214,
+      "executeMs": 23.268169999999373,
+      "proveMs": 2805.122702000004,
+      "verifyMs": 19.718452999994042,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "issue",
       "label": "issue: alternative metadata independently proves",
-      "executeMs": 4.30201500000112,
-      "proveMs": 973.9427219999998,
-      "verifyMs": 17.985429000000295,
+      "executeMs": 4.322199000002001,
+      "proveMs": 1066.061259999995,
+      "verifyMs": 19.44531700000516,
       "proofBytes": 14656,
       "publicInputs": 11
     },
     {
       "kind": "spend",
       "label": "spend: alternative metadata independently proves",
-      "executeMs": 26.618583000003127,
-      "proveMs": 3030.977880999999,
-      "verifyMs": 18.12603300000046,
+      "executeMs": 25.39276599999721,
+      "proveMs": 3330.034360000005,
+      "verifyMs": 19.249810999994224,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: alternative metadata independently proves",
-      "executeMs": 19.98909999999887,
-      "proveMs": 2552.9163189999963,
-      "verifyMs": 18.393318000002182,
+      "executeMs": 20.62569700000313,
+      "proveMs": 2797.5750679999983,
+      "verifyMs": 20.184911000003922,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "demand",
       "label": "demand: alternative metadata independently proves",
-      "executeMs": 19.238352000000305,
-      "proveMs": 2549.289687000004,
-      "verifyMs": 17.99184399999649,
+      "executeMs": 19.54277000000002,
+      "proveMs": 2801.0174130000014,
+      "verifyMs": 19.126960000001418,
       "proofBytes": 14656,
       "publicInputs": 16
     },
     {
       "kind": "request",
       "label": "request: alternative metadata independently proves",
-      "executeMs": 8.150987000000896,
-      "proveMs": 1406.184491,
-      "verifyMs": 17.731786000003922,
+      "executeMs": 8.592111999998451,
+      "proveMs": 1514.8689200000008,
+      "verifyMs": 19.096443000002182,
       "proofBytes": 14656,
       "publicInputs": 7
     },
     {
       "kind": "spend",
       "label": "spend: two backings with ordinary fee and both changes",
-      "executeMs": 25.516426000001957,
-      "proveMs": 3027.594962999996,
-      "verifyMs": 17.933916000001773,
+      "executeMs": 25.741707000001043,
+      "proveMs": 3331.727930000001,
+      "verifyMs": 19.26657200000045,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "spend",
       "label": "spend: two maximum u64 inputs conserve in u128",
-      "executeMs": 27.199742000004335,
-      "proveMs": 3038.38637,
-      "verifyMs": 17.833983999997145,
+      "executeMs": 25.218460000003688,
+      "proveMs": 3334.061677999998,
+      "verifyMs": 20.25391600000148,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: full value with ordinary zero change",
-      "executeMs": 19.942991999996593,
-      "proveMs": 2572.9918350000007,
-      "verifyMs": 18.635487999999896,
+      "executeMs": 19.7407680000033,
+      "proveMs": 2802.4732369999983,
+      "verifyMs": 19.385317000000214,
       "proofBytes": 14656,
       "publicInputs": 15
     }

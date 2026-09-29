@@ -14,7 +14,7 @@ M4, complete certificates and kind-11 venue evidence (Next 1): state its accepta
   Manifest source hashes updated; manifest, `V3_SPECIFICATION` and the README runtime
   pin are spec `85655a5`, whose tree also names venue-ergo.md for Ergo reports (closes
   former Next 5(d)). One fresh review: nothing material; precision points applied.
-  Reports re-recorded from CI run PENDING.
+  Reports re-recorded from CI run 36519561119 (447 checks; identities unchanged).
 - M2 (PR #45): `startBackend` loads only hash-checked parameters
   ([decision](decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters)).
 

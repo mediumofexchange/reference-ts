@@ -1,6 +1,6 @@
 {
   "status": "passed",
-  "specification": "786f962",
+  "specification": "85655a5",
   "evidence": "local-runtime-real-proofs",
   "limits": [
     "candidate configuration only",
@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1294
+      "elapsedMs": 1391
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1011
+      "elapsedMs": 1100
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2617
+      "elapsedMs": 2866
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2605
+      "elapsedMs": 2863
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2606
+      "elapsedMs": 2869
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1413
+      "elapsedMs": 1545
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2605
+      "elapsedMs": 2855
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2600
+      "elapsedMs": 2850
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2598
+      "elapsedMs": 2857
     }
   ],
   "transactions": [],
@@ -78,13 +78,13 @@
     "position": "4",
     "adoptionIndex": "24",
     "spentRoot": "5f374bcb11033eb9d6497b5c89ab72fac42592b033d4e3ebe9804e5102bca7c0",
-    "history": "74764a7cf3ebf62d54cc9e6689b2b7196140b5ec439d4a85fd78237b3b9b7c72",
+    "history": "39d7b00bdf7288b1f721fb548a31d91b977c0e2bea25b9bdebd4653e3f74bf87",
     "canonicalIndex": "25",
     "force": [
       {
         "index": "21",
         "kind": 4,
-        "sha256": "ca5b54f215e9bc9572ab24b40da25e6b87a52221cb8c48c0ac38d8f617ca9ba7"
+        "sha256": "cfbe81a6d3dc13ccd0b1d01399231e5b344a13aa1727b53da8d7bdf988576685"
       },
       {
         "index": "22",
@@ -94,12 +94,12 @@
       {
         "index": "23",
         "kind": 4,
-        "sha256": "4ba73337e3cfb54c75a52114766684816d2be2836012fcc0bde5cca3e6bf3239"
+        "sha256": "6b1be75eeafd338d1bec262d1028d183b8f33b5a66873293761763ad13799c65"
       },
       {
         "index": "24",
         "kind": 6,
-        "sha256": "941753ad0f692c545635265c111a7fb1af81089fa5412db89ffe37c5ee6b3000"
+        "sha256": "44e09e08ab6a4d70f6f521962c106208169f5d7978ae26f447d0e85ef1cbf90a"
       }
     ],
     "clock": {
@@ -120,7 +120,7 @@
       "snapshotIndex": "24"
     }
   },
-  "elapsedMs": 35370,
+  "elapsedMs": 37402,
   "sourceSha256Lf": {
     "dist/bytes.js": "9ab7f0e779a1d9e26923d6c0eb9367512fb514c36ff265d741c492e0b14056c9",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
@@ -172,15 +172,15 @@
     "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/pool/fixtures.mjs": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
     "scripts/pool/prepare-crs.mjs": "a19e538feab20a58847c03f1f0bf42ec1182799cf8518e545d5336f5357a63ef",
-    "scripts/pool/v3/candidate-manifest.json": "a5f34d76b1ac9cba71d322c5263fee75120a7756d0b5609720682c344e5049ae",
+    "scripts/pool/v3/candidate-manifest.json": "c6194797b481a511a3ed1fe1aaa8921c0640970ae9ae074fdc13e7cb883dae14",
     "scripts/pool/v3/candidate.mjs": "51273e876c6fe3a6bb76d57e81e379cc82115f942802436ca81e71fd07b1a460",
-    "scripts/pool/v3/circuits/burn.nr": "fc701db0ddf076004621ec91dcd25972d46b91bef5f2b00277155ef8a73b8fe5",
-    "scripts/pool/v3/circuits/demand.nr": "c0fe4af4fb64f8494b16a40f49a526b048e9c41b68924c471e99ef898c15c349",
-    "scripts/pool/v3/circuits/issue.nr": "dfc3a4c8c39e870e942d6c7c512af2a6d07e5a5f5eb01bbccf9fbf03a5c91167",
-    "scripts/pool/v3/circuits/notes.nr": "c606dd994e523631a969de861b909128b834be8f6fba4be11a4e2a217262270d",
-    "scripts/pool/v3/circuits/request.nr": "d6abd650c01efb37bd5ced2c38068ab64c99e62f3cba02468ec1107f985dca27",
-    "scripts/pool/v3/circuits/settle.nr": "5c7ed9ce647fa4440a11b6e43d62d889bd65f26016d9267b702bbac5393ad92d",
-    "scripts/pool/v3/circuits/spend.nr": "bde18e670aac3c1771419211a5685e5531da8c75fe1297f78e489855e511fdf7",
+    "scripts/pool/v3/circuits/burn.nr": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",
+    "scripts/pool/v3/circuits/demand.nr": "b48f7f86c8ee80aa5fea7e6d2ea0b709d2a95f670b3473b2a1abc7a0afd5bf9e",
+    "scripts/pool/v3/circuits/issue.nr": "0160497d77500bec7a62548b13908f46be122dfaf6f54cc0b720cf328a9c6ad6",
+    "scripts/pool/v3/circuits/notes.nr": "034f123da4aafbac55ecaa75a3d37bbb016b70f06040a8c7092f598fbc1662d3",
+    "scripts/pool/v3/circuits/request.nr": "2da922cbc425297aa09d231562de48eaf6f55fd392a1e060c523bd2ac981baee",
+    "scripts/pool/v3/circuits/settle.nr": "cb865bea2f8087213f3d79d2eee5e07c5221cc1511d72ae6f5ee727bd690fadd",
+    "scripts/pool/v3/circuits/spend.nr": "920c4702d2ae0c3e2d0f251fe298c39c0d658a390220b0c4d68b4e06c31ae695",
     "scripts/pool/v3/codec.mjs": "7857587335e2b6bd00a9cbc7305bf5dffadc9a135ef009a9083ee4352941c910",
     "scripts/pool/v3/compact-runtime-check.mjs": "08ceaaee8ec79544f5701409915434817bcc7933b117af04711e7b8104460bdb",
     "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
@@ -188,7 +188,7 @@
     "scripts/pool/v3/evidence-reader.mjs": "719a4f1eac2ba2ee10b05d588d13aa819afae25d9cf8cc9a8cf257702609c486",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
     "scripts/pool/v3/local-replay.mjs": "bad30f27975dd5f449b618373e8593dfd7fb7558da91fe2c694a687241770b54",
-    "scripts/pool/v3/provenance.mjs": "79cfdceff2dc1945aa1f8a4a07c7b79b685edc09fe5394ebd3214da133a71a3a",
+    "scripts/pool/v3/provenance.mjs": "1ff45e0134d3115628915e7a582cf86d66e81b9feea85dfa5e18ba4fd439e656",
     "scripts/pool/v3/public-artifacts.mjs": "82feec1b0fd8c67c6eeae12e7e54c578ebf353133210225a8db281f3484122cf",
     "scripts/pool/v3/recovery-store-check.mjs": "bc9fbabe8597ce62fa0f99faad54c733ec22cd86b6d530a80156d5729d3d28d8",
     "scripts/pool/v3/recovery-testnet.mjs": "bd1ed52fff6ab8ac23c199b54264a827be41d79871f8b9b84b6d925aba22cfa6",
