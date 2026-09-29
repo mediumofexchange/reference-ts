@@ -334,6 +334,8 @@ export interface FaultObserver {
     scope: { readonly header: SegmentHeader; readonly terms: readonly SignedTerms[] }): Promise<void>;
   intrinsicFailure(held: { readonly commitment: Commitment; readonly index: bigint },
     scope: { readonly header: SegmentHeader; readonly terms: readonly SignedTerms[] }, blockLength: bigint): string | undefined;
+  /** Whether any fault evidence was supplied, so that inspecting a checkpoint can report anything. */
+  holdsEvidence?(): boolean;
 }
 /** A carrying checkpoint's verdict as the reader reports it. */
 export interface CarryingVerdict {

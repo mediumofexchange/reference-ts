@@ -12,8 +12,9 @@
 // history and nothing grows in memory with the number of checkpoints.
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
-import { linkInForce, type HeldCommitment, type RangeEntry } from "../../record-range.js";
+import { linkInForce, RangeLimitError, type HeldCommitment, type RangeEntry } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
+import { VenueError } from "../../venue-error.js";
 import type { Commitment } from "../../venue-records.js";
 import { VALUE_BOUND } from "../field.js";
 import { ScopeTree } from "../scope.js";
@@ -362,9 +363,12 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
       else if (passed) { heldAfter++; view.carries(held); } else heldBefore++;
     }
   }
+  // A refusal met classifying the selection is met below it, where the descent had gone: its fault pass starts there.
+  walk.refusedBelow(selectedHeld);
   const selected = await classify(selectedHeld, selection.backing);
   if (selected.class === "lapsed") throw Object.assign(new EvidenceRefusal("lapsed-selection"), selected.clock === undefined ? {} : { clock: selected.clock });
   if (selected.class === "excluded") throw new ReplayRefusal(selected.check);
+  walk.refusedBelow(undefined);
   const current = await latest(selection.backing, context.terms);
   if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
   const { clock, publications, force, nonService } = await walk.around(selected, context.terms, view);
@@ -405,6 +409,8 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   const { trails } = evidence, walk = store.openWalk();
   const views = new Map<string, Promise<RecordView>>(), running = new Map<string, Promise<ScopeVerdict>>();
   const cursors = new Map<string, { term: number; after: bigint | undefined; busy: boolean }>();
+  // Whether any classification began, and the bound a refused read's fault pass starts below.
+  let began = false, below: HeldCommitment | undefined;
   const viewFor = (backing: Uint8Array, terms: RootTerms): Promise<RecordView> => {
     const id = hex(backing);
     if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, evidence, record, context.reference));
@@ -498,6 +504,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     return pending;
   };
   const judge = async (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
+    began = true;
     const c = held.commitment, directory = evidence.directory(c.root);
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const entry = directory.find(item => same(item.name, backing));
@@ -650,16 +657,20 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   };
   // Reports survive a later refusal (decision 2026-09-20). The descent met a backing's newest checkpoints
   // before an older refusal and reported their compact faults, so a refused read authenticates the backing's
-  // unclassified carrying checkpoints newest first and inspects them, stopping at the first classified one or
-  // the first whose directory, snapshot or scope does not authenticate. Nothing here classifies.
+  // unclassified carrying checkpoints newest first (below the selection when classifying it refused) and
+  // inspects them, stopping at the first classified one or the first whose directory, snapshot or scope does
+  // not authenticate. It runs only with fault evidence and once classification began, as the descent visited
+  // nothing otherwise. Nothing here classifies, and the read's own refusal stands: a pass stopped by missing,
+  // malformed or unanswered evidence ends silently; only other failures, such as the verifier's, surface.
   const inspectRefused = async (backing: Uint8Array, terms: RootTerms): Promise<void> => {
-    if (faults === NO_FAULTS) return;
+    if (!began || faults.holdsEvidence?.() !== true) return;
     try {
       const view = await viewFor(backing, terms);
       for (let i = view.chain.length - 1; i >= 0; i--) {
         const term = view.chain[i]!, end = view.termEnd(i);
         for (let held = view.previousHeld(term.operator, end); held !== undefined && held.index >= term.from;
           held = view.previousHeld(term.operator, end, held.commitment.sequence)) {
+          if (below !== undefined && !before(held, below)) continue;
           if (store.verdict(walk, rowKey(held.commitment)) !== undefined) return;
           const directory = evidence.directory(held.commitment.root);
           if (directory === undefined) return;
@@ -670,11 +681,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         }
       }
     } catch (error) {
-      if (!(error instanceof EvidenceRefusal)) throw error;
+      if (!(error instanceof EvidenceRefusal || error instanceof EncodingError || error instanceof RangeLimitError || error instanceof VenueError)) throw error;
     }
   };
   const carrying = (): ImportCarryingVerdict[] => [...store.verdicts(walk)].map(item => ({ operator: hex(item.operator),
     sequence: item.sequence.toString(), index: item.index.toString(), class: item.class, ...(item.class === "excluded" ? { check: item.detail! } : {}) }));
-  return { viewFor, latest, recovery, classify, around, carrying, inspectRefused, close: (): void => { store.closeWalk(walk); } };
+  const refusedBelow = (held: HeldCommitment | undefined): void => { below = held; };
+  return { viewFor, latest, recovery, classify, around, carrying, inspectRefused, refusedBelow, close: (): void => { store.closeWalk(walk); } };
 }
 

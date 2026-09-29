@@ -80,6 +80,7 @@ export function faultObserver(payloads: readonly Uint8Array[] = [],
   return {
     // Canonical package order must not change the fact list. Observations of
     // one record keep their order. Returned facts do not alias retained state.
+    holdsEvidence: () => evidence.length > 0,
     result() {
       if (facts.size === 0) return {};
       const order = <T extends bigint | string>(a: T, b: T): number => (a < b ? -1 : a > b ? 1 : 0);
