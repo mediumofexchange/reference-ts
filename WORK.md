@@ -10,22 +10,21 @@ incremental verdicts equal full replay, and corrupt kept state falls back; real 
 the old ceiling through journal, wallet sync and offline-operator recovery; first sync
 measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision).
 
-**Active: M5b.2 stored reader state**, branch `feat/m5b2-stored-reader-state`.
-*Acceptance:* the decision's M5b.2 list (unchanged verdicts, four new tests, no
-clone/copy of history-sized structures, Node 24 floor). *Stop:* merged with CI green and
-review resolved. Choices made within the decision are recorded in it ("M5b.2 as built").
+**Next: M5b.3 streamed evidence** (evidence file, streamed trails/packages, windowed ranges,
+per-object budgets, u64 codec, runtime pin to spec `97ff964`; acceptance: a ≥10⁵-statement
+stub replay with memory flat against history). Start from the probe's evidence schema and
+`replay-store.ts`; the baseline mode of `replay-store-probe.mjs` now measures the stored runtime.
 
 ## Status
-- M5b.2 built (PR #47): `replay-store.ts`, judgment/apply split, handles at a position, force
-  overlay, imports and merges by reference, witnesses with `holdings.ts` in the replay (the
-  harness shares it), Node 24 floor. Local typecheck, vitest, package, docs, pilot, Ergo
-  persistence, crash and service checks pass. Owed: review, CI (`check:pool:v3` real proofs,
-  not run locally under 2 GB free), reports re-recorded from the CI artifact, merge.
+- M5b.2 delivered (PR #47): every reader walk, the journal and the wallet replay into
+  `replay-store.ts` (choices and review under "M5b.2 as built/review" in the decision). Reports
+  re-recorded from CI run 36547711148; a leaf comparison shows every verdict unchanged. The store
+  is in memory per read or journal until M5b.4; records stay in event rows until M5b.3.
 - M5b.1: design and [probe](docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage); kept exclusions need §14 text in M5b.4.
 - [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay) (docs/spec only): complete replay, streamed and resumed; §12 items take a
   u64 length; [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets): 10⁶ statements over three years,
   memory ≤ 1 GiB independent of history, first sync ≤ 24 h. The runtime pins spec `85655a5`
-  (u32 codec) until M5b.3. Reports from CI run 36519561119.
+  (u32 codec) until M5b.3.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
@@ -38,7 +37,7 @@ review resolved. Choices made within the decision are recorded in it ("M5b.2 as 
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. **Finish M5b.2** (above), then M5b.3–M5b.6 as the
+1. Slice 8, adoption. **M5b.3** (above), then M5b.4–M5b.6 as the
    [storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)
    orders them; M5b.4 names the verifier by circuit identities in the replay identity. Then M6 Next 5(i) (confirm a host
    rule), M4 certificates/kind-11 fitted to this retention, M7 one-transaction
@@ -94,5 +93,5 @@ review resolved. Choices made within the decision are recorded in it ("M5b.2 as 
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
 
-Roughly **55% done / 45% remaining**, range **45–65%**, reassessed 2026-09-29 (lifetime evidence
-and installable commands were missing from the remainder; adoption, qualified storage, mainnet remain).
+Roughly **57% done / 43% remaining**, range **47–66%**, reassessed 2026-09-29 after M5b.2 (every
+party's state now in storage; streaming, kept state, first sync, adoption, qualified storage, mainnet remain).
