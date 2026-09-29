@@ -52,9 +52,10 @@ function fixture(proofVerifier: ProofCheck = verifier) {
   const venue = FixtureVenue.reference(label, lag, 200n), directories = new Map<string, readonly SnapshotDigest[]>();
   const snapshots: Uint8Array[] = [], trails: Uint8Array[] = [];
   const snapshotIds = new Set<string>(), trailIds = new Set<string>();
-  function checkpoint(target: Segment, sequence: bigint, index = sequence): Commitment {
+  function checkpoint(target: Segment, sequence: bigint, index = sequence, misstated = 0n): Commitment {
     const total = target.state.total(hex(backing));
-    const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.state.evidence, ...total };
+    const snapshot = { backing, segment: target.id, historyHash: target.state.history, evidenceHash: target.state.evidence,
+      ...total, issued: total.issued + misstated };
     const directory = [{ name: backing, digest: snapshotDigest(snapshot) }], root = directoryRoot(directory);
     const commitment = signCommitment(operatorSecret, sequence, root);
     directories.set(hex(root), directory);
@@ -136,6 +137,15 @@ describe("single-backing reader work budgets", () => {
     // the local records must refuse, never publish partial state.
     await expect(f.read(last, selected, { maxCheckpoints: 5n, maxEvents: 4n })).rejects.toMatchObject({ status: "resource-refusal" });
     await expect(f.read(last, selected, { maxCheckpoints: 4n, maxEvents: 3n })).rejects.toMatchObject({ status: "resource-refusal" });
+  });
+
+  it("founds a segment on an opening excluded for its own snapshot, so a later valid checkpoint of it finalizes (C2.10.12)", async () => {
+    const f = fixture(), original = segment(1n);
+    f.checkpoint(original, 1n, 1n, 1n); // The opening misstates its supply.
+    await issue(original); const selected = f.checkpoint(original, 2n);
+    const result = await f.read(original, selected, { maxCheckpoints: 2n, maxEvents: 1n });
+    expect(result.carrying!.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "excluded", "SNAPSHOT"], ["2", "valid", undefined]]);
+    expect(result.state!.issued).toBe(5n);
   });
 
   it("counts identical held checkpoints even when their public objects deduplicate", async () => {

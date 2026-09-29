@@ -633,10 +633,9 @@ export class V3OperatorJournal {
   }
   /**
    * An opening's import and the event work a reader spends reading it beyond its
-   * parents' own reads: a scope reader merges every distinct parent's events,
-   * comparing events that share a tag or demand (C2.10.6), then reads the merged
-   * ancestry once more; a single-backing reader reads one parent's ancestry only.
-   * Both are counted, so the reservation never falls short of either reader.
+   * parents' own reads: the reader merges every distinct parent's events, one
+   * parent included, comparing events that share a tag or demand (C2.10.6), then
+   * reads the merged ancestry once more.
    */
   private openingImports(parents: readonly CanonicalCheckpoint[]): { readonly imported: ImportSource | undefined; readonly work: bigint } {
     let work = 0n, merged;
