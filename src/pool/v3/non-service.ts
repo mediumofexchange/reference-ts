@@ -19,9 +19,9 @@ export interface CountContext { readonly selection: Pick<ReaderSelection, "domai
 /** Unadopted publications never change the canonical state's locks or spent tags.
  * First identity indices include invalid proof variants; any verifying variant
  * strictly before t can establish that identity, without refreshing its window. */
-export async function countNonService(context: CountContext, view: RecordView,
+export async function countNonService(context: CountContext, view: Pick<RecordView, "t" | "chain">,
   canonical: { readonly index: bigint; readonly state: ReplayResult } | undefined,
-  publications: readonly RangeEntry[], charge: (amount?: bigint) => void): Promise<NonServiceCount> {
+  publications: Iterable<RangeEntry>): Promise<NonServiceCount> {
   const { selection, terms, verifier } = context, { t, chain } = view;
   if (terms.nonService === undefined) throw new TypeError("non-service requires its declared clause");
   const { duration, count: threshold, window } = terms.nonService;
@@ -43,7 +43,6 @@ export async function countNonService(context: CountContext, view: RecordView,
       if (at < t - window || at > t - duration || tags.has(tag) || !state.hasAnchor(anchor) ||
           state.hasSpentTag(tag) || locked(state, tag, t)) continue;
       for (const record of records) {
-        charge();
         if (await verifier.verify(7, [...record.publicInputs], new Uint8Array(record.proof)) === true) { tags.add(tag); break; }
       }
     }

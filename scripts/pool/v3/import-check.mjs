@@ -337,37 +337,25 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     const duplicated = checkpoint(cs, 4n, 15n, [duplicate], [issueEffect], { nullifiers: imports, issued: 20n, burned: 1n });
     await reject(compose([...history, c0, duplicated]), "OUTPUT");
   });
-  await test("the import checkpoint budget counts held non-carrying commitments and returns no partial result", async () => {
+  await test("held non-carrying commitments past the retired 128-checkpoint total are read, not refused", async () => {
     const oversized = structuredClone(payload), directory = [{ name: b(140), digest: b(141) }];
     oversized.package.directories.push(directory);
     for (let i = 0n; i < 129n; i++) oversized.venue.records.push({ kind: 1, subject: operator, index: 16n,
       record: encodeCommitment(signCommitment(operatorSecret, 6n + i, directoryRoot(directory))) });
-    const answer = await replayLocalPackage(oversized, verifier, codec);
-    assert.equal(answer.status, "resource-refusal"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
+    const base = await replayLocalPackage(payload, verifier, codec), answer = await replayLocalPackage(oversized, verifier, codec);
+    assert.equal(answer.status, base.status); assert.equal(answer.audit.historyHash, base.audit.historyHash);
+    const held = r => r.audit.range.heldBefore + r.audit.range.heldAfter;
+    assert.equal(held(answer), held(base) + 129);
   });
-  await test("the import event budget charges records and fresh ancestry scans, while an extending checkpoint adds nothing", async () => {
-    // The smallest event budget, selected by the reader on its verifier, under which the read completes.
-    const smallest = async input => {
-      const status = async maxEvents => (await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents } }, codec)).status;
-      let low = 0n, high = 64n;
-      assert.equal(await status(high), "selected-local-replay");
-      while (low < high) { const mid = (low + high) / 2n; if (await status(mid) === "selected-local-replay") high = mid; else low = mid + 1n; }
-      const below = await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents: low - 1n } }, codec);
-      assert.equal(below.status, "resource-refusal"); assert.equal(below.audit, null); assert.deepEqual(below.candidates, []);
-      return low;
+  await test("each record's proof is verified once: an extending checkpoint resumes and verifies nothing again", async () => {
+    const proofs = async input => {
+      let calls = 0;
+      const counting = { ...verifier, verify: (...args) => { calls++; return verifier.verify(...args); } };
+      assert.equal((await replayLocalPackage(input, counting, codec)).status, "selected-local-replay");
+      return calls;
     };
     // b2 extends b1, which extends b0: without b1 the same positions are replayed once each.
-    // Under a silence clause the clock scan also charges each held index once, b1's included.
-    const total = await smallest(payload);
-    assert.equal(total, await smallest(compose([a0, a1, b0, b2, c0, c1, d0])) + (silence ? 1n : 0n));
-    // a1, b1 and b2 add three local positions. Fresh openings scan the
-    // imported events and charge a merge pass over their parent's events:
-    // b0 reads one twice, c0 and d0 three twice each. c1 resumes.
-    if (!silence) assert.equal(total, 17n);
-    // An invalid reader budget is the reader's own configuration error, not missing evidence.
-    for (const importLimits of [null, 1n, { maxCheckpoints: 128n }, { maxCheckpoints: -1n, maxEvents: 1n }, { maxCheckpoints: 1, maxEvents: 1n }]) {
-      await assert.rejects(replayLocalPackage(payload, { ...verifier, importLimits }, codec), { name: "TypeError", message: "invalid import limits" });
-    }
+    assert.equal(await proofs(payload), await proofs(compose([a0, a1, b0, b2, c0, c1, d0])));
   });
   let refusedPayload;
   if (silence) {

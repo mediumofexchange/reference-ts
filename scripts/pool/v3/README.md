@@ -153,7 +153,7 @@ roots, spent tags and locks feed the same counter. Checkpoints at the judging
 index and unadopted recovery publications cannot change its strictly earlier
 state. A non-service clause needs no silence clause; without the former
 there is no count. Missing range or ancestry evidence returns no audit.
-The count shares the import work budget and fixture authority boundary.
+The count adds no budget of its own and shares the fixture authority boundary.
 
 The reader is the runtime's (`src/pool/v3/reader.ts` and `state.ts` in
 `dist/`); `local-replay.mjs` layers imports, scopes, receipts, recovery force

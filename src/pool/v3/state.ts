@@ -128,7 +128,7 @@ export class StateHandle implements StateView {
     return stored === undefined ? undefined : this.scanOutput(stored);
   }
   scanOutput(stored: StoredOutput): ScanOutput {
-    return stored.settlement ? { cm: stored.cm, settlement: decodeRecord(this.store.event(stored.ns, stored.position)!.record) } :
+    return stored.settlement ? { cm: stored.cm, settlement: decodeRecord(this.store.event(stored.ns, stored.position)!.settlement!) } :
       { cm: stored.cm, capsule: stored.capsule };
   }
   /** The path of an output the replay witnessed, against the root of the segment holding it. */
@@ -143,8 +143,8 @@ export class StateHandle implements StateView {
   /** The event at `position` of this segment, as a receipt names it (C2.10.9a). */
   receiptEvent(position: bigint): ReceiptEvent | undefined {
     if (position < 1n || position > this.position) return undefined;
-    const event = this.store.event(this.ns, position)!, { statementHash: s, proofHash, signatureHash } = evidenceHashes(decodeRecord(event.record));
-    return { position, statementHash: s, historyHash: event.history, proofHash, signatureHash };
+    const event = this.store.event(this.ns, position)!;
+    return { position, statementHash: event.identity, historyHash: event.history, proofHash: event.proofHash, signatureHash: event.signatureHash };
   }
 }
 /** The state one segment replay moves: a handle at its namespace's tip. */
@@ -229,21 +229,17 @@ export interface LastValid {
 export interface Adopted { readonly bytes: Uint8Array; readonly index: bigint }
 
 /** What a new segment imports: a checkpoint's state, or finalized prefixes merged from several in the same store. */
-export interface MergedImport { readonly store: ReplayStore; readonly frontier: Imports; readonly events: bigint }
+export interface MergedImport { readonly store: ReplayStore; readonly frontier: Imports }
 export type ImportSource = StateHandle | MergedImport;
 
 /**
  * A fresh namespace for `segment` under `identity`, over the imported
  * frontier or else the empty state. Its imports are read by reference;
- * building the replay's ancestry reads each imported event once, charged to
- * `chargeEvents`.
+ * building the successor's spent set reads each imported nullifier once.
  */
-export function openSegmentState(store: ReplayStore, segment: Uint8Array, identity: Uint8Array, imported: ImportSource | undefined,
-  chargeEvents: (amount: bigint) => void): SegmentState {
+export function openSegmentState(store: ReplayStore, segment: Uint8Array, identity: Uint8Array, imported: ImportSource | undefined): SegmentState {
   if (imported !== undefined && imported.store !== store) throw new Error("an import is read from its own store");
   const frontier = imported === undefined ? undefined : imported instanceof StateHandle ? imported.frontier() : imported.frontier;
-  const events = imported === undefined ? 0n : imported instanceof StateHandle ? imported.eventCount() : imported.events;
-  if (events > 0n) chargeEvents(events);
   const ns = store.open(segment, identity, frontier, { history: genesisHistoryHash(segment), evidence: genesisEvidenceHash(segment) });
   return new StateHandle(store, ns);
 }
@@ -288,6 +284,7 @@ export interface Judged {
   readonly identity: Uint8Array;
   readonly at: bigint | undefined;
   readonly evidence: Uint8Array;
+  readonly digests: EvidenceDigests;
   readonly backing: string;
   readonly demand: Demand | undefined;
   readonly demandId: string | undefined;
@@ -329,7 +326,7 @@ export async function judgeRecord(state: SegmentState, bytes: Uint8Array, replay
   if (kind >= 4 && at === undefined) throw new EvidenceRefusal("unsupported-scope");
   const identity = statementHash(record);
   requireReplay(!state.hasStatement(identity), "REPEATED_STATEMENT");
-  const evidence = nextEvidenceHash(state.evidence, evidenceHashes(record), position + 1n);
+  const digests = evidenceHashes(record), evidence = nextEvidenceHash(state.evidence, digests, position + 1n);
   if (lastValid !== undefined && position + 1n === lastValid.position) requireReplay(same(evidence, lastValid.evidenceHash), "CONTINUITY");
   // Issuance witnessed at or after K's revocation is void (C2b.1). A position
   // the last valid checkpoint finalized was witnessed at its index, not here.
@@ -353,7 +350,7 @@ export async function judgeRecord(state: SegmentState, bytes: Uint8Array, replay
   }
   checkUniqueEffects(nfs, outputs, state);
   requireReplay(state.leaves + BigInt(outputs.length) <= NOTE_TREE_CAPACITY && position + 1n < VALUE_BOUND, "CAPACITY");
-  return { bytes, record, identity, at, evidence, backing: key, demand, demandId, position };
+  return { bytes, record, identity, at, evidence, digests, backing: key, demand, demandId, position };
 }
 
 /**
@@ -372,7 +369,8 @@ export function applyJudged(state: SegmentState, judged: Judged, replay: Segment
   const previous = state.history, lastValid = replay.lastValid;
   state.store.atomic(() => {
     const tip = state.store.append(state.ns, {
-      identity, kind, index: judged.at, record: judged.bytes, evidence: judged.evidence,
+      identity, kind, index: judged.at, record: judged.bytes, proofHash: judged.digests.proofHash,
+      signatureHash: judged.digests.signatureHash, evidence: judged.evidence,
       supply: kind === 1 ? { backing: judged.backing, issued: p[7]!, burned: 0n } : kind === 3 ? { backing: judged.backing, issued: 0n, burned: p[7]! } : undefined,
       nullifiers: nfs.map(nf => ({ nf, tag: tagOf(nf) })),
       outputs: scan.map(output => ({ cm: output.cm, capsule: output.capsule, settlement: output.settlement !== undefined,

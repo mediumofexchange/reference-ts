@@ -287,7 +287,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     expect((await f.read(await restored.package())).state.hasNullifier(f.input.note.nf)).toBe(true);
   });
 
-  it.each(["unwitnessed publication", "silence return"])("reserves all required checkpoints at the reader's work bound: %s", async action => {
+  it.each(["unwitnessed publication", "silence return"])("serves past the retired reader checkpoint reservation: %s", async action => {
     const f = fixture(action === "silence return"), a = f.create();
     let previous = await a.open("genesis", f.signed); await a.publish();
     const empty = await a.package(); a.close();
@@ -318,11 +318,12 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     } else {
       f.venue.advance(f.venue.witnessedIndex() + 5n);
     }
+    // Readers keep no total over checkpoints (M5b.3b), so the successor signs its next step past the old slot.
     const sign = vi.spyOn(ed25519, "sign");
     try {
-      await expect(action === "unwitnessed publication" ? successor.submit(issue) : successor.return("no-room-for-return"))
-        .rejects.toMatchObject({ code: "REFUSED", check: "RESOURCE" });
-      expect(sign).not.toHaveBeenCalled();
+      if (action === "unwitnessed publication") expect(await successor.submit(issue)).toBeInstanceOf(Uint8Array);
+      else expect((await successor.return("room-for-return")).sequence).toBe(2n);
+      expect(sign).toHaveBeenCalled();
     } finally { sign.mockRestore(); }
   }, 90_000);
 });

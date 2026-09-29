@@ -26,23 +26,6 @@ const same = (a, b) => compareBytes(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const sha256 = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
 export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
-// Work budgets for imported closures, including failed replays and merge work.
-// Events are the records a replay actually processes: a resumed checkpoint
-// charges only its positions after the last valid one, and a replay charges
-// imported events only when it builds their ancestry. Copying the resumed
-// state is not charged; it hashes and verifies nothing and is bounded by the
-// checkpoint and event budgets together. A reader may select other local
-// budgets on its verifier; they are never protocol bounds.
-export const IMPORT_LIMITS = Object.freeze({ maxCheckpoints: 128n, maxEvents: 8192n });
-function importLimitsOf(verifier) {
-  const limits = verifier?.importLimits;
-  if (limits === undefined) return IMPORT_LIMITS;
-  if (limits === null || typeof limits !== "object") throw new TypeError("invalid import limits");
-  // Each field is read once, so a getter cannot pass validation and then change.
-  const { maxCheckpoints, maxEvents } = limits;
-  if (!isValue(maxCheckpoints) || !isValue(maxEvents)) throw new TypeError("invalid import limits");
-  return Object.freeze({ maxCheckpoints, maxEvents });
-}
 const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
   candidateConfigurationChecked: false, signedTermsAuthenticated: false,
   termsAuthorityAuthenticated: false, completenessClaim: false, noMatchesMeansZeroBalance: false,
@@ -120,8 +103,6 @@ export async function replayLocalPackage(input, verifier, codec) {
     const reference = structuredClone(verifier.reference);
     const expectedVenue = referenceVenue(reference);
     requireReplay(selection?.venue instanceof Uint8Array && same(selection.venue, expectedVenue.id), "VENUE_REFERENCE");
-    // The reader's own budget selection is checked before any evidence.
-    const importLimits = importLimitsOf(verifier);
     requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
     const domain = codec.configurationHash(codec.decodeConfiguration(supplied.configuration));
     requireReplay(selection?.domain instanceof Uint8Array && same(domain, selection.domain), "CONFIGURATION");
@@ -145,7 +126,7 @@ export async function replayLocalPackage(input, verifier, codec) {
     if (venue === undefined && !imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     if (supplied.faults?.length && venue === undefined) throw new EvidenceRefusal("unsupported-scope");
     context = { store: new ReplayStore(), witness: seed === undefined ? undefined : seedWitness(seed, selection.domain),
-      selection, terms, signedTerms, header, verifier, codec, reference, importLimits, receiptBytes: supplied.receipt,
+      selection, terms, signedTerms, header, verifier, codec, reference, receiptBytes: supplied.receipt,
       faults: faultObserver(supplied.faults, selection, verifier, codec) };
     if (supplied.receipt !== undefined && (seed !== undefined || venue === undefined)) throw new EvidenceRefusal("unsupported-scope");
     let ranges = null, carrying = null, clock = null, state, rangeEvidence = "none";
@@ -162,7 +143,10 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      const result = await classifyScopes(context, directories, record, { snapshots, trails: new EvidenceStore().importTrails(budgeted(trails, codec)) });
+      // The walk looks its objects up by key, and keeps its venue answers beside the harness's stored trails.
+      const stored = new EvidenceStore().importTrails(budgeted(trails, codec));
+      const result = await classifyScopes(context, record, { directory: root => directories.get(hex(root)),
+        snapshot: digest => snapshots.find(bytes => same(sha256(bytes), digest)), trails: stored, answers: stored });
       if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
         candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
         currentRangeAuthenticated: selection.mode !== "historical-fixture" };

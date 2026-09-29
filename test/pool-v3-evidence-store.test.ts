@@ -3,10 +3,11 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { compareBytes, EncodingError } from "../src/bytes.js";
 import { limbsOf } from "../src/pool/field.js";
-import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
+import { genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
 import { EvidenceStore, MAX_ITEM_BYTES } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { decodeEvidencePackage, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
+import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
+import { directoryRoot } from "../src/venue-records.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { MAX_ROOT_TERMS_BYTES } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
@@ -146,6 +147,54 @@ describe("v3 evidence store", () => {
     const store = new EvidenceStore(), batch = await store.importStream(chunks(bytes, 1));
     expect(batch.count(6)).toBe(1);
     expect([...batch.heads(segment)]).toHaveLength(1);
+    store.close();
+  });
+
+  it("finds directories by root and snapshots by digest, and marks a directory that does not decode", () => {
+    const directory = [{ name: backing, digest: b(8) }], snapshot = snapshotBytes(snapshotAt(2)), store = new EvidenceStore();
+    const batch = store.importBytes(pack([{ kind: 3, payload: encodeEvidenceDirectory(directory) }, { kind: 4, payload: snapshot }]));
+    expect(batch.directory(directoryRoot(directory))).toEqual(directory);
+    expect(batch.directory(b(1))).toBeUndefined();
+    expect(batch.snapshot(sha256(snapshot))).toEqual(snapshot);
+    expect(batch.snapshot(b(1))).toBeUndefined();
+    expect(batch.malformedDirectory()).toBe(false);
+    expect(store.importBytes(pack([{ kind: 3, payload: Uint8Array.of(1, 2, 3) }])).malformedDirectory()).toBe(true);
+    store.close();
+  });
+
+  it("refuses a batch past the party's quota, keeping nothing, and a venue answer past it as a resource refusal", async () => {
+    const bytes = pack([{ kind: 6, payload: trail(6) }]), store = new EvidenceStore(":memory:", { maxBatchBytes: BigInt(trail(6).length) - 1n });
+    expect(() => store.importBytes(bytes)).toThrow(PackageLimitError);
+    await expect(store.importStream(chunks(bytes, 64))).rejects.toThrow(PackageLimitError);
+    const batch = store.importBytes(pack([{ kind: 6, payload: trail(2) }]));
+    expect([...batch.heads(segment)]).toHaveLength(1);
+    expect(() => batch.keepPublications(backing, [{ index: 1n, ordinal: 0n, record: new Uint8Array(Number(trail(6).length)) }]))
+      .toThrow(expect.objectContaining({ status: "resource-refusal" }));
+    expect(() => new EvidenceStore(":memory:", { maxBatchBytes: -1n })).toThrow(TypeError);
+    store.close();
+  });
+
+  it("keeps venue answers in index and venue order, one position for one subject", () => {
+    const store = new EvidenceStore(), batch = store.importBytes(pack([])), operator = header.operator;
+    const held = (index: bigint, sequence: bigint) => ({ index, commitment: { operator, sequence, root: b(Number(sequence)), signature: new Uint8Array(64).fill(1) } });
+    expect(batch.kept(1, operator)).toBe(false);
+    // Two windows of one answer, as a reader reads them.
+    batch.keepHeld(operator, [held(2n, 1n), held(2n, 2n)]); batch.keepHeld(operator, [held(9n, 5n)]); batch.keep(1, operator);
+    expect(batch.kept(1, operator)).toBe(true);
+    expect([...batch.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[2n, 1n], [2n, 2n], [9n, 5n]]);
+    expect(batch.heldAt(operator, 5n)).toEqual(held(9n, 5n)); expect(batch.heldAt(operator, 3n)).toBeUndefined();
+    expect([batch.heldAbove(operator, 2n), batch.heldAbove(operator, 5n)]).toEqual([true, false]);
+    expect(batch.nextHeld(operator, 3n)).toEqual(held(9n, 5n));
+    expect(batch.nextHeld(operator, 0n, 1n)).toEqual(held(2n, 2n));
+    expect([batch.firstHeldIndex(operator, 0n, 9n), batch.firstHeldIndex(operator, 3n, 9n), batch.firstHeldIndex(operator, 3n, 8n)]).toEqual([2n, 9n, undefined]);
+    const entry = (index: bigint, ordinal: bigint) => ({ index, ordinal, record: Uint8Array.of(Number(index), Number(ordinal)) });
+    batch.keepPublications(b(5), [entry(1n, 0n), entry(1n, 2n), entry(3n, 0n)]);
+    batch.keepPublications(b(6), [entry(1n, 1n)]);
+    expect([...batch.publications(b(5))]).toEqual([entry(1n, 0n), entry(1n, 2n), entry(3n, 0n)]);
+    expect(batch.nextPublication(b(5), entry(1n, 2n))).toEqual(entry(3n, 0n));
+    expect(batch.publicationCount(b(6))).toBe(1);
+    // One venue position answered under two subjects leaves the read unresolved (§13.1).
+    expect(() => batch.keepPublications(b(6), [entry(3n, 0n)])).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
     store.close();
   });
 });

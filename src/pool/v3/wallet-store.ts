@@ -103,11 +103,10 @@ function persistentPath(path: string): void {
 /** Each caller field read once: the wallet's domain, guarded venue identity and
  * the owned reader options every later step uses. */
 function ownOptions(options: PackageReader) {
-  const { configuration, verifier, venue, reference, importLimits } = options;
+  const { configuration, verifier, venue, reference } = options;
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
   const ownConfiguration = decodeConfiguration(configurationBytes(configuration)), verify = verifier.verify.bind(verifier);
-  const reader: PackageReader = { configuration: ownConfiguration, verifier: { verify }, venue, reference: ownReference,
-    ...(importLimits === undefined ? {} : { importLimits: { ...importLimits } }) };
+  const reader: PackageReader = { configuration: ownConfiguration, verifier: { verify }, venue, reference: ownReference };
   return { domain: configurationHash(ownConfiguration), venueId, reader };
 }
 export interface Fulfillment {

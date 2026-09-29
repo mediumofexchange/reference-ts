@@ -7,8 +7,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
-  admittedReplacements, decodeRangeAnswer, heldCommitments, replacementChain, revocationIndex,
-  type ChainLink, type HeldCommitment, type RangeAnswer, type RangeLimits, type RecordKind,
+  admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
+  type AdmittedReplacement, type ChainLink, type HeldCommitment, type HeldPrior, type RangeAnswer, type RangeEntry, type RangeLimits, type RecordKind,
 } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
@@ -22,7 +22,7 @@ import type { ReplayStore } from "./replay-store.js";
 import {
   applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type ScanOutput, type SegmentReplay,
 } from "./state.js";
-import type { StoredTrail } from "./evidence-store.js";
+import type { KeptAnswers, StoredTrail, WalkEvidence } from "./evidence-store.js";
 import type { RootTerms } from "./terms.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
@@ -41,20 +41,29 @@ export interface ReaderSelection {
   readonly sequence: bigint;
   readonly judgingIndex: bigint;
 }
-/** Packaged directories by the hex of their root. */
-export type Directories = ReadonlyMap<string, readonly SnapshotDigest[]>;
 export interface SignedTerms { readonly terms: Uint8Array; readonly signature: Uint8Array }
 
-/** §13 reads over [0, t] for one backing: its replacement chain, held commitments and K's revocation. */
+/** §13 reads over [0, t] for one backing: its replacement chain, K's revocation, and the held commitments
+ * and publications a read asks for, read window by window and kept in the read's evidence. */
 export interface RecordView {
   readonly t: bigint;
   readonly lag: bigint;
   readonly chain: readonly ChainLink[];
   readonly revokedAt: bigint | undefined;
-  heldBy(operator: Uint8Array): Promise<readonly HeldCommitment[]>;
+  /** Held commitments of `operator` (C2.3.3), in index and sequence order. */
+  held(operator: Uint8Array): Iterable<HeldCommitment>;
+  heldAt(operator: Uint8Array, sequence: bigint): HeldCommitment | undefined;
+  heldAbove(operator: Uint8Array, sequence: bigint): boolean;
+  /** The first held commitment of `operator` at or after `fromIndex` whose sequence exceeds `after`, if given. */
+  nextHeld(operator: Uint8Array, fromIndex: bigint, after?: bigint): HeldCommitment | undefined;
+  /** The least index in [from, to] at which `operator` holds a commitment. */
+  firstHeldIndex(operator: Uint8Array, from: bigint, to: bigint): bigint | undefined;
   termEnd(i: number): bigint;
   carries(held: HeldCommitment): SnapshotDigest | undefined;
-  ask(kind: RecordKind, subject: Uint8Array): Promise<RangeAnswer>;
+  /** This backing's publications (kind 4), in venue order; a venue position two backings share leaves the read unresolved. */
+  nextPublication(after?: Pick<RangeEntry, "index" | "ordinal">): RangeEntry | undefined;
+  publications(): Iterable<RangeEntry>;
+  publicationCount(): number;
 }
 
 /** A venue read; a venue with no answer at all (unsynced or failed) leaves the read unresolved. A
@@ -69,16 +78,41 @@ function read<T>(call: () => T): T {
   return value;
 }
 
+/** One §13 answer over [0, t], read as successive windows. A window over the
+ * reader's per-answer budget is asked again in halves; one index over it stays
+ * refused (RangeLimitError), as a whole answer over it was. Each window's
+ * answer must be the exact answer to its own request (§13.1). */
+function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, subject: Uint8Array, t: bigint,
+  take: (answer: RangeAnswer) => boolean | void): void {
+  let from = 0n, span = t + 1n;
+  while (from <= t) {
+    const to = from + span - 1n > t ? t : from + span - 1n;
+    const request = Object.freeze({ venue: copyBytes(venueId), kind, subject: copyBytes(subject), fromIndex: from, toIndex: to });
+    let bytes: unknown;
+    try { bytes = read(() => venue.range(request, RANGE_LIMITS)); } catch (error) {
+      if (error instanceof RangeLimitError && to > from) { span = (to - from + 1n) / 2n; continue; }
+      throw error;
+    }
+    if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    if (!(bytes instanceof Uint8Array)) throw new EncodingError("range answer");
+    // `take` returns true once it needs no later window.
+    if (take(decodeRangeAnswer(bytes, request, RANGE_LIMITS)) === true) return;
+    from = to + 1n; span *= 2n;
+  }
+}
+
 /** §13 reads against the reader's independently selected venue over [0, t]:
  * the replacement chain (C2.5) from the kind-2 answer under the venue's lag,
  * the held commitments (C2.3.3) of every party in force within its term
  * (C2.10.13), each passed by its packaged directory (C2.4.2) or listed as
  * carrying the backing, and K's revocation (C2b.1). The clock and lag are the
- * venue's; a supplied answer is never evidence. This view is shared by the
- * original-segment clock and the import walks. Nothing here classifies a
- * checkpoint. */
-export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">, terms: RootTerms, directories: Directories,
-  venue: RecordVenue, reference: VenueReference): Promise<RecordView> {
+ * venue's; a supplied answer is never evidence. Answers are read window by
+ * window; held commitments and publications are kept in the read's evidence,
+ * each kind and subject once, so memory does not grow with the venue's age.
+ * This view is shared by the original-segment clock and the import walks.
+ * Nothing here classifies a checkpoint. */
+export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">, terms: RootTerms,
+  evidence: Pick<WalkEvidence, "directory" | "answers">, venue: RecordVenue, reference: VenueReference): Promise<RecordView> {
   // The caller holds this preimage independently of supplied record evidence.
   // Candidate v3 never reads a deployment venue, even if it offers valid ranges.
   const lag = read(() => venue.lag());
@@ -88,29 +122,50 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
   if (typeof now !== "bigint" || typeof lag !== "bigint" || t > now || (selection.mode === "current-fixture" && t !== now)) {
     throw new EvidenceRefusal("unresolved-evidence");
   }
-  const ask = async (kind: RecordKind, subject: Uint8Array): Promise<RangeAnswer> => {
-    const request = Object.freeze({ venue: copyBytes(selection.venue), kind, subject: copyBytes(subject), fromIndex: 0n, toIndex: t });
-    const bytes: unknown = read(() => venue.range(request, RANGE_LIMITS));
-    if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    if (!(bytes instanceof Uint8Array)) throw new EncodingError("range answer");
-    return decodeRangeAnswer(bytes, request, RANGE_LIMITS);
+  const { answers } = evidence, backing = copyBytes(selection.backing);
+  // One identity counts once, at its first witnessing, across windows as within one answer.
+  const admitted: AdmittedReplacement[] = [];
+  readWindows(venue, selection.venue, 2, backing, t, answer => {
+    for (const entry of admittedReplacements(answer, terms.replacementRule)) {
+      if (!admitted.some(earlier => same(earlier.identity, entry.identity))) admitted.push(entry);
+    }
+  });
+  const { chain } = replacementChain(admitted, { backing, original: terms.operator, lag, now: t });
+  let revokedAt: bigint | undefined;
+  readWindows(venue, selection.venue, 3, terms.obligor, t, answer => (revokedAt = revocationIndex(answer)) !== undefined);
+  const heldOf = (operator: Uint8Array): KeptAnswers => {
+    if (!answers.kept(1, operator)) {
+      let prior: HeldPrior | undefined;
+      readWindows(venue, selection.venue, 1, operator, t, answer => {
+        const { held, next } = heldCommitments(answer, prior);
+        answers.keepHeld(operator, held); prior = next;
+      });
+      answers.keep(1, operator);
+    }
+    return answers;
   };
-  const admitted = admittedReplacements(await ask(2, selection.backing), terms.replacementRule);
-  const { chain } = replacementChain(admitted, { backing: selection.backing, original: terms.operator, lag, now: t });
-  const revokedAt = revocationIndex(await ask(3, terms.obligor));
-  const heldOf = new Map<string, readonly HeldCommitment[]>();
-  const heldBy = async (operator: Uint8Array): Promise<readonly HeldCommitment[]> => {
-    const key = hex(operator);
-    if (!heldOf.has(key)) heldOf.set(key, heldCommitments(await ask(1, operator)).held);
-    return heldOf.get(key)!;
+  const publicationsKept = (): KeptAnswers => {
+    if (!answers.kept(4, backing)) {
+      readWindows(venue, selection.venue, 4, backing, t, answer => { answers.keepPublications(backing, answer.entries); });
+      answers.keep(4, backing);
+    }
+    return answers;
   };
   const termEnd = (i: number): bigint => (i + 1 < chain.length ? chain[i + 1]!.from - 1n : t);
   const carries = (h: HeldCommitment): SnapshotDigest | undefined => {
-    const directory = directories.get(hex(h.commitment.root));
+    const directory = evidence.directory(h.commitment.root);
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    return directory.find(entry => same(entry.name, selection.backing));
+    return directory.find(entry => same(entry.name, backing));
   };
-  return { t, lag, chain, revokedAt, heldBy, termEnd, carries, ask };
+  return { t, lag, chain, revokedAt, termEnd, carries,
+    held: operator => heldOf(operator).held(operator),
+    heldAt: (operator, sequence) => heldOf(operator).heldAt(operator, sequence),
+    heldAbove: (operator, sequence) => heldOf(operator).heldAbove(operator, sequence),
+    nextHeld: (operator, fromIndex, after) => heldOf(operator).nextHeld(operator, fromIndex, after),
+    firstHeldIndex: (operator, from, to) => heldOf(operator).firstHeldIndex(operator, from, to),
+    nextPublication: after => publicationsKept().nextPublication(backing, after),
+    publications: () => publicationsKept().publications(backing),
+    publicationCount: () => publicationsKept().publicationCount(backing) };
 }
 
 /** What a trail replay reads besides its records: the store its state lives
@@ -156,8 +211,6 @@ export interface TrailOptions {
   readonly block?: readonly Adopted[];
   readonly openingIndex?: bigint | undefined;
   readonly isOpening?: boolean;
-  readonly chargeEvents?: (amount: bigint) => void;
-  readonly chargeRecords?: (amount: bigint) => void;
   /** Every scoped backing's snapshot in the checkpoint's directory: their totals are checked inside the replay. */
   readonly scopedSnapshots?: readonly Snapshot[] | undefined;
 }
@@ -179,14 +232,12 @@ export function lastValidOf(state: ReplayResult, snapshot: Pick<Snapshot, "histo
 export async function replayTrail(context: ReplayContext, snapshot: Snapshot, trail: StoredTrail, options: TrailOptions): Promise<ReplayResult> {
   const { store, selection, terms, scopedTerms, header, verifier, witness } = context;
   const { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false } = options;
-  const chargeEvents = options.chargeEvents ?? ((): void => {}), chargeRecords = options.chargeRecords ?? chargeEvents;
   const scope = new ScopeTree(header.entries).root();
   const identity = replayIdentity(context, snapshot, { imported, block, openingIndex, revokedAt, revocations });
   return store.replay(async () => {
     const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid);
-    const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported, chargeEvents);
+    const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported);
     if (!isOpening) requireReplay(trail.length >= BigInt(block.length), "ADOPTION");
-    chargeRecords(trail.length - (resumed?.position ?? 0n));
     const replay: SegmentReplay = { domain: selection.domain, backing: selection.backing, segment: snapshot.segment, scope, terms, scopedTerms,
       verifier, index, revokedAt, revocations, lastValid, block, witness };
     // Records are read from the reader's own storage one at a time.

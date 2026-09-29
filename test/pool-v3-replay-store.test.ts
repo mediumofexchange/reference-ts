@@ -12,7 +12,8 @@ const genesis = { history: new Uint8Array(32), evidence: new Uint8Array(32) };
 let counter = 1000n;
 const next = (): bigint => counter++;
 function append(outputs: bigint[], nfs: bigint[], witness: (cm: bigint) => boolean = () => false, extra: Partial<Append> = {}): Append {
-  return { identity: fieldToBytes(next()), kind: 2, index: 5n, record: new Uint8Array([1]), evidence: new Uint8Array(32), supply: undefined,
+  return { identity: fieldToBytes(next()), kind: 2, index: 5n, record: new Uint8Array([1]), proofHash: new Uint8Array(32), signatureHash: new Uint8Array(32),
+    evidence: new Uint8Array(32), supply: undefined,
     nullifiers: nfs.map(nf => ({ nf, tag: nf + 1n })), outputs: outputs.map(cm => ({ cm, capsule: undefined, settlement: false, witness: witness(cm) })),
     demand: undefined, ended: undefined, keys: [], history: () => new Uint8Array(32), ...extra };
 }

@@ -285,7 +285,7 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const otherAfter = await accepted({ ...payloadY, seed: issuerSeed });
     assert.deepEqual(otherAfter.candidates.map(c => c.cm), [sy.output.cm.toString()]); assertPaths(otherAfter);
   });
-  await test("scoped clocks scan each backing's held checkpoints once and each publication is charged once", async () => {
+  await test("later resuming checkpoints and an undecodable publication verify no proof again", async () => {
     // Later checkpoints of the joined segment repeat final's state; each resumes and adds no position.
     const repeats = count => Array.from({ length: count }, (_, i) =>
       ({ ...final, commitment: signCommitment(operatorSecret, 10n + BigInt(i), directoryRoot(final.directory)) }));
@@ -294,25 +294,18 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
       const later = repeats(count);
       return compose([...ancestry, adopted, final, ...later], later.at(-1) ?? final, [...publications, ...extra], joined.entries[0].backing);
     };
-    const status = async (input, maxEvents) =>
-      (await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents } }, codec)).status;
-    // The smallest reader-selected event budget under which the read completes.
-    const smallest = async input => {
-      let low = 0n, high = 4096n;
-      assert.equal(await status(input, high), "selected-local-replay");
-      while (low < high) { const mid = (low + high) / 2n; if (await status(input, mid) === "selected-local-replay") high = mid; else low = mid + 1n; }
-      return low;
+    const proofs = async input => {
+      let calls = 0n;
+      const counting = { ...verifier, verify: (...args) => { calls++; return verifier.verify(...args); } };
+      assert.equal((await replayLocalPackage(input, counting, codec)).status, "selected-local-replay");
+      return calls;
     };
-    const exact = async (input, budget) => {
-      assert.equal(await status(input, budget), "selected-local-replay");
-      assert.equal(await status(input, budget - 1n), "resource-refusal");
-    };
-    const base = await smallest(variant(0)), step = await smallest(variant(1)) - base;
-    // Each later checkpoint adds one held index to each backing's clock scan and nothing else.
-    assert.equal(step, 2n);
-    await exact(variant(3), base + 3n * step);
-    // An undecodable publication is charged once, however many forces, clocks and counts read it.
-    await exact(variant(0, [{ backing: x, at: 5n, bytes: new Uint8Array(92) }]), base + 1n);
+    const base = await proofs(variant(0));
+    // Each later checkpoint resumes its predecessor's state and verifies nothing.
+    assert.equal(await proofs(variant(1)), base);
+    assert.equal(await proofs(variant(3)), base);
+    // An undecodable publication verifies nothing, however many forces, clocks and counts read it.
+    assert.equal(await proofs(variant(0, [{ backing: x, at: 5n, bytes: new Uint8Array(92) }])), base);
   });
   await test("scope adoption rejects omitted reordered and changed proof bytes on the unselected backing", async () => {
     const reproof = (await settlement(splitY, dy2, fundedY, 1n, a1.tree, presenterY, 192n,
@@ -476,12 +469,12 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const common = segment("common", [dx2]), advanced = segment("left", [withdraw], [["common", 1n]]);
     for (const order of [[common, advanced], [advanced, common]]) {
       const merged = merge(order), seen = fixture.opened(merged);
-      assert.equal(merged.events, 2n); assert.equal(seen.demands, 0); assert.equal(seen.effective, 2);
+      assert.equal(seen.events, 2); assert.equal(seen.demands, 0); assert.equal(seen.effective, 2);
     }
     const old = segment("earlier", [dx1, wx]), newer = segment("later", [dx2, withdraw], [["earlier", 2n]]);
     for (const order of [[old, newer], [newer, old]]) {
       const merged = merge(order), seen = fixture.opened(merged);
-      assert.equal(merged.events, 4n); assert.equal(seen.demands, 0); assert.equal(seen.effective, 4);
+      assert.equal(seen.events, 4); assert.equal(seen.demands, 0); assert.equal(seen.effective, 4);
     }
   });
   const receipts = await checkRecoveryScopeReceipts({ codec, verifier, test, operatorSecret, checkpoint, compose,

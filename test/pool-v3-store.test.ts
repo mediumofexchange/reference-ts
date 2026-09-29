@@ -389,7 +389,7 @@ describe("the v3 operator journal", () => {
     expect(trail.records.length).toBe(admitted);
   });
 
-  it("reserves checkpoint work even when unchanged snapshots deduplicate to a small package", async () => {
+  it("signs past the retired 128-checkpoint reader reservation while its served package fits", async () => {
     const { j, venue, file } = await opened();
     let previous = await j.open("genesis", signed);
     j.close();
@@ -413,9 +413,12 @@ describe("the v3 operator journal", () => {
     const before = await restored.package();
     expect(before.package.length).toBeLessThan(4096);
     expect(before.selection.sequence).toBe(128n);
-    expect(await refusal(restored.commit("past-work-budget"))).toEqual(["REFUSED", "RESOURCE"]);
-    expect(await refusal(restored.submit(issue()))).toEqual(["REFUSED", "RESOURCE"]);
-    expect(await restored.package()).toEqual(before);
+    // Readers keep no total over checkpoints (M5b.3b): only the served package bounds the journal.
+    await restored.submit(issue());
+    expect((await restored.commit("past-work-budget")).sequence).toBe(129n);
+    await restored.publish(); venue.advance(venue.witnessedIndex() + lag);
+    const after = await restored.package();
+    expect(after.selection.sequence).toBe(129n); expect(after.package.length).toBeLessThan(8192);
   }, 90_000);
 
   it("serves only published commitments and the records they carry", async () => {
