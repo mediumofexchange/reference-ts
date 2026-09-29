@@ -1,5 +1,4 @@
 // C2.10.9a–c and C2b.4.3. Classification and clock boundaries come from the reader.
-import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
 import type { HeldCommitment } from "../../record-range.js";
@@ -28,7 +27,7 @@ export interface ReceiptWalk {
   finish(): ReceiptVerdict;
 }
 export async function receiptWalk(bytes: Uint8Array, context: { readonly selection: ReaderSelection }, view: RecordView,
-  trails: TrailEvidence, snapshots: readonly Uint8Array[], scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
+  trails: TrailEvidence, snapshotOf: (digest: Uint8Array) => Uint8Array | undefined, scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
   const { selection } = context, receipt = decodeReceipt(bytes);
   const [trail] = trails.heads(receipt.segment);
   if (trail === undefined) throw new EvidenceRefusal("unresolved-evidence");
@@ -45,11 +44,11 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     const end = scopedView.chain[termIndex + 1]?.from;
     if (end !== undefined && (termBoundary === undefined || end < termBoundary)) termBoundary = end;
   }
-  const held = await view.heldBy(header.operator), reference = held.find(h => h.commitment.sequence === receipt.after);
-  const movedPast = reference === undefined && held.some(h => h.commitment.sequence > receipt.after);
+  const reference = view.heldAt(header.operator, receipt.after);
+  const movedPast = reference === undefined && view.heldAbove(header.operator, receipt.after);
   if (reference !== undefined) {
     const entry = view.carries(reference); requireReceipt(entry !== undefined);
-    const snapshot = snapshots.find(s => same(sha256(s), entry.digest));
+    const snapshot = snapshotOf(entry.digest);
     if (snapshot === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const decoded = decodeSnapshot(snapshot);
     requireReceipt(same(decoded.segment, receipt.segment) && same(decoded.backing, selection.backing));

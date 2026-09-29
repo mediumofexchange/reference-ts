@@ -17,7 +17,7 @@ const issuer = ed25519.getPublicKey(issuerSecret), presenter = ed25519.getPublic
 const prefix = [...limbsOf(domain), ...limbsOf(segment), scope], verifier = { verify: (): boolean => true };
 const context = (extra: Partial<ForceContext> = {}): ForceContext =>
   ({ mode: "force", domain, segment, backing, scope, issuer, index: 9n, lag: 2n, verifier, ...extra });
-const fresh = () => openSegmentState(new ReplayStore(), segment, b(40), undefined, () => {});
+const fresh = () => openSegmentState(new ReplayStore(), segment, b(40), undefined);
 const replay = (extra: Partial<SegmentReplay> = {}): SegmentReplay =>
   ({ domain, segment, backing, scope, terms: { obligor: issuer } as RootTerms, index: 9n, lag: 2n, verifier, block: [], ...extra });
 function demand(instant = 7n, deadline = 12n, anchor = EMPTY_NOTE_ROOT, nf = 101n): Uint8Array {
@@ -128,7 +128,7 @@ describe("publication force over the snapshot forest", () => {
 describe("recovery admission and replay clocks", () => {
   it("adopts the exact forced records under their old binding and indices without a second door or proof check", async () => {
     const d = demand(), settlement = settle(d), targetSegment = b(30);
-    const state = openSegmentState(new ReplayStore(), targetSegment, b(40), undefined, () => {});
+    const state = openSegmentState(new ReplayStore(), targetSegment, b(40), undefined);
     const ctx = replay({ segment: targetSegment, scope: 88n, index: 30n, verifier: { verify: () => false },
       block: [{ bytes: d, index: 9n }, { bytes: settlement, index: 12n }] });
     await applyRecord(state, d, ctx); await applyRecord(state, settlement, ctx);

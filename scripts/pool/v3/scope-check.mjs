@@ -178,15 +178,12 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
   const j2 = checkpoint(joined, 7n, 15n, [mixed, burned], [mixedEffect, effect([finalX], [mixedX, burnPad])],
     { nullifiers: imports, supply: totals(10n, 1n) });
   const payload = compose([...history, j0, j1, j2]), payloadY = compose([...history, j0, j1, j2], j2, y);
-  await test("the scope event budget reads a merged closure once per built ancestry: an extending checkpoint adds its new position", async () => {
-    // The smallest reader-selected event budget under which the read completes.
+  await test("a merged closure's records are verified once: an extending checkpoint verifies only its new position", async () => {
     const smallest = async input => {
-      const status = async maxEvents => (await replayLocalPackage(input, { ...verifier, importLimits: { maxCheckpoints: 128n, maxEvents } }, codec)).status;
-      let low = 0n, high = 512n;
-      assert.equal(await status(high), "selected-local-replay");
-      while (low < high) { const mid = (low + high) / 2n; if (await status(mid) === "selected-local-replay") high = mid; else low = mid + 1n; }
-      assert.equal(await status(low - 1n), "resource-refusal");
-      return low;
+      let calls = 0n;
+      const counting = { ...verifier, verify: (...args) => { calls++; return verifier.verify(...args); } };
+      assert.equal((await replayLocalPackage(input, counting, codec)).status, "selected-local-replay");
+      return calls;
     };
     // j2 extends j1 and resumes from it; without j1, j2 replays both positions
     // over the same four-event imported closure. Either way the total agrees.
@@ -505,9 +502,8 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     // they do not claim that canonical disjoint scopes can finalize a conflict.
     // Keys are left out so the spent and output checks are reached apart from C2.10.6's ordering check.
     const fixture = mergeFixture(), parent = (name, record) => fixture.segment(name, [record], [], { keys: false });
-    let charged = 0n;
-    const common = fixture.merge([parent("shared", issuanceX), parent("shared", issuanceX)], count => { charged += count; });
-    assert.equal(common.events, 1n); assert.equal(fixture.opened(common).outputs, 1); assert.equal(charged, 2n);
+    const common = fixture.merge([parent("shared", issuanceX), parent("shared", issuanceX)]);
+    assert.equal(fixture.opened(common).outputs, 1);
     assert.deepEqual(common.frontier.totals.get(hex(x)), { issued: 10n, burned: 0n });
     for (const [left, right, expected] of [
       [parent("shared", issuanceX), parent("shared", issuanceY), "CONTINUITY"],

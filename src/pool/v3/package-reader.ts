@@ -2,23 +2,20 @@
 // verifier, selection and reference venue are independently held by the reader.
 // A package is copied into the reader's own evidence storage before any pass
 // reads it (pool-v3 §14), from memory or streamed.
-import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import type { RecordVenue } from "../../record-venue.js";
-import { decodeCommitment, directoryRoot, verifyCommitment } from "../../venue-records.js";
+import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, READ_KINDS, type EvidenceBatch } from "./evidence-store.js";
-import { decodeEvidenceDirectory } from "./package.js";
 import type { ReaderSelection, SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
-import { classifyScopeFrontier, classifyScopes, importLimitsOf, type FrontierContext, type FrontierResult, type ImportContext,
-  type ImportLimits, type ScopeResult } from "./scope-reader.js";
+import { classifyScopeFrontier, classifyScopes, type FrontierContext, type FrontierResult, type ImportContext,
+  type ScopeResult } from "./scope-reader.js";
 import { ReplayStore } from "./replay-store.js";
 import type { ProofCheck, ScanOutput } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
@@ -31,7 +28,6 @@ export interface PackageReader {
   readonly verifier: ProofCheck;
   readonly venue: RecordVenue;
   readonly reference: VenueReference;
-  readonly importLimits?: ImportLimits;
   /** The party's replay storage; a private in-memory store by default, kept alive by the result. */
   readonly store?: ReplayStore | undefined;
   /** The party's evidence storage the package is copied into before any pass; a private
@@ -75,11 +71,9 @@ function readKinds(batch: EvidenceBatch): void {
     throw new EvidenceRefusal("unsupported-scope");
   }
 }
-function directoriesOf(batch: EvidenceBatch): Map<string, ReturnType<typeof decodeEvidenceDirectory>> {
-  return new Map(batch.payloads(3).map(payload => {
-    const entries = decodeEvidenceDirectory(payload);
-    return [hex(directoryRoot(entries)), entries] as const;
-  }));
+/** Directories are found by root in the batch; one that does not decode makes the package malformed. */
+function directoriesOf(batch: EvidenceBatch): void {
+  if (batch.malformedDirectory()) throw new EncodingError("malformed directory");
 }
 
 /** Returns a complete reference verdict/state or throws a named evidence/replay
@@ -91,15 +85,15 @@ function directoriesOf(batch: EvidenceBatch): Map<string, ReturnType<typeof deco
 export async function readPackage(source: PackageSource, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
   const owned = ownPackageRead(selected, options);
   return withEvidence(source, options, async batch => {
-    const { context, directories, evidence, faults, venue } = openPackage(batch, owned, options);
-    const result = await classifyScopes(context, directories, venue, evidence);
+    const { context, faults, venue } = openPackage(batch, owned, options);
+    const result = await classifyScopes(context, venue, batch);
     return { ...result, ...faults.result() };
   });
 }
 
 /** The reader's own inputs, checked before the package is read. */
 function ownPackageRead(selected: ReaderSelection, options: PackageReader) {
-  const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn, importLimits: limitsIn } = options;
+  const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn } = options;
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
@@ -108,11 +102,11 @@ function ownPackageRead(selected: ReaderSelection, options: PackageReader) {
   const selection = ownSelection(selected);
   requireReplay(same(selection.venue, expectedVenue), "VENUE_REFERENCE");
   requireReplay(same(selection.domain, domain), "CONFIGURATION");
-  return { configuration, domain, verifier, reference, selection, importLimits: importLimitsOf(limitsIn) };
+  return { configuration, domain, verifier, reference, selection };
 }
 
 function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRead>, options: PackageReader) {
-  const { configuration, domain, verifier, reference, selection, importLimits } = owned, { venue } = options;
+  const { configuration, domain, verifier, reference, selection } = owned, { venue } = options;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
   if ([1, 2, 3, 4, 6].some(kind => batch.count(kind) === 0)) throw new EvidenceRefusal("unresolved-evidence");
@@ -122,11 +116,10 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   if (!same(commitment.operator, selection.operator) || commitment.sequence !== selection.sequence || !same(commitment.root, selection.root)) {
     throw new EvidenceRefusal("selection-mismatch");
   }
-  const directories = directoriesOf(batch);
-  const entry = directories.get(hex(commitment.root))?.find(value => same(value.name, selection.backing));
+  directoriesOf(batch);
+  const entry = batch.directory(commitment.root)?.find(value => same(value.name, selection.backing));
   if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
-  const snapshots = payloads(4);
-  const snapshotBytes = snapshots.find(payload => same(sha256(payload), entry.digest));
+  const snapshotBytes = batch.snapshot(entry.digest);
   if (snapshotBytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const snapshot = decodeSnapshot(snapshotBytes), scope = checkpointScope(batch, selection.backing, entry.digest, snapshot);
   const { header } = scope;
@@ -136,9 +129,9 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   const terms = scope.rootTerms[header.entries.findIndex(scoped => same(scoped.backing, selection.backing))]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
   const faults = faultObserver(payloads(7), selection, verifier);
-  const context: ImportContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, header, verifier, reference, importLimits, faults,
+  const context: ImportContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, header, verifier, reference, faults,
     ...(batch.count(10) === 0 ? {} : { receiptBytes: payloads(10)[0]! }) };
-  return { context, directories, evidence: { snapshots, trails: batch }, faults, venue };
+  return { context, faults, venue };
 }
 
 /** Descend every witnessed term for independently authenticated root terms,
@@ -149,15 +142,15 @@ export async function readFrontier(source: PackageSource, signed: SignedTerms, j
   options: PackageReader): Promise<FrontierResult & FaultResult> {
   const owned = ownFrontierRead(signed, judgingIndex, options);
   return withEvidence(source, options, async batch => {
-    const { context, directories, evidence, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
-    const result = await classifyScopeFrontier(context, directories, venue, evidence);
+    const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
+    const result = await classifyScopeFrontier(context, venue, batch);
     return { ...result, ...faults.result() };
   });
 }
 
 /** The reader's own inputs and the authenticated terms, checked before the package is read. */
 function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: PackageReader) {
-  const { configuration: configurationIn, verifier: verifierIn, reference: referenceIn, importLimits: limitsIn } = options;
+  const { configuration: configurationIn, verifier: verifierIn, reference: referenceIn } = options;
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
@@ -168,20 +161,20 @@ function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: Pac
   requireReplay(verifyRootTermsSignature(termsBytes, signature), "TERMS_SIGNATURE");
   const terms = decodeRootTerms(termsBytes), backing = rootTermsName(termsBytes);
   requireReplay(same(terms.configuration, domain), "CONFIGURATION");
-  return { configuration, domain, verifier, reference, terms, backing, importLimits: importLimitsOf(limitsIn) };
+  return { configuration, domain, verifier, reference, terms, backing };
 }
 
 function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontierRead>, judgingIndex: bigint, options: PackageReader) {
-  const { configuration, domain, verifier, reference, terms, backing, importLimits } = owned, { venue } = options;
+  const { configuration, domain, verifier, reference, terms, backing } = owned, { venue } = options;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
   if (batch.count(1) !== 0) requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
-  const directories = directoriesOf(batch);
+  directoriesOf(batch);
   // Invoke the external adapter only after every caller-owned input is copied.
   const venueId = requireReferenceVenue(reference, venue);
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
   const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
   const faults = faultObserver(payloads(7), selection, verifier);
-  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, verifier, reference, importLimits, faults };
-  return { context, directories, evidence: { snapshots: payloads(4), trails: batch }, faults, venue };
+  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, verifier, reference, faults };
+  return { context, faults, venue };
 }

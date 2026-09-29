@@ -440,9 +440,8 @@ original segment trees; a selected backing filters other recovered notes.
 The real-proof fixture splits a shared two-backing prefix, continues each
 branch, rejoins them, spends against distinct imported anchors and burns in a
 later continuation. Fresh public and wallet processes replay the same package.
-The same checkpoint/event budgets bound visited commitments and replay/merge
-operations, causal frontier construction, conflict comparisons and clock scans;
-existing byte, item and range bounds also apply. Multi-scope range
+Per-object byte, item, record and range bounds apply; the checkpoint and event
+totals that once bounded this work were removed in M5b.3b. Multi-scope range
 audit counts describe classified dependencies, not all non-carrying commitments.
 Recovery scopes retain each backing's own adoption index and original-prefix
 clock. Returning scopes adopt the owed publication union in global venue order,
@@ -505,7 +504,7 @@ Later unavailable evidence cannot erase a returned final inclusion; refusals
 preserve already proven contradictions as `receiptEvidence`. These conditional
 receipt judgments use the fixture venue and expose no audit state, recovered
 candidates or spending authority. One query adds only the existing 355-byte
-receipt plus package framing and reuses the replay's work budgets.
+receipt plus package framing and adds no budget of its own.
 
 Signed non-service terms enable C2b.5.2 in `audit.range.nonService`, with
 duration, threshold, window, count, firing status, incumbent and snapshot
@@ -526,7 +525,7 @@ until the canonical checkpoint adopts their effects. The existing kind-7 key
 in the checked configuration verifies requests; no new signed object, frame
 or authority is introduced. Non-service terms need no silence clause; missing
 terms mean no count, and missing range/ancestry evidence means no audit.
-The count uses the shared replay work budget and retains the same conditional
+The count adds no budget of its own and retains the same conditional
 fixture boundary as the other audit fields.
 
 The complete public-package boundary still requires the following inputs and
@@ -747,8 +746,9 @@ The measurement replays every case again from the selected trail alone. That
 package carries the unique records once, gives the identical result and still
 verifies each proof once. The local budgets remain far below such closures:
 trails of 1 MiB and 1,024 events hold about 64 real-size events. The import
-walk's event budget now charges each replayed position once, so a resumed
-checkpoint costs only its new positions. Limits: one
+walk then charged each replayed position once, so a resumed checkpoint cost
+only its new positions (M5b.3b removed that budget; the harness now checks that
+each proof is verified once). Limits: one
 synthetic shape with empty-root anchors and no imports, scopes, demands or
 publications; stub verification; one desktop, one run per case; no device
 budget.
@@ -882,6 +882,44 @@ Windows desktop with 4 logical cores shared with other work:
   - the reader's import limits were raised for the run;
   - stand-in proofs, so the bytes per record are about a sixteenth of the
     real size.
+
+### The runtime reader over many checkpoints (M5b.3b)
+
+`replay-store-probe.mjs read <N> --every 1 [--silence]` writes the same
+shape with a checkpoint after every record: an empty opening, then N
+checkpoints of one more record each, all served by one trail. The fixture
+venue holds the N + 1 held commitments. The read classifies every checkpoint
+in rank order ([M5b.3b](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)),
+resuming each from the one before. Memory is sampled after a forced
+collection at the first proof and every 5% of the records. The probe drops
+its own generation objects before the read, but the fixture venue's records
+stay in the process.
+
+Runs of 2026-09-29 on the same desktop, sharing it with the real-proof
+harness:
+
+| Checkpoints | Before the first proof | Replay per checkpoint | Heap over the replay | Process memory over the replay |
+|---:|---:|---:|---:|---:|
+| 1,001, descent before M5b.3b (`979346e`) | 20.4 s | 95 ms | 27.0 MB at the first proof, then falling to 23.8 MB | 145 → 212 MB |
+| 10,001, forward walk (`c6d9fd8`) | 61 s | 93 ms | 16.0 → 16.2 MB, 33 bytes per checkpoint | 274 → 275 MB, peak 370 MB |
+| 5,001 with `--silence`, forward walk (`bf69479`) | 29 s | 92 ms | 13.0 → 13.4 MB, 88 bytes per checkpoint | 236 → 237 MB, peak 299 MB |
+
+- *The baseline:* the descent reached the opening before checking a proof,
+  holding every verdict. Its heap rose by 15.5 MB over 1,001 checkpoints,
+  about 16 KB per checkpoint, so 10⁵ checkpoints would pass 1 GiB.
+- *Before the first proof:* the time is mostly the signature check of every
+  held commitment (C2.3.3), about 4 ms each on this host, once per read. The
+  held answer at 10,001 checkpoints (1.5 MB) was read in windows.
+- *Commits:* a first run of the walk wrote each walk row in its own commit
+  and replayed at 131 ms per checkpoint. Each walk now runs in one
+  transaction, and each kept answer in one savepoint.
+- *Clocks:* with a silence clause every continuation reads its clock, and
+  the running clock state keeps that linear. Heap rose 0.4 MB over the first
+  2,500 checkpoints and was flat over the last 2,500.
+- *Files:* the evidence file took 20.4 MiB and the state file 29.7 MiB. Event
+  rows no longer hold record bytes.
+- *Limits:* stand-in proofs and one backing, with no imports, recovery
+  publications or faults. Timings are from a shared host.
 
 ## Invalid-checkpoint evidence
 

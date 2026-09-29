@@ -38,7 +38,7 @@ import { RANGE_LIMITS, type SignedTerms } from "./reader.js";
 import { readFrontier, readPackage } from "./package-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
-import { IMPORT_LIMITS, mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
+import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
 import { ReplayStore } from "./replay-store.js";
 import { applyRecord, openSegmentState, type ImportSource, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
@@ -184,8 +184,6 @@ interface View {
   readonly boundaries: readonly bigint[];
   /** Each scoped backing's K revocation index, by backing name. */
   readonly revocations: ReadonlyMap<string, bigint | undefined>;
-  /** Publications of each scoped backing with a non-service clause, by backing name. */
-  readonly requests: ReadonlyMap<string, bigint>;
   readonly key: string;
 }
 
@@ -567,7 +565,7 @@ export class V3OperatorJournal {
   }
   /** A fresh admission state for the active segment over its import, kept under the journal's own identity. */
   private segmentState(segment: Uint8Array, imported: ImportSource | undefined): SegmentState {
-    return openSegmentState(this.replays, segment, sha256(concatBytes(utf8ToBytes("v3-journal-admission"), segment)), imported, () => {});
+    return openSegmentState(this.replays, segment, sha256(concatBytes(utf8ToBytes("v3-journal-admission"), segment)), imported);
   }
   /** Read every opening from bytes: a taken term by the public reader's
    * complete descent of the evidence, including proof of an empty book, and a
@@ -575,7 +573,7 @@ export class V3OperatorJournal {
    * selected predecessor or imported signing counter (C2.7, C2.10.4–7). */
   private async prepareRescope(engine: Engine, spec: OwnRescope, at: bigint): Promise<void> {
     const target = this.rescopeTarget(engine, spec, at), openings = new Map<string, CanonicalCheckpoint | undefined>();
-    let checkpoints = 0n, events = 0n, provided: EvidenceItem[] = [], evidence = spec.evidence;
+    let provided: EvidenceItem[] = [], evidence = spec.evidence;
     const unestablished = (error: unknown): never => {
       if ((error instanceof EvidenceRefusal && error.status === "resource-refusal") || error instanceof PackageLimitError) {
         throw new V3StoreError("REFUSED", "takeover evidence exceeds the reader's budget", "RESOURCE");
@@ -600,19 +598,15 @@ export class V3OperatorJournal {
       requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
       requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
       openings.set(bytesToHex(entry.backing), source.canonical);
-      checkpoints += source.work.checkpoints; events += this.reservedEventWork(source);
     }
     for (const name of spec.keep) {
       const source = await this.currentRead(engine, at, name);
       openings.set(bytesToHex(name), source.canonical);
-      checkpoints += source.work.checkpoints; events += this.reservedEventWork(source);
     }
     // One import per distinct canonical checkpoint; several are merged once (C2.10.6–7).
     const parents = new Map<string, CanonicalCheckpoint>();
     for (const canonical of openings.values()) if (canonical !== undefined) parents.set(hexOf(canonical.commitment)!, canonical);
-    const { imported, work } = this.openingImports([...parents.values()]);
-    this.reserveReadCheckpoints(engine, heldCommitments(this.ask(1, this.operator, at)).held, checkpoints, 2n);
-    requireThat(events + work <= IMPORT_LIMITS.maxEvents, "REFUSED", "the scope change leaves no reader budget for service", "RESOURCE");
+    const imported = this.openingImports([...parents.values()]);
     const header: SegmentHeader = { ...target.opened.header, entries: target.opened.header.entries.map(entry => {
       const canonical = openings.get(bytesToHex(entry.backing));
       return canonical === undefined ? entry : { ...entry, opening: { operator: copyBytes(canonical.commitment.operator),
@@ -631,20 +625,14 @@ export class V3OperatorJournal {
     engine.state = this.segmentState(opened.segment, imported);
     engine.pendingReturn = true;
   }
-  /**
-   * An opening's import and the event work a reader spends reading it beyond its
-   * parents' own reads: the reader merges every distinct parent's events, one
-   * parent included, comparing events that share a tag or demand (C2.10.6), then
-   * reads the merged ancestry once more.
-   */
-  private openingImports(parents: readonly CanonicalCheckpoint[]): { readonly imported: ImportSource | undefined; readonly work: bigint } {
-    let work = 0n, merged;
-    try { merged = mergeFinalizedPrefixes(this.replays, parents.map(parent => ({ state: parent.state })), amount => { work += amount; }); } catch (error) {
+  /** An opening's import: the one parent's state, or the parents' merged finalized prefixes (C2.10.6). */
+  private openingImports(parents: readonly CanonicalCheckpoint[]): ImportSource | undefined {
+    let merged;
+    try { merged = mergeFinalizedPrefixes(this.replays, parents.map(parent => ({ state: parent.state }))); } catch (error) {
       if (error instanceof ReplayRefusal) throw new V3StoreError("UNAVAILABLE", "the imported histories conflict");
       throw error;
     }
-    const imported = parents.length === 0 ? undefined : parents.length === 1 ? parents[0]!.state : merged;
-    return { imported, work: work + merged.events };
+    return parents.length === 0 ? undefined : parents.length === 1 ? parents[0]!.state : merged;
   }
   /** Each scoped K's revocation index as witnessed through `at`. */
   private revocations(opened: Opened, at: bigint): Map<string, bigint | undefined> {
@@ -703,7 +691,7 @@ export class V3OperatorJournal {
       catch (error) { if (error instanceof EncodingError) return false; throw error; }
       return same(c.operator, this.operator) && verifyCommitment(c);
     });
-    const boundaries: bigint[] = [], revocations = new Map<string, bigint | undefined>(), requests = new Map<string, bigint>();
+    const boundaries: bigint[] = [], revocations = new Map<string, bigint | undefined>();
     const evidence: string[] = [];
     const bind = (answer: RangeAnswer): void => {
       evidence.push(JSON.stringify(answer.entries.map(e => [e.index.toString(), e.ordinal.toString(), bytesToHex(sha256(e.record))])));
@@ -723,14 +711,11 @@ export class V3OperatorJournal {
       revocations.set(bytesToHex(backing), revocationIndex(revoked));
       const operators = new Map(chain.map(link => [bytesToHex(link.operator), link.operator]));
       for (const operator of operators.values()) if (!same(operator, this.operator)) bind(this.ask(1, operator, now));
-      if (terms.silence !== undefined || terms.nonService !== undefined) {
-        const publications = this.ask(4, backing, now); bind(publications);
-        if (terms.nonService !== undefined) requests.set(bytesToHex(backing), BigInt(publications.entries.length));
-      }
+      if (terms.silence !== undefined || terms.nonService !== undefined) bind(this.ask(4, backing, now));
     }
     const key = JSON.stringify([now.toString(), evidence, conflict, boundaries.map(String),
       [...revocations].map(([name, at]) => [name, at?.toString() ?? null])]);
-    return { now, lag: this.lag, held, conflict, boundaries, revocations, requests, key };
+    return { now, lag: this.lag, held, conflict, boundaries, revocations, key };
   }
   private exclusive(view: View): void {
     requireThat(!view.conflict, "CONFLICT", "the venue contains a commitment this journal did not sign");
@@ -765,8 +750,6 @@ export class V3OperatorJournal {
     if (engine.evidence.length > 0 || engine.opened.entries.some(({ terms }) => terms.silence !== undefined || terms.nonService !== undefined)) {
       const source = await this.currentRead(engine, view.now);
       this.serviceClock(source, view.now);
-      this.reserveReadCheckpoints(engine, view.held, source.work.checkpoints);
-      this.reserveEvents(engine, source, (action === "admit" ? 1n : 0n) + this.otherRequests(engine, view));
     }
     for (const { backing } of engine.opened.entries) {
       const revokedAt = view.revocations.get(bytesToHex(backing));
@@ -819,53 +802,12 @@ export class V3OperatorJournal {
     }
   }
 
-  /** Every signed checkpoint can still reach the venue. Deduplicated package
-   * bytes do not bound the reader's checkpoint work, so reserve that separately. */
-  private reserveCheckpoint(engine: Engine, count = 1n): void {
-    if (BigInt(engine.signed.length) + count > IMPORT_LIMITS.maxCheckpoints) {
-      throw new V3StoreError("REFUSED", "the next checkpoint exceeds the reader's work budget", "RESOURCE");
-    }
-  }
-  /** Held public ancestry plus every own unheld signing that can still land,
-   * and the checkpoint(s) needed to finalize the proposed work. */
-  private reserveReadCheckpoints(engine: Engine, held: readonly HeldCommitment[], checkpoints: bigint, count = 1n): void {
-    const known = new Set(held.map(h => hexOf(h.commitment)));
-    const unheld = BigInt(engine.signed.filter(signed => !known.has(hexOf(signed.commitment))).length);
-    requireThat(checkpoints + unheld + count <= IMPORT_LIMITS.maxCheckpoints, "REFUSED", "the next checkpoint exceeds the reader's work budget", "RESOURCE");
-  }
-
-  /** Known record-prefix work for the next continuation. A first continuation
-   * with an adopted block replays from the imported frontier, not its empty
-   * opening. Later independent venue publications can still exhaust a reader's
-   * local budgets; no journal can bound what other parties publish. */
-  private reserveEvents(engine: Engine, source: StateRead, extra: bigint): void {
-    const unadopted = this.unadopted(source);
-    const rebuild = source.canonical.commitment.sequence === engine.opened!.header.sequence && unadopted.length > 0;
-    const ancestry = rebuild ? source.state.importedEventCount() : 0n;
-    const records = BigInt(engine.records.length) + extra - (rebuild ? 0n : source.state.position);
-    if (this.reservedEventWork(source) + ancestry + records > IMPORT_LIMITS.maxEvents) {
-      throw new V3StoreError("REFUSED", "the continuation exceeds the reader's event budget", "RESOURCE");
-    }
-  }
-
   /** Forced publications after the canonical state's adoption index of their
    * backing, through its index, in venue order: an opening's exact block (C2b.4.1). */
   private unadopted(source: StateRead): readonly ScopeForcedPublication[] {
     const { state, canonical } = source;
     return source.force.filter(event => event.index <= canonical.index &&
       event.index > (state.adoptionIndices.get(event.backing) ?? 0n));
-  }
-
-  /** The journal reads the scope's first backing. A reader selecting another
-   * backing with a non-service clause may also read its publications and check
-   * one request proof per publication (C2b.5.2); reserve both for each. */
-  private otherRequests(engine: Engine, view: View): bigint {
-    return (engine.opened?.entries.slice(1) ?? []).reduce((sum, { backing }) => sum + 2n * (view.requests.get(bytesToHex(backing)) ?? 0n), 0n);
-  }
-
-  /** Known requests may enter the counting window before the next checkpoint. */
-  private reservedEventWork(source: Pick<StateRead, "work">): bigint {
-    return source.work.events - source.work.requestProofs + source.work.requestProofReserve;
   }
 
   /** Change only the in-memory segment; the caller atomically records the
@@ -921,15 +863,10 @@ export class V3OperatorJournal {
       const view = this.view(engine);
       this.exclusive(view);
       requireThat(engine.opened !== undefined && !engine.pendingReturn, "STALE", "a return is already pending or no segment exists");
-      this.reserveCheckpoint(engine, 2n); // Empty return and its service continuation.
       const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
       const source = await this.currentRead(engine, view.now);
-      this.reserveReadCheckpoints(engine, view.held, source.work.checkpoints, 2n);
-      if (this.reservedEventWork(source) + this.openingImports([source.canonical]).work + this.otherRequests(engine, view) > IMPORT_LIMITS.maxEvents) {
-        throw new V3StoreError("REFUSED", "the return exceeds the reader's ancestry budget", "RESOURCE");
-      }
       this.diverging = true;
       this.prepareReturn(engine, source, view.now);
       const opened = engine.opened!, { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
@@ -962,11 +899,8 @@ export class V3OperatorJournal {
       requireThat(held !== undefined && hexOf(held.commitment) === hexOf(engine.signed.at(-1)!.commitment), "UNAVAILABLE", "the return opening is not witnessed");
       const current = await this.currentRead(engine, view.now);
       this.serviceClock(current, view.now);
-      this.reserveReadCheckpoints(engine, view.held, current.work.checkpoints);
       const source = await this.currentRead(engine, held.index);
       const block = this.unadopted(source);
-      this.reserveCheckpoint(engine);
-      this.reserveEvents(engine, current, BigInt(block.length) + this.otherRequests(engine, view));
       this.encodePackage(opened, [...engine.signed, this.placeholder(opened)],
         held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives, engine.evidence);
       this.diverging = true;
@@ -1069,7 +1003,6 @@ export class V3OperatorJournal {
       const view = this.view({ ...engine, opened: target.opened });
       requireThat(view.now === at, "STALE", "the venue changed during the scope change");
       this.exclusive(view); this.signingSchedule(view);
-      this.reserveCheckpoint(engine, 2n);
       await this.prepareRescope(engine, own, at);
       const opened = engine.opened!, { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
       // Budget the exact wire shape before signing. Signature bytes have fixed size.
@@ -1119,7 +1052,6 @@ export class V3OperatorJournal {
       const prior = engine.receipts.get(hash);
       if (prior !== undefined) return copyBytes(prior);
       const view = this.view(engine);
-      this.reserveCheckpoint(engine);
       await this.ready(engine, view, "admit");
       const opened = engine.opened!, state = engine.state!, horizon = view.now + view.lag;
       requireThat(horizon < U64, "SCHEDULE", "the horizon is past the venue's index space");
@@ -1155,7 +1087,6 @@ export class V3OperatorJournal {
       const prior = this.prior(commandId, "commit");
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       const view = this.view(engine);
-      this.reserveCheckpoint(engine);
       await this.ready(engine, view, "commit");
       const last = engine.signed.at(-1)!, sequence = last.commitment.sequence + 1n;
       requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");

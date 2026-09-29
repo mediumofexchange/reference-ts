@@ -47,7 +47,7 @@ function fixture() {
     const header: SegmentHeader = { domain, venue: venue.id, operator: ed25519.getPublicKey(secret), sequence,
       entries: [{ backing, link, ...(predecessor === undefined ? {} : { opening: predecessor }) }] };
     const id = segmentIdentity(header);
-    return { header, id, state: openSegmentState(operatorStore, id, b(90), imported, () => {}), records: [], secret };
+    return { header, id, state: openSegmentState(operatorStore, id, b(90), imported), records: [], secret };
   }
   function checkpoint(target: Segment, sequence: bigint, index = sequence): Commitment {
     const total = target.state.total(hex(backing));
@@ -157,7 +157,6 @@ describe("single-backing complete frontier reader", () => {
     expect(empty.canonical).toBeUndefined(); expect(empty.clock).toBeUndefined();
     expect(empty.ranges).not.toHaveProperty("checkpointIndex");
     expect(empty.ranges.chain).toHaveLength(1);
-    expect(empty.work).toEqual({ checkpoints: 0n, events: 0n, requestProofs: 0n, requestProofReserve: 0n });
     expect((await f.read()).ranges.chain.at(-1)!.operator).toEqual(next);
   });
 
@@ -177,7 +176,7 @@ describe("single-backing complete frontier reader", () => {
     f.venue.witness(1, original, 1n, encodeCommitment(held));
     await expect(f.read(pack([]))).rejects.toMatchObject({ status: "unresolved-evidence" });
     const result = await f.read(pack([{ kind: 3, payload: encodeEvidenceDirectory(directory) }]));
-    expect(result.canonical).toBeUndefined(); expect(result.work.checkpoints).toBe(1n);
+    expect(result.canonical).toBeUndefined(); expect(result.carrying).toEqual([]);
   });
 
   it("matches selection replay while ignoring supplied selection and receipt metadata", async () => {
@@ -188,7 +187,7 @@ describe("single-backing complete frontier reader", () => {
     expect(frontier.canonical!.commitment).toEqual(latest);
     expect(frontier.canonical!.state.issued).toBe(5n);
     expect(frontier.canonical!.state.history).toEqual(selected.state!.history);
-    expect(frontier.carrying).toEqual(selected.carrying); expect(frontier.work).toEqual(selected.work);
+    expect(frontier.carrying).toEqual(selected.carrying);
     await expect(readPackage(f.selectedPackage(opening), f.selection(opening), f.options))
       .rejects.toMatchObject({ status: "superseded-selection" });
   });
@@ -230,35 +229,33 @@ describe("single-backing complete frontier reader", () => {
   it("owns caller bytes and options before the first asynchronous venue descent", async () => {
     const f = fixture(), opening = f.checkpoint(f.segment(), 1n);
     const bytes = Buffer.from(pack(f.items)), signed = { terms: Buffer.from(f.signed.terms), signature: Buffer.from(f.signed.signature) };
-    const options = { ...f.options, configuration: structuredClone(configuration), reference: structuredClone(reference),
-      importLimits: { maxCheckpoints: 1n, maxEvents: 0n } };
+    const options = { ...f.options, configuration: structuredClone(configuration), reference: structuredClone(reference) };
     const pending = readFrontier(bytes, signed, 10n, options);
     bytes.fill(0); signed.terms.fill(0); signed.signature.fill(0); options.configuration.helper.fill(0);
-    options.reference.label.fill(0); options.importLimits.maxCheckpoints = 0n;
+    options.reference.label.fill(0);
     expect((await pending).canonical!.commitment).toEqual(opening);
   });
 
   it("owns evidence and terms before a synchronous venue getter can mutate caller inputs", async () => {
     const f = fixture(), opening = f.checkpoint(f.segment(), 1n), venueId = f.venue.id;
     const bytes = Buffer.from(pack(f.items)), signed = { terms: Buffer.from(f.signed.terms), signature: Buffer.from(f.signed.signature) };
-    const options = { ...f.options, configuration: structuredClone(configuration), reference: structuredClone(reference),
-      importLimits: { maxCheckpoints: 1n, maxEvents: 0n } };
+    const options = { ...f.options, configuration: structuredClone(configuration), reference: structuredClone(reference) };
     Object.defineProperty(f.venue, "id", { get() {
       bytes.fill(0); signed.terms.fill(0); signed.signature.fill(0);
-      options.configuration.helper.fill(0); options.reference.label.fill(0); options.importLimits.maxCheckpoints = 0n;
+      options.configuration.helper.fill(0); options.reference.label.fill(0);
       return venueId;
     } });
     expect((await readFrontier(bytes, signed, 10n, options)).canonical!.commitment).toEqual(opening);
   });
 
-  it("charges both checkpoint descent and record replay under independent limits", async () => {
+  it("keeps no walk rows after a read, and none after a refused one", async () => {
     const f = fixture(), segment = f.segment(); f.checkpoint(segment, 1n); await f.issue(segment); f.checkpoint(segment, 2n);
-    const bytes = pack(f.items);
-    expect((await f.read()).work).toMatchObject({ checkpoints: 2n, events: 1n });
-    for (const importLimits of [{ maxCheckpoints: 1n, maxEvents: 1n }, { maxCheckpoints: 2n, maxEvents: 0n }]) {
-      await expect(readFrontier(bytes, f.signed, 10n, { ...f.options, importLimits }))
-        .rejects.toMatchObject({ status: "resource-refusal" });
-    }
+    const store = new ReplayStore(), walks = (): number => store.walkRows();
+    expect((await readFrontier(pack(f.items), f.signed, 10n, { ...f.options, store })).carrying).toHaveLength(2);
+    expect(walks()).toBe(0);
+    await expect(readFrontier(pack(f.items.filter(item => item.kind !== 4)), f.signed, 10n, { ...f.options, store }))
+      .rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(walks()).toBe(0);
   });
 });
 

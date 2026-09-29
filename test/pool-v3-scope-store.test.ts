@@ -129,17 +129,16 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     const bj = f.create(bSecret, "b");
     expect((await bj.takeover("take-x", f.x.signed, f.held.package)).sequence).toBe(1n);
     await expect(f.a.rescope("keep-ended", { keep: [f.x.name, f.y.name] })).rejects.toMatchObject({ code: "STALE" });
-    // The reader of the split opening merges and re-reads its parent's ancestry beyond
-    // the parent read itself; the journal reserves both passes (C2.10.6).
+    // The split opening imports its parent's finalized prefix (C2.10.6).
     const parent = await f.read(await f.a.package(f.y.name), f.y.name);
-    let merging = 0n;
-    const merged = mergeFinalizedPrefixes(parent.state.store, [{ state: parent.state }], amount => { merging += amount; });
+    const merged = mergeFinalizedPrefixes(parent.state.store, [{ state: parent.state }]);
     expect((await f.a.rescope("split", { keep: [f.y.name] })).sequence).toBe(3n);
     await expect(f.a.submit(f.issue(await f.context(f.a), f.output(f.y.name, 33, 1n), f.y.issuer))).rejects.toMatchObject({ code: "STALE" });
     for (const j of [bj, f.a]) { await j.publish(); expect(await j.adopt()).toEqual([]); }
     const split = await f.read(await f.a.package(f.y.name), f.y.name);
-    expect(split.work.events).toBeGreaterThan(parent.work.events + parent.state.eventCount());
-    expect(split.work.events).toBeLessThanOrEqual(parent.work.events + merging + merged.events);
+    // The split segment's reader imports exactly the parent's prefix.
+    expect(split.state.imports()).toEqual(new Map([...merged.frontier.segments].map(([name, entry]) => [name, { ns: split.state.imports().get(name)!.ns, upto: entry.upto }])));
+    expect(split.state.eventCount()).toBe(parent.state.eventCount());
     const [ctxB, ctxA] = [await f.context(bj), await f.context(f.a)];
     expect(ctxB.header.entries).toEqual([{ backing: f.x.name, link: toB.link, opening: { operator: aKey, sequence: 2n, root: f.held.selection.root } }]);
     expect(ctxA.header.entries).toEqual([{ backing: f.y.name, link: f.y.name, opening: { operator: aKey, sequence: 2n, root: f.held.selection.root } }]);

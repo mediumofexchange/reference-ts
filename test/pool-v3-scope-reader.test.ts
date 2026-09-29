@@ -53,7 +53,7 @@ async function twoBackings() {
     const id = segmentIdentity(header);
     return { header, id, scoped, scope: new ScopeTree(header.entries).root(), records: [] as Uint8Array[],
       scopedTerms: new Map(scoped.map(item => [hex(item.name), item.fields])),
-      state: openSegmentState(operatorStore, id, b(90), imported, () => {}) };
+      state: openSegmentState(operatorStore, id, b(90), imported) };
   };
   let current = open(backings, 1n);
   const items: EvidenceItem[] = [];
@@ -91,7 +91,7 @@ async function twoBackings() {
   }
   /** A reader's replay of `records` for segment `id` in `store`, under its own identity. */
   async function replayInto(store: ReplayStore, identity: Uint8Array, records: Uint8Array[], id = current.id): Promise<ReplayResult> {
-    const state = openSegmentState(store, id, identity, undefined, () => {});
+    const state = openSegmentState(store, id, identity, undefined);
     for (const bytes of records) await applyRecord(state, bytes, replayOf(id));
     const { issued: total, burned } = state.total(hex(x.name));
     return new ReplayResult(store, state.ns, state.position, { issued: total, burned, adoptionIndices: new Map(), identity });
@@ -161,30 +161,29 @@ describe("multi-backing scope reader", () => {
       ["3", "excluded", "SNAPSHOT"], ["4", "valid", undefined]]);
     const state = read.state;
     expect([state.position, state.store.tip(state.ns).position, state.leaves]).toEqual([3n, 3n, 3n]);
-    // One namespace carried 1, 2 and 4, and 4 resumed at 2's tip: 1 + 1 + 2 records charged, as before storage.
+    // One namespace carried 1, 2 and 4, and 4 resumed at 2's tip.
     expect(state.store.namespaces(state.identity)).toEqual([state.ns]);
-    expect(read.work.events).toBe(4n);
   });
 
-  it("merges imported prefixes once per event and refuses a conflicting identity", async () => {
+  it("merges imported prefixes once per parent state and refuses a conflicting identity", async () => {
     const f = await twoBackings();
     f.checkpoint(1n, 1n); await f.issue(5n, 101n);
     const read = await f.read(f.x.name, f.checkpoint(2n, 3n));
-    let charged = 0n;
     const store = read.state!.store;
-    const merged = mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: read.state! }, undefined], amount => { charged += amount; });
-    // Each parent's events are charged when read, even when they repeat.
-    expect(merged.events).toBe(1n); expect(charged).toBe(2n);
+    // A parent state named twice is merged once.
+    const merged = mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: read.state! }, undefined]);
+    expect([...merged.frontier.segments.values()]).toEqual([{ ns: read.state!.ns, upto: 1n }]);
     expect(merged.frontier.totals.get(hex(f.x.name))).toEqual({ issued: 5n, burned: 0n });
     // Another replay of the same segment agreeing on the shared prefix merges into the longer one.
     const longer = await f.replayInto(store, b(91), [f.issued(5n, 101n), f.issued(1n, 103n)]);
-    const joined = mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: longer }], () => {});
-    expect(joined.events).toBe(2n); expect(joined.frontier.totals.get(hex(f.x.name))).toEqual({ issued: 6n, burned: 0n });
+    const joined = mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: longer }]);
+    expect([...joined.frontier.segments.values()]).toEqual([{ ns: longer.ns, upto: 2n }]);
+    expect(joined.frontier.totals.get(hex(f.x.name))).toEqual({ issued: 6n, burned: 0n });
     // Two replays of one segment disagreeing at a shared position are conflicting histories.
     const conflicting = await f.replayInto(store, b(92), [f.issued(5n, 102n)]);
-    expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: conflicting }], () => {})).toThrow(expect.objectContaining({ check: "CONTINUITY" }));
+    expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: conflicting }])).toThrow(expect.objectContaining({ check: "CONTINUITY" }));
     // A distinct event repeating an imported output is a conflicting history.
     const repeated = await f.replayInto(store, b(93), [f.issued(5n, 101n, b(94))], b(94));
-    expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: repeated }], () => {})).toThrow(expect.objectContaining({ check: "OUTPUT" }));
+    expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: repeated }])).toThrow(expect.objectContaining({ check: "OUTPUT" }));
   });
 });

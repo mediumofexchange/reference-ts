@@ -7,6 +7,7 @@ import { readRecordView, RANGE_LIMITS, type ReaderSelection } from "../src/pool/
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 import { fieldToBytes } from "../src/pool/field.js";
 import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
@@ -15,6 +16,7 @@ import { RangeLimitError } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../src/record-venue.js";
 import { CandidateVenueError, type VenueReference } from "../src/pool/v3/guard.js";
 import { VenueError } from "../src/venue-error.js";
+import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 
 // The v3 state machine (src/pool/v3/state.ts) over synthetic §5 records: the
 // codec's shapes with real issuer signatures, and a proof verifier the test
@@ -51,7 +53,7 @@ function demand(roots: [bigint, bigint], tags: [bigint, bigint], deadline: bigin
 
 const spentRootOf = (nfs: bigint[]): Uint8Array => { const set = new RadixSpentSet(); nfs.forEach(nf => set.insert(fieldToBytes(nf))); return set.root(); };
 const accepting: ProofCheck = { verify: () => true };
-const fresh = (): SegmentState => openSegmentState(new ReplayStore(), SEGMENT, b(40), undefined, () => {});
+const fresh = (): SegmentState => openSegmentState(new ReplayStore(), SEGMENT, b(40), undefined);
 const replay = (overrides: Partial<SegmentReplay> = {}): SegmentReplay =>
   ({ domain: DOMAIN, backing: BACKING, segment: SEGMENT, scope: SCOPE, terms, verifier: accepting, index: 5n, block: [], ...overrides });
 async function refusal(state: SegmentState, bytes: Uint8Array, context: SegmentReplay): Promise<string> {
@@ -197,14 +199,16 @@ describe("the reader's venue", () => {
   const venueId = localVenueIdentity(b(12), 2n);
   const selection: ReaderSelection = { mode: "current-fixture", domain: DOMAIN, venue: venueId, backing: BACKING, operator: terms.operator,
     root: b(17), sequence: 1n, judgingIndex: 4n };
-  const view = (venue: RecordVenue, chosen = selection) => readRecordView(chosen, terms, new Map(), venue, reference);
+  // No package objects; venue answers are kept in an empty batch of the reader's own.
+  const noEvidence = () => ({ directory: () => undefined, answers: new EvidenceStore().importTrails([]) });
+  const view = (venue: RecordVenue, chosen = selection) => readRecordView(chosen, terms, noEvidence(), venue, reference);
   const status = (promise: Promise<unknown>): Promise<unknown> => promise.then(() => "read", (e: unknown) => e instanceof EvidenceRefusal ? e.status : e);
 
   it("reads the chain and revocation from a fixture venue's answers at the witnessed index", async () => {
     const venue = FixtureVenue.reference(b(12), 2n, 4n);
     const read = await view(venue);
     expect([read.t, read.lag, read.revokedAt, read.chain.map(link => link.from)]).toEqual([4n, 2n, undefined, [0n]]);
-    expect(await read.heldBy(terms.operator)).toEqual([]);
+    expect([...read.held(terms.operator)]).toEqual([]);
   });
 
   it("is unresolved past the clock, off the current index, on another venue and on a venue with no answer", async () => {
@@ -225,11 +229,23 @@ describe("the reader's venue", () => {
     expect(await status(view({ ...failed, witnessedIndex: () => Promise.resolve(4n) } as unknown as RecordVenue))).toBeInstanceOf(TypeError);
   });
 
+  it("reads an answer past the per-answer budget window by window, carrying the held state across windows", async () => {
+    const venue = FixtureVenue.reference(b(12), 2n, 6000n), secret = b(33), operator = ed25519.getPublicKey(secret);
+    const commitment = (sequence: bigint) => encodeCommitment(signCommitment(secret, sequence, b(Number(sequence))));
+    // More kind-2 and kind-1 entries than one answer may hold, spread over indices.
+    for (let i = 1n; i <= RANGE_LIMITS.maxEntries + 10n; i++) { venue.witness(2, BACKING, i, new Uint8Array(233)); venue.witness(1, operator, i, new Uint8Array(136)); }
+    // Sequence 2 after sequence 3 is never held, though a later window holds it alone (C2.3.3).
+    for (const [at, sequence] of [[1n, 1n], [3000n, 3n], [4500n, 2n], [4600n, 4n]] as const) venue.witness(1, operator, at, commitment(sequence));
+    const read = await view(venue, { ...selection, judgingIndex: 6000n });
+    expect(read.chain.map(link => link.from)).toEqual([0n]);
+    expect([...read.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[1n, 1n], [3000n, 3n], [4600n, 4n]]);
+  }, 60_000);
+
   it("requires the independently held reference preimage before asking for evidence", async () => {
     let reads = 0;
     const venue: RecordVenue = { id: venueId, lag: () => 2n,
       witnessedIndex: () => { reads++; return 4n; }, range: () => { reads++; return undefined; } };
-    const refused = (r: VenueReference, v = venue) => readRecordView(selection, terms, new Map(), v, r);
+    const refused = (r: VenueReference, v = venue) => readRecordView(selection, terms, noEvidence(), v, r);
     for (const r of [undefined, { ...reference, label: b(13) }, { ...reference, lag: 3n },
       { context: "moe/venue/ergo-testnet/reference" }, { context: "moe/venue/ergo/mainnet" }]) {
       await expect(refused(r as VenueReference)).rejects.toThrow(CandidateVenueError);

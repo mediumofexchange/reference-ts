@@ -5,7 +5,7 @@
 // retires with it. Not a check, not runtime.
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs baseline <events> [--proof <bytes>]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs stored <events> [options]
-//   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--proof <bytes>] [--dir <directory>]
+//   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--silence] [--proof <bytes>] [--dir <directory>]
 // baseline: the runtime state machine (dist state.ts) over synthetic records, stub verifier.
 // read (M5b.3 acceptance): the runtime reader (readPackage) streaming a package file of one
 //   segment's <events> statements into its own evidence and replay files, stub verifier.
@@ -76,7 +76,7 @@ if (mode === "baseline") {
   const digest = (outputs, capsules) => limbsOf(deliveryHash(domain, outputs, capsules));
   const verifier = { verify: () => true };
   const replay = { domain, backing, segment, scope, terms, verifier, index: 100n, block: [] };
-  const state = openSegmentState(new ReplayStore(), segment, sha("baseline"), undefined, () => {});
+  const state = openSegmentState(new ReplayStore(), segment, sha("baseline"), undefined);
   sample(0);
   const start = performance.now();
   for (let i = 0; i < N; i++) {
@@ -377,7 +377,9 @@ if (mode === "baseline") {
   const domain = configurationHash(configuration), venue = FixtureVenue.reference(label, lag, 10n);
   const obligor = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
   const termsBytes = encodeRootTerms({ obligor, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n }, operator,
-    configuration: domain, venue: venue.id, interval: 10n });
+    configuration: domain, venue: venue.id, interval: 10n,
+    // --silence: a silence clause, so every continuation reads its clock (C2b.6.1); no gap ever opens.
+    ...(rest.includes("--silence") ? { silence: { noCommitmentDuration: 100n, challengeWindow: 10n } } : {}) });
   const terms = decodeRootTerms(termsBytes), backing = rootTermsName(termsBytes), entries = [{ backing, link: backing }];
   const header = segmentBytes({ domain, venue: venue.id, operator, sequence: 1n, entries }), segment = sha(header), scope = new ScopeTree(entries).root();
   const prefix = [...limbsOf(domain), ...limbsOf(segment), scope], capsule = () => { const c = new Uint8Array(randomBytes(89)); c[0] = 1; return c; };
@@ -385,15 +387,17 @@ if (mode === "baseline") {
   const signedTerms = { terms: termsBytes, signature: ed25519.sign(rootTermsSignatureMessage(termsBytes), issuerSecret) };
   const u32 = n => { const x = Buffer.alloc(4); x.writeUInt32BE(n); return x; }, u64 = n => { const x = Buffer.alloc(8); x.writeBigUInt64BE(BigInt(n)); return x; };
 
-  // Operator: an empty opening checkpoint, then one checkpoint of all N records. Items 2–4
-  // have fixed sizes, so they are written as placeholders and filled, in hash order, at the end.
+  // Operator: an empty opening checkpoint, then a checkpoint every K records through N (one
+  // trail serves them all, cut at each snapshot's evidence hash). Items 2–4 have fixed sizes,
+  // so they are written as placeholders and filled, in hash order, at the end.
+  const EVERY = Number(option("--every", String(N))), C = Math.ceil(N / EVERY) + 1;
   const fd = openSync(packageFile, "w"), written = { bytes: 0 };
   const put = (bytes, at) => { writeSync(fd, bytes, 0, bytes.length, at); if (at === undefined) written.bytes += bytes.length; };
   const configurationItem = configurationBytes(configuration), placeholder = { commitment: [], directory: [], snapshot: [] };
   const commitmentLength = encodeCommitment(signCommitment(operatorSecret, 1n, b(0))).length, directoryLength = 9 + 64;
   const snapshotLength = snapshotBytes({ backing, segment, historyHash: b(0), evidenceHash: b(0), issued: 0n, burned: 0n }).length;
-  put(Buffer.concat([V3_PACKAGE_CONTEXT, u32(7), Buffer.of(1), u64(configurationItem.length), configurationItem]));
-  for (const [key, length, kind, count] of [["commitment", commitmentLength, 2, 1], ["directory", directoryLength, 3, 2], ["snapshot", snapshotLength, 4, 2]]) {
+  put(Buffer.concat([V3_PACKAGE_CONTEXT, u32(2 * C + 3), Buffer.of(1), u64(configurationItem.length), configurationItem]));
+  for (const [key, length, kind, count] of [["commitment", commitmentLength, 2, 1], ["directory", directoryLength, 3, C], ["snapshot", snapshotLength, 4, C]]) {
     for (let i = 0; i < count; i++) { put(Buffer.concat([Buffer.of(kind), u64(length)])); placeholder[key].push(written.bytes); put(Buffer.alloc(length)); }
   }
   put(Buffer.of(6)); const trailLengthAt = written.bytes; put(u64(0));
@@ -401,8 +405,10 @@ if (mode === "baseline") {
   put(Buffer.concat([V3_TRAIL_CONTEXT, u32(header.length), header, u32(termsBytes.length), termsBytes, signedTerms.signature]));
   const countAt = written.bytes; put(u64(0));
   const verifier = { verify: () => true }, operatorStore = new ReplayStore(operatorFile);
-  const state = openSegmentState(operatorStore, segment, sha("operator"), undefined, () => {});
+  const state = openSegmentState(operatorStore, segment, sha("operator"), undefined);
   const opening = { backing, segment, historyHash: state.history, evidenceHash: state.evidence, issued: 0n, burned: 0n };
+  const snapshots = [opening], snapshotOf = () => ({ backing, segment, historyHash: state.history, evidenceHash: state.evidence,
+    ...state.total(Buffer.from(backing).toString("hex")) });
   const replay = { domain, backing, segment, scope, terms, verifier, index: 1n, block: [] };
   let recordBytes = 0;
   const generateStart = performance.now();
@@ -421,19 +427,25 @@ if (mode === "baseline") {
     const bytes = encodeRecord(record);
     await applyRecord(state, bytes, replay);
     put(u32(bytes.length)); put(bytes); recordBytes += bytes.length;
+    if ((i + 1) % EVERY === 0 || i + 1 === N) snapshots.push(snapshotOf());
     if ((i + 1) % SAMPLE === 0) console.error(JSON.stringify({ generated: i + 1, msPerEvent: +((performance.now() - generateStart) / (i + 1)).toFixed(2) }));
   }
   const generateMs = performance.now() - generateStart;
-  const snapshot = { backing, segment, historyHash: state.history, evidenceHash: state.evidence, ...state.total(Buffer.from(backing).toString("hex")) };
-  const directories = [opening, snapshot].map(s => [{ name: backing, digest: snapshotDigest(s) }]);
-  const [openingCommitment, commitment] = directories.map((d, i) => signCommitment(operatorSecret, BigInt(i + 1), directoryRoot(d)));
+  assert.equal(snapshots.length, C);
+  const snapshot = snapshots.at(-1);
+  // Checkpoint k (sequence k + 1) is witnessed at index k + 1; the last is selected.
+  const directories = snapshots.map(s => [{ name: backing, digest: snapshotDigest(s) }]);
+  const commitments = directories.map((d, i) => signCommitment(operatorSecret, BigInt(i + 1), directoryRoot(d))), commitment = commitments.at(-1);
   const inOrder = list => list.sort((x, y) => Buffer.compare(sha(x), sha(y)));
   put(encodeCommitment(commitment), placeholder.commitment[0]);
   inOrder(directories.map(d => encodeEvidenceDirectory(d))).forEach((bytes, i) => put(bytes, placeholder.directory[i]));
-  inOrder([opening, snapshot].map(snapshotBytes)).forEach((bytes, i) => put(bytes, placeholder.snapshot[i]));
+  inOrder(snapshots.map(snapshotBytes)).forEach((bytes, i) => put(bytes, placeholder.snapshot[i]));
   put(u64(N), countAt); put(u64(written.bytes - trailStart), trailLengthAt);
   closeSync(fd); operatorStore.close();
-  venue.witness(1, operator, 1n, encodeCommitment(openingCommitment)); venue.witness(1, operator, 2n, encodeCommitment(commitment));
+  venue.advance(BigInt(C) + 10n);
+  commitments.forEach((c, i) => venue.witness(1, operator, BigInt(i + 1), encodeCommitment(c)));
+  // The operator's own objects are not the reader's memory; the fixture venue's records stay in-process.
+  snapshots.length = 0; directories.length = 0; commitments.length = 0;
 
   // Reader: the package file streamed into its own storage, memory sampled as it goes.
   const packageBytes = statSync(packageFile).size, importSamples = [], replaySamples = [];
@@ -450,14 +462,15 @@ if (mode === "baseline") {
   let verified = 0, importMs = 0;
   const readStart = performance.now();
   const reader = { verify: () => {
-    if (verified === 0) importMs = performance.now() - readStart;
+    // The first proof is checked once the walk has classified its way to the first record.
+    if (verified === 0) { importMs = performance.now() - readStart; at(replaySamples, { events: 0 }); }
     if (++verified % SAMPLE === 0) at(replaySamples, { events: verified });
     return true;
   } };
   const evidence = new EvidenceStore(evidenceFile), store = new ReplayStore(stateFile);
-  const result = await readPackage(stream(), { mode: "current-fixture", domain, venue: venue.id, backing, operator, sequence: 2n,
+  const result = await readPackage(stream(), { mode: "current-fixture", domain, venue: venue.id, backing, operator, sequence: BigInt(C),
     root: commitment.root, judgingIndex: venue.witnessedIndex() }, { configuration, verifier: reader, venue, reference: { context: LOCAL_REFERENCE, label, lag },
-    store, evidence, importLimits: { maxCheckpoints: 128n, maxEvents: BigInt(N) + 1n } });
+    store, evidence });
   const readMs = performance.now() - readStart;
   assert.equal(result.state.position, BigInt(N));
   assert.deepEqual(Buffer.from(result.state.history), Buffer.from(snapshot.historyHash));
@@ -465,7 +478,7 @@ if (mode === "baseline") {
   evidence.close(); store.close();
   const slope = (rows, key, x) => { const first = rows[1] ?? rows[0], last = rows.at(-1);
     return Math.round((last[key] - first[key]) * 1048576 / (last[x] - first[x])); };
-  console.log(JSON.stringify({ mode, events: N, proofBytes: PROOF, recordBytes: Math.round(recordBytes / N), packageMiB: mib(packageBytes),
+  console.log(JSON.stringify({ mode, events: N, checkpoints: C, silence: rest.includes("--silence"), proofBytes: PROOF, recordBytes: Math.round(recordBytes / N), packageMiB: mib(packageBytes),
     generateMsPerEvent: +(generateMs / N).toFixed(2), importSeconds: +(importMs / 1000).toFixed(1),
     replayMsPerEvent: +((readMs - importMs) / N).toFixed(2), evidenceMiB: mib(evidenceBytes), stateMiB: mib(stateBytes),
     importHeapBytesPerMiB: slope(importSamples, "heapMiB", "copiedMiB"), importRssBytesPerMiB: slope(importSamples, "rssMiB", "copiedMiB"),
