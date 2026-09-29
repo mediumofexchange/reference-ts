@@ -187,6 +187,7 @@ Search with `rg`/`git grep` and size with `du` only outside `scratch/ergo-nodes`
 Commands that can pass two minutes run detached with output and exit code in scratch; clear old
 completion markers before starting and wait with an until-loop or Monitor, never `sleep N; check`.
 WORK.md names detached jobs; change files they read only on a branch/worktree, merging after they end.
+Ergo nodes (own and archive) run only while a task uses them: start early for catch-up sync, stop after.
 Stay read-only when unexplained commits/file changes or a confirmed active session show concurrent
 editing of this checkout; an idle or unrelated agent process alone does not establish that.
 
