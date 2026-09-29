@@ -14,6 +14,7 @@ import { proofVerifier } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
 import { V3_SPECIFICATION } from './provenance.mjs';
+import { BN254_PARAMETERS } from '../prepare-crs.mjs';
 
 const here = import.meta.dirname, root = resolve(here, '../../..');
 mkdirSync(join(root, 'scratch'), { recursive: true });
@@ -35,6 +36,10 @@ try {
   assert.equal(compiledSourceHashes.poseidon2, manifest.sources['poseidon2.nr']);
   const crsPath = join(root, 'scratch/private-payment-crs');
   api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath });
+  // The files the backend now proves and verifies from: Ignition's leading BN254 points (pool-v3 §4).
+  const parameters = Object.fromEntries(Object.keys(BN254_PARAMETERS).map(name => [name, sha(readFileSync(join(crsPath, name)))]));
+  assert.deepEqual(parameters, BN254_PARAMETERS);
+  checks.push('the backend loaded the recorded Ignition BN254 G1 points and [x]_2');
   for (const kind of kinds) {
     const program = json(join(build, kind + '.json'));
     assert.equal(program.noir_version, '1.0.0-beta.26+40d6574f851d926f93e0c3a271bac3e6e82ac905');
@@ -613,7 +618,7 @@ try {
   }
   const git=args=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:30_000}).trim();
   const report={candidate:'combined six successor relations', referenceBase:git(['rev-parse','HEAD']), referenceTreeClean:git(['status','--porcelain','--untracked-files=no'])==='', companionSpec:V3_SPECIFICATION,
-    environment:{node:process.version,platform:process.platform,arch:process.arch,toolchain:manifest.toolchain,verifierTarget:options.verifierTarget,threads:1},
+    environment:{node:process.version,platform:process.platform,arch:process.arch,toolchain:manifest.toolchain,verifierTarget:options.verifierTarget,threads:1,parameters},
     counts,identities,sharedSources:Object.fromEntries(['notes.nr','poseidon2.nr'].map(n=>[n,sha(readFileSync(n === 'poseidon2.nr' ? join(root,'src/pool/circuits/vendor/poseidon2.nr') : join(here,'circuits',n)))])),
     publicInputs:Object.fromEntries(kinds.map(k=>[k,publicInputsOf(k,bases[k])])), checks,metrics,
     limits:['Synthetic domain, no final configuration hash','Opaque capsules; no receiver decryption claim','No v3 parser, kind router, admission, authorization, replay, finality or venue completeness','Single desktop run, not device budgets']};

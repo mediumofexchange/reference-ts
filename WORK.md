@@ -3,20 +3,17 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 7 M3 (done, PR #42): `V3Wallet` receives, holds, pays and re-proves one backing
-whose canonical segment scopes several (C4.5–7, pool-fees C1.2.3–5 over C2.10.3–9):
-`readFrontier`, every scoped term checked for admission (`scopeChains`), force past the
-backing's own adoption index. Accepted by `test/pool-v3-scope-wallet.test.ts` and the
-real-proof wallet payment in `scope-store-check.mjs` on both venues (CI). The live
-two-backing drill runs after adoption ([decision](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
-Next run: Next 1.
+Slice 8 (adoption), M1 done on `spec/v3-proving-parameters`: pool-v3 §4 (spec `85655a5`)
+states the Ignition parameters, that key identities bind key bytes (not G1), the
+parameter-hash check before loading (manifest per layout), qualifying compilers and
+BN254's ~100-bit margin; independent review and read-backs resolved. Probe
+[report](docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters) at `b4ea7cf`; `check.mjs`
+records the files it proved with. Next run: M2 (Next 1).
 
 ## Status
-- Slice 7 M3 review findings fixed in 2c95f68; its reports are from CI run 36483555469.
-- Audit 2026-09-29, v3 proof relations (PR #43): circuits match pool-v3 §§2–4. `check.mjs`
-  names every hostile refusal and covers each reachable ACIR assertion instance; first
-  cases for burn change backing, demand zero tag, per-backing conservation, slot-0
-  padding and settle `QUANTITY`. Conformance report from CI run 36499628288.
+- Audit 2026-09-29 (PR #43): circuits match pool-v3 §§2–4; `check.mjs` names every hostile
+  refusal and covers each reachable ACIR assertion instance. Conformance report from CI
+  run 36508150640 (445 checks, 18 proofs, identities unchanged; records the BN254 files).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),
@@ -33,11 +30,14 @@ Next run: Next 1.
   Pool-v2 and its guides/reports: [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Configuration adoption (plan slice 8): provenance, ACIR identities/certificates,
-   replay/import bounds, one-transaction condition and BN254 margin; then the live
-   two-backing drill under the adopted configuration. Mainnet needs separate authority.
-   With the source pin, rewrite circuit comments citing the retired recovery map ("§2.6",
-   "PROBE ONLY", bare v2 sections, "A5"): edits change source hashes and every v3 report.
+1. Slice 8, adoption, in the [decided order](decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters).
+   M2: runtime parameter loader for §4's check: parameter identities in the manifest;
+   backends from hash-checked bytes (`skipSrsInit`, `srsInitSrs`; verifier G2 plus one
+   G1 point, no Grumpkin); no bb.js download or unchecked `crsPath`. Then M3 source pin
+   (circuit comments citing "§2.6", "PROBE ONLY", bare v2 sections, "A5"; no configuration
+   byte changes), M4 certificates/kind-11, M5 replay/import rules and bounds, M6 Next
+   5(i), M7 one-transaction condition, M8 adoption, every report re-recorded, live
+   two-backing drill. Mainnet needs separate authority.
 2. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
 3. Complete trails fit roughly 67 repeated spend-sized records in 1 MiB with
@@ -56,7 +56,7 @@ Next run: Next 1.
    context long enough to check its last boundary. (b) `store.ts` `package()` serves a
    published commitment never held after the lag (C2.4.3). (c) `store.ts` `submit` may
    return an old-segment receipt for an adopted forced record (traced only). (d) Ergo
-   reports bind pool-v3 `786f962` but no `venue-ergo.md` revision; the CRS is unbound.
+   reports bind pool-v3 `786f962` but no `venue-ergo.md` revision.
    (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
    `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit. (h) Runtime
    package-reader refusals drop the receipt walk's proven contradictions and fault facts

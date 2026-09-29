@@ -177,8 +177,10 @@ with `../prepare-crs.mjs` before starting the suite. It checks both upstream
 hosts on download failure; an empty or corrupt successful HTTP response is
 never cached. These are the existing bb.js 5.2.0 test parameters whose lengths
 and hashes that script pins; Barretenberg's own validation remains active.
-A mismatched uncompressed cache fails explicitly. This does not establish
-ceremony trust or approve a v3 configuration.
+A mismatched uncompressed cache fails explicitly, and `check.mjs` records the
+BN254 files the backend loaded. They equal Aztec Ignition transcript00's leading
+points ([proving parameters](../../../docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters));
+that establishes their source, not ceremony trust or an approved v3 configuration.
 
 The suite verifies every public-input position under each amended key,
 equal-count spend/burn substitution in both directions, separately provable
