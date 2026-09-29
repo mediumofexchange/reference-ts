@@ -3,13 +3,13 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 7 M3 (done, PR #42): `V3Wallet` receives, holds, pays and re-proves one backing
-whose canonical segment scopes several (C4.5–7, pool-fees C1.2.3–5 over C2.10.3–9):
-`readFrontier`, every scoped term checked for admission (`scopeChains`), force past the
-backing's own adoption index. Accepted by `test/pool-v3-scope-wallet.test.ts` and the
-real-proof wallet payment in `scope-store-check.mjs` on both venues (CI). The live
-two-backing drill runs after adoption ([decision](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
-Next run: Next 1.
+Slice 8 (adoption), M1 on `spec/v3-proving-parameters` (both repositories): pool-v3 §4
+states the proving parameters (Ignition `[x]_2` and G1 powers), how each is bound
+(backend check; derived keys), the BN254 margin and that a compiler reproducing every
+identity is conforming. Acceptance: reviewed spec commit; probe report showing parameter
+bytes equal Ignition transcript00, pairing consistency, Grumpkin-free proving and
+reproduction under Noir 1.0.0-rc.3; conformance report binds parameter hashes (CI).
+Stop: no source pin, certificate, bound or runtime loader change (M2–M7 in Next 1).
 
 ## Status
 - Slice 7 M3 review findings fixed in 2c95f68; its reports are from CI run 36483555469.
