@@ -18,8 +18,8 @@ The one reader walk (`scope-reader.ts`) recurses through `latest` and caches eve
 read, so M5b.3 reworks it too ([one-walk decision](decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)).
 
 ## Status
-- One reader walk (PR #48): `scope-reader.ts` reads every scope; the linear and original walks,
-  `ScopeRequired` and the single-backing entries are gone; continuations resume again.
+- One reader walk (PR #48): `scope-reader.ts` reads every scope; the other walks and entries are gone;
+  review-found fixes: excluded openings found their segment, lapse before validity, clock on lapse.
 - M5b.2 (PR #47): reads, journal and wallet replay into `replay-store.ts` ("M5b.2 as built/review"),
   in memory per read or journal until M5b.4, records in event rows until M5b.3.
 - M5b.1: design and [probe](docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage); kept exclusions need §14 text in M5b.4.
