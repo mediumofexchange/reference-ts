@@ -548,9 +548,15 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
           requireReplay(openingEntry !== undefined && same(snapshotFor(openingEntry.digest).segment, snapshot.segment), "OPENING");
           // Lapse is judged before validity (C2.10.11), on the clock from the opening as
           // witnessed, valid or not (C2b.4.1).
-          const clocks = await scopeClocks(header, name => scopedTerms.get(hex(name))!, backing, openingHeld.index, held.index);
-          if (clocks.clocks.some(clock => clock !== null && (clock.open || (clock.boundary !== undefined && clock.boundary < held.index)))) {
-            return { ...base, class: "lapsed", ...(clocks.record === null ? {} : { clock: clocks.record }) };
+          const termsOf = (name: Uint8Array): RootTerms => scopedTerms.get(hex(name))!;
+          const { clocks } = await scopeClocks(header, termsOf, backing, openingHeld.index, held.index);
+          const lapses = (clock: ScopeClock | null | undefined): boolean =>
+            clock != null && (clock.open || (clock.boundary !== undefined && clock.boundary < held.index));
+          const own = header.entries.findIndex(entry => same(entry.backing, backing)), cause = lapses(clocks[own]) ? own : clocks.findIndex(lapses);
+          if (cause >= 0) {
+            // The record is the clock of a backing whose gap proves the lapse (its own first).
+            const { record } = await scopeClocks(header, termsOf, header.entries[cause]!.backing, openingHeld.index, held.index);
+            return { ...base, class: "lapsed", ...(record === null ? {} : { clock: record }) };
           }
           openingValid = (await classify(openingHeld, backing)).class === "valid";
           const parents = await parentsOf(), established = bases.get(hex(snapshot.segment));
