@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-09-29` [Load only hash-checked proving parameters](decisions/2026-09.md#2026-09-29--load-only-hash-checked-proving-parameters)
 - `2026-09-29` [Order configuration adoption and state its proving parameters](decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters)
 - `2026-09-28` [Pay one backing in any scope and run the live two-backing drill after adoption](decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)
 - `2026-09-28` [Change a journal's scope with one command at a committed boundary](decisions/2026-09.md#2026-09-28--change-a-journals-scope-with-one-command-at-a-committed-boundary)

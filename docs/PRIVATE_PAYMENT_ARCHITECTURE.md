@@ -89,7 +89,7 @@ not receiver payments. Fulfillment is judged against current canonical replay;
 neither framework establishes supported custody or private transport.
 Research-specific JSON journal formats and capacity knobs are not retained as
 another product mechanism. The shared proving-parameter cache keeps its existing
-`scratch/private-payment-crs` name; active pool tools still use it.
+`scratch/private-payment-crs` name; pool tools read its checked leading bytes.
 
 ## Where to read next
 

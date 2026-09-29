@@ -3,12 +3,14 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 8 (adoption), M1 done on `spec/v3-proving-parameters`: pool-v3 §4 (spec `85655a5`)
-states the Ignition parameters, that key identities bind key bytes (not G1), the
-parameter-hash check before loading (manifest per layout), qualifying compilers and
-BN254's ~100-bit margin; independent review and read-backs resolved. Probe
-[report](docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters) at `b4ea7cf`; `check.mjs`
-records the files it proved with. Next run: M2 (Next 1).
+Slice 8 M2 on `feat/v3-parameter-loader`: pool-v3 §4's load check at runtime.
+Acceptance: `startBackend(parameters)` is the one way `src/` and every v3 harness start
+bb.js; it copies and hashes the leading 2^15 uncompressed Ignition G1 points (2 MiB, the
+largest relation's size) and `[x]_2` against `BN254_PARAMETERS` and refuses before any
+backend starts; no `crsPath`, download, compressed file or Grumpkin. `proofVerifier` and
+`openV3Prover` refuse other instances; the verifier's own hold G2 and `[1]_1` only.
+`prepare-crs.mjs` fetches only those bytes, verified before caching. Hostile cases name
+their refusal; reports re-recorded from CI; one adversarial review resolved. Stop: M2 only.
 
 ## Status
 - Audit 2026-09-29 (PR #43): circuits match pool-v3 §§2–4; `check.mjs` names every hostile
@@ -31,9 +33,7 @@ records the files it proved with. Next run: M2 (Next 1).
 
 ## Next
 1. Slice 8, adoption, in the [decided order](decisions/2026-09.md#2026-09-29--order-configuration-adoption-and-state-its-proving-parameters).
-   M2: runtime parameter loader for §4's check: parameter identities in the manifest;
-   backends from hash-checked bytes (`skipSrsInit`, `srsInitSrs`; verifier G2 plus one
-   G1 point, no Grumpkin); no bb.js download or unchecked `crsPath`. Then M3 source pin
+   After M2 (Goal): M3 source pin
    (circuit comments citing "§2.6", "PROBE ONLY", bare v2 sections, "A5"; no configuration
    byte changes), M4 certificates/kind-11, M5 replay/import rules and bounds, M6 Next
    5(i), M7 one-transaction condition, M8 adoption, every report re-recorded, live
