@@ -504,7 +504,6 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     return pending;
   };
   const judge = async (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
-    began = true;
     const c = held.commitment, directory = evidence.directory(c.root);
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const entry = directory.find(item => same(item.name, backing));
@@ -512,6 +511,8 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const snapshot = snapshotFor(entry.digest);
     const scope = checkpointScope(trails, backing, entry.digest, snapshot), { header } = scope;
     await faults.inspect(held, directory, scope);
+    // The descent had visited this checkpoint once its faults were inspected.
+    began = true;
     store.putScope(walk, snapshot.segment, segmentBytes(header), scope.terms);
     // Required scope is discovered only after its header is authenticated;
     // checkpointScope resolved and verified every scoped terms field.
