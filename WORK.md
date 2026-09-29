@@ -3,17 +3,23 @@
 Updated: 2026-09-29
 
 ## Goal
-Slice 8 (adoption), ordered by the [direction check](decisions/2026-09.md#2026-09-29--decide-lifetime-evidence-before-adoption-then-ship-installable-commands)
-and M5. Next run: **M5b streaming evidence** (Next 1); restate its acceptance here.
+Slice 8 (adoption), M5b: every party's memory independent of history
+([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+*Acceptance (whole M5b):* memory flat on a ≥10⁵-statement stub run; resumed and
+incremental verdicts equal full replay, and corrupt kept state falls back; real proofs past
+the old ceiling through journal, wallet sync and offline-operator recovery; first sync
+measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision); next **M5b.2**.
 
 ## Status
+- M5b.1 (design + `scripts/pool/v3/replay-store-probe.mjs`, two review rounds): node:sqlite,
+  append-only facts read at (segment, position), tip-only spent set and frontier, savepoints,
+  judgment/apply split, keep points with a state-file digest, journal state with its commands,
+  Node 24 floor. Kept exclusions need §14 text in M5b.4. [Probe](docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage).
 - [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay) (docs/spec only): complete replay, streamed and resumed; no seventh relation,
   configuration unchanged. Pool-v3 §12 items take a u64 length (u32 capped a trail near
   276,000 spends); §14 consolidates replay and retention. [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
   10⁶ statements over three years, memory ≤ 1 GiB independent of history, reader first
-  sync ≤ 24 h. The runtime still pins spec `85655a5` (u32 codec) until M5b.
-- M3 (PR #46) pinned final circuit text at spec `85655a5`; M2 (PR #45) hash-checks
-  parameters. Reports from CI run 36519561119.
+  sync ≤ 24 h. The runtime still pins spec `85655a5` (u32 codec) until M5b.3. Reports from CI run 36519561119.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
@@ -26,16 +32,10 @@ and M5. Next run: **M5b streaming evidence** (Next 1); restate its acceptance he
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. **M5b streaming evidence** ([M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay)):
-   reader, wallet and journal keep evidence (per-segment records, venue evidence) and
-   replay state (note-tree frontier, spent set, tags, standing demands) on disk, read
-   input under pool-v3 §14's one-set-of-bytes rule, resume from checked kept state, and
-   sync only records after their position. u64 package codec, pin move; per-object
-   bounds replace the 1 MiB totals. *Acceptance:* memory flat against history on a
-   stub-verifier run of at least 10⁵ statements; resumed/incremental verdicts equal full
-   replay, corrupt kept state falls back; real proofs past the old ceiling through
-   journal, wallet sync and offline-operator recovery; first sync measured against its
-   budget (Barretenberg Poseidon2 if over); reports re-recorded. Then M6 Next 5(i) (confirm a host
+1. Slice 8, adoption. **M5b.2 stored reader state**, then M5b.3–M5b.6 as the
+   [storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)
+   orders them. M5b.2 starts from the probe's schema, the consumer inventory in the decision's
+   findings, and a Node 24 floor (`engines`, CI matrix, installed-package check). Then M6 Next 5(i) (confirm a host
    rule), M4 certificates/kind-11 fitted to this retention, M7 one-transaction
    condition, M8 adoption (one manifest holding §11.1's parameter identities too, now
    `BN254_PARAMETERS`), every report re-recorded, live two-backing drill. Mainnet needs

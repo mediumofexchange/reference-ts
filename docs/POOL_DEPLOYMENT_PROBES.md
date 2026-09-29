@@ -752,6 +752,101 @@ synthetic shape with empty-root anchors and no imports, scopes, demands or
 publications; stub verification; one desktop, one run per case; no device
 budget.
 
+## Replay-state storage
+
+Slice 8 M5b asks where replay state lives so that memory is independent of
+history (pool-v3 §14; [decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+The probe is `node --expose-gc scripts/pool/v3/replay-store-probe.mjs`. It
+uses the replay-cost shape: an issue, then spends of two fresh nullifiers into
+four outputs, anchored at the empty root, with 932-byte stand-in records. It
+has two modes:
+- *baseline:* the runtime state machine (`openSegmentState`, `applyRecord`)
+  with a stub verifier;
+- *stored:* the decision's layout in node:sqlite, with a SHA-256 stand-in for
+  the Poseidon2 node hash (26 ms per event, independent of storage). The
+  layout is:
+  - append-only fact rows carrying their position, read with as-of bounds,
+    with events holding their chain values;
+  - the note tree's frontier only;
+  - spent-set nodes updated in place behind a write-back cache;
+  - a savepoint per 64-event checkpoint;
+  - keep points that commit and then hash the state file;
+  - records in a separate evidence file.
+
+After the run, the stored mode reopens and re-digests the file, then
+recomputes from the kept state what §14 compares with the snapshot: the note
+root from the frontier, the spent root from the root node's children, the
+totals from the rows, and the chain at `n` from the stored value at `n−1`.
+
+With `--check`, it compares each checkpoint's roots with the runtime
+`NoteTree` (under `--poseidon`) and `RadixSpentSet`. It then rehashes every
+stored spent node from its children to that root. These passed on 2026-09-29:
+- 600 events under Poseidon2, with 12 of 38 checkpoints rolled back and
+  reapplied;
+- 400 events under Poseidon2 with a 32-node cache, 8 rollbacks;
+- 3,000 events with a 64-node cache, 47 rollbacks, so write-back evictions
+  happened inside rolled-back savepoints;
+- a WAL variant.
+
+Reapplying the same events after a rollback would trip the duplicate
+nullifier, statement or spent-root checks if any rolled-back row or node had
+survived.
+
+Runs of 2026-09-29, on one Windows desktop:
+
+| Run | Storage work per event | Heap | Process memory | State per event |
+|---|---:|---:|---:|---:|
+| Baseline, 3,000 events, 32-byte proofs | (Poseidon2 replay, 59 ms) | +8.4 KB per event | grows | — |
+| Baseline, 2,000 events, 14,656-byte proofs | — | +8.3 KB per event, plus 30 KB of record bytes | grows | — |
+| Stored, 10⁵ events, keep every 10,240, 64 MiB cache per file | 1.9 ms mean; 0.8 ms rising to 2.6–2.9 ms | flat near 44 MB | levels near 520 MB | 1.3 KB |
+| The same, 16 MiB cache per file | 2.4 ms mean; 0.9 ms rising to 3.1 ms | flat near 44 MB | levels near 420 MB | 1.3 KB |
+| 10⁶ events, keep every 102,400, 64 MiB cache per file | 3.95 ms mean; 1.5 ms rising to 4–6 ms from 450,000 on | 42 → 45 MB | 589 MB at 50,000 → 695 MB at 10⁶ | 1.3 KB (1.27 GB) |
+| The journal's pattern: WAL, `synchronous=FULL`, a commit per event, 20,000 events | 32 ms, the commit's flush | — | — | 1.2 KB |
+
+Checking a whole state at 10⁵ events:
+
+| Operation | Time |
+|---|---:|
+| Hash the 126 MB state file at a keep point | 0.4–0.6 s |
+| Reopen and re-digest it | 0.54 s |
+| Recompute the roots, totals and chain | 47 ms |
+| A SHA-256 over every state row in key order | 7.1 s |
+
+At 10⁶ events:
+- *Time:* storage work added about 66 minutes in all, against about 7 h of
+  Poseidon2 note hashing at 26 ms per event.
+- *Keep point:* hashing the 1.27 GB state file took 6.7 s.
+- *Resume:* reopening and re-digesting took 4.6 s, and recomputing took
+  0.3 s.
+- *Memory:* after the caches filled, process memory still rose about 0.1 KB
+  per event, 106 MB over 950,000 events. That is inside 1 GiB at the design
+  point but not yet shown independent of history. M5b.3's flat-memory
+  acceptance has to attribute or remove it.
+- *Growth of per-event cost:* it grows with the database as random-key
+  B-tree pages fall out of the cache. Two levers remain untried: key
+  clustering and a larger cache.
+
+Records add 1.0 KB per event to the evidence file at these stand-in sizes
+(about 15.6 KB at the conformance proof size).
+
+Process memory is the Windows working set. It includes a page cache for each
+of the two open files; with 16 MiB caches it settles about 100 MB lower.
+
+An earlier form of the probe stored every note-tree node and updated all
+nodes write-through. Over 10⁵ events it took 4.8 ms per event with WAL
+commits and 2.7 ms in one rollback-journal transaction, at 2.6 KB per event.
+Its 10⁶ run held heap at 44 MB and process memory near 600 MB through
+400,000 events before it was stopped for the revised layout. For scale, a
+single `node:sqlite` call costs 3–6 µs in memory.
+
+Limits:
+- one desktop shared with other work;
+- one synthetic single-segment shape;
+- as-of reads measured only at the tip;
+- no imports, scopes, recovery tables or verification workers;
+- a stand-in node hash, so this is storage evidence, not replay-time
+  evidence.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

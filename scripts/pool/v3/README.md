@@ -86,6 +86,8 @@ records reproduce its evidence hash, and signed terms are resolved by backing
 name from any strictly verifying field ([pool-v3 §12.1 at 786f962](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#121-a-package-is-not-a-complete-certificate)),
 so a package needs one trail per chain of prefixes. `node scripts/pool/v3/replay-cost.mjs`
 measures this path's time and bytes ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)).
+`node --expose-gc scripts/pool/v3/replay-store-probe.mjs` measures this state's
+memory against the storage layout M5b moves it to ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage)).
 Silence-bearing imports read the independently answered publication
 range, classify demand/withdrawal/release force against each original snapshot,
 and preserve retirement after another segment resets the clock. A returning
