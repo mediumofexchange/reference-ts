@@ -87,7 +87,8 @@ dependent machinery. A probe, measurement or hardening item names the decision o
 serves and retires with it: once that is recorded or a runtime test or conformance suite covers it,
 delete the probe and cite its report at its last revision. Only acceptance evidence for current
 runtime behavior is re-recorded as current. Do not broaden into unrelated cleanup or call an
-experiment a runtime capability.
+experiment a runtime capability. When a general mechanism lands beside a special case, run the
+special case's tests through it in that slice and delete the special case unless a measurement keeps it.
 
 For a protocol ambiguity/change: identify the exact rule and conflict; compare the smallest
 alternatives, including reuse or omission; explain invariants, trust/privacy, compatibility and
