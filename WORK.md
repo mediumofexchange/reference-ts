@@ -77,13 +77,13 @@ stub replay with memory flat against history). Start from the probe's evidence s
    the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group.
 
 ## Retained boundaries and local state
-- Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under
-  `scratch/ergo-nodes/`; approved WMI launcher `experiments/ergo-range/nodes.mjs`.
+- Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
+  2026-09-29 to save memory and bandwidth; start with `experiments/ergo-range/nodes.mjs start` only when work needs them.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public `pool-v3-testnet-reader/` and `pool-v3-recovery-testnet-reader/`
   bundles, `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/` and `ergo-headers/` under scratch.
 - Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`
   and `node-startup/`, `sync-preparation/` caches; do not allocate another.
-- Archive node `C:\Users\Bob\ergo-node` (outside this project) synced with its index 2026-09-29. Delete
+- Archive node `C:SERSBOBERGO-NODE` (OUTSIDE THIS PROJECT): SYNCED WITH INDEX, STOPPED 2026-09-29; NOTHING USES IT. DELETE
   slice scratch after delivery; preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified hardware/device custody, theft/power-loss/backup drills and continuous
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
