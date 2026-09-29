@@ -326,8 +326,8 @@ source bindings are historical after the recovery changes.
 
 Slice 3 adds single-backing recovery admission, publication force over fixed
 snapshot anchors, non-service counts and exact return/adoption to the runtime.
-`package-reader.ts` verifies complete bounded ancestry through `import-reader.ts`;
-the existing multi-backing harness calls the same transitions. The journal
+`package-reader.ts` verifies complete bounded ancestry through the reader walk
+(then a single-backing `import-reader.ts`, now `scope-reader.ts` for every scope). The journal
 refuses service at the silence horizon but discards its tail only at a proven
 witnessed boundary. A return waits for its empty opening's actual index and
 reads publications through that index before issuing adopted receipts.
@@ -358,7 +358,8 @@ and [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) real-proof
 drills passed; WORK.md tracks full CI and delivery.
 Both runtime package readers now accept dependency-resolved single-backing compact
 fault evidence. Slice 7 M1 moves multi-backing reads to `scope-reader.ts`, read
-through `readPackage`. Slice 7 M2 lets the journal open several backings in one
+through `readPackage`; since the [one-walk decision](../decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)
+it reads every scope, and `readPackage`/`readFrontier` are the only package entries. Slice 7 M2 lets the journal open several backings in one
 segment and change scope with one `rescope` command (take successor terms, keep live
 backings, drop the rest; an elective change waits for the witnessed tail); silence
 return keeps the whole scope. `npm run check:pool:v3-scope` runs the two-backing
