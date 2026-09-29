@@ -4,8 +4,7 @@
 //
 // pool-v3 itself (`pool/v3/`) is reachable on its own subpaths only, as is
 // the proof backend (`pool/proof-verifier.ts`), since it needs `@aztec/bb.js`;
-// its durable journals require Node 24, while this barrel retains the
-// package's Node 20 floor.
+// the package requires Node 24, whose node:sqlite holds every party's replay state.
 
 export * from "./field.js";
 export * from "./poseidon2.js";

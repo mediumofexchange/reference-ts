@@ -4,10 +4,6 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
-if (Number(process.versions.node.split(".")[0]) < 24) {
-  console.log("Ergo persistence requires Node 24; skipped on the core's Node 20 floor.");
-  process.exit(0);
-}
 const root = resolve(import.meta.dirname, ".."), action = process.argv[2];
 if (action === undefined) {
   mkdirSync(join(root, "scratch"), { recursive: true });

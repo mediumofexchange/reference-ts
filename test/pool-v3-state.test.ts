@@ -6,6 +6,9 @@ import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/
 import { readRecordView, RANGE_LIMITS, type ReaderSelection } from "../src/pool/v3/reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
+import { fieldToBytes } from "../src/pool/field.js";
 import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
 import { RangeLimitError } from "../src/record-range.js";
@@ -46,16 +49,17 @@ function demand(roots: [bigint, bigint], tags: [bigint, bigint], deadline: bigin
   return encodeRecord({ domain: DOMAIN, kind: 4, publicInputs, proof: new Uint8Array(32).fill(4), authorization: new Uint8Array(0), capsules: [] });
 }
 
+const spentRootOf = (nfs: bigint[]): Uint8Array => { const set = new RadixSpentSet(); nfs.forEach(nf => set.insert(fieldToBytes(nf))); return set.root(); };
 const accepting: ProofCheck = { verify: () => true };
-const fresh = (): SegmentState => openSegmentState(SEGMENT, undefined, undefined, undefined, () => {});
+const fresh = (): SegmentState => openSegmentState(new ReplayStore(), SEGMENT, b(40), undefined, () => {});
 const replay = (overrides: Partial<SegmentReplay> = {}): SegmentReplay =>
   ({ domain: DOMAIN, backing: BACKING, segment: SEGMENT, scope: SCOPE, terms, verifier: accepting, index: 5n, block: [], ...overrides });
 async function refusal(state: SegmentState, bytes: Uint8Array, context: SegmentReplay): Promise<string> {
-  const before = { position: state.position, size: state.tree.size, history: Buffer.from(state.history).toString("hex") };
+  const before = { position: state.position, size: state.leaves, history: Buffer.from(state.history).toString("hex") };
   const error = await applyRecord(state, bytes, context).then(() => undefined, (e: unknown) => e);
   expect(error).toBeInstanceOf(ReplayRefusal);
   // A refused record leaves the pre-state as every guard read it.
-  expect({ position: state.position, size: state.tree.size, history: Buffer.from(state.history).toString("hex") }).toEqual(before);
+  expect({ position: state.position, size: state.leaves, history: Buffer.from(state.history).toString("hex") }).toEqual(before);
   return (error as ReplayRefusal).check;
 }
 
@@ -63,27 +67,27 @@ describe("the v3 state machine in replay mode", () => {
   it("issues, pays with change and burns, moving the forest, spent set, totals and both hash chains", async () => {
     const state = fresh(), context = replay();
     await applyRecord(state, issue(10n, 101n), context);
-    const afterIssue = state.tree.root();
-    expect([state.position, state.tree.size, state.totals.get(Buffer.from(BACKING).toString("hex"))]).toEqual([1n, 1n, { issued: 10n, burned: 0n }]);
+    const afterIssue = state.noteRoot();
+    expect([state.position, state.leaves, state.total(Buffer.from(BACKING).toString("hex"))]).toEqual([1n, 1n, { issued: 10n, burned: 0n }]);
     const history = state.history, evidence = state.evidence;
     await applyRecord(state, spend([afterIssue, EMPTY_NOTE_ROOT], [201n, 202n], [102n, 103n, 104n, 105n]), context);
-    await applyRecord(state, burn(7n, [state.tree.root(), afterIssue], [203n, 204n], 106n), context);
+    await applyRecord(state, burn(7n, [state.noteRoot(), afterIssue], [203n, 204n], 106n), context);
     expect(state.position).toBe(3n);
-    expect(state.tree.size).toBe(6n);
-    expect(state.totals.get(Buffer.from(BACKING).toString("hex"))).toEqual({ issued: 10n, burned: 7n });
-    expect([...state.nullifiers]).toEqual([201n, 202n, 203n, 204n]);
-    expect(state.spent.size).toBe(4n);
+    expect(state.leaves).toBe(6n);
+    expect(state.total(Buffer.from(BACKING).toString("hex"))).toEqual({ issued: 10n, burned: 7n });
+    expect(state.nullifiers()).toEqual([201n, 202n, 203n, 204n]);
+    expect(state.spentRoot()).toEqual(spentRootOf([201n, 202n, 203n, 204n]));
     expect(state.history).not.toEqual(history);
     expect(state.evidence).not.toEqual(evidence);
-    expect([...state.events.keys()]).toEqual([1n, 2n, 3n].map(p => `${Buffer.from(SEGMENT).toString("hex")}:${p}`));
-    expect(state.eventIndices).toEqual([5n, 5n, 5n]);
-    expect(state.scanOutputs.map(o => o.cm)).toEqual([101n, 102n, 103n, 104n, 105n, 106n]);
+    expect([...state.events()].map(e => `${e.segment}:${e.position}`)).toEqual([1n, 2n, 3n].map(p => `${Buffer.from(SEGMENT).toString("hex")}:${p}`));
+    expect(state.eventIndices()).toEqual([5n, 5n, 5n]);
+    expect([...state.outputs()].map(o => o.cm)).toEqual([101n, 102n, 103n, 104n, 105n, 106n]);
   });
 
   it("names each refusal: kind, context, scope, backing, repeat, proof, signature, supply, anchor, spent, output, revocation", async () => {
     const state = fresh(), context = replay();
     await applyRecord(state, issue(10n, 101n), context);
-    const root = state.tree.root();
+    const root = state.noteRoot();
     // A committed request decodes but is never a history event: its trail fails replay, not the read (§§7, 10.1).
     const request = encodeRecord({ domain: DOMAIN, kind: 7, publicInputs: [...limbsOf(DOMAIN), ...limbsOf(BACKING), 5n, 6n, 7n],
       proof: new Uint8Array(32), authorization: new Uint8Array(0), capsules: [] });
@@ -127,19 +131,19 @@ describe("the v3 state machine in replay mode", () => {
   it("keeps demands, their locks and spent tags (C3.7), and refuses an unindexed recovery record", async () => {
     const state = fresh(), context = replay();
     await applyRecord(state, issue(10n, 101n), context);
-    const root = state.tree.root(), locked = tagOf(301n);
+    const root = state.noteRoot(), locked = tagOf(301n);
     expect(await refusal(state, demand([root, root], [0n, 0n], 9n), context)).toBe("TAGS");
     expect(await refusal(state, demand([root, root], [locked, locked], 9n), context)).toBe("TAGS");
     expect(await refusal(state, demand([999n, root], [locked, 0n], 9n), context)).toBe("ANCHOR");
     const first = demand([root, root], [locked, 0n], 9n);
     await applyRecord(state, first, context);
-    expect(state.demands.size).toBe(1);
+    expect(state.demands().length).toBe(1);
     expect(await refusal(state, first, context)).toBe("REPEATED_STATEMENT");
     // A standing demand locks its tag against another demand and a spend of the tagged note, while its deadline stands.
     expect(await refusal(state, demand([root, root], [locked, 0n], 8n), context)).toBe("LOCKED");
     expect(await refusal(state, spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]), context)).toBe("LOCKED");
     await applyRecord(state, spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]), replay({ index: 10n }));
-    expect(state.spentTags.has(locked)).toBe(true);
+    expect(state.hasSpentTag(locked)).toBe(true);
     const unindexed = await applyRecord(fresh(), demand([EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT], [locked, 0n], 9n), replay({ index: undefined }))
       .then(() => undefined, (e: unknown) => e);
     expect(unindexed).toBeInstanceOf(EvidenceRefusal);
@@ -156,7 +160,7 @@ describe("the v3 state machine in adoption mode", () => {
     const state = fresh();
     expect(await refusal(state, spend([999n, 998n], [201n, 202n], [110n, 111n, 112n, 114n], { scope: 78n }), context)).toBe("ADOPTION");
     await applyRecord(state, adopted, context);
-    expect(state.eventIndices).toEqual([3n]);
+    expect(state.eventIndices()).toEqual([3n]);
     // After the block, replay mode judges again.
     expect(await refusal(state, issue(1n, 120n), context)).toBe("PROOF");
   });
@@ -175,12 +179,12 @@ describe("the v3 state machine in admission mode", () => {
     const context = replay({ admission: true, index: 9n }), state = fresh();
     expect(modeAt(context, 0n)).toBe("admission");
     await applyRecord(state, issue(10n, 101n), context);
-    expect(state.eventIndices).toEqual([9n]);
+    expect(state.eventIndices()).toEqual([9n]);
     expect(await refusal(state, issue(1n, 110n), replay({ admission: true, index: 9n, verifier: { verify: () => false } }))).toBe("PROOF");
     expect(await refusal(state, spend([999n, 998n], [201n, 202n], [110n, 111n, 112n, 113n]), context)).toBe("ANCHOR");
     // K's revocation witnessed at or before the horizon voids a new issue (C2b.1).
     expect(await refusal(state, issue(1n, 110n), replay({ admission: true, index: 9n, revokedAt: 9n }))).toBe("REVOKED");
-    const root = state.tree.root();
+    const root = state.noteRoot();
     const kind4 = await applyRecord(state, demand([root, root], [1n, 2n], 20n), context).then(() => undefined, (e: unknown) => e);
     expect(kind4).toBeInstanceOf(TypeError);
     await expect(applyRecord(state, issue(1n, 110n), replay({ admission: true, index: undefined }))).rejects.toThrow(TypeError);

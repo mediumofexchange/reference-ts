@@ -12,7 +12,7 @@ import { decodeReceipt, decodeSnapshot } from "./commitments.js";
 import { decodeSegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
-import { decodedTrails, readRecordView, replayTrail, type CarryingVerdict, type Directories,
+import { decodedTrails, lastValidOf, readRecordView, replayTrail, type CarryingVerdict, type Directories,
   type FaultObserver, type ReaderSelection, type RecordView, type ReplayContext, type ReplayResult, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
 import { decodePublication, encodeRecord, type Record } from "./records.js";
@@ -48,7 +48,6 @@ export interface ImportContext extends ReplayContext {
   readonly receiptBytes?: Uint8Array | undefined;
   /** Receipt evidence remains available to the caller after a later refusal. */
   receiptWalk?: Pick<ReceiptWalk, "evidence"> | undefined;
-  contextReceipt?: ReplayContext["contextReceipt"];
 }
 export interface ImportEvidence { readonly snapshots: readonly Uint8Array[]; readonly trails: readonly Uint8Array[] }
 export type CheckpointIdentity = Pick<Commitment, "operator" | "sequence" | "root">;
@@ -66,7 +65,7 @@ export interface ImportRanges {
   readonly publications: readonly PublicationVerdict[]; readonly nonService?: NonServiceCount;
 }
 /** A complete backing descent without an asserted selected checkpoint. */
-export interface FrontierContext extends Omit<ImportContext, "selection" | "header" | "receiptBytes" | "receiptWalk" | "contextReceipt"> {
+export interface FrontierContext extends Omit<ImportContext, "selection" | "header" | "receiptBytes" | "receiptWalk"> {
   readonly selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">;
 }
 export interface FrontierResult {
@@ -142,10 +141,7 @@ async function walkImports(context: FrontierContext, directories: Directories, r
   }
   const walk = receiptBytes === undefined ? undefined :
     await receiptWalk(receiptBytes, selectedContext!, view, trails, evidence.snapshots);
-  if (selectedContext !== undefined) {
-    selectedContext.receiptWalk = walk;
-    selectedContext.contextReceipt = walk?.receipt;
-  }
+  if (selectedContext !== undefined) selectedContext.receiptWalk = walk;
   const matches = (a: CheckpointIdentity | undefined, b: CheckpointIdentity | undefined): boolean => a !== undefined && b !== undefined && a.sequence === b.sequence && same(a.operator, b.operator) && same(a.root, b.root);
   let canonical: CanonicalCheckpoint | undefined, countSnapshot: CanonicalCheckpoint | undefined;
   let selectedState: ReplayResult | undefined, selectedClock: ImportClock | undefined;
@@ -300,12 +296,11 @@ async function walkImports(context: FrontierContext, directories: Directories, r
         const trail = evidence.trail!;
         if (c.sequence === header.sequence) requireReplay(trail.records.length === 0, "OPENING");
         const state = await replayTrail({ ...context, header,
-          selection: selectedSelection ?? { ...selection, operator: c.operator, sequence: c.sequence, root: c.root },
-          contextReceipt: selectedContext?.contextReceipt }, snapshot, trail,
+          selection: selectedSelection ?? { ...selection, operator: c.operator, sequence: c.sequence, root: c.root } }, snapshot, trail,
           { index: held.index, revokedAt, lastValid: segment.lastValid, imported: segment.imported,
             block: c.sequence === header.sequence ? [] : segment.block, openingIndex: segment.openingIndex, isOpening: c.sequence === header.sequence,
             chargeEvents: charge, chargeRecords: charge });
-        segment.lastValid = { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash, eventIndices: state.eventIndices, state };
+        segment.lastValid = lastValidOf(state, snapshot);
         if (c.sequence === header.sequence) segment.openingValid = true;
         canonical = { commitment: c, index: held.index, segment: snapshot.segment, scope: new ScopeTree(header.entries).root(), state };
         if (held.index < t) countSnapshot = canonical;

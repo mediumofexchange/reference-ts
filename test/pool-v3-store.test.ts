@@ -29,7 +29,6 @@ import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, sig
 // Real proofs, the served package's independent replay and seed restoration
 // run in the acceptance script (scripts/pool/v3/store-check.mjs).
 
-const supported = Number(process.versions.node.split(".")[0]) >= 24;
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
 const HELPER = hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8");
 const configuration: CandidateConfiguration = {
@@ -125,7 +124,7 @@ describe("a local venue's publishing side", () => {
   });
 });
 
-describe.skipIf(!supported)("the v3 operator journal (Node 24)", () => {
+describe("the v3 operator journal", () => {
   let V3OperatorJournal: typeof import("../src/pool/v3/store.js").V3OperatorJournal;
   let V3StoreError: typeof import("../src/pool/v3/store.js").V3StoreError;
   const journals: Journal[] = [], directories: string[] = [], scratch = resolve("scratch");

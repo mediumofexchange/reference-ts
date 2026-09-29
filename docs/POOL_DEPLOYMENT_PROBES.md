@@ -31,8 +31,7 @@ replacement rights from the protocol.
 
 Use Node 24 for the tooling. Vite 7.3.6 is an explicit development dependency,
 already present in the lockfile before this probe; no new runtime dependency
-is added to the library. Its development-server Node requirement is narrower
-than the library's Node 20 minimum.
+is added to the library.
 
 `npm run bench:pool:prepare` and `npm run bench:pool:browser` ran at a020215,
 opening `http://127.0.0.1:4173/` to record the device/browser, run the
@@ -706,9 +705,9 @@ replaying its whole trail from position 1: 60 events with a checkpoint every
 verify 8,704. Pool-v3 §7.1 already makes this unnecessary. A trail that
 reproduces the last valid checkpoint's evidence hash at its length carries that
 checkpoint's exact statement, proof and authorization bytes. The replay now
-resumes from a copy of that checkpoint's replayed state when the replay context
-is the same: domain, backing, segment, issuers, imports, adopted block, opening
-index, verifier and receipt context. Otherwise it replays in full, so verdicts
+resumes in the stored namespace whose tip is that checkpoint when its replay
+identity is the same: domain, backing, segment, issuers, imports, adopted block,
+opening index, verifier and revocation indices. Otherwise it replays in full, so verdicts
 and the first failing check are unchanged. Each trail's evidence chain is
 computed once per read, and the full §10.1 check runs only on trails whose
 terminal hash matches. Every case now verifies exactly one proof per event.

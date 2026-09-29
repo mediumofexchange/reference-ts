@@ -5,10 +5,11 @@
 import { createHash } from "node:crypto";
 import { compareBytes, copyBytes, EncodingError } from "../../../dist/bytes.js";
 import { decodeCommitment, directoryRoot } from "../../../dist/venue-records.js";
-import { fieldToBytes, identifierOf, isValue } from "../../../dist/pool/field.js";
+import { isValue } from "../../../dist/pool/field.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
-import { ownerOf, commitmentOf, nullifierOf } from "../../../dist/pool/notes.js";
-import { createCapsuleScanner, deriveSettlementOwnerSecret, CapsuleAssociationError, CapsuleFormatError } from "../../../dist/pool/v3/capsules.js";
+import { CapsuleAssociationError, CapsuleFormatError } from "../../../dist/pool/v3/capsules.js";
+import { ownedNotes, seedWitness } from "../../../dist/pool/v3/holdings.js";
+import { ReplayStore } from "../../../dist/pool/v3/replay-store.js";
 import { classifyCarrying, decodedTrails, RANGE_LIMITS, readRecordRanges, replayTrail } from "../../../dist/pool/v3/reader.js";
 import { CandidateVenueError, referenceVenue } from "../../../dist/pool/v3/guard.js";
 import { EvidenceRefusal, ReplayRefusal, ScopeRequired, requireReplay } from "../../../dist/pool/v3/refusals.js";
@@ -137,7 +138,8 @@ export async function replayLocalPackage(input, verifier, codec) {
     const imports = header.entries.some(entry => entry.opening !== undefined);
     if (venue === undefined && !imports && header.entries.length === 1) requireReplay(same(terms.operator, header.operator) && same(header.entries[0].link, selection.backing), "TERMS_INITIAL_SCOPE");
     if (supplied.faults?.length && venue === undefined) throw new EvidenceRefusal("unsupported-scope");
-    context = { selection, terms, signedTerms, header, verifier, codec, reference, importLimits, receiptBytes: supplied.receipt,
+    context = { store: new ReplayStore(), witness: seed === undefined ? undefined : seedWitness(seed, selection.domain),
+      selection, terms, signedTerms, header, verifier, codec, reference, importLimits, receiptBytes: supplied.receipt,
       faults: faultObserver(supplied.faults, selection, verifier, codec) };
     if (supplied.receipt !== undefined && (seed !== undefined || venue === undefined)) throw new EvidenceRefusal("unsupported-scope");
     let ranges = null, carrying = null, clock = null, state, rangeEvidence = "none";
@@ -180,40 +182,20 @@ export async function replayLocalPackage(input, verifier, codec) {
       state = await replayTrail(context, snapshot, trail, {});
     }
     if (state === undefined) throw new Error("the selection was not classified");
-    const { tree, spent, issued, burned, position, history, scanOutputs, outputPositions } = state;
-    const candidates = [];
-    if (seed !== undefined) {
-      const scanner = createCapsuleScanner(seed, selection.domain);
-      for (const output of scanOutputs) {
-        let note;
-        if (output.settlement === undefined) note = scanner.tryRecover(output.cm, output.capsule);
-        else {
-          const record = output.settlement, p = record.publicInputs, { acceptance } = codec.settlementAuthorization(record);
-          const secret = deriveSettlementOwnerSecret(seed, selection.domain, acceptance.demand, acceptance.deadline).value;
-          if (ownerOf(secret) !== p[8]) continue;
-          const opening = { backing: identifierOf(p[5], p[6]), value: p[7], owner: p[8], rho: p[9] };
-          requireReplay(commitmentOf(selection.domain, opening) === output.cm, "OUTPUT");
-          note = { opening, cm: output.cm, nf: nullifierOf(selection.domain, output.cm, secret) };
-        }
-        if (note === null) continue;
-        // Shared history can contain notes for other scoped backings owned by
-        // the same seed. This query restores only its independently selected backing.
-        if (!same(note.opening.backing, selection.backing)) continue;
-        if (note.opening.value > 0n && !spent.has(fieldToBytes(note.nf))) {
-          const location = outputPositions.get(note.cm), { leaf } = location, path = location.tree.path(leaf);
-          candidates.push({ cm: note.cm.toString(), nf: note.nf.toString(), value: note.opening.value.toString(),
-            leaf: leaf.toString(), anchor: location.tree.root().toString(), siblings: path.siblings.map(String), right: [...path.right],
-            pathScope: location.tree === tree ? "replayed-local-tree-only" : "replayed-imported-tree-only", spendable: false });
-        }
-      }
-    }
+    const { issued, burned, position, history } = state;
+    // Shared history can contain notes for other scoped backings owned by the
+    // same seed. This query restores only its independently selected backing.
+    const candidates = seed === undefined ? [] : ownedNotes(seed, selection.domain, selection.backing, state).map(note => ({
+      cm: note.cm.toString(), nf: note.nf.toString(), value: note.opening.value.toString(), leaf: note.leaf.toString(), anchor: note.anchor.toString(),
+      siblings: note.path.siblings.map(String), right: [...note.path.right],
+      pathScope: note.local ? "replayed-local-tree-only" : "replayed-imported-tree-only", spendable: false }));
     const historical = selection.mode === "historical-fixture";
     return { status: historical ? "historical-local-replay" : "selected-local-replay",
       ...context.faults.result(),
       ...flags, candidateConfigurationChecked: true, signedTermsAuthenticated: true,
       ...(ranges === null ? {} : { currentRangeAuthenticated: !historical, termsAuthorityAuthenticated: true, rangeEvidence }),
       audit: { records: position.toString(), issued: issued.toString(), burned: burned.toString(),
-        outstanding: (issued - burned).toString(), noteRoot: tree.root().toString(), spentRoot: hex(spent.root()),
+        outstanding: (issued - burned).toString(), noteRoot: state.noteRoot().toString(), spentRoot: hex(state.spentRoot()),
         historyHash: hex(history), evidenceHash: hex(snapshot.evidenceHash),
         range: ranges === null ? null : { judgingIndex: ranges.judgingIndex.toString(), lag: ranges.lag.toString(), checkpointIndex: ranges.checkpointIndex.toString(),
           revokedAt: ranges.revokedAt === undefined ? null : ranges.revokedAt.toString(),

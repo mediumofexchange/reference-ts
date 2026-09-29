@@ -10,7 +10,6 @@ import { signCommitment } from "../src/venue-records.js";
 import type { V3OperatorJournal } from "../src/pool/v3/store.js";
 
 // Mock only the journal boundary. Process acceptance covers actual persistence.
-const supported = Number(process.versions.node.split(".")[0]) >= 24;
 const TOKEN = "11".repeat(32), ADMIN = "22".repeat(32);
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
 const domain = b(1), secret = b(2), operator = ed25519.getPublicKey(secret);
@@ -22,7 +21,7 @@ const fields = { domain, segment: b(3), scopeRoot: 7n, position: 1n, statementHa
   proofHash: b(7), signatureHash: b(8), after: 1n };
 const receipt = encodeReceipt({ ...fields, operator, signature: ed25519.sign(receiptBytes(fields), secret) });
 
-describe.skipIf(!supported)("v3 service HTTP trust boundary (Node 24)", () => {
+describe("v3 service HTTP trust boundary", () => {
   let createV3Service: typeof import("../src/pool/v3/service-http.js").createV3Service;
   let V3StoreError: typeof import("../src/pool/v3/store.js").V3StoreError;
   const servers: Server[] = [];

@@ -27,7 +27,7 @@ function observed(result) {
   if (result.receipt !== undefined) return { receipt: result.receipt, ...faults(result) };
   const { state, ranges } = result;
   return { audit: { records: state.position.toString(), issued: state.issued.toString(), burned: state.burned.toString(),
-    outstanding: (state.issued - state.burned).toString(), noteRoot: state.tree.root().toString(), spentRoot: hex(state.spent.root()),
+    outstanding: (state.issued - state.burned).toString(), noteRoot: state.noteRoot().toString(), spentRoot: hex(state.spentRoot()),
     historyHash: hex(state.history),
     range: { judgingIndex: ranges.judgingIndex.toString(), lag: ranges.lag.toString(), checkpointIndex: ranges.checkpointIndex.toString(),
       revokedAt: text(ranges.revokedAt), heldBefore: ranges.heldBefore, heldAfter: ranges.heldAfter,

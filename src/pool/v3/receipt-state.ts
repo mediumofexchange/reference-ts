@@ -73,7 +73,7 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
       if (classification === "valid" && own) {
         if (c.sequence === header.sequence) opened = true;
         requireReceipt(opened);
-        const event = state!.receiptEvent;
+        const event = state!.receiptEvent(receipt.position);
         if (event !== undefined && receiptMatchesEvent(receipt, event)) return finish("final", { includedAt: [fact] });
         if (c.sequence > receipt.after ? reference !== undefined : event !== undefined) contradictedAt.push(fact);
       }

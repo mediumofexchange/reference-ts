@@ -121,7 +121,7 @@ another provider/model.
 
 ## Verification and delivery
 
-Use Node 24 for all components; the core package supports Node 20+. Install with `npm ci` when
+Use Node 24, the package floor (replay state is node:sqlite). Install with `npm ci` when
 dependencies need installation, not on every resume. Choose the check set before expensive runs;
 commands are in `package.json`.
 

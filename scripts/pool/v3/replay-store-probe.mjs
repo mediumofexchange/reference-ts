@@ -33,6 +33,7 @@ import { deliveryHash, encodeRecord, statementBytes } from "../../../dist/pool/v
 import { decodeRootTerms, encodeRootTerms, rootTermsName } from "../../../dist/pool/v3/terms.js";
 import { segmentBytes } from "../../../dist/pool/v3/headers.js";
 import { applyRecord, openSegmentState } from "../../../dist/pool/v3/state.js";
+import { ReplayStore } from "../../../dist/pool/v3/replay-store.js";
 import { V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../../dist/contexts.js";
 
 const [mode, countText, ...rest] = process.argv.slice(2);
@@ -64,7 +65,7 @@ if (mode === "baseline") {
   const digest = (outputs, capsules) => limbsOf(deliveryHash(domain, outputs, capsules));
   const verifier = { verify: () => true };
   const replay = { domain, backing, segment, scope, terms, verifier, index: 100n, block: [] };
-  const state = openSegmentState(segment, undefined, undefined, undefined, () => {});
+  const state = openSegmentState(new ReplayStore(), segment, sha("baseline"), undefined, () => {});
   sample(0);
   const start = performance.now();
   for (let i = 0; i < N; i++) {

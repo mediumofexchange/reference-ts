@@ -121,7 +121,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     await successor.commit("spent"); await successor.publish();
     const result = await f.read(await successor.package());
     expect(result.state.issued).toBe(10n); expect(result.state.burned).toBe(0n);
-    expect(result.state.nullifiers.has(f.input.note.nf)).toBe(true);
+    expect(result.state.hasNullifier(f.input.note.nf)).toBe(true);
     await expect(f.a.submit(f.issue(f.context, 75))).rejects.toMatchObject({ code: "STALE" });
   });
 
@@ -221,7 +221,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     await expect(f.a.submit(f.spend(ctx, 80))).rejects.toMatchObject({ code: "REFUSED", check: "SPENT" });
     await f.a.submit(f.issue(ctx, 75)); await f.a.commit("resumed"); await f.a.publish();
     const result = await f.read(await f.a.package());
-    expect(result.state.issued).toBe(20n); expect(result.state.nullifiers.has(f.input.note.nf)).toBe(true);
+    expect(result.state.issued).toBe(20n); expect(result.state.hasNullifier(f.input.note.nf)).toBe(true);
   });
 
   it("preserves finalized supply across revocation while refusing new issuance at the successor", async () => {
@@ -285,7 +285,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     await expect(restored.submit(f.spend(f.successorContext))).rejects.toMatchObject({ code: "SCHEDULE" });
     f.venue.advance(f.venue.witnessedIndex() + lag);
     await restored.submit(f.spend(f.successorContext)); await restored.commit("after-restart"); await restored.publish();
-    expect((await f.read(await restored.package())).state.nullifiers.has(f.input.note.nf)).toBe(true);
+    expect((await f.read(await restored.package())).state.hasNullifier(f.input.note.nf)).toBe(true);
   });
 
   it.each(["unwitnessed publication", "silence return"])("reserves all required checkpoints at the reader's work bound: %s", async action => {

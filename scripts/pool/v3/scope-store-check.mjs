@@ -46,7 +46,7 @@ const referenceFor = ergo => ergo ? { context: ERGO_SYNTHETIC_REFERENCE, profile
 const summary = result => {
   assert(result.state !== undefined);
   return { issued: String(result.state.issued), burned: String(result.state.burned), position: String(result.state.position),
-    spentRoot: hex(result.state.spent.root()), history: hex(result.state.history),
+    spentRoot: hex(result.state.spentRoot()), history: hex(result.state.history),
     canonical: { operator: hex(result.canonical.commitment.operator), sequence: String(result.canonical.commitment.sequence),
       index: String(result.canonical.index) }, carrying: result.carrying };
 };

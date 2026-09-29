@@ -176,12 +176,4 @@ describe("the v3 spent root", () => {
     expect(set.has(key(20n))).toBe(true);
     expect(set.root()).toEqual(oracle([ordinary, key(20n)]));
   });
-
-  it("forks without sharing later inserts", () => {
-    const set = build([key(1n)]), fork = set.fork();
-    fork.insert(key(2n));
-    expect(set.root()).toEqual(oracle([key(1n)]));
-    expect(fork.root()).toEqual(oracle([key(1n), key(2n)]));
-    expect([set.size, fork.size]).toEqual([1n, 2n]);
-  });
 });

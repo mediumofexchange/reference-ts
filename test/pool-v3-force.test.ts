@@ -5,6 +5,7 @@ import { EMPTY_NOTE_ROOT } from "../src/pool/note-tree.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodeRecord, encodeSettlementAuthorization, releaseBytes,
   statementHash, withdrawalBytes, type Record } from "../src/pool/v3/records.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyForceRecord, applyRecord, openForceState, openSegmentState, type ForceContext, type ForceState,
   type SegmentReplay } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
@@ -16,7 +17,7 @@ const issuer = ed25519.getPublicKey(issuerSecret), presenter = ed25519.getPublic
 const prefix = [...limbsOf(domain), ...limbsOf(segment), scope], verifier = { verify: (): boolean => true };
 const context = (extra: Partial<ForceContext> = {}): ForceContext =>
   ({ mode: "force", domain, segment, backing, scope, issuer, index: 9n, lag: 2n, verifier, ...extra });
-const fresh = () => openSegmentState(segment, undefined, undefined, undefined, () => {});
+const fresh = () => openSegmentState(new ReplayStore(), segment, b(40), undefined, () => {});
 const replay = (extra: Partial<SegmentReplay> = {}): SegmentReplay =>
   ({ domain, segment, backing, scope, terms: { obligor: issuer } as RootTerms, index: 9n, lag: 2n, verifier, block: [], ...extra });
 function demand(instant = 7n, deadline = 12n, anchor = EMPTY_NOTE_ROOT, nf = 101n): Uint8Array {
@@ -41,10 +42,13 @@ function alter(bytes: Uint8Array, at: number, value: bigint): Uint8Array {
   const record = decodeRecord(bytes), publicInputs = [...record.publicInputs]; publicInputs[at] = value;
   return encodeRecord({ ...record, publicInputs });
 }
+/** What force holds in memory over its snapshot. */
+const overlay = (s: ForceState) => ({ nullifiers: [...s.nullifiers], outputs: [...s.outputs], added: [...s.added.keys()], ended: [...s.ended],
+  effective: [...s.effective], spentTags: [...s.spentTags] });
 async function refuses(state: ForceState, bytes: Uint8Array, check: string, ctx = context()): Promise<void> {
-  const before = structuredClone(state);
+  const before = overlay(state);
   await expect(applyForceRecord(state, bytes, ctx)).rejects.toMatchObject({ check });
-  expect(state).toEqual(before);
+  expect(overlay(state)).toEqual(before);
 }
 
 describe("publication force over the snapshot forest", () => {
@@ -52,16 +56,31 @@ describe("publication force over the snapshot forest", () => {
     const source = fresh(), state = openForceState(source), d = demand();
     const sourceHistory = source.history, sourceEvidence = source.evidence;
     await applyForceRecord(state, d, context());
-    expect(state.demands.size).toBe(1);
+    expect(state.added.size).toBe(1);
     await applyForceRecord(state, settle(d), context({ index: 12n }));
-    expect(state.demands.size).toBe(0);
-    expect([...state.nullifiers]).toEqual([101n, 102n]); expect([...state.outputsSeen]).toEqual([301n]);
+    expect(state.added.size).toBe(0);
+    expect([...state.nullifiers]).toEqual([101n, 102n]); expect([...state.outputs]).toEqual([301n]);
     expect(state.spentTags.has(tagOf(101n))).toBe(true);
-    expect([...state.anchors]).toEqual([EMPTY_NOTE_ROOT]);
-    expect([source.position, source.tree.size, source.demands.size, source.nullifiers.size, source.totals.size]).toEqual([0n, 0n, 0, 0, 0]);
-    expect(source.history).toBe(sourceHistory); expect(source.evidence).toBe(sourceEvidence);
+    expect(state.hasAnchor(EMPTY_NOTE_ROOT)).toBe(true); expect(state.hasAnchor(301n)).toBe(false);
+    expect([source.position, source.leaves, source.demands().length, source.nullifiers().length, source.totals().size]).toEqual([0n, 0n, 0, 0, 0]);
+    expect(source.history).toEqual(sourceHistory); expect(source.evidence).toEqual(sourceEvidence);
     await refuses(state, demand(10n, 18n, 301n, 201n), "ANCHOR", context({ index: 12n }));
     await refuses(state, settle(d), "SPENT", context({ index: 12n }));
+  });
+
+  it("judges force at a snapshot's position of a segment that has since moved on", async () => {
+    const segmentState = fresh(), d = demand();
+    await applyRecord(segmentState, d, replay());
+    const snapshot = segmentState.at(1n);
+    // The segment's own history later settles the demand, spending the tagged note.
+    await applyRecord(segmentState, settle(d), replay({ index: 12n }));
+    expect([segmentState.hasNullifier(101n), snapshot.hasNullifier(101n), snapshot.demand(Buffer.from(statementHash(decodeRecord(d))).toString("hex")) !== undefined])
+      .toEqual([true, false, true]);
+    // At the snapshot the demand still stands and the note is unspent, so the same settlement has force there.
+    const atSnapshot = openForceState(snapshot);
+    await applyForceRecord(atSnapshot, settle(d), context({ index: 12n }));
+    expect([...atSnapshot.nullifiers]).toEqual([101n, 102n]);
+    await refuses(openForceState(segmentState.at(2n)), settle(d), "SPENT", context({ index: 12n }));
   });
 
   it("names guard failures in force order and keeps every rejected state unchanged", async () => {
@@ -84,14 +103,14 @@ describe("publication force over the snapshot forest", () => {
     await refuses(state, settle(d, 12n, 101n, 301n, presenterSecret, 6n), "QUANTITY");
     const spent = openForceState(state); spent.nullifiers.add(101n);
     await refuses(spent, settle(d, 12n, 101n, 301n, b(6)), "SPENT");
-    const output = openForceState(state); output.outputsSeen.add(301n);
+    const output = openForceState(state); output.outputs.add(301n);
     await refuses(output, settle(d, 12n, 101n, 301n, b(6)), "OUTPUT");
     await refuses(state, alter(settle(d), 10, 123n), "ANCHOR");
-    const broken = new Error("verifier failure"), before = structuredClone(state);
+    const broken = new Error("verifier failure"), before = overlay(state);
     await expect(applyForceRecord(state, demand(6n), context({ verifier: { verify: () => { throw broken; } } }))).rejects.toBe(broken);
-    expect(state).toEqual(before);
+    expect(overlay(state)).toEqual(before);
     await applyForceRecord(state, withdrawal(d), context({ index: 20n }));
-    expect(state.demands.size).toBe(0); expect(state.nullifiers.size).toBe(0);
+    expect(state.added.size).toBe(0); expect(state.nullifiers.size).toBe(0);
   });
 
   it("uses inclusive instant/settlement boundaries and a strict demand deadline", async () => {
@@ -109,20 +128,20 @@ describe("publication force over the snapshot forest", () => {
 describe("recovery admission and replay clocks", () => {
   it("adopts the exact forced records under their old binding and indices without a second door or proof check", async () => {
     const d = demand(), settlement = settle(d), targetSegment = b(30);
-    const state = openSegmentState(targetSegment, undefined, undefined, undefined, () => {});
+    const state = openSegmentState(new ReplayStore(), targetSegment, b(40), undefined, () => {});
     const ctx = replay({ segment: targetSegment, scope: 88n, index: 30n, verifier: { verify: () => false },
       block: [{ bytes: d, index: 9n }, { bytes: settlement, index: 12n }] });
     await applyRecord(state, d, ctx); await applyRecord(state, settlement, ctx);
-    expect(state.eventIndices).toEqual([9n, 12n]); expect(state.demands.size).toBe(0);
-    expect([...state.nullifiers]).toEqual([101n, 102n]); expect(state.tree.size).toBe(1n);
+    expect(state.eventIndices()).toEqual([9n, 12n]); expect(state.demands().length).toBe(0);
+    expect(state.nullifiers()).toEqual([101n, 102n]); expect(state.leaves).toBe(1n);
   });
 
   it("admits at the horizon and replays a timely admission after its deadline", async () => {
     const d = demand(), admission = replay({ admission: true }), state = fresh();
     await applyRecord(state, d, admission);
     await applyRecord(state, settle(d), { ...admission, index: 12n });
-    expect(state.position).toBe(2n); expect(state.tree.size).toBe(1n);
-    expect(state.totals.get(Buffer.from(backing).toString("hex"))).toEqual({ issued: 0n, burned: 0n });
+    expect(state.position).toBe(2n); expect(state.leaves).toBe(1n);
+    expect(state.total(Buffer.from(backing).toString("hex"))).toEqual({ issued: 0n, burned: 0n });
     const later = fresh(); await applyRecord(later, d, replay({ index: 20n }));
     await applyRecord(later, settle(d), replay({ index: 20n }));
     expect(later.history).toEqual(state.history); expect(later.evidence).toEqual(state.evidence);
@@ -133,6 +152,6 @@ describe("recovery admission and replay clocks", () => {
     await expect(applyRecord(expired, settle(d), { ...admission, index: 13n })).rejects.toMatchObject({ check: "DEADLINE" });
     expect(expired.position).toBe(1n);
     await applyRecord(expired, withdrawal(d), { ...admission, index: 20n });
-    expect(expired.demands.size).toBe(0);
+    expect(expired.demands().length).toBe(0);
   });
 });

@@ -24,7 +24,7 @@ import { decodeReceipt, encodeReceipt, verifyReceipt, type Receipt } from "./com
 import { configurationBytes, configurationHash, decodeConfiguration } from "./configuration.js";
 import { requireReferenceVenue } from "./guard.js";
 import { decodeSegmentHeader, segmentIdentity, type SegmentHeader } from "./headers.js";
-import { ownedNotes, type OwnedNote } from "./holdings.js";
+import { ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { decodeEvidencePackage } from "./package.js";
 import { PACKAGE_LIMITS, readFrontier, type PackageReader } from "./package-reader.js";
 import { decodedTrails, type SignedTerms } from "./reader.js";
@@ -331,7 +331,7 @@ export class V3Wallet {
     const backing = rootTermsName(terms.terms), at = this.options.venue.witnessedIndex();
     requireThat(isValue(at), "INVALID", "invalid witnessed index");
     const observed = observedView(this.options.venue, this.venueId, at);
-    const result = await readFrontier(bytes, terms, at, { ...this.options, venue: observed.venue });
+    const result = await readFrontier(bytes, terms, at, { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain) });
     const canonical = result.canonical;
     let force: ForceState | undefined, notes: OwnedNote[] = [];
     if (canonical !== undefined) {
@@ -339,8 +339,8 @@ export class V3Wallet {
       // This backing's own adoption index: a scope opening's merged import has no single one.
       const adopted = canonical.state.adoptionIndices.get(hex(backing)) ?? canonical.state.adoptionIndex;
       for (const publication of result.force) if (publication.index > adopted) applyForceEffects(force, publication.record);
-      const spent = force.nullifiers;
-      notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.has(note.nf));
+      const spent = force;
+      notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));
     }
     return { bytes, terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
       lag: result.ranges.lag, clock: result.clock };
@@ -367,10 +367,10 @@ export class V3Wallet {
    * change/zero outputs are fresh, so no other statement creates them); failed:
    * a reserved input was spent otherwise. Statement identities are not imported
    * into a successor segment, so they cannot decide this. */
-  private resolution(name: string, record: Record, canonical: { state: { outputsSeen: ReadonlySet<bigint> } }, force: ForceState) {
-    if (record.publicInputs.slice(9, 13).every(cm => canonical.state.outputsSeen.has(cm))) return "final" as const;
+  private resolution(name: string, record: Record, canonical: { state: { hasOutput(cm: bigint): boolean } }, force: ForceState) {
+    if (record.publicInputs.slice(9, 13).every(cm => canonical.state.hasOutput(cm))) return "final" as const;
     const inputs = this.db.prepare("SELECT nf FROM payer_inputs WHERE alias=?").all(name);
-    return inputs.some(r => force.nullifiers.has(BigInt(r.nf as string))) ? "failed" as const : undefined;
+    return inputs.some(r => force.hasNullifier(BigInt(r.nf as string))) ? "failed" as const : undefined;
   }
   private resolve(updates: readonly { alias: string; status: "final" | "failed" }[], checkpoint: Uint8Array | undefined, at: bigint): void {
     if (updates.length !== 0) this.transaction(() => {
@@ -576,9 +576,10 @@ export class V3Wallet {
     const { bytes, terms, backing, at, observed, canonical, force } = await this.frontier(packageBytes, signed);
     requireThat(same(backing, note.opening.backing), "INVALID", "terms do not name requested backing");
     requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical payment");
-    requireThat(canonical.state.scanOutputs.some(out => out.cm === note.cm && out.capsule !== undefined && same(out.capsule, note.capsule)),
+    const paid = canonical.state.output(note.cm);
+    requireThat(paid?.capsule !== undefined && same(paid.capsule, note.capsule),
       "ABSENT", "exact requested output and capsule are absent");
-    requireThat(!force.nullifiers.has(note.nf), "SPENT", "payment is already spent");
+    requireThat(!force.hasNullifier(note.nf), "SPENT", "payment is already spent");
     requireThat(!locked(force, tagOf(note.nf), at), "LOCKED", "payment is locked by a standing demand");
     const checkpoint = encodeCommitment(canonical.commitment);
     // No async callback between final venue readback and the durable write.
@@ -671,13 +672,13 @@ export class V3Wallet {
       return this.payment(name)!;
     }
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
-    requireThat(theirs.every(cm => !canonical.state.outputsSeen.has(cm)), "CONFLICT", "request is already paid");
+    requireThat(theirs.every(cm => !canonical.state.hasOutput(cm)), "CONFLICT", "request is already paid");
     const header = this.admissible(view);
     // The venue answers behind this decision are rechecked before proving.
     observed.check();
     const holdings = this.holdingsOf(notes, force, at), available = notes.filter((_, i) => holdings[i]!.status === "available");
     const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
-    const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.tree.root(), path: note.tree.path(note.leaf) }));
+    const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
     // A zero input names the same backing and needs no membership (C1.2.3).
     const zero = inputs.length === 1 ? this.fresh(backing, 0n) : undefined;
     if (zero !== undefined) inputs.push({ ...inputs[0]!, note: zero });
@@ -744,7 +745,7 @@ export class V3Wallet {
     const positive = saved.inputs.map(nf => notes.find(note => note.nf === nf));
     requireThat(positive.every(note => note !== undefined), "ABSENT", "a reserved input is not in canonical history");
     requireThat(!positive.some(note => locked(force, tagOf(note.nf), at)), "LOCKED", "a reserved input is locked by a standing demand");
-    const placed = positive.map(note => ({ note, anchor: note.tree.root(), path: note.tree.path(note.leaf) }));
+    const placed = positive.map(note => ({ note, anchor: note.anchor, path: note.path }));
     const inputs: NoteInput[] = p.slice(7, 9).map(nf => {
       if (zero !== undefined && nf === zero.nf) return { ...placed[0]!, note: zero };
       const input = placed.find(i => i.note.nf === nf);

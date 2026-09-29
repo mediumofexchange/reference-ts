@@ -26,7 +26,11 @@ canonical frames authenticated by an independently obtained digest; v3 needs
 no receiver endpoint. A wallet restores holdings from its seed alone, or its
 complete local state from an encrypted offline handoff that freezes the source.
 Cancellation/release, multi-backing payment, continuous backup and physical
-qualification remain open.
+qualification remain open. Every read keeps its replay state in node:sqlite
+(`replay-store.ts`, [storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
+append-only facts read at a position, savepoints for refused checkpoints and
+witnesses for a wallet's own notes. The store is in memory per read or per
+journal; kept state across reads, streamed evidence and flat memory are M5b.3–M5b.6.
 
 Pool-v2 is retired: every remaining v2 check was mapped to a v3 case, a v2-only
 mechanism or a later slice
