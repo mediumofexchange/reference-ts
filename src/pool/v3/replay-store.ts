@@ -540,13 +540,21 @@ export class ReplayStore {
   openWalk(): number {
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
     this.#db.exec("BEGIN");
+    // No walk is open, so any walk rows are a crashed read's: they are no one's.
+    for (const table of ["walk", ...WALK_TABLES]) this.#db.prepare(`DELETE FROM ${table}`).run();
     return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id);
   }
-  /** Drop the walk's rows and commit what its replays kept, refused read or not. */
+  /** Drop the walk's rows and commit what its replays kept, refused read or not. If that fails, nothing
+   * of the walk commits and the store is left without an open transaction. */
   closeWalk(walk: number): void {
-    for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
-    this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);
-    if (this.#db.isTransaction) this.#db.exec("COMMIT");
+    try {
+      for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
+      this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);
+      if (this.#db.isTransaction) this.#db.exec("COMMIT");
+    } catch (error) {
+      if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
   /** Rows held for walks still open: none once every read has closed its walk. */
   walkRows(): number {
@@ -574,9 +582,9 @@ export class ReplayStore {
     const row = this.#db.prepare("SELECT * FROM walk_verdict WHERE walk = ? AND key = ?").get(walk, key) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#verdict(row);
   }
-  /** Every verdict of the walk, by index then sequence. */
+  /** Every verdict of the walk, by index, sequence, then operator and root bytes. */
   *verdicts(walk: number): Generator<WalkVerdict> {
-    for (const row of this.#db.prepare("SELECT * FROM walk_verdict WHERE walk = ? ORDER BY idx, seq").iterate(walk)) {
+    for (const row of this.#db.prepare("SELECT * FROM walk_verdict WHERE walk = ? ORDER BY idx, seq, operator, root").iterate(walk)) {
       yield this.#verdict(row as Record<string, unknown>);
     }
   }

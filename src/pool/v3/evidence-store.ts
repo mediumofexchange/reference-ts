@@ -57,8 +57,8 @@ export interface TrailEvidence {
 export interface KeptAnswers {
   /** Whether the answer for this kind and subject is kept, in full. */
   kept(kind: 1 | 4, subject: Uint8Array): boolean;
-  /** Mark an answer kept once its every window is stored. */
-  keep(kind: 1 | 4, subject: Uint8Array): void;
+  /** Keep one answer: `read` stores its every window, then it is marked kept; if `read` throws, none of it stays. */
+  keepAnswer(kind: 1 | 4, subject: Uint8Array, read: () => void): void;
   /** One window's held commitments of `operator` (C2.3.3), in sequence order. */
   keepHeld(operator: Uint8Array, held: readonly HeldCommitment[]): void;
   /** One window's publications of `backing`; a position another kept answer holds leaves the read unresolved. */
@@ -404,33 +404,39 @@ export class EvidenceBatch implements WalkEvidence, KeptAnswers {
   // --- Kept §13 answers --------------------------------------------------------------------
 
   kept(kind: 1 | 4, subject: Uint8Array): boolean { return this.#q.kept!.get(this.id, kind, subject) !== undefined; }
-  keep(kind: 1 | 4, subject: Uint8Array): void { this.#q.keep!.run(this.id, kind, subject); }
-  /** One window's rows in one savepoint: a window commits once, and one that fails leaves none. */
-  #window(body: () => void): void {
-    this.#db.exec("SAVEPOINT answer_window");
-    try { body(); this.#db.exec("RELEASE answer_window"); }
-    catch (error) { this.#db.exec("ROLLBACK TO answer_window"); this.#db.exec("RELEASE answer_window"); throw error; }
+  keepAnswer(kind: 1 | 4, subject: Uint8Array, read: () => void): void {
+    if (this.kept(kind, subject)) throw new Error("this answer is already kept");
+    // One savepoint: the answer commits once, and one that fails leaves no rows or quota behind.
+    const charged = this.#bytes;
+    this.#db.exec("SAVEPOINT answer");
+    try {
+      read();
+      this.#q.keep!.run(this.id, kind, subject);
+      this.#db.exec("RELEASE answer");
+    } catch (error) {
+      this.#db.exec("ROLLBACK TO answer"); this.#db.exec("RELEASE answer");
+      this.#bytes = charged;
+      throw error;
+    }
   }
   keepHeld(operator: Uint8Array, held: readonly HeldCommitment[]): void {
-    this.#window(() => {
-      for (const { index, commitment } of held) {
-        this.charge(136n, EvidenceRefusalQuota);
-        this.#q.putHeld!.run(this.id, operator, u64be(commitment.sequence), u64be(index), commitment.root, commitment.signature);
-      }
-    });
+    for (const { index, commitment } of held) {
+      this.charge(136n, EvidenceRefusalQuota);
+      this.#q.putHeld!.run(this.id, operator, u64be(commitment.sequence), u64be(index), commitment.root, commitment.signature);
+    }
   }
   keepPublications(backing: Uint8Array, entries: readonly RangeEntry[]): void {
-    this.#window(() => {
-      for (const { index, ordinal, record } of entries) {
-        this.charge(BigInt(record.length), EvidenceRefusalQuota);
-        try { this.#q.putPublication!.run(this.id, backing, u64be(index), u64be(ordinal), record); }
-        catch (error) {
-          // One venue position answered for two subjects cannot be both (§13.1).
-          if (error instanceof Error && /UNIQUE constraint failed/.test(error.message)) throw new EvidenceRefusal("unresolved-evidence");
-          throw error;
+    for (const { index, ordinal, record } of entries) {
+      this.charge(BigInt(record.length), EvidenceRefusalQuota);
+      try { this.#q.putPublication!.run(this.id, backing, u64be(index), u64be(ordinal), record); }
+      catch (error) {
+        // One venue position answered for two subjects cannot be both (§13.1); only that index names it.
+        if (error instanceof Error && /UNIQUE constraint failed: publication\.batch, publication\.idx, publication\.ordinal$/.test(error.message)) {
+          throw new EvidenceRefusal("unresolved-evidence");
         }
+        throw error;
       }
-    });
+    }
   }
   #held(operator: Uint8Array, row: Record<string, unknown>): HeldCommitment {
     return Object.freeze({ index: fromBe(row["idx"]), commitment: Object.freeze({ sequence: fromBe(row["seq"]), root: bytes(row["root"]),

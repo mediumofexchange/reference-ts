@@ -134,21 +134,19 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
   let revokedAt: bigint | undefined;
   readWindows(venue, selection.venue, 3, terms.obligor, t, answer => (revokedAt = revocationIndex(answer)) !== undefined);
   const heldOf = (operator: Uint8Array): KeptAnswers => {
-    if (!answers.kept(1, operator)) {
+    if (!answers.kept(1, operator)) answers.keepAnswer(1, operator, () => {
       let prior: HeldPrior | undefined;
       readWindows(venue, selection.venue, 1, operator, t, answer => {
         const { held, next } = heldCommitments(answer, prior);
         answers.keepHeld(operator, held); prior = next;
       });
-      answers.keep(1, operator);
-    }
+    });
     return answers;
   };
   const publicationsKept = (): KeptAnswers => {
-    if (!answers.kept(4, backing)) {
+    if (!answers.kept(4, backing)) answers.keepAnswer(4, backing, () => {
       readWindows(venue, selection.venue, 4, backing, t, answer => { answers.keepPublications(backing, answer.entries); });
-      answers.keep(4, backing);
-    }
+    });
     return answers;
   };
   const termEnd = (i: number): bigint => (i + 1 < chain.length ? chain[i + 1]!.from - 1n : t);

@@ -184,6 +184,7 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
   const { selection, verifier, store } = context;
   const progress = new Map<string, { last: RangeEntry | undefined; busy: boolean }>();
   const running = new Map<string, { upto: bigint; boundary: bigint | undefined }>();
+  const forceStates = new Map<string, { key: string; state: ReturnType<typeof openForceState> }>();
   const snapshotAt = (backing: Uint8Array, terms: RootTerms, index: bigint): Promise<ValidScope | undefined> =>
     latest(backing, terms, { index, strict: true });
   const classifyPublication = async (backing: Uint8Array, terms: RootTerms, view: RecordView, duration: bigint,
@@ -199,11 +200,18 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
         publication.kind === 2 || publication.kind === 5) return { force: false };
     const snapshot = await snapshotAt(backing, terms, entry.index);
     if (snapshot === undefined || entry.index - snapshot.index <= duration) return { force: false };
-    const source = snapshot.state;
-    const state = openForceState(source);
-    // Every earlier forced publication of this backing after the snapshot's adoption index, in venue order.
-    for (const prior of store.forced(walk, backing, source.adoptionIndices.get(name) ?? 0n, entry.index)) applyForceEffects(state, decodeRecord(prior.bytes));
-    const record = publication.record, bytes = encodeRecord(record);
+    const source = snapshot.state, key = `${source.ns}:${source.position}`;
+    // The snapshot's view with every earlier forced publication of this backing after its adoption index,
+    // in venue order. The snapshot only moves forward with the index, so one running state per backing
+    // extends while it stays; a publication that forces applies its effects to it, and a refused one
+    // leaves it unchanged (every check precedes mutation).
+    let kept = forceStates.get(name);
+    if (kept === undefined || kept.key !== key) {
+      const state = openForceState(source);
+      for (const prior of store.forced(walk, backing, source.adoptionIndices.get(name) ?? 0n, entry.index)) applyForceEffects(state, decodeRecord(prior.bytes));
+      kept = { key, state }; forceStates.set(name, kept);
+    }
+    const { state } = kept, record = publication.record, bytes = encodeRecord(record);
     try {
       await applyForceRecord(state, bytes, { mode: "force", domain: selection.domain, backing,
         segment: snapshot.segment, scope: new ScopeTree(snapshot.header.entries).root(), issuer: terms.obligor,

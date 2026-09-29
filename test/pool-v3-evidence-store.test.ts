@@ -179,8 +179,12 @@ describe("v3 evidence store", () => {
     const held = (index: bigint, sequence: bigint) => ({ index, commitment: { operator, sequence, root: b(Number(sequence)), signature: new Uint8Array(64).fill(1) } });
     expect(batch.kept(1, operator)).toBe(false);
     // Two windows of one answer, as a reader reads them.
-    batch.keepHeld(operator, [held(2n, 1n), held(2n, 2n)]); batch.keepHeld(operator, [held(9n, 5n)]); batch.keep(1, operator);
+    batch.keepAnswer(1, operator, () => { batch.keepHeld(operator, [held(2n, 1n), held(2n, 2n)]); batch.keepHeld(operator, [held(9n, 5n)]); });
     expect(batch.kept(1, operator)).toBe(true);
+    // An answer whose read fails keeps nothing, not even its earlier windows.
+    const other = b(44);
+    expect(() => batch.keepAnswer(1, other, () => { batch.keepHeld(other, [held(1n, 1n)]); throw new Error("a later window failed"); })).toThrow("a later window failed");
+    expect([batch.kept(1, other), [...batch.held(other)]]).toEqual([false, []]);
     expect([...batch.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[2n, 1n], [2n, 2n], [9n, 5n]]);
     expect(batch.heldAt(operator, 5n)).toEqual(held(9n, 5n)); expect(batch.heldAt(operator, 3n)).toBeUndefined();
     expect([batch.heldAbove(operator, 2n), batch.heldAbove(operator, 5n)]).toEqual([true, false]);

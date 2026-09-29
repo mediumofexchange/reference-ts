@@ -73,10 +73,9 @@ from that walk (C2b.6.1, C2b.4.1). For a selection with imports, the walk
 descends every operator term and requires each segment's exact finalized predecessor. It imports the validated spent set,
 output commitments, accepted roots and totals, then starts an empty local
 output tree. Reappointment and same-operator restart use the same rule.
-Imported wallet paths retain their source trees. Whole-read budgets cap this
-path at 128 held checkpoints and 8192 replayed events, including failed
-replays; a resumed checkpoint charges only its new positions, and a reader may
-select other local budgets on its verifier (`importLimits`). A checkpoint
+Imported wallet paths retain their source trees. Only per-object budgets
+bound this path (the whole-read checkpoint and event totals were removed in
+M5b.3b); each record's proof is verified once, and a checkpoint
 whose trail reproduces the last valid checkpoint's evidence hash at its length
 resumes from a copy of that replayed state under the same replay context,
 verifying only its new positions (C2.10.12, pool-v3 §7.1). Any other trail

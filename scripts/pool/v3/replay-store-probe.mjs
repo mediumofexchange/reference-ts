@@ -5,7 +5,7 @@
 // retires with it. Not a check, not runtime.
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs baseline <events> [--proof <bytes>]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs stored <events> [options]
-//   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--proof <bytes>] [--dir <directory>]
+//   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--silence] [--proof <bytes>] [--dir <directory>]
 // baseline: the runtime state machine (dist state.ts) over synthetic records, stub verifier.
 // read (M5b.3 acceptance): the runtime reader (readPackage) streaming a package file of one
 //   segment's <events> statements into its own evidence and replay files, stub verifier.
@@ -377,7 +377,9 @@ if (mode === "baseline") {
   const domain = configurationHash(configuration), venue = FixtureVenue.reference(label, lag, 10n);
   const obligor = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
   const termsBytes = encodeRootTerms({ obligor, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n }, operator,
-    configuration: domain, venue: venue.id, interval: 10n });
+    configuration: domain, venue: venue.id, interval: 10n,
+    // --silence: a silence clause, so every continuation reads its clock (C2b.6.1); no gap ever opens.
+    ...(rest.includes("--silence") ? { silence: { noCommitmentDuration: 100n, challengeWindow: 10n } } : {}) });
   const terms = decodeRootTerms(termsBytes), backing = rootTermsName(termsBytes), entries = [{ backing, link: backing }];
   const header = segmentBytes({ domain, venue: venue.id, operator, sequence: 1n, entries }), segment = sha(header), scope = new ScopeTree(entries).root();
   const prefix = [...limbsOf(domain), ...limbsOf(segment), scope], capsule = () => { const c = new Uint8Array(randomBytes(89)); c[0] = 1; return c; };
@@ -476,7 +478,7 @@ if (mode === "baseline") {
   evidence.close(); store.close();
   const slope = (rows, key, x) => { const first = rows[1] ?? rows[0], last = rows.at(-1);
     return Math.round((last[key] - first[key]) * 1048576 / (last[x] - first[x])); };
-  console.log(JSON.stringify({ mode, events: N, checkpoints: C, proofBytes: PROOF, recordBytes: Math.round(recordBytes / N), packageMiB: mib(packageBytes),
+  console.log(JSON.stringify({ mode, events: N, checkpoints: C, silence: rest.includes("--silence"), proofBytes: PROOF, recordBytes: Math.round(recordBytes / N), packageMiB: mib(packageBytes),
     generateMsPerEvent: +(generateMs / N).toFixed(2), importSeconds: +(importMs / 1000).toFixed(1),
     replayMsPerEvent: +((readMs - importMs) / N).toFixed(2), evidenceMiB: mib(evidenceBytes), stateMiB: mib(stateBytes),
     importHeapBytesPerMiB: slope(importSamples, "heapMiB", "copiedMiB"), importRssBytesPerMiB: slope(importSamples, "rssMiB", "copiedMiB"),
