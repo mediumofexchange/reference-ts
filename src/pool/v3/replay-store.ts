@@ -223,9 +223,6 @@ export class ReplayStore {
       witness: "SELECT siblings FROM witness WHERE ns = ? AND leaf = ?",
       putWitness: "INSERT INTO witness VALUES (?, ?, ?, ?)",
       moveWitness: "UPDATE witness SET siblings = ? WHERE ns = ? AND leaf = ?",
-      keyEvents: `SELECT x.ns, x.position, n.segment FROM event_key k JOIN event x ON x.ns = k.ns AND x.position = k.position
-        JOIN namespace n ON n.ns = x.ns WHERE k.key = :key AND ${v} ORDER BY x.ns, x.position`,
-      keys: `SELECT DISTINCT k.key FROM event_key k WHERE ${visible("k")}`,
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
   }
 
@@ -253,6 +250,10 @@ export class ReplayStore {
       this.#db.prepare("UPDATE namespace SET base_spent = ? WHERE ns = ?").run(spent.root(), ns);
       return ns;
     });
+  }
+
+  identity(ns: number): Uint8Array {
+    return bytes((this.#db.prepare("SELECT identity FROM namespace WHERE ns = ?").get(ns) as { identity: unknown }).identity);
   }
 
   /** The namespaces holding replays under `identity`, oldest first. */
@@ -420,16 +421,6 @@ export class ReplayStore {
   }
   *nullifiers(ns: number, p: bigint): Generator<bigint> {
     for (const row of this.#q.nullifiers!.iterate({ ns, p })) yield field((row as { nf: unknown }).nf);
-  }
-  /** The visible events touching `key` (a tag or demand). */
-  keyEvents(ns: number, p: bigint, key: string): { ns: number; position: bigint; segment: string }[] {
-    return this.#q.keyEvents!.all({ ns, p, key }).map(row => {
-      const r = row as { ns: bigint; position: bigint; segment: Uint8Array };
-      return { ns: Number(r.ns), position: BigInt(r.position), segment: hex(bytes(r.segment)) };
-    });
-  }
-  *keys(ns: number, p: bigint): Generator<string> {
-    for (const row of this.#q.keys!.iterate({ ns, p })) yield (row as { key: string }).key;
   }
 
   /** The path of a witnessed output at `ns`'s tip, which must be at `position`. */

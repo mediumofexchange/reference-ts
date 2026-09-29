@@ -43,10 +43,15 @@ export function seedScanner(seed: Uint8Array, domain: Uint8Array): (output: Scan
   };
 }
 
-/** The replay's witness predicate for this seed: every output it owns. */
+/** The replay's witness predicate for this seed: every output it owns. It
+ * never throws, so a seed's reading cannot change a checkpoint's verdict; an
+ * output it cannot read (a settlement whose opening does not give its
+ * commitment, which settle's proof rules out) is not witnessed or held. */
 export function seedWitness(seed: Uint8Array, domain: Uint8Array): (output: ScanOutput) => boolean {
   const scan = seedScanner(seed, domain);
-  return output => scan(output) !== undefined;
+  return output => {
+    try { return scan(output) !== undefined; } catch { return false; }
+  };
 }
 
 /** This seed's unspent positive notes of `backing` in a state replayed with

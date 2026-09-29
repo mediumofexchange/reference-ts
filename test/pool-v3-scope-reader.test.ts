@@ -156,6 +156,24 @@ describe("multi-backing scope reader", () => {
     await expect(misstated.read(misstated.x.name, wrong)).rejects.toMatchObject({ check: "SNAPSHOT" });
   });
 
+  it("rolls back a checkpoint excluded for a sibling's totals, so the next one resumes without extra work", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, 1n); await f.issue(5n, 101n); f.checkpoint(2n, 3n);
+    await f.issue(1n, 102n);
+    // Its records replay, then the other scoped backing's snapshot misstates supply: excluded after the records applied.
+    f.checkpoint(3n, 4n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, issued: 9n } : s));
+    await f.issue(1n, 103n);
+    const last = f.checkpoint(4n, 5n), read = await f.read(f.x.name, last);
+    if (read.receipt !== undefined) throw new Error("a receipt verdict");
+    expect(read.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "valid", undefined], ["2", "valid", undefined],
+      ["3", "excluded", "SNAPSHOT"], ["4", "valid", undefined]]);
+    const state = read.state;
+    expect([state.position, state.store.tip(state.ns).position, state.leaves]).toEqual([3n, 3n, 3n]);
+    // One namespace carried 1, 2 and 4, and 4 resumed at 2's tip: 1 + 1 + 2 records charged, as before storage.
+    expect(state.store.namespaces(state.identity)).toEqual([state.ns]);
+    expect(read.work.events).toBe(4n);
+  });
+
   it("merges imported prefixes once per event and refuses a conflicting identity", async () => {
     const f = await twoBackings();
     f.checkpoint(1n, 1n); await f.issue(5n, 101n);

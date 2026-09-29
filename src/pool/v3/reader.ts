@@ -234,6 +234,8 @@ export interface TrailOptions {
   readonly isOpening?: boolean;
   readonly chargeEvents?: (amount: bigint) => void;
   readonly chargeRecords?: (amount: bigint) => void;
+  /** Every scoped backing's snapshot in the checkpoint's directory: their totals are checked inside the replay. */
+  readonly scopedSnapshots?: readonly Snapshot[] | undefined;
 }
 
 /** A valid checkpoint as the next one's last valid checkpoint. */
@@ -268,6 +270,11 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
     const { issued, burned } = state.total(hex(snapshot.backing));
     requireReplay(same(state.history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
+    // Inside the savepoint: a sibling's misstated totals refuse the checkpoint and leave nothing behind.
+    for (const s of options.scopedSnapshots ?? []) {
+      const total = state.total(hex(s.backing));
+      requireReplay(s.issued === total.issued && s.burned === total.burned, "SNAPSHOT");
+    }
     const adoptionIndices = new Map(imported?.adoptionIndices);
     for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
       imported?.adoptionIndices?.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
@@ -296,14 +303,19 @@ function identityFrame(parts: readonly (Uint8Array | bigint | string | undefined
  * records and the index each was judged at (kept in its event rows): the
  * configuration and backing, the segment and scoped terms, the imported
  * frontier by segment, position and history hash, the adopted block and
- * opening index, the verifier and the revocation indices. Within one process
- * the verifier is named by object; M5b.4 names it by its circuit identities. */
-function replayIdentity({ selection, terms, scopedTerms, verifier }: ReplayContext, snapshot: Snapshot,
+ * opening index, the verifier, the witness predicate and the revocation
+ * indices. Within one process the verifier and predicate are named by object; M5b.4 names it by its circuit identities. */
+function replayIdentity({ selection, terms, scopedTerms, verifier, witness }: ReplayContext, snapshot: Snapshot,
   { imported, block, openingIndex, revokedAt, revocations }: { imported: ImportedFrontier | undefined; block: readonly Adopted[];
     openingIndex: bigint | undefined; revokedAt: bigint | undefined; revocations: ReadonlyMap<string, bigint | undefined> | undefined }): Uint8Array {
-  if (!verifierIds.has(verifier)) verifierIds.set(verifier, ++verifiers);
+  const id = (object: object | undefined): bigint | undefined => {
+    if (object === undefined) return undefined;
+    if (!verifierIds.has(object)) verifierIds.set(object, ++verifiers);
+    return BigInt(verifierIds.get(object)!);
+  };
+  // The witness predicate decides which paths the namespace can answer, so it is part of the identity too.
   const parts: (Uint8Array | bigint | string | undefined)[] = ["v3-replay-identity", selection.domain, selection.backing, snapshot.segment,
-    openingIndex, BigInt(verifierIds.get(verifier)!), revokedAt];
+    openingIndex, id(verifier), id(witness), revokedAt];
   const obligors = scopedTerms === undefined ? [["selected", terms.obligor] as const] : [...scopedTerms].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([name, t]) => [name, t?.obligor] as const);
   for (const [name, obligor] of obligors) parts.push(name, obligor);
@@ -325,10 +337,12 @@ function replayIdentity({ selection, terms, scopedTerms, verifier }: ReplayConte
  * namespace whose tip is that checkpoint instead of verifying the prefix
  * again. Anything else replays in a fresh namespace, keeping the first failing
  * check and its order. */
-function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array, trail: ServedTrail, lastValid: LastValid | undefined): StateHandle | undefined {
+function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array, trail: ServedTrail, lastValid: ValidCheckpoint | undefined): StateHandle | undefined {
   if (lastValid === undefined || BigInt(trail.records.length) < lastValid.position || !same(sha256(trail.header), segment)) return undefined;
-  for (const ns of store.namespaces(identity)) {
+  const own = lastValid.state?.ns, candidates = [...(own === undefined ? [] : [own]), ...store.namespaces(identity).filter(ns => ns !== own)];
+  for (const ns of candidates) {
     const tip = store.tip(ns);
+    if (!same(store.identity(ns), identity)) continue;
     if (tip.position !== lastValid.position || !same(tip.history, lastValid.historyHash) || !same(tip.evidence, lastValid.evidenceHash)) continue;
     const chain = trailEvidenceChain(trail);
     return chain.length > Number(tip.position) && same(chain[Number(tip.position)]!, lastValid.evidenceHash) ? new StateHandle(store, ns) : undefined;

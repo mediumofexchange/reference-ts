@@ -16,13 +16,11 @@ clone/copy of history-sized structures, Node 24 floor). *Stop:* merged with CI g
 review resolved. Choices made within the decision are recorded in it ("M5b.2 as built").
 
 ## Status
-- M5b.2 built on the branch: `replay-store.ts`, `state.ts` split into judgment and apply,
-  handles at a position, the force overlay, imports and merges by reference, witnesses and
-  `holdings.ts` in the replay (the local replay harness shares it), Node 24 floor, guards
-  removed. Local: typecheck, full vitest (1,856 plus the new tests), package, docs, pilot, Ergo
-  persistence, wallet/journal crash and service checks pass. Owed: independent review, CI
-  (`check:pool:v3` real proofs, not run locally at under 2 GB free), reports re-recorded from
-  the CI artifact, merge.
+- M5b.2 built (PR #47): `replay-store.ts`, judgment/apply split, handles at a position, force
+  overlay, imports and merges by reference, witnesses with `holdings.ts` in the replay (the
+  harness shares it), Node 24 floor. Local typecheck, vitest, package, docs, pilot, Ergo
+  persistence, crash and service checks pass. Owed: review, CI (`check:pool:v3` real proofs,
+  not run locally under 2 GB free), reports re-recorded from the CI artifact, merge.
 - M5b.1: design and [probe](docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage); kept exclusions need §14 text in M5b.4.
 - [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay) (docs/spec only): complete replay, streamed and resumed; §12 items take a
   u64 length; [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets): 10⁶ statements over three years,

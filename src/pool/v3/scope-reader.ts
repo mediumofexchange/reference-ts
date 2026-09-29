@@ -489,11 +489,7 @@ function scopeWalk(context: WalkContext, directories: Directories, record: Recor
         const revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
         const state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
           snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
-            block: opening ? [] : block, openingIndex, chargeEvents });
-        for (const s of scopedSnapshots) {
-          const total = state.total(hex(s.backing));
-          requireReplay(s.issued === total.issued && s.burned === total.burned, "SNAPSHOT");
-        }
+            block: opening ? [] : block, openingIndex, chargeEvents, scopedSnapshots });
         return { ...base, state, block, scopedTerms, openingIndex, class: "valid" };
       } catch (error) {
         if (!(error instanceof ReplayRefusal)) throw error;
