@@ -9,9 +9,8 @@ import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader } from "../src/pool/v3/headers.js";
-import { PACKAGE_LIMITS, readPackage } from "../src/pool/v3/package-reader.js";
+import { readPackage } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
 import { encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { ServedPackage, V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
@@ -88,8 +87,8 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     };
     /** The operator's newest segment header, as served. */
     const context = async (j: Journal): Promise<SegmentContext> => {
-      const headers = decodeEvidencePackage((await j.package()).package, PACKAGE_LIMITS).filter(item => item.kind === 6)
-        .map(item => decodeSegmentHeader(decodeTrail(item.payload, TRAIL_LIMITS).header))
+      const headers = decodeEvidencePackage((await j.package()).package).filter(item => item.kind === 6)
+        .map(item => decodeSegmentHeader(decodeTrail(item.payload).header))
         .filter(h => same(h.operator, j.operatorKey)).sort((p, q) => p.sequence > q.sequence ? -1 : p.sequence < q.sequence ? 1 : 0);
       return { domain, header: headers[0]! };
     };
@@ -229,7 +228,7 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     await a.open("genesis", [f.x.signed, f.y.signed]); await a.publish();
     await expect(a.rescope("nothing", {})).rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
     await expect(a.rescope("outside", { keep: [foreign.name] })).rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
-    await expect(a.rescope("stray-evidence", { keep: [f.y.name], evidence: encodeEvidencePackage([], PACKAGE_LIMITS) }))
+    await expect(a.rescope("stray-evidence", { keep: [f.y.name], evidence: encodeEvidencePackage([]) }))
       .rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
     // Dropping a live backing is elective: allowed once the whole tail is witnessed.
     await a.submit(f.issue(await f.context(a), f.output(f.x.name, 31, 10n), f.x.issuer));

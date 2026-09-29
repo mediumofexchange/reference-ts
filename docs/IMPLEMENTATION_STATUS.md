@@ -270,7 +270,8 @@ exact raw target bytes and an evidence suffix, checked against an externally
 authenticated snapshot with an explicit reader budget. Successful evidence
 authentication is not an exclusion verdict or a complete served trail.
 `src/pool/v3/trail.ts` implements [served-trail transport](https://github.com/mediumofexchange/money-from-first-principles/blob/7ea0ee8/pool-v3.md#10-served-trail-transport)
-with explicit byte/event budgets and raw inner-byte retention. Its local
+as one frame reader for memory and streams, with per-object bounds, optional
+caller budgets for a trail held in memory and raw inner-byte retention. Its local
 evidence helper authenticates the header and ordered event evidence against
 an expected signed-directory snapshot, including capsule association for
 decodable records. It does not authenticate scoped terms, replay history or
@@ -278,9 +279,15 @@ imports, resolve record ranges/adoption or establish a complete opening.
 Opaque terms still require their own decoding, name/signature and force checks.
 
 `src/pool/v3/package.ts` implements [§12 evidence transport](https://github.com/mediumofexchange/money-from-first-principles/blob/10dcf67/pool-v3.md#12-evidence-packages-and-dependency-retention):
-canonical typed exact-byte inventory, local byte/item limits before payload
-hashing, and the existing MOED directory-root preimage. Fresh local replay
-uses package bytes with exactly one configuration and signed commitment; the
+canonical typed exact-byte inventory with u64 item lengths ([97ff964](https://github.com/mediumofexchange/money-from-first-principles/blob/97ff964/pool-v3.md#12-evidence-packages-and-dependency-retention)),
+one frame reader for memory and streams, and the existing MOED
+directory-root preimage. A reader first copies the package into its own
+evidence storage (`src/pool/v3/evidence-store.ts`, node:sqlite in memory or a
+file) and reads only the copy: whole items under a 1 MiB per-object budget,
+and trails by record, each record kept once under its evidence chain value, so
+replay reads one record at a time
+([decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+Fresh local replay uses a package with exactly one configuration and signed commitment; the
 selection's snapshot is the one its directory names and its trail the one
 that authenticates it, both by hash, with the directory preimages, snapshots
 and trails of the other carrying checkpoints its range read classifies. Other
@@ -380,7 +387,7 @@ physical power-loss or wallet custody evidence is added.
 ## Runtime pin and recovery models
 
 The runtime follows specification revision
-[`85655a5e1d88ccb8f31beb2d02735d5058336943`](https://github.com/mediumofexchange/money-from-first-principles/tree/85655a5e1d88ccb8f31beb2d02735d5058336943):
+[`97ff9643003d870da308b5f270820adb2d7f70a9`](https://github.com/mediumofexchange/money-from-first-principles/tree/97ff9643003d870da308b5f270820adb2d7f70a9):
 `pool-v3.md` for the construction, with the Ergo venue profile's
 `venue-ergo.md`; the v3 reports bind the revision they check
 (`V3_SPECIFICATION` in `scripts/pool/v3/provenance.mjs`), which names both

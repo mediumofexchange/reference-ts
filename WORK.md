@@ -10,19 +10,20 @@ incremental verdicts equal full replay, and corrupt kept state falls back; real 
 the old ceiling through journal, wallet sync and offline-operator recovery; first sync
 measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision).
 
-**Next: M5b.3 streamed evidence** (evidence file, streamed trails/packages, windowed ranges,
-per-object budgets, u64 codec, runtime pin to spec `97ff964`; acceptance: a ≥10⁵-statement
-stub replay with memory flat against history). Start from the probe's evidence schema and
-`replay-store.ts` (probe baseline measures it); rework the one walk too: it recurses and caches every verdict per read ([decision](decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)).
+**Next: M5b.3b, checkpoints and venue age** ("M5b.3 split" in the decision): one forward walk in rank order with
+verdict rows (the walk recurses and caches every verdict per read), windowed range reads, directories/snapshots
+and faults read from the evidence store, per-object work bounds for `IMPORT_LIMITS` (and the journal's reservations),
+an aggregate object quota per read, event rows without record bytes. *Acceptance:* the probe's `read` mode with many checkpoints, memory flat.
 
 ## Status
-- One reader walk (PR #48): `scope-reader.ts` reads every scope; the other walks and entries are gone;
-  review-found fixes: excluded openings found their segment, lapse before validity, clock on lapse.
+- M5b.3a (PR #50): readers copy a package, bytes or stream, into `evidence-store.ts` and replay records one at a time;
+  one frame reader per frame; u64 items; per-object budgets; pin `97ff964`; [10⁵ statements at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-streaming-one-long-segment-m5b3a).
+- One reader walk (PR #48): `scope-reader.ts` reads every scope; the other walks and entries are gone.
 - M5b.2 (PR #47): reads, journal and wallet replay into `replay-store.ts` ("M5b.2 as built/review"),
-  in memory per read or journal until M5b.4, records in event rows until M5b.3.
+  in memory per read or journal until M5b.4, records in event rows until M5b.3b.
 - M5b.1: design and [probe](docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage); kept exclusions need §14 text in M5b.4.
   [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay): complete replay, streamed and resumed; u64 §12 items; [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets)
-  10⁶ statements over three years, memory ≤ 1 GiB, first sync ≤ 24 h. Runtime pins spec `85655a5` until M5b.3.
+  10⁶ statements over three years, memory ≤ 1 GiB, first sync ≤ 24 h.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
@@ -47,7 +48,7 @@ stub replay with memory flat against history). Start from the probe's evidence s
    and, against a case map, the transparent path in or right after it.
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
-4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller
+4. On touching affected files: fold `fulfill` into `sync` and take its canonical header from the reader's evidence (not a re-decode); shared byte helpers/caller
    ownership; Ergo section versus transaction charging; served-trail caller-object cache; drop the explicit `vite` dev pin (served the
    retired browser probe) at the next dependency change. Untested on v3: a second
    commit refused while one is in flight (`store.ts` `ready`; a probe traced it holding).
@@ -91,8 +92,6 @@ stub replay with memory flat against history). Start from the probe's evidence s
 ## Open questions
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
-- Non-blocking deletions (merged branches; maintainer-only in unattended runs): `git branch -d chore/one-reader-walk docs/one-walk-handoff;
-  git push origin --delete chore/one-reader-walk docs/one-walk-handoff feat/m5b2-stored-reader-state`.
 
-Roughly **57% done / 43% remaining**, range **47–66%**, reassessed 2026-09-29 after M5b.2 (every
-party's state now in storage; streaming, kept state, first sync, adoption, qualified storage, mainnet remain).
+Roughly **58% done / 42% remaining**, range **48–67%**, reassessed 2026-09-29 after M5b.3a (the reader streams a
+segment at flat memory; checkpoint axis, kept state, first sync, adoption, qualified storage, mainnet remain).

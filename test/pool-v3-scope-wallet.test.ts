@@ -10,9 +10,7 @@ import { prepareExactOutput, recoverCapsule } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, segmentIdentity } from "../src/pool/v3/headers.js";
-import { PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { decodeRecord, encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -88,8 +86,8 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
     /** The segment header an operator's served package names last. */
     const header = async (j: Journal, backing?: Uint8Array) => {
       const served = await j.package(backing);
-      return decodeEvidencePackage(served.package, PACKAGE_LIMITS).filter(item => item.kind === 6)
-        .map(item => decodeSegmentHeader(decodeTrail(item.payload, TRAIL_LIMITS).header))
+      return decodeEvidencePackage(served.package).filter(item => item.kind === 6)
+        .map(item => decodeSegmentHeader(decodeTrail(item.payload).header))
         .filter(h => same(h.operator, j.operatorKey)).sort((p, q) => p.sequence > q.sequence ? -1 : p.sequence < q.sequence ? 1 : 0)[0]!;
     };
     const served = async (j: Journal, backing?: Uint8Array) => (await j.package(backing)).package;

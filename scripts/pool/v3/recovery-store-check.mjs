@@ -19,13 +19,12 @@ import { BranchSupplier, MiningSupplier, plainBox } from "../../../dist/ergo-syn
 import { NoteTree } from "../../../dist/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../../../dist/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../../../dist/pool/v3/capsules.js";
-import { readPackage, PACKAGE_LIMITS } from "../../../dist/pool/v3/package-reader.js";
+import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../../../dist/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../../../dist/pool/v3/reader.js";
 import { decodeTrail } from "../../../dist/pool/v3/trail.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
-import { V3OperatorJournal } from "../../../dist/pool/v3/store.js";
+import { SERVED_PACKAGE_LIMITS, V3OperatorJournal } from "../../../dist/pool/v3/store.js";
 import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, issueTask, requestTask, settleTask,
   withdrawalRecord } from "../../../dist/pool/v3/witness.js";
 import { encodePublication, encodeRecord, statementHash } from "../../../dist/pool/v3/records.js";
@@ -230,14 +229,14 @@ async function acceptance(ergo, liveMode = false) {
       const input = await served(), result = await read(input); final = summary(result);
       assert.equal(final.supply, "20"); assert.equal(final.position, "4");
       assert(result.state.hasNullifier(funded[1].nf)); assert.deepEqual(fresh(input), final);
-      const items = decodeEvidencePackage(input.package, PACKAGE_LIMITS);
+      const items = decodeEvidencePackage(input.package);
       assert(items.filter(item => item.kind === 6).some(item => {
-        const records = decodeTrail(item.payload, TRAIL_LIMITS).records;
+        const records = decodeTrail(item.payload).records;
         return records.length === expectedAdoption.length && records.every((bytes, i) => hex(bytes) === hex(expectedAdoption[i]));
       }), "the return segment carries the exact adopted proof and signature bytes in venue order");
       for (const kind of [3, 4, 6]) await assert.rejects(read({ ...input,
-        package: encodeEvidencePackage(items.filter(item => item.kind !== kind), PACKAGE_LIMITS) }), error => error.status === "unresolved-evidence");
-      assert(Math.max(...packages) + 360 <= Number(PACKAGE_LIMITS.maxBytes), "complete ancestry plus receipt headroom must fit the reference package budget");
+        package: encodeEvidencePackage(items.filter(item => item.kind !== kind)) }), error => error.status === "unresolved-evidence");
+      assert(Math.max(...packages) + 360 <= Number(SERVED_PACKAGE_LIMITS.maxBytes), "complete ancestry plus receipt headroom must fit the served package limit");
     });
     checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
     let funding;

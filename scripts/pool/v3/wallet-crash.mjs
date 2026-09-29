@@ -104,10 +104,11 @@ async function worker(directory, operation, phase, action) {
   const wallet = new V3Wallet(path, reader);
   if (action === 'crash') {
     // Initialization has committed. Arm only the operation's own COMMIT; the
-    // deliberate exit leaves its DB handle open, without rollback or close.
+    // deliberate exit leaves its DB handle open, without rollback or close. A reader's
+    // in-memory evidence copy commits too; only the wallet's file is armed.
     const original = DatabaseSync.prototype.exec;
     DatabaseSync.prototype.exec = function (sql) {
-      if (sql.trim().toUpperCase() !== 'COMMIT') return original.call(this, sql);
+      if (sql.trim().toUpperCase() !== 'COMMIT' || !this.location()) return original.call(this, sql);
       if (operation === 'request') {
         const row = this.prepare('SELECT * FROM receiver_requests WHERE alias=?').get('invoice');
         const seed = this.prepare('SELECT seed FROM wallet_identity WHERE id=1').get().seed;

@@ -5,7 +5,10 @@
 // retires with it. Not a check, not runtime.
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs baseline <events> [--proof <bytes>]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs stored <events> [options]
+//   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--proof <bytes>] [--dir <directory>]
 // baseline: the runtime state machine (dist state.ts) over synthetic records, stub verifier.
+// read (M5b.3 acceptance): the runtime reader (readPackage) streaming a package file of one
+//   segment's <events> statements into its own evidence and replay files, stub verifier.
 // stored options:
 //   --proof <bytes>        stand-in record size is proof + 900 bytes (default 32)
 //   --checkpoint <events>  events per savepoint (default 64)
@@ -21,7 +24,7 @@
 //   --dir <directory>      default scratch/replay-store-probe/run
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { closeSync, createReadStream, existsSync, mkdirSync, openSync, rmSync, statSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -34,11 +37,19 @@ import { decodeRootTerms, encodeRootTerms, rootTermsName } from "../../../dist/p
 import { segmentBytes } from "../../../dist/pool/v3/headers.js";
 import { applyRecord, openSegmentState } from "../../../dist/pool/v3/state.js";
 import { ReplayStore } from "../../../dist/pool/v3/replay-store.js";
-import { V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../../dist/contexts.js";
+import { V3_PACKAGE_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE, V3_TRAIL_CONTEXT } from "../../../dist/contexts.js";
+import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
+import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
+import { snapshotBytes, snapshotDigest } from "../../../dist/pool/v3/commitments.js";
+import { configurationBytes, configurationHash, RELATIONS } from "../../../dist/pool/v3/configuration.js";
+import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
+import { encodeEvidenceDirectory } from "../../../dist/pool/v3/package.js";
+import { readPackage } from "../../../dist/pool/v3/package-reader.js";
+import { rootTermsSignatureMessage } from "../../../dist/pool/v3/terms.js";
 
 const [mode, countText, ...rest] = process.argv.slice(2);
 const option = (name, fallback) => { const i = rest.indexOf(name); return i < 0 ? fallback : rest[i + 1]; };
-assert(["baseline", "stored"].includes(mode) && /^[1-9][0-9]*$/.test(countText ?? ""), "usage: replay-store-probe.mjs baseline|stored <events> [...]");
+assert(["baseline", "stored", "read"].includes(mode) && /^[1-9][0-9]*$/.test(countText ?? ""), "usage: replay-store-probe.mjs baseline|stored|read <events> [...]");
 const N = Number(countText), PROOF = Number(option("--proof", "32")), SAMPLE = Math.max(1, Math.floor(N / 20));
 const sha = (...parts) => { const h = createHash("sha256"); for (const p of parts) h.update(p); return h.digest(); };
 const gc = () => { if (globalThis.gc) { globalThis.gc(); globalThis.gc(); } };
@@ -87,7 +98,7 @@ if (mode === "baseline") {
   const slope = key => Math.round((last[key] - first[key]) * 1048576 / (last.events - first.events));
   console.log(JSON.stringify({ mode, events: N, proofBytes: PROOF, heapBytesPerEvent: slope("heapMiB"), externalBytesPerEvent: slope("externalMiB"),
     rssBytesPerEvent: slope("rssMiB"), samples }, null, 1));
-} else {
+} else if (mode === "stored") {
   // The decision's layout for one segment:
   // - fact rows (nullifiers, outputs, anchors, events) are append-only and carry
   //   the position that added them, so a read at an earlier position bounds by it;
@@ -349,4 +360,117 @@ if (mode === "baseline") {
     keeps: keeps.length > 8 ? [...keeps.slice(0, 3), ...keeps.slice(-3)] : keeps, rowDigest,
     resume: { reopenAndDigestMs: Math.round(digestMs), recomputeMs: Math.round(recomputeMs) },
     maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, samples }, null, 1));
+} else {
+  // M5b.3's acceptance: the runtime reader over one segment of N statements, the
+  // baseline's shape, in one trail. The operator's side writes the package file
+  // with positional writes (the trail's length and the snapshot are known last),
+  // replaying into a file store of its own. The reader then streams that file
+  // into its own evidence file and replays into its own state file; memory is
+  // sampled as the stream is copied and as records are verified.
+  const dir = resolve(option("--dir", "scratch/replay-store-probe/read"));
+  const files = ["package.bin", "operator.sqlite", "evidence.sqlite", "state.sqlite"].map(name => join(dir, name));
+  const [packageFile, operatorFile, evidenceFile, stateFile] = files;
+  mkdirSync(dir, { recursive: true });
+  for (const f of files) for (const s of ["", "-journal"]) if (existsSync(f + s)) rmSync(f + s);
+  const b = n => new Uint8Array(32).fill(n), label = b(2), lag = 2n, issuerSecret = b(15), operatorSecret = b(16);
+  const configuration = { helper: Buffer.from("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8", "hex"), circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) };
+  const domain = configurationHash(configuration), venue = FixtureVenue.reference(label, lag, 10n);
+  const obligor = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
+  const termsBytes = encodeRootTerms({ obligor, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n }, operator,
+    configuration: domain, venue: venue.id, interval: 10n });
+  const terms = decodeRootTerms(termsBytes), backing = rootTermsName(termsBytes), entries = [{ backing, link: backing }];
+  const header = segmentBytes({ domain, venue: venue.id, operator, sequence: 1n, entries }), segment = sha(header), scope = new ScopeTree(entries).root();
+  const prefix = [...limbsOf(domain), ...limbsOf(segment), scope], capsule = () => { const c = new Uint8Array(randomBytes(89)); c[0] = 1; return c; };
+  const digest = (outputs, capsules) => limbsOf(deliveryHash(domain, outputs, capsules));
+  const signedTerms = { terms: termsBytes, signature: ed25519.sign(rootTermsSignatureMessage(termsBytes), issuerSecret) };
+  const u32 = n => { const x = Buffer.alloc(4); x.writeUInt32BE(n); return x; }, u64 = n => { const x = Buffer.alloc(8); x.writeBigUInt64BE(BigInt(n)); return x; };
+
+  // Operator: an empty opening checkpoint, then one checkpoint of all N records. Items 2–4
+  // have fixed sizes, so they are written as placeholders and filled, in hash order, at the end.
+  const fd = openSync(packageFile, "w"), written = { bytes: 0 };
+  const put = (bytes, at) => { writeSync(fd, bytes, 0, bytes.length, at); if (at === undefined) written.bytes += bytes.length; };
+  const configurationItem = configurationBytes(configuration), placeholder = { commitment: [], directory: [], snapshot: [] };
+  const commitmentLength = encodeCommitment(signCommitment(operatorSecret, 1n, b(0))).length, directoryLength = 9 + 64;
+  const snapshotLength = snapshotBytes({ backing, segment, historyHash: b(0), evidenceHash: b(0), issued: 0n, burned: 0n }).length;
+  put(Buffer.concat([V3_PACKAGE_CONTEXT, u32(7), Buffer.of(1), u64(configurationItem.length), configurationItem]));
+  for (const [key, length, kind, count] of [["commitment", commitmentLength, 2, 1], ["directory", directoryLength, 3, 2], ["snapshot", snapshotLength, 4, 2]]) {
+    for (let i = 0; i < count; i++) { put(Buffer.concat([Buffer.of(kind), u64(length)])); placeholder[key].push(written.bytes); put(Buffer.alloc(length)); }
+  }
+  put(Buffer.of(6)); const trailLengthAt = written.bytes; put(u64(0));
+  const trailStart = written.bytes;
+  put(Buffer.concat([V3_TRAIL_CONTEXT, u32(header.length), header, u32(termsBytes.length), termsBytes, signedTerms.signature]));
+  const countAt = written.bytes; put(u64(0));
+  const verifier = { verify: () => true }, operatorStore = new ReplayStore(operatorFile);
+  const state = openSegmentState(operatorStore, segment, sha("operator"), undefined, () => {});
+  const opening = { backing, segment, historyHash: state.history, evidenceHash: state.evidence, issued: 0n, burned: 0n };
+  const replay = { domain, backing, segment, scope, terms, verifier, index: 1n, block: [] };
+  let recordBytes = 0;
+  const generateStart = performance.now();
+  for (let i = 0; i < N; i++) {
+    let record;
+    if (i === 0) {
+      const cm = fieldOf(), caps = [capsule()];
+      record = { domain, kind: 1, publicInputs: [...prefix, ...limbsOf(backing), 1000n, cm, ...digest([cm], caps)],
+        proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(64), capsules: caps };
+      record.authorization = ed25519.sign(statementBytes(record), issuerSecret);
+    } else {
+      const nfs = [fieldOf(), fieldOf()], outs = [fieldOf(), fieldOf(), fieldOf(), fieldOf()], caps = outs.map(capsule);
+      record = { domain, kind: 2, publicInputs: [...prefix, EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, ...nfs, ...outs, ...digest(outs, caps)],
+        proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(), capsules: caps };
+    }
+    const bytes = encodeRecord(record);
+    await applyRecord(state, bytes, replay);
+    put(u32(bytes.length)); put(bytes); recordBytes += bytes.length;
+    if ((i + 1) % SAMPLE === 0) console.error(JSON.stringify({ generated: i + 1, msPerEvent: +((performance.now() - generateStart) / (i + 1)).toFixed(2) }));
+  }
+  const generateMs = performance.now() - generateStart;
+  const snapshot = { backing, segment, historyHash: state.history, evidenceHash: state.evidence, ...state.total(Buffer.from(backing).toString("hex")) };
+  const directories = [opening, snapshot].map(s => [{ name: backing, digest: snapshotDigest(s) }]);
+  const [openingCommitment, commitment] = directories.map((d, i) => signCommitment(operatorSecret, BigInt(i + 1), directoryRoot(d)));
+  const inOrder = list => list.sort((x, y) => Buffer.compare(sha(x), sha(y)));
+  put(encodeCommitment(commitment), placeholder.commitment[0]);
+  inOrder(directories.map(d => encodeEvidenceDirectory(d))).forEach((bytes, i) => put(bytes, placeholder.directory[i]));
+  inOrder([opening, snapshot].map(snapshotBytes)).forEach((bytes, i) => put(bytes, placeholder.snapshot[i]));
+  put(u64(N), countAt); put(u64(written.bytes - trailStart), trailLengthAt);
+  closeSync(fd); operatorStore.close();
+  venue.witness(1, operator, 1n, encodeCommitment(openingCommitment)); venue.witness(1, operator, 2n, encodeCommitment(commitment));
+
+  // Reader: the package file streamed into its own storage, memory sampled as it goes.
+  const packageBytes = statSync(packageFile).size, importSamples = [], replaySamples = [];
+  const at = (rows, extra) => { gc(); const m = process.memoryUsage();
+    const row = { ...extra, heapMiB: mib(m.heapUsed), rssMiB: mib(m.rss), externalMiB: mib(m.external + m.arrayBuffers) };
+    rows.push(row); console.error(JSON.stringify(row)); };
+  async function* stream() {
+    let read = 0, next = packageBytes / 20;
+    for await (const chunk of createReadStream(packageFile, { highWaterMark: 1 << 20 })) {
+      yield chunk; read += chunk.length;
+      if (read >= next) { at(importSamples, { copiedMiB: mib(read) }); next += packageBytes / 20; }
+    }
+  }
+  let verified = 0, importMs = 0;
+  const readStart = performance.now();
+  const reader = { verify: () => {
+    if (verified === 0) importMs = performance.now() - readStart;
+    if (++verified % SAMPLE === 0) at(replaySamples, { events: verified });
+    return true;
+  } };
+  const evidence = new EvidenceStore(evidenceFile), store = new ReplayStore(stateFile);
+  const result = await readPackage(stream(), { mode: "current-fixture", domain, venue: venue.id, backing, operator, sequence: 2n,
+    root: commitment.root, judgingIndex: venue.witnessedIndex() }, { configuration, verifier: reader, venue, reference: { context: LOCAL_REFERENCE, label, lag },
+    store, evidence, importLimits: { maxCheckpoints: 128n, maxEvents: BigInt(N) + 1n } });
+  const readMs = performance.now() - readStart;
+  assert.equal(result.state.position, BigInt(N));
+  assert.deepEqual(Buffer.from(result.state.history), Buffer.from(snapshot.historyHash));
+  const stateBytes = statSync(stateFile).size, evidenceBytes = statSync(evidenceFile).size;
+  evidence.close(); store.close();
+  const slope = (rows, key, x) => { const first = rows[1] ?? rows[0], last = rows.at(-1);
+    return Math.round((last[key] - first[key]) * 1048576 / (last[x] - first[x])); };
+  console.log(JSON.stringify({ mode, events: N, proofBytes: PROOF, recordBytes: Math.round(recordBytes / N), packageMiB: mib(packageBytes),
+    generateMsPerEvent: +(generateMs / N).toFixed(2), importSeconds: +(importMs / 1000).toFixed(1),
+    replayMsPerEvent: +((readMs - importMs) / N).toFixed(2), evidenceMiB: mib(evidenceBytes), stateMiB: mib(stateBytes),
+    importHeapBytesPerMiB: slope(importSamples, "heapMiB", "copiedMiB"), importRssBytesPerMiB: slope(importSamples, "rssMiB", "copiedMiB"),
+    replayHeapBytesPerEvent: slope(replaySamples, "heapMiB", "events"), replayRssBytesPerEvent: slope(replaySamples, "rssMiB", "events"),
+    replayExternalBytesPerEvent: slope(replaySamples, "externalMiB", "events"),
+    maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, importSamples, replaySamples }, null, 1));
+  for (const f of files) for (const s of ["", "-journal"]) rmSync(f + s, { force: true });
 }

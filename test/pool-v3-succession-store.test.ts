@@ -9,9 +9,8 @@ import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { readPackage, PACKAGE_LIMITS } from "../src/pool/v3/package-reader.js";
+import { readPackage } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage } from "../src/pool/v3/package.js";
-import { TRAIL_LIMITS } from "../src/pool/v3/reader.js";
 import { encodePublication, encodeRecord, type Record } from "../src/pool/v3/records.js";
 import type { ServedPackage, V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -83,8 +82,8 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     };
     const openingContext = async (j: Journal): Promise<SegmentContext> => {
       const served = await j.package();
-      const headers = decodeEvidencePackage(served.package, PACKAGE_LIMITS).filter(item => item.kind === 6)
-        .map(item => decodeSegmentHeader(decodeTrail(item.payload, TRAIL_LIMITS).header));
+      const headers = decodeEvidencePackage(served.package).filter(item => item.kind === 6)
+        .map(item => decodeSegmentHeader(decodeTrail(item.payload).header));
       const selected = headers.filter(h => Buffer.from(h.operator).equals(Buffer.from(j.operatorKey)))
         .sort((x, y) => x.sequence > y.sequence ? -1 : x.sequence < y.sequence ? 1 : 0)[0];
       if (selected === undefined) throw new Error("missing active header");
@@ -153,7 +152,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
 
   it("opens an authorized empty book only after proving no prior carrying checkpoint", async () => {
     const f = fixture(), next = await f.replace(); f.venue.advance(next.effective);
-    const successor = f.create(bSecret, "b"), empty = encodeEvidencePackage([], PACKAGE_LIMITS);
+    const successor = f.create(bSecret, "b"), empty = encodeEvidencePackage([]);
     const opening = await successor.takeover("empty", f.signed, empty);
     expect(opening.sequence).toBe(1n);
     await expect(successor.adopt()).rejects.toMatchObject({ code: "UNAVAILABLE" });
@@ -167,10 +166,10 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
 
   it.each([3, 4, 6])("refuses unavailable predecessor evidence kind %i without consuming the command", async kind => {
     const f = await fundedFixture(), next = await f.replace(); f.venue.advance(next.effective);
-    const successor = f.create(bSecret, "b"), items = decodeEvidencePackage(f.held.package, PACKAGE_LIMITS);
-    const withheld = encodeEvidencePackage(items.filter(item => item.kind !== kind), PACKAGE_LIMITS);
+    const successor = f.create(bSecret, "b"), items = decodeEvidencePackage(f.held.package);
+    const withheld = encodeEvidencePackage(items.filter(item => item.kind !== kind));
     await expect(successor.takeover("retry", f.signed, withheld)).rejects.toMatchObject({ code: "UNAVAILABLE" });
-    await expect(successor.takeover("empty-lie", f.signed, encodeEvidencePackage([], PACKAGE_LIMITS)))
+    await expect(successor.takeover("empty-lie", f.signed, encodeEvidencePackage([])))
       .rejects.toMatchObject({ code: "UNAVAILABLE" });
     expect((await successor.takeover("retry", f.signed, f.held.package)).sequence).toBe(1n);
   });
@@ -238,17 +237,17 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
 
   it("classifies a fully served invalid predecessor checkpoint and imports the earlier finalized state", async () => {
     const f = await fundedFixture(), next = await f.replace();
-    const items = decodeEvidencePackage(f.held.package, PACKAGE_LIMITS);
+    const items = decodeEvidencePackage(f.held.package);
     const snapshot = items.filter(item => item.kind === 4).map(item => decodeSnapshot(item.payload)).find(value => value.issued === 10n)!;
     const invalid = { ...snapshot, issued: 20n }, directory = [{ name: f.backing, digest: snapshotDigest(invalid) }];
     const checkpoint = signCommitment(aSecret, 3n, directoryRoot(directory));
     await f.venue.publishRecord(1, aKey, encodeCommitment(checkpoint));
-    const evidence = [...items, { kind: 3, payload: encodeEvidenceDirectory(directory, PACKAGE_LIMITS) },
+    const evidence = [...items, { kind: 3, payload: encodeEvidenceDirectory(directory) },
       { kind: 4, payload: snapshotBytes(invalid) }]
       .sort((a, b) => a.kind - b.kind || Buffer.compare(sha256(a.payload), sha256(b.payload)));
     f.venue.advance(next.effective);
     const successor = f.create(bSecret, "b");
-    await successor.takeover("takeover", f.signed, encodeEvidencePackage(evidence, PACKAGE_LIMITS));
+    await successor.takeover("takeover", f.signed, encodeEvidencePackage(evidence));
     await successor.publish(); await successor.adopt();
     const result = await f.read(await successor.package());
     expect(result.state.issued).toBe(10n);
@@ -275,7 +274,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
   it("replays the exact takeover command across restart and rejects identifier reuse", async () => {
     const f = await transferred();
     expect(await f.successor.takeover("takeover", f.signed, f.held.package)).toEqual(f.opening);
-    await expect(f.successor.takeover("takeover", f.signed, encodeEvidencePackage([], PACKAGE_LIMITS)))
+    await expect(f.successor.takeover("takeover", f.signed, encodeEvidencePackage([])))
       .rejects.toMatchObject({ code: "CONFLICT" });
     await expect(f.successor.commit("takeover")).rejects.toMatchObject({ code: "CONFLICT" });
     const served = await f.successor.package(); f.successor.close();
@@ -300,8 +299,8 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
       await f.venue.publishRecord(1, aKey, encodeCommitment(next));
       previous = next;
     }
-    const publicA = encodeEvidencePackage(decodeEvidencePackage(empty.package, PACKAGE_LIMITS)
-      .map(item => item.kind === 2 ? { kind: 2, payload: encodeCommitment(previous) } : item), PACKAGE_LIMITS);
+    const publicA = encodeEvidencePackage(decodeEvidencePackage(empty.package)
+      .map(item => item.kind === 2 ? { kind: 2, payload: encodeCommitment(previous) } : item));
     expect(previous.sequence).toBe(126n); expect(f.venue.witnessedIndex()).toBe(126n);
     const replacement = await f.replace(); f.venue.advance(replacement.effective);
     const successor = f.create(bSecret, "b");

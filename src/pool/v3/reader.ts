@@ -18,18 +18,16 @@ import type { Snapshot } from "./commitments.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { ReplayRefusal, EvidenceRefusal, requireReplay } from "./refusals.js";
-import { trailEvidenceChain } from "./served-trail.js";
 import type { ReplayStore } from "./replay-store.js";
 import {
   applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type ScanOutput, type SegmentReplay,
 } from "./state.js";
+import type { StoredTrail } from "./evidence-store.js";
 import type { RootTerms } from "./terms.js";
-import { decodeTrail, type ServedTrail, type TrailLimits } from "./trail.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
-/** The reader's local budgets for one trail and one range answer; never protocol bounds. */
-export const TRAIL_LIMITS: TrailLimits = Object.freeze({ maxBytes: 1_048_576n, maxEvents: 1024n });
+/** The reader's local budget for one range answer; never a protocol bound. */
 export const RANGE_LIMITS: RangeLimits = Object.freeze({ maxBytes: 1_048_576n, maxEntries: 4096n });
 
 /** The reader's independently chosen selection: one configuration, venue, backing and commitment, judged at one index. */
@@ -115,18 +113,6 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
   return { t, lag, chain, revokedAt, heldBy, termEnd, carries, ask };
 }
 
-/** Trails that decode under the budget; one that does not decode is no
- * evidence for any checkpoint (§10.1) and is not read, while the budget holds. */
-export function decodedTrails(trails: readonly Uint8Array[]): ServedTrail[] {
-  const decoded: ServedTrail[] = [];
-  for (const bytes of trails) {
-    try { decoded.push(decodeTrail(bytes, TRAIL_LIMITS)); } catch (error) {
-      if (!(error instanceof EncodingError)) throw error;
-    }
-  }
-  return decoded;
-}
-
 /** What a trail replay reads besides its records: the store its state lives
  * in, the selection, the selected backing's terms (and each scoped backing's),
  * the segment's header, the proof verifier and the outputs to witness. */
@@ -190,7 +176,7 @@ export function lastValidOf(state: ReplayResult, snapshot: Pick<Snapshot, "histo
  * and history hashes there (C2.10.12, pool-v3 §7.1), the evidence before any
  * verification. The replay runs in one savepoint of the store: a refusal
  * leaves nothing behind, and a new namespace it opened disappears. */
-export async function replayTrail(context: ReplayContext, snapshot: Snapshot, trail: ServedTrail, options: TrailOptions): Promise<ReplayResult> {
+export async function replayTrail(context: ReplayContext, snapshot: Snapshot, trail: StoredTrail, options: TrailOptions): Promise<ReplayResult> {
   const { store, selection, terms, scopedTerms, header, verifier, witness } = context;
   const { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false } = options;
   const chargeEvents = options.chargeEvents ?? ((): void => {}), chargeRecords = options.chargeRecords ?? chargeEvents;
@@ -199,11 +185,12 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
   return store.replay(async () => {
     const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid);
     const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported, chargeEvents);
-    if (!isOpening) requireReplay(trail.records.length >= block.length, "ADOPTION");
-    chargeRecords(BigInt(trail.records.length) - (resumed?.position ?? 0n));
+    if (!isOpening) requireReplay(trail.length >= BigInt(block.length), "ADOPTION");
+    chargeRecords(trail.length - (resumed?.position ?? 0n));
     const replay: SegmentReplay = { domain: selection.domain, backing: selection.backing, segment: snapshot.segment, scope, terms, scopedTerms,
       verifier, index, revokedAt, revocations, lastValid, block, witness };
-    for (const bytes of trail.records.slice(Number(state.position))) await applyRecord(state, bytes, replay);
+    // Records are read from the reader's own storage one at a time.
+    for (const bytes of trail.records(state.position)) await applyRecord(state, bytes, replay);
     const position = state.position;
     requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
     const { issued, burned } = state.total(hex(snapshot.backing));
@@ -274,15 +261,15 @@ function replayIdentity({ selection, terms, scopedTerms, verifier, witness }: Re
  * namespace whose tip is that checkpoint instead of verifying the prefix
  * again. Anything else replays in a fresh namespace, keeping the first failing
  * check and its order. */
-function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array, trail: ServedTrail, lastValid: ValidCheckpoint | undefined): StateHandle | undefined {
-  if (lastValid === undefined || BigInt(trail.records.length) < lastValid.position || !same(sha256(trail.header), segment)) return undefined;
+function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array, trail: StoredTrail, lastValid: ValidCheckpoint | undefined): StateHandle | undefined {
+  if (lastValid === undefined || trail.length < lastValid.position || !same(trail.segment, segment)) return undefined;
   const own = lastValid.state?.ns, candidates = [...(own === undefined ? [] : [own]), ...store.namespaces(identity).filter(ns => ns !== own)];
   for (const ns of candidates) {
     const tip = store.tip(ns);
     if (!same(store.identity(ns), identity)) continue;
     if (tip.position !== lastValid.position || !same(tip.history, lastValid.historyHash) || !same(tip.evidence, lastValid.evidenceHash)) continue;
-    const chain = trailEvidenceChain(trail);
-    return chain.length > Number(tip.position) && same(chain[Number(tip.position)]!, lastValid.evidenceHash) ? new StateHandle(store, ns) : undefined;
+    const evidence = trail.evidence(tip.position);
+    return evidence !== undefined && same(evidence, lastValid.evidenceHash) ? new StateHandle(store, ns) : undefined;
   }
   return undefined;
 }

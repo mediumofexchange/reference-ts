@@ -4,10 +4,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 
 /** The companion specification revision the v3 reports implement, the
- * runtime pin: pool-v3 at 85655a5, whose §4 loads only hash-checked proving
- * parameters, and for Ergo reports venue-ergo.md in the same tree. The six
- * relations are unchanged since d57ddb0. */
-export const V3_SPECIFICATION = "85655a5";
+ * runtime pin: pool-v3 at 97ff964, whose §12 frames package items with u64
+ * lengths and whose §14 states replay, retention and streamed input, and for
+ * Ergo reports venue-ergo.md in the same tree. The six relations are unchanged
+ * since d57ddb0. */
+export const V3_SPECIFICATION = "97ff964";
 
 const root = resolve(import.meta.dirname, "../../..");
 const rel = file => relative(root, file).replaceAll("\\", "/");
