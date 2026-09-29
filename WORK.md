@@ -10,19 +10,20 @@ incremental verdicts equal full replay, and corrupt kept state falls back; real 
 the old ceiling through journal, wallet sync and offline-operator recovery; first sync
 measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision).
 
-**Next: M5b.3 streamed evidence** (evidence file, streamed trails/packages, windowed ranges,
-per-object budgets, u64 codec, runtime pin to spec `97ff964`; acceptance: a ≥10⁵-statement
-stub replay with memory flat against history). Start from the probe's evidence schema and
-`replay-store.ts` (probe baseline measures it); rework the one walk too: it recurses and caches every verdict per read ([decision](decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)).
+**Next: M5b.3b, checkpoints and venue age** ("M5b.3 split" in the decision): one forward walk in rank order with
+verdict rows (the walk recurses and caches every verdict per read), windowed range reads, directories/snapshots
+read from the evidence store, per-object work bounds for `IMPORT_LIMITS` (and the journal's reservations),
+event rows without record bytes. *Acceptance:* the probe's `read` mode with many checkpoints, memory flat.
 
 ## Status
-- One reader walk (PR #48): `scope-reader.ts` reads every scope; the other walks and entries are gone;
-  review-found fixes: excluded openings found their segment, lapse before validity, clock on lapse.
+- M5b.3a (branch `feat/m5b3-streamed-evidence`): readers copy a package, bytes or stream, into `evidence-store.ts`
+  and replay records one at a time; one frame reader each for package/trail; u64 items; per-object budgets; pin `97ff964`.
+- One reader walk (PR #48): `scope-reader.ts` reads every scope; the other walks and entries are gone.
 - M5b.2 (PR #47): reads, journal and wallet replay into `replay-store.ts` ("M5b.2 as built/review"),
-  in memory per read or journal until M5b.4, records in event rows until M5b.3.
+  in memory per read or journal until M5b.4, records in event rows until M5b.3b.
 - M5b.1: design and [probe](docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage); kept exclusions need §14 text in M5b.4.
   [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay): complete replay, streamed and resumed; u64 §12 items; [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets)
-  10⁶ statements over three years, memory ≤ 1 GiB, first sync ≤ 24 h. Runtime pins spec `85655a5` until M5b.3.
+  10⁶ statements over three years, memory ≤ 1 GiB, first sync ≤ 24 h.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
