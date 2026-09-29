@@ -7,7 +7,9 @@ import { pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { serialize } from "node:v8";
 import { Noir } from "@noir-lang/noir_js";
-import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
+import { UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
+import { startBackend } from "../../../dist/pool/proof-verifier.js";
+import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { NoteTree, notePathProves } from "../../../dist/pool/note-tree.js";
 import { ScopeTree } from "../../../dist/pool/scope.js";
@@ -63,7 +65,7 @@ try {
   execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
   checkCandidateSources(manifest);
   const circuits = {}, identities = {}, options = { verifierTarget: manifest.verifierTarget };
-  api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath: join(scratch, "private-payment-crs") });
+  api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
   for (const [kind, name] of RELATION_KINDS) {
     const artifact = JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"));
     const backend = new UltraHonkBackend(artifact.bytecode, api), vk = await backend.getVerificationKey(options);

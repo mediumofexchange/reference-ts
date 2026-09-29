@@ -1,38 +1,42 @@
-// Reproducible test parameters for bb.js 5.2.0's default 2^19 BN254 points.
-// Identities match those first recorded for pool-v2 (docs/pool-v2-verification.json
-// at a020215) and fresh downloads from both
-// upstream hosts. The BN254 files equal Aztec Ignition transcript00's leading
-// points (pool-v3 §4): their source, not the ceremony's trust. Grumpkin is
-// fetched only because bb.js loads it at startup; UltraHonk does not use it.
+// The proving parameters the reference loads (pool-v3 §4), fetched and verified
+// before they are cached: the leading 2^15 uncompressed BN254 G1 points (a
+// prefix of the CDN's `g1.dat`) and `[x]_2`. Both equal Aztec Ignition
+// transcript00's leading points (docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters):
+// their source, not the ceremony's trust. The runtime checks the same hashes
+// again before loading (`startBackend`, src/pool/proof-verifier.ts); a test
+// holds these entries equal to its `BN254_PARAMETERS`.
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const hosts = ['https://crs.aztec-cdn.foundation', 'https://crs.aztec-labs.com'];
-const parameters = [
-  { name: 'bn254_g1_compressed.dat', source: 'g1_compressed.dat', bytes: 16777216, range: true,
-    sha256: '1d03ebeb73e1a6d426e44a2ccc88b04125ca185ab9d1679817380502a723fa80' },
-  { name: 'bn254_g2.dat', source: 'g2.dat', bytes: 128, range: false,
-    sha256: '01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f' },
-  { name: 'grumpkin_g1_v2.flat.dat', source: 'grumpkin_g1_v2.dat', bytes: 4194304, range: true,
-    sha256: '64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd' },
-];
-const UNCOMPRESSED_G1 = 'ea7b37bb4e1840b5632675fb2d79873ac0a1598374d3087344ba0e980736b8ac';
-/** The BN254 files the backend proves and verifies from once it has loaded them
- * (it caches the uncompressed G1 layout). Both equal Aztec Ignition transcript00's
- * leading points (pool-v3 §4; docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters). */
-export const BN254_PARAMETERS = Object.freeze({
-  'bn254_g1.dat': UNCOMPRESSED_G1, 'bn254_g2.dat': parameters.find(p => p.name === 'bn254_g2.dat').sha256,
-});
+/** Each file's leading `bytes` are the parameter; a longer copy (such as all 2^19 points) is read by its prefix. */
+export const PARAMETER_FILES = Object.freeze([
+  Object.freeze({ name: 'bn254_g1.dat', source: 'g1.dat', bytes: 2097152, range: true,
+    sha256: '50d2f4e9567be2b8e382cedfd078b96a3428a94597b7e88c4116e105d578ce77' }),
+  Object.freeze({ name: 'bn254_g2.dat', source: 'g2.dat', bytes: 128, range: false,
+    sha256: '01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f' }),
+]);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const matches = (bytes, parameter) => bytes.length === parameter.bytes && sha(bytes) === parameter.sha256;
 
+/** A file's leading `bytes` bytes, fewer if it is shorter; undefined if it does not exist. */
+async function leading(path, bytes) {
+  let handle;
+  try { handle = await open(path, 'r'); } catch (error) { if (error.code === 'ENOENT') return undefined; throw error; }
+  try {
+    const buffer = Buffer.alloc(bytes);
+    let read = 0;
+    for (let n; read < bytes && (n = (await handle.read(buffer, read, bytes - read, read)).bytesRead) > 0;) read += n;
+    return buffer.subarray(0, read);
+  } finally { await handle.close(); }
+}
+
 export async function ensureParameter(directory, parameter, { fetchImpl = fetch, log = console.log } = {}) {
   const target = join(directory, parameter.name);
-  try {
-    if (matches(await readFile(target), parameter)) return;
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const cached = await leading(target, parameter.bytes);
+  if (cached !== undefined && matches(cached, parameter)) return;
   const failures = [];
   for (const host of hosts) {
     let response;
@@ -80,16 +84,22 @@ export async function ensureParameter(directory, parameter, { fetchImpl = fetch,
 }
 
 export async function prepareCrs(directory) {
-  // bb.js prefers uncompressed G1 when present; verify that path as well.
-  try {
-    const bytes = await readFile(join(directory, 'bn254_g1.dat'));
-    if (bytes.length !== 33554432 || sha(bytes) !== UNCOMPRESSED_G1) {
-      throw new Error('Uncompressed G1 cache differs from the recorded test parameters');
-    }
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  for (const parameter of parameters) await ensureParameter(directory, parameter);
+  for (const parameter of PARAMETER_FILES) await ensureParameter(directory, parameter);
 }
 
+/**
+ * The parameter bytes as `startBackend` takes them: each file's leading bytes,
+ * unjudged here (the runtime checks them), with where they were read from.
+ */
+export async function readParameters(directory) {
+  const [g1, g2] = await Promise.all(PARAMETER_FILES.map(p => leading(join(directory, p.name), p.bytes)));
+  if (g1 === undefined || g2 === undefined) throw new Error(`No proving parameters in ${directory}; run scripts/pool/prepare-crs.mjs`);
+  return { g1, g2 };
+}
+
+/** The reference's parameter directory. */
+export const PARAMETER_DIRECTORY = fileURLToPath(new URL('../../scratch/private-payment-crs/', import.meta.url));
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  await prepareCrs(fileURLToPath(new URL('../../scratch/private-payment-crs/', import.meta.url)));
+  await prepareCrs(PARAMETER_DIRECTORY);
 }

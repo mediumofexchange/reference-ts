@@ -11,12 +11,16 @@
 // nothing else; it never accepts a verification key supplied with a statement.
 // `v3/prover.ts` binds pool-v3's table.
 //
+// Every backend instance is started here from proving parameters whose hashes
+// match `BN254_PARAMETERS` (pool-v3 §4's check before loading); the backend's
+// own loader, which reads an unchecked directory or downloads, is never used.
 // This module and `v3/prover.ts` are the only ones that import `@aztec/bb.js`,
 // an optional peer dependency.
 
 import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
-import { copyBytes, EncodingError } from "../bytes.js";
+import { copyBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { fieldToHex, isField } from "./field.js";
 
 /** The proof options every construction here is defined under. */
@@ -57,17 +61,86 @@ export interface ProofVerifier {
   close(): Promise<void>;
 }
 
-/** How a backend instance is started: the verifier's own, and a caller's. */
+/**
+ * The proving parameters this implementation loads (pool-v3 §4), one accepted
+ * layout per input, as SHA-256. `g1` is the leading `points` G1 points of Aztec
+ * Ignition's transcript00, uncompressed as the backend reads them (each point
+ * `x || y`, 32-byte big-endian; the first is `[1]_1`). `points` is the size of
+ * the largest relation proved here, pool-v3's spend: the backend refuses to
+ * derive a key or prove for a larger circuit. `g2` is `[x]_2`, which the
+ * backend's loader also requires.
+ */
+export const BN254_PARAMETERS = Object.freeze({
+  points: 32768,
+  g1: "50d2f4e9567be2b8e382cedfd078b96a3428a94597b7e88c4116e105d578ce77",
+  g2: "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f",
+});
+const POINT_BYTES = 64;
+const G2_BYTES = 128;
+
+/** The parameter bytes a caller obtained, from wherever it keeps or fetches them. */
+export interface ProvingParameters {
+  readonly g1: Uint8Array;
+  readonly g2: Uint8Array;
+}
+
+/** Parameter bytes that are not `BN254_PARAMETERS`' layout, or an instance not started from them. */
+export class ParameterError extends Error {
+  constructor(readonly code: "G1" | "G2" | "UNCHECKED", message: string) {
+    super(message); this.name = "ParameterError";
+  }
+}
+
+/** How a backend instance runs. */
 export interface BackendOptions {
-  readonly crsPath?: string;
   readonly threads?: number;
 }
 
-export const startBackend = (options: BackendOptions): Promise<Barretenberg> => Barretenberg.new({
-  backend: BackendType.WasmWorker,
-  threads: options.threads ?? 1,
-  ...(options.crsPath === undefined ? {} : { crsPath: options.crsPath }),
-});
+// Every instance `startBackend` loaded, with what the verifier's own instances
+// load: `[1]_1` and `[x]_2`. Verification given a key reads nothing else (§4).
+const STARTED = new WeakMap<Barretenberg, { readonly generator: Uint8Array; readonly g2: Uint8Array }>();
+
+/** An owned copy of one input, judged by its own length and hash. */
+function checked(value: unknown, code: "G1" | "G2", length: number, expected: string): Uint8Array {
+  let own: Uint8Array;
+  try {
+    own = copyUnshared(value as Uint8Array);
+  } catch (error) {
+    if (error instanceof EncodingError) throw new ParameterError(code, `the BN254 ${code} parameters are not bytes`);
+    throw error;
+  }
+  if (own.length !== length || bytesToHex(sha256(own)) !== expected) {
+    throw new ParameterError(code, `the BN254 ${code} parameters are not the manifest's`);
+  }
+  return own;
+}
+
+/** A WASM worker instance holding `count` G1 points and G2, and no Grumpkin points (UltraHonk reads none). */
+async function load(points: Uint8Array, count: number, g2: Uint8Array, threads: number | undefined): Promise<Barretenberg> {
+  const api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: threads ?? 1, skipSrsInit: true });
+  try {
+    await api.srsInitSrs({ pointsBuf: copyBytes(points), numPoints: count, g2Point: copyBytes(g2) });
+  } catch (error) {
+    await api.destroy().catch(() => {});
+    throw error;
+  }
+  return api;
+}
+
+/**
+ * Start a backend instance from `parameters` once their copies match
+ * `BN254_PARAMETERS`; anything else is refused before a backend starts. The
+ * caller owns the instance. Reloading other points into it through the
+ * backend's own API is outside what this check can stop.
+ */
+export async function startBackend(parameters: ProvingParameters, options: BackendOptions = {}): Promise<Barretenberg> {
+  if (parameters === null || typeof parameters !== "object") throw new ParameterError("G2", "no BN254 parameters");
+  const g2 = checked(parameters.g2, "G2", G2_BYTES, BN254_PARAMETERS.g2);
+  const g1 = checked(parameters.g1, "G1", BN254_PARAMETERS.points * POINT_BYTES, BN254_PARAMETERS.g1);
+  const api = await load(g1, BN254_PARAMETERS.points, g2, options.threads);
+  STARTED.set(api, Object.freeze({ generator: copyBytes(g1.subarray(0, POINT_BYTES)), g2 }));
+  return api;
+}
 
 // What bb.js 5.2.0 throws while reading a well-sized proof whose bytes are not
 // a proof: an element at or above its field's modulus, a commitment coordinate
@@ -120,30 +193,28 @@ function allFields(values: unknown, count: number): values is readonly bigint[] 
 }
 
 /**
- * Derive one key per circuit of `table` over the caller's backend instance
- * and build the verifier. `close` on the result does not destroy the instance
- * the caller owns.
+ * Derive one key per circuit of `table` over the caller's backend instance,
+ * which `startBackend` must have started, and build the verifier. `close` on
+ * the result does not destroy the instance the caller owns.
  *
  * A proof bb.js throws on leaves its instance behind: each such throw leaks
  * in the WASM instance, and after enough of them every later verification
  * fails, valid proofs included. So the verifier verifies only on an instance
- * of its own, started with `options` at its first verification and replaced
- * after every throw, and never on the caller's. Verifications run one at a
- * time, so no call is in flight on an instance being retired.
+ * of its own, holding `[1]_1` and `[x]_2` from the caller's checked
+ * parameters, started at its first verification and replaced after every
+ * throw, and never on the caller's. Verifications run one at a time, so no
+ * call is in flight on an instance being retired.
  */
 export async function proofVerifier(
   api: Barretenberg,
   table: CircuitTable,
   programs: Readonly<Record<string, CompiledProgram>>,
-  options: BackendOptions,
+  options: BackendOptions = {},
 ): Promise<ProofVerifier> {
   const owned = ownTable(table);
-  // Each replacement starts with these options as given now, not as the caller later changes them.
-  const { crsPath, threads } = options;
-  const own: BackendOptions = Object.freeze({ ...(crsPath === undefined ? {} : { crsPath }), ...(threads === undefined ? {} : { threads }) });
-  const keys = new Map<number, { readonly vk: Uint8Array; readonly publicInputs: number }>();
-  const identities: Record<string, CircuitIdentity> = {};
-  for (const { kind, name, publicInputs } of owned.circuits) {
+  // Each replacement runs as the options are given now, not as the caller later changes them.
+  const { threads } = options;
+  const texts = owned.circuits.map(({ name }) => {
     // A circuit's bytecode identity hashes the bytes the artifact's field
     // decodes to. The key is derived by the backend from its own decoding of
     // the same string, read once here, so the string must have one decoding:
@@ -153,8 +224,15 @@ export async function proofVerifier(
     if (typeof text !== "string") throw new EncodingError(`${name} bytecode is not canonical base64`);
     const bytecode = Buffer.from(text, "base64");
     if (bytecode.toString("base64") !== text) throw new EncodingError(`${name} bytecode is not canonical base64`);
-    const backend = new UltraHonkBackend(text, api);
-    const vk = await backend.getVerificationKey(PROOF_OPTIONS);
+    return { text, bytecode };
+  });
+  const loaded = STARTED.get(api);
+  if (loaded === undefined) throw new ParameterError("UNCHECKED", "the backend instance was not started from checked parameters");
+  const keys = new Map<number, { readonly vk: Uint8Array; readonly publicInputs: number }>();
+  const identities: Record<string, CircuitIdentity> = {};
+  for (const [i, { kind, name, publicInputs }] of owned.circuits.entries()) {
+    const { text, bytecode } = texts[i]!;
+    const vk = await new UltraHonkBackend(text, api).getVerificationKey(PROOF_OPTIONS);
     keys.set(kind, Object.freeze({ vk, publicInputs }));
     identities[name] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk) });
   }
@@ -187,7 +265,7 @@ export async function proofVerifier(
       return serially(async () => {
         if (closed) throw new Error("the proof verifier is closed");
         if (current === undefined) {
-          const fresh = await startBackend(own);
+          const fresh = await load(loaded.generator, 1, loaded.g2, threads);
           current = { api: fresh, backend: new UltraHonkVerifierBackend(fresh) };
         }
         try {

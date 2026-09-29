@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { join, resolve, sep } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { serialize, deserialize } from "node:v8";
-import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
+import { UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
 import { ErgoVenue } from "../../../dist/ergo.js";
@@ -28,7 +28,8 @@ import { openV3Prover } from "../../../dist/pool/v3/prover.js";
 import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { authorizeIssue, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
 import { encodeRecord } from "../../../dist/pool/v3/records.js";
-import { PROOF_OPTIONS } from "../../../dist/pool/proof-verifier.js";
+import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
+import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
 import { v3Codec as codec } from "./codec.mjs";
@@ -54,7 +55,7 @@ async function worker(directory, ergo) {
   for await (const chunk of process.stdin) { length += chunk.length; assert(length <= 4_194_304, "worker input budget"); chunks.push(chunk); }
   const input = deserialize(Buffer.concat(chunks));
   assert.deepEqual(Object.keys(input).sort(), ["package", "selection", "venue"]);
-  const api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath: join(root, "scratch/private-payment-crs") });
+  const api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
   try {
     const backend = new UltraHonkVerifierBackend(api), verifier = { verify: (kind, publicInputs, proof) =>
       backend.verifyProof({ proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind) }, PROOF_OPTIONS) };
@@ -85,11 +86,11 @@ async function acceptance(ergo) {
     const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
     const configuration = candidateConfiguration(manifest, codec), domain = codec.configurationHash(configuration);
     execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
-    api = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, crsPath: join(scratch, "private-payment-crs") });
+    api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
     const programs = Object.fromEntries(RELATION_KINDS.map(([, name]) => [name, JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"))]));
     for (const [kind, name] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
     readCandidateKeys(build, manifest);
-    prover = await openV3Prover(api, programs, configuration, { crsPath: join(scratch, "private-payment-crs") });
+    prover = await openV3Prover(api, programs, configuration);
     const prove = async (task, name) => { const began = performance.now(), record = await prover.prove(task);
       proofs.push({ name, kind: task.kind, bytes: record.proof.length, elapsedMs: Math.round(performance.now() - began) }); return record; };
     const reference = referenceFor(ergo), supplier = ergo ? new MiningSupplier("succession-synthetic", ERGO_CHAIN, verifyErgoProof) : undefined;
