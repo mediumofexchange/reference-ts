@@ -13,9 +13,7 @@ measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the dec
 **Next: M5b.3 streamed evidence** (evidence file, streamed trails/packages, windowed ranges,
 per-object budgets, u64 codec, runtime pin to spec `97ff964`; acceptance: a ≥10⁵-statement
 stub replay with memory flat against history). Start from the probe's evidence schema and
-`replay-store.ts`; the baseline mode of `replay-store-probe.mjs` now measures the stored runtime.
-The one reader walk (`scope-reader.ts`) recurses through `latest` and caches every verdict per
-read, so M5b.3 reworks it too ([one-walk decision](decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)).
+`replay-store.ts` (probe baseline measures it); rework the one walk too: it recurses and caches every verdict per read ([decision](decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)).
 
 ## Status
 - One reader walk (PR #48): `scope-reader.ts` reads every scope; the other walks and entries are gone;
@@ -74,19 +72,18 @@ read, so M5b.3 reworks it too ([one-walk decision](decisions/2026-09.md#2026-09-
    acceptance receipt handoff, store-check's request through the frame, same-segment rescoping.
    Phone-first wallet: first a venue range source proportional to the subject's records
    (index-free box source, a new venue identity; M5), then a succinct relation if needed.
-7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages
-   beside `package-reader.ts`. After 5(h), read every `local-check` group through
-   `readPackage`/`readFrontier`, keep only the no-venue trail replay, and delete the dispatch and
-   `{compact,scope}-runtime-check.mjs`; equivalence: those two comparisons pass on every group first.
+7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside
+   `package-reader.ts`. After 5(h), read every `local-check` group through `readPackage`/`readFrontier`, keep
+   the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group.
 
 ## Retained boundaries and local state
-- Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under
-  `scratch/ergo-nodes/`; approved WMI launcher `experiments/ergo-range/nodes.mjs`.
+- Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
+  2026-09-29: run them (`experiments/ergo-range/nodes.mjs start|stop`) only while work uses them, allowing catch-up sync.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public `pool-v3-testnet-reader/` and `pool-v3-recovery-testnet-reader/`
   bundles, `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/` and `ergo-headers/` under scratch.
 - Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`
   and `node-startup/`, `sync-preparation/` caches; do not allocate another.
-- Archive node `C:\Users\Bob\ergo-node` (outside this project) synced with its index 2026-09-29. Delete
+- Archive node `C:\Users\Bob\ergo-node` (outside this project): synced with its index, stopped 2026-09-29; nothing uses it. Delete
   slice scratch after delivery; preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified hardware/device custody, theft/power-loss/backup drills and continuous
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
@@ -94,6 +91,8 @@ read, so M5b.3 reworks it too ([one-walk decision](decisions/2026-09.md#2026-09-
 ## Open questions
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
+- Non-blocking deletions (merged branches; maintainer-only in unattended runs): `git branch -d chore/one-reader-walk docs/one-walk-handoff;
+  git push origin --delete chore/one-reader-walk docs/one-walk-handoff feat/m5b2-stored-reader-state`.
 
 Roughly **57% done / 43% remaining**, range **47–66%**, reassessed 2026-09-29 after M5b.2 (every
 party's state now in storage; streaming, kept state, first sync, adoption, qualified storage, mainnet remain).

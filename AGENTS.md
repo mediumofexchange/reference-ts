@@ -87,8 +87,8 @@ dependent machinery. A probe, measurement or hardening item names the decision o
 serves and retires with it: once that is recorded or a runtime test or conformance suite covers it,
 delete the probe and cite its report at its last revision. Only acceptance evidence for current
 runtime behavior is re-recorded as current. Do not broaden into unrelated cleanup or call an
-experiment a runtime capability. When a general mechanism lands beside a special case, run the
-special case's tests through it in that slice and delete the special case unless a measurement keeps it.
+experiment a runtime capability. When a general mechanism lands beside a special case, run the special
+case's tests and reviewed rules through it in that slice; delete the special case unless measurement keeps it.
 
 For a protocol ambiguity/change: identify the exact rule and conflict; compare the smallest
 alternatives, including reuse or omission; explain invariants, trust/privacy, compatibility and
@@ -187,6 +187,7 @@ Search with `rg`/`git grep` and size with `du` only outside `scratch/ergo-nodes`
 Commands that can pass two minutes run detached with output and exit code in scratch; clear old
 completion markers before starting and wait with an until-loop or Monitor, never `sleep N; check`.
 WORK.md names detached jobs; change files they read only on a branch/worktree, merging after they end.
+Ergo nodes (own and archive) run only while a task uses them: start early for catch-up sync, stop after.
 Stay read-only when unexplained commits/file changes or a confirmed active session show concurrent
 editing of this checkout; an idle or unrelated agent process alone does not establish that.
 
