@@ -259,14 +259,16 @@ export async function replayEvidencePackage(input, verifier, codec) {
     if (snapshotBytes === undefined) return refused("unresolved-evidence");
     const snapshot = codec.decodeSnapshot(snapshotBytes), expected = { backing: selection.backing, segment: snapshot.segment, digest: entry.digest };
     // pool-v3 §12.1: the selection's served trail may be the prefix of a longer packaged trail.
-    const trailed = payloads(6).filter(payload => { try { codec.decodeTrail(payload, LIMITS); return true; } catch (error) {
-      if (error instanceof EncodingError) return false; throw error; } });
+    const trailed = budgeted(payloads(6), codec);
     const served = new EvidenceStore().importTrails(trailed).served(expected, snapshot);
     if (served === undefined) return refused("unresolved-evidence");
-    const scoped = codec.decodeSegmentHeader(served.header).entries.length;
-    const encoded = codec.encodeTrail({ header: served.header, terms: Array.from({ length: scoped }, (_, i) => served.term(i)),
-      records: [...served.records()] }, LIMITS);
-    const trailBytes = [payloads(6).find(payload => same(payload, encoded)) ?? encoded];
+    // The supplied trail it was cut from is the first whose records begin with the served ones;
+    // its bytes are used whole, or cut to the served length with its own terms kept.
+    const records = [...served.records()];
+    const origin = trailed.map(payload => ({ payload, trail: codec.decodeTrail(payload, LIMITS) })).find(({ trail }) =>
+      same(trail.header, served.header) && trail.records.length >= records.length && records.every((record, i) => same(record, trail.records[i])));
+    const trailBytes = [origin.trail.records.length === records.length ? origin.payload :
+      codec.encodeTrail({ ...origin.trail, records }, LIMITS)];
     const others = directories.filter(entries => entries !== directory);
     const snapshots = payloads(4).filter(payload => payload !== snapshotBytes), trails = payloads(6).filter(payload => payload !== trailBytes[0]);
     if (others.length + snapshots.length + trails.length > 0 && input.venue === undefined) return refused("unsupported-scope");
