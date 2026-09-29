@@ -16,8 +16,8 @@ and faults read from the evidence store, per-object work bounds for `IMPORT_LIMI
 an aggregate object quota per read, event rows without record bytes. *Acceptance:* the probe's `read` mode with many checkpoints, memory flat.
 
 ## Status
-- M5b.3a (branch `feat/m5b3-streamed-evidence`): readers copy a package, bytes or stream, into `evidence-store.ts`
-  and replay records one at a time; one frame reader each for package/trail; u64 items; per-object budgets; pin `97ff964`.
+- M5b.3a (PR #50): readers copy a package, bytes or stream, into `evidence-store.ts` and replay records one at a time;
+  one frame reader per frame; u64 items; per-object budgets; pin `97ff964`; [10⁵ statements at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-streaming-one-long-segment-m5b3a).
 - One reader walk (PR #48): `scope-reader.ts` reads every scope; the other walks and entries are gone.
 - M5b.2 (PR #47): reads, journal and wallet replay into `replay-store.ts` ("M5b.2 as built/review"),
   in memory per read or journal until M5b.4, records in event rows until M5b.3b.
@@ -93,5 +93,5 @@ an aggregate object quota per read, event rows without record bytes. *Acceptance
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
 
-Roughly **57% done / 43% remaining**, range **47–66%**, reassessed 2026-09-29 after M5b.2 (every
-party's state now in storage; streaming, kept state, first sync, adoption, qualified storage, mainnet remain).
+Roughly **58% done / 42% remaining**, range **48–67%**, reassessed 2026-09-29 after M5b.3a (the reader streams a
+segment at flat memory; checkpoint axis, kept state, first sync, adoption, qualified storage, mainnet remain).

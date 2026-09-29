@@ -848,6 +848,41 @@ Limits:
 - a stand-in node hash, so this is storage evidence, not replay-time
   evidence.
 
+### The runtime reader streaming one long segment (M5b.3a)
+
+`replay-store-probe.mjs read <N>` measures the runtime reader, not a model of
+it ([M5b.3a](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+An operator replays the baseline shape (an issue, then spends of two
+nullifiers into four outputs) into a file store of its own. It writes one
+package file with an empty opening checkpoint and one checkpoint of all N
+records. `readPackage` then streams that file in 1 MiB chunks into an
+evidence file and replays into a state file, with a stub verifier and
+Poseidon2 note hashing. Memory is sampled after a forced collection while the
+stream is copied and every 5,000 verified records.
+
+Run of 2026-09-29 at commit `4b159c2`, 10⁵ statements, 938-byte records, one
+Windows desktop with 4 logical cores shared with other work:
+
+| Phase | Time | Heap | Process memory |
+|---|---:|---:|---:|
+| Copy the 89.8 MiB package into the evidence file | 40 s | 8.3 MB throughout | 259 → 263 MB |
+| Replay 10⁵ records from it | 37.1 ms per record | 8.6 → 8.7 MB, 1 byte per record | 262 → 262 MB, peaks 266 MB |
+
+- *Files:* the evidence file took 124.5 MiB and the state file 630.6 MiB.
+  The state file still holds each record's bytes in its event row
+  (M5b.3b removes them) and needs its per-record size attributed.
+- *Other costs:* process memory includes the operator's own replay earlier in
+  the same process; the peak was 283 MB. Generation ran at 92 ms per record.
+- *Later fixes:* the review fixes after `4b159c2` changed chunk buffering
+  and a copy's shared-memory test, not the reader's path. A 1 MiB chunk was
+  already one array.
+- *Limits:*
+  - one segment with two checkpoints, so this shows memory flat against a
+    segment's statements, not against checkpoints or venue age (M5b.3b);
+  - the reader's import limits were raised for the run;
+  - stand-in proofs, so the bytes per record are about a sixteenth of the
+    real size.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

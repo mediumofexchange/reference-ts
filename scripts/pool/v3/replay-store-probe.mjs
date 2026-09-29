@@ -472,5 +472,5 @@ if (mode === "baseline") {
     replayHeapBytesPerEvent: slope(replaySamples, "heapMiB", "events"), replayRssBytesPerEvent: slope(replaySamples, "rssMiB", "events"),
     replayExternalBytesPerEvent: slope(replaySamples, "externalMiB", "events"),
     maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, importSamples, replaySamples }, null, 1));
-  for (const f of files) rmSync(f, { force: true });
+  for (const f of files) for (const s of ["", "-journal"]) rmSync(f + s, { force: true });
 }
