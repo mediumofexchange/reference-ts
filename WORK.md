@@ -11,10 +11,9 @@ BN254's ~100-bit margin; independent review and read-backs resolved. Probe
 records the files it proved with. Next run: M2 (Next 1).
 
 ## Status
-- Audit 2026-09-29, v3 proof relations (PR #43): circuits match pool-v3 §§2–4. `check.mjs`
-  names every hostile refusal and covers each reachable ACIR assertion instance; first
-  cases for burn change backing, demand zero tag, per-backing conservation, slot-0
-  padding and settle `QUANTITY`. Conformance report from CI run 36499628288.
+- Audit 2026-09-29 (PR #43): circuits match pool-v3 §§2–4; `check.mjs` names every hostile
+  refusal and covers each reachable ACIR assertion instance. Conformance report from CI
+  run 36508150640 (445 checks, 18 proofs, identities unchanged; records the BN254 files).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md),

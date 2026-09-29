@@ -1,6 +1,6 @@
 {
   "candidate": "combined six successor relations",
-  "referenceBase": "929797da4a8c9a19367572080a290f7a7ff91d4f",
+  "referenceBase": "23fd680f5474984c1f3aefb050abbeb2722968b0",
   "referenceTreeClean": true,
   "companionSpec": "786f962",
   "environment": {
@@ -13,7 +13,11 @@
       "@noir-lang/noir_wasm": "1.0.0-beta.26"
     },
     "verifierTarget": "noir-recursive",
-    "threads": 1
+    "threads": 1,
+    "parameters": {
+      "bn254_g1.dat": "ea7b37bb4e1840b5632675fb2d79873ac0a1598374d3087344ba0e980736b8ac",
+      "bn254_g2.dat": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f"
+    }
   },
   "counts": {
     "issue": 11,
@@ -161,6 +165,7 @@
     ]
   },
   "checks": [
+    "the backend loaded the recorded Ignition BN254 G1 points and [x]_2",
     "issue: all 27 integer and boolean inputs are range-checked in ACIR",
     "spend: all 124 integer and boolean inputs are range-checked in ACIR",
     "burn: all 100 integer and boolean inputs are range-checked in ACIR",
@@ -610,162 +615,162 @@
     {
       "kind": "issue",
       "label": "issue: exact public order and real proof",
-      "executeMs": 69.62969000000157,
-      "proveMs": 1085.6397929999985,
-      "verifyMs": 50.05927800000063,
+      "executeMs": 61.74343299999964,
+      "proveMs": 1016.8573340000003,
+      "verifyMs": 46.755434999999125,
       "proofBytes": 14656,
       "publicInputs": 11
     },
     {
       "kind": "spend",
       "label": "spend: exact public order and real proof",
-      "executeMs": 54.444266999998945,
-      "proveMs": 3085.826556,
-      "verifyMs": 38.94391600000017,
+      "executeMs": 57.44686999999976,
+      "proveMs": 3059.4204500000014,
+      "verifyMs": 35.29826099999991,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: exact public order and real proof",
-      "executeMs": 30.10845100000006,
-      "proveMs": 2611.1514419999985,
-      "verifyMs": 38.835955000002286,
+      "executeMs": 41.37424100000135,
+      "proveMs": 2566.3764899999987,
+      "verifyMs": 35.757196000002295,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "demand",
       "label": "demand: exact public order and real proof",
-      "executeMs": 21.771746999998868,
-      "proveMs": 2616.824751,
-      "verifyMs": 38.61185899999691,
+      "executeMs": 24.816886000000522,
+      "proveMs": 2555.1839249999975,
+      "verifyMs": 33.76524100000097,
       "proofBytes": 14656,
       "publicInputs": 16
     },
     {
       "kind": "settle",
       "label": "settle: exact public order and real proof",
-      "executeMs": 21.5916320000033,
-      "proveMs": 2612.0535789999994,
-      "verifyMs": 39.18023499999981,
+      "executeMs": 22.813882000002195,
+      "proveMs": 2555.070310999996,
+      "verifyMs": 35.16523600000073,
       "proofBytes": 14656,
       "publicInputs": 17
     },
     {
       "kind": "request",
       "label": "request: exact public order and real proof",
-      "executeMs": 8.834093000004941,
-      "proveMs": 1397.7962159999952,
-      "verifyMs": 50.781904000003124,
+      "executeMs": 9.781479999997828,
+      "proveMs": 1366.775499000003,
+      "verifyMs": 33.38262599999871,
       "proofBytes": 14656,
       "publicInputs": 7
     },
     {
       "kind": "demand",
       "label": "demand: two real notes with distinct anchors and tags",
-      "executeMs": 22.340214999996533,
-      "proveMs": 2578.0422650000037,
-      "verifyMs": 37.39815899999667,
+      "executeMs": 22.07690900000307,
+      "proveMs": 2562.8086780000012,
+      "verifyMs": 33.91183699999965,
       "proofBytes": 14656,
       "publicInputs": 16
     },
     {
       "kind": "settle",
       "label": "settle: two real notes with distinct anchors and nullifiers",
-      "executeMs": 22.583520000000135,
-      "proveMs": 2586.736294999995,
-      "verifyMs": 37.35375700000441,
+      "executeMs": 23.396942999999737,
+      "proveMs": 2561.503958000001,
+      "verifyMs": 33.23696299999574,
       "proofBytes": 14656,
       "publicInputs": 17
     },
     {
       "kind": "spend",
       "label": "spend: two real inputs with distinct anchors",
-      "executeMs": 27.28271600000153,
-      "proveMs": 3060.0317250000007,
-      "verifyMs": 38.46529200000077,
+      "executeMs": 29.46320299999934,
+      "proveMs": 3052.7551810000004,
+      "verifyMs": 36.355022999996436,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: two real inputs with distinct anchors",
-      "executeMs": 20.993459999997867,
-      "proveMs": 2575.7559709999987,
-      "verifyMs": 37.5630930000043,
+      "executeMs": 21.41164900000149,
+      "proveMs": 2550.0790940000006,
+      "verifyMs": 36.21268599999894,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "issue",
       "label": "issue: alternative metadata independently proves",
-      "executeMs": 4.257812000003469,
-      "proveMs": 987.6043359999967,
-      "verifyMs": 38.360142000005,
+      "executeMs": 4.336410000003525,
+      "proveMs": 970.9781819999989,
+      "verifyMs": 33.60761300000013,
       "proofBytes": 14656,
       "publicInputs": 11
     },
     {
       "kind": "spend",
       "label": "spend: alternative metadata independently proves",
-      "executeMs": 25.504863999994996,
-      "proveMs": 3064.826347000002,
-      "verifyMs": 37.81012300000293,
+      "executeMs": 27.91498199999478,
+      "proveMs": 3025.688498000003,
+      "verifyMs": 36.27174399999785,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: alternative metadata independently proves",
-      "executeMs": 19.178907999994408,
-      "proveMs": 2600.956238000006,
-      "verifyMs": 40.72268299999996,
+      "executeMs": 19.339238000000478,
+      "proveMs": 2571.9094110000005,
+      "verifyMs": 33.82451800000126,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "demand",
       "label": "demand: alternative metadata independently proves",
-      "executeMs": 19.08572400000412,
-      "proveMs": 2610.495099999993,
-      "verifyMs": 37.57893200000399,
+      "executeMs": 19.06313599999703,
+      "proveMs": 2553.805023000001,
+      "verifyMs": 35.74409200000082,
       "proofBytes": 14656,
       "publicInputs": 16
     },
     {
       "kind": "request",
       "label": "request: alternative metadata independently proves",
-      "executeMs": 8.10325400000147,
-      "proveMs": 1400.269042,
-      "verifyMs": 39.72482899999886,
+      "executeMs": 8.146780000002764,
+      "proveMs": 1366.9448300000004,
+      "verifyMs": 33.182373999996344,
       "proofBytes": 14656,
       "publicInputs": 7
     },
     {
       "kind": "spend",
       "label": "spend: two backings with ordinary fee and both changes",
-      "executeMs": 25.73978899999929,
-      "proveMs": 3081.510180000012,
-      "verifyMs": 38.232173999989755,
+      "executeMs": 25.5459039999987,
+      "proveMs": 3028.9990980000002,
+      "verifyMs": 33.175370999990264,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "spend",
       "label": "spend: two maximum u64 inputs conserve in u128",
-      "executeMs": 24.83947099999932,
-      "proveMs": 3074.689796999999,
-      "verifyMs": 38.20184199999494,
+      "executeMs": 26.025250999999116,
+      "proveMs": 3030.1697390000045,
+      "verifyMs": 33.299488999997266,
       "proofBytes": 14656,
       "publicInputs": 15
     },
     {
       "kind": "burn",
       "label": "burn: full value with ordinary zero change",
-      "executeMs": 20.300961999993888,
-      "proveMs": 2576.462581,
-      "verifyMs": 38.65024899999844,
+      "executeMs": 20.219344999990426,
+      "proveMs": 2549.709658000007,
+      "verifyMs": 32.7225449999969,
       "proofBytes": 14656,
       "publicInputs": 15
     }
