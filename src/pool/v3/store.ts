@@ -241,7 +241,10 @@ export class V3OperatorJournal {
       this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
       requireThat(this.db.prepare("PRAGMA journal_mode").get()?.journal_mode === "wal" &&
         this.db.prepare("PRAGMA synchronous").get()?.synchronous === 2n, "STORAGE", "persistent WAL with FULL synchronization is required");
-      this.db.exec("BEGIN IMMEDIATE");
+      try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
+        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+        throw error;
+      }
       this.db.exec(`CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id=1),
         profile TEXT NOT NULL, domain TEXT NOT NULL, operator TEXT NOT NULL, venue TEXT NOT NULL,
         owner INTEGER NOT NULL, tip INTEGER NOT NULL, observed TEXT NOT NULL) STRICT;
@@ -261,7 +264,7 @@ export class V3OperatorJournal {
           bytesToHex(this.operator), bytesToHex(this.venueId), now.toString());
         meta = this.metadata()!;
       }
-      this.identity(meta);
+      this.identity(meta, true);
       requireThat(now >= decimal(meta.observed), "STORAGE", "venue clock is behind the durable journal");
       requireThat(typeof meta.owner === "bigint" && meta.owner < SQLITE_LIMIT, "STORAGE", "journal owner counter exhausted");
       this.owner = meta.owner + 1n;
@@ -317,11 +320,14 @@ export class V3OperatorJournal {
   }
 
   private metadata() { return this.db.prepare("SELECT * FROM identity WHERE id=1").get(); }
-  private identity(meta: ReturnType<V3OperatorJournal["metadata"]>): void {
+  /** The journal is this configuration's, key's and venue's, and its log ends at the recorded tip. Opening also
+   * counts the log, once: a count at every transaction would cost each command the whole history. */
+  private identity(meta: ReturnType<V3OperatorJournal["metadata"]>, opening = false): void {
     requireThat(meta?.profile === PROFILE && meta.domain === bytesToHex(this.domain) &&
       meta.operator === bytesToHex(this.operator) && meta.venue === bytesToHex(this.venueId), "STORAGE", "journal identity does not match");
-    const counts = this.db.prepare("SELECT COUNT(*) AS n, COALESCE(MAX(seq),0) AS tip FROM events").get()!;
-    requireThat(typeof meta.tip === "bigint" && meta.tip === counts.tip && meta.tip === counts.n, "STORAGE", "journal is truncated or noncontiguous");
+    const tip = this.db.prepare("SELECT COALESCE(MAX(seq),0) AS tip FROM events").get()!.tip;
+    requireThat(typeof meta.tip === "bigint" && meta.tip === tip &&
+      (!opening || this.db.prepare("SELECT COUNT(*) AS n FROM events").get()!.n === tip), "STORAGE", "journal is truncated or noncontiguous");
   }
   private clock(): bigint {
     let now: unknown, lag: unknown, id: unknown;
@@ -552,6 +558,13 @@ export class V3OperatorJournal {
     return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference,
       store: store ?? this.reads(), evidence: this.evidence };
   }
+  /** One read through the public reader. A kept file another handle is writing leaves the operation BUSY. */
+  private async whileReading<T>(read: () => Promise<T>): Promise<T> {
+    try { return await read(); } catch (error) {
+      if (error instanceof Error && error.message === "the kept replay file is in use") throw new V3StoreError("BUSY", "another handle is reading this journal's history");
+      throw error;
+    }
+  }
   /** A fresh admission state for a segment, kept under the journal's own identity, over its import: the
    * frontier a read replayed, copied into this database inside the command's transaction. */
   private segmentState(segment: Uint8Array, imported: ImportSource | undefined): SegmentState {
@@ -592,7 +605,7 @@ export class V3OperatorJournal {
       // A journal with history reads its own checkpoints beside the public evidence, from what it retains:
       // a taken term may follow, or already hold, one of this key's (C2.7.1).
       let source: FrontierResult;
-      try { source = await readFrontier(evidence, entry.signed, at, this.readerOptions()); } catch (error) { return unestablished(error); }
+      try { source = await this.whileReading(() => readFrontier(evidence, entry.signed, at, this.readerOptions())); } catch (error) { return unestablished(error); }
       const current = source.ranges.chain.at(-1)!;
       requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
       requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
@@ -812,8 +825,8 @@ export class V3OperatorJournal {
       const c = signed.commitment;
       const selected = encodeEvidencePackage([{ kind: 1, payload: configurationBytes(this.configuration) }, { kind: 2, payload: encodeCommitment(c) }]);
       try {
-        const result = await readPackage(selected, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
-          backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions(store));
+        const result = await this.whileReading(() => readPackage(selected, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
+          backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions(store)));
         requireThat(result.state !== undefined, "UNAVAILABLE", "a journal state read returned a receipt");
         return result;
       } catch (error) {
@@ -1177,7 +1190,7 @@ export class V3OperatorJournal {
    * - each scoped backing's canonical checkpoint is read again through the public reader, from the segments'
    *   seeds over the evidence the journal serves, with nothing kept, so every proof through it is verified
    *   again. Where that checkpoint is of the active segment, the journal's stored state at its position must be
-   *   the state the read replayed: its chains, totals and fact counts;
+   *   the state the read replayed: its chains, totals and every fact it holds, imports included;
    * - every signed row must be the reply its command was given, in order, and carry the publication the log records;
    * - every record of the active segment must have a receipt this key signed, and one naming the active
    *   segment must be its row's.
@@ -1203,7 +1216,7 @@ export class V3OperatorJournal {
           requireThat(read.position <= state.position, "STORAGE", "the stored state is behind the witnessed evidence");
           const mine = state.at(read.position), totals = mine.total(bytesToHex(backing));
           requireThat(same(mine.history, read.history) && same(mine.evidence, read.evidence) && totals.issued === read.issued &&
-            totals.burned === read.burned && JSON.stringify(this.replays.factCounts(mine.ns, mine.position)) === JSON.stringify(fresh.factCounts(read.ns, read.position)),
+            totals.burned === read.burned && same(this.replays.factDigest(mine.ns, mine.position), fresh.factDigest(read.ns, read.position)),
             "STORAGE", "the stored state is not the state the evidence replays to");
         } finally { fresh.close(); }
       }

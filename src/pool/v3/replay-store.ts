@@ -148,7 +148,6 @@ const SCHEMA = `
   CREATE TABLE spent (ns INTEGER, id INTEGER, key BLOB NOT NULL, bit INTEGER, l INTEGER, r INTEGER, hash BLOB NOT NULL,
     PRIMARY KEY(ns, id)) WITHOUT ROWID;
   CREATE TABLE witness (ns INTEGER, leaf INTEGER, cm BLOB NOT NULL, siblings BLOB NOT NULL, PRIMARY KEY(ns, leaf)) WITHOUT ROWID;
-  CREATE TABLE merging (ns INTEGER PRIMARY KEY, upto INTEGER NOT NULL);
   CREATE TABLE kept_context (id INTEGER PRIMARY KEY CHECK (id = 1), key BLOB NOT NULL);
   CREATE TABLE verdict (key BLOB PRIMARY KEY, operator BLOB NOT NULL, seq BLOB NOT NULL, root BLOB NOT NULL, signature BLOB NOT NULL,
     idx BLOB NOT NULL, class TEXT NOT NULL, detail TEXT, segment BLOB NOT NULL, snapshot BLOB NOT NULL, ns INTEGER, position INTEGER,
@@ -183,7 +182,7 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 /** Kept venue answers refer to no namespace, so collection keeps them. */
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -337,7 +336,13 @@ export class ReplayStore {
         if (path === ":memory:" || typeof kept.digest !== "string" || kept.digest === path) throw new TypeError("a kept store is a file with its own digest");
         if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
         this.#kept = { ...kept, path };
-        if (!keptFileHolds(path, kept.digest)) for (const file of [path, `${path}-journal`, kept.digest]) rmSync(file, { force: true });
+        if (!keptFileHolds(path, kept.digest)) {
+          try { for (const file of [path, `${path}-journal`, kept.digest]) rmSync(file, { force: true }); } catch (error) {
+            // A file another store still holds cannot be removed (Windows): the caller's error, as above.
+            if (["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw new Error("the kept replay file is in use");
+            throw error;
+          }
+        }
       }
       const reopened = kept !== undefined && existsSync(path);
       this.#db = new DatabaseSync(path, { readBigInts: true });
@@ -345,6 +350,8 @@ export class ReplayStore {
       this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL; PRAGMA temp_store=MEMORY;");
       if (!reopened) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
     }
+    // C2.10.6's union is a working set of one connection: it never changes the file, so a kept file's digest stands.
+    this.#db.exec("CREATE TEMP TABLE IF NOT EXISTS merging (ns INTEGER PRIMARY KEY, upto INTEGER NOT NULL)");
     const v = visible("x");
     this.#q = Object.fromEntries(Object.entries({
       tip: "SELECT * FROM namespace WHERE ns = ?",
@@ -560,9 +567,12 @@ export class ReplayStore {
    */
   copyFrontier(source: ReplayStore, frontier: Imports, identity: (segment: Uint8Array) => Uint8Array): Imports {
     if (source === this) return frontier;
+    if (source.#db.isTransaction || source.#replaying) throw new Error("a walk is open on the imported store");
     const from = source.#db, segments = new Map<string, ImportEntry>();
     const facts = ["event", "event_key", "nullifier", "output", "anchor", "demand", "demand_end", "total"];
-    this.#atomic(() => {
+    // One read transaction on the source: every table is copied from the same committed state, whoever else holds the file.
+    from.exec("BEGIN");
+    try { this.#atomic(() => {
       for (const [name, entry] of frontier.segments) {
         const tip = source.tip(entry.ns), at = entry.upto === 0n ? undefined : source.event(entry.ns, entry.upto);
         if (hex(tip.segment) !== name || entry.upto > tip.position || (entry.upto > 0n && at === undefined)) throw new Error("an imported frontier names no replayed position");
@@ -591,7 +601,7 @@ export class ReplayStore {
           .iterate(entry.ns, entry.upto));
         segments.set(name, { ns, upto: entry.upto });
       }
-    });
+    }); } finally { from.exec("COMMIT"); }
     return { segments, totals: new Map(frontier.totals) };
   }
 
@@ -618,13 +628,25 @@ export class ReplayStore {
   isEffective(ns: number, p: bigint, id: string): boolean { return this.#has("effective", ns, p, unhex(id)); }
   /** A statement already in this segment's own history (imports are not statements of it). */
   hasStatement(ns: number, p: bigint, identity: Uint8Array): boolean { return this.#q.statement!.get(identity, ns, p) !== undefined; }
-  /** How many facts of each kind are visible from (ns, p): an audit compares a stored state with a fresh replay by them. */
-  factCounts(ns: number, p: bigint): { readonly [table: string]: string } {
-    const out: { [table: string]: string } = {};
-    for (const table of ["event", "nullifier", "output", "anchor", "demand", "demand_end"]) {
-      out[table] = String((this.#db.prepare(`SELECT count(*) AS c FROM ${table} x WHERE ${visible("x")}`).get({ ns, p }) as { c: bigint }).c);
+  /** A digest of every fact visible from (ns, p), imports included, whatever namespaces hold them: an audit
+   * compares a stored state with a fresh replay of the same history by it. Linear in the state. */
+  factDigest(ns: number, p: bigint): Uint8Array {
+    const hash = createHash("sha256");
+    const tables: [string, string[]][] = [["event", ["identity", "kind", "proof_hash", "signature_hash", "history", "evidence", "note_root", "spent_root"]],
+      ["nullifier", ["nf", "tag"]], ["output", ["cm", "leaf", "settlement"]], ["anchor", ["root"]],
+      ["demand", ["id", "backing", "quantity", "tag0", "tag1", "presenter", "deadline"]], ["demand_end", ["id"]]];
+    for (const [table, columns] of tables) {
+      hash.update(`${table}:`);
+      const list = columns.map(column => `x.${column}`).join(", ");
+      for (const row of this.#db.prepare(`SELECT ${list} FROM ${table} x WHERE ${visible("x")} ORDER BY ${list}`).iterate({ ns, p })) {
+        for (const column of columns) {
+          const value = (row as Record<string, unknown>)[column];
+          const field = value instanceof Uint8Array ? value : new TextEncoder().encode(String(value));
+          hash.update(be(BigInt(field.length))); hash.update(field);
+        }
+      }
     }
-    return out;
+    return new Uint8Array(hash.digest());
   }
   /** An issuance of `backing` (hex) among this segment's own records after position `after` through `p`. */
   hasIssuance(ns: number, p: bigint, after: bigint, backing: string): boolean {
@@ -760,17 +782,27 @@ export class ReplayStore {
     // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
     if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
-    this.#db.exec("BEGIN");
-    // No walk is open, so any walk rows are a crashed read's: they are no one's.
-    for (const table of ["walk", ...WALK_TABLES]) this.#db.prepare(`DELETE FROM ${table}`).run();
-    const kept = this.#db.prepare("SELECT key FROM kept_context WHERE id = 1").get() as { key: unknown } | undefined;
-    if (kept === undefined || !equal(bytes(kept.key), context)) {
-      for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
-      // A kept file's namespaces were replayed under the old context and can never resume under this one.
-      if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
-      this.#db.prepare("INSERT OR REPLACE INTO kept_context VALUES (1, ?)").run(context);
+    // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
+    try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
+      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");
+      throw error;
     }
-    return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id);
+    try {
+      // No walk is open, so any walk rows are a crashed read's: they are no one's.
+      for (const table of ["walk", ...WALK_TABLES]) this.#db.prepare(`DELETE FROM ${table}`).run();
+      const kept = this.#db.prepare("SELECT key FROM kept_context WHERE id = 1").get() as { key: unknown } | undefined;
+      if (kept === undefined || !equal(bytes(kept.key), context)) {
+        for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
+        // A kept file's namespaces were replayed under the old context and can never resume under this one.
+        if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
+        this.#db.prepare("INSERT OR REPLACE INTO kept_context VALUES (1, ?)").run(context);
+      }
+      return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id);
+    } catch (error) {
+      // A walk that did not open leaves no transaction behind.
+      if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
   /** Drop the walk's own rows and commit what it kept, refused read or not; a kept file records its digest
    * (a keep point). If the commit fails, what the walk wrote since its last keep point is rolled back and no

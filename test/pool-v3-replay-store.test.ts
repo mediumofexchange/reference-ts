@@ -113,7 +113,6 @@ describe("replay storage", () => {
     expect([...copied.segments.values()].map(entry => entry.upto)).toEqual([1n, 2n]);
     const successor = store.open(new Uint8Array(32).fill(3), new Uint8Array(32).fill(9), copied, genesis);
     // The successor reads the imported prefixes, to their positions and no further, from the host's own rows.
-    reads.close();
     expect([11n, 12n, 13n, 14n, 15n].map(nf => store.hasNullifier(successor, 0n, nf))).toEqual([true, false, true, true, false]);
     expect([1n, 2n, 3n, 4n, 5n].map(cm => store.hasOutput(successor, 0n, cm))).toEqual([true, false, true, true, false]);
     expect(store.demand(successor, 0n, "d1")).toBeUndefined();
@@ -121,7 +120,10 @@ describe("replay storage", () => {
     expect(store.total(successor, 0n, "aa".repeat(32))).toEqual({ issued: 7n, burned: 1n });
     const spent = new RadixSpentSet(); [11n, 13n, 14n].forEach(nf => spent.insert(fieldToBytes(nf)));
     expect(store.tip(successor).spentRoot).toEqual(spent.root());
-    expect(store.factCounts(successor, 0n)).toMatchObject({ event: "3", nullifier: "3", output: "3", demand: "1", demand_end: "1" });
+    // The successor over the copies holds exactly the facts a successor over the read's own namespaces holds.
+    const direct = reads.open(new Uint8Array(32).fill(3), new Uint8Array(32).fill(9), frontier, genesis);
+    expect(store.factDigest(successor, 0n)).toEqual(reads.factDigest(direct, 0n));
+    expect(store.factDigest(successor, 0n)).not.toEqual(reads.factDigest(read, 3n));
     // The same prefix again is the copy already here; a longer one of the same segment is copied anew.
     const again = new ReplayStore(), twin = again.open(one, new Uint8Array(32).fill(7), undefined, genesis);
     again.append(twin, append([1n], [11n], () => false, { history: history(1) })); again.append(twin, append([2n], [12n], () => false, { history: history(2) }));
@@ -130,7 +132,7 @@ describe("replay storage", () => {
     const longer = store.copyFrontier(again, { segments: new Map([[name(1), { ns: twin, upto: 2n }]]), totals: new Map() }, identity);
     expect(longer.segments.get(name(1))!.ns).not.toBe(copied.segments.get(name(1))!.ns);
     expect(() => store.copyFrontier(again, { segments: new Map([[name(1), { ns: twin, upto: 3n }]]), totals: new Map() }, identity)).toThrow(/no replayed position/);
-    again.close();
+    again.close(); reads.close();
     // What another namespace imports cannot be dropped; the host's retired state can.
     expect(() => store.drop(copied.segments.get(name(2))!.ns)).toThrow(/still read/);
     store.drop(a);

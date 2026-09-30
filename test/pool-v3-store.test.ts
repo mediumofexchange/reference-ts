@@ -545,6 +545,30 @@ describe("the v3 operator journal", () => {
     expect(decodeReceipt(await next!.submit(issued(2))).position).toBe(3n);
   });
 
+  it("answers BUSY while a replaced owner still reads the kept file, and reads once it has finished", async () => {
+    const venue = FixtureVenue.reference(label, lag), file = path();
+    let during: () => Promise<void> = async () => {};
+    const declared = { identities: configuration.circuits,
+      verify: async (...args: Parameters<typeof verifier.verify>) => { await during(); return verifier.verify(...args); } };
+    const open = (): Journal => { const j = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: declared }); journals.push(j); return j; };
+    const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
+    const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
+    const issued = (n: number): Uint8Array =>
+      encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
+    const a = open();
+    await a.open("genesis", silent); await a.publish();
+    await a.submit(issued(0)); await a.commit("c2"); await a.publish();
+    let next: Journal | undefined, first: [string, string | undefined] | undefined;
+    during = async () => {
+      if (next !== undefined) return;
+      next = open(); venue.advance(venue.witnessedIndex() + lag);
+      first = await refusal(next.submit(issued(1)));
+    };
+    expect(await refusal(a.submit(issued(1)))).toEqual(["FENCED", undefined]);
+    expect(first).toEqual(["BUSY", undefined]);
+    expect(decodeReceipt(await next!.submit(issued(1))).position).toBe(2n);
+  });
+
   it("reopens between a return opening and its adoption, still pending", async () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 4n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);

@@ -10,21 +10,25 @@ incremental verdicts equal full replay, and corrupt kept state falls back; real 
 the old ceiling through journal, wallet sync and offline-operator recovery; first sync
 measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision).
 
-**Next: M5b.5, journal and wallet** (order in the decision). The journal commits its state with its commands,
-reopens without re-verifying and serves incrementally: a package of new objects plus a trail head and the records after
-the reader's checkpoint, which the reader names by segment, position and chain value (`EvidenceStore.importTrail`).
-The wallet syncs from a kept replay file and retained evidence, with a scan cursor and kept witnesses (kept stores
-refuse witnesses today). Also: drop the journal's whole §13 asks in `store.ts`, and its in-memory answers now kept
-across its reads until M5b.5 gives it files. *Acceptance:* real proofs past the old 67-statement ceiling through the
+M5b.5 runs as three milestones ([split](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)); 5a is delivered.
+
+**Next: M5b.5b, the journal's venue reads and incremental serving.** (1) `store.ts` `view`/`ask` read whole §13 answers
+and verify every held commitment twice per command (about 5 ms per checkpoint; 4,096 bound its life): keep them by
+windows, as the reader does. (2) Serve incrementally and streamed: new objects plus a trail head and the records after the
+reader's checkpoint (`EvidenceStore.importTrail`); lift the 1 MiB caps in `service-wire.ts`/`service-http.ts`/
+`service-client.ts`; `assemble` holds the package whole. *Acceptance:* a journal past 4,096 checkpoints at flat cost per
+command; a second sync over HTTP fetches only new bytes; memory flat while serving. *Stop:* the wallet.
+**Then M5b.5c, the wallet:** sync from a kept replay file and retained evidence, a scan cursor and kept witnesses (kept
+stores refuse witnesses today). *Acceptance (closes M5b.5):* real proofs past the old 67-statement ceiling through the
 journal, wallet sync and offline-operator recovery.
 
 ## Status
-- M5b.4b (PR #54): retained evidence (records under segment and chain value, checked on use), `importTrail`
-  assembly, kept §13 answers extended by windows. M5b.4a (PR #52, spec 8d48b25): kept classes, non-extension without replay. M5b.3b (PR #51): one forward walk over rows, running clocks and force states, no import totals;
-  [10⁴ checkpoints at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-over-many-checkpoints-m5b3b). M5b.3a (PR #50):
-  packages copied into `evidence-store.ts`, [10⁵ statements at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-streaming-one-long-segment-m5b3a).
-  M5b.2 (PR #47): replays in `replay-store.ts`. [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay):
-  [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) 10⁶ statements over three years, ≤ 1 GiB, first sync ≤ 24 h.
+- M5b.5a (PR #55): the journal's database holds its admission state, records and served evidence, one transaction per
+  command; it reopens from rows, reads its history through the public reader with a kept file beside it (`<db>.reads`),
+  copies imports in, and `audit` re-verifies; [10⁴ admissions at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-journal-on-rows-m5b5a).
+  Earlier: M5b.4b (PR #54) retained evidence, `importTrail`, kept §13 answers; M5b.4a (PR #52, spec 8d48b25) kept
+  classes; M5b.3 (PRs #50, #51) streamed evidence and one forward walk; M5b.2 (PR #47) replays in `replay-store.ts`.
+  [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets): 10⁶ statements over three years, ≤ 1 GiB, first sync ≤ 24 h.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
@@ -36,7 +40,7 @@ journal, wallet sync and offline-operator recovery.
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. **M5b.5** (above), then M5b.6 as the
+1. Slice 8, adoption. **M5b.5b**, **M5b.5c** (above), then M5b.6 as the
    [storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)
    orders them; pruning retained evidence no read used is open (decision limits). Then M6 Next 5(i) (confirm a host
    rule), M4 certificates/kind-11 fitted to this retention, M7 one-transaction condition, M8 adoption (one
@@ -49,31 +53,26 @@ journal, wallet sync and offline-operator recovery.
    ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
-4. On touching affected files: fold `fulfill` into `sync` and take its canonical header from the reader's evidence (not a re-decode); shared byte helpers/caller
-   ownership; Ergo section versus transaction charging; served-trail caller-object cache; drop the explicit `vite` dev pin (served the
-   retired browser probe) at the next dependency change. Untested on v3: a second
-   commit refused while one is in flight (`store.ts` `ready`; a probe traced it holding).
-   One setup module for the store-check family (~100 shared lines) and one `receiptFields` for the two receipt
-   checks (the copies drifted); retire `header-verify`, `testnet-header-check`, `publisher-check` (historical
-   reports; tests cover their rules) unless the headers re-record or a mainnet slice needs them.
-5. Review findings deferred 2026-09-28: (a) `guard.ts` accepts a testnet-context profile
-   anchored on a mainnet header until the next epoch boundary (<=127 blocks; `testnet.mjs`
-   checks `/info`, so only a new caller is exposed); fix by a difficulty bound. (b) `store.ts` `package()` serves a
-   published commitment never held after the lag (C2.4.3). (c) `store.ts` `submit` may
-   return an old-segment receipt for an adopted forced record (traced only).
-   (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read
-   `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit. (h) Runtime
-   package-reader refusals drop the receipt walk's contradictions and fault facts.
-   (i) (M6) A settlement publishes its output opening (C3.5), so a backer seeing it before witnessing can
-   issue the same `cm_out` first; it is refused `OUTPUT` (`state.ts`) and the acceptance may read as the
-   holder's lapse (C3.8). A retry needs a fresh `rho_out` and release; the wallet builds no settlements yet.
-   (j) Verify-only parties could take identity-checked key bytes, needing no G1 file.
-6. Only when a gate needs them: cancellation, batching, venue-moving
-   record, slowest-supplier clock, multi-entry extension fixture, Poseidon2 on Barretenberg,
-   sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-
-   acceptance receipt handoff, store-check's request through the frame, same-segment rescoping.
-   Phone-first wallet: first a venue range source proportional to the subject's records
-   (index-free box source, a new venue identity; M5), then a succinct relation if needed.
+4. On touching affected files: fold `fulfill` into `sync` and take its canonical header from the reader's evidence (not a
+   re-decode); shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail caller-object
+   cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one
+   is in flight (`store.ts` `ready`). One setup module for the store-check family and one `receiptFields` for the two
+   receipt checks; retire `header-verify`, `testnet-header-check`, `publisher-check` unless a mainnet slice needs them.
+5. Review findings deferred: (a) `guard.ts` accepts a testnet-context profile anchored on a mainnet header until the next
+   epoch boundary (<=127 blocks); fix by a difficulty bound. (b) `store.ts` `package()` serves a published commitment
+   never held after the lag (C2.4.3). (c) `store.ts` `submit` may return an old-segment receipt for an adopted forced
+   record (traced only). (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read `signed.terms`
+   twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a transaction.
+   (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (k) A read under a silence
+   or non-service clause judges every held checkpoint again at each admission (persisting the walk's cursors would bound
+   it). (l) Evidence of a refused scope change stays in the journal database. (j) Verify-only parties could take
+   identity-checked key bytes, needing no G1 file. (i) (M6) A settlement publishes its output opening (C3.5), so a backer
+   seeing it before witnessing can issue the same `cm_out` first; it is refused `OUTPUT` and the acceptance may read as
+   the holder's lapse (C3.8). A retry needs a fresh `rho_out` and release; the wallet builds no settlements yet.
+6. Only when a gate needs them: cancellation, batching, venue-moving record, slowest-supplier clock, multi-entry extension
+   fixture, Poseidon2 on Barretenberg, sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5
+   pending-acceptance receipt handoff, store-check's request through the frame, same-segment rescoping. Phone-first
+   wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
 7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`.
    After 5(h), read every `local-check` group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete
    `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`).
@@ -94,5 +93,5 @@ journal, wallet sync and offline-operator recovery.
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
 
-Roughly **60% done / 40% remaining**, range **50–69%**, reassessed 2026-09-30 after M5b.4b (a reader keeps classes, state,
-answers and evidence across reads; journal and wallet, first sync, adoption, qualified storage, mainnet remain).
+Roughly **60% done / 40% remaining**, range **50–69%**, reassessed 2026-09-30 after M5b.5a (the journal's storage
+is rows; its venue reads, incremental serving, the wallet's kept sync, first sync, adoption, qualified storage, mainnet remain).
