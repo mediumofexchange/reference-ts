@@ -8,11 +8,13 @@
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--silence] [--proof <bytes>] [--dir <directory>]
 //     [--kept <events>]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs journal <events> [--every <events>] [--proof <bytes>] [--dir <directory>]
-//     [--audit] [--serve [--more <events>] [--sample-mib <n>]]
+//     [--audit] [--serve [--more <events>] [--sample-mib <n>]] [--wallet [--more <events>]]
 // journal (M5b.5a): the operator journal (V3OperatorJournal) admitting <events> statements in its own database,
 //   one synced transaction each, with a published checkpoint every --every; then reopened, audited and served.
 //   --serve (M5b.5b.2): the journal then serves its history over HTTP, by stream, into a reader's evidence
 //   file, admits --more statements under a new checkpoint, and serves a second sync of only those.
+//   --wallet (M5b.5c): a wallet then syncs its evidence file from the journal and reads the frontier into its
+//   kept replay file, scanning every output; then --more statements, a second sync, and a restart.
 // baseline: the runtime state machine (dist state.ts) over synthetic records, stub verifier.
 // read (M5b.3 acceptance): the runtime reader (readPackage) streaming a package file of one
 //   segment's <events> statements into its own evidence and replay files, stub verifier.
@@ -59,6 +61,7 @@ import { rootTermsSignatureMessage } from "../../../dist/pool/v3/terms.js";
 import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
 import { createV3Service } from "../../../dist/pool/v3/service-http.js";
 import { V3OperatorJournal } from "../../../dist/pool/v3/store.js";
+import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 
 const [mode, countText, ...rest] = process.argv.slice(2);
 const option = (name, fallback) => { const i = rest.indexOf(name); return i < 0 ? fallback : rest[i + 1]; };
@@ -475,6 +478,46 @@ if (mode === "baseline") {
       rssMiBDuring: [Math.min(...during.map(s => s.rssMiB)), Math.max(...during.map(s => s.rssMiB))],
       more: MORE, newRecordBytes: moreBytes, secondSyncBytes: responses[1].bytes, secondSyncMs: Math.round(secondMs), idleSyncBytes: responses[2].bytes,
       evidenceFileMiB: mib(statSync(evidenceFile).size) };
+  }
+  if (rest.includes("--wallet")) {
+    // M5b.5c: a wallet (V3Wallet) syncs its own evidence file from the journal over HTTP and reads the backing's
+    // frontier into its kept replay file, scanning every output with its seed; then --more statements and a
+    // checkpoint, and a second sync and read of only them; then a restart with nothing new. Memory is sampled
+    // as the read verifies: journal, transport and wallet share this process.
+    const MORE = Number(option("--more", "100")), WALLET = "11".repeat(32), walletFile = join(dir, "wallet.sqlite");
+    for (const suffix of ["", "-wal", "-shm", ".evidence", ".evidence-journal", ".replay", ".replay-journal", ".replay.sha256"]) if (existsSync(walletFile + suffix)) rmSync(walletFile + suffix);
+    const server = createV3Service(journal, { walletToken: WALLET, adminToken: "22".repeat(32) });
+    await new Promise((done, failed) => server.listen(0, "127.0.0.1", done).once("error", failed));
+    const client = new V3ServiceClient(`http://127.0.0.1:${server.address().port}/`, WALLET, { domain, operator, reference });
+    let checked = 0, asked = 0;
+    const counting = { identities: configuration.circuits, verify: () => { if (++checked % SAMPLE === 0) sample(N, { walletVerified: checked }); return true; } };
+    const seen = { get id() { return venue.id; }, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+      range: (request, limits) => { asked++; return venue.range(request, limits); } };
+    const openWallet = () => new V3Wallet(walletFile, { configuration, venue: seen, reference, verifier: counting });
+    const synced = async wallet => {
+      const before = samples.length, start = performance.now(), verifiedBefore = checked, askedBefore = asked;
+      const served = await wallet.supply(evidence => client.sync(backing, evidence)), fetched = performance.now();
+      const view = await wallet.sync(served.package, signedTerms), end = performance.now();
+      gc(); const m = process.memoryUsage(), during = samples.slice(before);
+      return { view, syncMs: Math.round(fetched - start), readMs: Math.round(end - fetched), verified: checked - verifiedBefore, venueRequests: asked - askedBefore,
+        heapMiBDuring: during.length === 0 ? undefined : [Math.min(...during.map(s => s.heapMiB)), Math.max(...during.map(s => s.heapMiB))],
+        rssMiBDuring: during.length === 0 ? undefined : [Math.min(...during.map(s => s.rssMiB)), Math.max(...during.map(s => s.rssMiB))],
+        heapAfterMiB: mib(m.heapUsed) };
+    };
+    const strip = ({ view, ...rest }) => rest;
+    let wallet = openWallet();
+    const first = await synced(wallet);
+    assert.equal(first.verified, N); assert.equal(first.view.holdings.length, 0);
+    for (let i = 0; i < MORE; i++) await journal.submit(encodeRecord(spend()));
+    const latest = await journal.commit(`c${++checkpoints}`); await journal.publish();
+    const second = await synced(wallet);
+    assert.equal(second.verified, MORE); assert.deepEqual(second.view.checkpoint, latest);
+    wallet.close(); wallet = openWallet();
+    const third = await synced(wallet);
+    assert.equal(third.verified, 0); assert.equal(third.venueRequests, 0);
+    wallet.close(); server.closeAllConnections(); await new Promise(done => server.close(done));
+    result.wallet = { first: { ...strip(first), msPerStatement: +(first.readMs / N).toFixed(2) }, more: MORE, second: strip(second), restarted: strip(third),
+      evidenceFileMiB: mib(statSync(`${walletFile}.evidence`).size), replayFileMiB: mib(statSync(`${walletFile}.replay`).size) };
   }
   journal.close();
   console.log(JSON.stringify({ ...result, maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, samples }, null, 1));

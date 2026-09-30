@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1326
+      "elapsedMs": 1289
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3118
+      "elapsedMs": 3117
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3089
+      "elapsedMs": 3088
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 996
+      "elapsedMs": 1000
     }
   ],
   "transactions": [],
@@ -49,7 +49,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "2261233c042322f55531c96b723172fc487a8f7f74afbb8e2e2dcacf6086ba3a",
-    "history": "bdf6ee4863986b19858cee0882783e34e0d13a72ee02ba5e1022ac8ebde8fcf3",
+    "history": "1a9046829fd5d08a6f83b8d5a29e494737258fcda740e62d4f3bd77c56a857d4",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -107,7 +107,7 @@
       }
     ]
   },
-  "elapsedMs": 24578,
+  "elapsedMs": 24583,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
@@ -129,12 +129,12 @@
     "dist/pool/v3/capsules.js": "594dfaaf85da7ec968a00c636598642634805d36ce3525c3e20a1fa5bf75e324",
     "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
     "dist/pool/v3/configuration.js": "7e56fae94da6dbd60d24fc1686943ade94e5938b79f3a71b1ac83731691354c3",
-    "dist/pool/v3/evidence-store.js": "0e896fe05b1fd270e89d1571192e4a1623ccde62a4de7da624e862f48e037278",
+    "dist/pool/v3/evidence-store.js": "dd0ac0f22e8733bf26ec73ee8bb6b4f3243c5bfe7f7c49272f3c762f1ebc6ee8",
     "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
     "dist/pool/v3/fault-observer.js": "e67dcc0954c558e2432593c3478db0aaf183f2d1381e7581c334676144958ae5",
     "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
     "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
-    "dist/pool/v3/holdings.js": "ab32ac07c167a3a9a638b60e0ac1fc9fc54f9eb742b198f38723326a25f4373a",
+    "dist/pool/v3/holdings.js": "00f520f919748cb718d5b7a0ac428e2217a9cec688731160fb4e5a1619a5bf80",
     "dist/pool/v3/non-service.js": "d7497c5d4a2e43c1cd01440961d23a77b7851b982594553b9137f8c78f1e3bea",
     "dist/pool/v3/package-reader.js": "7d7955a6af45d991f32fe981ec9272ab94c011d098768b28ef0f4d1fa657256c",
     "dist/pool/v3/package.js": "198b0665b94820324a131698b4c86ae4f6d7a1c8c3dbf28b7b5c849f682bd775",
@@ -144,9 +144,9 @@
     "dist/pool/v3/records.js": "61be901b5a91950785c06f46679f90f689e5eea86d1a1450d3c3f5c36d17069b",
     "dist/pool/v3/recovery.js": "85c05c69336abc977f612c0664f1b6e0fb18be44bb62aba8191bc72ac3d6f603",
     "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
-    "dist/pool/v3/replay-store.js": "6f4bd4580bb4063396974090afea9be5f84cc22133631ac6a0cf5cc40827992e",
+    "dist/pool/v3/replay-store.js": "c200a1badb4253d1380e670e7c12d112fba9de65382aaf48cd47a07250cea9b6",
     "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
-    "dist/pool/v3/scope-reader.js": "d8b60e2ca57a332881633b94dfdb2e73d12e267dd5de687bfb27ab890ca36e79",
+    "dist/pool/v3/scope-reader.js": "d1c1f357047cb2c7661808e29361e889141d2a5711ffdd26f7e7bef5a239c5be",
     "dist/pool/v3/state.js": "770f846cf562909a9c8ea1a26d7243bb94e4f42025d701afed34d8b6752f874e",
     "dist/pool/v3/store.js": "fd2253de880e2ee1d3491b74c06b2b563d35dccf86c6868f504371c08b6583a1",
     "dist/pool/v3/terms.js": "97c37f5dcc46aa1362eb44b6f5473ca188dcac91959f6bebadb504ae348d78a3",
@@ -199,12 +199,12 @@
     "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "067a110b6cfde53937d403b3d692ca229cb864b0e41bc703c18e6969cd34b1d3",
-    "src/pool/v3/evidence-store.ts": "562f1dde8fd77ef8a3effd6464be3083dd40ee4a696fff32b344eac94b5e1fa6",
+    "src/pool/v3/evidence-store.ts": "431f4f21d5f5771e4312363ab4421523ae9a1e03257454e86e2da6d0c5cade25",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
     "src/pool/v3/fault-observer.ts": "0891d5e2c6fccba206aeeab342b605de80a58bb182bb955189e52749bfe2b307",
     "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
-    "src/pool/v3/holdings.ts": "e131820bb33b9e316f705382c0c42167d6fef094d0251bd92b007ddfe0ca6591",
+    "src/pool/v3/holdings.ts": "3bae790f353cc97aeec19ce5e7ba781438550f485a1fb92357c8c72c819aa0bc",
     "src/pool/v3/non-service.ts": "6572a0d87bcb20e93f95594238173d2252b1255bddd647537df5ca524575a95e",
     "src/pool/v3/package-reader.ts": "73a01d7baf44ac6474203285fa1ce109c9d436e7d35311ed2d10c01e5a0ba6ea",
     "src/pool/v3/package.ts": "d007bd04dfc0f1b27b500d19eca172f3228b186bb04145603b69bc519acb4dca",
@@ -214,9 +214,9 @@
     "src/pool/v3/records.ts": "5cb68ec45d9babeb147ea60b592470fac5d08096df137993257b933718ac36f6",
     "src/pool/v3/recovery.ts": "6a351c42dd6a7f10337bd557f372d69fc5bdc4c114bf43081893dbf175f8b80d",
     "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
-    "src/pool/v3/replay-store.ts": "0cee777b2b81e24f7089084f4787057ea4034b63e59e5dd2408b868a991687a6",
+    "src/pool/v3/replay-store.ts": "096639165a5324bfcd12c8213fdce0e1bab5c1353dd1d15f9f748d8f46708933",
     "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
-    "src/pool/v3/scope-reader.ts": "476eedc99039e86082cc47a189ef1da8880584a262b940cde84866b9f5a40756",
+    "src/pool/v3/scope-reader.ts": "85b6df622fad8a632925346e80f405c15451f9bb5b37ec1fd2ada9d0e3906167",
     "src/pool/v3/state.ts": "aaea2d928834bfca28fc118da02c732854cd8ff9bf47f5a7fc75951afe666302",
     "src/pool/v3/store.ts": "5eed93f202c106a18b114d6b864a35d7e96ad0140d5ad6ab3c7d0e5185732462",
     "src/pool/v3/terms.ts": "ddc7c00a5e1349a187aa548f01cc2e8e975516df45987e94cbeb69d57ce0a484",

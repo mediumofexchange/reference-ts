@@ -22,7 +22,7 @@ import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
-import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
@@ -309,14 +309,56 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(await refusal(f.read(counting(), undefined, { withoutTrails: true }))).toContain("unresolved-evidence");
   });
 
-  it("keeps no witnesses: a witnessing read refuses a kept store and reads in memory as before", async () => {
-    // Witnesses stay only at a namespace's tip, so kept state below it could not answer paths (M5b.5 keeps a wallet's).
-    const f = fixture(), kept = files(), witness: WitnessPredicate = Object.assign(() => true, { identity: b(77) });
+  it("keeps witnesses at the tips: a later read extends them to a fresh read's paths and scans only new outputs", async () => {
+    const f = fixture(), kept = files();
+    const scanned: bigint[] = [];
+    const witness: WitnessPredicate = Object.assign((output: { cm: bigint }) => { scanned.push(output.cm); return output.cm !== 108n; }, { identity: b(77) });
+    const every: WitnessPredicate = Object.assign((output: { cm: bigint }) => output.cm !== 108n, { identity: b(77) });
+    await f.first();
+    let store = opened(kept.path, kept);
+    const first = await f.read(counting(), store, { witness }), fresh = await f.read(counting(), undefined, { witness: every });
+    // 102 is an output of the excluded checkpoint's trail: scanned as it replayed, its witness rolled back with it.
+    expect(scanned).toEqual([101n, 102n, 106n]);
+    expect(first.canonical!.state.path(102n)).toBeUndefined();
+    for (const cm of [101n, 106n]) expect(first.canonical!.state.path(cm)).toEqual(fresh.canonical!.state.path(cm));
+    expect(first.canonical!.state.path(101n)).toBeDefined();
+    store.close();
+
+    // Two more outputs: the reopened file scans only them, and every kept witness moves to the new root.
+    f.venue.advance(12n); await f.issue(107n); await f.issue(108n); f.checkpoint(f.segment, 6n, 11n);
+    store = opened(kept.path, kept);
+    const verifier = counting(), second = await f.read(verifier, store, { witness }), again = await f.read(counting(), undefined, { witness: every });
+    expect(verifier.checks).toBe(2);
+    expect(scanned).toEqual([101n, 102n, 106n, 107n, 108n]);
+    const state = second.canonical!.state;
+    for (const cm of [101n, 106n, 107n]) expect(state.path(cm)).toEqual(again.canonical!.state.path(cm));
+    expect(state.path(107n)!.anchor).toBe(state.noteRoot());
+    // An output the predicate passed over has no witness, kept or fresh.
+    expect(state.path(108n)).toBeUndefined(); expect(again.canonical!.state.path(108n)).toBeUndefined();
+    expect([...state.store.witnessedOutputs(state.ns, state.position)].map(output => output.cm)).toEqual([101n, 106n, 107n]);
+
+    // A read below the tips cannot answer paths from kept witnesses: that is kept state to discard (§14).
+    const earlier = await f.read(counting(), store, { witness, at: 10n });
+    expect(earlier.canonical!.commitment.sequence).toBe(5n);
+    expect(() => earlier.canonical!.state.path(101n)).toThrow(KeptStateMismatch);
+    store.discardKept();
+    const replayed = await f.read(counting(), store, { witness, at: 10n });
+    expect(replayed.canonical!.state.path(101n)).toEqual(fresh.canonical!.state.path(101n));
+    store.close();
+  });
+
+  it("names a kept witness predicate by its declared identity: an undeclared one is refused, another one's state is dropped", async () => {
+    const f = fixture(), kept = files();
     await f.first();
     const store = opened(kept.path, kept);
-    await expect(f.read(counting(), store, { witness })).rejects.toThrow("a kept store keeps no witnesses");
-    const fresh = await f.read(counting(), undefined, { witness });
-    expect(fresh.canonical!.state.path(106n)).toBeDefined();
+    await expect(f.read(counting(), store, { witness: () => true })).rejects.toThrow("a kept store needs a witness predicate that declares its identity");
+    await f.read(counting(), store, { witness: Object.assign(() => true, { identity: b(77) }) });
+    // Another predicate witnesses other outputs, so nothing replayed under the first is reused.
+    const other = counting(), read = await f.read(other, store, { witness: Object.assign(() => false, { identity: b(78) }) });
+    expect(other.checks).toBe(4);
+    expect(read.canonical!.state.path(106n)).toBeUndefined();
+    store.close();
+    expect(namespaceCount(kept.path)).toBe(1);
   });
 
   it("classifies a scope's dependencies on a kept read as a fresh read does (two backings)", async () => {

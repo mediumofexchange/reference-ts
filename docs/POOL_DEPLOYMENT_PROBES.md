@@ -1054,6 +1054,42 @@ the delivered code:
   walks its kept links back once, about 7.5 µs per record served in the
   review's run (0.75 s at 10⁵ records), without yielding.
 
+### The wallet on its kept files (M5b.5c.1)
+
+`replay-store-probe.mjs journal <N> --every <K> --wallet --more <M>` runs the
+journal as above, then a `V3Wallet` whose verifier declares its circuits: it
+syncs its evidence file from the journal's HTTP service (`supply` with
+`V3ServiceClient.sync`) and reads the backing's frontier into its kept replay
+file, scanning every output with its seed. The journal then admits M more
+statements under one new checkpoint; the wallet syncs and reads again, and once
+more after a restart with nothing new
+([M5b.5c.1](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+Journal, transport and wallet share one process, and memory is sampled as the
+read verifies.
+
+Run of 2026-09-30 on the same desktop at `52c90ec`, with N = 10⁴, K = 1,000,
+M = 100 and 14,656-byte stand-in proofs (15.6 KB per statement):
+
+| Step | Result |
+|---|---|
+| First sync: fetch into the evidence file | 14.1 s |
+| First read: 10⁴ records, 11 checkpoints, 4 × 10⁴ outputs scanned | 440 s, 44 ms per statement; 3 venue requests |
+| Heap during the first read | 13.2–13.6 MB throughout |
+| Process memory during the first read | 227 → 324 MB, SQLite's page caches; the run's peak |
+| Second sync and read, 100 new records | 0.4 s and 5.7 s; 100 proofs checked, 3 venue requests |
+| Sync and read after a restart, nothing new | 0.06 s and 0.75 s; no proof checked, no venue request |
+| Files | evidence 158 MiB, replay 21.5 MiB |
+
+- *Flat and proportional:* the heap does not follow the history, and the
+  second read costs what its 100 records do. The first read's 44 ms per
+  statement is the reader's replay cost (39–43 ms at M5b.4b) with the seed's
+  scan of four outputs.
+- *Limits:* stand-in proofs, one backing and one segment, and a wallet that
+  owns none of the outputs. A replay updates every kept witness of its segment
+  at each record that adds outputs, so a wallet holding many notes pays for
+  each of them at every record; that cost was not measured here
+  (WORK.md Next 5(n)).
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

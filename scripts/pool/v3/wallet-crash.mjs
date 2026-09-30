@@ -33,6 +33,8 @@ const domain = configurationHash(configuration), issuerSecret = b(15), operatorS
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const reference = { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
 const verifier = { verify: (kind, _inputs, proof) => proof[0] === kind };
+// The wallet's verifier declares its circuits, so its reads keep their state in a file beside its database.
+const declared = { ...verifier, identities: configuration.circuits };
 const save = (file, value) => writeFileSync(file, serialize(value));
 const load = file => deserialize(readFileSync(file));
 const publicRequest = out => ({ domain, opening: out.opening, cm: out.cm, capsule: out.capsule });
@@ -50,7 +52,7 @@ async function worker(directory, operation, phase, action) {
     const terms = encodeRootTerms({ obligor: issuer, operator, replacementRule: issuer, configuration: domain, venue: venue.id, interval: 20n,
       payout: { thing: 'crash fixture units', quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
-    const backing = rootTermsName(terms), wallet = new V3Wallet(path, { configuration, venue, reference, verifier });
+    const backing = rootTermsName(terms), wallet = new V3Wallet(path, { configuration, venue, reference, verifier: declared });
     const fixture = { backing, signed, venue: venue.export() };
     if (operation === 'export' || operation === 'import') {
       fixture.request = wallet.request('invoice', backing, 7n);
@@ -100,15 +102,16 @@ async function worker(directory, operation, phase, action) {
     }
     wallet.close(); save(fixturePath, fixture); return;
   }
-  const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue), reader = { configuration, venue, reference, verifier };
+  const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue), reader = { configuration, venue, reference, verifier: declared };
   const wallet = new V3Wallet(path, reader);
   if (action === 'crash') {
     // Initialization has committed. Arm only the operation's own COMMIT; the
-    // deliberate exit leaves its DB handle open, without rollback or close. A reader's
-    // in-memory evidence copy commits too; only the wallet's file is armed.
+    // deliberate exit leaves its DB handle open, without rollback or close. The wallet's
+    // evidence and kept replay files commit before it; only the wallet's database (or the
+    // restore's staging file) is armed.
     const original = DatabaseSync.prototype.exec;
     DatabaseSync.prototype.exec = function (sql) {
-      if (sql.trim().toUpperCase() !== 'COMMIT' || !this.location()) return original.call(this, sql);
+      if (sql.trim().toUpperCase() !== 'COMMIT' || !this.location() || /.(evidence|replay)$/.test(this.location())) return original.call(this, sql);
       if (operation === 'request') {
         const row = this.prepare('SELECT * FROM receiver_requests WHERE alias=?').get('invoice');
         const seed = this.prepare('SELECT seed FROM wallet_identity WHERE id=1').get().seed;
@@ -237,7 +240,6 @@ if (process.argv[2] === '--worker') {
         }
         if (operation === 'fulfillment' && phase === 'after') {
           const row = db.prepare('SELECT * FROM receiver_fulfilled').get();
-          assert.deepEqual(row.package, fixture.package);
           assert.deepEqual(row.checkpoint, encodeCommitment(fixture.checkpoint));
           assert.deepEqual(row.terms, fixture.signed.terms); assert.deepEqual(row.signature, fixture.signed.signature);
           assert.equal(row.judging_index, fixture.venue.witnessedIndex.toString());
@@ -263,7 +265,7 @@ if (process.argv[2] === '--worker') {
       } else if (operation === 'receipt') assert.deepEqual(restored, decodeReceipt(fixture.receipt));
       else if (operation === 'import') assert.deepEqual(restored, fixture.request);
       else assert.deepEqual(restored, { request: fixture.request, checkpoint: fixture.checkpoint,
-        judgingIndex: fixture.venue.witnessedIndex, package: fixture.package, terms: fixture.signed });
+        judgingIndex: fixture.venue.witnessedIndex, terms: fixture.signed });
       console.log(`PASS v3 wallet ${operation}/${phase}: abrupt COMMIT exit, exact restart and retry.`);
     }
     console.log('V3 wallet crash check passed: fourteen abrupt exits; synthetic process evidence only.');

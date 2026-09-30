@@ -7,29 +7,38 @@
 // authentication and independent public-evidence retention are caller
 // obligations; this module supplies neither transport nor physical
 // storage/rollback protection.
+//
+// Reads cost what is new (pool-v3 §14, storage decision 2026-09-29 items 6 and 8).
+// Beside the database the wallet keeps two files that hold no secret and are in
+// no backup, so losing either costs a first sync and nothing else:
+// - `<path>.evidence`, its own copy of the public evidence (evidence-store.ts):
+//   `supply` runs the caller's transport into it, and a read's package then
+//   carries only that read's own items;
+// - `<path>.replay` with its digest, the kept classes, replay state and venue
+//   answers of its reads (replay-store.ts), with an incremental witness for
+//   each of this seed's notes, kept where the verifier declares its circuits.
+//   It shows which outputs are this seed's, so it needs the database's protection.
 import { randomBytes, randomInt } from "node:crypto";
 import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
-import { copyRequest, type RangeRequest, type RangeLimits } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
 import { identifierOf, isValue } from "../field.js";
 import { commitmentOf } from "../notes.js";
-import { ScopeTree } from "../scope.js";
 import { prepareExactOutput, type PreparedOutput } from "./capsules.js";
 import { decodeReceipt, encodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier } from "./configuration.js";
 import { requireReferenceVenue } from "./guard.js";
-import { decodeSegmentHeader, segmentIdentity, type SegmentHeader } from "./headers.js";
+import { EvidenceStore } from "./evidence-store.js";
+import type { SegmentHeader } from "./headers.js";
 import { ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
-import { decodeEvidencePackage } from "./package.js";
-import { decodeTrail } from "./trail.js";
 import { readFrontier, type PackageReader } from "./package-reader.js";
 import type { SignedTerms } from "./reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
+import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
+import type { CanonicalCheckpoint, FrontierResult } from "./scope-reader.js";
 import { locked, tagOf } from "./recovery.js";
 import { applyForceEffects, openForceState, type ForceState } from "./state.js";
 import { rootTermsName } from "./terms.js";
@@ -39,7 +48,7 @@ import { copyPaymentRequest, type PaymentRequest } from "./wallet-request.js";
 import { spendTask, type NoteInput, type OutputNote, type ProofTask } from "./witness.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
-const PROFILE = "moe/wallet/v3/2", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/3", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
     "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE", message: string) { super(message); this.name = "V3WalletError"; }
@@ -64,7 +73,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS receiver_requests (alias TEXT PRIMARY KEY, request_id BLOB NOT NULL UNIQUE,
     backing BLOB NOT NULL, value TEXT NOT NULL, cm TEXT NOT NULL UNIQUE) STRICT;
   CREATE TABLE IF NOT EXISTS receiver_fulfilled (alias TEXT PRIMARY KEY, cm TEXT NOT NULL UNIQUE,
-    checkpoint BLOB NOT NULL, judging_index TEXT NOT NULL, package BLOB NOT NULL, terms BLOB NOT NULL, signature BLOB NOT NULL) STRICT;
+    checkpoint BLOB NOT NULL, judging_index TEXT NOT NULL, terms BLOB NOT NULL, signature BLOB NOT NULL) STRICT;
   CREATE TABLE IF NOT EXISTS payer_payments (alias TEXT PRIMARY KEY, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL,
     backing BLOB NOT NULL, operator BLOB NOT NULL, payee TEXT NOT NULL, value TEXT NOT NULL, fee TEXT, fee_value TEXT,
     status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
@@ -82,7 +91,7 @@ const DEFINITIONS = new Map(SCHEMA.split(";").map(s => s.replace(/\s+/g, " ").tr
  * destination takes the seed, a fresh owner fence and its own provenance. */
 const TABLES = [
   ["receiver_requests", ["alias", "request_id", "backing", "value", "cm"]],
-  ["receiver_fulfilled", ["alias", "cm", "checkpoint", "judging_index", "package", "terms", "signature"]],
+  ["receiver_fulfilled", ["alias", "cm", "checkpoint", "judging_index", "terms", "signature"]],
   ["payer_payments", ["alias", "statement", "record", "backing", "operator", "payee", "value", "fee", "fee_value",
     "status", "receipt", "checkpoint", "judging_index", "zero", "judged"]],
   ["payer_inputs", ["nf", "alias"]],
@@ -112,11 +121,12 @@ function ownOptions(options: PackageReader) {
     venue, reference: ownReference };
   return { domain: configurationHash(ownConfiguration), venueId, reader };
 }
+/** The canonical checkpoint and witnessed index a request was found paid at. Its evidence is what the
+ * wallet's evidence file retains; nothing here stores or proves that evidence. */
 export interface Fulfillment {
   readonly request: PaymentRequest;
   readonly checkpoint: Commitment;
   readonly judgingIndex: bigint;
-  readonly package: Uint8Array;
   readonly terms: SignedTerms;
 }
 /** What the payer agreed to pay: the payee's exact request and amount and, for
@@ -154,34 +164,28 @@ export interface WalletView {
   readonly holdings: readonly Holding[];
 }
 
-/** Record exactly the independent venue answers used by replay, then compare
- * them synchronously before acknowledgment. Index equality alone cannot detect
- * same-index revocation or newly available records. No supplied transcript is
- * ever accepted as venue authority. */
-function observedView(source: RecordVenue, id: Uint8Array, at: bigint) {
+/** The venue as one read sees it: its clock held at `at`. The read is acted on only while the venue's
+ * identity, lag and witnessed index are still those (`check`, called synchronously before every write or
+ * proof). An answer through a witnessed index is final (pool-v3 §13.1–13.2), so a clock that has not moved
+ * means every answer the read used, kept or newly asked, still stands; nothing is asked twice. No supplied
+ * transcript is ever accepted as venue authority. */
+function heldView(source: RecordVenue, id: Uint8Array, at: bigint) {
   const lag = source.lag();
-  const answers: { request: RangeRequest; limits: RangeLimits; bytes: Uint8Array | undefined }[] = [];
   const venue: RecordVenue = {
     get id() { return new Uint8Array(id); }, lag: () => lag, witnessedIndex: () => at,
-    range(request, limits) {
-      const owned = copyRequest(request), bound = { maxBytes: limits.maxBytes, maxEntries: limits.maxEntries };
-      const answer = source.range(copyRequest(owned), { ...bound });
-      const bytes = answer === undefined ? undefined : copyUnshared(answer);
-      answers.push({ request: owned, limits: bound, bytes });
-      return bytes === undefined ? undefined : new Uint8Array(bytes);
-    },
+    range: (request, limits) => source.range(request, limits),
   };
-  const checkIdentity = () => requireThat(same(source.id, id) && source.lag() === lag && source.witnessedIndex() === at,
-    "CHANGED_VIEW", "venue changed during verification");
   return { venue, check() {
-    checkIdentity();
-    for (const answer of answers) {
-      const current = source.range(copyRequest(answer.request), { ...answer.limits });
-      requireThat(answer.bytes === undefined ? current === undefined : current !== undefined && same(current, answer.bytes),
-        "CHANGED_VIEW", "venue range changed during verification");
-    }
-    checkIdentity();
+    requireThat(same(source.id, id) && source.lag() === lag && source.witnessedIndex() === at, "CHANGED_VIEW", "venue changed during verification");
   } };
+}
+
+/** One backing's frontier as a wallet read found it, at the index the view is held at. */
+interface Frontier {
+  readonly terms: SignedTerms; readonly backing: Uint8Array; readonly at: bigint; readonly lag: bigint;
+  readonly observed: ReturnType<typeof heldView>;
+  readonly canonical: CanonicalCheckpoint | undefined; readonly force: ForceState | undefined; readonly notes: OwnedNote[];
+  readonly chain: FrontierResult["ranges"]["chain"]; readonly scopeChains: FrontierResult["scopeChains"]; readonly clock: FrontierResult["clock"];
 }
 
 /** The spendable single-note or least-total pair covering `total`; ties by commitment. */
@@ -208,13 +212,19 @@ export class V3Wallet {
   private readonly venueId: Uint8Array;
   private readonly seed: Uint8Array;
   private readonly owner: bigint;
+  private readonly path: string;
+  /** The wallet's evidence file and kept replay file, each opened at the first read that needs it. */
+  private retained: EvidenceStore | undefined;
+  private replays: ReplayStore | undefined;
+  /** The last read or supply: one runs at a time, since they share the two files. */
+  private turn: Promise<void> = Promise.resolve();
   private closed = false;
   private poisoned = false;
 
   constructor(path: string, options: PackageReader) {
     const restore = installing; installing = undefined;
     const own = ownOptions(options);
-    this.venueId = own.venueId; this.domain = own.domain; this.options = own.reader;
+    this.venueId = own.venueId; this.domain = own.domain; this.options = own.reader; this.path = path;
     requireThat(restore === undefined || (same(restore.domain, this.domain) && same(restore.venue, this.venueId)),
       "CONFLICT", "wallet configuration or venue changed");
     persistentPath(path);
@@ -241,8 +251,8 @@ export class V3Wallet {
       }
       // A database from before offline handoff has no custody row: it was never exported.
       this.db.exec("INSERT OR IGNORE INTO wallet_custody VALUES(1,NULL,NULL)");
-      requireThat(meta.profile === PROFILE && meta.domain === hex(this.domain) && meta.venue === hex(this.venueId),
-        "CONFLICT", "wallet configuration or venue changed");
+      requireThat(meta.profile === PROFILE, "CONFLICT", "wallet database has another profile");
+      requireThat(meta.domain === hex(this.domain) && meta.venue === hex(this.venueId), "CONFLICT", "wallet configuration or venue changed");
       requireThat(typeof meta.owner === "bigint" && meta.owner >= 0n && meta.owner < MAX_OWNER,
         "STORAGE", "wallet owner counter exhausted");
       this.seed = identifier(meta.seed as Uint8Array); this.owner = meta.owner + 1n;
@@ -325,38 +335,122 @@ export class V3Wallet {
     throw new V3WalletError("STORAGE", "could not prepare a fresh output");
   }
 
-  /** Independently read the terms' backing at the venue's current witnessed
-   * index, in any scope (C2.10.3–7); restore this seed's unspent positive notes
-   * of that backing, force effects applied. Other scoped backings' notes of the
-   * shared history are that backing's view, not this one's. */
-  private async frontier(packageBytes: Uint8Array, signed: SignedTerms) {
-    const bytes = copyUnshared(packageBytes), terms = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
-    const backing = rootTermsName(terms.terms), at = this.options.venue.witnessedIndex();
-    requireThat(isValue(at), "INVALID", "invalid witnessed index");
-    const observed = observedView(this.options.venue, this.venueId, at);
-    const result = await readFrontier(bytes, terms, at, { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain) });
-    const canonical = result.canonical;
-    let force: ForceState | undefined, notes: OwnedNote[] = [];
-    if (canonical !== undefined) {
-      force = openForceState(canonical.state);
-      // This backing's own adoption index: each scoped backing has its own.
-      const adopted = canonical.state.adoptionIndices.get(hex(backing)) ?? 0n;
-      for (const publication of result.force) if (publication.index > adopted) applyForceEffects(force, publication.record);
-      const spent = force;
-      notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));
+  /** One read or supply at a time, in call order: they share the evidence file and the kept replay file,
+   * whose state a read in progress holds open. A failed turn does not hold up the next. */
+  private inTurn<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.turn.then(action);
+    this.turn = result.then(() => {}, () => {});
+    return result;
+  }
+  /** The wallet's own evidence file (§14): what suppliers and packages brought, authenticated when a read uses it. */
+  private evidence(): EvidenceStore {
+    // A file of another layout, or one that is no database, is never replaced here: it may be the holder's
+    // only copy of the evidence. The holder removes it to sync again from nothing.
+    try { return this.retained ??= new EvidenceStore(`${this.path}.evidence`); } catch {
+      throw new V3WalletError("STORAGE", "the wallet's evidence file cannot be read; remove it to sync again");
     }
-    return { bytes, terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
-      lag: result.ranges.lag, clock: result.clock };
+  }
+  /** The kept state of the wallet's reads (§14 kept classes): a file where the verifier declares its circuits,
+   * which name kept state; otherwise each read keeps its own in memory. */
+  private kept(): ReplayStore | undefined {
+    const declared = this.options.verifier.identities;
+    if (declared === undefined || Object.keys(declared).length === 0) return undefined;
+    try { return this.replays ??= new ReplayStore(`${this.path}.replay`, { digest: `${this.path}.replay.sha256` }); } catch (error) {
+      if (error instanceof Error && /in use/.test(error.message)) throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
+      throw error;
+    }
+  }
+
+  /**
+   * Bring public evidence into the wallet's own evidence file: `transport` is the caller's, for example
+   * `evidence => client.sync(backing, evidence)` (service-client.ts) or an import of a package from any other
+   * source. It runs in turn with the wallet's reads. Transport only: what it keeps is authenticated when a
+   * read uses it, selects nothing and proves nothing. A later read's package then needs only that read's own
+   * items (the configuration, fault evidence). Where a read stays unresolved over what the file holds, supply
+   * it again in full (`{ full: true }`). A transport must not call this wallet's reads or `supply`: they
+   * would wait for the turn it holds.
+   */
+  async supply<T>(transport: (evidence: EvidenceStore) => Promise<T>): Promise<T> {
+    this.mutable();
+    requireThat(typeof transport === "function", "INVALID", "an evidence transport is required");
+    return this.inTurn(async () => { this.mutable(); return transport(this.evidence()); });
+  }
+
+  /** Independently read the terms' backing at the venue's current witnessed
+   * index, in any scope (C2.10.3–7), over the package and what the wallet's
+   * evidence file retains; restore this seed's unspent positive notes of that
+   * backing, force effects applied. Other scoped backings' notes of the
+   * shared history are that backing's view, not this one's. `use` decides from
+   * the view synchronously, inside the read's turn: the state it reads is the
+   * kept file's, which a later read moves on. The caller's bytes are copied
+   * before the first await. */
+  private async read<T>(packageBytes: Uint8Array, signed: SignedTerms, use: (view: Frontier) => T): Promise<T> {
+    const bytes = copyUnshared(packageBytes), terms = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
+    const backing = rootTermsName(terms.terms);
+    return this.inTurn(async () => {
+      let view: Frontier;
+      try {
+        this.mutable();
+        view = await this.frontier(bytes, terms, backing);
+      } catch (error) {
+        // A replaced or exported handle says so, whatever its read met once another handle held the files.
+        if (!(error instanceof V3WalletError)) this.mutable();
+        if (error instanceof Error && error.message === "the kept replay file is in use") {
+          throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
+        }
+        throw error;
+      }
+      // The read awaited: a handle replaced or exported meanwhile answers nothing from it.
+      this.mutable();
+      return use(view);
+    });
+  }
+  private async frontier(bytes: Uint8Array, terms: SignedTerms, backing: Uint8Array) {
+    const at = this.options.venue.witnessedIndex();
+    requireThat(isValue(at), "INVALID", "invalid witnessed index");
+    const observed = heldView(this.options.venue, this.venueId, at), store = this.kept();
+    // Kept answers stand only while the venue's finality rule does (§13.2). A venue whose clock is behind what
+    // the kept state was read through is not the view that state was read from: nothing kept is used, and
+    // the venue is asked for everything. (One replaced at the same clock is believed, as any venue's answers are.)
+    const seen = store?.answersThrough();
+    if (store !== undefined && seen !== undefined && at < seen) store.discardKept();
+    // The scanner's keys live for this read only.
+    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(),
+      ...(store === undefined ? {} : { store }) };
+    for (let again = false; ; again = true) {
+      try {
+        const result = await readFrontier(bytes, terms, at, options);
+        const canonical = result.canonical;
+        let force: ForceState | undefined, notes: OwnedNote[] = [];
+        if (canonical !== undefined) {
+          force = openForceState(canonical.state);
+          // This backing's own adoption index: each scoped backing has its own.
+          const adopted = canonical.state.adoptionIndices.get(hex(backing)) ?? 0n;
+          for (const publication of result.force) if (publication.index > adopted) applyForceEffects(force, publication.record);
+          const spent = force;
+          // The scan ran inside the replay, once per output: only this seed's witnessed outputs are read here.
+          notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));
+        }
+        return { terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
+          lag: result.ranges.lag, clock: result.clock };
+      } catch (error) {
+        // §14: kept witnesses answer only at their namespaces' tips. A read below one (a venue view older than
+        // an earlier read's) discards the kept state and replays; with nothing kept the failure stays visible.
+        if (!(error instanceof KeptStateMismatch) || store === undefined || again) throw error;
+        store.discardKept();
+      }
+    }
   }
   /** The canonical segment's header, if a new statement for it could still be
    * admitted: no scoped backing's operator term has ended (one ending ends the
    * segment for every scoped backing, C2.10.9) and, where the backing declares
    * silence, the operator's witnessing horizon has not reached the clock (the
-   * journal's own admission rule). Advisory: the operator judges admission. */
-  private admissible(view: Awaited<ReturnType<V3Wallet["frontier"]>>): SegmentHeader {
+   * journal's own admission rule). Advisory: the operator judges admission.
+   * The header is the one the read authenticated for the canonical checkpoint. */
+  private admissible(view: Frontier): SegmentHeader {
     const { canonical, chain, scopeChains, clock, at, lag } = view;
     requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
-    const header = this.headerOf(view.bytes, canonical.segment, canonical.scope, view.backing);
+    const header = canonical.header;
     // A statement for an ended term would be refused.
     requireThat(header.entries.every(entry => {
       const term = (same(entry.backing, view.backing) ? chain : scopeChains?.get(hex(entry.backing)))?.at(-1);
@@ -563,35 +657,37 @@ export class V3Wallet {
     const row = this.db.prepare("SELECT * FROM receiver_fulfilled WHERE alias=?").get(name);
     if (row === undefined) return undefined;
     return { request: this.publicRequest(this.prepared(name)), checkpoint: decodeCommitment(row.checkpoint as Uint8Array),
-      judgingIndex: BigInt(row.judging_index as string), package: copyUnshared(row.package as Uint8Array),
+      judgingIndex: BigInt(row.judging_index as string),
       terms: { terms: copyUnshared(row.terms as Uint8Array), signature: copyUnshared(row.signature as Uint8Array) } };
   }
 
   /** C4.5: final acceptance against the complete canonical frontier at the
    * independently witnessed current index. Pending receipts cannot fulfill.
-   * Caller must arrange independent retention of this public evidence and the
-   * authenticated venue evidence; saving a package cannot guarantee availability. */
+   * The evidence read is what the wallet's evidence file retains; the caller
+   * must arrange independent retention of it and of the authenticated venue
+   * evidence, since keeping a copy cannot guarantee availability. */
   async fulfill(name: string, packageBytes: Uint8Array, signed: SignedTerms): Promise<Fulfillment> {
     name = alias(name); this.mutable();
     const note = this.prepared(name);
     requireThat(this.fulfillment(name) === undefined, "CONFLICT", "request already fulfilled");
     requireThat(same(rootTermsName(copyUnshared(signed.terms)), note.opening.backing), "INVALID", "terms do not name requested backing");
-    const { bytes, terms, backing, at, observed, canonical, force } = await this.frontier(packageBytes, signed);
-    requireThat(same(backing, note.opening.backing), "INVALID", "terms do not name requested backing");
-    requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical payment");
-    const paid = canonical.state.output(note.cm);
-    requireThat(paid?.capsule !== undefined && same(paid.capsule, note.capsule),
-      "ABSENT", "exact requested output and capsule are absent");
-    requireThat(!force.hasNullifier(note.nf), "SPENT", "payment is already spent");
-    requireThat(!locked(force, tagOf(note.nf), at), "LOCKED", "payment is locked by a standing demand");
-    const checkpoint = encodeCommitment(canonical.commitment);
-    // No async callback between final venue readback and the durable write.
-    observed.check();
-    this.transaction(() => {
-      requireThat(this.db.prepare("SELECT 1 FROM receiver_fulfilled WHERE alias=? OR cm=?").get(name, note.cm.toString()) === undefined,
-        "CONFLICT", "request or payment already fulfilled");
-      this.db.prepare("INSERT INTO receiver_fulfilled VALUES(?,?,?,?,?,?,?)").run(name, note.cm.toString(), checkpoint,
-        at.toString(), bytes, terms.terms, terms.signature);
+    await this.read(packageBytes, signed, ({ terms, backing, at, observed, canonical, force }) => {
+      requireThat(same(backing, note.opening.backing), "INVALID", "terms do not name requested backing");
+      requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical payment");
+      const paid = canonical.state.output(note.cm);
+      requireThat(paid?.capsule !== undefined && same(paid.capsule, note.capsule),
+        "ABSENT", "exact requested output and capsule are absent");
+      requireThat(!force.hasNullifier(note.nf), "SPENT", "payment is already spent");
+      requireThat(!locked(force, tagOf(note.nf), at), "LOCKED", "payment is locked by a standing demand");
+      const checkpoint = encodeCommitment(canonical.commitment);
+      // No async callback between the venue check and the durable write.
+      observed.check();
+      this.transaction(() => {
+        requireThat(this.db.prepare("SELECT 1 FROM receiver_fulfilled WHERE alias=? OR cm=?").get(name, note.cm.toString()) === undefined,
+          "CONFLICT", "request or payment already fulfilled");
+        this.db.prepare("INSERT INTO receiver_fulfilled VALUES(?,?,?,?,?,?)").run(name, note.cm.toString(), checkpoint,
+          at.toString(), terms.terms, terms.signature);
+      });
     });
     return this.fulfillment(name)!;
   }
@@ -620,17 +716,18 @@ export class V3Wallet {
    * canonical needs `reprove`. */
   async sync(packageBytes: Uint8Array, signed: SignedTerms): Promise<WalletView> {
     this.mutable();
-    const { backing, at, observed, canonical, force, notes } = await this.frontier(packageBytes, signed);
-    const updates: { alias: string; status: "final" | "failed" }[] = [];
-    if (canonical !== undefined && force !== undefined) {
-      for (const row of this.db.prepare("SELECT alias,record FROM payer_payments WHERE status='prepared' AND backing=?").all(backing)) {
-        const status = this.resolution(row.alias as string, decodeRecord(row.record as Uint8Array), canonical, force);
-        if (status !== undefined) updates.push({ alias: row.alias as string, status });
+    return this.read(packageBytes, signed, ({ backing, at, observed, canonical, force, notes }) => {
+      const updates: { alias: string; status: "final" | "failed" }[] = [];
+      if (canonical !== undefined && force !== undefined) {
+        for (const row of this.db.prepare("SELECT alias,record FROM payer_payments WHERE status='prepared' AND backing=?").all(backing)) {
+          const status = this.resolution(row.alias as string, decodeRecord(row.record as Uint8Array), canonical, force);
+          if (status !== undefined) updates.push({ alias: row.alias as string, status });
+        }
       }
-    }
-    observed.check();
-    this.resolve(updates, canonical === undefined ? undefined : encodeCommitment(canonical.commitment), at);
-    return { backing, judgingIndex: at, checkpoint: canonical?.commitment, holdings: this.holdingsOf(notes, force, at) };
+      observed.check();
+      this.resolve(updates, canonical === undefined ? undefined : encodeCommitment(canonical.commitment), at);
+      return { backing, judgingIndex: at, checkpoint: canonical?.commitment, holdings: this.holdingsOf(notes, force, at) };
+    });
   }
 
   /** pool-fees C1.2.3–5: pay one exact request, and optionally one exact fee
@@ -667,28 +764,33 @@ export class V3Wallet {
     const taken = this.db.prepare("SELECT 1 FROM payer_outputs WHERE cm=?");
     requireThat(theirs.every(cm => taken.get(cm.toString()) === undefined), "CONFLICT", "request is already in a saved payment");
 
-    const view = await this.frontier(packageBytes, signed), { canonical, force, notes, at, observed } = view;
-    // A concurrent exact call may have saved while this one read: answer it before selection.
-    const racing = sameOrder();
-    if (racing !== undefined) {
-      requireThat(racing, "CONFLICT", "alias names another payment order");
-      return this.payment(name)!;
-    }
-    requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
-    requireThat(theirs.every(cm => !canonical.state.hasOutput(cm)), "CONFLICT", "request is already paid");
-    const header = this.admissible(view);
-    // The venue answers behind this decision are rechecked before proving.
-    observed.check();
-    const holdings = this.holdingsOf(notes, force, at), available = notes.filter((_, i) => holdings[i]!.status === "available");
-    const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
-    const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
-    // A zero input names the same backing and needs no membership (C1.2.3).
-    const zero = inputs.length === 1 ? this.fresh(backing, 0n) : undefined;
-    if (zero !== undefined) inputs.push({ ...inputs[0]!, note: zero });
-    const outputs: OutputNote[] = [payee, ...(fee === undefined ? [] : [fee.request]), this.fresh(backing, sum - total)];
-    while (outputs.length < 4) outputs.push(this.fresh(backing, 0n));
-    // Public order labels no position (C1.2.3); the saved record fixes it for retries.
-    for (let i = outputs.length - 1; i > 0; i--) { const j = randomInt(i + 1); [outputs[i], outputs[j]] = [outputs[j]!, outputs[i]!]; }
+    const planned = await this.read(packageBytes, signed, view => {
+      const { canonical, force, notes, at, observed } = view;
+      // A concurrent exact call may have saved while this one read: answer it before selection.
+      const racing = sameOrder();
+      if (racing !== undefined) {
+        requireThat(racing, "CONFLICT", "alias names another payment order");
+        return undefined;
+      }
+      requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
+      requireThat(theirs.every(cm => !canonical.state.hasOutput(cm)), "CONFLICT", "request is already paid");
+      const header = this.admissible(view);
+      // The venue view behind this decision is checked before proving.
+      observed.check();
+      const holdings = this.holdingsOf(notes, force, at), available = notes.filter((_, i) => holdings[i]!.status === "available");
+      const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
+      const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
+      // A zero input names the same backing and needs no membership (C1.2.3).
+      const zero = inputs.length === 1 ? this.fresh(backing, 0n) : undefined;
+      if (zero !== undefined) inputs.push({ ...inputs[0]!, note: zero });
+      const outputs: OutputNote[] = [payee, ...(fee === undefined ? [] : [fee.request]), this.fresh(backing, sum - total)];
+      while (outputs.length < 4) outputs.push(this.fresh(backing, 0n));
+      // Public order labels no position (C1.2.3); the saved record fixes it for retries.
+      for (let i = outputs.length - 1; i > 0; i--) { const j = randomInt(i + 1); [outputs[i], outputs[j]] = [outputs[j]!, outputs[i]!]; }
+      return { header, selected, inputs, zero, outputs, at };
+    });
+    if (planned === undefined) return this.payment(name)!;
+    const { header, selected, inputs, zero, outputs, at } = planned;
     const bytes = await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove);
     const statement = hex(statementHash(decodeRecord(bytes))), reserved = selected.map(note => note.nf.toString());
     this.transaction(() => {
@@ -730,39 +832,44 @@ export class V3Wallet {
     const backing = copyUnshared(row.backing as Uint8Array);
     requireThat(same(rootTermsName(copyUnshared(signed.terms)), backing), "INVALID", "terms do not name the payment's backing");
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
-    const view = await this.frontier(packageBytes, signed), { canonical, force, notes, at, observed } = view;
-    requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
-    requireThat(at >= BigInt(row.judged as string), "CHANGED_VIEW", "the venue view is older than the saved record's");
     const old = decodeRecord(saved.record), p = old.publicInputs;
-    const status = this.resolution(name, old, canonical, force);
-    if (status !== undefined) {
+    const planned = await this.read(packageBytes, signed, view => {
+      const { canonical, force, notes, at, observed } = view;
+      requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
+      requireThat(at >= BigInt(row.judged as string), "CHANGED_VIEW", "the venue view is older than the saved record's");
+      const status = this.resolution(name, old, canonical, force);
+      if (status !== undefined) {
+        observed.check();
+        this.resolve([{ alias: name, status }], encodeCommitment(canonical.commitment), at);
+        return this.payment(name)!;
+      }
+      const header = this.admissible(view);
+      if (same(identifierOf(p[2]!, p[3]!), canonical.segment)) return saved;
       observed.check();
-      this.resolve([{ alias: name, status }], encodeCommitment(canonical.commitment), at);
-      return this.payment(name)!;
-    }
-    const header = this.admissible(view);
-    if (same(identifierOf(p[2]!, p[3]!), canonical.segment)) return saved;
-    observed.check();
-    // The same notes, now read in the canonical segment's accepted history.
-    const zero = row.zero === null ? undefined : prepareExactOutput(this.seed, this.domain, row.zero as Uint8Array, backing, 0n);
-    const positive = saved.inputs.map(nf => notes.find(note => note.nf === nf));
-    requireThat(positive.every(note => note !== undefined), "ABSENT", "a reserved input is not in canonical history");
-    requireThat(!positive.some(note => locked(force, tagOf(note.nf), at)), "LOCKED", "a reserved input is locked by a standing demand");
-    const placed = positive.map(note => ({ note, anchor: note.anchor, path: note.path }));
-    const inputs: NoteInput[] = p.slice(7, 9).map(nf => {
-      if (zero !== undefined && nf === zero.nf) return { ...placed[0]!, note: zero };
-      const input = placed.find(i => i.note.nf === nf);
-      requireThat(input !== undefined, "STORAGE", "saved inputs do not reproduce the record");
-      return input;
+      // The same notes, now read in the canonical segment's accepted history.
+      const zero = row.zero === null ? undefined : prepareExactOutput(this.seed, this.domain, row.zero as Uint8Array, backing, 0n);
+      const positive = saved.inputs.map(nf => notes.find(note => note.nf === nf));
+      requireThat(positive.every(note => note !== undefined), "ABSENT", "a reserved input is not in canonical history");
+      requireThat(!positive.some(note => locked(force, tagOf(note.nf), at)), "LOCKED", "a reserved input is locked by a standing demand");
+      const placed = positive.map(note => ({ note, anchor: note.anchor, path: note.path }));
+      const inputs: NoteInput[] = p.slice(7, 9).map(nf => {
+        if (zero !== undefined && nf === zero.nf) return { ...placed[0]!, note: zero };
+        const input = placed.find(i => i.note.nf === nf);
+        requireThat(input !== undefined, "STORAGE", "saved inputs do not reproduce the record");
+        return input;
+      });
+      const opening = this.db.prepare("SELECT value,owner,rho FROM payer_outputs WHERE cm=? AND alias=?");
+      const outputs: OutputNote[] = p.slice(9, 13).map((cm, i) => {
+        const out = opening.get(cm.toString(), name);
+        requireThat(out !== undefined, "STORAGE", "saved outputs do not reproduce the record");
+        const note = { backing, value: BigInt(out.value as string), owner: BigInt(out.owner as string), rho: BigInt(out.rho as string) };
+        requireThat(commitmentOf(this.domain, note) === cm, "STORAGE", "saved outputs do not reproduce the record");
+        return { opening: note, cm, capsule: old.capsules[i]! };
+      });
+      return { header, inputs, outputs, at };
     });
-    const opening = this.db.prepare("SELECT value,owner,rho FROM payer_outputs WHERE cm=? AND alias=?");
-    const outputs: OutputNote[] = p.slice(9, 13).map((cm, i) => {
-      const out = opening.get(cm.toString(), name);
-      requireThat(out !== undefined, "STORAGE", "saved outputs do not reproduce the record");
-      const note = { backing, value: BigInt(out.value as string), owner: BigInt(out.owner as string), rho: BigInt(out.rho as string) };
-      requireThat(commitmentOf(this.domain, note) === cm, "STORAGE", "saved outputs do not reproduce the record");
-      return { opening: note, cm, capsule: old.capsules[i]! };
-    });
+    if (!("header" in planned)) return planned;
+    const { header, inputs, outputs, at } = planned;
     const bytes = await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove);
     const statement = hex(statementHash(decodeRecord(bytes)));
     this.transaction(() => {
@@ -814,19 +921,9 @@ export class V3Wallet {
     return this.payment(name)!.receipt!;
   }
 
-  /** The canonical segment's header from the package's own trails, bound by
-   * identity and scoping this backing (C2.10.2). */
-  private headerOf(bytes: Uint8Array, segment: Uint8Array, scope: bigint, backing: Uint8Array) {
-    // A trail that does not frame is no evidence (§10.1) and is passed over.
-    const found = decodeEvidencePackage(bytes).filter(item => item.kind === 6).map(item => {
-      try { return decodeTrail(item.payload); } catch (error) { if (error instanceof EncodingError) return undefined; throw error; }
-    }).find(trail => trail !== undefined && same(sha256(trail.header), segment));
-    requireThat(found !== undefined, "ABSENT", "canonical segment header is absent");
-    const header = decodeSegmentHeader(found.header);
-    requireThat(same(segmentIdentity(header), segment) && new ScopeTree(header.entries).root() === scope &&
-      header.entries.some(scoped => same(scoped.backing, backing)), "INVALID", "canonical segment is not this backing's");
-    return header;
+  close(): void {
+    if (this.closed) return;
+    this.closed = true; this.seed.fill(0);
+    this.retained?.close(); this.replays?.close(); this.db.close();
   }
-
-  close(): void { if (!this.closed) { this.closed = true; this.seed.fill(0); this.db.close(); } }
 }

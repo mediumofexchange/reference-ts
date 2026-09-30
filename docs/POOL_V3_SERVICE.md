@@ -70,12 +70,17 @@ own package (the configuration and the selected commitment), to pass to
 `readPackage` with that store.
 
 `package(backing)` collects the same stream, served from nothing, into one
-§12 package held in memory. It is for a caller that reads a whole package,
-as `V3Wallet` does until it syncs from retained evidence
+§12 package held in memory. It is for a caller that reads a whole package:
+the checks, and tests. A wallet syncs its own evidence file instead,
+`wallet.supply(evidence => client.sync(backing, evidence))`, and reads with
+the returned package
 ([M5b.5c](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+Every response closes its connection: a caller's verification blocks its event
+loop between requests, so an idle connection the server has timed out would
+otherwise be reused before the caller sees it closed.
 Both methods return untrusted bytes and metadata. They expose the journal's
 published state and exclude its unpublished tail. The receiver calls
-`V3Wallet.fulfill` with the bytes and independently held signed root terms,
+`V3Wallet.fulfill` with the package and independently held signed root terms,
 configuration, verifier and venue. The venue supplies the judging index and
 complete range answers. Server metadata cannot select those inputs. Missing or
 changed evidence refuses fulfillment, and receipts alone cannot fulfill a
