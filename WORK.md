@@ -17,7 +17,7 @@ to learn whether workers or Poseidon2 on Barretenberg decide the 24 h. Measure R
 
 ## Status
 - Review-code 2026-09-30 (main since e57fc31): a checkpoint is judged in its directory's first entry's segment ([decision](decisions/2026-09.md#2026-09-30--judge-a-checkpoint-in-the-segment-its-directorys-first-entry-names),
-  spec bd23810), receipts past an excluded opening, verifier kinds, keep-point lock, replay temp files, supply quota; deferred as Next 5(o)–(s).
+  spec 298b6f5), receipts past an excluded opening, verifier kinds, keep-point lock, replay temp files, supply quota; deferred as Next 5(o)–(s).
 - M5b.5c.2 (PR #60): [real proofs past the old package](docs/POOL_DEPLOYMENT_PROBES.md#real-proofs-past-the-old-package-m5b5c2):
   73 statements through journal, wallet sync and an offline-operator recovery read from kept files
   (`check:pool:v3-history`); owed kept-path, second-handle and read-crash tests added. M5b.5 is closed.

@@ -639,8 +639,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         if (openingDirectory === undefined) throw new EvidenceRefusal("unresolved-evidence");
         // The opening is this segment's where its own first snapshot names it, as its judgment reads it,
         // whichever backing this read holds: one it omits too (C2.10.12).
+        // A first entry this segment does not scope is not its opening, which the directory alone shows.
         const openingEntry = openingDirectory[0];
-        requireReplay(openingEntry !== undefined && same(snapshotFor(openingEntry.digest).segment, segment), "OPENING");
+        requireReplay(openingEntry !== undefined && header.entries.some(scoped => same(scoped.backing, openingEntry.name)) &&
+          same(snapshotFor(openingEntry.digest).segment, segment), "OPENING");
         // Lapse is judged before validity (C2.10.11), on the clock from the opening as
         // witnessed, valid or not (C2b.4.1).
         const termsOf = (name: Uint8Array): RootTerms => scopedTerms.get(hex(name))!;

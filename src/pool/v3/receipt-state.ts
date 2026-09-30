@@ -53,7 +53,8 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     // reader judges the checkpoint (pool-v3 §7.1), whichever backing this read holds.
     const directory = directoryOf(reference.commitment.root);
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    const entry = directory[0]; requireReceipt(entry !== undefined);
+    // A first entry the receipt's segment does not scope is of another segment, which the directory alone shows.
+    const entry = directory[0]; requireReceipt(entry !== undefined && header.entries.some(scope => same(scope.backing, entry.name)));
     const snapshot = snapshotOf(entry.digest);
     if (snapshot === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const decoded = decodeSnapshot(snapshot);

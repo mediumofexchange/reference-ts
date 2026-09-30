@@ -176,6 +176,16 @@ describe("multi-backing scope reader", () => {
     }
   });
 
+  it("finds no opening at a sequence whose first entry the segment does not scope, from the directory alone (C2.10.12)", async () => {
+    const f = await twoBackings();
+    // The operator's sequence 1 carries another backing only, and that backing's snapshot preimage is not supplied.
+    f.checkpoint(1n, 1n, snapshots => [{ ...snapshots[0]!, backing: b(88) }]);
+    f.items.splice(f.items.findIndex(item => item.kind === 4), 1);
+    await f.issue(5n, 101n);
+    const latest = f.checkpoint(2n, 3n);
+    for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, latest)).rejects.toMatchObject({ check: "OPENING" });
+  });
+
   it("reads a receipt final where a valid checkpoint includes it, in a segment whose opening is excluded (C2.10.12, C2.10.9c)", async () => {
     const f = await twoBackings();
     // The opening misstates a supply: excluded, it still founds the segment.
