@@ -303,6 +303,9 @@ describe("v3 evidence store", () => {
       expect(await store.importTrail(bytes, { after })).toBe(false);
       expect(store.importBytes(pack([])).served(expectedAt(4), snapshotAt(4))).toBeUndefined();
     }
+    // From the seed, the head must still be of the segment named, and the seed its own.
+    expect(await store.importTrail(trail(6), { after: { ...tip, position: 0n, evidence: chain[1]! } })).toBe(false);
+    expect(await store.importTrail(other, { after: { ...tip, position: 0n, evidence: chain[0]! } })).toBe(false);
     expect(await store.importTrail(later, { after: tip })).toBe(true);
     await expect(store.importTrail(later, { after: { ...tip, position: -1n } })).rejects.toThrow(TypeError);
     store.close();

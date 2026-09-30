@@ -133,14 +133,15 @@ export class EvidenceStore {
     if (version === 0n) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
     else if (version !== BigInt(SCHEMA_VERSION)) { this.#db.close(); throw new TypeError("the evidence file has another layout"); }
     // No read is open, so any per-read items are a crashed read's.
-    else this.#db.exec("DELETE FROM item");
+    else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
     this.#q = Object.fromEntries(Object.entries({
       batch: "INSERT INTO batch VALUES (NULL) RETURNING id",
       item: "INSERT INTO item VALUES (?, ?, ?, ?)",
       payloads: "SELECT payload FROM item WHERE batch = ? AND kind = ? AND payload IS NOT NULL ORDER BY seq",
       count: "SELECT count(*) AS c FROM item WHERE batch = ? AND kind = ?",
       release: "DELETE FROM item WHERE batch = ?",
-      keep: "INSERT INTO object VALUES (?, ?, ?) ON CONFLICT(kind, hash) DO UPDATE SET payload = excluded.payload",
+      releaseBatch: "DELETE FROM batch WHERE id = ?",
+      keep: "INSERT INTO object VALUES (?, ?, ?) ON CONFLICT(kind, hash) DO UPDATE SET payload = excluded.payload WHERE payload != excluded.payload",
       object: "SELECT payload FROM object WHERE kind = ? AND hash = ?",
       dropObject: "DELETE FROM object WHERE kind = ? AND hash = ?",
       head: "INSERT INTO head VALUES (NULL, ?, NULL, ?) RETURNING id",
@@ -203,10 +204,11 @@ export class EvidenceStore {
    * §14 incremental retrieval: a later trail of a segment this store holds through `after`, fetched as its
    * head (context, header, scoped terms and count) followed by the records after `after.position`. §10's frame
    * is read over the head, the retained records and the fetched ones to the exact end, and the evidence
-   * recurrence continues from the kept chain value; the stated position authenticates nothing. Without `after`
-   * the source is a complete trail. A stream states its byte length (`size`). Resolves true where the trail
-   * framed and was kept; false where it does not frame or `after` is no kept position. PackageLimitError past
-   * the quota.
+   * recurrence continues from the kept chain value; the stated position authenticates nothing. The head must
+   * be of `after.segment`. Without `after`, or after position 0 (the segment's seed), the source is a complete
+   * trail. A stream states its byte length (`size`). Resolves true where the trail framed and was kept; false
+   * where it does not frame, is of another segment, or `after` is no kept position. PackageLimitError past the
+   * quota.
    */
   async importTrail(source: Uint8Array | AsyncIterable<Uint8Array>,
     options: { readonly after?: TrailTip | undefined; readonly size?: bigint | undefined } = {}): Promise<boolean> {
@@ -220,8 +222,8 @@ export class EvidenceStore {
     }
     return this.#transactionAsync(async () => {
       let base: Base | undefined;
-      if (after !== undefined && after.position > 0n) {
-        base = this.#base(after);
+      if (after !== undefined) {
+        base = after.position === 0n ? (same(after.evidence, genesisEvidenceHash(after.segment)) ? { ...after, size: 0n } : undefined) : this.#base(after);
         if (base === undefined) return false;
       }
       const batch = this.#batch();
@@ -403,7 +405,7 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
   /** Items of `kind` this package carried. */
   count(kind: number): number { return Number((this.#q.count!.get(this.id, kind) as { c: bigint }).c); }
   /** Forget this read's own items once it ends; retained evidence stays. */
-  release(): void { if (this.#db.isOpen) this.#q.release!.run(this.id); }
+  release(): void { if (this.#db.isOpen) { this.#q.release!.run(this.id); this.#q.releaseBatch!.run(this.id); } }
 
   /** A kept object by the hash its users look it up by, checked against that hash on use. */
   #object(kind: 3 | 4, hash: Uint8Array): Uint8Array | undefined {
@@ -527,8 +529,9 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       evidence(position: bigint): Uint8Array | undefined {
         if (position < 0n || position > length) return undefined;
         if (position === 0n) return seed;
-        let value = top!, above: Uint8Array | undefined;
-        for (let p = length; p > position; p--) { const prev = stepBack(value, p, above); above = value; value = prev; }
+        // Every step walked is checked, so the value returned is chained to the one the snapshot names.
+        let value = top!;
+        for (let p = length; p > position; p--) value = checked(value, p).prev;
         checked(value, position);
         return value;
       } });

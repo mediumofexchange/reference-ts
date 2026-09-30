@@ -143,10 +143,10 @@ export async function replayLocalPackage(input, verifier, codec) {
       const distinct = list => list.filter((item, i) => list.findIndex(other => same(other, item)) === i);
       const snapshots = distinct([supplied.snapshot, ...byteList(supplied.snapshots, "snapshots")]);
       const trails = distinct([supplied.trail, ...byteList(supplied.trails, "trails")]);
-      // The walk looks its objects up by key, and keeps its venue answers beside the harness's stored trails.
+      // The walk looks its objects up by key; its venue answers are kept in the read's replay store.
       const stored = new EvidenceStore().importTrails(budgeted(trails, codec));
       const result = await classifyScopes(context, record, { directory: root => directories.get(hex(root)),
-        snapshot: digest => snapshots.find(bytes => same(sha256(bytes), digest)), trails: stored, answers: stored });
+        snapshot: digest => snapshots.find(bytes => same(sha256(bytes), digest)), trails: stored, chargeAnswer: amount => stored.chargeAnswer(amount) });
       if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
         candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
         currentRangeAuthenticated: selection.mode !== "historical-fixture" };
