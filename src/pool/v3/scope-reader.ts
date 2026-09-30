@@ -436,7 +436,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   let began = false, below: HeldCommitment | undefined;
   const viewFor = (backing: Uint8Array, terms: RootTerms): Promise<RecordView> => {
     const id = hex(backing);
-    if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, evidence, record, context.reference));
+    if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, evidence, record, context.reference, store));
     return views.get(id)!;
   };
   const snapshotFor = (digest: Uint8Array): Snapshot => {

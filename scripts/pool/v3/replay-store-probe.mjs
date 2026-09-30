@@ -6,9 +6,13 @@
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs baseline <events> [--proof <bytes>]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs stored <events> [options]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--silence] [--proof <bytes>] [--dir <directory>]
+//     [--kept <events>]
 // baseline: the runtime state machine (dist state.ts) over synthetic records, stub verifier.
 // read (M5b.3 acceptance): the runtime reader (readPackage) streaming a package file of one
 //   segment's <events> statements into its own evidence and replay files, stub verifier.
+//   --kept <more> (M5b.4b): the replay file is kept with its digest; the reader then reopens it (the
+//   digest check), fetches the trail's head and <more> new records after its checkpoint, and reads a
+//   package carrying only the new checkpoint's objects.
 // stored options:
 //   --proof <bytes>        stand-in record size is proof + 900 bytes (default 32)
 //   --checkpoint <events>  events per savepoint (default 64)
@@ -24,7 +28,7 @@
 //   --dir <directory>      default scratch/replay-store-probe/run
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, createReadStream, existsSync, mkdirSync, openSync, rmSync, statSync, writeSync } from "node:fs";
+import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -43,7 +47,7 @@ import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/v
 import { snapshotBytes, snapshotDigest } from "../../../dist/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS } from "../../../dist/pool/v3/configuration.js";
 import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
-import { encodeEvidenceDirectory } from "../../../dist/pool/v3/package.js";
+import { encodeEvidenceDirectory, encodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { rootTermsSignatureMessage } from "../../../dist/pool/v3/terms.js";
 
@@ -368,8 +372,10 @@ if (mode === "baseline") {
   // into its own evidence file and replays into its own state file; memory is
   // sampled as the stream is copied and as records are verified.
   const dir = resolve(option("--dir", "scratch/replay-store-probe/read"));
-  const files = ["package.bin", "operator.sqlite", "evidence.sqlite", "state.sqlite"].map(name => join(dir, name));
-  const [packageFile, operatorFile, evidenceFile, stateFile] = files;
+  const files = ["package.bin", "operator.sqlite", "evidence.sqlite", "state.sqlite", "state.sha256"].map(name => join(dir, name));
+  const [packageFile, operatorFile, evidenceFile, stateFile, digestFile] = files;
+  const MORE = rest.includes("--kept") ? Number(option("--kept", "0")) : undefined;
+  assert(MORE === undefined || (Number.isSafeInteger(MORE) && MORE > 0), "--kept takes a count of new records");
   mkdirSync(dir, { recursive: true });
   for (const f of files) for (const s of ["", "-journal"]) if (existsSync(f + s)) rmSync(f + s);
   const b = n => new Uint8Array(32).fill(n), label = b(2), lag = 2n, issuerSecret = b(15), operatorSecret = b(16);
@@ -405,6 +411,8 @@ if (mode === "baseline") {
   put(Buffer.concat([V3_TRAIL_CONTEXT, u32(header.length), header, u32(termsBytes.length), termsBytes, signedTerms.signature]));
   const countAt = written.bytes; put(u64(0));
   const verifier = { verify: () => true }, operatorStore = new ReplayStore(operatorFile);
+  // The operator writes its whole history in one transaction (a walk's), not one synced commit per record.
+  const operatorWalk = operatorStore.openWalk(sha("operator"));
   const state = openSegmentState(operatorStore, segment, sha("operator"), undefined);
   const opening = { backing, segment, historyHash: state.history, evidenceHash: state.evidence, issued: 0n, burned: 0n };
   const snapshots = [opening], snapshotOf = () => ({ backing, segment, historyHash: state.history, evidenceHash: state.evidence,
@@ -430,6 +438,7 @@ if (mode === "baseline") {
     if ((i + 1) % EVERY === 0 || i + 1 === N) snapshots.push(snapshotOf());
     if ((i + 1) % SAMPLE === 0) console.error(JSON.stringify({ generated: i + 1, msPerEvent: +((performance.now() - generateStart) / (i + 1)).toFixed(2) }));
   }
+  operatorStore.closeWalk(operatorWalk);
   const generateMs = performance.now() - generateStart;
   assert.equal(snapshots.length, C);
   const snapshot = snapshots.at(-1);
@@ -441,7 +450,7 @@ if (mode === "baseline") {
   inOrder(directories.map(d => encodeEvidenceDirectory(d))).forEach((bytes, i) => put(bytes, placeholder.directory[i]));
   inOrder(snapshots.map(snapshotBytes)).forEach((bytes, i) => put(bytes, placeholder.snapshot[i]));
   put(u64(N), countAt); put(u64(written.bytes - trailStart), trailLengthAt);
-  closeSync(fd); operatorStore.close();
+  closeSync(fd);
   venue.advance(BigInt(C) + 10n);
   commitments.forEach((c, i) => venue.witness(1, operator, BigInt(i + 1), encodeCommitment(c)));
   // The operator's own objects are not the reader's memory; the fixture venue's records stay in-process.
@@ -467,7 +476,9 @@ if (mode === "baseline") {
     if (++verified % SAMPLE === 0) at(replaySamples, { events: verified });
     return true;
   } };
-  const evidence = new EvidenceStore(evidenceFile), store = new ReplayStore(stateFile);
+  // A kept file names its verifier by circuit identities (§14).
+  if (MORE !== undefined) reader.identities = configuration.circuits;
+  const evidence = new EvidenceStore(evidenceFile), store = MORE === undefined ? new ReplayStore(stateFile) : new ReplayStore(stateFile, { digest: digestFile });
   const result = await readPackage(stream(), { mode: "current-fixture", domain, venue: venue.id, backing, operator, sequence: BigInt(C),
     root: commitment.root, judgingIndex: venue.witnessedIndex() }, { configuration, verifier: reader, venue, reference: { context: LOCAL_REFERENCE, label, lag },
     store, evidence });
@@ -485,5 +496,46 @@ if (mode === "baseline") {
     replayHeapBytesPerEvent: slope(replaySamples, "heapMiB", "events"), replayRssBytesPerEvent: slope(replaySamples, "rssMiB", "events"),
     replayExternalBytesPerEvent: slope(replaySamples, "externalMiB", "events"),
     maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, importSamples, replaySamples }, null, 1));
+  if (MORE !== undefined) {
+    // The operator continues: MORE spends and one more checkpoint, witnessed later.
+    const suffix = [], moreWalk = operatorStore.openWalk(sha("operator"));
+    for (let i = 0; i < MORE; i++) {
+      const nfs = [fieldOf(), fieldOf()], outs = [fieldOf(), fieldOf(), fieldOf(), fieldOf()], caps = outs.map(capsule);
+      const bytes = encodeRecord({ domain, kind: 2, publicInputs: [...prefix, EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, ...nfs, ...outs, ...digest(outs, caps)],
+        proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(), capsules: caps });
+      await applyRecord(state, bytes, replay);
+      suffix.push(u32(bytes.length), bytes);
+    }
+    operatorStore.closeWalk(moreWalk);
+    const later = snapshotOf(), directory = [{ name: backing, digest: snapshotDigest(later) }];
+    const next = signCommitment(operatorSecret, BigInt(C + 1), directoryRoot(directory));
+    operatorStore.close();
+    venue.advance(BigInt(C) + 20n); venue.witness(1, operator, BigInt(C) + 15n, encodeCommitment(next));
+    const fetched = Buffer.concat([V3_TRAIL_CONTEXT, u32(header.length), header, u32(termsBytes.length), termsBytes, signedTerms.signature,
+      u64(N + MORE), ...suffix]);
+    const minimal = encodeEvidencePackage([{ kind: 1, payload: configurationItem }, { kind: 2, payload: encodeCommitment(next) },
+      { kind: 3, payload: encodeEvidenceDirectory(directory) }, { kind: 4, payload: snapshotBytes(later) }]);
+    // A keep point's cost: one SHA-256 of the whole state file, as the reopening below and each keep point take.
+    const hashStart = performance.now(); sha(readFileSync(stateFile)); const fileDigestMs = performance.now() - hashStart;
+    const openStart = performance.now(), keptStore = new ReplayStore(stateFile, { digest: digestFile }), openMs = performance.now() - openStart;
+    const keptRows = keptStore.keptRows(), keptEvidence = new EvidenceStore(evidenceFile);
+    const fetchStart = performance.now();
+    assert.equal(await keptEvidence.importTrail(fetched, { after: { segment, position: BigInt(N), evidence: snapshot.evidenceHash } }), true);
+    const fetchMs = performance.now() - fetchStart;
+    let checks = 0;
+    const secondStart = performance.now();
+    const second = await readPackage(minimal, { mode: "current-fixture", domain, venue: venue.id, backing, operator, sequence: BigInt(C + 1),
+      root: next.root, judgingIndex: venue.witnessedIndex() }, { configuration, verifier: { verify: () => { checks++; return true; }, identities: configuration.circuits },
+      venue, reference: { context: LOCAL_REFERENCE, label, lag }, store: keptStore, evidence: keptEvidence });
+    const secondMs = performance.now() - secondStart;
+    assert.equal(second.state.position, BigInt(N + MORE));
+    assert.deepEqual(Buffer.from(second.state.history), Buffer.from(later.historyHash));
+    assert.equal(checks, MORE);
+    keptEvidence.close(); keptStore.close();
+    console.log(JSON.stringify({ mode: "kept", events: N, more: MORE, checkpoints: C + 1, stateMiB: mib(statSync(stateFile).size),
+      evidenceMiB: mib(statSync(evidenceFile).size), keptRowsAtOpen: keptRows, fileDigestSeconds: +(fileDigestMs / 1000).toFixed(2),
+      openSeconds: +(openMs / 1000).toFixed(2), fetchedMiB: mib(fetched.length), packageBytes: minimal.length, assembleSeconds: +(fetchMs / 1000).toFixed(2),
+      secondReadSeconds: +(secondMs / 1000).toFixed(2), secondChecks: checks, node: process.version }, null, 1));
+  }
   for (const f of files) for (const s of ["", "-journal"]) rmSync(f + s, { force: true });
 }

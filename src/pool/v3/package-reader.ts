@@ -30,8 +30,9 @@ export interface PackageReader {
   readonly reference: VenueReference;
   /** The party's replay storage; a private in-memory store by default, kept alive by the result. */
   readonly store?: ReplayStore | undefined;
-  /** The party's evidence storage the package is copied into before any pass; a private
-   * in-memory store by default, closed when the read ends. A file keeps memory flat. */
+  /** The party's evidence storage the package is copied into before any pass; a private in-memory store by
+   * default, closed when the read ends. A party's file keeps memory flat and retains the evidence across reads,
+   * so a later package need carry only new objects and trails can be assembled (§14 incremental retrieval). */
   readonly evidence?: EvidenceStore | undefined;
   /** Outputs to keep incremental witnesses for (a wallet's own), so their paths can be read from the result. */
   readonly witness?: WitnessPredicate | undefined;
@@ -71,19 +72,21 @@ function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofChe
   return { verify: verify.bind(verifierIn), identities: Object.freeze(identities) };
 }
 
-/** Copy the package into the reader's evidence storage, then read only the copy.
- * Bytes are copied before the first await; a stream is copied chunk by chunk. */
+/** Copy the package into the reader's evidence storage, then read only the copy and what the store retains.
+ * Bytes are copied before the first await; a stream is copied chunk by chunk. The package's own items go
+ * when the read ends. */
 async function withEvidence<T>(source: PackageSource, options: PackageReader, read: (batch: EvidenceBatch) => Promise<T>): Promise<T> {
   const own = options.evidence === undefined, store = options.evidence ?? new EvidenceStore();
+  let batch: EvidenceBatch | undefined;
   try {
     const streamed = source !== null && typeof source === "object" &&
       typeof (source as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function";
-    const batch = streamed ? await store.importStream(source as AsyncIterable<Uint8Array>) : store.importBytes(source as Uint8Array);
+    batch = streamed ? await store.importStream(source as AsyncIterable<Uint8Array>) : store.importBytes(source as Uint8Array);
     return await read(batch);
-  } finally { if (own) store.close(); }
+  } finally { if (own) store.close(); else batch?.release(); }
 }
 
-/** Each of kinds 1, 2 and 10 at most once; the import refused kinds a v3 reader does not read. */
+/** Each of kinds 1, 2 and 10 at most once in the package; the import refused kinds a v3 reader does not read. */
 function readKinds(batch: EvidenceBatch): void {
   if ([1, 2, 10].some(kind => batch.count(kind) > 1)) throw new EvidenceRefusal("unsupported-scope");
 }
@@ -104,7 +107,8 @@ export async function readPackage(source: PackageSource, selected: ReaderSelecti
 }
 
 /** §14: kept state that fails a check before reuse is discarded, and the read classifies again from the evidence.
- * A second mismatch, with nothing kept, is a programming failure and stays visible. */
+ * A second mismatch, with nothing kept, is a programming failure and stays visible. (Retained evidence that
+ * fails its check reads as absent or leaves the read unresolved; see evidence-store.ts.) */
 async function keptOrAgain<T>(options: PackageReader, read: () => Promise<T>): Promise<T> {
   try { return await read(); } catch (error) {
     if (!(error instanceof KeptStateMismatch) || options.store === undefined) throw error;
@@ -131,7 +135,8 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   const { configuration, domain, verifier, reference, selection } = owned, { venue } = options;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
-  if ([1, 2, 3, 4, 6].some(kind => batch.count(kind) === 0)) throw new EvidenceRefusal("unresolved-evidence");
+  // Directories, snapshots and trails may be retained from earlier packages; each lookup below needs its own.
+  if ([1, 2].some(kind => batch.count(kind) === 0)) throw new EvidenceRefusal("unresolved-evidence");
   requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
   const commitment = decodeCommitment(payloads(2)[0]!);
   if (!verifyCommitment(commitment)) throw new EvidenceRefusal("unresolved-evidence");

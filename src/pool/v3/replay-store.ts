@@ -11,9 +11,10 @@
 //   set's nodes, the note tree's frontier and the incremental witnesses of the
 //   outputs a replay chose to witness. No note-tree interior node is kept.
 // - A refused checkpoint rolls back a savepoint; nothing is copied to undo.
-// - Classes, scopes, bases and publication verdicts are kept across reads under one
-//   context (pool-v3 §14 kept classes). A party's kept file is reopened only where its
-//   digest, recorded at each keep point outside the file, still matches.
+// - Classes, scopes, bases, publication verdicts and the venue answers they were read
+//   from are kept across reads under one context (pool-v3 §§13.2, 14). A party's kept
+//   file is reopened only where its digest, recorded at each keep point outside the
+//   file, still matches.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { createHash, randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, writeSync } from "node:fs";
@@ -21,6 +22,8 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
 import { EMPTY_NOTE_ROOT, EMPTY_NOTE_SUBTREE, NOTE_TREE_DEPTH, noteNode, type NotePath } from "../note-tree.js";
+import type { HeldCommitment, RangeEntry } from "../../record-range.js";
+import { EvidenceRefusal } from "./refusals.js";
 
 export interface Totals { issued: bigint; burned: bigint }
 /** A standing kind-4 demand, by its statement identity. */
@@ -153,6 +156,14 @@ const SCHEMA = `
     PRIMARY KEY(segment, n)) WITHOUT ROWID;
   CREATE TABLE publication (backing BLOB, idx BLOB, ordinal BLOB, record_hash BLOB NOT NULL, force INTEGER NOT NULL, detail TEXT, bytes BLOB,
     PRIMARY KEY(backing, idx, ordinal)) WITHOUT ROWID;
+  CREATE TABLE answer (kind INTEGER, subject BLOB, through BLOB NOT NULL, value BLOB, PRIMARY KEY(kind, subject)) WITHOUT ROWID;
+  CREATE TABLE answer_held (operator BLOB, seq BLOB, idx BLOB NOT NULL, root BLOB NOT NULL, signature BLOB NOT NULL,
+    PRIMARY KEY(operator, seq)) WITHOUT ROWID;
+  CREATE INDEX answer_held_idx ON answer_held(operator, idx, seq);
+  CREATE TABLE answer_replacement (backing BLOB, identity BLOB, idx BLOB NOT NULL, record BLOB NOT NULL, PRIMARY KEY(backing, identity)) WITHOUT ROWID;
+  CREATE INDEX answer_replacement_order ON answer_replacement(backing, idx, record);
+  CREATE TABLE answer_publication (backing BLOB, idx BLOB, ordinal BLOB, record BLOB NOT NULL, PRIMARY KEY(backing, idx, ordinal)) WITHOUT ROWID;
+  CREATE UNIQUE INDEX answer_publication_position ON answer_publication(idx, ordinal);
   CREATE TABLE walk (id INTEGER PRIMARY KEY AUTOINCREMENT);
   CREATE TABLE walk_verdict (walk INTEGER, key BLOB, idx BLOB NOT NULL, seq BLOB NOT NULL, operator BLOB NOT NULL, root BLOB NOT NULL,
     PRIMARY KEY(walk, key)) WITHOUT ROWID;
@@ -162,9 +173,12 @@ const SCHEMA = `
 /** Rows one read keeps for itself: what it classified (a verdict it judged or reused) and each backing's valid candidates. */
 const WALK_TABLES = ["walk_verdict", "walk_valid"];
 /** Rows kept across reads (pool-v3 §14 kept classes): each is a function of authenticated bytes and the record before its index. */
-const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication"];
+const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication",
+  "answer", "answer_held", "answer_replacement", "answer_publication"];
+/** Kept venue answers refer to no namespace, so collection keeps them. */
+const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -500,8 +514,9 @@ export class ReplayStore {
     } finally { this.#savepoints--; }
   }
 
-  /** Drop every namespace that neither `keep` nor anything they import reads. Kept rows refer to
-   * namespaces, so dropping any also forgets them: a later read classifies again. */
+  /** Drop every namespace that neither `keep` nor anything they import reads. Kept classes, scopes, bases and
+   * publication verdicts refer to namespaces, so dropping any also forgets them: a later read classifies again.
+   * Kept venue answers refer to none and stay. */
   collect(keep: readonly number[]): void {
     if (this.#replaying) throw new Error("a replay is open on this store");
     const live = new Set<number>();
@@ -513,7 +528,7 @@ export class ReplayStore {
         const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
         for (const ns of dead) drop.run(ns);
       }
-      for (const table of [...KEPT_TABLES, "kept_context"]) this.#db.prepare(`DELETE FROM ${table}`).run();
+      for (const table of KEPT_TABLES) if (!ANSWER_TABLES.includes(table)) this.#db.prepare(`DELETE FROM ${table}`).run();
     });
   }
 
@@ -821,6 +836,103 @@ export class ReplayStore {
       const r = row as Record<string, unknown>;
       yield { backing: hex(backing), index: fromBe(r["idx"]), ordinal: fromBe(r["ordinal"]), bytes: bytes(r["bytes"]) };
     }
+  }
+
+  // --- Kept venue answers (pool-v3 §13.2–13.3) ------------------------------------------
+  //
+  // A §13 answer the reader read from its own venue is kept for each kind and subject through the index it
+  // was read to, and a later read extends it by windows after that index (§13.3's adjacent earlier answer).
+  // Every query is bounded by the reading's own judging index, so a read at or below the kept index reads
+  // exactly its own range. Kept answers are kept rows: under the file's digest, and dropped with the context.
+
+  /** The kept answer of `kind` for `subject`: the index it is kept through, and its carried value (kind 1:
+   * the highest sequence held through it; kind 3: the revocation's index, once found). */
+  keptAnswer(kind: number, subject: Uint8Array): { readonly through: bigint; readonly value: bigint | undefined } | undefined {
+    const row = this.#db.prepare("SELECT through, value FROM answer WHERE kind = ? AND subject = ?").get(kind, subject) as
+      { through: unknown; value: unknown } | undefined;
+    return row === undefined ? undefined : { through: fromBe(row.through), value: row.value === null ? undefined : fromBe(row.value) };
+  }
+  /** Extend (or start) a kept answer: `read` writes its windows and returns what it now holds through. An
+   * answer whose read throws keeps none of its windows. */
+  keepAnswer(kind: number, subject: Uint8Array, read: () => { readonly through: bigint; readonly value: bigint | undefined }): void {
+    this.#atomic(() => {
+      const held = read();
+      this.#db.prepare("INSERT OR REPLACE INTO answer VALUES (?, ?, ?, ?)").run(kind, subject, be(held.through),
+        held.value === undefined ? null : be(held.value));
+    });
+  }
+  putHeld(operator: Uint8Array, held: readonly HeldCommitment[]): void {
+    const put = this.#db.prepare("INSERT INTO answer_held VALUES (?, ?, ?, ?, ?)");
+    for (const { index, commitment } of held) put.run(operator, be(commitment.sequence), be(index), commitment.root, commitment.signature);
+  }
+  /** An admitted replacement, kept at its first witnessing only (§13.3). */
+  putReplacement(backing: Uint8Array, identity: Uint8Array, index: bigint, record: Uint8Array): void {
+    this.#db.prepare("INSERT OR IGNORE INTO answer_replacement VALUES (?, ?, ?, ?)").run(backing, identity, be(index), record);
+  }
+  putPublications(backing: Uint8Array, entries: readonly RangeEntry[]): void {
+    const put = this.#db.prepare("INSERT INTO answer_publication VALUES (?, ?, ?, ?)");
+    for (const { index, ordinal, record } of entries) {
+      try { put.run(backing, be(index), be(ordinal), record); } catch (error) {
+        // One venue position answered for two subjects cannot be both (§13.1). SQLite names this index for any repeat of a
+        // position, so a same-subject repeat reads the same; each answer is extended once past its kept index, so none arises.
+        if (error instanceof Error && /UNIQUE constraint failed: answer_publication\.idx, answer_publication\.ordinal$/.test(error.message)) {
+          throw new EvidenceRefusal("unresolved-evidence");
+        }
+        throw error;
+      }
+    }
+  }
+  #held(operator: Uint8Array, row: Record<string, unknown> | undefined): HeldCommitment | undefined {
+    return row === undefined ? undefined : Object.freeze({ index: fromBe(row["idx"]), commitment: Object.freeze({ sequence: fromBe(row["seq"]),
+      root: bytes(row["root"]), operator: new Uint8Array(operator), signature: bytes(row["signature"]) }) });
+  }
+  #heldRow(sql: string, ...values: (Uint8Array | bigint)[]): Record<string, unknown> | undefined {
+    return this.#db.prepare(`SELECT seq, idx, root, signature FROM answer_held WHERE ${sql}`).get(...values) as Record<string, unknown> | undefined;
+  }
+  /** The kept held commitment of `operator` at `sequence`, witnessed by `t`. */
+  heldAt(operator: Uint8Array, sequence: bigint, t: bigint): HeldCommitment | undefined {
+    return this.#held(operator, this.#heldRow("operator = ? AND seq = ? AND idx <= ?", operator, be(sequence), be(t)));
+  }
+  heldAbove(operator: Uint8Array, sequence: bigint, t: bigint): boolean {
+    return this.#heldRow("operator = ? AND seq > ? AND idx <= ? LIMIT 1", operator, be(sequence), be(t)) !== undefined;
+  }
+  /** The first kept held commitment of `operator` in [fromIndex, t] whose sequence exceeds `after`, if given.
+   * Index and sequence rise together (C2.3.3), so `after` at or past `fromIndex` bounds both. */
+  nextHeld(operator: Uint8Array, fromIndex: bigint, after: bigint | undefined, t: bigint): HeldCommitment | undefined {
+    const held = this.#held(operator, after === undefined ?
+      this.#heldRow("operator = ? AND idx >= ? AND idx <= ? ORDER BY idx, seq LIMIT 1", operator, be(fromIndex), be(t)) :
+      this.#heldRow("operator = ? AND seq > ? AND idx <= ? ORDER BY seq LIMIT 1", operator, be(after), be(t)));
+    return held === undefined || held.index >= fromIndex ? held : this.nextHeld(operator, fromIndex, undefined, t);
+  }
+  /** The last kept held commitment of `operator` at or below `toIndex` (and `t`) whose sequence is below `before`, if given. */
+  previousHeld(operator: Uint8Array, toIndex: bigint, before: bigint | undefined, t: bigint): HeldCommitment | undefined {
+    const bound = be(toIndex < t ? toIndex : t);
+    return this.#held(operator, before === undefined ?
+      this.#heldRow("operator = ? AND idx <= ? ORDER BY idx DESC, seq DESC LIMIT 1", operator, bound) :
+      this.#heldRow("operator = ? AND seq < ? AND idx <= ? ORDER BY seq DESC LIMIT 1", operator, be(before), bound));
+  }
+  /** The least index of a kept held commitment of `operator` in [from, to]. */
+  firstHeldIndex(operator: Uint8Array, from: bigint, to: bigint): bigint | undefined {
+    if (from > to) return undefined;
+    const row = this.#db.prepare("SELECT idx FROM answer_held WHERE operator = ? AND idx >= ? AND idx <= ? ORDER BY idx LIMIT 1")
+      .get(operator, be(from), be(to)) as { idx: unknown } | undefined;
+    return row === undefined ? undefined : fromBe(row.idx);
+  }
+  /** `backing`'s kept admitted replacements witnessed by `t`, in answer order (index, then record bytes). */
+  replacements(backing: Uint8Array, t: bigint): RangeEntry[] {
+    return this.#db.prepare("SELECT idx, record FROM answer_replacement WHERE backing = ? AND idx <= ? ORDER BY idx, record").all(backing, be(t))
+      .map(row => { const r = row as { idx: unknown; record: unknown }; return Object.freeze({ index: fromBe(r.idx), ordinal: 0n, record: bytes(r.record) }); });
+  }
+  /** `backing`'s kept publication after `after` in venue order (or the first), witnessed by `t`. */
+  nextPublication(backing: Uint8Array, after: Pick<RangeEntry, "index" | "ordinal"> | undefined, t: bigint): RangeEntry | undefined {
+    const row = (after === undefined ?
+      this.#db.prepare("SELECT idx, ordinal, record FROM answer_publication WHERE backing = ? AND idx <= ? ORDER BY idx, ordinal LIMIT 1").get(backing, be(t)) :
+      this.#db.prepare(`SELECT idx, ordinal, record FROM answer_publication WHERE backing = ? AND (idx > ? OR (idx = ? AND ordinal > ?)) AND idx <= ?
+        ORDER BY idx, ordinal LIMIT 1`).get(backing, be(after.index), be(after.index), be(after.ordinal), be(t))) as Record<string, unknown> | undefined;
+    return row === undefined ? undefined : Object.freeze({ index: fromBe(row["idx"]), ordinal: fromBe(row["ordinal"]), record: bytes(row["record"]) });
+  }
+  publicationCount(backing: Uint8Array, t: bigint): number {
+    return Number((this.#db.prepare("SELECT count(*) AS c FROM answer_publication WHERE backing = ? AND idx <= ?").get(backing, be(t)) as { c: bigint }).c);
   }
 
   // --- The one write --------------------------------------------------------------------

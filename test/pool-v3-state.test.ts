@@ -7,7 +7,6 @@ import { readRecordView, RANGE_LIMITS, type ReaderSelection } from "../src/pool/
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
-import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 import { fieldToBytes } from "../src/pool/field.js";
 import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
@@ -16,7 +15,7 @@ import { RangeLimitError } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../src/record-venue.js";
 import { CandidateVenueError, type VenueReference } from "../src/pool/v3/guard.js";
 import { VenueError } from "../src/venue-error.js";
-import { encodeCommitment, signCommitment } from "../src/venue-records.js";
+import { encodeCommitment, encodeRevocation, signCommitment, signRevocation } from "../src/venue-records.js";
 
 // The v3 state machine (src/pool/v3/state.ts) over synthetic §5 records: the
 // codec's shapes with real issuer signatures, and a proof verifier the test
@@ -199,9 +198,9 @@ describe("the reader's venue", () => {
   const venueId = localVenueIdentity(b(12), 2n);
   const selection: ReaderSelection = { mode: "current-fixture", domain: DOMAIN, venue: venueId, backing: BACKING, operator: terms.operator,
     root: b(17), sequence: 1n, judgingIndex: 4n };
-  // No package objects; venue answers are kept in an empty batch of the reader's own.
-  const noEvidence = () => ({ directory: () => undefined, answers: new EvidenceStore().importTrails([]) });
-  const view = (venue: RecordVenue, chosen = selection) => readRecordView(chosen, terms, noEvidence(), venue, reference);
+  // No package objects; venue answers are kept in a replay store of the reader's own.
+  const noEvidence = () => ({ directory: () => undefined, chargeAnswer: () => {} });
+  const view = (venue: RecordVenue, chosen = selection) => readRecordView(chosen, terms, noEvidence(), venue, reference, new ReplayStore());
   const status = (promise: Promise<unknown>): Promise<unknown> => promise.then(() => "read", (e: unknown) => e instanceof EvidenceRefusal ? e.status : e);
 
   it("reads the chain and revocation from a fixture venue's answers at the witnessed index", async () => {
@@ -241,11 +240,50 @@ describe("the reader's venue", () => {
     expect([...read.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[1n, 1n], [3000n, 3n], [4600n, 4n]]);
   }, 60_000);
 
+  it("keeps each answer, asks the venue only past the index it is kept through, and reads a lower index bounded (§§13.2–13.3)", async () => {
+    const venue = FixtureVenue.reference(b(12), 2n, 8n), secret = b(33), operator = ed25519.getPublicKey(secret);
+    const commitment = (sequence: bigint) => encodeCommitment(signCommitment(secret, sequence, b(Number(sequence))));
+    for (const [at, sequence] of [[1n, 1n], [3n, 2n], [3n, 3n], [6n, 4n]] as const) venue.witness(1, operator, at, commitment(sequence));
+    for (const at of [2n, 6n]) venue.witness(4, BACKING, at, Uint8Array.of(Number(at)));
+    venue.witness(3, issuer, 5n, encodeRevocation(signRevocation(issuerSecret)));
+    const asked: string[] = [], counting: RecordVenue = { id: venue.id, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+      range: (request, limits) => { asked.push(`${request.kind}:${request.fromIndex}-${request.toIndex}`); return venue.range(request, limits); } };
+    const store = new ReplayStore(), at = (t: bigint) => ({ ...selection, mode: "historical-fixture" as const, judgingIndex: t });
+    /** Everything a view answers, in comparable form. */
+    const answers = async (read: Awaited<ReturnType<typeof view>>) => ({ revokedAt: read.revokedAt, chain: read.chain,
+      held: [...read.held(operator)], publications: [...read.publications()], count: read.publicationCount(),
+      at2: read.heldAt(operator, 2n), above1: read.heldAbove(operator, 1n), next: read.nextHeld(operator, 2n, undefined),
+      previous: read.previousHeld(operator, 8n, undefined), first: read.firstHeldIndex(operator, 2n, 8n) });
+    const kept = (t: bigint) => readRecordView(at(t), terms, noEvidence(), counting, reference, store);
+    // Each read equals a fresh one at its own index.
+    for (const [t, requests] of [
+      [4n, ["2:0-4", "3:0-4", "1:0-4", "4:0-4"]],
+      // Extended past the kept index only.
+      [8n, ["2:5-8", "3:5-8", "1:5-8", "4:5-8"]],
+      // At or below it, nothing is asked and nothing past t is read.
+      [3n, []], [8n, []],
+    ] as const) {
+      asked.length = 0;
+      const read = await answers(await kept(t));
+      expect(asked).toEqual(requests);
+      expect(read).toEqual(await answers(await view(venue, at(t))));
+    }
+    expect((await answers(await kept(3n))).held.map(h => h.index)).toEqual([1n, 3n, 3n]);
+    expect([(await kept(4n)).revokedAt, (await kept(8n)).revokedAt]).toEqual([undefined, 5n]);
+    // A read that fails keeps none of its windows.
+    const failing = new ReplayStore(), refusing: RecordVenue = { ...counting, range: (request, limits) =>
+      request.kind === 1 && request.fromIndex > 0n ? undefined : venue.range(request, limits) };
+    await (await readRecordView(at(4n), terms, noEvidence(), refusing, reference, failing)).held(operator)[Symbol.iterator]().next();
+    const later = await readRecordView(at(8n), terms, noEvidence(), refusing, reference, failing);
+    expect(() => [...later.held(operator)]).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
+    expect(failing.keptAnswer(1, operator)?.through).toBe(4n);
+  });
+
   it("requires the independently held reference preimage before asking for evidence", async () => {
     let reads = 0;
     const venue: RecordVenue = { id: venueId, lag: () => 2n,
       witnessedIndex: () => { reads++; return 4n; }, range: () => { reads++; return undefined; } };
-    const refused = (r: VenueReference, v = venue) => readRecordView(selection, terms, noEvidence(), v, r);
+    const refused = (r: VenueReference, v = venue) => readRecordView(selection, terms, noEvidence(), v, r, new ReplayStore());
     for (const r of [undefined, { ...reference, label: b(13) }, { ...reference, lag: 3n },
       { context: "moe/venue/ergo-testnet/reference" }, { context: "moe/venue/ergo/mainnet" }]) {
       await expect(refused(r as VenueReference)).rejects.toThrow(CandidateVenueError);
