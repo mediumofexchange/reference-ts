@@ -21,7 +21,8 @@ jobs:
   pool-v3:
     runs-on: ${{ matrix.os }}
     # The --ergo pass replays every local group a second time from synthetic Ergo block sections through the
-    # profile's own framer; the budget leaves headroom over the ~13-minute baseline (13.5 minutes at d913edd).
+    # profile's own framer, and the history acceptance proves some eighty statements; the budget leaves headroom
+    # over the baseline (20 minutes on Windows at ae342b1, before the history acceptance).
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -44,6 +45,7 @@ jobs:
             scratch/pool-v3-results.json
             scratch/pool-v3-store-results.json
             scratch/pool-v3-local-replay-results.json
+            docs/pool-v3-history-store-verification.json
             docs/pool-v3-recovery-store-verification.json
             docs/pool-v3-recovery-store-ergo-verification.json
             docs/pool-v3-succession-store-verification.json

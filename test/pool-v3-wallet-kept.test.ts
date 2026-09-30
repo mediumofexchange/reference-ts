@@ -11,7 +11,11 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
+import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
+import { ownedNotes, seedWitness } from "../src/pool/v3/holdings.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
+import { readFrontier } from "../src/pool/v3/package-reader.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { encodeRecord, type Record } from "../src/pool/v3/records.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
@@ -64,8 +68,11 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
       payout: { thing: "kept wallet units", quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    const counts = { verified: 0, asked: 0 }, view: { at?: bigint } = {};
-    const counting = { identities: configuration.circuits, verify: (...args: Parameters<typeof verifier.verify>) => { counts.verified++; return verifier.verify(...args); } };
+    const counts = { verified: 0, asked: 0 }, view: { at?: bigint } = {}, gate: { wait?: Promise<void> } = {};
+    // A verification waits for the gate while one is set, which holds a read in flight.
+    const counting = { identities: configuration.circuits, verify: (...args: Parameters<typeof verifier.verify>) => {
+      counts.verified++; return gate.wait === undefined ? verifier.verify(...args) : gate.wait.then(() => verifier.verify(...args));
+    } };
     const seen: RecordVenue = { get id() { return venue.id; }, lag: () => venue.lag(), witnessedIndex: () => view.at ?? venue.witnessedIndex(),
       range: (request, limits) => { counts.asked++; return venue.range(request, limits); } };
     const reader = { configuration, venue: seen, reference, verifier: counting };
@@ -96,7 +103,7 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
       return { served, view: await wallet.sync(served.package, signed) };
     };
     const service = { submit: async (bytes: Uint8Array) => decodeReceipt(await j.submit(bytes)) };
-    return { directory, venue, view, signed, backing, counts, requests, client, payer, receiver, open, path, reader, j, publish, synced, service };
+    return { directory, venue, view, gate, signed, backing, counts, requests, client, payer, receiver, open, path, reader, j, publish, synced, service };
   }
 
   it("syncs past the old one-megabyte ceiling over HTTP, then fetches, verifies and scans only what is new", async () => {
@@ -208,6 +215,61 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     expect(holdings((await f.synced(f.payer)).view)).toEqual(holdings(second.view));
     expect(f.requests.at(-1)!.url.endsWith("&after=0")).toBe(true);
   }, 120_000);
+
+  it("keeps the witnesses a fresh replay of the same evidence computes, across payments both ways and later reads", async () => {
+    const f = await fixture(5);
+    let { served } = await f.synced(f.payer);
+    // Two rounds, each its own checkpoint and read: the payer pays one unit and the receiver pays it back to a
+    // new request, so the payer's kept witnesses move under later outputs and new ones start at later leaves.
+    for (const round of [0, 1]) {
+      await f.payer.prepare(`out-${round}`, { request: f.receiver.request(`invoice-${round}`, f.backing, 1n), value: 1n }, served.package, f.signed, prove);
+      await f.payer.submit(`out-${round}`, f.service); await f.publish();
+      const paid = (await f.synced(f.receiver)).served;
+      await f.receiver.prepare(`back-${round}`, { request: f.payer.request(`refund-${round}`, f.backing, 1n), value: 1n }, paid.package, f.signed, prove);
+      await f.receiver.submit(`back-${round}`, f.service); await f.publish();
+      ({ served } = await f.synced(f.payer));
+    }
+    const seed = f.payer.recoverySeed(), path = f.path("payer"), at = f.venue.witnessedIndex(), records = 5 + 4;
+    f.payer.close();
+    // The wallet's own two files, read as the wallet reads them: nothing is verified, so the state is the kept one.
+    const evidence = new EvidenceStore(`${path}.evidence`), keptStore = new ReplayStore(`${path}.replay`, { digest: `${path}.replay.sha256` });
+    try {
+      const paths = (result: Awaited<ReturnType<typeof readFrontier>>) =>
+        ownedNotes(seed, domain, f.backing, result.canonical!.state).map(note => ({ cm: note.cm, leaf: note.leaf, anchor: note.anchor, path: note.path }));
+      f.counts.verified = 0;
+      const kept = paths(await readFrontier(served.package, f.signed, at, { ...f.reader, evidence, store: keptStore, witness: seedWitness(seed, domain) }));
+      expect(f.counts.verified).toBe(0);
+      // The same evidence replayed from nothing in memory.
+      const fresh = paths(await readFrontier(served.package, f.signed, at, { ...f.reader, evidence, witness: seedWitness(seed, domain) }));
+      expect(f.counts.verified).toBe(records);
+      // Three funded notes never spent and the two refunds, whose leaves follow every funded one.
+      expect(kept.map(note => note.leaf < 5n)).toEqual([true, true, true, false, false]);
+      expect(kept).toEqual(fresh);
+    } finally { keptStore.close(); evidence.close(); }
+  }, 60_000);
+
+  it("refuses a second handle's read while the first handle's read holds the kept replay file, and fences the first", async () => {
+    const f = await fixture(2);
+    const served = await f.payer.supply(evidence => f.client.sync(f.backing, evidence));
+    let release!: () => void;
+    f.gate.wait = new Promise<void>(done => { release = done; });
+    // The first handle's first read stops at its first verification, its walk open on the kept replay file.
+    const reading = f.payer.sync(served.package, f.signed);
+    const outcome = reading.then(() => undefined, (error: unknown) => error);
+    while (f.counts.verified === 0) await new Promise(done => setImmediate(done));
+    // A newer handle owns the wallet from here; its read cannot take the file the older read holds.
+    const second = f.open("payer");
+    await expect(second.sync(served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: "another handle holds this wallet's kept replay file" });
+    delete f.gate.wait; release();
+    // The older read finishes in the kept files, which are any reader's own classes, and answers nothing.
+    expect(await outcome).toMatchObject({ code: "FENCED" });
+    await expect(f.payer.sync(served.package, f.signed)).rejects.toMatchObject({ code: "FENCED" });
+    f.payer.close();
+    // With the file released, the newer handle reads what the older read kept: nothing is verified again.
+    f.counts.verified = 0;
+    expect((await second.sync(served.package, f.signed)).holdings).toHaveLength(2);
+    expect(f.counts.verified).toBe(0);
+  });
 
   it("takes turns between supplies and reads, and supplies nothing through a frozen or closed wallet", async () => {
     const f = await fixture(2);
