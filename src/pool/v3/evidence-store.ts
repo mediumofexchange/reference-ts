@@ -32,7 +32,7 @@ import { decodeEvidenceDirectory, PackageLimitError, packageReader, type Package
 import { decodeRecord, evidenceHashes } from "./records.js";
 import { EvidenceRefusal } from "./refusals.js";
 import { verifyRootTermsSignature } from "./terms.js";
-import { trailReader, type TrailSink } from "./trail.js";
+import { MAX_TRAIL_RECORD_BYTES, trailReader, type TrailSink } from "./trail.js";
 
 /** A whole item's local per-object budget; a trail is bounded per record instead. */
 export const MAX_ITEM_BYTES = 1_048_576n;
@@ -113,23 +113,35 @@ export class EvidenceStore {
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
   readonly #quota: bigint;
+  readonly #hosted: boolean;
   #busy = false;
   #savepoints = 0;
 
   /** A private in-memory database by default; a file path is the party's retained evidence, reopened at its
    * layout and kept across reads. One import runs at a time, and a party opens its file once.
-   * `maxBatchBytes` is the party's quota on what one batch takes (EVIDENCE_QUOTA by default). */
-  constructor(path = ":memory:", options: { readonly maxBatchBytes?: bigint } = {}) {
-    const quota = options.maxBatchBytes ?? (path === ":memory:" ? EVIDENCE_QUOTA.memory : EVIDENCE_QUOTA.file);
+   * `maxBatchBytes` is the party's quota on what one batch takes (EVIDENCE_QUOTA by default).
+   *
+   * A host's open connection (one that reads integers as BigInt) places the store in the host's database
+   * instead, as an operator's journal does (store.ts): the host owns durability and closing, its layout names
+   * this one, and what the host keeps of its own (`keep`, `keepHead`, `append`) joins the host's open transaction. */
+  constructor(source: string | DatabaseSync = ":memory:", options: { readonly maxBatchBytes?: bigint } = {}) {
+    const quota = options.maxBatchBytes ?? (source === ":memory:" ? EVIDENCE_QUOTA.memory : EVIDENCE_QUOTA.file);
     if (typeof quota !== "bigint" || quota < 0n) throw new TypeError("invalid evidence quota");
     this.#quota = quota;
-    this.#db = new DatabaseSync(path, { readBigInts: true });
-    this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL;");
-    const version = (this.#db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
-    if (version === 0n) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
-    else if (version !== BigInt(SCHEMA_VERSION)) { this.#db.close(); throw new TypeError("the evidence file has another layout"); }
-    // No read is open, so any per-read items are a crashed read's.
-    else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
+    if (typeof source !== "string") {
+      this.#db = source; this.#hosted = true;
+      if (this.#db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'chain'").get() === undefined) this.#db.exec(SCHEMA);
+      // No read of this host is open, so any per-read items are a crashed read's.
+      else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
+    } else {
+      this.#db = new DatabaseSync(source, { readBigInts: true }); this.#hosted = false;
+      this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL;");
+      const version = (this.#db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
+      if (version === 0n) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
+      else if (version !== BigInt(SCHEMA_VERSION)) { this.#db.close(); throw new TypeError("the evidence file has another layout"); }
+      // No read is open, so any per-read items are a crashed read's.
+      else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
+    }
     this.#q = Object.fromEntries(Object.entries({
       batch: "INSERT INTO batch VALUES (NULL) RETURNING id",
       item: "INSERT INTO item VALUES (?, ?, ?, ?)",
@@ -154,7 +166,48 @@ export class EvidenceStore {
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
   }
 
-  close(): void { if (this.#db.isOpen) this.#db.close(); }
+  close(): void { if (!this.#hosted && this.#db.isOpen) this.#db.close(); }
+
+  /** The retained evidence alone, as a read uses it, with no package of its own. */
+  retained(): EvidenceBatch { return this.#batch(); }
+
+  // --- A party's own evidence (an operator's journal): kept as supplied evidence is, and read the same way.
+  // Each is one statement or a few, so inside the host's open transaction it commits with the host's command.
+
+  /** Keep the party's own directory (3) or snapshot (4) under the SHA256 its users look it up by. */
+  keep(kind: 3 | 4, payload: Uint8Array): void {
+    const own = copyBytes(payload);
+    if (kind === 3) decodeEvidenceDirectory(own);
+    this.#q.keep!.run(kind, sha256(own), own);
+  }
+
+  /** Keep the party's own segment head: its header and each scoped entry's signed terms, under §12.1's rule. */
+  keepHead(header: Uint8Array, terms: readonly SignedTermsField[]): void {
+    const own = copyBytes(header), segment = sha256(own), entries = decodeSegmentHeader(own).entries;
+    this.#q.putHead!.run(segment, own);
+    terms.forEach((field, i) => this.#keepTerms(segment, entries, i, copyBytes(field.terms), copyBytes(field.signature)));
+  }
+
+  /** Only a field that names its entry's backing and verifies is evidence (§12.1); it is the one kept. */
+  #keepTerms(segment: Uint8Array, entries: readonly SegmentEntry[], i: number, terms: Uint8Array | undefined, signature: Uint8Array): void {
+    const entry = entries[i];
+    if (terms !== undefined && entry !== undefined && same(sha256(terms), entry.backing) && verifyRootTermsSignature(terms, signature)) {
+      this.#q.putTerms!.run(segment, i, terms, signature);
+    }
+  }
+
+  /** Keep the party's own record at the position after `after`, a kept position of its segment's trail (0 is
+   * the seed), under the chain value the evidence recurrence gives it; returns that position. */
+  append(after: TrailTip, record: Uint8Array): TrailTip {
+    const segment = copyBytes(after.segment), previous = copyBytes(after.evidence), own = copyBytes(record);
+    const base = after.position === 0n ? (same(previous, genesisEvidenceHash(segment)) ? { size: 0n } : undefined) :
+      this.#base({ segment, position: after.position, evidence: previous });
+    if (base === undefined) throw new Error("no kept trail position to append after");
+    if (own.length > MAX_TRAIL_RECORD_BYTES) throw new EncodingError("trail record too long");
+    const position = after.position + 1n, evidence = nextEvidenceHash(previous, evidenceHashes(decodeRecord(own)), position);
+    this.#q.record!.run(evidence, segment, previous, position, base.size + 4n + BigInt(own.length), own);
+    return { segment, position, evidence };
+  }
 
   /** Copy a package held in memory: EncodingError for a malformed package and
    * PackageLimitError for a whole item past its budget or a batch past the quota, keeping nothing. */
@@ -312,13 +365,7 @@ export class EvidenceStore {
         q.putHead!.run(segment, header);
         chain = base?.evidence ?? genesisEvidenceHash(segment);
       },
-      terms: (i, terms, signature) => {
-        // Only a field that names its entry's backing and verifies is evidence (§12.1); it is the one kept.
-        const entry = entries[i];
-        if (terms !== undefined && entry !== undefined && same(sha256(terms), entry.backing) && verifyRootTermsSignature(terms, signature)) {
-          q.putTerms!.run(segment!, i, terms, signature);
-        }
-      },
+      terms: (i, terms, signature) => { this.#keepTerms(segment!, entries, i, terms, signature); },
       count: () => {},
       record: (position, record) => {
         if (chain === undefined) return;
@@ -399,18 +446,18 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
 
   /** A kept object by the hash its users look it up by. One that no longer hashes to it is absent, as if never
    * supplied; a copy supplied again replaces it. */
-  #object(kind: 3 | 4, hash: Uint8Array): Uint8Array | undefined {
+  object(kind: 3 | 4, hash: Uint8Array): Uint8Array | undefined {
     const row = this.#q.object!.get(kind, hash) as { payload: unknown } | undefined;
     const payload = row === undefined ? undefined : bytes(row.payload);
     return payload !== undefined && same(sha256(payload), hash) ? payload : undefined;
   }
   /** The kept directory whose root is `root`, decoded. */
   directory(root: Uint8Array): readonly SnapshotDigest[] | undefined {
-    const payload = this.#object(3, root);
+    const payload = this.object(3, root);
     return payload === undefined ? undefined : decodeEvidenceDirectory(payload);
   }
   /** The kept snapshot whose SHA256 is `digest`. */
-  snapshot(digest: Uint8Array): Uint8Array | undefined { return this.#object(4, digest); }
+  snapshot(digest: Uint8Array): Uint8Array | undefined { return this.object(4, digest); }
 
   /** The segment's kept head, if its header still hashes to the segment: its header and, for each scoped entry, the
    * first supplied terms field that named the entry's backing and verified (§12.1); a field that did not was never kept. */
@@ -427,16 +474,23 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
   served(expected: ExpectedSnapshot, snapshot: Snapshot): StoredTrail | undefined {
     if (!same(snapshot.backing, expected.backing) || !same(snapshot.segment, expected.segment) ||
         !same(snapshotDigest(snapshot), expected.digest)) return undefined;
-    const segment = expected.segment, seed = genesisEvidenceHash(segment), [head] = this.heads(segment);
+    const [head] = this.heads(expected.segment);
     if (head === undefined || !decodeSegmentHeader(head.header).entries.some(entry => same(entry.backing, expected.backing))) return undefined;
-    if (same(snapshot.evidenceHash, seed)) return this.#cut(head, segment, seed, undefined, 0n);
+    return this.trail(expected.segment, snapshot.evidenceHash);
+  }
+
+  /** The kept records of `segment` through the chain value `evidence` (at its seed, none), with the segment's kept head. */
+  trail(segment: Uint8Array, evidence: Uint8Array): StoredTrail | undefined {
+    const seed = genesisEvidenceHash(segment), [head] = this.heads(segment);
+    if (head === undefined) return undefined;
+    if (same(evidence, seed)) return this.#cut(head, segment, seed, undefined, 0n);
     // A chain value fixes the records before it, and a kept row belongs to the segment whose trail supplied it: the
     // records of this segment under the snapshot's evidence hash serve it. The row's own chain step is checked
     // before its position gives the trail's length, so a damaged row is absent rather than a shorter trail.
-    const row = this.#q.step!.get(snapshot.evidenceHash, segment) as { position: bigint } | undefined;
+    const row = this.#q.step!.get(evidence, segment) as { position: bigint } | undefined;
     if (row === undefined) return undefined;
     const length = BigInt(row.position);
-    return chainStep(this.#q, segment, snapshot.evidenceHash, length) === undefined ? undefined : this.#cut(head, segment, seed, snapshot.evidenceHash, length);
+    return chainStep(this.#q, segment, evidence, length) === undefined ? undefined : this.#cut(head, segment, seed, evidence, length);
   }
 
   #cut(head: TrailHead, segment: Uint8Array, seed: Uint8Array, top: Uint8Array | undefined, length: bigint): StoredTrail {
