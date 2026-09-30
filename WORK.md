@@ -76,7 +76,7 @@ to learn whether workers or Poseidon2 on Barretenberg decide the 24 h. Measure R
    Barretenberg, sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-acceptance receipt handoff, store-check's request
    through the frame, same-segment rescoping. Phone-first wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
 7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`. After 5(h), read every `local-check`
-   group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`).
+   group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`). To cut CI failures, run the harness's proof-free cases in vitest with stand-in proofs, and consider a real-proof job only for PRs marked ready.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped

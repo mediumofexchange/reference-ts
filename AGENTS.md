@@ -137,9 +137,9 @@ Add the smallest regression test for changed behavior; hostile witnesses must ot
 relation so unrelated constraints cannot hide a missing guard. Cover relevant replay, aliasing,
 overflow, index boundaries, withheld data and wrong-context proofs.
 
-Iterate with focused checks; run expensive real-proof/full acceptance after the relevant patch
-stabilizes. Reuse a passing baseline when its inputs are unchanged, recording revision, affected
-checks and gaps. A report/cache is evidence only for the exact sources/artifacts/configuration it
+Iterate with focused checks; run real-proof/full acceptance once the patch stabilizes. Before a push, run
+the unit suite and `check:scripts`, and `check:pool:local-replay` where verdict code changed (memory
+permitting): CI is not the first run. Reuse a passing baseline when its inputs are unchanged, recording revision, affected checks and gaps. A report/cache is evidence only for the exact sources/artifacts/configuration it
 binds, so a report generator hashes every source its verdict depends on (including imported
 parsers) and takes specification pins from one constant. Rerun affected checks after fixes and
 required checks on final code. Do not duplicate unchanged passing CI locally or weaken checks after
