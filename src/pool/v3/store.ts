@@ -15,10 +15,14 @@
 // serves (an EvidenceStore hosted here), the receipt and the signed commitment.
 // Nothing but the active segment's scope is held in memory, and reopening
 // reads rows: it verifies no proof. It checks instead that the stored state
-// reproduces its own tip and the last signed snapshot. The journal's own reads
-// of its history go through the public reader over the same evidence, keeping
-// classes and replays in the same database, so each record is verified there
-// once. `audit` re-verifies from the evidence alone, keeping nothing.
+// reproduces its own tip and the last signed snapshot, and that the log's
+// latest signed reply is the latest signed row. The journal's own reads of its
+// history go through the public reader over the same evidence. Their classes
+// and replays are a reader's kept state (§14) in a file of their own beside
+// the database, so a read never holds the journal's connection and each
+// record is verified there once; what a new segment imports from a read is
+// copied into the database with the command that opens it. `audit`
+// re-verifies from the evidence alone, keeping nothing.
 //
 // Candidate only: the configuration comes from the caller's manifest check
 // and the venue must be a reference venue (guard.ts). Time is the venue's
@@ -67,6 +71,12 @@ const hexOf = (c: Commitment | undefined): string | null => (c === undefined ? n
 const copyCommitment = (c: Commitment): Commitment => decodeCommitment(encodeCommitment(c));
 /** The replay identity a segment's admission state is kept under: the journal's own, never a reader's. */
 const admissionIdentity = (segment: Uint8Array): Uint8Array => sha256(concatBytes(utf8ToBytes("v3-journal-admission"), segment));
+/** The identity an imported segment's copied prefix is kept under. */
+const importIdentity = (segment: Uint8Array): Uint8Array => sha256(concatBytes(utf8ToBytes("v3-journal-import"), segment));
+/** A genesis segment: opened by `open`, each backing under its original term with nothing imported. Every other
+ * opening waits for adoption (C2b.4.2, C2.10.9). */
+const isGenesis = (header: SegmentHeader): boolean => header.sequence === 1n &&
+  header.entries.every(entry => entry.opening === undefined && same(entry.link, entry.backing));
 
 export class V3StoreError extends Error {
   constructor(readonly code: "STORAGE" | "FENCED" | "BUSY" | "CONFLICT" | "UNAVAILABLE" | "STALE" | "SCHEDULE" | "UNSUPPORTED" | "REFUSED",
@@ -200,8 +210,12 @@ export class V3OperatorJournal {
   private readonly reference: VenueReference;
   private readonly owner: bigint;
   private readonly resumedAt: bigint | undefined;
-  /** The admission state, and the classes and replays of the journal's own reads, in this database. */
+  private readonly path: string;
+  /** The admission state and the imported prefixes it reads, in this database. */
   private readonly replays: ReplayStore;
+  /** The kept state of the journal's own reads, opened at the first read: a file beside the database where the
+   * verifier declares its circuits (§14 names kept state by them), else memory dropped after each operation. */
+  private reading: ReplayStore | undefined;
   /** The evidence the journal serves and reads: its own records, heads, directories and snapshots, and what a takeover took. */
   private readonly evidence: EvidenceStore;
   private readonly retained: EvidenceBatch;
@@ -220,7 +234,7 @@ export class V3OperatorJournal {
     requireConfigurationVerifier(this.configuration, verifier.identities);
     this.venue = venue; this.lag = venue.lag(); this.verifier = verifier;
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
-    this.observedIndex = 0n;
+    this.observedIndex = 0n; this.path = path;
     const now = this.clock();
     this.db = new DatabaseSync(path, { timeout: 5000, readBigInts: true });
     try {
@@ -235,8 +249,7 @@ export class V3OperatorJournal {
         request TEXT NOT NULL, command TEXT NOT NULL, response TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS ergo_publisher (id INTEGER PRIMARY KEY CHECK(id=1),
         revision INTEGER NOT NULL CHECK(revision>0), snapshot TEXT NOT NULL) STRICT;
-        CREATE TABLE IF NOT EXISTS journal_state (id INTEGER PRIMARY KEY CHECK(id=1), segment BLOB NOT NULL,
-        ns INTEGER NOT NULL, pending INTEGER NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS journal_state (id INTEGER PRIMARY KEY CHECK(id=1), segment BLOB NOT NULL, ns INTEGER NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS journal_signed (sequence INTEGER PRIMARY KEY CHECK(sequence>0), commitment BLOB NOT NULL,
         segment BLOB NOT NULL, length INTEGER NOT NULL, at TEXT NOT NULL, observed TEXT, published INTEGER NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS journal_receipt (statement BLOB PRIMARY KEY, receipt BLOB NOT NULL) STRICT, WITHOUT ROWID;
@@ -255,8 +268,8 @@ export class V3OperatorJournal {
       // C2.8.2: a restarted journal waits the lag before it signs again.
       this.resumedAt = meta.tip === 0n ? undefined : now;
       this.db.prepare("UPDATE identity SET owner=?,observed=? WHERE id=1").run(this.owner, now.toString());
-      // Only the admission state is the journal's own; its reads' namespaces go when their kept classes do.
-      this.replays = new ReplayStore(this.db, { live: () => this.db.prepare("SELECT ns FROM journal_state WHERE id=1").all().map(row => Number(row.ns)) });
+      // Both stores' tables are part of this database's layout, which PROFILE names.
+      this.replays = new ReplayStore(this.db);
       this.evidence = new EvidenceStore(this.db);
       this.retained = this.evidence.retained();
       this.db.exec("COMMIT");
@@ -325,7 +338,11 @@ export class V3OperatorJournal {
    * next operation reads the journal as stored. */
   private transaction<T>(action: () => T): T {
     requireThat(!this.closed, "STORAGE", "store is closed");
-    this.db.exec("BEGIN IMMEDIATE");
+    try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
+      // Another handle holds the database past the busy timeout: nothing was read or written here.
+      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+      throw error;
+    }
     try {
       const meta = this.metadata(); this.identity(meta);
       requireThat(meta!.owner === this.owner, "FENCED", "another process owns this journal");
@@ -348,9 +365,20 @@ export class V3OperatorJournal {
     }
     finally {
       this.busy = false;
-      // Reads whose kept classes were discarded leave replays no one names: they go here, between operations.
-      if (!this.closed) this.replays.sweep();
+      // Reads kept only in memory are dropped between operations; their venue answers stay.
+      if (this.reading !== undefined && !this.reading.kept) this.reading.collect([]);
     }
+  }
+  /** The store the journal's own reads keep their classes and replays in. */
+  private reads(): ReplayStore {
+    if (this.reading === undefined) {
+      const declared = this.verifier.identities !== undefined && Object.keys(this.verifier.identities).length > 0;
+      try { this.reading = declared ? new ReplayStore(`${this.path}.reads`, { digest: `${this.path}.reads.sha256` }) : new ReplayStore(); } catch (error) {
+        if (error instanceof Error && /in use/.test(error.message)) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
+        throw error;
+      }
+    }
+    return this.reading;
   }
 
   /** Memory from the rows, under the fence. Nothing is verified again: the stored state must reproduce (storage
@@ -365,7 +393,7 @@ export class V3OperatorJournal {
     });
   }
   private stored(): Engine {
-    const meta = this.metadata()!, row = this.db.prepare("SELECT segment,ns,pending FROM journal_state WHERE id=1").get();
+    const meta = this.metadata()!, row = this.db.prepare("SELECT segment,ns FROM journal_state WHERE id=1").get();
     const found = this.db.prepare("SELECT * FROM journal_signed ORDER BY sequence DESC LIMIT 1").get();
     requireThat((row === undefined) === (meta.tip === 0n) && (row === undefined) === (found === undefined), "STORAGE", "journal state disagrees with its command log");
     if (row === undefined || found === undefined) return { revision: 0n, opened: undefined, state: undefined, last: undefined, pendingReturn: false };
@@ -375,6 +403,11 @@ export class V3OperatorJournal {
     const opened = this.openedFrom(segment), state = new StateHandle(this.replays, ns);
     requireThat(same(last.segment, segment) && same(last.commitment.operator, this.operator) && verifyCommitment(last.commitment) &&
       last.length <= state.position && last.at <= this.observedIndex, "STORAGE", "the last signed commitment is not this journal's");
+    // Every signed sequence has its row, and the log's latest signing reply is the latest row: a lost row
+    // would let the next commitment reuse its sequence.
+    const count = this.db.prepare("SELECT COUNT(*) AS n FROM journal_signed").get()!.n;
+    const reply = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq DESC LIMIT 1").get()?.response;
+    requireThat(count === last.commitment.sequence && reply === hexOf(last.commitment), "STORAGE", "the signed commitments disagree with the command log");
     // The roots and chains recomputed from the stored state, against the last signed snapshot of every scoped backing.
     const directory = this.retained.directory(last.commitment.root);
     requireThat(directory !== undefined && directory.length === opened.entries.length, "STORAGE", "the last signed directory is missing");
@@ -385,7 +418,9 @@ export class V3OperatorJournal {
     }
     requireThat(storedTipHolds(this.replays, ns), "STORAGE", "the stored state does not reproduce its own tip");
     requireThat(this.retained.trail(segment, state.evidence)?.length === state.position, "STORAGE", "the stored trail does not reach the admission state");
-    return { revision: meta.tip as bigint, opened, state, last, pendingReturn: row.pending === 1n };
+    // An opening other than the genesis is pending until its adoption is logged.
+    const adopted = this.db.prepare("SELECT 1 FROM events WHERE id=?").get(`adopt:${opened.header.sequence}`) !== undefined;
+    return { revision: meta.tip as bigint, opened, state, last, pendingReturn: !isGenesis(opened.header) && !adopted };
   }
   /** The active segment's scope from its kept head: the header and each scoped backing's terms, which its name binds. */
   private openedFrom(segment: Uint8Array): Opened {
@@ -510,13 +545,20 @@ export class V3OperatorJournal {
     return sequence;
   }
   /** The journal's reads go through the public reader over the evidence it serves, keeping their classes and
-   * replays in this database (§14), so a later read verifies only what it has not. */
-  private readerOptions(store: ReplayStore = this.replays) {
-    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference, store, evidence: this.evidence };
+   * replays (§14), so a later read verifies only what it has not. The fence is checked first: a replaced
+   * owner reads and keeps nothing. */
+  private readerOptions(store?: ReplayStore) {
+    this.transaction(() => {});
+    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference,
+      store: store ?? this.reads(), evidence: this.evidence };
   }
-  /** A fresh admission state for a segment over its import, kept under the journal's own identity. */
+  /** A fresh admission state for a segment, kept under the journal's own identity, over its import: the
+   * frontier a read replayed, copied into this database inside the command's transaction. */
   private segmentState(segment: Uint8Array, imported: ImportSource | undefined): SegmentState {
-    return openSegmentState(this.replays, segment, admissionIdentity(segment), imported);
+    if (imported === undefined) return openSegmentState(this.replays, segment, admissionIdentity(segment), undefined);
+    const frontier = imported instanceof StateHandle ? imported.frontier() : imported.frontier;
+    return openSegmentState(this.replays, segment, admissionIdentity(segment),
+      { store: this.replays, frontier: this.replays.copyFrontier(imported.store, frontier, importIdentity) });
   }
   /** Read every opening from bytes: a taken term by the public reader's
    * complete descent of the evidence, including proof of an empty book, and a
@@ -525,8 +567,9 @@ export class V3OperatorJournal {
    * supplied evidence joins what the journal retains and serves; nothing else
    * is written before the opening is signed. */
   private async planRescope(engine: Engine, spec: OwnRescope, at: bigint, target: ReturnType<V3OperatorJournal["rescopeTarget"]>):
-    Promise<{ readonly opened: Opened; readonly imported: ImportSource | undefined; readonly taken: readonly (readonly [3 | 4, Uint8Array])[] }> {
-    const openings = new Map<string, CanonicalCheckpoint | undefined>(), taken: [3 | 4, Uint8Array][] = [];
+    Promise<{ readonly opened: Opened; readonly imported: ImportSource | undefined; readonly taken: readonly (readonly [number, Uint8Array])[] }> {
+    const openings = new Map<string, CanonicalCheckpoint | undefined>(), taken: [number, Uint8Array][] = [];
+    let evidence = spec.evidence;
     const unestablished = (error: unknown): never => {
       if ((error instanceof EvidenceRefusal && error.status === "resource-refusal") || error instanceof PackageLimitError) {
         throw new V3StoreError("REFUSED", "takeover evidence exceeds the reader's budget", "RESOURCE");
@@ -537,16 +580,19 @@ export class V3OperatorJournal {
       throw error;
     };
     if (target.taken.length > 0) {
-      // The directories and snapshots a reader of the new segment needs, served from now on beside the journal's own.
+      // Only public dependencies are read from the supplied package: directories, snapshots, trails and, for
+      // these reads alone, faults. The first three are served from now on beside the journal's own.
       try {
-        for (const item of decodeEvidencePackage(spec.evidence)) if (item.kind === 3 || item.kind === 4) taken.push([item.kind, sha256(item.payload)]);
+        const provided = decodeEvidencePackage(spec.evidence).filter(item => [3, 4, 6, 7].includes(item.kind));
+        for (const item of provided) if (item.kind !== 7) taken.push([item.kind, sha256(item.payload)]);
+        evidence = encodeEvidencePackage(provided);
       } catch (error) { unestablished(error); }
     }
     for (const entry of target.taken) {
       // A journal with history reads its own checkpoints beside the public evidence, from what it retains:
       // a taken term may follow, or already hold, one of this key's (C2.7.1).
       let source: FrontierResult;
-      try { source = await readFrontier(spec.evidence, entry.signed, at, this.readerOptions()); } catch (error) { return unestablished(error); }
+      try { source = await readFrontier(evidence, entry.signed, at, this.readerOptions()); } catch (error) { return unestablished(error); }
       const current = source.ranges.chain.at(-1)!;
       requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
       requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
@@ -570,7 +616,7 @@ export class V3OperatorJournal {
   /** An opening's import: the one parent's state, or the parents' merged finalized prefixes (C2.10.6). */
   private openingImports(parents: readonly CanonicalCheckpoint[]): ImportSource | undefined {
     let merged;
-    try { merged = mergeFinalizedPrefixes(this.replays, parents.map(parent => ({ state: parent.state }))); } catch (error) {
+    try { merged = mergeFinalizedPrefixes(this.reads(), parents.map(parent => ({ state: parent.state }))); } catch (error) {
       if (error instanceof ReplayRefusal) throw new V3StoreError("UNAVAILABLE", "the imported histories conflict");
       throw error;
     }
@@ -628,14 +674,13 @@ export class V3OperatorJournal {
   }
   /** Open a segment's admission state over its import, keep its head as evidence and sign its empty opening;
    * the state of the segment it replaces, which nothing imports, goes. */
-  private openSegment(engine: Engine, opened: Opened, imported: ImportSource | undefined, at: bigint, observed: string | null,
-    pending: boolean): { readonly state: SegmentState; readonly signed: Signed } {
+  private openSegment(engine: Engine, opened: Opened, imported: ImportSource | undefined, at: bigint, observed: string | null):
+    { readonly state: SegmentState; readonly signed: Signed } {
     const state = this.segmentState(opened.segment, imported);
     if (engine.state !== undefined) this.replays.drop(engine.state.ns);
     this.evidence.keepHead(opened.headerBytes, opened.entries.map(entry => entry.signed));
     const signed = this.sign(opened, state, opened.header.sequence, at, observed);
-    this.db.prepare("INSERT INTO journal_state VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET segment=excluded.segment,ns=excluded.ns,pending=excluded.pending")
-      .run(opened.segment, state.ns, pending ? 1 : 0);
+    this.db.prepare("INSERT INTO journal_state VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET segment=excluded.segment,ns=excluded.ns").run(opened.segment, state.ns);
     return { state, signed };
   }
   private append(engine: Engine, id: string, request: string, command: Command, response: string): void {
@@ -777,7 +822,7 @@ export class V3OperatorJournal {
         throw error;
       }
     }
-    throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available");
+    throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available", "CANONICAL");
   }
 
   private serviceClock(source: StateRead, now: bigint): void {
@@ -826,7 +871,7 @@ export class V3OperatorJournal {
       const opened = this.returnOpening(engine, source, view.now), observed = hexOf(view.held.at(-1)?.commitment);
       const { state, signed } = this.transaction(() => {
         this.stable(engine, view);
-        const next = this.openSegment(engine, opened, source.state, view.now, observed, true);
+        const next = this.openSegment(engine, opened, source.state, view.now, observed);
         this.append(engine, commandId, "return", { kind: "return", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(next.signed.commitment)));
         return next;
       });
@@ -862,7 +907,6 @@ export class V3OperatorJournal {
       const receipts = this.transaction(() => {
         this.stable(engine, view); this.signingSchedule(view, true);
         const signed = block.map(event => this.admit(engine, judgeAdopted(state, event.bytes, replay), replay));
-        this.db.prepare("UPDATE journal_state SET pending=0 WHERE id=1").run();
         this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(signed.map(bytesToHex)));
         return signed;
       });
@@ -912,7 +956,7 @@ export class V3OperatorJournal {
       requireThat(schedule.commitNow, "SCHEDULE", "the opening's signing schedule is closed");
       const { state, signed: first } = this.transaction(() => {
         this.stable(engine, view);
-        const next = this.openSegment(engine, opened, undefined, view.now, null, false);
+        const next = this.openSegment(engine, opened, undefined, view.now, null);
         this.append(engine, commandId, request, { kind: "open", scope, at: view.now.toString(), observed: null }, bytesToHex(encodeCommitment(next.signed.commitment)));
         return next;
       });
@@ -949,7 +993,7 @@ export class V3OperatorJournal {
       const plan = await this.planRescope(engine, own, at, target), opened = plan.opened, observed = hexOf(view.held.at(-1)?.commitment);
       const { state, signed } = this.transaction(() => {
         this.stable({ ...engine, opened }, view);
-        const next = this.openSegment(engine, opened, plan.imported, at, observed, true);
+        const next = this.openSegment(engine, opened, plan.imported, at, observed);
         const taken = this.db.prepare("INSERT OR IGNORE INTO journal_taken VALUES(?,?)");
         for (const [kind, hash] of plan.taken) taken.run(kind, hash);
         this.append(engine, commandId, request, { kind: "rescope", take: texts, keep: names, evidence: named, at: at.toString(), observed },
@@ -1080,7 +1124,7 @@ export class V3OperatorJournal {
         add(4, payload); snapshot(payload);
       }
     }
-    for (const row of this.db.prepare("SELECT kind,hash FROM journal_taken ORDER BY kind,hash").all()) {
+    for (const row of this.db.prepare("SELECT kind,hash FROM journal_taken WHERE kind IN (3,4) ORDER BY kind,hash").all()) {
       const kind = row.kind === 3n ? 3 : 4, payload = this.retained.object(kind, bytes(row.hash));
       if (payload === undefined) continue;
       add(kind, payload);
@@ -1129,33 +1173,49 @@ export class V3OperatorJournal {
   }
 
   /**
-   * Full re-verification, on request (storage decision item 7): what any
-   * reader concludes from the evidence this journal serves, read through the
-   * public reader from the segments' seeds with nothing kept, so every proof is
-   * verified again. Where the canonical checkpoint of a scoped backing is of
-   * the active segment, the journal's stored state at that position must be
-   * the state the read replayed, and every stored receipt of the active
-   * segment must authenticate its record's row. A failure is STORAGE; evidence
-   * that no longer reads is UNAVAILABLE, as for any of the journal's reads.
+   * Re-verification on request (storage decision item 7). Reopening trusts the rows; this does not:
+   * - each scoped backing's canonical checkpoint is read again through the public reader, from the segments'
+   *   seeds over the evidence the journal serves, with nothing kept, so every proof through it is verified
+   *   again. Where that checkpoint is of the active segment, the journal's stored state at its position must be
+   *   the state the read replayed: its chains, totals and fact counts;
+   * - every signed row must be the reply its command was given, in order, and carry the publication the log records;
+   * - every record of the active segment must have a receipt this key signed, and one naming the active
+   *   segment must be its row's.
+   * Records admitted after the canonical checkpoint are not proved again here: no reader has judged them.
+   * A failure is STORAGE; evidence that no longer reads is UNAVAILABLE, as for any of the journal's reads.
    */
   async audit(): Promise<void> {
     return this.run(async engine => {
       const opened = engine.opened, state = engine.state;
       if (opened === undefined || state === undefined) return;
       const now = this.clock();
-      if (heldCommitments(this.ask(1, this.operator, now)).held.some(held => this.ownHeld(held) !== undefined)) {
-        for (const { backing } of opened.entries) {
-          const fresh = new ReplayStore();
-          try {
-            const { canonical, state: read } = await this.currentRead(engine, now, backing, fresh);
-            if (!same(canonical.segment, opened.segment)) continue;
-            const mine = state.at(read.position), totals = mine.total(bytesToHex(backing));
-            requireThat(read.position <= state.position && same(mine.history, read.history) && same(mine.evidence, read.evidence) &&
-              totals.issued === read.issued && totals.burned === read.burned, "STORAGE", "the stored state is not the state the evidence replays to");
-          } finally { fresh.close(); }
-        }
+      for (const { backing } of opened.entries) {
+        const fresh = new ReplayStore();
+        try {
+          let source: StateRead;
+          try { source = await this.currentRead(engine, now, backing, fresh); } catch (error) {
+            // Nothing this journal signed is witnessed as carrying the backing yet: there is no read to compare.
+            if (error instanceof V3StoreError && error.check === "CANONICAL") continue;
+            throw error;
+          }
+          const { canonical, state: read } = source;
+          if (!same(canonical.segment, opened.segment)) continue;
+          requireThat(read.position <= state.position, "STORAGE", "the stored state is behind the witnessed evidence");
+          const mine = state.at(read.position), totals = mine.total(bytesToHex(backing));
+          requireThat(same(mine.history, read.history) && same(mine.evidence, read.evidence) && totals.issued === read.issued &&
+            totals.burned === read.burned && JSON.stringify(this.replays.factCounts(mine.ns, mine.position)) === JSON.stringify(fresh.factCounts(read.ns, read.position)),
+            "STORAGE", "the stored state is not the state the evidence replays to");
+        } finally { fresh.close(); }
       }
-      const authority = { domain: this.domain, segment: opened.segment, scopeRoot: opened.scope, operator: this.operator };
+      // The signed rows against the log, in step.
+      const replies = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq").iterate();
+      for (const row of this.db.prepare("SELECT sequence,commitment,published FROM journal_signed ORDER BY sequence").all()) {
+        const reply = replies.next().value?.response;
+        requireThat(reply === bytesToHex(bytes(row.commitment)), "STORAGE", "a signed row is not its command's reply");
+        const logged = this.db.prepare("SELECT 1 FROM events WHERE id=?").get(`published:${row.sequence}`) !== undefined;
+        requireThat(logged === (row.published === 1n), "STORAGE", "a signed row's publication disagrees with the log");
+      }
+      requireThat(replies.next().done === true, "STORAGE", "a signing reply has no signed row");
       for (let position = 1n; position <= state.position; position++) {
         const event = state.receiptEvent(position)!, row = this.db.prepare("SELECT receipt FROM journal_receipt WHERE statement=?").get(event.statementHash);
         requireThat(row !== undefined, "STORAGE", "an admitted record has no receipt");
@@ -1164,15 +1224,16 @@ export class V3OperatorJournal {
           if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "a stored receipt does not decode");
           throw error;
         }
-        // A statement first admitted in an earlier segment keeps that segment's receipt.
-        if (!same(receipt.segment, opened.segment)) continue;
-        requireThat(verifyReceipt(authority, receipt) && receiptMatchesEvent(receipt, event), "STORAGE", "a stored receipt does not authenticate its record");
+        // A statement first admitted in an earlier segment keeps that segment's receipt, signed by this key.
+        const here = same(receipt.segment, opened.segment);
+        requireThat(verifyReceipt({ domain: this.domain, segment: receipt.segment, scopeRoot: receipt.scopeRoot, operator: this.operator }, receipt) &&
+          (!here || (receipt.scopeRoot === opened.scope && receiptMatchesEvent(receipt, event))), "STORAGE", "a stored receipt does not authenticate its record");
       }
     });
   }
 
   close(): void {
     requireThat(!this.busy, "BUSY", "cannot close during a journal operation");
-    if (!this.closed) { this.db.close(); this.secret.fill(0); this.engine = undefined; this.closed = true; }
+    if (!this.closed) { this.db.close(); this.reading?.close(); this.secret.fill(0); this.engine = undefined; this.closed = true; }
   }
 }

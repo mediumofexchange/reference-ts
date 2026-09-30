@@ -471,12 +471,20 @@ describe("the v3 operator journal", () => {
       "UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 2",
       "UPDATE journal_state SET ns = ns + 1",
       "DELETE FROM journal_state",
+      // A lost signed row would let the next commitment reuse its sequence; so would a rewritten reply.
+      "DELETE FROM journal_signed WHERE sequence = (SELECT MAX(sequence) FROM journal_signed)",
+      "DELETE FROM journal_signed WHERE sequence = 1",
+      "UPDATE events SET response = (SELECT response FROM events WHERE seq = 1) WHERE request = 'commit'",
     ]) expect(await refusal((async () => (await tampered(tamper)).package())()), tamper).toEqual(["STORAGE", undefined]);
-    // What reopening does not read, the audit does: a record and a receipt.
+    // What reopening does not read, the audit does: a record, a receipt, an earlier reply or publication, a fact row.
     for (const tamper of [
       "UPDATE chain SET bytes = zeroblob(length(bytes)) WHERE position = 1",
       "UPDATE journal_receipt SET receipt = zeroblob(length(receipt))",
       "DELETE FROM journal_receipt",
+      "UPDATE events SET response = (SELECT response FROM events WHERE request = 'commit') WHERE seq = 1",
+      "UPDATE journal_signed SET published = 0 WHERE sequence = 1",
+      "DELETE FROM anchor WHERE position = 1",
+      "DELETE FROM output WHERE position = 1",
     ]) {
       const j = await tampered(tamper);
       const error = await j.audit().then(() => undefined, (e: unknown) => e);
@@ -509,6 +517,67 @@ describe("the v3 operator journal", () => {
     venue.advance(venue.witnessedIndex() + lag);
     // Another process with the same declared verifier resumes the kept classes and replays.
     await j.submit(issued(5)); expect(verified).toBe(10);
+  });
+
+  it("holds no transaction on its database while it reads its own history", async () => {
+    const venue = FixtureVenue.reference(label, lag), file = path();
+    let during = () => {};
+    const hooked = { verify: (...args: Parameters<typeof verifier.verify>) => { during(); return verifier.verify(...args); } };
+    const j = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
+    const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
+    const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
+    const issued = (n: number): Uint8Array =>
+      encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
+    await j.open("genesis", silent); await j.publish();
+    await j.submit(issued(0)); await j.commit("c2"); await j.publish();
+    // The publication outbox writes through the journal's connection while a read verifies (an Ergo venue's
+    // sync settles it at any time): the read must not hold that connection.
+    const persistence = j.publisherPersistence(); persistence.load();
+    let calls = 0;
+    during = () => { calls++; persistence.guard(); persistence.save(`outbox-${calls}`); };
+    expect(decodeReceipt(await j.submit(issued(1))).position).toBe(2n);
+    expect(calls).toBeGreaterThan(1);
+    // A new owner opens at once during a read; the replaced owner then signs nothing.
+    let next: Journal | undefined;
+    during = () => { next ??= journal(file, venue); };
+    expect(await refusal(j.submit(issued(2)))).toEqual(["FENCED", undefined]);
+    venue.advance(venue.witnessedIndex() + lag);
+    expect(decodeReceipt(await next!.submit(issued(2))).position).toBe(3n);
+  });
+
+  it("reopens between a return opening and its adoption, still pending", async () => {
+    const venue = FixtureVenue.reference(label, lag), file = path();
+    const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 4n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
+    const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
+    const spendable = prepareExactOutput(payerSeed, domain, b(100), name, 10n);
+    let j = journal(file, venue);
+    await j.open("genesis", silent); await j.publish();
+    await j.submit(encodeRecord(authorizeIssue(record(issueTask(own, spendable)), issuerSecret))); const checkpoint = await j.commit("c2"); await j.publish();
+    venue.advance(venue.witnessedIndex() + 6n);
+    const opening = await j.return("returned");
+    j.close(); j = journal(file, venue);
+    // The rows say a return is pending: no service, the same reply, and adoption once it is witnessed.
+    expect(await j.return("returned")).toEqual(opening);
+    expect(await refusal(j.commit("early"))).toEqual(["STALE", undefined]);
+    await j.publish();
+    j.close(); j = journal(file, venue);
+    venue.advance(venue.witnessedIndex() + lag);
+    expect(await j.adopt()).toEqual([]);
+    expect(await j.adopt()).toEqual([]);
+    await j.audit();
+    // The returned segment imports the note issued before it, copied into the journal's database with its
+    // opening: the note's old root is an anchor there, and its spend is admitted once.
+    const returned: SegmentContext = { domain, header: { ...own.header, sequence: opening.sequence,
+      entries: [{ backing: name, link: name, opening: { operator, sequence: 2n, root: checkpoint.root } }] } };
+    const tree = new NoteTree(); tree.append(spendable.cm);
+    const input = { note: spendable, anchor: tree.root(), path: tree.path(0n) };
+    const out = (id: number, value: bigint) => prepareExactOutput(receiverSeed, domain, b(id), name, value);
+    const spend = (first: number) => encodeRecord(record(spendTask(returned, [input, { ...input, note: prepareExactOutput(payerSeed, domain, b(101), name, 0n) }],
+      [out(first, 10n), out(first + 1, 0n), out(first + 2, 0n), out(first + 3, 0n)])));
+    expect(decodeReceipt(await j.submit(spend(110))).position).toBe(1n);
+    expect(await refusal(j.submit(spend(120)))).toEqual(["REFUSED", "SPENT"]);
+    j.close(); j = journal(file, venue);
+    expect(await refusal(j.submit(spend(120)))).toEqual(["SCHEDULE", undefined]);
   });
 
   it("answers a concurrent operation BUSY and hands the caller owned package bytes", async () => {

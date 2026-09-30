@@ -17,7 +17,9 @@
 //   file, still matches.
 // - An operator's journal hosts a store in its own database instead (store.ts):
 //   its admission state is written inside the journal's command transactions, and
-//   the journal owns the connection, its transactions and its durability.
+//   the journal owns the connection, its transactions and its durability. No walk
+//   runs there: the journal's reads use a store of their own, and what a new
+//   segment imports from a read is copied in (`copyFrontier`).
 import { sha256 } from "@noble/hashes/sha2.js";
 import { createHash, randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, writeSync } from "node:fs";
@@ -233,8 +235,6 @@ export interface KeptFile {
   /** Replayed records between keep points inside one read (a long first sync keeps its progress). */
   readonly every?: number | undefined;
 }
-/** A store inside its host's database: the namespaces the host itself reads (what they import stays with them). */
-export interface HostedStore { readonly live: () => readonly number[] }
 /** Kept state that failed a check before reuse (§14): the read discards it and classifies again. */
 export class KeptStateMismatch extends Error {
   constructor(what: string) { super(`kept state does not match: ${what}`); this.name = "KeptStateMismatch"; }
@@ -313,11 +313,7 @@ export class ReplayStore {
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
   readonly #kept: (KeptFile & { readonly path: string }) | undefined;
-  /** A hosted store's namespaces that outlive its reads: the host's own, with what they import. */
-  readonly #live: (() => readonly number[]) | undefined;
   readonly #hosted: boolean;
-  /** Kept rows were discarded since the last sweep, so namespaces they named may be no one's. */
-  #stale = false;
   #savepoints = 0;
   #replaying = false;
   #sinceKeep = 0;
@@ -328,17 +324,16 @@ export class ReplayStore {
    *
    * A host's open connection (one that reads integers as BigInt) places the store in the host's database
    * instead: the host owns its transactions and durability, a write made while the host's transaction is
-   * open joins it, and closing is the host's. Its kept rows rest on the host's storage, with no digest.
-   * `live` names the host's own namespaces; `sweep` drops the reads' namespaces that discarded kept rows named. */
-  constructor(source: string | DatabaseSync = ":memory:", kept?: KeptFile | HostedStore) {
+   * open joins it, and closing is the host's. The host's layout names this one: it has no version of its own.
+   * A hosted store holds state only; a walk needs a store of its own. */
+  constructor(source: string | DatabaseSync = ":memory:", kept?: KeptFile) {
     if (typeof source !== "string") {
-      if (kept === undefined || !("live" in kept) || typeof kept.live !== "function") throw new TypeError("a hosted store names its host's namespaces");
-      this.#db = source; this.#hosted = true; this.#live = kept.live;
+      if (kept !== undefined) throw new TypeError("a hosted store is not a kept file");
+      this.#db = source; this.#hosted = true;
       if (this.#db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'namespace'").get() === undefined) this.#db.exec(SCHEMA);
     } else {
       const path = source;
       if (kept !== undefined) {
-        if ("live" in kept) throw new TypeError("only a hosted store names its host's namespaces");
         if (path === ":memory:" || typeof kept.digest !== "string" || kept.digest === path) throw new TypeError("a kept store is a file with its own digest");
         if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
         this.#kept = { ...kept, path };
@@ -425,8 +420,6 @@ export class ReplayStore {
       this.#db.prepare("DELETE FROM kept_context").run();
     });
     if (this.#kept !== undefined) this.collect([]);
-    // A host's own namespaces stay; the read namespaces its discarded classes named go at its next sweep.
-    else this.#stale = true;
   }
   /** The kept note frontier of `ns` (leaf count and completed left subtrees), for §14's snapshot check. */
   frontier(ns: number): { readonly leaves: bigint; readonly ommers: readonly (bigint | undefined)[] } {
@@ -558,23 +551,48 @@ export class ReplayStore {
     });
   }
 
-  /** A hosted store, between its host's operations: once kept rows were discarded, drop every namespace that
-   * is neither the host's, nor named by a kept class or base, nor imported by one of those. Kept rows stay. */
-  sweep(): void {
-    if (this.#live === undefined || !this.#stale || this.#db.isTransaction || this.#replaying) return;
-    const live = new Set<number>(this.#live());
-    for (const sql of ["SELECT DISTINCT ns FROM verdict WHERE ns IS NOT NULL", "SELECT DISTINCT ns FROM base_import"]) {
-      for (const row of this.#db.prepare(sql).all() as { ns: bigint }[]) live.add(Number(row.ns));
-    }
-    for (const ns of [...live]) if (this.hasNamespace(ns)) for (const entry of this.imports(ns).values()) live.add(entry.ns);
-    const dead = (this.#db.prepare("SELECT ns FROM namespace").all() as { ns: bigint }[]).map(r => Number(r.ns)).filter(ns => !live.has(ns));
+  /**
+   * Copy an imported frontier read in another store into this one, so a namespace opened here can import it
+   * (an operator's new segment imports what its own read replayed). Each imported segment's rows through its
+   * imported position are copied into a namespace kept under `identity(segment)`; a copy already here that
+   * holds the same prefix, by its history hash at that position, is used instead. Only fact rows are copied:
+   * an imported namespace is read at its position, never moved. Runs inside the caller's transaction.
+   */
+  copyFrontier(source: ReplayStore, frontier: Imports, identity: (segment: Uint8Array) => Uint8Array): Imports {
+    if (source === this) return frontier;
+    const from = source.#db, segments = new Map<string, ImportEntry>();
+    const facts = ["event", "event_key", "nullifier", "output", "anchor", "demand", "demand_end", "total"];
     this.#atomic(() => {
-      for (const table of NAMESPACE_TABLES) {
-        const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
-        for (const ns of dead) drop.run(ns);
+      for (const [name, entry] of frontier.segments) {
+        const tip = source.tip(entry.ns), at = entry.upto === 0n ? undefined : source.event(entry.ns, entry.upto);
+        if (hex(tip.segment) !== name || entry.upto > tip.position || (entry.upto > 0n && at === undefined)) throw new Error("an imported frontier names no replayed position");
+        const name_ = identity(tip.segment);
+        const held = this.namespaces(name_).find(ns => {
+          const own = this.tip(ns);
+          return equal(own.segment, tip.segment) && own.position >= entry.upto &&
+            (entry.upto === 0n || equal(this.event(ns, entry.upto)!.history, at!.history));
+        });
+        if (held !== undefined) { segments.set(name, { ns: held, upto: entry.upto }); continue; }
+        // The copy's tip is its imported position. Its other tip fields and structures are never read: an
+        // imported namespace answers only from its fact rows.
+        const ns = Number((this.#q.insertNamespace!.get(tip.segment, name_, at?.history ?? new Uint8Array(32), at?.evidence ?? new Uint8Array(32),
+          fieldToBytes(at?.noteRoot ?? EMPTY_NOTE_ROOT), encodeOmmers([]), EMPTY_SPENT) as { ns: bigint }).ns);
+        this.#db.prepare("UPDATE namespace SET position = ? WHERE ns = ?").run(entry.upto, ns);
+        const copy = (table: string, rows: Iterable<unknown>): void => {
+          let put: StatementSync | undefined;
+          for (const item of rows) {
+            const values = { ...(item as Record<string, unknown>), ns } as Record<string, Uint8Array | bigint | string | number | null>;
+            put ??= this.#db.prepare(`INSERT INTO ${table} (${Object.keys(values).join(", ")}) VALUES (${Object.keys(values).map(() => "?").join(", ")})`);
+            put.run(...Object.values(values));
+          }
+        };
+        for (const table of facts) copy(table, from.prepare(`SELECT * FROM ${table} WHERE ns = ? AND position <= ?`).iterate(entry.ns, entry.upto));
+        copy("demand_tag", from.prepare("SELECT t.* FROM demand_tag t JOIN demand d ON d.id = t.id AND d.ns = t.ns WHERE t.ns = ? AND d.position <= ?")
+          .iterate(entry.ns, entry.upto));
+        segments.set(name, { ns, upto: entry.upto });
       }
     });
-    this.#stale = false;
+    return { segments, totals: new Map(frontier.totals) };
   }
 
   /** Drop one namespace nothing else reads: no namespace imports it and no kept class or base names it
@@ -600,6 +618,14 @@ export class ReplayStore {
   isEffective(ns: number, p: bigint, id: string): boolean { return this.#has("effective", ns, p, unhex(id)); }
   /** A statement already in this segment's own history (imports are not statements of it). */
   hasStatement(ns: number, p: bigint, identity: Uint8Array): boolean { return this.#q.statement!.get(identity, ns, p) !== undefined; }
+  /** How many facts of each kind are visible from (ns, p): an audit compares a stored state with a fresh replay by them. */
+  factCounts(ns: number, p: bigint): { readonly [table: string]: string } {
+    const out: { [table: string]: string } = {};
+    for (const table of ["event", "nullifier", "output", "anchor", "demand", "demand_end"]) {
+      out[table] = String((this.#db.prepare(`SELECT count(*) AS c FROM ${table} x WHERE ${visible("x")}`).get({ ns, p }) as { c: bigint }).c);
+    }
+    return out;
+  }
   /** An issuance of `backing` (hex) among this segment's own records after position `after` through `p`. */
   hasIssuance(ns: number, p: bigint, after: bigint, backing: string): boolean {
     return this.#db.prepare("SELECT 1 FROM event WHERE ns = ? AND position > ? AND position <= ? AND kind = 1 AND backing = ? LIMIT 1")
@@ -731,6 +757,8 @@ export class ReplayStore {
   // a second open while one is open is the caller's error. Another context than the kept one discards the
   // kept rows: a store keeps one context.
   openWalk(context: Uint8Array): number {
+    // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
+    if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
     this.#db.exec("BEGIN");
     // No walk is open, so any walk rows are a crashed read's: they are no one's.
@@ -740,9 +768,6 @@ export class ReplayStore {
       for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
       // A kept file's namespaces were replayed under the old context and can never resume under this one.
       if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
-      // A host's namespaces stay until its sweep: its own were never replayed under a reader's context, and
-      // an earlier read's result may still be in the host's hands.
-      else this.#stale = true;
       this.#db.prepare("INSERT OR REPLACE INTO kept_context VALUES (1, ?)").run(context);
     }
     return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id);
