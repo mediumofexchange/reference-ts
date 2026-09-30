@@ -8,7 +8,10 @@ import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { describeState } from "./pool-v3-state-description.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
 import { encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal, ServedPackage } from "../src/pool/v3/store.js";
@@ -186,6 +189,41 @@ describe("v3 recovery journal and independent package reader", () => {
     const old = items.findIndex(item => item.kind === 4);
     await expect(f.read({ ...served, package: encodeEvidencePackage(items.filter((_, i) => i !== old)) }))
       .rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("reads force, publications and the non-service count through kept state and retained evidence as a fresh read does", async () => {
+    const f = await fixture(); f.venue.advance(7n);
+    const first = f.demand(6n), withdrawal = withdrawalRecord(f.context, statementHash(first), presenterSecret), second = f.demand(8n, 21n, b(18));
+    await f.venue.publishRecord(4, f.backing, f.publication(1, first));
+    await f.venue.publishRecord(4, f.backing, f.publication(4, withdrawal));
+    await f.venue.publishRecord(4, f.backing, f.publication(1, second));
+    await f.venue.publishRecord(4, f.backing, f.publication(5, record(requestTask(domain, f.input, 0n))));
+    const directory = mkdtempSync(join(scratch, "v3-recovery-kept-test-")); directories.push(directory);
+    const store = new ReplayStore(join(directory, "replay.sqlite"), { digest: join(directory, "replay.sha256") });
+    const evidence = new EvidenceStore(join(directory, "evidence.sqlite"));
+    try {
+      const identified = { verify: verifier.verify, identities: configuration.circuits };
+      const read = (packageBytes: Uint8Array, kept: { store?: ReplayStore; evidence?: EvidenceStore } = {}) => readPackage(packageBytes,
+        { ...f.held.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { configuration, verifier: identified, venue: f.venue, reference, ...kept });
+      const comparable = async (result: ReturnType<typeof read>) => {
+        const r = await result;
+        if (r.state === undefined) throw new Error("unexpected receipt verdict");
+        return { ...r, state: describeState(r.state), canonical: { ...r.canonical, state: describeState(r.canonical.state) } };
+      };
+      const fresh = await comparable(read(f.held.package));
+      expect(fresh.force.map(item => item.record.kind)).toEqual([4, 5, 4]);
+      expect(fresh.ranges.nonService).toMatchObject({ count: "0" });
+      expect(await comparable(read(f.held.package, { store, evidence }))).toEqual(fresh);
+      // Later, with one more publication: the package carries only the configuration and the selected commitment.
+      await f.venue.publishRecord(4, f.backing, f.publication(5, record(requestTask(domain, f.input, 1n))));
+      f.venue.advance(f.venue.witnessedIndex() + 2n);
+      const minimal = encodeEvidencePackage(decodeEvidencePackage(f.held.package).filter(item => item.kind === 1 || item.kind === 2));
+      const later = await comparable(read(f.held.package));
+      // The first request now counts, strictly before the judging index.
+      expect(later.ranges.nonService).toMatchObject({ count: "1" });
+      expect(await comparable(read(minimal, { store, evidence }))).toEqual(later);
+      await expect(read(minimal)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    } finally { store.close(); evidence.close(); }
   });
 
   it("counts one unanswered request per tag and requires complete venue answers", async () => {

@@ -1,6 +1,9 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compareBytes, EncodingError } from "../src/bytes.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
@@ -10,6 +13,7 @@ import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { decodeSnapshot, genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { decodeFaultEvidence, encodeFaultEvidence } from "../src/pool/v3/fault-evidence.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import type { CanonicalCheckpoint } from "../src/pool/v3/scope-reader.js";
@@ -110,8 +114,8 @@ async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTai
   const compactItems = f.items.filter(item => item.kind !== 6 || compareBytes(item.payload, fullTrail) !== 0);
   const proofVerifier: ProofCheck = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0 };
   const options = { ...f.options, verifier: proofVerifier };
-  const readCompact = (items = compactItems, faults = [fault], custom = proofVerifier) =>
-    readFrontier(pack([...items, ...faults.map(payload => ({ kind: 7, payload }))]), f.signed, 10n, { ...options, verifier: custom });
+  const readCompact = (items = compactItems, faults = [fault], custom = proofVerifier, kept: { store?: ReplayStore; evidence?: EvidenceStore } = {}) =>
+    readFrontier(pack([...items, ...faults.map(payload => ({ kind: 7, payload }))]), f.signed, 10n, { ...options, verifier: custom, ...kept });
   const readSelected = (items = compactItems, faults = [fault], commitment = selected) =>
     readPackage(pack([...items, ...faults.map(payload => ({ kind: 7, payload })),
       { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
@@ -316,6 +320,22 @@ describe("single-backing compact fault packages", () => {
     expect(compact.canonical!.state.issued).toBe(5n);
     expect(compact.carrying.map(item => item.class)).toEqual(["valid", "valid", "excluded", "valid"]);
     expect(canonicalEvidence((await f.readSelected()).canonical)).toEqual(canonicalEvidence(compact.canonical));
+  });
+
+  it("reads a compact exclusion through kept state and retained evidence as a fresh read does; faults are carried per read", async () => {
+    const f = await compactFixture("PROOF", true), dir = mkdtempSync(join(tmpdir(), "moe-kept-compact-"));
+    const store = new ReplayStore(join(dir, "replay.sqlite"), { digest: join(dir, "replay.sha256") }), evidence = new EvidenceStore(join(dir, "evidence.sqlite"));
+    try {
+      // A kept store names its verifier by circuit identities.
+      const identified: ProofCheck = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0, identities: configuration.circuits };
+      const fresh = await f.readCompact(), comparable = (read: typeof fresh) => ({ canonical: canonicalEvidence(read.canonical), carrying: read.carrying,
+        force: read.force, clock: read.clock, faults: read.faultEvidence });
+      expect(comparable(await f.readCompact(f.compactItems, [f.fault], identified, { store, evidence }))).toEqual(comparable(fresh));
+      // Again from what is kept and retained, the fault supplied again: faults are one read's own items.
+      expect(comparable(await f.readCompact([], [f.fault], identified, { store, evidence }))).toEqual(comparable(fresh));
+      await expect(f.readCompact([], [], identified, { store, evidence })).rejects.toMatchObject({ status: "unresolved-evidence" });
+      await expect(f.readCompact(f.compactItems, [])).rejects.toMatchObject({ status: "unresolved-evidence" });
+    } finally { store.close(); evidence.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("requires complete opening and predecessor evidence despite an authenticated fault", async () => {

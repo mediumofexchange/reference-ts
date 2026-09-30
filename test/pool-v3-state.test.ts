@@ -15,7 +15,7 @@ import { RangeLimitError } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../src/record-venue.js";
 import { CandidateVenueError, type VenueReference } from "../src/pool/v3/guard.js";
 import { VenueError } from "../src/venue-error.js";
-import { encodeCommitment, signCommitment } from "../src/venue-records.js";
+import { encodeCommitment, encodeRevocation, signCommitment, signRevocation } from "../src/venue-records.js";
 
 // The v3 state machine (src/pool/v3/state.ts) over synthetic §5 records: the
 // codec's shapes with real issuer signatures, and a proof verifier the test
@@ -239,6 +239,45 @@ describe("the reader's venue", () => {
     expect(read.chain.map(link => link.from)).toEqual([0n]);
     expect([...read.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[1n, 1n], [3000n, 3n], [4600n, 4n]]);
   }, 60_000);
+
+  it("keeps each answer, asks the venue only past the index it is kept through, and reads a lower index bounded (§§13.2–13.3)", async () => {
+    const venue = FixtureVenue.reference(b(12), 2n, 8n), secret = b(33), operator = ed25519.getPublicKey(secret);
+    const commitment = (sequence: bigint) => encodeCommitment(signCommitment(secret, sequence, b(Number(sequence))));
+    for (const [at, sequence] of [[1n, 1n], [3n, 2n], [3n, 3n], [6n, 4n]] as const) venue.witness(1, operator, at, commitment(sequence));
+    for (const at of [2n, 6n]) venue.witness(4, BACKING, at, Uint8Array.of(Number(at)));
+    venue.witness(3, issuer, 5n, encodeRevocation(signRevocation(issuerSecret)));
+    const asked: string[] = [], counting: RecordVenue = { id: venue.id, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+      range: (request, limits) => { asked.push(`${request.kind}:${request.fromIndex}-${request.toIndex}`); return venue.range(request, limits); } };
+    const store = new ReplayStore(), at = (t: bigint) => ({ ...selection, mode: "historical-fixture" as const, judgingIndex: t });
+    /** Everything a view answers, in comparable form. */
+    const answers = async (read: Awaited<ReturnType<typeof view>>) => ({ revokedAt: read.revokedAt, chain: read.chain,
+      held: [...read.held(operator)], publications: [...read.publications()], count: read.publicationCount(),
+      at2: read.heldAt(operator, 2n), above1: read.heldAbove(operator, 1n), next: read.nextHeld(operator, 2n, undefined),
+      previous: read.previousHeld(operator, 8n, undefined), first: read.firstHeldIndex(operator, 2n, 8n) });
+    const kept = (t: bigint) => readRecordView(at(t), terms, noEvidence(), counting, reference, store);
+    // Each read equals a fresh one at its own index.
+    for (const [t, requests] of [
+      [4n, ["2:0-4", "3:0-4", "1:0-4", "4:0-4"]],
+      // Extended past the kept index only.
+      [8n, ["2:5-8", "3:5-8", "1:5-8", "4:5-8"]],
+      // At or below it, nothing is asked and nothing past t is read.
+      [3n, []], [8n, []],
+    ] as const) {
+      asked.length = 0;
+      const read = await answers(await kept(t));
+      expect(asked).toEqual(requests);
+      expect(read).toEqual(await answers(await view(venue, at(t))));
+    }
+    expect((await answers(await kept(3n))).held.map(h => h.index)).toEqual([1n, 3n, 3n]);
+    expect([(await kept(4n)).revokedAt, (await kept(8n)).revokedAt]).toEqual([undefined, 5n]);
+    // A read that fails keeps none of its windows.
+    const failing = new ReplayStore(), refusing: RecordVenue = { ...counting, range: (request, limits) =>
+      request.kind === 1 && request.fromIndex > 0n ? undefined : venue.range(request, limits) };
+    await (await readRecordView(at(4n), terms, noEvidence(), refusing, reference, failing)).held(operator)[Symbol.iterator]().next();
+    const later = await readRecordView(at(8n), terms, noEvidence(), refusing, reference, failing);
+    expect(() => [...later.held(operator)]).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
+    expect(failing.keptAnswer(1, operator)?.through).toBe(4n);
+  });
 
   it("requires the independently held reference preimage before asking for evidence", async () => {
     let reads = 0;

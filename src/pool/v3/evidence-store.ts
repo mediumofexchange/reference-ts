@@ -5,16 +5,16 @@
 // reads, so a later package need carry only new objects:
 // - directories and snapshots are kept once, by the SHA256 their users look
 //   them up by;
-// - a trail is a head (header and scoped terms) and a line of record
-//   positions, each position's evidence chain value (§7) with the record
-//   stored once under it. The value fixes every record through its position,
-//   so trails that share a prefix share one line, and a new line starts only
-//   where a trail forks from every kept one;
+// - a trail is a head (header and scoped terms) and its records, each stored
+//   once under its evidence chain value (§7) with the value before it. The
+//   value fixes every record through its position, so trails that share a
+//   prefix share its rows, a fork costs only its own records, and a trail is
+//   read by walking back from the value its checkpoint names;
 // - the items one read reads from its own package (kinds 1, 2, 7 and 10) stay
 //   with that read's batch and go when the read ends.
 // Nothing retained is trusted as stored: an object is checked against its hash
 // when used and a record against the chain step to its position, and damage
-// removes the object or line (`KeptEvidenceMismatch`), so kept evidence can
+// removes the object or record (`KeptEvidenceMismatch`), so kept evidence can
 // only leave a read unresolved. Budgets are per object: a whole item, a
 // header, a terms field, a record; the one aggregate is the party's quota on
 // the bytes one batch takes. The only module that touches this database.
@@ -87,8 +87,11 @@ export interface WalkEvidence {
   /** Count a kept venue answer's bytes against the read's quota: past it, a resource refusal (§14). */
   chargeAnswer(bytes: bigint): void;
 }
-/** Where a kept line of a segment ends: a later trail of it can be fetched as a head and the records after this. */
-export interface TrailTip { readonly position: bigint; readonly evidence: Uint8Array }
+/** A kept position of a segment's trail, by its chain value: the reader's own checkpoint that a later trail can be
+ * fetched after, as a head and the records after it. */
+export interface TrailTip { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array }
+/** Records a walk back holds at a time: a trail is read in pages, so memory does not grow with its length. */
+const PAGE = 4096n;
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 const bytes = (value: unknown): Uint8Array => new Uint8Array(value as Uint8Array);
@@ -105,14 +108,10 @@ const SCHEMA = `
   CREATE INDEX head_segment ON head(segment, id);
   CREATE UNIQUE INDEX head_digest ON head(digest);
   CREATE TABLE head_terms (head INTEGER, i INTEGER, terms BLOB, signature BLOB NOT NULL, PRIMARY KEY(head, i)) WITHOUT ROWID;
-  CREATE TABLE line (id INTEGER PRIMARY KEY AUTOINCREMENT, segment BLOB NOT NULL, position INTEGER NOT NULL);
-  CREATE INDEX line_segment ON line(segment, position);
-  CREATE TABLE link (line INTEGER, position INTEGER, evidence BLOB NOT NULL, size INTEGER NOT NULL, PRIMARY KEY(line, position)) WITHOUT ROWID;
-  CREATE INDEX link_evidence ON link(evidence);
-  CREATE TABLE record (evidence BLOB PRIMARY KEY, bytes BLOB NOT NULL) WITHOUT ROWID;`;
+  CREATE TABLE chain (evidence BLOB NOT NULL UNIQUE, prev BLOB NOT NULL, position INTEGER NOT NULL, size INTEGER NOT NULL, bytes BLOB NOT NULL);`;
 
-/** A kept position a trail is assembled after: its line, chain value and the frame bytes of its records. */
-interface Base { readonly line: bigint; readonly position: bigint; readonly evidence: Uint8Array; readonly size: bigint; readonly segment: Uint8Array }
+/** A kept position a trail is assembled after: its chain value and the frame bytes of its records. */
+interface Base { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array; readonly size: bigint }
 
 export class EvidenceStore {
   readonly #db: DatabaseSync;
@@ -152,18 +151,13 @@ export class EvidenceStore {
       terms: "INSERT INTO head_terms VALUES (?, ?, ?, ?)",
       headTerm: "SELECT terms, signature FROM head_terms WHERE head = ? AND i = ?",
       heads: "SELECT id, header FROM head WHERE segment = ? AND id > ? ORDER BY id LIMIT 1",
-      newLine: "INSERT INTO line VALUES (NULL, ?, ?) RETURNING id",
-      lineTip: "SELECT position FROM line WHERE id = ?",
-      moveTip: "UPDATE line SET position = ? WHERE id = ?",
-      tip: `SELECT l.position, k.evidence FROM line l JOIN link k ON k.line = l.id AND k.position = l.position
-        WHERE l.segment = ? ORDER BY l.position DESC, l.id LIMIT 1`,
-      link: "INSERT INTO link VALUES (?, ?, ?, ?)",
-      fork: "INSERT INTO link SELECT ?, position, evidence, size FROM link WHERE line = ? AND position < ?",
-      find: "SELECT k.line, k.position, k.size, l.segment FROM link k JOIN line l ON l.id = k.line WHERE k.evidence = ? ORDER BY k.line LIMIT 1",
-      at: "SELECT k.evidence, r.bytes FROM link k LEFT JOIN record r ON r.evidence = k.evidence WHERE k.line = ? AND k.position = ?",
-      dropLinks: "DELETE FROM link WHERE line = ?",
-      dropLine: "DELETE FROM line WHERE id = ?",
-      record: "INSERT INTO record VALUES (?, ?) ON CONFLICT(evidence) DO UPDATE SET bytes = excluded.bytes WHERE bytes != excluded.bytes",
+      // A record supplied again under its chain value replaces a kept row that storage damaged.
+      record: `INSERT INTO chain VALUES (?, ?, ?, ?, ?) ON CONFLICT(evidence) DO UPDATE SET prev = excluded.prev, position = excluded.position,
+        size = excluded.size, bytes = excluded.bytes WHERE prev != excluded.prev OR position != excluded.position OR size != excluded.size
+        OR bytes != excluded.bytes`,
+      step: "SELECT prev, position, size FROM chain WHERE evidence = ?",
+      entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ?",
+      dropRecord: "DELETE FROM chain WHERE evidence = ?",
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
   }
 
@@ -219,8 +213,11 @@ export class EvidenceStore {
     const streamed = !(source instanceof Uint8Array), own = streamed ? undefined : copyUnshared(source);
     const size = own === undefined ? options.size : BigInt(own.length);
     if (typeof size !== "bigint" || size < 0n) throw new TypeError("a streamed trail states its byte length");
-    const after = options.after === undefined ? undefined : { position: options.after.position, evidence: copyBytes(options.after.evidence) };
-    if (after !== undefined && (typeof after.position !== "bigint" || after.position < 0n || after.evidence.length !== 32)) throw new TypeError("invalid trail position");
+    const after = options.after === undefined ? undefined :
+      { segment: copyBytes(options.after.segment), position: options.after.position, evidence: copyBytes(options.after.evidence) };
+    if (after !== undefined && (typeof after.position !== "bigint" || after.position < 0n || after.evidence.length !== 32 || after.segment.length !== 32)) {
+      throw new TypeError("invalid trail position");
+    }
     return this.#transactionAsync(async () => {
       let base: Base | undefined;
       if (after !== undefined && after.position > 0n) {
@@ -237,16 +234,11 @@ export class EvidenceStore {
     });
   }
 
-  /** The furthest kept position of `segment`'s lines, where a later trail of it can be fetched from. */
-  tip(segment: Uint8Array): TrailTip | undefined {
-    const row = this.#q.tip!.get(copyBytes(segment)) as { position: bigint; evidence: unknown } | undefined;
-    return row === undefined ? undefined : Object.freeze({ position: BigInt(row.position), evidence: bytes(row.evidence) });
-  }
-
+  /** The kept position `after` names, if a trail of it is kept there. */
   #base(after: TrailTip): Base | undefined {
-    const row = this.#q.find!.get(after.evidence) as { line: bigint; position: bigint; size: bigint; segment: unknown } | undefined;
+    const row = this.#q.step!.get(after.evidence) as { position: bigint; size: bigint } | undefined;
     return row === undefined || BigInt(row.position) !== after.position ? undefined :
-      { line: row.line, position: after.position, evidence: after.evidence, size: BigInt(row.size), segment: bytes(row.segment) };
+      { segment: after.segment, position: after.position, evidence: after.evidence, size: BigInt(row.size) };
   }
 
   #batch(): EvidenceBatch {
@@ -314,11 +306,11 @@ export class EvidenceStore {
   #rows(batch: EvidenceBatch, base: Base | undefined): TrailSink {
     const q = this.#q;
     let head: bigint | undefined, digest: ReturnType<typeof sha256.create> | undefined, segment: Uint8Array | undefined;
-    let chain: Uint8Array | undefined, line = base?.line, size = base?.size ?? 0n;
+    let chain: Uint8Array | undefined, size = base?.size ?? 0n;
     return {
       header: header => {
         segment = sha256(header);
-        // The recurrence continues only within its own segment: its seed is the segment's.
+        // The recurrence continues only within its own segment, whose seed began the kept chain.
         if (base !== undefined && !same(segment, base.segment)) throw new EncodingError("an assembled trail of another segment");
         head = (q.head!.get(segment, header) as { id: bigint }).id;
         digest = sha256.create().update(frame(header));
@@ -342,31 +334,15 @@ export class EvidenceStore {
           chain = undefined;
           return;
         }
-        chain = nextEvidenceHash(chain, digests, position);
+        const previous = chain;
+        chain = nextEvidenceHash(previous, digests, position);
         size += 4n + BigInt(record.length);
         batch.charge(RECORD_ROW_BYTES, PackageLimitError);
-        line = this.#link(segment!, line, position, chain, size);
         // The chain value fixes every record through its position, so a kept row under it holds these bytes
         // unless storage damaged it; the supplied copy repairs it.
-        q.record!.run(chain, record);
+        q.record!.run(chain, previous, position, size, record);
       },
     };
-  }
-
-  /** Place position `p` (chain value `evidence`) on a line: the kept line already holding it, else the end of
-   * the line being followed, else a new line; one that forks copies the prefix it shares. */
-  #link(segment: Uint8Array, line: bigint | undefined, p: bigint, evidence: Uint8Array, size: bigint): bigint {
-    const q = this.#q, found = q.find!.get(evidence) as { line: bigint; position: bigint } | undefined;
-    // A kept row under this value at another position is damage: it is not followed.
-    if (found !== undefined && BigInt(found.position) === p) return found.line;
-    if (line !== undefined && BigInt((q.lineTip!.get(line) as { position: bigint }).position) === p - 1n) {
-      q.link!.run(line, p, evidence, size); q.moveTip!.run(p, line);
-      return line;
-    }
-    const next = (q.newLine!.get(segment, p) as { id: bigint }).id;
-    if (line !== undefined) q.fork!.run(next, line, p);
-    q.link!.run(next, p, evidence, size);
-    return next;
   }
 
   #transaction<T>(body: () => T): T {
@@ -477,63 +453,83 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
     for (const head of this.#heads(expected.segment)) {
       if (!decodeSegmentHeader(head.header).entries.some(entry => same(entry.backing, expected.backing))) continue;
       if (atSeed) return this.#cut(head, expected.segment, seed, undefined, 0n);
-      // Every head of a segment has its header, and a chain value fixes the records before it, so any
-      // kept line holding the snapshot's evidence hash serves it.
-      const row = this.#q.find!.get(snapshot.evidenceHash) as { line: bigint; position: bigint; segment: unknown } | undefined;
-      return row === undefined || !same(bytes(row.segment), expected.segment) ? undefined :
-        this.#cut(head, expected.segment, seed, row.line, BigInt(row.position));
+      // Every head of a segment has its header, and a chain value fixes the records before it (its seed is the
+      // segment's), so the kept records under the snapshot's evidence hash serve it.
+      const row = this.#q.step!.get(snapshot.evidenceHash) as { position: bigint } | undefined;
+      return row === undefined ? undefined : this.#cut(head, expected.segment, seed, snapshot.evidenceHash, BigInt(row.position));
     }
     return undefined;
   }
 
-  /** A line removed for damage: its positions no longer serve, and a trail supplied again rebuilds it. */
-  #damaged(line: bigint): never {
-    this.#q.dropLinks!.run(line); this.#q.dropLine!.run(line);
+  /** A record removed for damage: no trail through it serves until it is supplied again (§14: a damaged cache
+   * never grounds an exclusion). */
+  #damaged(evidence: Uint8Array): never {
+    this.#q.dropRecord!.run(evidence);
     throw new KeptEvidenceMismatch("a trail's records");
   }
 
-  #cut(head: Head, segment: Uint8Array, seed: Uint8Array, line: bigint | undefined, length: bigint): StoredTrail {
-    const db = this.#db, q = this.#q, damaged = (at: bigint): never => this.#damaged(at);
-    // The chain value kept at `p` (the seed at 0), without its check.
-    const kept = (p: bigint): Uint8Array | undefined => {
-      if (p === 0n) return seed;
-      const row = q.at!.get(line!, p) as { evidence: unknown } | undefined;
-      return row === undefined ? undefined : bytes(row.evidence);
+  #cut(head: Head, segment: Uint8Array, seed: Uint8Array, top: Uint8Array | undefined, length: bigint): StoredTrail {
+    const q = this.#q, damaged = (evidence: Uint8Array): never => this.#damaged(evidence);
+    /** One step back from the value kept at position `p`: the value before it. A row off its position is damage,
+     * and so is a missing one, found at the row above whose value names it. */
+    const stepBack = (value: Uint8Array, p: bigint, above: Uint8Array | undefined): Uint8Array => {
+      const row = q.step!.get(value) as { prev: unknown; position: bigint } | undefined;
+      if (row === undefined) return damaged(above ?? value);
+      if (BigInt(row.position) !== p) return damaged(value);
+      return bytes(row.prev);
     };
-    // The chain step to `p` from `previous` over `record`, or undefined where the record does not decode.
-    const step = (previous: Uint8Array, record: Uint8Array, p: bigint): Uint8Array | undefined => {
-      try { return nextEvidenceHash(previous, evidenceHashes(decodeRecord(record)), p); } catch (error) {
-        if (!(error instanceof EncodingError)) throw error;
-        return undefined;
+    /** The values from position `to` down to `from`, walking back from `start` at `to`, highest first. */
+    const back = (start: Uint8Array, to: bigint, from: bigint): Uint8Array[] => {
+      const values: Uint8Array[] = [];
+      for (let p = to, value = start, above: Uint8Array | undefined; p >= from; p--) {
+        values.push(value);
+        const prev = stepBack(value, p, above);
+        above = value; value = prev;
       }
+      return values;
+    };
+    /** The record kept under `value` at position `p`, after its chain step from its own previous value (and from
+     * `previous`, where the walk knows it): a record that does not decode or does not hash to its value is damage. */
+    const checked = (value: Uint8Array, p: bigint, previous?: Uint8Array): { record: Uint8Array; prev: Uint8Array } => {
+      const row = q.entry!.get(value) as { prev: unknown; position: bigint; bytes: unknown } | undefined;
+      if (row === undefined || BigInt(row.position) !== p) return damaged(value);
+      const record = bytes(row.bytes), prev = bytes(row.prev);
+      if (previous !== undefined && !same(prev, previous)) return damaged(value);
+      let next: Uint8Array | undefined;
+      try { next = nextEvidenceHash(prev, evidenceHashes(decodeRecord(record)), p); } catch (error) { if (!(error instanceof EncodingError)) throw error; }
+      if (next === undefined || !same(next, value)) return damaged(value);
+      return { record, prev };
     };
     return Object.freeze({ header: head.header, segment, term: head.term, length,
       *records(after = 0n): Iterable<Uint8Array> {
         if (after >= length) return;
-        let chain = kept(after), expected = after + 1n, broken = chain === undefined;
-        if (!broken) {
-          const rows = db.prepare(`SELECT k.position, k.evidence, r.bytes FROM link k LEFT JOIN record r ON r.evidence = k.evidence
-            WHERE k.line = ? AND k.position > ? AND k.position <= ? ORDER BY k.position`);
-          for (const row of rows.iterate(line!, after, length)) {
-            const { position, evidence, bytes: stored } = row as { position: bigint; evidence: unknown; bytes: unknown };
-            const record = stored === null ? undefined : bytes(stored);
-            const next = record === undefined || BigInt(position) !== expected ? undefined : step(chain!, record, expected);
-            if (next === undefined || !same(next, bytes(evidence))) { broken = true; break; }
-            chain = next; expected++;
-            yield record!;
+        // Walk back once to position `after`, keeping only the value at each page's top.
+        const tops: Uint8Array[] = [];
+        let value = top!, above: Uint8Array | undefined;
+        for (let p = length; p > after; p--) {
+          if ((length - p) % PAGE === 0n) tops.push(value);
+          const prev = stepBack(value, p, above);
+          above = value; value = prev;
+        }
+        // The chain starts at the seed, or at the kept value at `after` that the caller checked against its own state.
+        if (after === 0n && !same(value, seed)) damaged(above!);
+        // Then read the pages forward, one page's values in memory at a time, each record checked before it is given.
+        let previous = value, p = after + 1n;
+        for (let i = tops.length - 1; i >= 0; i--) {
+          const to = length - BigInt(i) * PAGE, page = back(tops[i]!, to, p).reverse();
+          for (const entry of page) {
+            const { record } = checked(entry, p, previous);
+            previous = entry; p++;
+            yield record;
           }
         }
-        // A record missing, out of place or off the chain is damage, found before it could be replayed.
-        if (broken || expected !== length + 1n) damaged(line!);
       },
       evidence(position: bigint): Uint8Array | undefined {
         if (position < 0n || position > length) return undefined;
         if (position === 0n) return seed;
-        const previous = kept(position - 1n), row = q.at!.get(line!, position) as { evidence: unknown; bytes: unknown } | undefined;
-        const value = row === undefined ? undefined : bytes(row.evidence);
-        if (previous === undefined || value === undefined || row!.bytes === null) return damaged(line!);
-        const next = step(previous, bytes(row!.bytes), position);
-        if (next === undefined || !same(next, value)) return damaged(line!);
+        let value = top!, above: Uint8Array | undefined;
+        for (let p = length; p > position; p--) { const prev = stepBack(value, p, above); above = value; value = prev; }
+        checked(value, position);
         return value;
       } });
   }

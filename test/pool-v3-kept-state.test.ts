@@ -8,17 +8,18 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { compareBytes } from "../src/bytes.js";
-import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
+import { FixtureVenue, LOCAL_REFERENCE, type RecordVenue } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
-import { genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { decodeSnapshot, encodeReceipt, genesisEvidenceHash, nextEvidenceHash, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
+import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { readFrontier } from "../src/pool/v3/package-reader.js";
+import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -77,9 +78,34 @@ function fixture() {
     await applyRecord(segment.state, bytes, { domain, backing, segment: id, scope, terms: fields, verifier: accept, index: 2n, block: [] });
     segment.records.push(bytes);
   }
-  const read = (verifier: ProofCheck, store?: ReplayStore, options: { at?: bigint; witness?: WitnessPredicate; withoutTrails?: boolean } = {}) =>
-    readFrontier(pack(options.withoutTrails === true ? items.filter(item => item.kind !== 6) : items), signed, options.at ?? venue.witnessedIndex(),
-      { configuration, verifier, reference, venue, ...(store === undefined ? {} : { store }), ...(options.witness === undefined ? {} : { witness: options.witness }) });
+  interface ReadOptions { at?: bigint; witness?: WitnessPredicate; withoutTrails?: boolean; evidence?: EvidenceStore; items?: EvidenceItem[]; venue?: RecordVenue }
+  const own = (verifier: ProofCheck, store: ReplayStore | undefined, options: ReadOptions) => ({ configuration, verifier, reference, venue: options.venue ?? venue,
+    ...(store === undefined ? {} : { store }), ...(options.witness === undefined ? {} : { witness: options.witness }),
+    ...(options.evidence === undefined ? {} : { evidence: options.evidence }) });
+  const read = (verifier: ProofCheck, store?: ReplayStore, options: ReadOptions = {}) =>
+    readFrontier(pack(options.items ?? (options.withoutTrails === true ? items.filter(item => item.kind !== 6) : items)), signed,
+      options.at ?? venue.witnessedIndex(), own(verifier, store, options));
+  /** A read of the held commitment `selected` with a receipt, as a holder presents it. */
+  const readReceipt = (verifier: ProofCheck, selected: Commitment, receipt: Uint8Array, store?: ReplayStore, options: ReadOptions = {}) =>
+    readPackage(pack([...(options.items ?? items), { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(selected) },
+      { kind: 10, payload: receipt }]), { mode: "historical-fixture", domain, venue: venue.id, backing, operator, sequence: selected.sequence,
+      root: selected.root, judgingIndex: options.at ?? venue.witnessedIndex() }, own(verifier, store, options));
+  /** The segment's trail as §14 fetches it after a kept position: its head, count included, and the records after it. */
+  function fetchedAfter(after: bigint): Uint8Array {
+    const full = encodeTrail({ header: segmentBytes(header), terms: [signed], records: segment.records });
+    const head = encodeTrail({ header: segmentBytes(header), terms: [signed], records: [] }).length;
+    const skip = segment.records.slice(0, Number(after)).reduce((n, r) => n + 4 + r.length, 0);
+    const out = new Uint8Array(full.length - skip); out.set(full.subarray(0, head)); out.set(full.subarray(head + skip), head);
+    return out;
+  }
+  /** The operator's receipt for the record at `position` of the segment, after its sequence `after`. */
+  function receipt(position: number, after: bigint): Uint8Array {
+    const record = decodeRecord(segment.records[position - 1]!), evidence = chain(segment.records.slice(0, position));
+    const snapshot = items.filter(item => item.kind === 4).map(item => decodeSnapshot(item.payload)).find(value => compareBytes(value.evidenceHash, evidence) === 0)!;
+    const fields = { domain, segment: id, scopeRoot: new ScopeTree(header.entries).root(), position: BigInt(position), historyHash: snapshot.historyHash,
+      after, ...evidenceHashes(record) };
+    return encodeReceipt({ ...fields, operator, signature: ed25519.sign(receiptBytes(fields), operatorSecret) });
+  }
   // The first history: a valid opening and issue, a checkpoint excluded for a foreign signature, one that
   // rewrites the valid prefix (its first record carries a proof the verifier refuses), then a valid one.
   async function first() {
@@ -91,9 +117,15 @@ function fixture() {
     checkpoint({ ...segment, records: rewritten, evidence: chain(rewritten) }, 4n, 4n);
     await issue(106n); checkpoint(segment, 5n, 5n);
   }
-  return { venue, segment, checkpoint, issue, read, first };
+  return { venue, segment, items, checkpoint, issue, read, readReceipt, fetchedAfter, receipt, chain, first };
 }
 
+/** A venue that lists the ranges a reader asks it for. */
+function asking(venue: FixtureVenue): { venue: RecordVenue; asked: string[] } {
+  const asked: string[] = [];
+  return { asked, venue: { id: venue.id, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+    range: (request, limits) => { asked.push(`${request.kind}:${request.fromIndex}-${request.toIndex}`); return venue.range(request, limits); } } };
+}
 /** What a read establishes, in comparable form. */
 const outcome = (read: Awaited<ReturnType<typeof readFrontier>>) => ({ carrying: read.carrying, clock: read.clock, force: read.force,
   canonical: read.canonical === undefined ? undefined : { ...read.canonical, state: describeState(read.canonical.state) },
@@ -109,9 +141,16 @@ const namespaceCount = (path: string): number => {
 const opened = (path: string, kept: { digest: string; every?: number }): ReplayStore => { const store = new ReplayStore(path, kept); stores.push(store); return store; };
 function files() {
   const dir = mkdtempSync(join(tmpdir(), "moe-kept-")); directories.push(dir);
-  return { path: join(dir, "replay.sqlite"), digest: join(dir, "replay.sha256") };
+  return { path: join(dir, "replay.sqlite"), digest: join(dir, "replay.sha256"), evidence: join(dir, "evidence.sqlite") };
 }
-afterEach(() => { for (const store of stores.splice(0)) store.close(); for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+const evidenceStores: EvidenceStore[] = [];
+/** The party's retained evidence file, closed after the test. */
+const retained = (path: string): EvidenceStore => { const store = new EvidenceStore(path); evidenceStores.push(store); return store; };
+afterEach(() => {
+  for (const store of stores.splice(0)) store.close();
+  for (const store of evidenceStores.splice(0)) store.close();
+  for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 describe("pool-v3 §14 kept classes across reads", () => {
   it("gives a fresh read's verdicts and state, replaying only records it has not replayed", async () => {
@@ -326,6 +365,79 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(fresh.carrying.map(item => item.sequence)).toEqual(["1", "2", "3"]);
     expect(outcome(await read(store))).toEqual(fresh);
     expect(outcome(await read(store))).toEqual(fresh);
+  });
+
+  it("reads a growing history from packages carrying only new objects, as a fresh read of the complete package does (§14)", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    let store = opened(kept.path, kept), evidence = retained(kept.evidence);
+    const first = await f.read(counting(), store, { evidence });
+    expect(outcome(first)).toEqual(outcome(await f.read(counting())));
+    // The reader's own last valid checkpoint: a later trail is fetched after it.
+    const tip = { segment: f.segment.id, position: first.canonical!.state.position, evidence: first.canonical!.state.evidence };
+    expect(tip.position).toBe(2n);
+    store.close(); evidence.close();
+
+    // Two more records and a checkpoint. The package carries only the new checkpoint's directory and snapshot;
+    // its trail is the head and the records after the kept checkpoint, assembled against the retained ones.
+    const seen = f.items.length;
+    f.venue.advance(12n); await f.issue(107n); await f.issue(108n); f.checkpoint(f.segment, 6n, 11n);
+    store = opened(kept.path, kept); evidence = retained(kept.evidence);
+    const added = f.items.slice(seen).filter(item => item.kind !== 6);
+    expect(added.map(item => item.kind).sort()).toEqual([3, 4]);
+    expect(await evidence.importTrail(f.fetchedAfter(tip.position), { after: tip })).toBe(true);
+    const verifier = counting(), later = asking(f.venue);
+    const second = await f.read(verifier, store, { evidence, items: added, venue: later.venue });
+    expect(outcome(second)).toEqual(outcome(await f.read(counting())));
+    // Only the two new records are verified, and the venue is asked only past the kept index (10).
+    expect(verifier.checks).toBe(2);
+    expect(later.asked.length).toBeGreaterThan(0);
+    expect(later.asked.every(request => request.endsWith(":11-12"))).toBe(true);
+
+    // Nothing new: an empty package, no record verified, and only the new index asked.
+    f.venue.advance(14n);
+    const idle = counting(), third = asking(f.venue);
+    expect(outcome(await f.read(idle, store, { evidence, items: [], venue: third.venue }))).toEqual(outcome(await f.read(counting())));
+    expect(idle.checks).toBe(0);
+    expect(third.asked.every(request => request.endsWith(":13-14"))).toBe(true);
+    // An earlier index reads the kept answers bounded by it, asking nothing, as a fresh read at that index does.
+    const earlier = asking(f.venue);
+    expect(outcome(await f.read(counting(), store, { evidence, items: [], venue: earlier.venue, at: 12n })))
+      .toEqual(outcome(await f.read(counting(), undefined, { at: 12n })));
+    expect(earlier.asked).toEqual([]);
+  });
+
+  it("never excludes on damaged retained evidence: the read is unresolved until the evidence is supplied again", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    let evidence = retained(kept.evidence);
+    const fresh = outcome(await f.read(counting()));
+    expect(outcome(await f.read(counting(), undefined, { evidence }))).toEqual(fresh);
+    evidence.close();
+    // The retained first record now carries a proof the verifier refuses: replayed, it would exclude every checkpoint after it.
+    const first = f.segment.records[0]!, refused = encodeRecord({ ...decodeRecord(first), proof: b(99) });
+    const db = new DatabaseSync(kept.evidence);
+    db.prepare("UPDATE chain SET bytes = ? WHERE evidence = ?").run(refused, f.chain([first])); db.close();
+    evidence = retained(kept.evidence);
+    const verifier = counting();
+    await expect(f.read(verifier, undefined, { evidence, items: [] })).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(verifier.checks).toBe(0);
+    // The package supplied again repairs the retained copy.
+    expect(outcome(await f.read(counting(), undefined, { evidence }))).toEqual(fresh);
+    expect(outcome(await f.read(counting(), undefined, { evidence, items: [] }))).toEqual(fresh);
+  });
+
+  it("reads a receipt through kept state and retained evidence as a fresh read does", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    const selected = f.checkpoint(f.segment, 7n, 7n), paid = f.receipt(1, 1n);
+    const store = opened(kept.path, kept), evidence = retained(kept.evidence), fresh = await f.readReceipt(counting(), selected, paid);
+    expect(fresh.receipt).toMatchObject({ status: "final" });
+    expect(await f.readReceipt(counting(), selected, paid, store, { evidence })).toEqual(fresh);
+    // Again with nothing but the selection and the receipt: everything else is kept or retained.
+    const verifier = counting();
+    expect(await f.readReceipt(verifier, selected, paid, store, { evidence, items: [] })).toEqual(fresh);
+    expect(verifier.checks).toBe(0);
   });
 
   it("refuses a kept store without a file or its own digest path", () => {
