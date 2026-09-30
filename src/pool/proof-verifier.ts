@@ -59,9 +59,18 @@ export interface ProofVerifier {
   readonly identities: Readonly<Record<string, CircuitIdentity>>;
   /** False for a kind outside the table, a wrong count of canonical fields, malformed proof bytes or a proof that fails. */
   verify(kind: number, publicInputs: readonly bigint[], proof: Uint8Array): Promise<boolean>;
-  /** Destroys the verifier's own backend instance; later verifications refuse. */
+  /** How many verifications run at once, each on an instance of its own, off the caller's thread. */
+  readonly parallel: number;
+  /** Destroys the verifier's own backend instances; later verifications refuse. */
   close(): Promise<void>;
 }
+
+/** How the verifier's own instances run: `instances` of them (default one), each a WASM worker of about 50 MB. */
+export interface VerifierOptions extends BackendOptions {
+  readonly instances?: number;
+}
+/** The most instances one verifier starts. */
+const MAX_INSTANCES = 64;
 
 /**
  * The proving parameters this implementation loads (pool-v3 §4), one accepted
@@ -215,21 +224,25 @@ function allFields(values: unknown, count: number): values is readonly bigint[] 
  *
  * A proof bb.js throws on leaves its instance behind: each such throw leaks
  * in the WASM instance, and after enough of them every later verification
- * fails, valid proofs included. So the verifier verifies only on an instance
- * of its own, holding `[1]_1` and `[x]_2` from the caller's checked
+ * fails, valid proofs included. So the verifier verifies only on instances
+ * of its own, each holding `[1]_1` and `[x]_2` from the caller's checked
  * parameters, started at its first verification and replaced after every
- * throw, and never on the caller's. Verifications run one at a time, so no
- * call is in flight on an instance being retired.
+ * throw, and never on the caller's. Each instance runs its verifications one
+ * at a time, so no call is in flight on an instance being retired; a
+ * verification goes to the instance with the fewest waiting.
  */
 export async function proofVerifier(
   api: Barretenberg,
   table: CircuitTable,
   programs: Readonly<Record<string, CompiledProgram>>,
-  options: BackendOptions = {},
+  options: VerifierOptions = {},
 ): Promise<ProofVerifier> {
   const owned = ownTable(table);
   // Each replacement runs as the options are given now, not as the caller later changes them.
-  const { threads } = options;
+  const { threads, instances = 1 } = options;
+  if (!Number.isSafeInteger(instances) || instances < 1 || instances > MAX_INSTANCES) {
+    throw new RangeError(`a verifier runs 1 to ${MAX_INSTANCES} instances`);
+  }
   const texts = owned.circuits.map(({ name }) => {
     // A circuit's bytecode identity hashes the bytes the artifact's field
     // decodes to. The key is derived by the backend from its own decoding of
@@ -252,20 +265,25 @@ export async function proofVerifier(
     keys.set(kind, Object.freeze({ vk, publicInputs }));
     identities[name] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk), kind });
   }
-  // The verifier's own instance; undefined before its first verification and after each throw.
-  let current: { readonly api: Barretenberg; readonly backend: UltraHonkVerifierBackend } | undefined;
+  // Each lane's own instance, undefined before its first verification and after each throw, its queue, how many
+  // wait on it, and whether its close has run.
+  interface Lane {
+    current: { readonly api: Barretenberg; readonly backend: UltraHonkVerifierBackend } | undefined;
+    queue: Promise<unknown>; waiting: number; closed: boolean;
+  }
+  const lanes: Lane[] = Array.from({ length: instances }, () => ({ current: undefined, queue: Promise.resolve(), waiting: 0, closed: false }));
   let closed = false;
-  let queue: Promise<unknown> = Promise.resolve();
-  const retire = async (): Promise<void> => {
-    const retired = current;
-    current = undefined;
+  const retire = async (lane: Lane): Promise<void> => {
+    const retired = lane.current;
+    lane.current = undefined;
     // The instance is abandoned either way; a failed destroy does not change
     // what the proof was.
     if (retired !== undefined) await retired.api.destroy().catch(() => {});
   };
-  const serially = <T>(task: () => Promise<T>): Promise<T> => {
-    const run = queue.then(task, task);
-    queue = run.catch(() => {});
+  const serially = <T>(lane: Lane, task: () => Promise<T>): Promise<T> => {
+    lane.waiting++;
+    const run = lane.queue.then(task, task).finally(() => { lane.waiting--; });
+    lane.queue = run.catch(() => {});
     return run;
   };
   const wellFormed = (proof: unknown): proof is Uint8Array =>
@@ -278,24 +296,30 @@ export async function proofVerifier(
       const key = keys.get(kind);
       if (key === undefined || !allFields(publicInputs, key.publicInputs) || !wellFormed(proof)) return false;
       const input = { proof: copyBytes(proof), publicInputs: publicInputs.map(fieldToHex), verificationKey: key.vk };
-      return serially(async () => {
-        if (closed) throw new Error("the proof verifier is closed");
-        if (current === undefined) {
+      const lane = lanes.reduce((best, next) => next.waiting < best.waiting ? next : best);
+      return serially(lane, async () => {
+        if (lane.closed) throw new Error("the proof verifier is closed");
+        if (lane.current === undefined) {
           const fresh = await load(loaded.generator, 1, loaded.g2, threads);
-          current = { api: fresh, backend: new UltraHonkVerifierBackend(fresh) };
+          lane.current = { api: fresh, backend: new UltraHonkVerifierBackend(fresh) };
         }
         try {
-          return (await current.backend.verifyProof(input, PROOF_OPTIONS)) === true;
+          return (await lane.current.backend.verifyProof(input, PROOF_OPTIONS)) === true;
         } catch (cause) {
-          await retire();
+          await retire(lane);
           if (isMalformedProofFailure(cause)) return false;
           throw cause;
         }
       });
     },
-    close: () => serially(async () => {
+    parallel: instances,
+    // Verifications asked for before `close` finish; later ones refuse.
+    async close() {
       closed = true;
-      await retire();
-    }),
+      await Promise.all(lanes.map(lane => serially(lane, async () => {
+        lane.closed = true;
+        await retire(lane);
+      })));
+    },
   };
 }

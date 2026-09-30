@@ -18,6 +18,7 @@ import { classifyScopeFrontier, classifyScopes, type FrontierContext, type Front
   type ScopeResult } from "./scope-reader.js";
 import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import type { ProofCheck, WitnessPredicate } from "./state.js";
+import { declaredParallel } from "./verify-ahead.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
 /** A §12 package as a reader receives it: bytes in memory or a stream of chunks. */
@@ -57,8 +58,9 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
 /** The caller's verifier bound once, with a copy of the circuit identities it declares, which must be the
  * configuration's (§11.1) and name it in kept state (§14). */
 function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
+  const parallel = declaredParallel(verifierIn), running = parallel === undefined ? {} : { parallel };
   const declared = verifierIn.identities;
-  if (declared === undefined) return { verify: verify.bind(verifierIn) };
+  if (declared === undefined) return { verify: verify.bind(verifierIn), ...running };
   if (declared === null || typeof declared !== "object") throw new TypeError("invalid verifier identities");
   const identities: { [name: string]: VerifierIdentities[string] } = {};
   for (const name of Object.keys(declared)) {
@@ -68,7 +70,7 @@ function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofChe
     if (bytecode.length !== 32 || vk.length !== 32) throw new TypeError("invalid verifier identities");
     identities[name] = { bytecode, vk, ...(kind === undefined ? {} : { kind }) };
   }
-  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(configuration, identities) };
+  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(configuration, identities), ...running };
 }
 
 /** Copy the package into the reader's evidence storage, then read only the copy and what the store retains.

@@ -41,6 +41,7 @@ import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import type { CanonicalCheckpoint, FrontierResult } from "./scope-reader.js";
 import { locked, tagOf } from "./recovery.js";
 import { applyForceEffects, openForceState, type ForceState } from "./state.js";
+import { declaredParallel } from "./verify-ahead.js";
 import { rootTermsName } from "./terms.js";
 import { cellBytes, decodeWalletSnapshot, encodeWalletSnapshot, MAX_WALLET_BACKUP_BYTES, openWalletBackup, sealWalletBackup,
   WALLET_BACKUP_OVERHEAD, walletBackupDigest, type WalletCell, type WalletSnapshot } from "./wallet-backup.js";
@@ -115,8 +116,9 @@ function ownOptions(options: PackageReader) {
   const { configuration, verifier, venue, reference } = options;
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
   const ownConfiguration = decodeConfiguration(configurationBytes(configuration)), verify = verifier.verify.bind(verifier);
-  const identities = requireConfigurationVerifier(ownConfiguration, verifier.identities);
-  const reader: PackageReader = { configuration: ownConfiguration, verifier: identities === undefined ? { verify } : { verify, identities },
+  const identities = requireConfigurationVerifier(ownConfiguration, verifier.identities), parallel = declaredParallel(verifier);
+  const reader: PackageReader = { configuration: ownConfiguration, verifier: { verify, ...(identities === undefined ? {} : { identities }),
+    ...(parallel === undefined ? {} : { parallel }) },
     venue, reference: ownReference };
   return { domain: configurationHash(ownConfiguration), venueId, reader };
 }

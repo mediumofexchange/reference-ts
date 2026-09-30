@@ -28,6 +28,7 @@ import {
   applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type SegmentReplay, type WitnessPredicate,
 } from "./state.js";
 import type { StoredTrail, WalkEvidence } from "./evidence-store.js";
+import { verifyAhead } from "./verify-ahead.js";
 import type { RootTerms } from "./terms.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
@@ -311,10 +312,11 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid);
     const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported);
     if (!isOpening) requireReplay(trail.length >= BigInt(block.length), "ADOPTION");
+    // Records are read from the reader's own storage one at a time, their proofs started ahead where the verifier runs off this thread.
+    const ahead = verifyAhead(verifier, trail.records(state.position), state.position, block);
     const replay: SegmentReplay = { domain: selection.domain, backing: selection.backing, segment: snapshot.segment, scope, terms, scopedTerms,
-      verifier, index, revokedAt, revocations, lastValid, block, witness };
-    // Records are read from the reader's own storage one at a time.
-    for (const bytes of trail.records(state.position)) await applyRecord(state, bytes, replay);
+      verifier: ahead.verifier, index, revokedAt, revocations, lastValid, block, witness };
+    for (const bytes of ahead.records) await applyRecord(state, bytes, replay);
     const position = state.position;
     const { issued, burned } = state.total(hex(snapshot.backing));
     requireReplay(same(state.history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");

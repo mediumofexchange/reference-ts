@@ -73,6 +73,7 @@ import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
 import { ReplayStore } from "./replay-store.js";
+import { declaredParallel } from "./verify-ahead.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type Judged, type ProofCheck, type SegmentReplay,
   type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
@@ -258,7 +259,9 @@ export class V3OperatorJournal {
     this.configuration = decodeConfiguration(configurationBytes(configuration)); this.domain = configurationHash(this.configuration);
     // The circuit identities are copied once: what later reads name and check is what was checked here.
     const identities = requireConfigurationVerifier(this.configuration, verifier.identities), verify = verifier.verify.bind(verifier);
-    this.venue = venue; this.lag = venue.lag(); this.verifier = identities === undefined ? { verify } : { verify, identities };
+    const parallel = declaredParallel(verifier);
+    this.venue = venue; this.lag = venue.lag();
+    this.verifier = { verify, ...(identities === undefined ? {} : { identities }), ...(parallel === undefined ? {} : { parallel }) };
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
     this.observedIndex = 0n; this.path = path;
     const now = this.clock();
