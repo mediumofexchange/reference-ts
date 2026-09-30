@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { compareBytes, EncodingError } from "../src/bytes.js";
 import { limbsOf } from "../src/pool/field.js";
 import { genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
-import { EvidenceStore, KeptEvidenceMismatch, MAX_ITEM_BYTES } from "../src/pool/v3/evidence-store.js";
+import { EvidenceStore, MAX_ITEM_BYTES } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
 import { directoryRoot } from "../src/venue-records.js";
@@ -78,7 +78,7 @@ describe("v3 evidence store", () => {
       expect(batch.count(6)).toBe(2);
       // A snapshot is retained evidence, found by its digest; only per-read kinds are the package's own payloads.
       expect([batch.snapshot(sha256(Uint8Array.of(1))), batch.payloads(4)]).toEqual([Uint8Array.of(1), []]);
-      // Two trails with one header and terms are one head, and their records one line.
+      // The segment's trails share one head.
       expect([...batch.heads(segment)].map(head => [...head.header])).toEqual([[...headerBytes]]);
       for (let n = 0; n <= 6; n++) {
         const served = batch.served(expectedAt(n), snapshotAt(n))!;
@@ -165,13 +165,19 @@ describe("v3 evidence store", () => {
     store.close(); exact.close();
   });
 
-  it("skips a terms field too long to verify, which decodeTrail keeps", () => {
-    const long = [{ terms: new Uint8Array(MAX_ROOT_TERMS_BYTES + 1).fill(4), signature: new Uint8Array(64) }];
-    const bytes = trail(1, { terms: long }), store = new EvidenceStore();
-    expect(decodeTrail(bytes).terms[0]!.terms).toHaveLength(MAX_ROOT_TERMS_BYTES + 1);
-    const batch = store.importBytes(pack([{ kind: 6, payload: bytes }, { kind: 6, payload: trail(1) }]));
-    expect([...batch.heads(segment)].map(head => head.term(0)?.terms.length)).toEqual(
-      compareBytes(sha256(bytes), sha256(trail(1))) < 0 ? [undefined, 3] : [3, undefined]);
+  it("keeps only a terms field that names its backing and verifies, skipping one too long to verify", () => {
+    const issuerSecret = b(12), realTerms = encodeRootTerms({ obligor: ed25519.getPublicKey(issuerSecret), payout: { thing: "t", quantumExponent: 0, perUnit: 1n },
+      operator: header.operator, configuration: domain, venue: header.venue, interval: 1n });
+    const named = { ...header, entries: [{ backing: rootTermsName(realTerms), link: b(6) }] }, id = segmentIdentity(named);
+    const signed = { terms: realTerms, signature: ed25519.sign(rootTermsSignatureMessage(realTerms), issuerSecret) };
+    const long = { terms: new Uint8Array(MAX_ROOT_TERMS_BYTES + 1).fill(4), signature: new Uint8Array(64) };
+    const trailOf = (field: typeof signed) => encodeTrail({ header: segmentBytes(named), terms: [field], records: [] });
+    expect(decodeTrail(trailOf(long)).terms[0]!.terms).toHaveLength(MAX_ROOT_TERMS_BYTES + 1);
+    const store = new EvidenceStore();
+    // Neither a field too long to verify nor one that does not name the backing is kept: the head alone is.
+    const first = store.importBytes(pack([{ kind: 6, payload: trailOf(long) }, { kind: 6, payload: trailOf({ terms: Uint8Array.of(1), signature: signed.signature }) }]));
+    expect([...first.heads(id)].map(head => head.term(0))).toEqual([undefined]);
+    expect([...store.importBytes(pack([{ kind: 6, payload: trailOf(signed) }])).heads(id)].map(head => head.term(0))).toEqual([signed]);
     store.close();
   });
 
@@ -283,7 +289,7 @@ describe("v3 evidence store", () => {
     // An assembly from the seed is a complete trail.
     expect(await store.importTrail(trail(6), { after: { segment, position: 0n, evidence: chain[0]! } })).toBe(true);
     store.close();
-    expect([file.count("chain"), file.count("head")]).toEqual([6, 1]);
+    expect([file.count("chain"), file.count("segment_head")]).toEqual([6, 1]);
   });
 
   it("keeps nothing of an assembly that does not frame, does not continue, or names no kept position", async () => {
@@ -322,7 +328,7 @@ describe("v3 evidence store", () => {
     const snapshot = { ...snapshotAt(3), evidenceHash: fork }, served = batch.served({ backing, segment, digest: snapshotDigest(snapshot) }, snapshot)!;
     expect(recordsOf(served)).toEqual(forked.map(r => [...r]));
     store.close();
-    expect([file.count("chain"), file.count("head")]).toEqual([5, 1]);
+    expect([file.count("chain"), file.count("segment_head")]).toEqual([5, 1]);
   });
 
   it("reads a long trail in pages from the seed or from a kept position", () => {
@@ -338,46 +344,51 @@ describe("v3 evidence store", () => {
     store.close();
   });
 
-  it("checks retained evidence when it is used and removes what is damaged; a copy supplied again repairs it", () => {
+  it("checks retained evidence when it is used: damage reads as absent or unresolved, and a copy supplied again repairs it", () => {
     const file = evidenceFile(), directory = [{ name: backing, digest: snapshotDigest(snapshotAt(4)) }], root = directoryRoot(directory);
     const snapshot = snapshotBytes(snapshotAt(4)), all = pack([{ kind: 3, payload: encodeEvidenceDirectory(directory) }, { kind: 4, payload: snapshot },
       { kind: 6, payload: trail(4) }]);
     const first = new EvidenceStore(file.path); first.importBytes(all); first.close();
     const flipped = (bytes: Uint8Array): Uint8Array => { const out = new Uint8Array(bytes); out[out.length - 1]! ^= 1; return out; };
     type Batch = ReturnType<EvidenceStore["importBytes"]>;
-    const servedAt = (n: number) => (batch: Batch) => batch.served(expectedAt(n), snapshotAt(n));
-    const damaged = (damage: () => void, use: (batch: Batch) => unknown, gone: (batch: Batch) => unknown): void => {
+    const unresolved = expect.objectContaining({ status: "unresolved-evidence" });
+    /** Damage the file, check what a read then meets, and check that the same evidence supplied again repairs it. */
+    const damaged = (damage: () => void, meets: (batch: Batch) => void, healthy: (batch: Batch) => unknown): void => {
       damage();
-      let store = new EvidenceStore(file.path), batch = store.importBytes(pack([]));
-      expect(() => use(batch)).toThrow(KeptEvidenceMismatch);
-      // Removed where it was found: the next use finds nothing there, which leaves a read unresolved.
-      expect(gone(batch)).toBeUndefined();
+      let store = new EvidenceStore(file.path);
+      meets(store.importBytes(pack([])));
       store.close();
-      // The same evidence supplied again is kept afresh.
-      store = new EvidenceStore(file.path); batch = store.importBytes(all);
-      expect(() => use(batch)).not.toThrow();
+      store = new EvidenceStore(file.path);
+      expect(healthy(store.importBytes(all))).toBeDefined();
       store.close();
     };
-    // A record's bytes: found before that record is given, after the ones before it.
-    file.sql("UPDATE chain SET bytes = ? WHERE evidence = ?", flipped(records[1]!), chain[2]!);
-    const reader = new EvidenceStore(file.path), given: Uint8Array[] = [];
-    expect(() => { for (const record of servedAt(4)(reader.importBytes(pack([])))!.records()) given.push(record); }).toThrow(KeptEvidenceMismatch);
-    expect([given, servedAt(2)(reader.importBytes(pack([])))]).toEqual([[records[0]], undefined]);
-    reader.close();
-    const repair = new EvidenceStore(file.path);
-    expect(recordsOf(servedAt(4)(repair.importBytes(all)))).toEqual(records.slice(0, 4).map(r => [...r]));
-    repair.close();
-    // A chain value under another key, a missing record, a moved position, and one chain step read alone.
-    damaged(() => file.sql("UPDATE chain SET evidence = ? WHERE position = 3", b(1)), batch => [...servedAt(4)(batch)!.records()], servedAt(4));
-    damaged(() => file.sql("DELETE FROM chain WHERE evidence = ?", chain[3]!), batch => [...servedAt(4)(batch)!.records(2n)], servedAt(4));
-    damaged(() => file.sql("UPDATE chain SET position = 9 WHERE position = 2"), batch => [...servedAt(4)(batch)!.records()], servedAt(2));
-    damaged(() => file.sql("UPDATE chain SET prev = ? WHERE position = 2", b(1)), batch => servedAt(4)(batch)!.evidence(2n), servedAt(2));
-    // Objects found by their hash, and a head by its segment.
+    const servedAt = (n: number) => (batch: Batch) => batch.served(expectedAt(n), snapshotAt(n));
+    const whole = (batch: Batch) => recordsOf(servedAt(4)(batch));
+    // A record's bytes: found before that record is given, after the ones before it; nothing is removed.
+    damaged(() => file.sql("UPDATE chain SET bytes = ? WHERE evidence = ?", flipped(records[1]!), chain[2]!), batch => {
+      const given: Uint8Array[] = [];
+      expect(() => { for (const record of servedAt(4)(batch)!.records()) given.push(record); }).toThrow(unresolved);
+      expect(given).toEqual([records[0]]);
+      // The damaged row is the top of checkpoint 2's trail: it is not served, rather than served shorter.
+      expect(servedAt(2)(batch)).toBeUndefined();
+    }, whole);
+    // The top row's position: not a shorter trail, but none.
+    damaged(() => file.sql("UPDATE chain SET position = 0 WHERE evidence = ?", chain[4]!), batch => expect(servedAt(4)(batch)).toBeUndefined(), whole);
+    // A chain value under another key, a missing record, a moved position, a changed link read alone.
+    damaged(() => file.sql("UPDATE chain SET evidence = ? WHERE position = 3", b(1)), batch => expect(() => whole(batch)).toThrow(unresolved), whole);
+    damaged(() => file.sql("DELETE FROM chain WHERE evidence = ?", chain[3]!), batch => expect(() => recordsOf(servedAt(4)(batch), 2n)).toThrow(unresolved), whole);
+    damaged(() => file.sql("UPDATE chain SET position = 9 WHERE position = 2"), batch => expect(() => whole(batch)).toThrow(unresolved), whole);
+    damaged(() => file.sql("UPDATE chain SET prev = ? WHERE position = 2", b(1)), batch => expect(() => servedAt(4)(batch)!.evidence(2n)).toThrow(unresolved),
+      batch => servedAt(4)(batch)!.evidence(2n));
+    // A row of this segment under another segment's name serves no trail of this one.
+    damaged(() => file.sql("UPDATE chain SET segment = ? WHERE position = 4", b(1)), batch => expect(servedAt(4)(batch)).toBeUndefined(), whole);
+    // Objects found by their hash, and the head by its segment, read as absent.
     damaged(() => file.sql("UPDATE object SET payload = ? WHERE kind = 3", flipped(encodeEvidenceDirectory(directory))),
-      batch => batch.directory(root), batch => batch.directory(root));
-    damaged(() => file.sql("UPDATE object SET payload = ? WHERE kind = 4", flipped(snapshot)), batch => batch.snapshot(sha256(snapshot)),
+      batch => expect(batch.directory(root)).toBeUndefined(), batch => batch.directory(root));
+    damaged(() => file.sql("UPDATE object SET payload = ? WHERE kind = 4", flipped(snapshot)), batch => expect(batch.snapshot(sha256(snapshot))).toBeUndefined(),
       batch => batch.snapshot(sha256(snapshot)));
-    damaged(() => file.sql("UPDATE head SET header = ?", flipped(headerBytes)), batch => [...batch.heads(segment)], batch => [...batch.heads(segment)][0]);
+    damaged(() => file.sql("UPDATE segment_head SET header = ?", flipped(headerBytes)), batch => expect([...batch.heads(segment)]).toEqual([]),
+      batch => [...batch.heads(segment)][0]);
   });
 
   it("keeps a read's own items only while it lasts, and refuses a file of another layout", () => {

@@ -175,6 +175,8 @@ const WALK_TABLES = ["walk_verdict", "walk_valid"];
 /** Rows kept across reads (pool-v3 §14 kept classes): each is a function of authenticated bytes and the record before its index. */
 const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication",
   "answer", "answer_held", "answer_replacement", "answer_publication"];
+/** Kept venue answers refer to no namespace, so collection keeps them. */
+const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. */
 const SCHEMA_VERSION = 2;
 /** Replayed records between keep points inside one read, by default. */
@@ -512,8 +514,9 @@ export class ReplayStore {
     } finally { this.#savepoints--; }
   }
 
-  /** Drop every namespace that neither `keep` nor anything they import reads. Kept rows refer to
-   * namespaces, so dropping any also forgets them: a later read classifies again. */
+  /** Drop every namespace that neither `keep` nor anything they import reads. Kept classes, scopes, bases and
+   * publication verdicts refer to namespaces, so dropping any also forgets them: a later read classifies again.
+   * Kept venue answers refer to none and stay. */
   collect(keep: readonly number[]): void {
     if (this.#replaying) throw new Error("a replay is open on this store");
     const live = new Set<number>();
@@ -525,7 +528,7 @@ export class ReplayStore {
         const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
         for (const ns of dead) drop.run(ns);
       }
-      for (const table of [...KEPT_TABLES, "kept_context"]) this.#db.prepare(`DELETE FROM ${table}`).run();
+      for (const table of KEPT_TABLES) if (!ANSWER_TABLES.includes(table)) this.#db.prepare(`DELETE FROM ${table}`).run();
     });
   }
 

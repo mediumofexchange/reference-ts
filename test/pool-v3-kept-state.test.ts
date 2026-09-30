@@ -25,7 +25,7 @@ import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementByte
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
-import { encodeTrail } from "../src/pool/v3/trail.js";
+import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
@@ -425,6 +425,42 @@ describe("pool-v3 §14 kept classes across reads", () => {
     // The package supplied again repairs the retained copy.
     expect(outcome(await f.read(counting(), undefined, { evidence }))).toEqual(fresh);
     expect(outcome(await f.read(counting(), undefined, { evidence, items: [] }))).toEqual(fresh);
+  });
+
+  it("never serves another segment's chain value: a checkpoint naming one reads alike with or without that segment's trail", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    f.venue.advance(12n);
+    // Another segment's trail with records, and a checkpoint of this segment whose snapshot names that trail's last chain value.
+    const otherHeader = { ...f.segment.header, sequence: 2n }, otherId = segmentIdentity(otherHeader), otherRecords = [...f.segment.records];
+    const otherTrail = encodeTrail({ header: segmentBytes(otherHeader), terms: decodeTrail(f.items.find(item => item.kind === 6)!.payload).terms, records: otherRecords });
+    const otherChain = otherRecords.reduce((previous, bytes, i) => nextEvidenceHash(previous, evidenceHashes(decodeRecord(bytes)), BigInt(i + 1)),
+      genesisEvidenceHash(otherId));
+    f.checkpoint({ ...f.segment, evidence: otherChain }, 6n, 11n);
+    const verdict = (read: Promise<unknown>) => read.then(() => "read", (error: { status?: string; check?: string }) => error.status ?? error.check);
+    const withOther = [...f.items, { kind: 6, payload: otherTrail }];
+    expect(await verdict(f.read(counting(), undefined, { items: withOther }))).toBe("unresolved-evidence");
+    expect(await verdict(f.read(counting(), undefined, { items: [...f.items] }))).toBe("unresolved-evidence");
+    // Retained, the other segment's records stay whole and still serve its own trail.
+    const evidence = retained(kept.evidence);
+    expect(await verdict(f.read(counting(), undefined, { evidence, items: withOther }))).toBe("unresolved-evidence");
+    const batch = evidence.importBytes(pack([])), otherSnapshot = { backing: f.segment.header.entries[0]!.backing, segment: otherId,
+      historyHash: b(9), evidenceHash: otherChain, issued: 0n, burned: 0n };
+    expect([...batch.served({ backing: otherSnapshot.backing, segment: otherId, digest: snapshotDigest(otherSnapshot) }, otherSnapshot)!.records()])
+      .toEqual(otherRecords);
+    batch.release();
+  });
+
+  it("never excludes on a damaged trail length: the checkpoint's trail is absent instead", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    const evidence = retained(kept.evidence);
+    expect(outcome(await f.read(counting(), undefined, { evidence }))).toEqual(outcome(await f.read(counting())));
+    evidence.close();
+    // Checkpoint 5's snapshot names the chain value after the segment's two records; its row now claims position 0.
+    const db = new DatabaseSync(kept.evidence);
+    expect(db.prepare("UPDATE chain SET position = 0 WHERE evidence = ?").run(f.chain(f.segment.records)).changes).toBe(1); db.close();
+    await expect(f.read(counting(), undefined, { evidence: retained(kept.evidence), items: [] })).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 
   it("reads a receipt through kept state and retained evidence as a fresh read does", async () => {

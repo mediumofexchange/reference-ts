@@ -10,7 +10,7 @@ import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { EvidenceStore, KeptEvidenceMismatch, type EvidenceBatch } from "./evidence-store.js";
+import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
 import type { ReaderSelection, SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
@@ -107,18 +107,13 @@ export async function readPackage(source: PackageSource, selected: ReaderSelecti
 }
 
 /** §14: kept state that fails a check before reuse is discarded, and the read classifies again from the evidence.
- * A second mismatch, with nothing kept, is a programming failure and stays visible. Retained evidence that
- * fails its check was removed where it was found, so the read runs again without it: each retry follows a
- * removal, and a read that needed it becomes unresolved. */
+ * A second mismatch, with nothing kept, is a programming failure and stays visible. (Retained evidence that
+ * fails its check reads as absent or leaves the read unresolved; see evidence-store.ts.) */
 async function keptOrAgain<T>(options: PackageReader, read: () => Promise<T>): Promise<T> {
-  let discarded = false;
-  for (;;) {
-    try { return await read(); } catch (error) {
-      if (error instanceof KeptEvidenceMismatch && options.evidence !== undefined) continue;
-      if (!(error instanceof KeptStateMismatch) || options.store === undefined || discarded) throw error;
-      options.store.discardKept();
-      discarded = true;
-    }
+  try { return await read(); } catch (error) {
+    if (!(error instanceof KeptStateMismatch) || options.store === undefined) throw error;
+    options.store.discardKept();
+    return read();
   }
 }
 
