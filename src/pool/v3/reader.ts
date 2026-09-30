@@ -331,7 +331,7 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
 }
 
 /** The pool-v3 revision this reader implements. */
-const SPECIFICATION = "pool-v3 8d48b25";
+const SPECIFICATION = "pool-v3 298b6f5";
 let rules: Uint8Array | undefined;
 /** The reader rules (§14 kept classes): the specification revision and the implementation's own code, every
  * file of the package's source or build tree by path and content. Any change to either discards kept state. */

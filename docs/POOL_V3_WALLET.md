@@ -98,11 +98,14 @@ a kept class that fails a check, and kept state read through a later venue
 clock than the one now shown are discarded and replayed, asking the venue for
 everything. Evidence that no longer hashes reads as absent. An evidence file
 that cannot be opened at all refuses `STORAGE` and is never replaced by the
-wallet, since it may be the holder's only copy; the holder removes it. A
+wallet, since it may be the holder's only copy; the holder removes it. One
+that another handle holds refuses `STORAGE` as in use. A
 package handed to a read is kept even when the read refuses, and nothing prunes
 the file. A read left `unresolved-evidence` over what the file holds is
 answered by supplying again in full (`{ full: true }`). The replay file shows
-which outputs are this seed's, so it needs the database's protection. Reads and
+which outputs are this seed's, so it needs the database's protection; during a
+read, SQLite's temporary files for it (savepoint journals past the page cache)
+go to the system temporary directory and are deleted on close. Reads and
 supplies of one wallet take turns. The holder remains responsible for retaining
 the public evidence (C2.10.13): the evidence file is that retention only as
 long as it is kept.

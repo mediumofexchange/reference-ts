@@ -202,6 +202,14 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     expect(holdings((await f.synced(f.payer, { full: true })).view)).toEqual(holdings(second.view));
     expect(f.counts.verified).toBe(0);
 
+    // An evidence file another connection holds is in use, not unreadable: the wallet says so, keeps no handle
+    // on it and opens it once it is free.
+    f.payer.close(); f.payer = f.open("payer");
+    const holder = new DatabaseSync(evidence); holder.exec("BEGIN IMMEDIATE");
+    await expect(f.payer.sync(second.served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: "another handle holds this wallet's evidence file" });
+    holder.exec("ROLLBACK"); holder.close();
+    expect(holdings(await f.payer.sync(second.served.package, f.signed))).toEqual(holdings(second.view));
+
     // An evidence file that is no database is never replaced by the wallet: the holder removes it.
     f.payer.close(); writeFileSync(evidence, new Uint8Array(8192).fill(7));
     f.payer = f.open("payer");

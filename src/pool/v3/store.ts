@@ -256,8 +256,9 @@ export class V3OperatorJournal {
     this.venueId = requireReferenceVenue(reference, venue);
     this.reference = structuredClone(reference);
     this.configuration = decodeConfiguration(configurationBytes(configuration)); this.domain = configurationHash(this.configuration);
-    requireConfigurationVerifier(this.configuration, verifier.identities);
-    this.venue = venue; this.lag = venue.lag(); this.verifier = verifier;
+    // The circuit identities are copied once: what later reads name and check is what was checked here.
+    const identities = requireConfigurationVerifier(this.configuration, verifier.identities), verify = verifier.verify.bind(verifier);
+    this.venue = venue; this.lag = venue.lag(); this.verifier = identities === undefined ? { verify } : { verify, identities };
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
     this.observedIndex = 0n; this.path = path;
     const now = this.clock();
@@ -1362,7 +1363,7 @@ export class V3OperatorJournal {
       }
       // The signed rows against the log, in step.
       const replies = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq").iterate();
-      for (const row of this.db.prepare("SELECT sequence,commitment,published FROM journal_signed ORDER BY sequence").all()) {
+      for (const row of this.db.prepare("SELECT sequence,commitment,published FROM journal_signed ORDER BY sequence").iterate()) {
         const reply = replies.next().value?.response;
         requireThat(reply === bytesToHex(bytes(row.commitment)), "STORAGE", "a signed row is not its command's reply");
         const logged = this.db.prepare("SELECT 1 FROM events WHERE id=?").get(`published:${row.sequence}`) !== undefined;

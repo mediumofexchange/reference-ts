@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, verifyConfiguration, RELATIONS,
+import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, verifyConfiguration, RELATION_KINDS, RELATIONS,
   type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { EncodingError } from "../src/bytes.js";
 import { flipping, lookAlikes } from "./hostile-bytes.js";
@@ -86,5 +86,29 @@ describe("candidate configuration, pool-v3 §11.1; no adoption", () => {
       { ...own, spend: { vk: own.spend.vk } }, { ...own, spend: { ...own.spend, vk: Array.from(own.spend.vk) } }]) {
       expect(() => requireConfigurationVerifier(config, identities as unknown as typeof own)).toThrow(refusal);
     }
+  });
+  it("refuses a verifier whose identities match by name but route a relation's proofs to another kind's key", () => {
+    const config = fixture(), refusal = new TypeError("the verifier's circuit identities are not the configuration's");
+    const routed = Object.fromEntries(RELATIONS.map(name => [name, { ...config.circuits[name], kind: RELATION_KINDS[name] }]));
+    expect(() => requireConfigurationVerifier(config, routed)).not.toThrow();
+    // A table swapping spend's and burn's names (both take 15 public inputs) derives the same identities by name.
+    const swapped = { ...routed, spend: { ...routed.spend!, kind: RELATION_KINDS.burn }, burn: { ...routed.burn!, kind: RELATION_KINDS.spend } };
+    expect(() => requireConfigurationVerifier(config, swapped)).toThrow(refusal);
+    // The caller keeps the copy returned: a later change to the declared object changes nothing checked.
+    const declared = structuredClone(routed), owned = requireConfigurationVerifier(config, declared)!;
+    delete declared.issue; declared.spend!.vk[0]! ^= 1;
+    expect(Object.keys(owned).sort()).toEqual([...RELATIONS].sort());
+    expect(owned.spend!.vk).toEqual(config.circuits.spend.vk);
+  });
+});
+
+describe("the specification pin", () => {
+  it("is one revision in the reader's rules, the report provenance, the candidate manifest and the README", () => {
+    const text = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+    const pinned = /export const V3_SPECIFICATION = "([0-9a-f]{7})";/.exec(text("../scripts/pool/v3/provenance.mjs"))?.[1];
+    expect(pinned).toBeDefined();
+    expect(/const SPECIFICATION = "pool-v3 ([0-9a-f]{7})";/.exec(text("../src/pool/v3/reader.ts"))?.[1]).toBe(pinned);
+    expect(manifest.specification).toBe(pinned);
+    expect(text("../README.md")).toMatch(new RegExp(`money-from-first-principles/tree/${pinned}[0-9a-f]{33}[)]`));
   });
 });

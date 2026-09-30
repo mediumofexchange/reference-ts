@@ -17,14 +17,14 @@ import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { identifierOf } from "../field.js";
 import { PROOF_OPTIONS, proofVerifier, type BackendOptions, type CircuitTable, type ProofVerifier } from "../proof-verifier.js";
-import { RELATIONS, type CandidateConfiguration, type Relation } from "./configuration.js";
+import { RELATION_KINDS, RELATIONS, type CandidateConfiguration, type Relation } from "./configuration.js";
 import type { Record } from "./records.js";
 import type { ProofTask } from "./witness.js";
 
 /** pool-v3's six relations: kind, artifact and public-input count (§3), proofs to §5's bound. */
 export const POOL_V3_CIRCUITS: CircuitTable = Object.freeze({
-  circuits: Object.freeze(([[1, "issue", 11], [2, "spend", 15], [3, "burn", 15], [4, "demand", 16], [6, "settle", 17], [7, "request", 7]] as const)
-    .map(([kind, name, publicInputs]) => Object.freeze({ kind, name, publicInputs }))),
+  circuits: Object.freeze(([["issue", 11], ["spend", 15], ["burn", 15], ["demand", 16], ["settle", 17], ["request", 7]] as const)
+    .map(([name, publicInputs]) => Object.freeze({ kind: RELATION_KINDS[name], name, publicInputs }))),
   maxProofBytes: 131072,
 });
 const NAMES = new Map<number, Relation>(POOL_V3_CIRCUITS.circuits.map(c => [c.kind, c.name as Relation]));

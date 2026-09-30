@@ -834,13 +834,20 @@ try {
     await reject(compose(pair, 0, revokedAtFirst), "REVOKED");
     // An authenticated directory adding a name outside its header fails whole-
     // scope carriage. Pass that excluded checkpoint, then replay the valid continuation.
-    const wideDirectory = [{ name: backing, digest: third.directory[0].digest }, { name: otherName, digest: b(79) }].sort((x, y) => Buffer.compare(x.name, y.name));
-    const wide = clone(extended);
-    wide.venue.records[2] = { kind: 1, subject: operator, index: 3n, record: encodeCommitment(signCommitment(operatorSecret, 3n, directoryRoot(wideDirectory))) };
-    wide.package.directories = [opening.directory, before, wideDirectory];
-    const wideResult = await replayLocalPackage(wide, verifier, codec);
+    // The checkpoint is judged in the segment its first entry names (pool-v3 §7.1), so the added name sorts after it.
+    const widened = name => {
+      const wideDirectory = [{ name: backing, digest: third.directory[0].digest }, { name, digest: b(79) }].sort((x, y) => Buffer.compare(x.name, y.name));
+      const wide = clone(extended);
+      wide.venue.records[2] = { kind: 1, subject: operator, index: 3n, record: encodeCommitment(signCommitment(operatorSecret, 3n, directoryRoot(wideDirectory))) };
+      wide.package.directories = [opening.directory, before, wideDirectory];
+      return wide;
+    };
+    assert(Buffer.compare(b(255), backing) > 0 && Buffer.compare(b(0), backing) < 0);
+    const wideResult = await replayLocalPackage(widened(b(255)), verifier, codec);
     assert.equal(wideResult.status, "selected-local-replay");
     assert.equal(wideResult.audit.range.carrying.some(c => c.class === "excluded" && c.check === "SCOPE"), true);
+    // Added first, the name's snapshot is the checkpoint's reference: withheld, every reader is unresolved, as when the operator withholds its trail.
+    assert.equal((await replayLocalPackage(widened(b(0)), verifier, codec)).status, "unresolved-evidence");
   });
   await test("excluded checkpoints are passed: a stale twin, diverging evidence or a bad suffix never moves the last valid prefix (C2.10.12)", async () => {
     const corrupt = record => { const bad = clone(record); bad.proof[100] ^= 1; return bad; };

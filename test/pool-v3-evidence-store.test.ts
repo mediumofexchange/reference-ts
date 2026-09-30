@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { compareBytes, EncodingError } from "../src/bytes.js";
 import { limbsOf } from "../src/pool/field.js";
 import { genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
@@ -14,8 +14,14 @@ import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, 
 import { directoryRoot } from "../src/venue-records.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { authenticatedScope } from "../src/pool/v3/scope-evidence.js";
-import { encodeRootTerms, MAX_ROOT_TERMS_BYTES, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
+import { encodeRootTerms, MAX_ROOT_TERMS_BYTES, rootTermsName, rootTermsSignatureMessage, verifyRootTermsSignature } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
+
+// The terms signature check, counted where it runs and otherwise unchanged.
+vi.mock("../src/pool/v3/terms.js", async original => {
+  const actual = await original<typeof import("../src/pool/v3/terms.js")>();
+  return { ...actual, verifyRootTermsSignature: vi.fn(actual.verifyRootTermsSignature) };
+});
 
 // The store's own contract: one copy of the supplied bytes, each trail's
 // decodable prefix by evidence position, and nothing kept of what does not frame.
@@ -205,7 +211,17 @@ describe("v3 evidence store", () => {
     expect(() => new EvidenceStore(":memory:", { maxBatchBytes: cost - 1n }).importBytes(two)).toThrow(PackageLimitError);
     // Bare trails, as a harness supplies them, are charged the same.
     expect(() => new EvidenceStore(":memory:", { maxBatchBytes: cost - 1n }).importTrails([trail(2)])).toThrow(PackageLimitError);
-    store.close(); exact.close();
+    // Split across a supplier's parts, the rows still count: two one-byte items per part cost 258 bytes against
+    // under 90 on the wire, so the second of two parts passes a quota of 400 that wire bytes alone would not.
+    const parts = new EvidenceStore(":memory:", { maxBatchBytes: 400n });
+    const part = (n: number): EvidencePart => ({ package: pack([0, 1].map(i => ({ kind: 4, payload: Uint8Array.of(2 * n + i) }))) });
+    await expect(parts.take([part(0), part(1)])).rejects.toThrow(PackageLimitError);
+    expect([parts.retained().snapshot(sha256(Uint8Array.of(1))) !== undefined, parts.retained().snapshot(sha256(Uint8Array.of(2)))]).toEqual([true, undefined]);
+    // A trail part after a position the store does not hold is not read, and its stated bytes still count.
+    const skipped = new EvidenceStore(":memory:", { maxBatchBytes: 1000n });
+    const unheld = (n: number): EvidencePart => ({ trail: { after: { segment: b(n), position: 5n, evidence: b(9) }, size: 900n, chunks: [new Uint8Array(900)] } });
+    await expect(skipped.take([unheld(1), unheld(2)])).rejects.toThrow(PackageLimitError);
+    store.close(); exact.close(); parts.close(); skipped.close();
   });
 
   it("keeps only a terms field that names its backing and verifies, skipping one too long to verify", () => {
@@ -221,6 +237,10 @@ describe("v3 evidence store", () => {
     const first = store.importBytes(pack([{ kind: 6, payload: trailOf(long) }, { kind: 6, payload: trailOf({ terms: Uint8Array.of(1), signature: signed.signature }) }]));
     expect([...first.heads(id)].map(head => head.term(0))).toEqual([undefined]);
     expect([...store.importBytes(pack([{ kind: 6, payload: trailOf(signed) }])).heads(id)].map(head => head.term(0))).toEqual([signed]);
+    // A field already kept byte for byte is not verified again when its head is served again.
+    vi.mocked(verifyRootTermsSignature).mockClear();
+    expect([...store.importBytes(pack([{ kind: 6, payload: trailOf(signed) }])).heads(id)].map(head => head.term(0))).toEqual([signed]);
+    expect(verifyRootTermsSignature).not.toHaveBeenCalled();
     store.close();
   });
 
@@ -494,8 +514,9 @@ describe("v3 evidence store", () => {
     const empty = new EvidenceStore();
     expect(await empty.take([trailPart(full, tip)!, { package: pack([{ kind: 4, payload: snapshot }]) }])).toBe(false);
     expect([[...empty.retained().heads(segment)], empty.retained().snapshot(sha256(snapshot))]).toEqual([[], snapshot]);
-    // The quota bounds all the parts of one take together, as it bounds one package.
-    const small = new EvidenceStore(":memory:", { maxBatchBytes: BigInt(bare(6).length) + 1500n });
+    // The quota bounds all the parts of one take together, as it bounds one package, rows included: the
+    // trail's item row and six record rows (128 + 6 × 192 bytes), and each object's 700 bytes and item row.
+    const small = new EvidenceStore(":memory:", { maxBatchBytes: BigInt(bare(6).length) + 1280n + 2n * 828n + 100n });
     const object = (n: number): EvidencePart => ({ package: pack([{ kind: 4, payload: new Uint8Array(700).fill(n) }]) });
     expect(await small.take([trailPart(full)!, object(1)])).toBe(true);
     await expect(small.take([trailPart(full)!, object(2), object(3), object(4)])).rejects.toThrow(PackageLimitError);

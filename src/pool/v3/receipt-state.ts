@@ -8,6 +8,7 @@ import type { TrailEvidence } from "./evidence-store.js";
 import { decodeSegmentHeader, type SegmentHeader } from "./headers.js";
 import type { ReaderSelection, RecordView, ReplayResult } from "./reader.js";
 import { EvidenceRefusal } from "./refusals.js";
+import type { SnapshotDigest } from "../../venue-records.js";
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 function requireReceipt(condition: boolean): asserts condition { if (!condition) throw new EvidenceRefusal("invalid-receipt"); }
 export interface ReceiptFact { readonly operator: string; readonly sequence: string; readonly index: string }
@@ -27,7 +28,8 @@ export interface ReceiptWalk {
   finish(): ReceiptVerdict;
 }
 export async function receiptWalk(bytes: Uint8Array, context: { readonly selection: ReaderSelection }, view: RecordView,
-  trails: TrailEvidence, snapshotOf: (digest: Uint8Array) => Uint8Array | undefined, scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
+  trails: TrailEvidence, snapshotOf: (digest: Uint8Array) => Uint8Array | undefined,
+  directoryOf: (root: Uint8Array) => readonly SnapshotDigest[] | undefined, scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
   const { selection } = context, receipt = decodeReceipt(bytes);
   const [trail] = trails.heads(receipt.segment);
   if (trail === undefined) throw new EvidenceRefusal("unresolved-evidence");
@@ -46,17 +48,30 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
   }
   const reference = view.heldAt(header.operator, receipt.after);
   const movedPast = reference === undefined && view.heldAbove(header.operator, receipt.after);
-  if (reference !== undefined) {
-    const entry = view.carries(reference); requireReceipt(entry !== undefined);
+  // `after` is of the receipt's segment where its directory's first entry names that segment, as every reader
+  // judges the checkpoint (pool-v3 §7.1), whichever backing this read holds. Checked when the walk reaches `after`
+  // and before any verdict, so evidence the walk found below `after` survives a refusal here.
+  let referenceChecked = reference === undefined;
+  const checkReference = (): void => {
+    if (referenceChecked) return;
+    referenceChecked = true;
+    const directory = directoryOf(reference!.commitment.root);
+    if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    // A first entry the receipt's segment does not scope is of another segment, which the directory alone shows.
+    const entry = directory[0]; requireReceipt(entry !== undefined && header.entries.some(scope => same(scope.backing, entry.name)));
     const snapshot = snapshotOf(entry.digest);
     if (snapshot === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const decoded = decodeSnapshot(snapshot);
-    requireReceipt(same(decoded.segment, receipt.segment) && same(decoded.backing, selection.backing));
-  }
+    // A first snapshot of another backing authenticates nothing, as the checkpoint's judgment reads it.
+    if (!same(decoded.backing, entry.name)) throw new EvidenceRefusal("unresolved-evidence");
+    requireReceipt(same(decoded.segment, receipt.segment));
+  };
   const contradictedAt: ReceiptFact[] = [];
   let opened = false, lastSegment = receipt.after, passedOver = 0n;
-  const finish = (status: ReceiptVerdict["status"], detail: Partial<ReceiptVerdict> = {}): ReceiptVerdict => ({ status,
-    sequence: reference ? "held" : movedPast ? "moved-past" : "not-reached", includedAt: [], contradictedAt: [...contradictedAt], ...detail });
+  const finish = (status: ReceiptVerdict["status"], detail: Partial<ReceiptVerdict> = {}): ReceiptVerdict => {
+    checkReference();
+    return { status, sequence: reference ? "held" : movedPast ? "moved-past" : "not-reached", includedAt: [], contradictedAt: [...contradictedAt], ...detail };
+  };
   const lapse = (kind: string, at?: bigint): ReceiptVerdict => finish(contradictedAt.length ? "contradicted" : "lapsed",
     contradictedAt.length ? {} : { lapse: { kind, ...(at === undefined ? {} : { at: at.toString() }) } });
   return { receipt, header, termBoundary, evidence: () => ({ contradictedAt: [...contradictedAt] }),
@@ -69,8 +84,10 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     checkpoint(held, segment, state, checkpointHeader, classification) {
       const c = held.commitment, own = segment !== undefined && same(segment, receipt.segment);
       const fact = { operator: hex(c.operator), sequence: c.sequence.toString(), index: held.index.toString() };
+      if (same(c.operator, header.operator) && c.sequence >= receipt.after) checkReference();
+      // The segment stands from its opening as witnessed, valid or excluded (C2.10.12); a lapsed one founds nothing.
+      if (own && c.sequence === header.sequence && classification !== "lapsed") opened = true;
       if (classification === "valid" && own) {
-        if (c.sequence === header.sequence) opened = true;
         requireReceipt(opened);
         const event = state!.receiptEvent(receipt.position);
         if (event !== undefined && receiptMatchesEvent(receipt, event)) return finish("final", { includedAt: [fact] });

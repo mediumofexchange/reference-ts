@@ -159,16 +159,19 @@ export class EvidenceStore {
       else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
     } else {
       this.#db = new DatabaseSync(source, { readBigInts: true }); this.#hosted = false;
-      let version: bigint;
-      // A file that is no database leaves no handle open on it.
+      // A file that is no database, or that another connection holds, leaves no handle open on it.
       try {
         this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL;");
-        version = (this.#db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
-      } catch (error) { this.#db.close(); throw error; }
-      if (version === 0n) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
-      else if (version !== BigInt(SCHEMA_VERSION)) { this.#db.close(); throw new TypeError("the evidence file has another layout"); }
-      // No read is open, so any per-read items are a crashed read's.
-      else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
+        const version = (this.#db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
+        if (version === 0n) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
+        else if (version !== BigInt(SCHEMA_VERSION)) throw new TypeError("the evidence file has another layout");
+        // No read is open, so any per-read items are a crashed read's.
+        else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
+      } catch (error) {
+        this.#db.close();
+        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the evidence file is in use");
+        throw error;
+      }
     }
     this.#q = Object.fromEntries(Object.entries({
       batch: "INSERT INTO batch VALUES (NULL) RETURNING id",
@@ -218,10 +221,14 @@ export class EvidenceStore {
     terms.forEach((field, i) => this.#keepTerms(segment, entries, i, copyBytes(field.terms), copyBytes(field.signature)));
   }
 
-  /** Only a field that names its entry's backing and verifies is evidence (§12.1); it is the one kept. */
+  /** Only a field that names its entry's backing and verifies is evidence (§12.1); it is the one kept. A field
+   * already kept byte for byte was verified when it was kept, so a head served again costs no signature check. */
   #keepTerms(segment: Uint8Array, entries: readonly SegmentEntry[], i: number, terms: Uint8Array | undefined, signature: Uint8Array): void {
     const entry = entries[i];
-    if (terms !== undefined && entry !== undefined && same(sha256(terms), entry.backing) && verifyRootTermsSignature(terms, signature)) {
+    if (terms === undefined || entry === undefined || !same(sha256(terms), entry.backing)) return;
+    const kept = this.#q.headTerm!.get(segment, i) as { terms: unknown; signature: unknown } | undefined;
+    if (kept !== undefined && same(bytes(kept.terms), terms) && same(bytes(kept.signature), signature)) return;
+    if (verifyRootTermsSignature(terms, signature)) {
       this.#q.putTerms!.run(segment, i, terms, signature);
     }
   }
@@ -241,11 +248,14 @@ export class EvidenceStore {
 
   /** Copy a package held in memory: EncodingError for a malformed package and
    * PackageLimitError for a whole item past its budget or a batch past the quota, keeping nothing. */
-  importBytes(input: Uint8Array): EvidenceBatch {
+  importBytes(input: Uint8Array): EvidenceBatch { return this.#importBytes(input, 0n); }
+
+  /** `importBytes`, its batch charged from `spent` on. */
+  #importBytes(input: Uint8Array, spent: bigint): EvidenceBatch {
     // The size is known, so the count and each length are checked against it before any payload.
     const own = copyUnshared(input);
     return this.#transaction(() => {
-      const batch = this.#batch(), feed = new FrameFeed(packageReader(this.#sink(batch), { maxItemBytes: MAX_ITEM_BYTES, total: BigInt(own.length) }));
+      const batch = this.#batch(spent), feed = new FrameFeed(packageReader(this.#sink(batch), { maxItemBytes: MAX_ITEM_BYTES, total: BigInt(own.length) }));
       feed.feed(own); feed.end();
       return batch;
     });
@@ -287,6 +297,12 @@ export class EvidenceStore {
    */
   async importTrail(source: Uint8Array | Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
     options: { readonly after?: TrailTip | undefined; readonly size?: bigint | undefined } = {}): Promise<boolean> {
+    return (await this.#importTrail(source, options, 0n)).kept;
+  }
+
+  /** `importTrail`, its batch charged from `spent` on; resolves what it kept and the charge it reached. */
+  async #importTrail(source: Uint8Array | Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
+    options: { readonly after?: TrailTip | undefined; readonly size?: bigint | undefined }, spent: bigint): Promise<{ kept: boolean; charged: bigint }> {
     const streamed = !(source instanceof Uint8Array), own = streamed ? undefined : copyUnshared(source);
     const size = own === undefined ? options.size : BigInt(own.length);
     if (typeof size !== "bigint" || size < 0n) throw new TypeError("a streamed trail states its byte length");
@@ -299,30 +315,38 @@ export class EvidenceStore {
       let base: Base | undefined;
       if (after !== undefined) {
         base = after.position === 0n ? (same(after.evidence, genesisEvidenceHash(after.segment)) ? { ...after, size: 0n } : undefined) : this.#base(after);
-        if (base === undefined) return false;
+        // A trail that is not read still costs its supplier's stated bytes: every trail byte counts, kept or not.
+        if (base === undefined) return { kept: false, charged: spent + size };
       }
-      const batch = this.#batch();
+      const batch = this.#batch(spent);
       batch.charge(ITEM_ROW_BYTES, PackageLimitError);
       const receiver = this.#trail(batch, size, base);
       if (own !== undefined) receiver.data(own);
       else for await (const chunk of source as AsyncIterable<Uint8Array>) receiver.data(chunk);
       receiver.end(new Uint8Array(32));
       batch.release();
-      return receiver.kept();
+      return { kept: receiver.kept(), charged: batch.charged };
     });
   }
 
   /** Keep a supplier's parts, each whole or not at all: a package as `importBytes` copies it, its per-read items
    * dropped at once, and a trail as `importTrail` assembles it. Resolves false where some trail was not kept;
    * the other parts stay, since each is authenticated only when a read uses it. The party's quota bounds
-   * the bytes of all the parts together, as it bounds one package: past it, PackageLimitError before that part. */
+   * all the parts together as it bounds one package, rows charged as well as bytes: a part whose stated size
+   * does not fit what is left is refused before it is read, and one whose rows pass it while being kept. */
   async take(parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>): Promise<boolean> {
-    let kept = true, taken = 0n;
+    let kept = true, charged = 0n;
     for await (const part of parts) {
-      taken += "package" in part ? BigInt(part.package.length) : part.trail.size;
-      if (taken > this.#quota) throw new PackageLimitError("the reader's evidence quota is exhausted");
-      if ("package" in part) this.importBytes(part.package).release();
-      else if (!await this.importTrail(part.trail.chunks, { after: part.trail.after, size: part.trail.size })) kept = false;
+      if (charged + ("package" in part ? BigInt(part.package.length) : part.trail.size) > this.#quota) {
+        throw new PackageLimitError("the reader's evidence quota is exhausted");
+      }
+      if ("package" in part) {
+        const batch = this.#importBytes(part.package, charged);
+        charged = batch.charged; batch.release();
+      } else {
+        const trail = await this.#importTrail(part.trail.chunks, { after: part.trail.after, size: part.trail.size }, charged);
+        charged = trail.charged; if (!trail.kept) kept = false;
+      }
     }
     return kept;
   }
@@ -345,9 +369,10 @@ export class EvidenceStore {
       { segment: after.segment, position: after.position, evidence: after.evidence, size: BigInt(row.size) };
   }
 
-  #batch(): EvidenceBatch {
+  /** A new batch; `spent` is what earlier parts of the same supply already charged to the quota. */
+  #batch(spent = 0n): EvidenceBatch {
     const id = (this.#q.batch!.get() as { id: bigint }).id;
-    return new EvidenceBatch(this.#db, this.#q, id, this.#quota);
+    return new EvidenceBatch(this.#db, this.#q, id, this.#quota, spent);
   }
 
   #sink(batch: EvidenceBatch): PackageSink {
@@ -481,8 +506,8 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
   #bytes = 0n;
   readonly id: bigint;
 
-  constructor(db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint) {
-    this.#db = db; this.#q = q; this.id = id; this.#quota = quota;
+  constructor(db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint, spent = 0n) {
+    this.#db = db; this.#q = q; this.id = id; this.#quota = quota; this.#bytes = spent;
   }
 
   /** Count taken bytes against the party's quota. */
@@ -490,6 +515,8 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
     this.#bytes += amount;
     if (this.#bytes > this.#quota) throw new Refusal("the reader's evidence quota is exhausted");
   }
+  /** What the batch has charged to the quota, with what it started from. */
+  get charged(): bigint { return this.#bytes; }
   chargeAnswer(amount: bigint): void { this.charge(amount, EvidenceRefusalQuota); }
 
   get trails(): TrailEvidence { return this; }

@@ -340,7 +340,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
       termsByBacking.set(hex(scoped.backing), terms);
       scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
     }
-    const receiptRead = await receiptWalk(context.receiptBytes, context, view, trails, digest => evidence.snapshot(digest), scopeViews);
+    const receiptRead = await receiptWalk(context.receiptBytes, context, view, trails, digest => evidence.snapshot(digest), root => evidence.directory(root), scopeViews);
     context.receiptWalk = receiptRead;
     let openingIndex: bigint | undefined;
     const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
@@ -562,16 +562,20 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const entry = directory.find(item => same(item.name, backing));
     if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const snapshot = snapshotFor(entry.digest);
-    const scope = checkpointScope(trails, backing, entry.digest, snapshot), { header } = scope;
+    // The segment and scope are those the directory's first snapshot names, whichever backing the reader
+    // holds, so every reader judges one class (C2.10.11, pool-v3 §7.1); a snapshot naming another segment
+    // fails SNAPSHOT below, after lapse.
+    const first = directory[0]!, named = same(first.name, backing) ? snapshot : snapshotFor(first.digest);
+    const scope = checkpointScope(trails, first.name, first.digest, named), { header } = scope, { segment } = named;
     await faults.inspect(held, directory, scope);
     // The descent had visited this checkpoint once its faults were inspected.
     began = true;
-    store.putScope(snapshot.segment, segmentBytes(header), scope.terms);
+    store.putScope(segment, segmentBytes(header), scope.terms);
     // Required scope is discovered only after its header is authenticated;
     // checkpointScope resolved and verified every scoped terms field.
     const scopedTerms = new Map(header.entries.map((scoped, i) => [hex(scoped.backing), scope.rootTerms[i]!]));
     const scopeViews = new Map<string, RecordView>();
-    const base: Classified = { commitment: c, index: held.index, segment: snapshot.segment, header, snapshot };
+    const base: Classified = { commitment: c, index: held.index, segment, header, snapshot };
     try {
       requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
         same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
@@ -618,8 +622,8 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         segmentBase = { imported: merged, block: adopted.sort(venueOrder), openingIndex: held.index, parents: parents.map(p => p === undefined ? undefined : rowKey(p.commitment)) };
         const computed: WalkBase = { openingIndex: held.index, parents: segmentBase.parents, imports: merged.frontier.segments,
           totals: merged.frontier.totals, adoption: merged.adoptionIndices, block: segmentBase.block };
-        const stored = keptBase(snapshot.segment);
-        if (stored === undefined) store.putBase(snapshot.segment, computed);
+        const stored = keptBase(segment);
+        if (stored === undefined) store.putBase(segment, computed);
         // A kept base must be the one this read derives (§14 kept classes).
         else if (baseKey(stored) !== baseKey(computed)) throw new KeptStateMismatch("a kept segment base");
         // The segment stands from here even if this opening's own evidence fails below:
@@ -633,8 +637,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         requireReplay(before(openingHeld, held), "IMPORT_RANK");
         const openingDirectory = evidence.directory(openingHeld.commitment.root);
         if (openingDirectory === undefined) throw new EvidenceRefusal("unresolved-evidence");
-        const openingEntry = openingDirectory.find(item => same(item.name, backing));
-        requireReplay(openingEntry !== undefined && same(snapshotFor(openingEntry.digest).segment, snapshot.segment), "OPENING");
+        // The opening is this segment's where its own first snapshot names it, as its judgment reads it,
+        // whichever backing this read holds: one it omits too (C2.10.12).
+        // A first entry this segment does not scope is not its opening, which the directory alone shows.
+        const openingEntry = openingDirectory[0];
+        requireReplay(openingEntry !== undefined && header.entries.some(scoped => same(scoped.backing, openingEntry.name)) &&
+          same(snapshotFor(openingEntry.digest).segment, segment), "OPENING");
         // Lapse is judged before validity (C2.10.11), on the clock from the opening as
         // witnessed, valid or not (C2b.4.1).
         const termsOf = (name: Uint8Array): RootTerms => scopedTerms.get(hex(name))!;
@@ -647,14 +655,14 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           const { record } = await scopeClocks(header, termsOf, header.entries[cause]!.backing, openingHeld.index, held.index);
           return { ...base, class: "lapsed", ...(record === null ? {} : { clock: record }) };
         }
-        openingValid = (await classify(openingHeld, backing)).class === "valid";
-        const parents = await parentsOf(), established = baseOf(snapshot.segment);
+        openingValid = (await classify(openingHeld, openingEntry.name)).class === "valid";
+        const parents = await parentsOf(), established = baseOf(segment);
         requireReplay(established !== undefined && established.openingIndex === openingHeld.index, "OPENING");
         segmentBase = established;
         // Returning to an older segment cannot abandon a valid newer one: the last valid checkpoint
         // before this one is in this segment for every scoped backing, or else each backing's
         // predecessor that the opening imported.
-        const inSegment = parents.every(parent => parent !== undefined && same(parent.segment, snapshot.segment) &&
+        const inSegment = parents.every(parent => parent !== undefined && same(parent.segment, segment) &&
           matches(parent.commitment, parents[0]!.commitment));
         const importedKey = (i: number): string | undefined => { const key = segmentBase.parents[i]; return key === undefined ? undefined : hex(key); };
         requireReplay(inSegment || parents.every((parent, i) => parent === undefined ? segmentBase.parents[i] === undefined :
@@ -671,7 +679,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         directory.some(item => same(item.name, scoped.backing))), "SCOPE");
       const scopedSnapshots = header.entries.map(scoped => {
         const s = snapshotFor(directory.find(item => same(item.name, scoped.backing))!.digest);
-        requireReplay(same(s.backing, scoped.backing) && same(s.segment, snapshot.segment) &&
+        requireReplay(same(s.backing, scoped.backing) && same(s.segment, segment) &&
           same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
         return s;
       });

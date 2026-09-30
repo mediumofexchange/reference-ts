@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fieldToBytes } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT, NoteTree, notePathProves } from "../src/pool/note-tree.js";
 import { ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
@@ -141,5 +144,21 @@ describe("replay storage", () => {
     store.close();
     expect(db.isOpen).toBe(true);
     db.close();
+  });
+
+  it("holds a kept file's write lock across a keep point, so another store's walk is refused while the walk awaits", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-point-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const first = new ReplayStore(path, { digest, every: 1 }), context = new Uint8Array(32).fill(7);
+    try {
+      const walk = first.openWalk(context), ns = first.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
+      first.append(ns, append([next()], []));
+      first.keepPoint();
+      expect(existsSync(digest)).toBe(true);
+      // The digest recorded at the keep point holds, so the second store opens; its walk would take the first's rows.
+      const second = new ReplayStore(path, { digest });
+      try { expect(() => second.openWalk(context)).toThrow("the kept replay file is in use"); } finally { second.close(); }
+      expect(first.walkRows()).toBeGreaterThan(0);
+      first.closeWalk(walk);
+    } finally { first.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 });

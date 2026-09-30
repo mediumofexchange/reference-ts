@@ -7,12 +7,12 @@ import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
-import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
+import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
-import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
 import { ReplayResult } from "../src/pool/v3/reader.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -98,12 +98,19 @@ async function twoBackings() {
   }
   const selection = (backing: Uint8Array, commitment: Commitment) => ({ mode: "current-fixture" as const, domain, venue: venue.id,
     backing, operator, sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
-  const read = (backing: Uint8Array, commitment: Commitment) => readPackage(pack([...items,
+  const read = (backing: Uint8Array, commitment: Commitment, extra: readonly EvidenceItem[] = []) => readPackage(pack([...items, ...extra,
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
   selection(backing, commitment), { configuration, verifier, reference, venue });
+  /** The operator's receipt for the current segment's latest record, given after sequence `after`. */
+  function receipt(after: bigint): Uint8Array {
+    const bytes = current.records.at(-1)!, digests = evidenceHashes(decodeRecord(bytes));
+    const fields = { domain, segment: current.id, scopeRoot: current.scope, position: BigInt(current.records.length),
+      statementHash: digests.statementHash, historyHash: current.state.history, proofHash: digests.proofHash, signatureHash: digests.signatureHash, after };
+    return encodeReceipt({ ...fields, operator, signature: ed25519.sign(receiptBytes(fields), operatorSecret) });
+  }
   /** An empty successor opening scoping the first backing alone, importing `predecessor`. */
   const successor = (sequence: bigint, predecessor: Commitment) => { current = open([x], sequence, predecessor, current.state); };
-  return { venue, x, y, items, checkpoint, issue, issued, replayInto, successor, selection, read };
+  return { venue, x, y, items, checkpoint, issue, issued, replayInto, successor, selection, read, receipt };
 }
 
 describe("multi-backing scope reader", () => {
@@ -146,6 +153,59 @@ describe("multi-backing scope reader", () => {
     const wrong = misstated.checkpoint(2n, 3n, snapshots => snapshots.map(s =>
       compareBytes(s.backing, misstated.y.name) === 0 ? { ...s, issued: 5n } : s));
     await expect(misstated.read(misstated.x.name, wrong)).rejects.toMatchObject({ check: "SNAPSHOT" });
+  });
+
+  it("reads one class for a checkpoint whichever scoped backing is read, where the opening omits or misplaces one (C2.10.11-12)", async () => {
+    const cases = [
+      // The opening carries the first backing alone: excluded for its scope, it still founds the segment.
+      { check: "SCOPE", alter: (f: Awaited<ReturnType<typeof twoBackings>>) => (snapshots: ReturnType<Parameters<typeof f.checkpoint>[2] & {}>) =>
+        snapshots.filter(s => compareBytes(s.backing, f.x.name) === 0) },
+      // The opening's second snapshot names another segment: judged in the first one's segment, it fails there.
+      { check: "SNAPSHOT", alter: (f: Awaited<ReturnType<typeof twoBackings>>) => (snapshots: ReturnType<Parameters<typeof f.checkpoint>[2] & {}>) =>
+        snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s) },
+    ];
+    for (const { check, alter } of cases) {
+      const f = await twoBackings();
+      f.checkpoint(1n, 1n, alter(f)); await f.issue(5n, 101n);
+      const latest = f.checkpoint(2n, 3n);
+      const [readX, readY] = [stateOf(await f.read(f.x.name, latest)), stateOf(await f.read(f.y.name, latest))];
+      for (const read of [readX, readY]) {
+        expect(read.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "excluded", check], ["2", "valid", undefined]]);
+      }
+      expect([readX.state.issued, readY.state.issued]).toEqual([5n, 0n]);
+    }
+  });
+
+  it("finds no opening at a sequence whose first entry the segment does not scope, from the directory alone (C2.10.12)", async () => {
+    const f = await twoBackings();
+    // The operator's sequence 1 carries another backing only, and that backing's snapshot preimage is not supplied.
+    f.checkpoint(1n, 1n, snapshots => [{ ...snapshots[0]!, backing: b(88) }]);
+    f.items.splice(f.items.findIndex(item => item.kind === 4), 1);
+    await f.issue(5n, 101n);
+    const latest = f.checkpoint(2n, 3n);
+    for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, latest)).rejects.toMatchObject({ check: "OPENING" });
+  });
+
+  it("reads a receipt final where a valid checkpoint includes it, in a segment whose opening is excluded (C2.10.12, C2.10.9c)", async () => {
+    const f = await twoBackings();
+    // The opening misstates a supply: excluded, it still founds the segment.
+    f.checkpoint(1n, 1n, snapshots => snapshots.map(s => ({ ...s, issued: s.issued + 1n })));
+    await f.issue(5n, 101n);
+    const receipt = f.receipt(1n), latest = f.checkpoint(2n, 3n);
+    const read = await f.read(f.x.name, latest, [{ kind: 10, payload: receipt }]);
+    expect(read.receipt).toMatchObject({ status: "final", includedAt: [{ sequence: "2" }] });
+  });
+
+  it("reads a receipt whose `after` names a checkpoint with a misplaced snapshot alike for every scoped backing (C2.10.9c)", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, 1n);
+    // Checkpoint 2's second snapshot names another segment: judged in the first one's, it is excluded.
+    f.checkpoint(2n, 2n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s));
+    await f.issue(5n, 101n);
+    const receipt = f.receipt(2n), latest = f.checkpoint(3n, 4n);
+    for (const backing of [f.x.name, f.y.name]) {
+      expect((await f.read(backing, latest, [{ kind: 10, payload: receipt }])).receipt).toMatchObject({ status: "final", includedAt: [{ sequence: "3" }] });
+    }
   });
 
   it("rolls back a checkpoint excluded for a sibling's totals, so the next one resumes without extra work", async () => {

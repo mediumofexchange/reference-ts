@@ -316,6 +316,8 @@ export class ReplayStore {
   #savepoints = 0;
   #replaying = false;
   #sinceKeep = 0;
+  /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
+  #lost = false;
 
   /** A private in-memory database by default: short reads and tests run the same code. A path with `kept`
    * is the party's kept state (§14): reopened only where the digest check passes, discarded otherwise, and
@@ -347,7 +349,9 @@ export class ReplayStore {
       const reopened = kept !== undefined && existsSync(path);
       this.#db = new DatabaseSync(path, { readBigInts: true });
       this.#hosted = false;
-      this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL; PRAGMA temp_store=MEMORY;");
+      // Temporary storage in files: a replay's savepoint journals the pages the walk's transaction already
+      // changed, and in memory that journal grows with every record until the walk commits.
+      this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL; PRAGMA temp_store=FILE;");
       if (!reopened) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
     }
     // C2.10.6's union is a working set of one connection: it never changes the file, so a kept file's digest stands.
@@ -414,10 +418,27 @@ export class ReplayStore {
    * once `every` records have replayed since the last, so a killed long read keeps its progress. */
   keepPoint(): void {
     const kept = this.#kept;
-    if (kept === undefined || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
+    if (kept === undefined || this.#lost || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
         this.#sinceKeep < (kept.every ?? KEEP_EVERY)) return;
+    // The walk takes its write lock again at once, as openWalk took it: while it awaits a verifier or a venue
+    // after the keep point, another store's walk is refused, not free to take the walk rows as a crashed read's.
+    // A store that wrote in the moment between is found by the file's data version, and this walk stops.
+    // Read inside the transaction: this connection's own commit leaves the version as it is.
+    const version = this.#dataVersion();
     this.#db.exec("COMMIT");
-    try { this.#recordDigest(); } finally { this.#db.exec("BEGIN"); }
+    try { this.#recordDigest(); } finally {
+      try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
+        if (!(error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message))) throw error;
+        // Writes still in flight go into a transaction closeWalk rolls back, never into the file.
+        this.#lost = true; this.#db.exec("BEGIN");
+      }
+    }
+    if (!this.#lost && this.#dataVersion() !== version) this.#lost = true;
+    if (this.#lost) throw new Error("the kept replay file is in use");
+  }
+  /** SQLite's count of commits other connections made to the file, as this connection sees it. */
+  #dataVersion(): bigint {
+    return BigInt((this.#db.prepare("PRAGMA data_version").get() as { data_version: bigint }).data_version);
   }
   /** Forget every kept row (§14: kept state that fails a check is discarded); a kept file also drops its namespaces. */
   discardKept(): void {
@@ -785,6 +806,7 @@ export class ReplayStore {
     // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
     if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
+    this.#lost = false;
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");
@@ -811,6 +833,12 @@ export class ReplayStore {
    * (a keep point). If the commit fails, what the walk wrote since its last keep point is rolled back and no
    * transaction stays open. */
   closeWalk(walk: number): void {
+    // A walk that lost its file at a keep point leaves it to the store that took it: nothing to drop or digest here.
+    if (this.#lost) {
+      this.#lost = false;
+      if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+      return;
+    }
     try {
       for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
       this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);

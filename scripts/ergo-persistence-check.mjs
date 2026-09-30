@@ -68,7 +68,7 @@ if (action === "initialize") {
   const configuration = { circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])),
     helper: Uint8Array.from(Buffer.from("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8", "hex")) };
   const owner = new V3OperatorJournal(join(directory, "operator.sqlite"), { configuration, secret: b(81), venue,
-    reference: { context: profile.reference, profile }, verifier: async () => false });
+    reference: { context: profile.reference, profile }, verifier: { verify: async () => false } });
   const funding = b(82), tree = payToPublicKeyTree(secp256k1.getPublicKey(funding, true));
   const box = plainBox(tree, 10000000n, chain.anchor.height), boxId = blake2b(box, { dkLen: 32 });
   let submitted = false;
