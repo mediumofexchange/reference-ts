@@ -316,6 +316,8 @@ export class ReplayStore {
   #savepoints = 0;
   #replaying = false;
   #sinceKeep = 0;
+  /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
+  #lost = false;
 
   /** A private in-memory database by default: short reads and tests run the same code. A path with `kept`
    * is the party's kept state (§14): reopened only where the digest check passes, discarded otherwise, and
@@ -421,15 +423,17 @@ export class ReplayStore {
     // The walk takes its write lock again at once, as openWalk took it: while it awaits a verifier or a venue
     // after the keep point, another store's walk is refused, not free to take the walk rows as a crashed read's.
     // A store that wrote in the moment between is found by the file's data version, and this walk stops.
-    this.#db.exec("COMMIT");
+    // Read inside the transaction: this connection's own commit leaves the version as it is.
     const version = this.#dataVersion();
+    this.#db.exec("COMMIT");
     try { this.#recordDigest(); } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");
-        throw error;
+        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) this.#lost = true;
+        else throw error;
       }
     }
-    if (this.#dataVersion() !== version) throw new Error("the kept replay file is in use");
+    if (!this.#lost && this.#dataVersion() !== version) this.#lost = true;
+    if (this.#lost) throw new Error("the kept replay file is in use");
   }
   /** SQLite's count of commits other connections made to the file, as this connection sees it. */
   #dataVersion(): bigint {
@@ -827,6 +831,12 @@ export class ReplayStore {
    * (a keep point). If the commit fails, what the walk wrote since its last keep point is rolled back and no
    * transaction stays open. */
   closeWalk(walk: number): void {
+    // A walk that lost its file at a keep point leaves it to the store that took it: nothing to drop or digest here.
+    if (this.#lost) {
+      this.#lost = false;
+      if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+      return;
+    }
     try {
       for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
       this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);

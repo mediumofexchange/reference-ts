@@ -8,6 +8,7 @@ import type { TrailEvidence } from "./evidence-store.js";
 import { decodeSegmentHeader, type SegmentHeader } from "./headers.js";
 import type { ReaderSelection, RecordView, ReplayResult } from "./reader.js";
 import { EvidenceRefusal } from "./refusals.js";
+import type { SnapshotDigest } from "../../venue-records.js";
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 function requireReceipt(condition: boolean): asserts condition { if (!condition) throw new EvidenceRefusal("invalid-receipt"); }
 export interface ReceiptFact { readonly operator: string; readonly sequence: string; readonly index: string }
@@ -27,7 +28,8 @@ export interface ReceiptWalk {
   finish(): ReceiptVerdict;
 }
 export async function receiptWalk(bytes: Uint8Array, context: { readonly selection: ReaderSelection }, view: RecordView,
-  trails: TrailEvidence, snapshotOf: (digest: Uint8Array) => Uint8Array | undefined, scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
+  trails: TrailEvidence, snapshotOf: (digest: Uint8Array) => Uint8Array | undefined,
+  directoryOf: (root: Uint8Array) => readonly SnapshotDigest[] | undefined, scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
   const { selection } = context, receipt = decodeReceipt(bytes);
   const [trail] = trails.heads(receipt.segment);
   if (trail === undefined) throw new EvidenceRefusal("unresolved-evidence");
@@ -47,11 +49,15 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
   const reference = view.heldAt(header.operator, receipt.after);
   const movedPast = reference === undefined && view.heldAbove(header.operator, receipt.after);
   if (reference !== undefined) {
-    const entry = view.carries(reference); requireReceipt(entry !== undefined);
+    // `after` is of the receipt's segment where its directory's first entry names that segment, as every
+    // reader judges the checkpoint (pool-v3 §7.1), whichever backing this read holds.
+    const directory = directoryOf(reference.commitment.root);
+    if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    const entry = directory[0]; requireReceipt(entry !== undefined);
     const snapshot = snapshotOf(entry.digest);
     if (snapshot === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const decoded = decodeSnapshot(snapshot);
-    requireReceipt(same(decoded.segment, receipt.segment) && same(decoded.backing, selection.backing));
+    requireReceipt(same(decoded.segment, receipt.segment) && same(decoded.backing, entry.name));
   }
   const contradictedAt: ReceiptFact[] = [];
   let opened = false, lastSegment = receipt.after, passedOver = 0n;

@@ -217,7 +217,11 @@ describe("v3 evidence store", () => {
     const part = (n: number): EvidencePart => ({ package: pack([0, 1].map(i => ({ kind: 4, payload: Uint8Array.of(2 * n + i) }))) });
     await expect(parts.take([part(0), part(1)])).rejects.toThrow(PackageLimitError);
     expect([parts.retained().snapshot(sha256(Uint8Array.of(1))) !== undefined, parts.retained().snapshot(sha256(Uint8Array.of(2)))]).toEqual([true, undefined]);
-    store.close(); exact.close(); parts.close();
+    // A trail part after a position the store does not hold is not read, and its stated bytes still count.
+    const skipped = new EvidenceStore(":memory:", { maxBatchBytes: 1000n });
+    const unheld = (n: number): EvidencePart => ({ trail: { after: { segment: b(n), position: 5n, evidence: b(9) }, size: 900n, chunks: [new Uint8Array(900)] } });
+    await expect(skipped.take([unheld(1), unheld(2)])).rejects.toThrow(PackageLimitError);
+    store.close(); exact.close(); parts.close(); skipped.close();
   });
 
   it("keeps only a terms field that names its backing and verifies, skipping one too long to verify", () => {

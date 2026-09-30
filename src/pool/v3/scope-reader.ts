@@ -340,7 +340,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
       termsByBacking.set(hex(scoped.backing), terms);
       scopeViews.set(hex(scoped.backing), await viewFor(scoped.backing, terms));
     }
-    const receiptRead = await receiptWalk(context.receiptBytes, context, view, trails, digest => evidence.snapshot(digest), scopeViews);
+    const receiptRead = await receiptWalk(context.receiptBytes, context, view, trails, digest => evidence.snapshot(digest), root => evidence.directory(root), scopeViews);
     context.receiptWalk = receiptRead;
     let openingIndex: bigint | undefined;
     const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {

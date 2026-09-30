@@ -315,7 +315,8 @@ export class EvidenceStore {
       let base: Base | undefined;
       if (after !== undefined) {
         base = after.position === 0n ? (same(after.evidence, genesisEvidenceHash(after.segment)) ? { ...after, size: 0n } : undefined) : this.#base(after);
-        if (base === undefined) return { kept: false, charged: spent };
+        // A trail that is not read still costs its supplier's stated bytes: every trail byte counts, kept or not.
+        if (base === undefined) return { kept: false, charged: spent + size };
       }
       const batch = this.#batch(spent);
       batch.charge(ITEM_ROW_BYTES, PackageLimitError);

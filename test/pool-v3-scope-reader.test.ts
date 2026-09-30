@@ -186,6 +186,18 @@ describe("multi-backing scope reader", () => {
     expect(read.receipt).toMatchObject({ status: "final", includedAt: [{ sequence: "2" }] });
   });
 
+  it("reads a receipt whose `after` names a checkpoint with a misplaced snapshot alike for every scoped backing (C2.10.9c)", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, 1n);
+    // Checkpoint 2's second snapshot names another segment: judged in the first one's, it is excluded.
+    f.checkpoint(2n, 2n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s));
+    await f.issue(5n, 101n);
+    const receipt = f.receipt(2n), latest = f.checkpoint(3n, 4n);
+    for (const backing of [f.x.name, f.y.name]) {
+      expect((await f.read(backing, latest, [{ kind: 10, payload: receipt }])).receipt).toMatchObject({ status: "final", includedAt: [{ sequence: "3" }] });
+    }
+  });
+
   it("rolls back a checkpoint excluded for a sibling's totals, so the next one resumes without extra work", async () => {
     const f = await twoBackings();
     f.checkpoint(1n, 1n); await f.issue(5n, 101n); f.checkpoint(2n, 3n);
