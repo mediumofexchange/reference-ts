@@ -159,8 +159,12 @@ export class EvidenceStore {
       else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
     } else {
       this.#db = new DatabaseSync(source, { readBigInts: true }); this.#hosted = false;
-      this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL;");
-      const version = (this.#db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
+      let version: bigint;
+      // A file that is no database leaves no handle open on it.
+      try {
+        this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL;");
+        version = (this.#db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
+      } catch (error) { this.#db.close(); throw error; }
       if (version === 0n) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
       else if (version !== BigInt(SCHEMA_VERSION)) { this.#db.close(); throw new TypeError("the evidence file has another layout"); }
       // No read is open, so any per-read items are a crashed read's.

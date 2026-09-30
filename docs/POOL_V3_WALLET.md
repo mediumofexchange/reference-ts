@@ -92,11 +92,15 @@ files, so it costs what is new, not the history
   kept where the verifier declares its circuits, which name kept state;
   otherwise each read replays in memory.
 
-Neither file holds a secret or is part of a backup. Losing one, or damage to
-it, costs a first sync or a full read and nothing else: a kept file that fails
-its digest, a kept class that fails a check and a witness past the venue view
-being read are discarded and replayed, and evidence that no longer hashes reads
-as absent. A read left `unresolved-evidence` over what the file holds is
+Neither file holds a secret or is part of a backup. Losing one costs a first
+sync or a full read and nothing else. A kept replay file that fails its digest,
+a kept class that fails a check, and kept state read through a later venue
+clock than the one now shown are discarded and replayed, asking the venue for
+everything. Evidence that no longer hashes reads as absent. An evidence file
+that cannot be opened at all refuses `STORAGE` and is never replaced by the
+wallet, since it may be the holder's only copy; the holder removes it. A
+package handed to a read is kept even when the read refuses, and nothing prunes
+the file. A read left `unresolved-evidence` over what the file holds is
 answered by supplying again in full (`{ full: true }`). The replay file shows
 which outputs are this seed's, so it needs the database's protection. Reads and
 supplies of one wallet take turns. The holder remains responsible for retaining
@@ -319,8 +323,9 @@ a venue clock that moves during verification, owner fencing and competing fulfil
 one-megabyte package over HTTP, a second sync that fetches, verifies and asks
 the venue only for what is new, a seed-restored wallet's equal view, a restart,
 and the fallbacks for a damaged replay file, a venue view older than the kept
-witnesses and lost evidence. The wallet, payer and multi-backing suites run on
-the kept path; the backup suite runs without declared circuits, in memory.
+witnesses, a venue behind the kept answers and lost or unreadable evidence.
+The receiver and multi-backing suites run on the kept path; the payer and
+backup suites run without declared circuits, in memory.
 `test/pool-v3-payer.test.ts` ports the v2 payment cases: single/pair selection
 and three-note refusal, agreed terms, repeated or already paid requests, prover
 failure and substituted statements, concurrent retry, forged and lost receipts,

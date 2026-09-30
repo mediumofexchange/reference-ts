@@ -40,7 +40,7 @@ import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record 
 import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import type { CanonicalCheckpoint, FrontierResult } from "./scope-reader.js";
 import { locked, tagOf } from "./recovery.js";
-import { applyForceEffects, openForceState, type ForceState, type WitnessPredicate } from "./state.js";
+import { applyForceEffects, openForceState, type ForceState } from "./state.js";
 import { rootTermsName } from "./terms.js";
 import { cellBytes, decodeWalletSnapshot, encodeWalletSnapshot, MAX_WALLET_BACKUP_BYTES, openWalletBackup, sealWalletBackup,
   WALLET_BACKUP_OVERHEAD, walletBackupDigest, type WalletCell, type WalletSnapshot } from "./wallet-backup.js";
@@ -213,8 +213,6 @@ export class V3Wallet {
   private readonly seed: Uint8Array;
   private readonly owner: bigint;
   private readonly path: string;
-  /** This seed's outputs, which a replay keeps witnesses for. */
-  private readonly witness: WitnessPredicate;
   /** The wallet's evidence file and kept replay file, each opened at the first read that needs it. */
   private retained: EvidenceStore | undefined;
   private replays: ReplayStore | undefined;
@@ -253,12 +251,11 @@ export class V3Wallet {
       }
       // A database from before offline handoff has no custody row: it was never exported.
       this.db.exec("INSERT OR IGNORE INTO wallet_custody VALUES(1,NULL,NULL)");
-      requireThat(meta.profile === PROFILE && meta.domain === hex(this.domain) && meta.venue === hex(this.venueId),
-        "CONFLICT", "wallet configuration or venue changed");
+      requireThat(meta.profile === PROFILE, "CONFLICT", "wallet database has another profile");
+      requireThat(meta.domain === hex(this.domain) && meta.venue === hex(this.venueId), "CONFLICT", "wallet configuration or venue changed");
       requireThat(typeof meta.owner === "bigint" && meta.owner >= 0n && meta.owner < MAX_OWNER,
         "STORAGE", "wallet owner counter exhausted");
       this.seed = identifier(meta.seed as Uint8Array); this.owner = meta.owner + 1n;
-      this.witness = seedWitness(this.seed, this.domain);
       this.db.prepare("UPDATE wallet_identity SET owner=? WHERE id=1").run(this.owner);
       this.db.exec("COMMIT");
     } catch (error) {
@@ -347,9 +344,10 @@ export class V3Wallet {
   }
   /** The wallet's own evidence file (§14): what suppliers and packages brought, authenticated when a read uses it. */
   private evidence(): EvidenceStore {
-    try { return this.retained ??= new EvidenceStore(`${this.path}.evidence`); } catch (error) {
-      if (error instanceof TypeError) throw new V3WalletError("STORAGE", "the wallet's evidence file has another layout");
-      throw error;
+    // A file of another layout, or one that is no database, is never replaced here: it may be the holder's
+    // only copy of the evidence. The holder removes it to sync again from nothing.
+    try { return this.retained ??= new EvidenceStore(`${this.path}.evidence`); } catch {
+      throw new V3WalletError("STORAGE", "the wallet's evidence file cannot be read; remove it to sync again");
     }
   }
   /** The kept state of the wallet's reads (§14 kept classes): a file where the verifier declares its circuits,
@@ -369,7 +367,8 @@ export class V3Wallet {
    * source. It runs in turn with the wallet's reads. Transport only: what it keeps is authenticated when a
    * read uses it, selects nothing and proves nothing. A later read's package then needs only that read's own
    * items (the configuration, fault evidence). Where a read stays unresolved over what the file holds, supply
-   * it again in full (`{ full: true }`).
+   * it again in full (`{ full: true }`). A transport must not call this wallet's reads or `supply`: they
+   * would wait for the turn it holds.
    */
   async supply<T>(transport: (evidence: EvidenceStore) => Promise<T>): Promise<T> {
     this.mutable();
@@ -396,8 +395,13 @@ export class V3Wallet {
       } catch (error) {
         // A replaced or exported handle says so, whatever its read met once another handle held the files.
         if (!(error instanceof V3WalletError)) this.mutable();
+        if (error instanceof Error && error.message === "the kept replay file is in use") {
+          throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
+        }
         throw error;
       }
+      // The read awaited: a handle replaced or exported meanwhile answers nothing from it.
+      this.mutable();
       return use(view);
     });
   }
@@ -405,7 +409,14 @@ export class V3Wallet {
     const at = this.options.venue.witnessedIndex();
     requireThat(isValue(at), "INVALID", "invalid witnessed index");
     const observed = heldView(this.options.venue, this.venueId, at), store = this.kept();
-    const options = { ...this.options, venue: observed.venue, witness: this.witness, evidence: this.evidence(), ...(store === undefined ? {} : { store }) };
+    // Kept answers stand only while the venue's finality rule does (§13.2). A venue whose clock is behind what
+    // the kept state was read through is not the view that state was read from: nothing kept is used, and
+    // the venue is asked for everything. (One replaced at the same clock is believed, as any venue's answers are.)
+    const seen = store?.answersThrough();
+    if (store !== undefined && seen !== undefined && at < seen) store.discardKept();
+    // The scanner's keys live for this read only.
+    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(),
+      ...(store === undefined ? {} : { store }) };
     for (let again = false; ; again = true) {
       try {
         const result = await readFrontier(bytes, terms, at, options);

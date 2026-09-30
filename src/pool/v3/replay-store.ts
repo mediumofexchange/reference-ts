@@ -975,6 +975,11 @@ export class ReplayStore {
       { through: unknown; value: unknown } | undefined;
     return row === undefined ? undefined : { through: fromBe(row.through), value: row.value === null ? undefined : fromBe(row.value) };
   }
+  /** The furthest index any kept answer was read through, if one is kept: the venue clock this state has seen. */
+  answersThrough(): bigint | undefined {
+    const row = this.#db.prepare("SELECT max(through) AS through FROM answer").get() as { through: unknown } | undefined;
+    return row === undefined || row.through === null ? undefined : fromBe(row.through);
+  }
   /** Extend (or start) a kept answer: `read` writes its windows and returns what it now holds through. An
    * answer whose read throws keeps none of its windows. */
   keepAnswer(kind: number, subject: Uint8Array, read: () => { readonly through: bigint; readonly value: bigint | undefined }): void {

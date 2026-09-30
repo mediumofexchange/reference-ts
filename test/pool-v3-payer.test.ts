@@ -59,8 +59,8 @@ describe("v3 payer custody over restored holdings", () => {
       interval: 20n, payout: { thing: "payer units", quantumExponent: 0, perUnit: 1n }, ...clauses });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    // The wallet's verifier declares the configuration's circuits, so its reads keep their state in a file (§14).
-    const reader = { configuration, venue, reference, verifier: { ...readerVerifier, identities: configuration.circuits } };
+    // This verifier declares no circuits, so each read replays in memory; the receiver, multi-backing and kept suites run on kept files.
+    const reader = { configuration, venue, reference, verifier: readerVerifier };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
     const payer = open("payer"), receiver = open("receiver");
     const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier, secret: operatorSecret });
@@ -446,6 +446,6 @@ describe("v3 payer custody over restored holdings", () => {
     f.open("first").close();
     const first = new DatabaseSync(join(f.directory, "first.db"));
     first.exec("UPDATE wallet_identity SET profile='moe/wallet/v3/1'"); first.close();
-    expect(() => f.open("first")).toThrow(expect.objectContaining({ code: "CONFLICT", message: "wallet configuration or venue changed" }));
+    expect(() => f.open("first")).toThrow(expect.objectContaining({ code: "CONFLICT", message: "wallet database has another profile" }));
   });
 });

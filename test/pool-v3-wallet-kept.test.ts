@@ -162,8 +162,10 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     const replay = `${f.path("payer")}.replay`, evidence = `${f.path("payer")}.evidence`;
 
     // A venue view older than the last read's: the kept witnesses are past it, so the state is discarded and replayed.
-    f.view.at = early; f.counts.verified = 0;
+    // Nothing kept is used, answers included: the venue is asked for everything again.
+    f.view.at = early; f.counts.verified = 0; f.counts.asked = 0;
     const earlier = await f.payer.sync(second.served.package, f.signed);
+    expect(f.counts.asked).toBeGreaterThanOrEqual(3);
     // At that index the payment is not yet in history: its input shows reserved beside the two free notes.
     const free = second.view.holdings.map(h => h.cm);
     expect(holdings(earlier)).toEqual(first.view.holdings.map(h => [h.cm, h.value, free.includes(h.cm) ? "available" : "reserved"]));
@@ -193,6 +195,12 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     expect(holdings((await f.synced(f.payer, { full: true })).view)).toEqual(holdings(second.view));
     expect(f.counts.verified).toBe(0);
 
+    // An evidence file that is no database is never replaced by the wallet: the holder removes it.
+    f.payer.close(); writeFileSync(evidence, new Uint8Array(8192).fill(7));
+    f.payer = f.open("payer");
+    await expect(f.payer.sync(second.served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: "the wallet's evidence file cannot be read; remove it to sync again" });
+    await expect(f.payer.supply(async () => {})).rejects.toMatchObject({ code: "STORAGE" });
+
     // A lost evidence file loses its mark with it: the next sync asks from nothing.
     f.payer.close(); rmSync(evidence);
     f.payer = f.open("payer");
@@ -212,6 +220,18 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     await expect(f.payer.supply(async () => { throw new Error("transport failed"); })).rejects.toThrow("transport failed");
     expect((await f.payer.sync(served.package, f.signed)).holdings).toHaveLength(2);
     await expect(f.payer.supply(undefined as never)).rejects.toMatchObject({ code: "INVALID" });
+    // A venue of the same identity behind the kept answers (a replaced local venue): nothing kept answers for it.
+    // It holds no record, so the receiver's request is not fulfilled from what an earlier venue showed.
+    const invoice = f.receiver.request("invoice", f.backing, 1n);
+    await f.payer.prepare("shop", { request: invoice, value: 1n }, served.package, f.signed, prove);
+    await f.payer.submit("shop", f.service); await f.publish();
+    const paid = await f.receiver.supply(evidence => f.client.sync(f.backing, evidence));
+    expect((await f.receiver.sync(paid.package, f.signed)).holdings).toHaveLength(1);
+    f.receiver.close();
+    const behind = FixtureVenue.reference(label, lag, f.venue.witnessedIndex() - 1n);
+    const replaced = new V3Wallet(f.path("receiver"), { ...f.reader, venue: behind }); wallets.push(replaced);
+    await expect(replaced.fulfill("invoice", paid.package, f.signed)).rejects.toMatchObject({ code: "ABSENT" });
+    expect(replaced.fulfillment("invoice")).toBeUndefined();
     f.payer.exportBackup(b(9));
     await expect(f.payer.supply(async () => {})).rejects.toMatchObject({ code: "FENCED" });
     f.payer.close();
