@@ -418,7 +418,7 @@ export class ReplayStore {
    * once `every` records have replayed since the last, so a killed long read keeps its progress. */
   keepPoint(): void {
     const kept = this.#kept;
-    if (kept === undefined || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
+    if (kept === undefined || this.#lost || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
         this.#sinceKeep < (kept.every ?? KEEP_EVERY)) return;
     // The walk takes its write lock again at once, as openWalk took it: while it awaits a verifier or a venue
     // after the keep point, another store's walk is refused, not free to take the walk rows as a crashed read's.
@@ -428,8 +428,9 @@ export class ReplayStore {
     this.#db.exec("COMMIT");
     try { this.#recordDigest(); } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) this.#lost = true;
-        else throw error;
+        if (!(error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message))) throw error;
+        // Writes still in flight go into a transaction closeWalk rolls back, never into the file.
+        this.#lost = true; this.#db.exec("BEGIN");
       }
     }
     if (!this.#lost && this.#dataVersion() !== version) this.#lost = true;
@@ -805,6 +806,7 @@ export class ReplayStore {
     // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
     if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
+    this.#lost = false;
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");

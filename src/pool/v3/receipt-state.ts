@@ -57,7 +57,9 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     const snapshot = snapshotOf(entry.digest);
     if (snapshot === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const decoded = decodeSnapshot(snapshot);
-    requireReceipt(same(decoded.segment, receipt.segment) && same(decoded.backing, entry.name));
+    // A first snapshot of another backing authenticates nothing, as the checkpoint's judgment reads it.
+    if (!same(decoded.backing, entry.name)) throw new EvidenceRefusal("unresolved-evidence");
+    requireReceipt(same(decoded.segment, receipt.segment));
   }
   const contradictedAt: ReceiptFact[] = [];
   let opened = false, lastSegment = receipt.after, passedOver = 0n;
