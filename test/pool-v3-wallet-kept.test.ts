@@ -248,24 +248,30 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     } finally { keptStore.close(); evidence.close(); }
   }, 60_000);
 
-  it("refuses a second handle's read while the first handle's read holds the kept replay file, and fences the first", async () => {
+  it("fences a handle replaced during its read, whose kept replay file the newer handle cannot take from under it", async () => {
     const f = await fixture(2);
     const served = await f.payer.supply(evidence => f.client.sync(f.backing, evidence));
     let release!: () => void;
     f.gate.wait = new Promise<void>(done => { release = done; });
     // The first handle's first read stops at its first verification, its walk open on the kept replay file.
-    const reading = f.payer.sync(served.package, f.signed);
-    const outcome = reading.then(() => undefined, (error: unknown) => error);
+    const settled = <T>(promise: Promise<T>) => promise.then(value => ({ value }), (error: unknown) => ({ error }));
+    const older = settled(f.payer.sync(served.package, f.signed));
     while (f.counts.verified === 0) await new Promise(done => setImmediate(done));
-    // A newer handle owns the wallet from here; its read cannot take the file the older read holds.
-    const second = f.open("payer");
-    await expect(second.sync(served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: "another handle holds this wallet's kept replay file" });
+    // A newer handle owns the wallet from here, and reads while the older read still holds the file.
+    const second = f.open("payer"), newer = settled(second.sync(served.package, f.signed));
+    await new Promise(done => setTimeout(done, 50));
     delete f.gate.wait; release();
-    // The older read finishes in the kept files, which are any reader's own classes, and answers nothing.
-    expect(await outcome).toMatchObject({ code: "FENCED" });
+    // The older read finishes in a kept file, which holds any reader's own classes, and answers nothing.
+    expect(await older).toMatchObject({ error: { code: "FENCED" } });
     await expect(f.payer.sync(served.package, f.signed)).rejects.toMatchObject({ code: "FENCED" });
+    // Windows does not let the newer handle replace the file an open walk holds: its read refuses until the
+    // older handle closes. Elsewhere it replaces the file and replays into its own; the older read's kept
+    // state goes with the unlinked file (storage decision, M5b.5c.1 limits).
+    const outcome = await newer;
+    if (process.platform === "win32" || "error" in outcome) expect(outcome).toMatchObject({ error: { code: "STORAGE", message: "another handle holds this wallet's kept replay file" } });
+    else expect(outcome.value.holdings).toHaveLength(2);
     f.payer.close();
-    // With the file released, the newer handle reads what the older read kept: nothing is verified again.
+    // Either way the newer handle then reads kept state: nothing is verified again.
     f.counts.verified = 0;
     expect((await second.sync(served.package, f.signed)).holdings).toHaveLength(2);
     expect(f.counts.verified).toBe(0);
