@@ -1,6 +1,6 @@
 {
   "status": "passed",
-  "specification": "97ff964",
+  "specification": "8d48b25",
   "evidence": "local-runtime-real-proofs",
   "limits": [
     "candidate configuration only",
@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1291
+      "elapsedMs": 996
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1018
+      "elapsedMs": 755
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2619
+      "elapsedMs": 1941
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2610
+      "elapsedMs": 1936
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2596
+      "elapsedMs": 1927
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1404
+      "elapsedMs": 1078
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2587
+      "elapsedMs": 1994
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2586
+      "elapsedMs": 1941
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2588
+      "elapsedMs": 1933
     }
   ],
   "transactions": [],
@@ -78,13 +78,13 @@
     "position": "4",
     "adoptionIndex": "24",
     "spentRoot": "5f374bcb11033eb9d6497b5c89ab72fac42592b033d4e3ebe9804e5102bca7c0",
-    "history": "6394115ba52a6872238ae2355be2244c6421e8928971c3ef04982a08d5b22d7d",
+    "history": "e36aec04093dfdea7cf0c9895a323dfd09e73c7d58613a6837b384405184060f",
     "canonicalIndex": "25",
     "force": [
       {
         "index": "21",
         "kind": 4,
-        "sha256": "d458b3e01afca045f5cf9834840d96271fed2979800556d90a555bb46c2e496b"
+        "sha256": "af129e3682c50d4697f03f914b35951c7f8426eb3f4ef4cf1ecdd8b4838877b6"
       },
       {
         "index": "22",
@@ -94,12 +94,12 @@
       {
         "index": "23",
         "kind": 4,
-        "sha256": "c519e2a09f47d48c1191b36ddcc19ba27959bc910cf40513763fe263bd693791"
+        "sha256": "544b822f42c6c39277c2832779c841fe1669920322c8f7e302fc33930ecdbc89"
       },
       {
         "index": "24",
         "kind": 6,
-        "sha256": "e252d3f65e97cfc9a530d1f42587304dd61fec3961987b0761c7a3be64c1c30d"
+        "sha256": "cb0ac8502a4276bfcb2c3da635ca40bcaad8560c366ab112c0022ea099eb1946"
       }
     ],
     "clock": {
@@ -120,7 +120,7 @@
       "snapshotIndex": "24"
     }
   },
-  "elapsedMs": 35269,
+  "elapsedMs": 26763,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
@@ -149,17 +149,17 @@
     "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
     "dist/pool/v3/holdings.js": "ab32ac07c167a3a9a638b60e0ac1fc9fc54f9eb742b198f38723326a25f4373a",
     "dist/pool/v3/non-service.js": "d7497c5d4a2e43c1cd01440961d23a77b7851b982594553b9137f8c78f1e3bea",
-    "dist/pool/v3/package-reader.js": "a8d82d6fc2fc74e9d1a1908f385521200547b65ce79da16268ad961444a29143",
+    "dist/pool/v3/package-reader.js": "a312fcce9114e21f779e75e7eb99d3b16bfd87a9b57c9092649ed48730b750d8",
     "dist/pool/v3/package.js": "198b0665b94820324a131698b4c86ae4f6d7a1c8c3dbf28b7b5c849f682bd775",
     "dist/pool/v3/prover.js": "27ef13796b7cbf7c3612d4173e3c6b41eebc2d6deabf674d9b07398be5bafada",
-    "dist/pool/v3/reader.js": "36d72a89d2719084bf4e98b1b27de1e6ca4db17e0e140b250f84bba50d54851f",
+    "dist/pool/v3/reader.js": "7e09a5600050ef67657f236b3d8a246dd47d7ab131bfa488f4ab9c1d33a1c32a",
     "dist/pool/v3/receipt-state.js": "f8f576ce6b771eebc41ef587eb048c1b0c06a582f7c4a6a28278c95d23418ab6",
     "dist/pool/v3/records.js": "61be901b5a91950785c06f46679f90f689e5eea86d1a1450d3c3f5c36d17069b",
     "dist/pool/v3/recovery.js": "85c05c69336abc977f612c0664f1b6e0fb18be44bb62aba8191bc72ac3d6f603",
     "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
-    "dist/pool/v3/replay-store.js": "ad5c9b01ad8b9d9c9bdd98f6d0220a98ac7c7b4208677372cc5b2fd7523c34c8",
+    "dist/pool/v3/replay-store.js": "a47799014fd2c9f0d99e3a88e8d2e929bbddb50f3762db10f045873e5350e512",
     "dist/pool/v3/scope-evidence.js": "8e98a2d88d94f37bce9637e3b0483c0ac887d31e64f179b08c088e8cf5ab5b24",
-    "dist/pool/v3/scope-reader.js": "6968ebd6b0802d3cfe3c275d3430e0223bac5d90f774666ee708310af385567d",
+    "dist/pool/v3/scope-reader.js": "f66fa021f9c3165f4dd5b1cf954daa5bab1998b83631eb480fa49de2ce260312",
     "dist/pool/v3/state.js": "df07a9134854fc36bebb6c4b7b8945f9c429f4023a6337f8e061c99f6e437c82",
     "dist/pool/v3/store.js": "d0602049384d5e0816471cfc47075de7f950c04cbf913520c42e1dc029cc74e2",
     "dist/pool/v3/terms.js": "7a7c4432cb7b49b8e8e5018829567946b2c2aebaf9ca13c4f3f8cb79d0d547f5",
@@ -172,7 +172,7 @@
     "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/pool/fixtures.mjs": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
     "scripts/pool/prepare-crs.mjs": "a19e538feab20a58847c03f1f0bf42ec1182799cf8518e545d5336f5357a63ef",
-    "scripts/pool/v3/candidate-manifest.json": "221e0bd66d28c2ae6788dc29ac9357e9bee5c978121d357b938853fbc154e6de",
+    "scripts/pool/v3/candidate-manifest.json": "1ba730b84448b26e691486fa729e7d2e12004b42dc7374f1afea4c453bf1be19",
     "scripts/pool/v3/candidate.mjs": "51273e876c6fe3a6bb76d57e81e379cc82115f942802436ca81e71fd07b1a460",
     "scripts/pool/v3/circuits/burn.nr": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",
     "scripts/pool/v3/circuits/demand.nr": "b48f7f86c8ee80aa5fea7e6d2ea0b709d2a95f670b3473b2a1abc7a0afd5bf9e",
@@ -188,7 +188,7 @@
     "scripts/pool/v3/evidence-reader.mjs": "d36c7f99a1a4b6fff10f0217cbe0cbb0540561c3d9ab7c0ff221a99d470e0b09",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
     "scripts/pool/v3/local-replay.mjs": "e48ef370c82e65c7f2ab6cb081e45fd287405985980a33be4128071bcc7c5f94",
-    "scripts/pool/v3/provenance.mjs": "42e3665c2e11c7875ab1bddf242ef4aa5e87feb89be6448fe9232781524cb464",
+    "scripts/pool/v3/provenance.mjs": "644486c7e50582c328f66b9811f74a6916863331e120dff900e091d88166245a",
     "scripts/pool/v3/public-artifacts.mjs": "82feec1b0fd8c67c6eeae12e7e54c578ebf353133210225a8db281f3484122cf",
     "scripts/pool/v3/recovery-store-check.mjs": "bf238065e102f7d26adb9d51bb457b4c2cdb64acb26b89a11414a043fc435d7a",
     "scripts/pool/v3/recovery-testnet.mjs": "bd1ed52fff6ab8ac23c199b54264a827be41d79871f8b9b84b6d925aba22cfa6",
@@ -222,18 +222,18 @@
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
     "src/pool/v3/holdings.ts": "e131820bb33b9e316f705382c0c42167d6fef094d0251bd92b007ddfe0ca6591",
     "src/pool/v3/non-service.ts": "6572a0d87bcb20e93f95594238173d2252b1255bddd647537df5ca524575a95e",
-    "src/pool/v3/package-reader.ts": "0f466b4929c9fbe300c27d7dcc8c30eba025d6fbf08c751816aec299aac3ff84",
+    "src/pool/v3/package-reader.ts": "89a6394074b5964f4d222aca775e4a42b6ff5412614a3182d7950f97d439250e",
     "src/pool/v3/package.ts": "d007bd04dfc0f1b27b500d19eca172f3228b186bb04145603b69bc519acb4dca",
     "src/pool/v3/prover.ts": "b9be116d0f72994a3c0fd82ba01d836043520f3b433348b7863ffca5a59e9138",
-    "src/pool/v3/reader.ts": "f061d12e92f78205d8a5bb479257638bbfbbdb176f2450ce6919490aa4131c1d",
+    "src/pool/v3/reader.ts": "67e756b46b71601aa279d44f14b87950494d5106f41664c271fc727115df79f8",
     "src/pool/v3/receipt-state.ts": "7b1a4913d83fbbffa00e6c2ba55bb7e3bd4158ed869e27f9ceebd798fc1ff7af",
     "src/pool/v3/records.ts": "5cb68ec45d9babeb147ea60b592470fac5d08096df137993257b933718ac36f6",
     "src/pool/v3/recovery.ts": "6a351c42dd6a7f10337bd557f372d69fc5bdc4c114bf43081893dbf175f8b80d",
     "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
-    "src/pool/v3/replay-store.ts": "83a18ea13a4173d354bd81cb7319f4bf203d76b128cb24da7c61fb15c665217c",
+    "src/pool/v3/replay-store.ts": "7ef675ee672da5e98ffeca38c10dfe3058811d81127b82bc948de00319a1f5be",
     "src/pool/v3/scope-evidence.ts": "712b3a5959d12dee42f985cebf2ccdb828a1d0bfba89b3e014e075dc01f6627d",
-    "src/pool/v3/scope-reader.ts": "392dd548b5511e2b119da83ac95b227d410914624ae1fdc80b53bc1ffe59bd6e",
-    "src/pool/v3/state.ts": "887f391307b4396edc36a8234c2f4aaaf7ee31466ab2d27f1cefbca7f036fee5",
+    "src/pool/v3/scope-reader.ts": "65c452960168e8a0f1cd9fa51188467e5d2ae999c4db91bf6bbfbe9443553fec",
+    "src/pool/v3/state.ts": "d44b2341fc52a0cbd29d198caa85c5058a4dc49a39fe0f99018fe472fae6f813",
     "src/pool/v3/store.ts": "ed6aadf8a475481fd50996647de2448303ba434eec4affcefde3b240473bbfe0",
     "src/pool/v3/terms.ts": "d70b26e03d11e303f88b6a19d396cea01cb74275891b8fe898d195b35faeff04",
     "src/pool/v3/trail.ts": "b385ffe81a97840196098e3480826685fb4a45925b7f3f1ecd8fed8a39e6f037",
