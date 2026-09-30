@@ -6,7 +6,7 @@
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs baseline <events> [--proof <bytes>]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs stored <events> [options]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--silence] [--proof <bytes>] [--dir <directory>]
-//     [--kept <events>]
+//     [--kept <events>] [--real <directory> [--instances <k>] [--in-turn]]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs journal <events> [--every <events>] [--proof <bytes>] [--dir <directory>]
 //     [--audit] [--serve [--more <events>] [--sample-mib <n>]] [--wallet [--more <events>]]
 // journal (M5b.5a): the operator journal (V3OperatorJournal) admitting <events> statements in its own database,
@@ -21,6 +21,10 @@
 //   --kept <more> (M5b.4b): the replay file is kept with its digest; the reader then reopens it (the
 //   digest check), fetches the trail's head and <more> new records after its checkpoint, and reads a
 //   package carrying only the new checkpoint's objects.
+//   --real <directory> (M5b.6): each stand-in proof check verifies a real proof instead, cycling through
+//   <directory>/proofs.bin with the circuits compiled in <directory>, on the runtime verifier's own
+//   <k> instances (default 1), which the reader verifies ahead on unless --in-turn. The first sync's
+//   real verification load and whole-process memory, not the records' own proofs.
 // stored options:
 //   --proof <bytes>        stand-in record size is proof + 900 bytes (default 32)
 //   --checkpoint <events>  events per savepoint (default 64)
@@ -62,6 +66,10 @@ import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
 import { createV3Service } from "../../../dist/pool/v3/service-http.js";
 import { V3OperatorJournal } from "../../../dist/pool/v3/store.js";
 import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
+import { proofVerifier, startBackend } from "../../../dist/pool/proof-verifier.js";
+import { POOL_V3_CIRCUITS } from "../../../dist/pool/v3/prover.js";
+import { deserialize } from "node:v8";
+import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 
 const [mode, countText, ...rest] = process.argv.slice(2);
 const option = (name, fallback) => { const i = rest.indexOf(name); return i < 0 ? fallback : rest[i + 1]; };
@@ -626,13 +634,24 @@ if (mode === "baseline") {
     }
   }
   let verified = 0, importMs = 0;
+  // --real: the runtime verifier over compiled circuits and real proofs, each call verifying the next one.
+  const REAL = option("--real", undefined), INSTANCES = Number(option("--instances", "1")), IN_TURN = rest.includes("--in-turn");
+  let real, realApi;
+  if (REAL !== undefined) {
+    const programs = Object.fromEntries(RELATIONS.map(name => [name, JSON.parse(readFileSync(join(REAL, `${name}.json`), "utf8"))]));
+    const proofs = deserialize(readFileSync(join(REAL, "proofs.bin")));
+    realApi = await startBackend(await readParameters(PARAMETER_DIRECTORY));
+    const pool = await proofVerifier(realApi, POOL_V3_CIRCUITS, programs, { instances: INSTANCES });
+    let next = 0;
+    real = { pool, verify: async () => { const p = proofs[next++ % proofs.length]; assert.equal(await pool.verify(p.kind, p.inputs, p.proof), true); return true; } };
+  }
   const readStart = performance.now();
   const reader = { verify: () => {
     // The first proof is checked once the walk has classified its way to the first record.
     if (verified === 0) { importMs = performance.now() - readStart; at(replaySamples, { events: 0 }); }
     if (++verified % SAMPLE === 0) at(replaySamples, { events: verified });
-    return true;
-  } };
+    return real === undefined ? true : real.verify();
+  }, ...(real === undefined || IN_TURN ? {} : { parallel: INSTANCES }) };
   // A kept file names its verifier by circuit identities (§14).
   if (MORE !== undefined) reader.identities = configuration.circuits;
   const evidence = new EvidenceStore(evidenceFile), store = MORE === undefined ? new ReplayStore(stateFile) : new ReplayStore(stateFile, { digest: digestFile });
@@ -640,13 +659,15 @@ if (mode === "baseline") {
     root: commitment.root, judgingIndex: venue.witnessedIndex() }, { configuration, verifier: reader, venue, reference: { context: LOCAL_REFERENCE, label, lag },
     store, evidence });
   const readMs = performance.now() - readStart;
+  if (real !== undefined) { await real.pool.close(); await realApi.destroy(); }
   assert.equal(result.state.position, BigInt(N));
   assert.deepEqual(Buffer.from(result.state.history), Buffer.from(snapshot.historyHash));
   const stateBytes = statSync(stateFile).size, evidenceBytes = statSync(evidenceFile).size;
   evidence.close(); store.close();
   const slope = (rows, key, x) => { const first = rows[1] ?? rows[0], last = rows.at(-1);
     return Math.round((last[key] - first[key]) * 1048576 / (last[x] - first[x])); };
-  console.log(JSON.stringify({ mode, events: N, checkpoints: C, silence: rest.includes("--silence"), proofBytes: PROOF, recordBytes: Math.round(recordBytes / N), packageMiB: mib(packageBytes),
+  console.log(JSON.stringify({ mode, events: N, checkpoints: C, silence: rest.includes("--silence"), proofBytes: PROOF,
+    verification: REAL === undefined ? "stub" : { instances: INSTANCES, ahead: !IN_TURN }, recordBytes: Math.round(recordBytes / N), packageMiB: mib(packageBytes),
     generateMsPerEvent: +(generateMs / N).toFixed(2), importSeconds: +(importMs / 1000).toFixed(1),
     replayMsPerEvent: +((readMs - importMs) / N).toFixed(2), evidenceMiB: mib(evidenceBytes), stateMiB: mib(stateBytes),
     importHeapBytesPerMiB: slope(importSamples, "heapMiB", "copiedMiB"), importRssBytesPerMiB: slope(importSamples, "rssMiB", "copiedMiB"),
@@ -694,5 +715,6 @@ if (mode === "baseline") {
       openSeconds: +(openMs / 1000).toFixed(2), fetchedMiB: mib(fetched.length), packageBytes: minimal.length, assembleSeconds: +(fetchMs / 1000).toFixed(2),
       secondReadSeconds: +(secondMs / 1000).toFixed(2), secondChecks: checks, node: process.version }, null, 1));
   }
+  if (MORE === undefined) operatorStore.close();
   for (const f of files) for (const s of ["", "-journal"]) rmSync(f + s, { force: true });
 }
