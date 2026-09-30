@@ -5,9 +5,9 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
 import { encodeReceipt, receiptBytes } from "../src/pool/v3/commitments.js";
 import { encodeRecord } from "../src/pool/v3/records.js";
-import { V3_SERVICE_PROFILE } from "../src/pool/v3/service-wire.js";
 import { signCommitment } from "../src/venue-records.js";
-import type { V3OperatorJournal } from "../src/pool/v3/store.js";
+import { readServed, V3_SERVICE_PROFILE } from "../src/pool/v3/service-wire.js";
+import type { ServedEvidence, V3OperatorJournal } from "../src/pool/v3/store.js";
 
 // Mock only the journal boundary. Process acceptance covers actual persistence.
 const TOKEN = "11".repeat(32), ADMIN = "22".repeat(32);
@@ -38,12 +38,14 @@ describe("v3 service HTTP trust boundary", () => {
     const commitment = signCommitment(secret, 2n, b(9));
     const journal = { configurationDomain: domain.slice(), submit: vi.fn(async (_bytes: Uint8Array) => receipt.slice()),
       commit: vi.fn(async (_id: string) => commitment), publish: vi.fn(async () => commitment),
-      package: vi.fn(async () => ({ selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12) })) };
+      serve: vi.fn(async (_backing: Uint8Array, _after: bigint): Promise<ServedEvidence> => ({
+        selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12),
+        parts: [{ package: b(13) }, { trail: { size: 200_000n, chunks: [new Uint8Array(200_000).fill(7)] } }] })) };
     const server = createV3Service(journal as unknown as V3OperatorJournal, { walletToken: TOKEN, adminToken: ADMIN });
     servers.push(server);
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
-    return { journal, url };
+    return { journal, url, server };
   }
   async function raw(url: string, body: unknown, token = TOKEN, headers: Record<string, string> = {}) {
     const response = await fetch(new URL("/commands", url), { method: "POST", headers: {
@@ -53,7 +55,7 @@ describe("v3 service HTTP trust boundary", () => {
     return { status: response.status, body: await response.json() };
   }
 
-  it("authorizes wallet submit/package and reserves commit/publish for the admin credential", async () => {
+  it("authorizes wallet submit/evidence and reserves commit/publish for the admin credential", async () => {
     const f = await fixture(), submission = command({ kind: "submit", record: bytesToHex(record()) });
     expect((await raw(f.url, submission)).status).toBe(200);
     expect(f.journal.submit).toHaveBeenCalledExactlyOnceWith(record());
@@ -62,18 +64,59 @@ describe("v3 service HTTP trust boundary", () => {
     expect(f.journal.commit).not.toHaveBeenCalled(); expect(f.journal.publish).not.toHaveBeenCalled();
     expect((await raw(f.url, command({ kind: "commit", id: "checkpoint" }), ADMIN)).status).toBe(200);
     expect((await raw(f.url, command({ kind: "publish" }), ADMIN)).status).toBe(200);
-    const response = await fetch(new URL("/package", f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
+    // Evidence is a byte stream of the journal's parts, for the backing and after the sequence the reader names.
+    const evidence = (query: string, token = TOKEN) => fetch(new URL(`/evidence${query}`, f.url), { headers: { authorization: `Bearer ${token}` } });
+    const response = await evidence(`?backing=${"0b".repeat(32)}&after=18446744073709551615`);
     expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toBe("no-store");
-    await response.arrayBuffer(); expect(f.journal.package).toHaveBeenCalledExactlyOnceWith(undefined);
-    // A multi-backing scope serves the holder's backing by name; any other query is not a route.
-    const named = await fetch(new URL(`/package?backing=${"0b".repeat(32)}`, f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
-    expect(named.status).toBe(200); await named.arrayBuffer();
-    expect(f.journal.package).toHaveBeenLastCalledWith(b(11));
-    for (const query of ["?backing=0B", `?backing=${"0b".repeat(31)}`, `?backing=${"0b".repeat(32)}&x=1`, "?other=1"]) {
-      const refused = await fetch(new URL(`/package${query}`, f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
-      expect(refused.status).toBe(404); await refused.arrayBuffer();
+    expect(response.headers.get("content-type")).toBe("application/octet-stream");
+    const read = await readServed(response.body as unknown as AsyncIterable<Uint8Array>, async (_, parts) => {
+      const sizes: number[] = [];
+      for await (const part of parts) {
+        if ("package" in part) { sizes.push(part.package.length); continue; }
+        let size = 0; for await (const chunk of part.trail.chunks) size += chunk.length;
+        sizes.push(size);
+      }
+      return sizes;
+    });
+    expect(read.served).toEqual({ selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12) });
+    expect(read.taken).toEqual([32, 200_000]);
+    expect(f.journal.serve).toHaveBeenCalledExactlyOnceWith(b(11), 18446744073709551615n);
+    // Any other query is not a route; a sequence past u64 is invalid.
+    for (const query of ["", "?backing=0B&after=0", `?backing=${"0b".repeat(31)}&after=0`, `?backing=${"0b".repeat(32)}`,
+      `?backing=${"0b".repeat(32)}&after=01`, `?backing=${"0b".repeat(32)}&after=0&x=1`, `?after=0&backing=${"0b".repeat(32)}`]) {
+      const refused = await evidence(query);
+      expect(refused.status, query).toBe(404); await refused.arrayBuffer();
     }
-    expect(f.journal.package).toHaveBeenCalledTimes(2);
+    const past = await evidence(`?backing=${"0b".repeat(32)}&after=18446744073709551616`);
+    expect([past.status, await past.json()]).toEqual([400, { code: "INVALID" }]);
+    const old = await fetch(new URL("/package", f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
+    expect(old.status).toBe(404); await old.arrayBuffer();
+    expect(f.journal.serve).toHaveBeenCalledTimes(1);
+    // A refusal before the stream is a JSON reply; a failure within it ends the connection short of the end mark.
+    f.journal.serve.mockRejectedValueOnce(new V3StoreError("STALE", "nothing published"));
+    const stale = await evidence(`?backing=${"0b".repeat(32)}&after=0`);
+    expect([stale.status, await stale.json()]).toEqual([409, { code: "STALE" }]);
+    f.journal.serve.mockResolvedValueOnce({ selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12),
+      parts: (function* () { yield { package: b(13) }; throw new V3StoreError("STORAGE", "rows do not read back"); })() });
+    // The peer sees no complete stream: the connection fails, or the parts end before the end mark. The owner is told why.
+    const told: unknown[] = []; f.server.on("evidenceError", error => told.push(error));
+    await expect((async () => {
+      const broken = await evidence(`?backing=${"0b".repeat(32)}&after=0`);
+      await readServed(broken.body as unknown as AsyncIterable<Uint8Array>, async (_, parts) => { for await (const _part of parts); });
+    })()).rejects.toThrow(/truncated served evidence|fetch failed|terminated/);
+    expect(told).toEqual([new V3StoreError("STORAGE", "rows do not read back")]);
+    // Eight streams at once leave the other connections for commands: a ninth is refused while they last.
+    const release: (() => void)[] = [];
+    f.journal.serve.mockImplementation(() => new Promise((_, refuse) => { release.push(() => refuse(new V3StoreError("UNAVAILABLE", "released"))); }));
+    const held = Array.from({ length: 8 }, () => evidence(`?backing=${"0b".repeat(32)}&after=0`));
+    await vi.waitFor(() => expect(release).toHaveLength(8));
+    const ninth = await evidence(`?backing=${"0b".repeat(32)}&after=0`);
+    expect([ninth.status, await ninth.json()]).toEqual([409, { code: "BUSY" }]);
+    expect((await raw(f.url, command({ kind: "publish" }), ADMIN)).status).toBe(200);
+    for (const free of release) free();
+    for (const response of await Promise.all(held)) expect([response.status, await response.json()]).toEqual([503, { code: "UNAVAILABLE" }]);
+    f.journal.serve.mockRejectedValueOnce(new V3StoreError("STALE", "nothing published"));
+    expect((await evidence(`?backing=${"0b".repeat(32)}&after=0`)).status).toBe(409);
   });
 
   it("rejects wrong and duplicate authorization before invoking the journal", async () => {

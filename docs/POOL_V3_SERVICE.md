@@ -9,7 +9,7 @@ reference service, with no public deployment or production configuration claim.
 `createV3Service(journal, { walletToken, adminToken })` requires distinct random
 32-byte credentials encoded as lowercase hex. Exactly one `Authorization:
 Bearer …` header is required. The wallet credential permits submission and
-package retrieval; the admin credential additionally permits commit and publish.
+evidence retrieval; the admin credential additionally permits commit and publish.
 Credentials grant local operations, never protocol authorization or finality.
 
 | Endpoint | Request | Reply |
@@ -17,9 +17,9 @@ Credentials grant local operations, never protocol authorization or finality.
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "submit", record }` | `kind: "accepted"`, exact signed receipt |
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "commit", id }` | `kind: "committed"`, signed commitment |
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "publish" }` | `kind: "published"`, signed commitment |
-| `GET /package` | Optional `?backing=` with 64 lowercase hex digits naming a backing the served commitment carries (default: the scope's first) | `kind: "package"`, selection metadata naming that backing and evidence bytes |
+| `GET /evidence` | `?backing=` with 64 lowercase hex digits naming a backing the served commitment carries, then `&after=` with the decimal sequence the reader's evidence was served through (0 for none) | a byte stream: selection metadata naming that backing, the read's own package, then the evidence parts served after that sequence |
 
-Every successful reply also carries version 1 and the same profile. Byte fields
+Every successful command reply also carries version 1 and the same profile. Byte fields
 are lowercase hex. Commit identifiers match `[A-Za-z0-9._:-]{1,128}`. Records
 retain their canonical v3 encoding; segment-free kind-7 requests are not segment
 admissions. Unexpected fields, malformed UTF-8, compressed bodies and oversized
@@ -45,30 +45,70 @@ Both client methods authenticate the expected operator's commitment signature;
 neither establishes witnessing, inclusion or current spendability. Commit IDs
 are local journal keys, not fields in the signed commitment.
 
-`package(backing)` checks framing and pinned context, then returns untrusted
-bytes and metadata. It exposes the journal's published package and excludes
-its unpublished tail. The receiver calls `V3Wallet.fulfill` with the
-bytes and independently held signed root terms, configuration, verifier and
-venue. The venue supplies the judging index and complete range answers. Server
-metadata cannot select those inputs. Missing or changed evidence refuses
-fulfillment, and receipts alone cannot fulfill a request. See the
-[receiver obligations](POOL_V3_WALLET.md) and
+`sync(backing, evidence)` brings the party's own `EvidenceStore` up to the
+journal's latest published commitment
+([pool-v3 §14, incremental retrieval](https://github.com/mediumofexchange/money-from-first-principles/blob/8d48b25/pool-v3.md#14-replay-retention-and-resource-bounds)).
+The store records the sequence this service's evidence was kept through, and
+the request names it. The journal then serves, from its rows:
+- the directory and snapshots of each checkpoint signed after that sequence,
+  and what an opening in that range took, in whole §12 packages of about 1 MiB;
+- for each segment those snapshots name, its trail as §10's head and the
+  records after the position its checkpoints through that sequence reached.
+  A segment new to the reader is served whole, and a trail already served that
+  far is left out.
+
+The client checks the pinned context and that the read's own package carries
+the named commitment under the expected operator's signature, so a sequence
+it records is one that operator signed. It keeps each part as it arrives.
+A stated position authenticates nothing: the store looks it up in its own
+rows and continues its own evidence recurrence. Where the parts do not
+assemble over what the store holds, the client fetches everything once more
+from nothing. `{ full: true }` asks for that outright, which a reader uses
+when a read over its kept evidence is unresolved: a resupplied copy replaces
+an object that storage damaged. The result is the selection and the read's
+own package (the configuration and the selected commitment), to pass to
+`readPackage` with that store.
+
+`package(backing)` collects the same stream, served from nothing, into one
+§12 package held in memory. It is for a caller that reads a whole package,
+as `V3Wallet` does until it syncs from retained evidence
+([M5b.5c](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+Both methods return untrusted bytes and metadata. They expose the journal's
+published state and exclude its unpublished tail. The receiver calls
+`V3Wallet.fulfill` with the bytes and independently held signed root terms,
+configuration, verifier and venue. The venue supplies the judging index and
+complete range answers. Server metadata cannot select those inputs. Missing or
+changed evidence refuses fulfillment, and receipts alone cannot fulfill a
+request. See the [receiver obligations](POOL_V3_WALLET.md) and
 [package rule](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#12-evidence-packages-and-dependency-retention).
 
 ## Bounds and interrupted operations
 
-Request envelopes are capped at 300,000 bytes, command replies at 4,096 bytes,
-and package replies at 2,100,000 bytes for up to 1 MiB of binary evidence.
-Headers are capped at 8,192 bytes and 32 fields; connections at 16. Hex transport
-roughly doubles evidence bytes and buffers a complete package. These are local
-limits, not a streaming or lifetime scalability claim. The journal itself
-admits, signs and assembles a package of any size from its rows; a package
-past the reply cap is refused by this transport until it serves incrementally
-([storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points), M5b.5).
+Request envelopes are capped at 300,000 bytes and command replies at 4,096
+bytes. Headers are capped at 8,192 bytes and 32 fields; connections at 16.
+Served evidence is a binary stream with no total cap, since a history has no
+size to cap (§14): one package part is at most 4 MiB, a trail is bounded per
+record, and the journal holds one part or one record in memory at a time
+([probe](POOL_DEPLOYMENT_PROBES.md#serving-by-stream-and-incrementally-m5b5b2)).
+The client bounds one response by the caller's byte budget (64 GiB by default
+for `sync`, 256 MiB for `package`), and the evidence store's own quota
+bounds the parts of one sync together. These are local limits, not protocol
+bounds.
 
-The client aborts after ten seconds. The server closes a pending response after
-fifteen seconds measured from the request callback, after headers arrive; Node's
-header/request receive timeouts apply separately. Losing a response does not
+The client aborts a command after ten seconds, and a served stream ten seconds
+after its last chunk. The server closes a pending command response after
+fifteen seconds measured from the request callback, after headers arrive. A
+served stream is closed fifteen seconds after its last write, or once its peer
+has taken less than 64 KB per second beyond the first fifteen seconds. At most
+eight streams are served at once (`BUSY` otherwise), so slow readers leave
+connections for commands. Node's header/request receive timeouts apply
+separately. Serving holds no journal
+operation: its rows are never changed, so commands run while a stream is read.
+A stream that fails after its headers ends short of its end mark, which the
+client refuses; the server emits `evidenceError` with the cause. A trail's
+first record is preceded by one walk over its kept links, about 7.5 µs per
+record served, during which the process answers nothing else. `sync` takes no
+overall deadline or abort signal yet. Losing a response does not
 cancel or roll back journal work. Recover an uncertain submit or commit by its
 exact saved statement or command ID. Reopening the journal fences older owners
 and reads its state from rows without verifying a proof again; it refuses
@@ -80,13 +120,18 @@ Operation failures expose bounded codes rather than internal error text.
 The three `test/pool-v3-service-*.test.ts` files cover strict framing, roles,
 duplicate authorization, signed reply/context binding, changed-proof retries,
 mutation isolation, wrong context, transport limits and stalled client response.
+`test/pool-v3-store.test.ts` runs the journal behind this service: a second
+sync fetches only the new checkpoint's objects and the records after the
+first, a read over the kept evidence equals a read of the whole package, and
+a store that lacks what its recorded sequence implies is served again.
 The server timeout followed by eventual journal completion has source review,
 but no direct timed acceptance case.
 
 `npm run check:pool:v3-service` runs separate server/receiver processes. It drops
 a completed commit reply, retries exact signed bytes, restarts service, fences
 the old owner and fulfills from a downloaded package against an independently
-restored fixture venue. Withheld/altered evidence cannot fulfill; unpublished
+restored fixture venue. The receiver also keeps an evidence file across its
+processes and syncs it after each publication. Withheld/altered evidence cannot fulfill; unpublished
 records stay excluded. Proofs are synthetic in this process test.
 
 The real-proof `scripts/pool/v3/store-check.mjs` also submits issue, four-output

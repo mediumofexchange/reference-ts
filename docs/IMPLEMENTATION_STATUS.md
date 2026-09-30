@@ -294,7 +294,10 @@ with the value before it, so replay reads one record at a time. A party's file
 retains directories, snapshots and trails across reads, each checked by its
 hash or chain step on use, so a later package carries only new objects and a
 later trail is assembled from its head and the records after the reader's
-checkpoint ([§14](https://github.com/mediumofexchange/money-from-first-principles/blob/8d48b25/pool-v3.md#14-replay-retention-and-resource-bounds));
+checkpoint ([§14](https://github.com/mediumofexchange/money-from-first-principles/blob/8d48b25/pool-v3.md#14-replay-retention-and-resource-bounds)).
+The operator journal serves that way, by parts read from its rows, and the
+local service streams them ([service guide](POOL_V3_SERVICE.md)); the wallet
+still reads whole packages. In a package,
 the configuration, selected commitment, faults and receipt stay one read's own.
 A kind the reader does not read refuses the import at its header; every item's
 row counts against the party's quota; a directory that does not decode is

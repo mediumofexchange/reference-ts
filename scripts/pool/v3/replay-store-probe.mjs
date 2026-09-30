@@ -8,8 +8,11 @@
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--silence] [--proof <bytes>] [--dir <directory>]
 //     [--kept <events>]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs journal <events> [--every <events>] [--proof <bytes>] [--dir <directory>]
+//     [--audit] [--serve [--more <events>] [--sample-mib <n>]]
 // journal (M5b.5a): the operator journal (V3OperatorJournal) admitting <events> statements in its own database,
 //   one synced transaction each, with a published checkpoint every --every; then reopened, audited and served.
+//   --serve (M5b.5b.2): the journal then serves its history over HTTP, by stream, into a reader's evidence
+//   file, admits --more statements under a new checkpoint, and serves a second sync of only those.
 // baseline: the runtime state machine (dist state.ts) over synthetic records, stub verifier.
 // read (M5b.3 acceptance): the runtime reader (readPackage) streaming a package file of one
 //   segment's <events> statements into its own evidence and replay files, stub verifier.
@@ -47,12 +50,14 @@ import { ReplayStore } from "../../../dist/pool/v3/replay-store.js";
 import { V3_PACKAGE_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE, V3_TRAIL_CONTEXT } from "../../../dist/contexts.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
 import { directoryRoot, encodeCommitment, signCommitment } from "../../../dist/venue-records.js";
-import { snapshotBytes, snapshotDigest } from "../../../dist/pool/v3/commitments.js";
+import { decodeSnapshot, snapshotBytes, snapshotDigest } from "../../../dist/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS } from "../../../dist/pool/v3/configuration.js";
 import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
-import { encodeEvidenceDirectory, encodeEvidencePackage } from "../../../dist/pool/v3/package.js";
+import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { rootTermsSignatureMessage } from "../../../dist/pool/v3/terms.js";
+import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
+import { createV3Service } from "../../../dist/pool/v3/service-http.js";
 import { V3OperatorJournal } from "../../../dist/pool/v3/store.js";
 
 const [mode, countText, ...rest] = process.argv.slice(2);
@@ -388,6 +393,11 @@ if (mode === "baseline") {
   const verifier = { identities: configuration.circuits, verify: () => { verified++; return true; } };
   const open = () => new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier });
   const EVERY = Number(option("--every", String(Math.max(1, Math.floor(N / 10)))));
+  const spend = () => {
+    const nfs = [fieldOf(), fieldOf()], outs = [fieldOf(), fieldOf(), fieldOf(), fieldOf()], caps = outs.map(capsule);
+    return { domain, kind: 2, publicInputs: [...prefix, EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, ...nfs, ...outs, ...digest(outs, caps)],
+      proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(), capsules: caps };
+  };
   let journal = open(), checkpoints = 1;
   await journal.open("genesis", signedTerms); await journal.publish();
   const start = performance.now(); let recordBytes = 0, last = start;
@@ -398,11 +408,7 @@ if (mode === "baseline") {
       record = { domain, kind: 1, publicInputs: [...prefix, ...limbsOf(backing), 1000n, cm, ...digest([cm], caps)],
         proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(64), capsules: caps };
       record.authorization = ed25519.sign(statementBytes(record), issuerSecret);
-    } else {
-      const nfs = [fieldOf(), fieldOf()], outs = [fieldOf(), fieldOf(), fieldOf(), fieldOf()], caps = outs.map(capsule);
-      record = { domain, kind: 2, publicInputs: [...prefix, EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, ...nfs, ...outs, ...digest(outs, caps)],
-        proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(), capsules: caps };
-    }
+    } else record = spend();
     const bytes = encodeRecord(record); recordBytes += bytes.length;
     await journal.submit(bytes);
     if ((i + 1) % EVERY === 0 || i + 1 === N) { await journal.commit(`c${++checkpoints}`); await journal.publish(); }
@@ -428,6 +434,47 @@ if (mode === "baseline") {
     result.auditMs = Math.round(performance.now() - auditStart); result.auditVerified = verified - admitted - reopenVerified;
     const serveStart = performance.now(), served = await journal.package();
     result.serveMs = Math.round(performance.now() - serveStart); result.packageMiB = mib(served.package.length);
+  }
+  if (rest.includes("--serve")) {
+    // M5b.5b.2: the journal serves its whole history over HTTP to a reader's evidence file, by stream; then
+    // --more statements and a checkpoint, and a second sync that fetches only them. Memory is sampled as the
+    // response is written: the journal's rows, the transport and the reader's import share this process.
+    const MORE = Number(option("--more", "100")), SERVE_SAMPLE = Number(option("--sample-mib", "8")) * 1048576, WALLET = "11".repeat(32), evidenceFile = join(dir, "reader-evidence.sqlite");
+    for (const suffix of ["", "-journal"]) if (existsSync(evidenceFile + suffix)) rmSync(evidenceFile + suffix);
+    const server = createV3Service(journal, { walletToken: WALLET, adminToken: "22".repeat(32) }), responses = [];
+    server.prependListener("request", (_request, response) => {
+      const entry = { bytes: 0 }, write = response.write.bind(response); responses.push(entry);
+      response.write = (chunk, ...args) => {
+        const before = entry.bytes; entry.bytes += chunk.length;
+        if (Math.floor(entry.bytes / SERVE_SAMPLE) > Math.floor(before / SERVE_SAMPLE)) sample(N, { servedMiB: mib(entry.bytes) });
+        return write(chunk, ...args);
+      };
+    });
+    await new Promise((done, failed) => server.listen(0, "127.0.0.1", done).once("error", failed));
+    const client = new V3ServiceClient(`http://127.0.0.1:${server.address().port}/`, WALLET, { domain, operator, reference });
+    const evidence = new EvidenceStore(evidenceFile), source = Buffer.concat([domain, venue.id, operator]);
+    sample(N, { servedMiB: 0 });
+    const before = samples.at(-1), firstStart = performance.now(), first = await client.sync(backing, evidence);
+    const firstMs = performance.now() - firstStart; sample(N, { servedMiB: mib(responses[0].bytes) });
+    const during = samples.slice(samples.indexOf(before));
+    assert.equal(evidence.suppliedThrough(source), first.selection.sequence);
+    let moreBytes = 0;
+    for (let i = 0; i < MORE; i++) { const bytes = encodeRecord(spend()); moreBytes += 4 + bytes.length; await journal.submit(bytes); }
+    await journal.commit(`c${++checkpoints}`); await journal.publish();
+    const secondStart = performance.now(), second = await client.sync(backing, evidence), secondMs = performance.now() - secondStart;
+    assert.equal(second.selection.sequence, first.selection.sequence + 1n);
+    // Nothing new: the selection and the read's own package.
+    await client.sync(backing, evidence);
+    // What the reader's file now holds is the journal's trail through the new checkpoint.
+    const [objects] = (await journal.serve(backing, first.selection.sequence)).parts;
+    const snapshot = decodeSnapshot(decodeEvidencePackage(objects.package).find(item => item.kind === 4).payload);
+    assert.equal(evidence.retained().trail(segment, snapshot.evidenceHash)?.length, BigInt(N + MORE));
+    evidence.close(); server.closeAllConnections(); await new Promise(done => server.close(done));
+    result.serve = { firstSyncMiB: mib(responses[0].bytes), firstSyncMs: Math.round(firstMs), mibPerSecond: +(responses[0].bytes / 1048576 / (firstMs / 1000)).toFixed(1),
+      heapMiBDuring: [Math.min(...during.map(s => s.heapMiB)), Math.max(...during.map(s => s.heapMiB))],
+      rssMiBDuring: [Math.min(...during.map(s => s.rssMiB)), Math.max(...during.map(s => s.rssMiB))],
+      more: MORE, newRecordBytes: moreBytes, secondSyncBytes: responses[1].bytes, secondSyncMs: Math.round(secondMs), idleSyncBytes: responses[2].bytes,
+      evidenceFileMiB: mib(statSync(evidenceFile).size) };
   }
   journal.close();
   console.log(JSON.stringify({ ...result, maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, samples }, null, 1));

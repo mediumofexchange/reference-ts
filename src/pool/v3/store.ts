@@ -34,6 +34,14 @@
 // the journal's own rows, trusted as the rest of its state is; `audit` reads
 // the venue again from its first index and compares.
 //
+// Evidence is served by parts, read from rows as a reader takes them (§14
+// incremental retrieval): the objects of each checkpoint signed after the
+// sequence the reader was served through, and each trail as its head and the
+// records after the position that sequence reached. Served rows are never
+// changed, so serving holds no operation and no transaction; memory holds one
+// part or one record at a time. A whole package is those parts served from
+// nothing, for a caller that holds one in memory.
+//
 // Candidate only: the configuration comes from the caller's manifest check
 // and the venue must be a reference venue (guard.ts). Time is the venue's
 // witnessed index. SQLite fences handles of this journal; it cannot fence
@@ -54,10 +62,10 @@ import { scopeSchedule } from "../schedule.js";
 import { decodeReceipt, decodeSnapshot, encodeReceipt, receiptBytes, receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt,
   type Snapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
-import { EvidenceStore, MAX_ITEM_BYTES, type EvidenceBatch } from "./evidence-store.js";
+import { EvidenceStore, MAX_ITEM_BYTES, trailPart, wholePackage, type EvidenceBatch, type EvidencePart, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { decodeSegmentHeader, segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
-import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "./package.js";
+import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError } from "./package.js";
 import { keptAnswers, keptStateHolds, storedTipHolds, type KeptAnswers, type SignedTerms } from "./reader.js";
 import { readFrontier, readPackage } from "./package-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
@@ -68,9 +76,12 @@ import { ReplayStore } from "./replay-store.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type Judged, type ProofCheck, type SegmentReplay,
   type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
-import { encodeTrail } from "./trail.js";
 
-const PROFILE = "pool-store/v3/2";
+const PROFILE = "pool-store/v3/3";
+/** What one served package part holds before it is sent: a bound on the memory serving takes, not on what is served. */
+const PART_ITEMS = 1024, PART_BYTES = 1_048_576;
+/** Signed rows read at a time while serving. */
+const SERVE_PAGE = 256n;
 const U64 = 1n << 64n;
 const SQLITE_LIMIT = (1n << 63n) - 1n;
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
@@ -204,6 +215,12 @@ export interface ServedPackage {
   };
   readonly package: Uint8Array;
 }
+/** Served evidence by parts (§14 incremental retrieval). `package` holds only the read's own items, the
+ * configuration and the selected commitment. `parts` hold every other object a reader of the selection needs
+ * that was not served through the sequence the reader named, and are read from rows as they are consumed. */
+export interface ServedEvidence extends ServedPackage {
+  readonly parts: Iterable<EvidencePart>;
+}
 
 export class V3OperatorJournal {
   private readonly db: DatabaseSync;
@@ -264,7 +281,8 @@ export class V3OperatorJournal {
         CREATE TABLE IF NOT EXISTS journal_signed (sequence INTEGER PRIMARY KEY CHECK(sequence>0), commitment BLOB NOT NULL,
         segment BLOB NOT NULL, length INTEGER NOT NULL, at TEXT NOT NULL, observed TEXT, published INTEGER NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS journal_receipt (statement BLOB PRIMARY KEY, receipt BLOB NOT NULL) STRICT, WITHOUT ROWID;
-        CREATE TABLE IF NOT EXISTS journal_taken (kind INTEGER NOT NULL, hash BLOB NOT NULL, PRIMARY KEY(kind, hash)) STRICT, WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS journal_signed_segment ON journal_signed(segment, sequence);
+        CREATE TABLE IF NOT EXISTS journal_taken (sequence INTEGER NOT NULL, kind INTEGER NOT NULL, hash BLOB NOT NULL, PRIMARY KEY(sequence, kind, hash)) STRICT, WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS journal_conflict (id INTEGER PRIMARY KEY CHECK(id=1), idx TEXT NOT NULL, record BLOB NOT NULL) STRICT;`);
       let meta = this.metadata();
       if (meta === undefined) {
@@ -618,7 +636,7 @@ export class V3OperatorJournal {
     // A journal with history reads its own checkpoints beside the public evidence: a taken term may follow,
     // or already hold, one of this key's (C2.7.1).
     if (target.taken.length > 0 && engine.last !== undefined) {
-      try { supplied.importBytes(this.assemble(engine.last)).release(); } catch (error) {
+      try { requireThat(await supplied.take(this.parts(engine.last, 0n)), "STORAGE", "the journal's own evidence does not read back"); } catch (error) {
         if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
         if (error instanceof PackageLimitError) unestablished(error);
         throw error;
@@ -1070,8 +1088,10 @@ export class V3OperatorJournal {
         const next = this.openSegment(engine, opened, plan.imported, at, observed);
         // What was taken joins the evidence the journal serves, with the opening it supports.
         if (plan.evidence !== undefined) this.evidence.importBytes(plan.evidence).release();
-        const taken = this.db.prepare("INSERT OR IGNORE INTO journal_taken VALUES(?,?)");
-        for (const [kind, hash] of plan.taken) taken.run(kind, hash);
+        // Each taken object is served from the opening that took it on. One taken again is named under the later
+        // opening too: that take may bring the trail or terms its first one lacked.
+        const taken = this.db.prepare("INSERT OR IGNORE INTO journal_taken VALUES(?,?,?)");
+        for (const [kind, hash] of plan.taken) taken.run(next.signed.commitment.sequence, kind, hash);
         this.append(engine, commandId, request, { kind: "rescope", take: texts, keep: names, evidence: named, at: at.toString(), observed },
           bytesToHex(encodeCommitment(next.signed.commitment)));
         return next;
@@ -1172,58 +1192,108 @@ export class V3OperatorJournal {
     });
   }
 
-  /**
-   * The served §12 package, assembled from rows: the configuration, `selected`,
-   * every directory and snapshot signed through it, what a takeover took, and
-   * for each segment those snapshots name one trail, through the furthest of
-   * them, whose prefixes serve each earlier checkpoint (§12.1). Held whole in
-   * memory; per-object budgets are the reader's (§14).
-   */
-  private assemble(selected: Signed): Uint8Array {
-    const items = new Map<string, EvidenceItem>(), tops = new Map<string, { segment: Uint8Array; evidence: Uint8Array; length: bigint }>();
-    const add = (kind: number, payload: Uint8Array): void => { items.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
-    // A snapshot names the furthest record of its segment that a reader of it needs.
-    const snapshot = (payload: Uint8Array): void => {
-      let named: Snapshot;
-      try { named = decodeSnapshot(payload); } catch (error) { if (error instanceof EncodingError) return; throw error; }
-      const length = this.retained.trail(named.segment, named.evidenceHash)?.length, top = tops.get(bytesToHex(named.segment));
-      if (length !== undefined && (top === undefined || top.length < length)) tops.set(bytesToHex(named.segment), { segment: named.segment, evidence: named.evidenceHash, length });
-    };
-    add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected.commitment));
-    for (const row of this.db.prepare("SELECT commitment FROM journal_signed WHERE sequence<=? ORDER BY sequence").all(selected.commitment.sequence)) {
-      const directory = this.retained.object(3, decodeCommitment(bytes(row.commitment)).root);
-      requireThat(directory !== undefined, "STORAGE", "a signed directory is missing");
-      add(3, directory);
-      for (const entry of decodeEvidenceDirectory(directory)) {
-        const payload = this.retained.snapshot(entry.digest);
-        requireThat(payload !== undefined, "STORAGE", "a signed snapshot is missing");
-        add(4, payload); snapshot(payload);
-      }
-    }
-    for (const row of this.db.prepare("SELECT kind,hash FROM journal_taken WHERE kind IN (3,4) ORDER BY kind,hash").all()) {
-      const kind = row.kind === 3n ? 3 : 4, payload = this.retained.object(kind, bytes(row.hash));
-      if (payload === undefined) continue;
-      add(kind, payload);
-      if (kind === 4) snapshot(payload);
-    }
-    for (const top of tops.values()) {
-      const trail = this.retained.trail(top.segment, top.evidence)!, count = decodeSegmentHeader(trail.header).entries.length;
-      // A scoped terms field the evidence does not hold is served empty: it names no backing, so it is no evidence (§12.1).
-      add(6, encodeTrail({ header: trail.header, records: [...trail.records()],
-        terms: Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }) }));
-    }
-    return encodeEvidencePackage([...items.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload))));
+  /** The furthest record of `segment` that this journal's own checkpoints through `sequence` name: what a
+   * reader served through that sequence holds of the segment's trail. */
+  private ownTop(segment: Uint8Array, sequence: bigint): TrailTip | undefined {
+    const row = this.db.prepare("SELECT * FROM journal_signed WHERE segment=? AND sequence<=? ORDER BY sequence DESC LIMIT 1").get(segment, sequence);
+    if (row === undefined) return undefined;
+    const signed = this.signedOf(row), snapshot = this.retained.snapshot(this.directoryOf(signed)[0]!.digest);
+    requireThat(snapshot !== undefined, "STORAGE", "a signed snapshot is missing");
+    return { segment, position: signed.length, evidence: decodeSnapshot(snapshot).evidenceHash };
   }
 
   /**
-   * The §12 package for the latest commitment published or held on the venue,
-   * with every checkpoint signed through it. Records admitted after it are not
-   * served, nor is a commitment still in the outbox. A held one counts even
-   * where a lost reply left its publication unrecorded. The selection names
-   * `backing` (by default the scope's first); a reader selects its own.
+   * What serves `selected` and was not served through sequence `after`, read from rows as it is consumed
+   * (§12.1, §14): each directory and snapshot signed after `after` through the selection, what an opening in
+   * that range took, and for each segment those snapshots name, one trail through the furthest of them, whose
+   * prefixes serve each earlier checkpoint. Objects go in whole §12 packages of bounded size. A trail goes as
+   * its head and the records after the furthest one this journal's checkpoints through `after` name, where
+   * the trail passes through it, else whole; a trail already served that far is left out. Memory holds one
+   * package part or one record at a time. Served rows are never changed, so no command waits for a reader.
    */
-  async package(backing?: Uint8Array): Promise<ServedPackage> {
+  private *parts(selected: Signed, after: bigint): Iterable<EvidencePart> {
+    try {
+      const through = selected.commitment.sequence, from = after < through ? after : through;
+      const tops = new Map<string, TrailTip>(), batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
+      let held = 0;
+      const add = (kind: number, payload: Uint8Array): void => {
+        const hash = sha256(payload), key = `${kind}:${bytesToHex(hash)}`;
+        if (!batch.has(key)) { batch.set(key, { kind, payload, hash }); held += payload.length; }
+      };
+      const full = (): boolean => batch.size >= PART_ITEMS || held >= PART_BYTES;
+      const packed = (): EvidencePart => {
+        const items = [...batch.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash));
+        batch.clear(); held = 0;
+        return { package: encodeEvidencePackage(items) };
+      };
+      // A snapshot names the furthest record of its segment that a reader of it needs.
+      const snapshot = (payload: Uint8Array): void => {
+        let named: Snapshot;
+        try { named = decodeSnapshot(payload); } catch (error) { if (error instanceof EncodingError) return; throw error; }
+        const key = bytesToHex(named.segment), top = tops.get(key);
+        if (top !== undefined && same(top.evidence, named.evidenceHash)) return;
+        const length = this.retained.trail(named.segment, named.evidenceHash)?.length;
+        if (length !== undefined && (top === undefined || top.position < length)) tops.set(key, { segment: named.segment, position: length, evidence: named.evidenceHash });
+      };
+      for (let cursor = from; cursor < through;) {
+        const rows = this.db.prepare("SELECT sequence,commitment FROM journal_signed WHERE sequence>? AND sequence<=? ORDER BY sequence LIMIT ?").all(cursor, through, SERVE_PAGE);
+        if (rows.length === 0) break;
+        for (const row of rows) {
+          const directory = this.retained.object(3, decodeCommitment(bytes(row.commitment)).root);
+          requireThat(directory !== undefined, "STORAGE", "a signed directory is missing");
+          add(3, directory);
+          for (const entry of decodeEvidenceDirectory(directory)) {
+            const payload = this.retained.snapshot(entry.digest);
+            requireThat(payload !== undefined, "STORAGE", "a signed snapshot is missing");
+            add(4, payload); snapshot(payload);
+            if (full()) yield packed();
+          }
+          cursor = row.sequence as bigint;
+        }
+      }
+      // What the openings in range took, in (sequence, kind, hash) order from a mark no row at `from` passes (kinds are below 9).
+      for (let mark: [bigint, bigint, Uint8Array] = [from, 9n, new Uint8Array()]; ;) {
+        const rows = this.db.prepare(`SELECT sequence,kind,hash FROM journal_taken WHERE (sequence,kind,hash)>(?,?,?) AND sequence<=? AND kind IN (3,4)
+          ORDER BY sequence,kind,hash LIMIT ?`).all(...mark, through, SERVE_PAGE);
+        if (rows.length === 0) break;
+        for (const row of rows) {
+          mark = [row.sequence as bigint, row.kind as bigint, bytes(row.hash)];
+          const kind = row.kind === 3n ? 3 : 4, payload = this.retained.object(kind, mark[2]);
+          if (payload === undefined) continue;
+          add(kind, payload);
+          if (kind === 4) snapshot(payload);
+          if (full()) yield packed();
+        }
+      }
+      if (batch.size > 0) yield packed();
+      for (const top of tops.values()) {
+        const trail = this.retained.trail(top.segment, top.evidence);
+        requireThat(trail !== undefined, "STORAGE", "a served trail is missing");
+        const base = from === 0n ? undefined : this.ownTop(top.segment, from);
+        // A reader served through `from` holds this top where its own trail passes through it.
+        if (base !== undefined && base.position >= top.position &&
+            this.retained.trail(base.segment, base.evidence)?.through(top.position, top.evidence) !== undefined) continue;
+        yield (base === undefined ? undefined : trailPart(trail, base)) ?? trailPart(trail)!;
+      }
+    } catch (error) {
+      if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
+      throw error;
+    }
+  }
+
+  /**
+   * The evidence for the latest commitment published or held on the venue, by parts (§14 incremental
+   * retrieval): the read's own §12 package (the configuration and that commitment), and every other object
+   * of every checkpoint signed through it that a reader served through sequence `after` does not hold yet
+   * (`parts`). Records admitted after the selection are not served, nor is a commitment still in the outbox.
+   * A held one counts even where a lost reply left its publication unrecorded. The selection names `backing`
+   * (by default the scope's first); a reader selects its own. `after` is the selection's sequence of an earlier
+   * call whose parts the reader kept; it authenticates nothing, and a reader that lacks what it implies asks
+   * again from 0. The parts are read after this call returns, while other commands run.
+   */
+  async serve(backing?: Uint8Array, after = 0n): Promise<ServedEvidence> {
     const named = backing === undefined ? undefined : copyBytes(backing);
+    requireThat(typeof after === "bigint" && after >= 0n && after < U64, "REFUSED", "the served sequence is not a u64", "SEQUENCE");
     return this.run(async engine => {
       const view = this.view(engine);
       let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
@@ -1238,14 +1308,21 @@ export class V3OperatorJournal {
       // The selection names `backing`, by default the scope's first; its directory must carry it.
       const name = named ?? directory[0]!.name;
       requireThat(directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
-      let served: Uint8Array;
-      try { served = this.assemble(signed); } catch (error) {
-        if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
-        throw error;
-      }
+      const own = encodeEvidencePackage([{ kind: 1, payload: configurationBytes(this.configuration) }, { kind: 2, payload: encodeCommitment(signed.commitment) }]);
       return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
-        operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) }, package: served };
+        operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) },
+        package: own, parts: this.parts(signed, after) };
     });
+  }
+
+  /** `serve` from nothing as one §12 package held in memory, for a caller that reads a whole package. */
+  async package(backing?: Uint8Array): Promise<ServedPackage> {
+    const served = await this.serve(backing);
+    try { return { selection: served.selection, package: await wholePackage(served.package, served.parts) }; } catch (error) {
+      // A trail's records are checked as they are read, after its part is handed over.
+      if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
+      throw error;
+    }
   }
 
   /**

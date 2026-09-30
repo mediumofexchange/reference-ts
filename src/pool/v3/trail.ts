@@ -179,16 +179,27 @@ function requireTrail(input: ServedTrail, budgetIn?: TrailLimits): { size: numbe
     trail: Object.freeze({ header, terms: Object.freeze(terms), records: Object.freeze(records) }) };
 }
 
-export function encodeTrail(input: ServedTrail, budget?: TrailLimits): Uint8Array {
-  const { size, trail } = requireTrail(input, budget);
+/** A §10 frame's head: the context, the header, each scoped terms field and the event count. The records
+ * follow it, each behind its u32 length. Its fields are the caller's own, already checked. */
+export function trailHead(header: Uint8Array, terms: ServedTrail["terms"], events: bigint): Uint8Array {
+  const size = CONTEXT.length + 4 + header.length + terms.reduce((sum, term) => sum + 68 + term.terms.length, 0) + 8;
   const out = new Uint8Array(size), view = new DataView(out.buffer);
   let offset = 0;
   const put = (value: Uint8Array): void => { out.set(value, offset); offset += value.length; };
   const field = (value: Uint8Array): void => { view.setUint32(offset, value.length, false); offset += 4; put(value); };
-  put(CONTEXT); field(trail.header);
-  for (const term of trail.terms) { field(term.terms); put(term.signature); }
-  view.setBigUint64(offset, BigInt(trail.records.length), false); offset += 8;
-  for (const record of trail.records) field(record);
+  put(CONTEXT); field(header);
+  for (const term of terms) { field(term.terms); put(term.signature); }
+  view.setBigUint64(offset, events, false);
+  return out;
+}
+
+export function encodeTrail(input: ServedTrail, budget?: TrailLimits): Uint8Array {
+  const { size, trail } = requireTrail(input, budget);
+  const out = new Uint8Array(size), view = new DataView(out.buffer);
+  const head = trailHead(trail.header, trail.terms, BigInt(trail.records.length));
+  out.set(head);
+  let offset = head.length;
+  for (const record of trail.records) { view.setUint32(offset, record.length, false); out.set(record, offset + 4); offset += 4 + record.length; }
   return out;
 }
 

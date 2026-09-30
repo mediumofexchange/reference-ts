@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1319
+      "elapsedMs": 1339
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3168
+      "elapsedMs": 3110
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3135
+      "elapsedMs": 3084
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 997
+      "elapsedMs": 998
     }
   ],
   "transactions": [
@@ -89,7 +89,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "7c508ac3c03f76246a4225622a9f91b7924c7bf0007f260f20f80d1921a92d71",
-    "history": "b1c47b6fb567b30111be230a241e5c79d5fcf03a9e594733c3adf9a45f89e437",
+    "history": "aac8b9cd1131da53222f1011eb3f81975e7fa1ebbed012a716f8161b64e00415",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -147,7 +147,7 @@
       }
     ]
   },
-  "elapsedMs": 27550,
+  "elapsedMs": 27305,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
@@ -169,7 +169,7 @@
     "dist/pool/v3/capsules.js": "594dfaaf85da7ec968a00c636598642634805d36ce3525c3e20a1fa5bf75e324",
     "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
     "dist/pool/v3/configuration.js": "7e56fae94da6dbd60d24fc1686943ade94e5938b79f3a71b1ac83731691354c3",
-    "dist/pool/v3/evidence-store.js": "5c18d0a0d472eae0b6f1e0ed5ea10450ee54318b8bbc0938127f2953c03f3e88",
+    "dist/pool/v3/evidence-store.js": "0e896fe05b1fd270e89d1571192e4a1623ccde62a4de7da624e862f48e037278",
     "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
     "dist/pool/v3/fault-observer.js": "e67dcc0954c558e2432593c3478db0aaf183f2d1381e7581c334676144958ae5",
     "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
@@ -188,9 +188,9 @@
     "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
     "dist/pool/v3/scope-reader.js": "d8b60e2ca57a332881633b94dfdb2e73d12e267dd5de687bfb27ab890ca36e79",
     "dist/pool/v3/state.js": "770f846cf562909a9c8ea1a26d7243bb94e4f42025d701afed34d8b6752f874e",
-    "dist/pool/v3/store.js": "b34212a5a27d80c9471676209eb85ff71acbda7715d8da3e002974f7b8d7bb95",
+    "dist/pool/v3/store.js": "fd2253de880e2ee1d3491b74c06b2b563d35dccf86c6868f504371c08b6583a1",
     "dist/pool/v3/terms.js": "97c37f5dcc46aa1362eb44b6f5473ca188dcac91959f6bebadb504ae348d78a3",
-    "dist/pool/v3/trail.js": "2f193a464ea69dbb99313f65b001e385ffd8c366bce70edd879abdd6affee487",
+    "dist/pool/v3/trail.js": "f3705bc9636e2c497b85a226a8bc5ac88f08a3c5d03eefb2566ee1ebc9b1dae1",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
     "dist/record-range.js": "d7e1c2f8cb58256abbbce621e32f152c021e55a7eb0471dbbd906a07c6c23a8c",
     "dist/record-venue.js": "5d66c88d298800211a159d4db8f3b2fcd4adcf28131e976817e070e6d16fb916",
@@ -239,7 +239,7 @@
     "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "067a110b6cfde53937d403b3d692ca229cb864b0e41bc703c18e6969cd34b1d3",
-    "src/pool/v3/evidence-store.ts": "32663c90a986fef7fd95752f7380de69c8a0a44cc66f62ff385f647b6bf6946b",
+    "src/pool/v3/evidence-store.ts": "562f1dde8fd77ef8a3effd6464be3083dd40ee4a696fff32b344eac94b5e1fa6",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
     "src/pool/v3/fault-observer.ts": "0891d5e2c6fccba206aeeab342b605de80a58bb182bb955189e52749bfe2b307",
     "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
@@ -258,9 +258,9 @@
     "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
     "src/pool/v3/scope-reader.ts": "476eedc99039e86082cc47a189ef1da8880584a262b940cde84866b9f5a40756",
     "src/pool/v3/state.ts": "aaea2d928834bfca28fc118da02c732854cd8ff9bf47f5a7fc75951afe666302",
-    "src/pool/v3/store.ts": "045b8b27463bd5e66946c26651da5721817354cd117a30f4de8a2b4c7f2a3ee9",
+    "src/pool/v3/store.ts": "5eed93f202c106a18b114d6b864a35d7e96ad0140d5ad6ab3c7d0e5185732462",
     "src/pool/v3/terms.ts": "ddc7c00a5e1349a187aa548f01cc2e8e975516df45987e94cbeb69d57ce0a484",
-    "src/pool/v3/trail.ts": "a7243fb1f8341c08a17b44021cc4e72fc53b1fee4da6fe337374da59d8624b05",
+    "src/pool/v3/trail.ts": "b9bea043061fa0c474097a38f1034453a723eb1ad79a14e3eb5a14d11f47130d",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
     "src/record-range.ts": "0658a6592bba3883c5f9c7fd368cdee07f9fe8049ab5ee041af40df78577a840",
     "src/record-venue.ts": "19cc7913cd90de844d4b9e6b977ef452d0f682dbb7e8947843341908ff771233",

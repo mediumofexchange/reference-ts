@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { encodeReceipt } from '../../../dist/pool/v3/commitments.js';
+import { EvidenceStore } from '../../../dist/pool/v3/evidence-store.js';
 import { decodeEvidencePackage, encodeEvidencePackage } from '../../../dist/pool/v3/package.js';
+import { readPackage } from '../../../dist/pool/v3/package-reader.js';
 import { decodeRecord, encodeRecord } from '../../../dist/pool/v3/records.js';
 import { V3ServiceClient } from '../../../dist/pool/v3/service-client.js';
 import { V3Wallet } from '../../../dist/pool/v3/wallet-store.js';
@@ -14,7 +16,7 @@ import { encodeCommitment } from '../../../dist/venue-records.js';
 import { ADMIN, WALLET, backing, configuration, domain, load, operator, reference, save, terms, verifier } from './service-fixture.mjs';
 
 const [mode, directory, baseUrl] = process.argv.slice(2);
-const walletPath = join(directory, 'receiver.sqlite');
+const walletPath = join(directory, 'receiver.sqlite'), evidencePath = join(directory, 'receiver-evidence.sqlite');
 if (mode === 'prepare') {
   const venue = FixtureVenue.reference(reference.label, reference.lag);
   const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
@@ -26,6 +28,21 @@ const client = new V3ServiceClient(baseUrl, WALLET, { domain, operator, referenc
 const fixture = load(join(directory, 'public.v8'));
 assert.deepEqual(fixture.signed.terms, terms, 'terms are pinned separately from the service response');
 const encoded = commitment => bytesToHex(encodeCommitment(commitment));
+// The receiver's own evidence file, kept across its processes: a sync asks the service only for what came
+// after the sequence the file was kept through, and a read over it needs only the read's own package.
+async function synced(expected, position) {
+  const evidence = new EvidenceStore(evidencePath);
+  try {
+    assert.equal(evidence.suppliedThrough(Buffer.concat([domain, FixtureVenue.reference(reference.label, reference.lag).id, operator])), expected.before);
+    const served = await client.sync(backing, evidence);
+    assert.equal(served.selection.sequence, expected.sequence);
+    assert.deepEqual(decodeEvidencePackage(served.package).map(item => item.kind), [1, 2]);
+    const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
+    const read = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: 'current-fixture' },
+      { configuration, verifier, venue, reference, evidence });
+    assert.equal(read.state.position, position);
+  } finally { evidence.close(); }
+}
 async function receipt() {
   const first = await client.submit(fixture.issue);
   const original = decodeRecord(fixture.issue), proof = original.proof.slice(); proof[proof.length - 1] ^= 1;
@@ -43,6 +60,7 @@ if (mode === 'initial') {
   assert.equal(encoded(await client.commit('payment')), encoded(checkpoint));
   assert.equal(encoded(await client.publish()), encoded(checkpoint));
   const complete = await client.package(backing); assert.equal(complete.selection.sequence, 2n);
+  await synced({ before: 0n, sequence: 2n }, 2n);
   await client.submit(fixture.tail);
   const tail = await client.commit('tail'); assert.equal(tail.sequence, 3n);
   assert.deepEqual(await client.package(backing), complete, 'committed unpublished records/checkpoint are excluded');
@@ -78,6 +96,7 @@ if (mode === 'initial') {
   if (mode === 'resumed') assert.deepEqual(await client.package(backing), load(join(directory, 'published.v8')));
   assert.equal(encoded(await client.publish()), encoded(tail));
   assert.equal((await client.package(backing)).selection.sequence, 3n);
+  await synced({ before: mode === 'resumed' ? 2n : 3n, sequence: 3n }, 3n);
   const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
   const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
   try { assert.deepEqual(wallet.fulfillment('invoice'), load(join(directory, 'fulfilled.v8'))); } finally { wallet.close(); }

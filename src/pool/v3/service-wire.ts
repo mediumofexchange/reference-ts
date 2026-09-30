@@ -1,17 +1,17 @@
 // Local application envelopes. Protocol records keep their existing v3 bytes;
 // JSON is never signed and package metadata is never verification authority.
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { EncodingError } from "../../bytes.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
 import { decodeReceipt, encodeReceipt } from "./commitments.js";
+import type { EvidencePart, TrailTip } from "./evidence-store.js";
 import { decodeRecord, encodeRecord } from "./records.js";
-import type { ServedPackage } from "./store.js";
+import type { ServedEvidence, ServedPackage } from "./store.js";
 
 export const V3_SERVICE_PROFILE = "pool-store/v3";
 export const MAX_V3_SERVICE_REQUEST_BYTES = 300_000;
-export const MAX_V3_SERVICE_RESPONSE_BYTES = 2_100_000;
 export const MAX_V3_SERVICE_REPLY_BYTES = 4096;
-const MAX_RECORD_BYTES = 135_000, MAX_PACKAGE_BYTES = 1_048_576;
+const MAX_RECORD_BYTES = 135_000;
 type Obj = Record<string, unknown>;
 function object(value: unknown): Obj {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new EncodingError("expected object");
@@ -31,12 +31,6 @@ function hex(value: unknown, max: number, exact = false): Uint8Array {
   if (typeof value !== "string" || value.length === 0 || value.length > max * 2 || value.length % 2 !== 0 ||
       (exact && value.length !== max * 2) || !/^[0-9a-f]+$/.test(value)) throw new EncodingError("invalid service hex");
   return hexToBytes(value);
-}
-function sequence(value: unknown): bigint {
-  if (typeof value !== "string" || !/^[1-9][0-9]{0,19}$/.test(value) || BigInt(value) >= 1n << 64n) {
-    throw new EncodingError("invalid service sequence");
-  }
-  return BigInt(value);
 }
 
 export type V3ServiceCommand =
@@ -84,26 +78,142 @@ export function decodeV3ServiceReply(value: unknown): V3ServiceReply {
   throw new EncodingError("unsupported service reply");
 }
 
-/** Framing only: the independent reader must verify all returned evidence. */
-export function decodeV3ServicePackage(value: unknown): ServedPackage {
-  const r = envelope(value); fields(r, ["version", "profile", "kind", "selection", "package"]);
-  if (r.kind !== "package") throw new EncodingError("unexpected service package");
-  const s = object(r.selection); fields(s, ["domain", "venue", "backing", "operator", "sequence", "root"]);
-  return { selection: { domain: hex(s.domain, 32, true), venue: hex(s.venue, 32, true), backing: hex(s.backing, 32, true),
-    operator: hex(s.operator, 32, true), sequence: sequence(s.sequence), root: hex(s.root, 32, true) },
-    package: hex(r.package, MAX_PACKAGE_BYTES) };
-}
 export function replyFromReceipt(bytes: Uint8Array): V3ServiceReply {
   return decodeV3ServiceReply({ version: 1, profile: V3_SERVICE_PROFILE, kind: "accepted", receipt: bytesToHex(bytes) });
 }
 export function replyFromCommitment(kind: "committed" | "published", commitment: Commitment): V3ServiceReply {
   return decodeV3ServiceReply({ version: 1, profile: V3_SERVICE_PROFILE, kind, commitment: bytesToHex(encodeCommitment(commitment)) });
 }
-export function packageReply(served: ServedPackage) {
-  const s = served.selection;
-  const reply = { version: 1, profile: V3_SERVICE_PROFILE, kind: "package", selection: {
-    domain: bytesToHex(s.domain), venue: bytesToHex(s.venue), backing: bytesToHex(s.backing),
-    operator: bytesToHex(s.operator), sequence: s.sequence.toString(), root: bytesToHex(s.root),
-  }, package: bytesToHex(served.package) };
-  decodeV3ServicePackage(reply); return reply;
+
+// Served evidence is a byte stream, not JSON: a history has no size to cap (§14).
+//   served = "pool-store/v3/served" || domain[32] || venue[32] || backing[32] || operator[32] || u64 sequence || root[32]
+//            || u32 n || package[n] || part* || u8 0
+//   part   = u8 1 || u32 n || package[n]
+//          | u8 2 || u8 0 || u64 size || bytes[size]
+//          | u8 2 || u8 1 || segment[32] || u64 position || evidence[32] || u64 size || bytes[size]
+// The first package holds the read's own items; each part is an EvidencePart. Integers are big-endian. The
+// frame carries existing v3 bytes and adds none: a receiver's evidence store authenticates what it keeps.
+const SERVED = utf8ToBytes("pool-store/v3/served");
+/** The read's own package: a configuration and one commitment. */
+const MAX_OWN_PACKAGE_BYTES = 65_536;
+/** One package part: a supplier sends objects in parts of about 1 MiB, and one object is at most 1 MiB. */
+export const MAX_V3_SERVED_PART_BYTES = 4_194_304;
+const u32 = (value: number): Uint8Array => { const out = new Uint8Array(4); new DataView(out.buffer).setUint32(0, value, false); return out; };
+const u64 = (value: bigint): Uint8Array => { const out = new Uint8Array(8); new DataView(out.buffer).setBigUint64(0, value, false); return out; };
+
+/** A journal's served evidence as the bytes a transport sends, in chunks: one part, or one piece of a trail, at a time. */
+export async function* servedFrames(served: ServedEvidence): AsyncIterable<Uint8Array> {
+  const s = served.selection, fixed = (value: Uint8Array): Uint8Array => {
+    if (!(value instanceof Uint8Array) || value.length !== 32) throw new EncodingError("expected a 32-byte service identity");
+    return value;
+  };
+  if (typeof s.sequence !== "bigint" || s.sequence < 1n || s.sequence >= 1n << 64n) throw new EncodingError("invalid service sequence");
+  if (served.package.length > MAX_OWN_PACKAGE_BYTES) throw new EncodingError("served package too large");
+  yield concatBytes(SERVED, fixed(s.domain), fixed(s.venue), fixed(s.backing), fixed(s.operator), u64(s.sequence), fixed(s.root),
+    u32(served.package.length), served.package);
+  for (const part of served.parts) {
+    if ("package" in part) {
+      if (part.package.length > MAX_V3_SERVED_PART_BYTES) throw new EncodingError("served package part too large");
+      yield concatBytes(Uint8Array.of(1), u32(part.package.length), part.package);
+      continue;
+    }
+    const { after, size } = part.trail;
+    yield after === undefined ? concatBytes(Uint8Array.of(2, 0), u64(size)) :
+      concatBytes(Uint8Array.of(2, 1), fixed(after.segment), u64(after.position), fixed(after.evidence), u64(size));
+    let sent = 0n;
+    for await (const chunk of part.trail.chunks) { sent += BigInt(chunk.length); yield chunk; }
+    // The stated size framed what follows: a trail that read back otherwise leaves the stream unusable.
+    if (sent !== size) throw new EncodingError("a served trail is not its stated size");
+  }
+  yield Uint8Array.of(0);
+}
+
+/** Reads a byte stream by exact counts. */
+class Pull {
+  readonly #source: AsyncIterator<Uint8Array>;
+  #held: Uint8Array = new Uint8Array(0);
+  #at = 0;
+  constructor(source: AsyncIterable<Uint8Array>) { this.#source = source[Symbol.asyncIterator](); }
+  async #more(): Promise<boolean> {
+    while (this.#at >= this.#held.length) {
+      const next = await this.#source.next();
+      if (next.done === true) return false;
+      if (!(next.value instanceof Uint8Array)) throw new EncodingError("served evidence is not bytes");
+      this.#held = next.value; this.#at = 0;
+    }
+    return true;
+  }
+  /** Exactly `n` bytes, copied. */
+  async take(n: number): Promise<Uint8Array> {
+    const out = new Uint8Array(n);
+    for (let got = 0; got < n;) {
+      if (!await this.#more()) throw new EncodingError("truncated served evidence");
+      const piece = this.#held.subarray(this.#at, this.#at + (n - got));
+      out.set(piece, got); got += piece.length; this.#at += piece.length;
+    }
+    return out;
+  }
+  /** Exactly `n` bytes as they arrive, not copied: the receiver copies what it keeps. */
+  async *pieces(n: bigint): AsyncIterable<Uint8Array> {
+    for (let left = n; left > 0n;) {
+      if (!await this.#more()) throw new EncodingError("truncated served evidence");
+      const available = this.#held.length - this.#at, want = left < BigInt(available) ? Number(left) : available;
+      const piece = this.#held.subarray(this.#at, this.#at + want);
+      this.#at += want; left -= BigInt(want);
+      yield piece;
+    }
+  }
+  async ended(): Promise<boolean> { return !await this.#more(); }
+}
+
+/**
+ * Framing only. Reads a served stream: the selection and the read's own package, then each part as it
+ * arrives, to the end mark and the exact end of the stream. `take` is given the selection first, so it can
+ * refuse another context before any part, and then the parts (an evidence store's `take` keeps them).
+ * Metadata never selects a reader's authority, and the independent reader verifies all kept evidence.
+ * A trail's bytes that `take` leaves unread are skipped. EncodingError for a stream that does not frame.
+ */
+export async function readServed<T>(source: AsyncIterable<Uint8Array>, take: (served: ServedPackage, parts: AsyncIterable<EvidencePart>) => Promise<T>):
+  Promise<{ readonly served: ServedPackage; readonly taken: T }> {
+  const pull = new Pull(source), view = (b: Uint8Array): DataView => new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const head = await pull.take(SERVED.length + 172), at = SERVED.length;
+  if (bytesToHex(head.subarray(0, at)) !== bytesToHex(SERVED)) throw new EncodingError("wrong service profile");
+  const sequence = view(head).getBigUint64(at + 128, false);
+  if (sequence === 0n) throw new EncodingError("invalid service sequence");
+  const length = view(head).getUint32(at + 168, false);
+  if (length > MAX_OWN_PACKAGE_BYTES) throw new EncodingError("served package too large");
+  const served: ServedPackage = { selection: { domain: head.slice(at, at + 32), venue: head.slice(at + 32, at + 64), backing: head.slice(at + 64, at + 96),
+    operator: head.slice(at + 96, at + 128), sequence, root: head.slice(at + 136, at + 168) }, package: await pull.take(length) };
+  let ended = false;
+  const parts = async function* (): AsyncIterable<EvidencePart> {
+    for (;;) {
+      const [tag] = await pull.take(1);
+      if (tag === 0) break;
+      if (tag === 1) {
+        const n = view(await pull.take(4)).getUint32(0, false);
+        if (n > MAX_V3_SERVED_PART_BYTES) throw new EncodingError("served package part too large");
+        yield { package: await pull.take(n) };
+      } else if (tag === 2) {
+        const [based] = await pull.take(1);
+        if (based !== 0 && based !== 1) throw new EncodingError("unsupported served part");
+        let after: TrailTip | undefined;
+        if (based === 1) {
+          const tip = await pull.take(72);
+          after = { segment: tip.slice(0, 32), position: view(tip).getBigUint64(32, false), evidence: tip.slice(40, 72) };
+        }
+        const size = view(await pull.take(8)).getBigUint64(0, false);
+        let left = size;
+        const chunks = async function* (): AsyncIterable<Uint8Array> {
+          for await (const piece of pull.pieces(size)) { left -= BigInt(piece.length); yield piece; }
+        };
+        yield { trail: { after, size, chunks: chunks() } };
+        for await (const _ of pull.pieces(left)) left -= BigInt(_.length);
+      } else throw new EncodingError("unsupported served part");
+    }
+    if (!await pull.ended()) throw new EncodingError("trailing served bytes");
+    ended = true;
+  };
+  const taken = await take(served, parts());
+  if (!ended) throw new EncodingError("served evidence was not read to its end");
+  return { served, taken };
 }

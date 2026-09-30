@@ -21,18 +21,27 @@
 // or another record, and a copy supplied again repairs it. Budgets are per object: a whole item, a
 // header, a terms field, a record; the one aggregate is the party's quota on
 // the bytes one batch takes. The only module that touches this database.
+//
+// A supplier that serves incrementally sends parts (EvidencePart): whole §12
+// packages of objects, and each trail as its head and the records after a
+// position the receiver holds (`take`). The store keeps, for each supplier the
+// party names, the sequence its evidence was supplied through, so the next
+// request asks only for what came after. The file that holds the evidence
+// holds that mark, so a lost file asks for everything again.
 import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, concatBytes } from "@noble/hashes/utils.js";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { compareBytes, copyBytes, copyUnshared, EncodingError, FrameFeed } from "../../bytes.js";
 import type { SnapshotDigest } from "../../venue-records.js";
 import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "./commitments.js";
 import type { ExpectedSnapshot } from "./fault-evidence.js";
 import { decodeSegmentHeader, type SegmentEntry } from "./headers.js";
-import { decodeEvidenceDirectory, PackageLimitError, packageReader, type PackageSink, type PayloadSink } from "./package.js";
+import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidencePackage, PackageLimitError, packageReader, type PackageSink,
+  type PayloadSink } from "./package.js";
 import { decodeRecord, evidenceHashes } from "./records.js";
 import { EvidenceRefusal } from "./refusals.js";
 import { verifyRootTermsSignature } from "./terms.js";
-import { MAX_TRAIL_RECORD_BYTES, trailReader, type TrailSink } from "./trail.js";
+import { MAX_TRAIL_RECORD_BYTES, trailHead, trailReader, type TrailSink } from "./trail.js";
 
 /** A whole item's local per-object budget; a trail is bounded per record instead. */
 export const MAX_ITEM_BYTES = 1_048_576n;
@@ -51,7 +60,7 @@ const READ_KINDS: readonly number[] = Object.freeze([1, 2, 3, 4, 6, 7, 10]);
 /** Kinds one read takes from its own package: the configuration, the selected commitment, faults and a receipt. */
 const PER_READ_KINDS: readonly number[] = Object.freeze([1, 2, 7, 10]);
 /** The retained file's layout: a file of another layout is refused rather than read. */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export interface SignedTermsField { readonly terms: Uint8Array; readonly signature: Uint8Array }
 /** A stored trail's header, and its scoped terms field `i` read on demand; a field too long to verify is undefined. */
@@ -63,6 +72,12 @@ export interface TrailHead {
 export interface StoredTrail extends TrailHead {
   readonly segment: Uint8Array;
   readonly length: bigint;
+  /** The §10 frame bytes of the cut's records, each behind its u32 length, as the kept rows state them. */
+  readonly bytes: bigint;
+  /** The frame bytes of the records through `position`, where the cut's chain passes through `evidence` there
+   * (at 0, the seed). Read from the kept rows' links without checking a record: `records(position)` then
+   * checks each later one. Undefined where it does not pass, or a link is missing. */
+  through(position: bigint, evidence: Uint8Array): bigint | undefined;
   /** The records after position `after` through `length`, in order, read from storage one at a time,
    * each checked against the chain value at its position before it is given. */
   records(after?: bigint): Iterable<Uint8Array>;
@@ -88,6 +103,14 @@ export interface WalkEvidence {
 /** A kept position of a segment's trail, by its chain value: the reader's own checkpoint that a later trail can be
  * fetched after, as a head and the records after it. */
 export interface TrailTip { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array }
+/** One part of the evidence a supplier streams (§14 incremental retrieval): a whole §12 package of objects, or a
+ * trail as §10's head and the records after `after`, a position the receiver holds (without it, a complete
+ * trail). `size` is the byte length of `chunks`. A supplier's stated position authenticates nothing: the receiver
+ * looks it up in its own rows and continues its own evidence recurrence from there. */
+export type EvidencePart =
+  | { readonly package: Uint8Array }
+  | { readonly trail: { readonly after?: TrailTip | undefined; readonly size: bigint;
+      readonly chunks: Iterable<Uint8Array> | AsyncIterable<Uint8Array> } };
 /** Records a walk back holds at a time: a trail is read in pages, so memory does not grow with its length. */
 const PAGE = 4096n;
 
@@ -104,7 +127,8 @@ const SCHEMA = `
   CREATE TABLE segment_head (segment BLOB PRIMARY KEY, header BLOB NOT NULL) WITHOUT ROWID;
   CREATE TABLE segment_terms (segment BLOB, i INTEGER, terms BLOB NOT NULL, signature BLOB NOT NULL, PRIMARY KEY(segment, i)) WITHOUT ROWID;
   CREATE TABLE chain (evidence BLOB NOT NULL UNIQUE, segment BLOB NOT NULL, prev BLOB NOT NULL, position INTEGER NOT NULL, size INTEGER NOT NULL,
-    bytes BLOB NOT NULL);`;
+    bytes BLOB NOT NULL);
+  CREATE TABLE supplier (source BLOB PRIMARY KEY, sequence INTEGER NOT NULL) WITHOUT ROWID;`;
 
 /** A kept position a trail is assembled after: its chain value and the frame bytes of its records. */
 interface Base { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array; readonly size: bigint }
@@ -163,6 +187,8 @@ export class EvidenceStore {
         OR position != excluded.position OR size != excluded.size OR bytes != excluded.bytes`,
       step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
       entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
+      supplied: "SELECT sequence FROM supplier WHERE source = ?",
+      supply: "INSERT INTO supplier VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET sequence = excluded.sequence",
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
   }
 
@@ -255,7 +281,7 @@ export class EvidenceStore {
    * where it does not frame, is of another segment, or `after` is no kept position. PackageLimitError past the
    * quota.
    */
-  async importTrail(source: Uint8Array | AsyncIterable<Uint8Array>,
+  async importTrail(source: Uint8Array | Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
     options: { readonly after?: TrailTip | undefined; readonly size?: bigint | undefined } = {}): Promise<boolean> {
     const streamed = !(source instanceof Uint8Array), own = streamed ? undefined : copyUnshared(source);
     const size = own === undefined ? options.size : BigInt(own.length);
@@ -280,6 +306,32 @@ export class EvidenceStore {
       batch.release();
       return receiver.kept();
     });
+  }
+
+  /** Keep a supplier's parts, each whole or not at all: a package as `importBytes` copies it, its per-read items
+   * dropped at once, and a trail as `importTrail` assembles it. Resolves false where some trail was not kept;
+   * the other parts stay, since each is authenticated only when a read uses it. The party's quota bounds
+   * the bytes of all the parts together, as it bounds one package: past it, PackageLimitError before that part. */
+  async take(parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>): Promise<boolean> {
+    let kept = true, taken = 0n;
+    for await (const part of parts) {
+      taken += "package" in part ? BigInt(part.package.length) : part.trail.size;
+      if (taken > this.#quota) throw new PackageLimitError("the reader's evidence quota is exhausted");
+      if ("package" in part) this.importBytes(part.package).release();
+      else if (!await this.importTrail(part.trail.chunks, { after: part.trail.after, size: part.trail.size })) kept = false;
+    }
+    return kept;
+  }
+
+  /** The sequence through which the supplier the party names `source` has supplied its evidence; 0 for none. */
+  suppliedThrough(source: Uint8Array): bigint {
+    const row = this.#q.supplied!.get(copyBytes(source)) as { sequence: bigint } | undefined;
+    return row === undefined ? 0n : BigInt(row.sequence);
+  }
+  /** Record that `source` has supplied everything through `sequence`, once all of it is kept. */
+  supplied(source: Uint8Array, sequence: bigint): void {
+    if (typeof sequence !== "bigint" || sequence < 0n || sequence >= 1n << 63n) throw new TypeError("invalid supplier sequence");
+    this.#q.supply!.run(copyBytes(source), sequence);
   }
 
   /** The kept position `after` names, if a trail of it is kept there. */
@@ -486,17 +538,18 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
   trail(segment: Uint8Array, evidence: Uint8Array): StoredTrail | undefined {
     const seed = genesisEvidenceHash(segment), [head] = this.heads(segment);
     if (head === undefined) return undefined;
-    if (same(evidence, seed)) return this.#cut(head, segment, seed, undefined, 0n);
+    if (same(evidence, seed)) return this.#cut(head, segment, seed, undefined, 0n, 0n);
     // A chain value fixes the records before it, and a kept row belongs to the segment whose trail supplied it: the
     // records of this segment under the snapshot's evidence hash serve it. The row's own chain step is checked
     // before its position gives the trail's length, so a damaged row is absent rather than a shorter trail.
-    const row = this.#q.step!.get(evidence, segment) as { position: bigint } | undefined;
+    const row = this.#q.step!.get(evidence, segment) as { position: bigint; size: bigint } | undefined;
     if (row === undefined) return undefined;
     const length = BigInt(row.position);
-    return chainStep(this.#q, segment, evidence, length) === undefined ? undefined : this.#cut(head, segment, seed, evidence, length);
+    return chainStep(this.#q, segment, evidence, length) === undefined ? undefined :
+      this.#cut(head, segment, seed, evidence, length, BigInt(row.size));
   }
 
-  #cut(head: TrailHead, segment: Uint8Array, seed: Uint8Array, top: Uint8Array | undefined, length: bigint): StoredTrail {
+  #cut(head: TrailHead, segment: Uint8Array, seed: Uint8Array, top: Uint8Array | undefined, length: bigint, size: bigint): StoredTrail {
     const q = this.#q;
     // Damage met on a walk leaves the read unresolved; nothing is deleted, and a copy supplied again repairs it.
     const broken = (): never => { throw new EvidenceRefusal("unresolved-evidence"); };
@@ -516,7 +569,20 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       const step = chainStep(q, segment, value, p);
       return step === undefined || (previous !== undefined && !same(step.prev, previous)) ? broken() : step;
     };
-    return Object.freeze({ header: head.header, segment, term: head.term, length,
+    return Object.freeze({ header: head.header, segment, term: head.term, length, bytes: size,
+      through(position: bigint, evidence: Uint8Array): bigint | undefined {
+        if (position < 0n || position > length) return undefined;
+        if (position === 0n) return same(evidence, seed) ? 0n : undefined;
+        const held = q.step!.get(evidence, segment) as { position: bigint; size: bigint } | undefined;
+        if (held === undefined || BigInt(held.position) !== position) return undefined;
+        let value = top!;
+        for (let p = length; p > position; p--) {
+          const row = q.step!.get(value, segment) as { prev: unknown; position: bigint } | undefined;
+          if (row === undefined || BigInt(row.position) !== p) return undefined;
+          value = bytes(row.prev);
+        }
+        return same(value, evidence) ? BigInt(held.size) : undefined;
+      },
       *records(after = 0n): Iterable<Uint8Array> {
         if (after >= length) return;
         // Walk back once to position `after`, keeping only the value at each page's top.
@@ -549,6 +615,45 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
         return value;
       } });
   }
+}
+
+/** A kept trail as a supplier streams it: §10's head, then each record after `after` behind its u32 length, read
+ * and checked one at a time. Undefined where the trail's chain does not pass through `after`. A scoped terms
+ * field the evidence does not hold is served empty: it names no backing, so it is no evidence (§12.1). */
+export function trailPart(trail: StoredTrail, after?: TrailTip): EvidencePart | undefined {
+  const held = after === undefined ? 0n : trail.through(after.position, after.evidence);
+  if (held === undefined) return undefined;
+  const count = decodeSegmentHeader(trail.header).entries.length;
+  const head = trailHead(trail.header, Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }), trail.length);
+  const chunks = function* (): Iterable<Uint8Array> {
+    yield head;
+    for (const record of trail.records(after?.position ?? 0n)) {
+      const framed = new Uint8Array(4 + record.length);
+      new DataView(framed.buffer).setUint32(0, record.length, false); framed.set(record, 4);
+      yield framed;
+    }
+  };
+  return { trail: { after, size: BigInt(head.length) + trail.bytes - held, chunks: chunks() } };
+}
+
+/** One §12 package of a read's own items and a supplier's parts served from nothing, for a caller that holds a
+ * whole package in memory. A trail served after a position is refused: it is no §10 frame by itself. */
+export async function wholePackage(own: Uint8Array, parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>): Promise<Uint8Array> {
+  const items = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
+  const add = (kind: number, payload: Uint8Array): void => {
+    const hash = sha256(payload); items.set(`${kind}:${bytesToHex(hash)}`, { kind, payload, hash });
+  };
+  for (const item of decodeEvidencePackage(own)) add(item.kind, item.payload);
+  for await (const part of parts) {
+    if ("package" in part) for (const item of decodeEvidencePackage(part.package)) add(item.kind, item.payload);
+    else {
+      if (part.trail.after !== undefined) throw new EncodingError("a whole package takes whole trails");
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of part.trail.chunks) chunks.push(chunk);
+      add(6, concatBytes(...chunks));
+    }
+  }
+  return encodeEvidencePackage([...items.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash)));
 }
 
 /** The record kept under `value` at position `p` of `segment`, and the value before it, where its chain step holds. */
