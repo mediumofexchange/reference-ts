@@ -13,7 +13,8 @@ measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the dec
 **Next: M5b.4b, incremental retrieval** (order in the decision): evidence retained across reads in the party's evidence
 file (committing before the replay file), trails assembled from a head plus the records after the kept position, §13
 answers extended by windows. Carry in from the M5b.4a review: kept-store tests for publications/force, receipt reads and
-compact faults; a kept-read probe at scale measuring the whole-file digest per keep point and open. *Acceptance:*
+compact faults; a kept-read probe at scale measuring the whole-file digest per keep point and open; a store kept across
+reads keeps no answers during an open streamed import (`keepAnswer` refuses since the area-10 audit). *Acceptance:*
 incremental verdicts equal full replay with packages carrying only new objects; kept evidence falls back like kept state.
 
 ## Status
@@ -42,11 +43,11 @@ incremental verdicts equal full replay with packages carrying only new objects; 
    rule), M4 certificates/kind-11 fitted to this retention, M7 one-transaction condition, M8 adoption (one
    manifest holding §11.1's parameter identities too, now `BN254_PARAMETERS`), every report re-recorded,
    live two-backing drill. Mainnet needs separate authority.
-2. Slice 9, installable commands on the testnet: holder wallet, operator service and
-   supply reader from a packed install (`bin`), fresh processes and data directories,
-   issue → pay → receive → fulfill → redeem and an offline-operator recovery past the
-   old 67-statement ceiling. Close Next 5 (a)–(c), (e) before its drill. Retire the pilot CLI
-   and, against a case map, the transparent path in or right after it.
+2. Slice 9, installable commands on the testnet: holder wallet, operator service and supply reader from a
+   packed install (`bin`), fresh processes and data directories, issue → pay → receive → fulfill → redeem and an
+   offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e) before its drill. Retire the
+   pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities
+   ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements
    spending several backings from the wallet; single-backing openings over-reserve by |E|.
 4. On touching affected files: fold `fulfill` into `sync` and take its canonical header from the reader's evidence (not a re-decode); shared byte helpers/caller
@@ -74,9 +75,9 @@ incremental verdicts equal full replay with packages carrying only new objects; 
    acceptance receipt handoff, store-check's request through the frame, same-segment rescoping.
    Phone-first wallet: first a venue range source proportional to the subject's records
    (index-free box source, a new venue identity; M5), then a succinct relation if needed.
-7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside
-   `package-reader.ts`. After 5(h), read every `local-check` group through `readPackage`/`readFrontier`, keep
-   the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group.
+7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`.
+   After 5(h), read every `local-check` group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete
+   `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`).
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
