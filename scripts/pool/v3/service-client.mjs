@@ -8,7 +8,6 @@ import { encodeReceipt } from '../../../dist/pool/v3/commitments.js';
 import { decodeEvidencePackage, encodeEvidencePackage } from '../../../dist/pool/v3/package.js';
 import { decodeRecord, encodeRecord } from '../../../dist/pool/v3/records.js';
 import { V3ServiceClient } from '../../../dist/pool/v3/service-client.js';
-import { SERVED_PACKAGE_LIMITS } from '../../../dist/pool/v3/store.js';
 import { V3Wallet } from '../../../dist/pool/v3/wallet-store.js';
 import { FixtureVenue } from '../../../dist/record-venue.js';
 import { encodeCommitment } from '../../../dist/venue-records.js';
@@ -50,14 +49,14 @@ if (mode === 'initial') {
   const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
   const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
   try {
-    const items = decodeEvidencePackage(complete.package, SERVED_PACKAGE_LIMITS);
-    const withheld = encodeEvidencePackage(items.filter(item => item.kind !== 6), SERVED_PACKAGE_LIMITS);
+    const items = decodeEvidencePackage(complete.package);
+    const withheld = encodeEvidencePackage(items.filter(item => item.kind !== 6));
     await assert.rejects(wallet.fulfill('invoice', withheld, fixture.signed), { status: 'unresolved-evidence' });
     const tampered = items.map(item => {
       if (item.kind !== 4) return item;
       const payload = item.payload.slice(); payload[payload.length - 1] ^= 1; return { kind: item.kind, payload };
     }).sort((a, b) => a.kind - b.kind || Buffer.compare(sha256(a.payload), sha256(b.payload)));
-    await assert.rejects(wallet.fulfill('invoice', encodeEvidencePackage(tampered, SERVED_PACKAGE_LIMITS), fixture.signed),
+    await assert.rejects(wallet.fulfill('invoice', encodeEvidencePackage(tampered), fixture.signed),
       { status: 'unresolved-evidence' });
     assert.equal(wallet.fulfillment('invoice'), undefined, 'refused evidence cannot credit the invoice');
     const fulfilled = await wallet.fulfill('invoice', complete.package, fixture.signed);
