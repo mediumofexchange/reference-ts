@@ -22,7 +22,7 @@
 // the database, so a read never holds the journal's connection and each
 // record is verified there once; what a new segment imports from a read is
 // copied into the database with the command that opens it. `audit`
-// re-verifies from the evidence alone, keeping nothing.
+// re-verifies from the evidence alone, keeping nothing of what it replays.
 //
 // What the journal reads of the venue for its own commands is kept in the
 // database too (§§13.2–13.3): this key's held commitments, each scoped
@@ -773,15 +773,32 @@ export class V3OperatorJournal {
     return { now, lag: this.lag, latest: store.previousHeld(this.operator, now, undefined, now), conflict: conflicted(), boundaries, revocations };
   }
   /** Inside a journal transaction: the view at the venue's clock, from the journal's kept answers. The first
-   * conflict found is kept with the answer that showed it, so it stands for every later command. */
+   * conflict found is kept with the answer that showed it, so it stands for every later command. The clock
+   * the answers reach is recorded, so a restart refuses a venue that is behind them. */
   private viewed(opened: Opened | undefined): View {
+    const now = this.clock();
+    if (decimal(this.metadata()!.observed) < now) this.db.prepare("UPDATE identity SET observed=? WHERE id=1").run(now.toString());
     const conflict = (): boolean => this.db.prepare("SELECT 1 FROM journal_conflict WHERE id=1").get() !== undefined;
-    return this.observe(opened, this.clock(), this.replays, entry => {
+    return this.observe(opened, now, this.replays, entry => {
       this.db.prepare("INSERT OR IGNORE INTO journal_conflict VALUES(1,?,?)").run(entry.index.toString(), entry.record);
     }, conflict);
   }
+  /** A transaction that only keeps venue answers. Each answer is kept whole or not at all, with any conflict
+   * its windows showed, so what was kept before a refusal stands: the refusal is given once that is committed,
+   * and memory is left as it was. */
+  private keeping<T>(read: () => T): T {
+    let refused = undefined as V3StoreError | undefined;
+    const result = this.transaction(() => {
+      try { return read(); } catch (error) {
+        if (!(error instanceof V3StoreError)) throw error;
+        refused = error; return undefined;
+      }
+    });
+    if (refused !== undefined) throw refused;
+    return result as T;
+  }
   private view(engine: Engine): View {
-    return this.transaction(() => this.viewed(engine.opened));
+    return this.keeping(() => this.viewed(engine.opened));
   }
   private exclusive(view: View): void {
     requireThat(!view.conflict, "CONFLICT", "the venue contains a commitment this journal did not sign");
@@ -994,7 +1011,7 @@ export class V3OperatorJournal {
       this.exclusive(view);
       requireThat(view.latest === undefined, "CONFLICT", "this key already has commitments on the venue");
       // A witnessed replacement ends a term at its effective index: the opening is signed by C2.6.1's last signing index.
-      const boundaries = this.transaction(() => {
+      const boundaries = this.keeping(() => {
         const ends: bigint[] = [];
         for (const { backing, terms } of opened.entries) {
           const { chain, pending } = this.chain(backing, terms, view.now);
@@ -1039,7 +1056,7 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
-      const { at, target, view } = this.transaction(() => {
+      const { at, target, view } = this.keeping(() => {
         // This key's held commitments are kept through the clock first: the target's checks read them.
         const at = this.viewed(undefined).now, target = this.rescopeTarget(engine, own, at), view = this.viewed(target.opened);
         requireThat(view.now === at, "STALE", "the venue changed during the scope change");
@@ -1244,10 +1261,9 @@ export class V3OperatorJournal {
    */
   async audit(): Promise<void> {
     return this.run(async engine => {
-      const opened = engine.opened, state = engine.state;
-      if (opened === undefined || state === undefined) return;
-      const view = this.view(engine), now = view.now;
+      const opened = engine.opened, state = engine.state, view = this.view(engine), now = view.now;
       this.auditAnswers(opened, view);
+      if (opened === undefined || state === undefined) return;
       for (const { backing } of opened.entries) {
         const fresh = new ReplayStore();
         try {
@@ -1291,16 +1307,26 @@ export class V3OperatorJournal {
     });
   }
 
-  /** The kept venue answers against the venue itself, read again from its first index into a store of its
-   * own: the same view, and the same held commitments of this key at the same indices. */
-  private auditAnswers(opened: Opened, view: View): void {
+  /** The kept venue answers a view reads against the venue itself, read again from its first index into a
+   * store of its own: the same conflict, the same term boundaries and revocations of the active scope, the
+   * same held commitments of this key at the same indices, each kept through the view's clock. Answers kept
+   * for a backing outside the active scope are not read by a view and are not compared. */
+  private auditAnswers(opened: Opened | undefined, view: View): void {
     const fresh = new ReplayStore(), failed = "the kept venue answers are not the venue's";
     try {
-      let conflict = false;
-      const again = this.observe(opened, view.now, fresh, () => { conflict = true; }, () => conflict);
+      let first: RangeEntry | undefined;
+      const again = this.observe(opened, view.now, fresh, entry => { first ??= entry; }, () => first !== undefined);
       const text = (v: View): string => JSON.stringify([v.conflict, v.boundaries.map(String),
         [...v.revocations].map(([name, at]) => [name, at?.toString() ?? null])]);
       requireThat(text(again) === text(view), "STORAGE", failed);
+      const stored = this.db.prepare("SELECT idx,record FROM journal_conflict WHERE id=1").get();
+      requireThat((stored === undefined) === (first === undefined) && (stored === undefined || first === undefined ||
+        (stored.idx === first.index.toString() && same(bytes(stored.record), first.record))), "STORAGE", failed);
+      // A kept answer reaches the view's clock exactly; a revocation once found is not extended.
+      const through = (kind: number, subject: Uint8Array): bigint | undefined => this.replays.keptAnswer(kind, subject)?.through;
+      requireThat(through(1, this.operator) === view.now && (opened?.entries ?? []).every(({ backing, terms }) =>
+        through(2, backing) === view.now && (view.revocations.get(bytesToHex(backing)) !== undefined || through(3, terms.obligor) === view.now)),
+      "STORAGE", failed);
       const next = (store: ReplayStore, after?: HeldCommitment): HeldCommitment | undefined =>
         store.nextHeld(this.operator, 0n, after?.commitment.sequence, view.now);
       for (let kept = next(this.replays), read = next(fresh); kept !== undefined || read !== undefined; kept = next(this.replays, kept), read = next(fresh, read)) {

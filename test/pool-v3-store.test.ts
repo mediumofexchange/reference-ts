@@ -304,6 +304,10 @@ describe("the v3 operator journal", () => {
     v2.advance(v2.witnessedIndex() + lag);
     expect(await refusal(j2.submit(issue(output(payerSeed, 70, 3n))))).toEqual(["REFUSED", "REVOKED"]);
     await j2.submit(payment());
+    // A commitment held after the revocation finalizes no issuance: the issue stays finalized by the one before it.
+    await j2.commit("c3"); await j2.publish(); v2.advance(v2.witnessedIndex() + lag);
+    expect(decodeReceipt(await j2.submit(burning())).position).toBe(3n);
+    expect(await refusal(j2.submit(issue(output(payerSeed, 71, 3n))))).toEqual(["REFUSED", "REVOKED"]);
   });
 
   it("refuses service when the venue holds a commitment of this key the journal did not sign", async () => {
@@ -376,6 +380,35 @@ describe("the v3 operator journal", () => {
     expect(await refusal(j.submit(issue()))).toEqual(["STALE", undefined]);
     expect(await refusal(j.submit(issue()))).toEqual(["CONFLICT", undefined]);
     expect((await j.package()).selection.sequence).toBe(1n);
+  });
+
+  it("refuses a command whose view the venue's clock has left, and admits it on the next view", async () => {
+    const venue = FixtureVenue.reference(label, lag);
+    let duringProof = () => {};
+    const j = new V3OperatorJournal(path(), { configuration, secret: operatorSecret, venue, reference,
+      verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
+    journals.push(j);
+    await j.open("genesis", signed); await j.publish();
+    // Nothing was witnessed: the clock alone moved while the proof was checked.
+    duringProof = () => { duringProof = () => {}; venue.advance(venue.witnessedIndex() + 1n); };
+    expect(await refusal(j.submit(issue()))).toEqual(["STALE", undefined]);
+    expect(decodeReceipt(await j.submit(issue())).position).toBe(1n);
+  });
+
+  it("keeps the answers and the conflict that a refused command read", async () => {
+    const { venue, j, file } = await opened();
+    venue.advance(venue.witnessedIndex() + 1n);
+    venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 9n, b(5))));
+    // The scope change is refused for its own reason, after it read the window that shows the conflict.
+    expect(await refusal(j.rescope("outside", { keep: [b(77)] }))).toEqual(["REFUSED", "SCOPE"]);
+    j.close();
+    let asked = 0;
+    const restored = journal(file, asking(venue, request => { if (request.kind === 1) asked++; }));
+    expect(await refusal(restored.commit("c2"))).toEqual(["CONFLICT", undefined]);
+    expect(asked).toBe(0);
+    // A restart on a venue behind the index the kept answers reach is refused.
+    restored.close();
+    expect(await refusal((async () => journal(file, FixtureVenue.reference(label, lag, venue.witnessedIndex() - 1n)))())).toEqual(["STORAGE", undefined]);
   });
 
   it("refuses terms for another operator, venue or configuration and accepts silence terms", async () => {
@@ -482,6 +515,8 @@ describe("the v3 operator journal", () => {
       "DELETE FROM answer_held WHERE seq = (SELECT MIN(seq) FROM answer_held)",
       "UPDATE answer_held SET idx = zeroblob(8) WHERE seq = (SELECT MAX(seq) FROM answer_held)",
       "UPDATE answer SET value = zeroblob(8) WHERE kind = 3",
+      "UPDATE answer SET through = x'00000000000000ff' WHERE kind = 1",
+      "UPDATE answer SET through = x'00000000000000ff' WHERE kind = 2",
       "INSERT INTO journal_conflict VALUES(1,'1',zeroblob(136))",
     ]) {
       const { file, venue, j } = await opened();
@@ -491,15 +526,22 @@ describe("the v3 operator journal", () => {
       const reopened = journal(file, venue);
       expect(await refusal(reopened.audit()), tamper).toEqual(["STORAGE", undefined]);
     }
-    // A conflict the venue shows and the rows have lost is found by the audit too.
-    const { file, venue, j } = await opened();
-    venue.advance(venue.witnessedIndex() + 1n);
-    venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 9n, b(5))));
-    expect(await refusal(j.commit("c2"))).toEqual(["CONFLICT", undefined]);
-    j.close();
-    const db = new DatabaseSync(file);
-    expect(Number(db.prepare("DELETE FROM journal_conflict").run().changes)).toBe(1); db.close();
-    expect(await refusal(journal(file, venue).audit())).toEqual(["STORAGE", undefined]);
+    // A conflict the venue shows and the rows have lost or changed is found by the audit too, segment or none.
+    for (const [tamper, open] of [["DELETE FROM journal_conflict", true], ["UPDATE journal_conflict SET idx = '0'", true],
+      ["DELETE FROM journal_conflict", false]] as const) {
+      const file = path(), venue = FixtureVenue.reference(label, lag), j = journal(file, venue);
+      if (open) { await j.open("genesis", signed); await j.publish(); }
+      venue.advance(venue.witnessedIndex() + 1n);
+      venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 9n, b(5))));
+      expect(await refusal(open ? j.commit("c2") : j.open("genesis", signed))).toEqual(["CONFLICT", undefined]);
+      // With no segment there is nothing else to read, and the honest rows pass. (A foreign held commitment's
+      // directory is not the journal's to serve, so an open journal's own read stays unresolved.)
+      if (!open) await j.audit();
+      j.close();
+      const db = new DatabaseSync(file);
+      expect(Number(db.prepare(tamper).run().changes)).toBe(1); db.close();
+      expect(await refusal(journal(file, venue).audit()), tamper).toEqual(["STORAGE", undefined]);
+    }
   });
 
   it("serves only published commitments and the records they carry", async () => {
