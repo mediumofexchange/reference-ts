@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -21,7 +21,8 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTer
 import { decodeTrail } from "../src/pool/v3/trail.js";
 import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask, type SegmentContext } from "../src/pool/v3/witness.js";
 import { ScopeTree } from "../src/pool/scope.js";
-import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../src/record-venue.js";
+import { RangeLimitError, type RangeRequest } from "../src/record-range.js";
+import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordPublisher, type RecordVenue } from "../src/record-venue.js";
 import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
 
 // The pool-v3 operator journal (src/pool/v3/store.ts) on the local reference
@@ -143,9 +144,14 @@ describe("the v3 operator journal", () => {
   }
   /** A verifier that accepts exactly the stand-in proofs whose first byte is the kind. */
   const verifier = { verify: (kind: number, _inputs: bigint[], proof: Uint8Array) => proof[0] === kind };
-  function journal(file: string, venue: FixtureVenue, secret = operatorSecret): Journal {
+  function journal(file: string, venue: RecordVenue & RecordPublisher, secret = operatorSecret): Journal {
     const j = new V3OperatorJournal(file, { configuration, secret, venue, reference, verifier }); journals.push(j); return j;
   }
+  /** `venue`, telling `asked` each range request the journal makes of it. */
+  const asking = (venue: FixtureVenue, asked: (request: RangeRequest) => void): RecordVenue & RecordPublisher => ({
+    id: venue.id, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+    range: (request, limits) => { asked(request); return venue.range(request, limits); },
+    publishRecord: (kind, subject, record) => venue.publishRecord(kind, subject, record) });
   async function refusal(action: Promise<unknown>): Promise<[string, string | undefined]> {
     const error = await action.then(() => undefined, (e: unknown) => e);
     expect(error).toBeInstanceOf(V3StoreError);
@@ -298,6 +304,10 @@ describe("the v3 operator journal", () => {
     v2.advance(v2.witnessedIndex() + lag);
     expect(await refusal(j2.submit(issue(output(payerSeed, 70, 3n))))).toEqual(["REFUSED", "REVOKED"]);
     await j2.submit(payment());
+    // A commitment held after the revocation finalizes no issuance: the issue stays finalized by the one before it.
+    await j2.commit("c3"); await j2.publish(); v2.advance(v2.witnessedIndex() + lag);
+    expect(decodeReceipt(await j2.submit(burning())).position).toBe(3n);
+    expect(await refusal(j2.submit(issue(output(payerSeed, 71, 3n))))).toEqual(["REFUSED", "REVOKED"]);
   });
 
   it("refuses service when the venue holds a commitment of this key the journal did not sign", async () => {
@@ -309,25 +319,33 @@ describe("the v3 operator journal", () => {
   });
 
   it.each(["same index", "later index"])("refuses a hidden same-sequence twin at %s while retaining historical replies", async location => {
-    const { venue, j, file } = await opened();
+    // The journal's own opening is witnessed at the next index; a twin at that index is in the same window.
+    const file = path(), venue = FixtureVenue.reference(label, lag), j = journal(file, venue);
     const own = await j.open("genesis", signed);
-    const receipt = await j.submit(issue()), saved = await j.package();
     const twin = signCommitment(operatorSecret, own.sequence, new Uint8Array(32).fill(255));
     // The larger root loses the same-index tie; only the raw range retains it.
     expect(Buffer.compare(encodeCommitment(own), encodeCommitment(twin))).toBe(-1);
     expect(isEquivocation(own, twin)).toBe(true);
-    if (location === "later index") venue.advance(venue.witnessedIndex() + 1n);
+    await j.publish();
+    let receipt: Uint8Array | undefined;
+    if (location === "later index") { receipt = await j.submit(issue()); venue.advance(venue.witnessedIndex() + 1n); }
+    // A witnessed index is final (§13.2): the twin arrives at an index the journal has not read yet.
     venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(twin));
     expect(await refusal(j.submit(payment()))).toEqual(["CONFLICT", undefined]);
     expect(await refusal(j.commit("after-twin"))).toEqual(["CONFLICT", undefined]);
     expect(await j.open("genesis", signed)).toEqual(own);
-    expect(await j.submit(issue())).toEqual(receipt);
+    if (receipt !== undefined) expect(await j.submit(issue())).toEqual(receipt);
     expect(await j.publish()).toEqual(own);
-    expect(await j.package()).toEqual(saved);
+    const saved = await j.package();
+    expect(saved.selection.sequence).toBe(own.sequence);
     j.close();
-    const restored = journal(file, venue);
+    // The conflict is kept with the answer that showed it: a restarted journal refuses without reading that index again.
+    let asked = 0;
+    const restored = journal(file, asking(venue, () => { asked++; }));
+    expect(await refusal(restored.submit(payment()))).toEqual(["CONFLICT", undefined]);
+    expect(asked).toBe(0);
     venue.advance(venue.witnessedIndex() + lag);
-    expect(await restored.submit(issue())).toEqual(receipt);
+    if (receipt !== undefined) expect(await restored.submit(issue())).toEqual(receipt);
     expect(await restored.package()).toEqual(saved);
     expect(await refusal(restored.submit(payment()))).toEqual(["CONFLICT", undefined]);
   });
@@ -352,11 +370,45 @@ describe("the v3 operator journal", () => {
       verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
     journals.push(j);
     const own = await j.open("genesis", signed); await j.publish();
-    duringProof = () => { venue.witness(1, operator, venue.witnessedIndex(),
-      encodeCommitment(signCommitment(operatorSecret, own.sequence, b(255)))); };
-    expect(await refusal(j.submit(issue()))).toEqual(["CONFLICT", undefined]);
+    // A witnessed index is final (§13.2), so a record witnessed during the proof check moves the venue's clock:
+    // the command is judged by a view the venue has left, and the next one reads the conflict.
+    duringProof = () => {
+      duringProof = () => {};
+      venue.advance(venue.witnessedIndex() + 1n);
+      venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, own.sequence, b(255))));
+    };
+    expect(await refusal(j.submit(issue()))).toEqual(["STALE", undefined]);
     expect(await refusal(j.submit(issue()))).toEqual(["CONFLICT", undefined]);
     expect((await j.package()).selection.sequence).toBe(1n);
+  });
+
+  it("refuses a command whose view the venue's clock has left, and admits it on the next view", async () => {
+    const venue = FixtureVenue.reference(label, lag);
+    let duringProof = () => {};
+    const j = new V3OperatorJournal(path(), { configuration, secret: operatorSecret, venue, reference,
+      verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
+    journals.push(j);
+    await j.open("genesis", signed); await j.publish();
+    // Nothing was witnessed: the clock alone moved while the proof was checked.
+    duringProof = () => { duringProof = () => {}; venue.advance(venue.witnessedIndex() + 1n); };
+    expect(await refusal(j.submit(issue()))).toEqual(["STALE", undefined]);
+    expect(decodeReceipt(await j.submit(issue())).position).toBe(1n);
+  });
+
+  it("keeps the answers and the conflict that a refused command read", async () => {
+    const { venue, j, file } = await opened();
+    venue.advance(venue.witnessedIndex() + 1n);
+    venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 9n, b(5))));
+    // The scope change is refused for its own reason, after it read the window that shows the conflict.
+    expect(await refusal(j.rescope("outside", { keep: [b(77)] }))).toEqual(["REFUSED", "SCOPE"]);
+    j.close();
+    let asked = 0;
+    const restored = journal(file, asking(venue, request => { if (request.kind === 1) asked++; }));
+    expect(await refusal(restored.commit("c2"))).toEqual(["CONFLICT", undefined]);
+    expect(asked).toBe(0);
+    // A restart on a venue behind the index the kept answers reach is refused.
+    restored.close();
+    expect(await refusal((async () => journal(file, FixtureVenue.reference(label, lag, venue.witnessedIndex() - 1n)))())).toEqual(["UNAVAILABLE", undefined]);
   });
 
   it("refuses terms for another operator, venue or configuration and accepts silence terms", async () => {
@@ -401,6 +453,96 @@ describe("the v3 operator journal", () => {
     expect(result.carrying?.length).toBe(41);
     expect(result.state?.position).toBe(1n);
   }, 90_000);
+
+  it("keeps its venue answers: asks only past the index they are kept through, by windows within the answer budget", async () => {
+    const venue = FixtureVenue.reference(label, lag), file = path(), answered: RangeRequest[] = [];
+    // A venue whose answers span at most four indices: a longer range is past the asker's budget (§13.1).
+    const narrow: RecordVenue & RecordPublisher = { ...asking(venue, () => {}), range: (request, limits) => {
+      if (request.toIndex - request.fromIndex >= 4n) throw new RangeLimitError("past the budget");
+      answered.push(request); return venue.range(request, limits);
+    } };
+    let j = journal(file, narrow);
+    const verify = vi.spyOn(ed25519, "verify"), signatures = [(await j.open("genesis", signed)).signature];
+    try {
+      await j.publish();
+      for (let sequence = 2; sequence <= 6; sequence++) {
+        venue.advance(venue.witnessedIndex() + 9n);
+        await j.submit(issue(output(payerSeed, 100 + sequence, 1n)));
+        const checkpoint = await j.commit(`c${sequence}`); await j.publish();
+        expect(checkpoint.sequence).toBe(BigInt(sequence)); signatures.push(checkpoint.signature);
+      }
+      expect((await j.package()).selection.sequence).toBe(6n);
+      // Each held commitment was verified once, in the window that first carried it.
+      for (const signature of signatures) expect(verify.mock.calls.filter(call => Buffer.from(call[0] as Uint8Array).equals(signature))).toHaveLength(1);
+    } finally { verify.mockRestore(); }
+    // Each kind and subject was asked once for every index, in adjacent windows from index zero to the clock.
+    const asked = new Map<string, bigint>();
+    for (const request of answered) {
+      const key = `${request.kind}:${bytesToHex(request.subject)}`;
+      expect(request.fromIndex, key).toBe((asked.get(key) ?? -1n) + 1n);
+      asked.set(key, request.toIndex);
+    }
+    expect([...asked].sort()).toEqual([[`1:${bytesToHex(operator)}`, venue.witnessedIndex()], [`2:${bytesToHex(backing)}`, venue.witnessedIndex()],
+      [`3:${bytesToHex(issuer)}`, venue.witnessedIndex()]].sort());
+    // While the clock stands, a command asks the venue nothing; nor does a restarted journal, which reads its rows.
+    answered.length = 0;
+    const served = await j.package();
+    j.close(); j = journal(file, narrow);
+    expect(await j.package()).toEqual(served);
+    expect(answered).toEqual([]);
+    // The audit reads the venue again from its first index, in windows of its own, and finds the same answers.
+    await j.audit();
+    expect(answered.some(request => request.kind === 1 && request.fromIndex === 0n)).toBe(true);
+    const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+      { configuration, verifier, venue, reference });
+    expect([result.carrying?.length, result.state?.issued]).toEqual([6, 5n]);
+  });
+
+  it("serves on a venue holding more records under its key than one answer's budget", async () => {
+    // Anyone may file records under the key (C2.3.1); before kept windows, one whole answer past 4,096 entries ended service.
+    const venue = FixtureVenue.reference(label, lag, 4200n);
+    for (let index = 1n; index <= 4200n; index++) venue.witness(1, operator, index, new Uint8Array(136));
+    const j = journal(path(), venue);
+    await j.open("genesis", signed); await j.publish();
+    await j.submit(issue()); await j.commit("c2"); await j.publish();
+    expect((await j.package()).selection.sequence).toBe(2n);
+    await j.audit();
+  }, 60_000);
+
+  it("audits its kept venue answers against the venue", async () => {
+    const { DatabaseSync } = await import("node:sqlite");
+    for (const tamper of [
+      "DELETE FROM answer_held WHERE seq = (SELECT MIN(seq) FROM answer_held)",
+      "UPDATE answer_held SET idx = zeroblob(8) WHERE seq = (SELECT MAX(seq) FROM answer_held)",
+      "UPDATE answer SET value = zeroblob(8) WHERE kind = 3",
+      "UPDATE answer SET through = x'00000000000000ff' WHERE kind = 1",
+      "UPDATE answer SET through = x'00000000000000ff' WHERE kind = 2",
+      "INSERT INTO journal_conflict VALUES(1,'1',zeroblob(136))",
+    ]) {
+      const { file, venue, j } = await opened();
+      await j.submit(issue()); await j.commit("c2"); await j.publish(); await j.package(); j.close();
+      const db = new DatabaseSync(file);
+      expect(Number(db.prepare(tamper).run().changes), tamper).toBeGreaterThan(0); db.close();
+      const reopened = journal(file, venue);
+      expect(await refusal(reopened.audit()), tamper).toEqual(["STORAGE", undefined]);
+    }
+    // A conflict the venue shows and the rows have lost or changed is found by the audit too, segment or none.
+    for (const [tamper, open] of [["DELETE FROM journal_conflict", true], ["UPDATE journal_conflict SET idx = '0'", true],
+      ["DELETE FROM journal_conflict", false]] as const) {
+      const file = path(), venue = FixtureVenue.reference(label, lag), j = journal(file, venue);
+      if (open) { await j.open("genesis", signed); await j.publish(); }
+      venue.advance(venue.witnessedIndex() + 1n);
+      venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 9n, b(5))));
+      expect(await refusal(open ? j.commit("c2") : j.open("genesis", signed))).toEqual(["CONFLICT", undefined]);
+      // With no segment there is nothing else to read, and the honest rows pass. (A foreign held commitment's
+      // directory is not the journal's to serve, so an open journal's own read stays unresolved.)
+      if (!open) await j.audit();
+      j.close();
+      const db = new DatabaseSync(file);
+      expect(Number(db.prepare(tamper).run().changes)).toBe(1); db.close();
+      expect(await refusal(journal(file, venue).audit()), tamper).toEqual(["STORAGE", undefined]);
+    }
+  });
 
   it("serves only published commitments and the records they carry", async () => {
     const { j } = await opened();

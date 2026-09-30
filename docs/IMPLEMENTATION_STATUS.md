@@ -32,9 +32,10 @@ append-only facts read at a position, savepoints for refused checkpoints and
 witnesses for a wallet's own notes. A reader may keep its classes, replays and
 evidence in files across reads. The operator journal keeps its admission state,
 records and served evidence in its own database, commits each command with all
-it changes and reopens without verifying again (M5b.5a). Its whole §13 asks,
-incremental serving, the wallet's kept file and verification workers are
-M5b.5b–M5b.6.
+it changes and reopens without verifying again (M5b.5a). It keeps its venue
+answers there too and asks the venue only past the index they reach (M5b.5b.1).
+Incremental serving, the wallet's kept file and verification workers are
+M5b.5b.2–M5b.6.
 
 Pool-v2 is retired: every remaining v2 check was mapped to a v3 case, a v2-only
 mechanism or a later slice

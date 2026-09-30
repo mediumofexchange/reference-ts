@@ -270,14 +270,14 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     expect((await f.openingContext(successor)).header.entries[0]!.opening).toMatchObject({ operator: aKey, sequence: 2n });
   });
 
-  it("detects same-index historical venue mutation during verification before signing an opening", async () => {
+  it("signs no opening where the venue witnessed a record during verification", async () => {
     const f = await fundedFixture(), next = await f.replace(); f.venue.advance(next.effective);
-    // This creates a new historical predecessor checkpoint without moving the
-    // observed clock; clock-only revalidation would miss the changed evidence.
+    // A predecessor checkpoint witnessed while the evidence is verified moves the venue's clock (a witnessed
+    // index is final, §13.2): the opening was planned by a view the venue has left.
     const extra = encodeCommitment(signCommitment(aSecret, 3n, b(99)));
     let mutated = false;
     const successor = f.create(bSecret, "b", () => {
-      if (!mutated) { mutated = true; f.venue.witness(1, aKey, 2n, extra); }
+      if (!mutated) { mutated = true; f.venue.advance(f.venue.witnessedIndex() + 1n); f.venue.witness(1, aKey, f.venue.witnessedIndex(), extra); }
     });
     const sign = vi.spyOn(ed25519, "sign");
     try {

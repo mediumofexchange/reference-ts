@@ -228,8 +228,8 @@ real proofs for A→B→A, inherited spending, imported double-spend refusal and
 revoked issuance. Pending/cancelled handovers refuse; a fresh seedless process
 reads only public evidence. Fully evidenced hostile checkpoints are excluded,
 while missing ancestry remains unresolved. Focused tests additionally exercise
-empty-book takeover, a nonempty force block, same-index evidence changes and
-authority ending during adoption. The real-proof drill's adoption block is empty;
+empty-book takeover, a nonempty force block, a record witnessed during
+verification and authority ending during adoption. The real-proof drill's adoption block is empty;
 the recovery drill above supplies real-proof force/adoption evidence.
 The [local](pool-v3-succession-store-verification.json) and
 [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) reports own the
@@ -980,13 +980,44 @@ shared the desktop) and N = 4,000 on the idle desktop (final code):
 - *Where an admission's time goes:* about two thirds is the note tree's
   Poseidon2 hashing, as in the storage probe; the synced commit is under a
   tenth.
-- *The rise per checkpoint:* the journal's view verifies every held
+- *The rise per checkpoint:* the journal's view verified every held
   commitment of its key twice at each command, about 5 ms per checkpoint.
-  That is the whole-answer read M5b.5b replaces with kept windows; it is
-  linear in checkpoints until then.
+  M5b.5b.1 replaced that whole-answer read with kept windows (below).
 - *Limits:* stand-in proofs, one backing and one segment, 11 checkpoints; no
   silence clause, so no admission read the journal's own history; the package
   is assembled whole in memory.
+
+### The journal's venue view by kept windows (M5b.5b.1)
+
+`replay-store-probe.mjs journal <N> --every 1` signs and publishes a
+checkpoint after every admission, so the journal's own key holds N + 1
+commitments on the venue
+([M5b.5b.1](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+One cycle is an admission, a commitment and a publication: three commands,
+each reading its view of the venue.
+
+Runs of 2026-09-30 on the same desktop: the whole-answer view at `76ee0b4`
+with N = 300, and kept windows at `2ea30c8` with N = 5,000 and `--audit`.
+
+| Step | Whole answers, 301 checkpoints | Kept windows, 5,001 checkpoints |
+|---|---|---|
+| One cycle | 228 ms over the first 15, 4,871 ms at 240: about 20 ms per checkpoint held | 76 ms over the first 250, 81 ms over the last 250; 76–87 ms throughout |
+| Past 4,096 checkpoints | not run: one answer's entry budget refuses every command (the unit test shows it at 4,200 objects) | served |
+| Heap over the run | 9.6 → 10.2 MB | 10.2 → 13.0 MB, the in-process fixture venue's 5,001 records |
+| Database | 7.7 KB per statement | 33.7 MiB, 7.1 KB per statement with its checkpoint |
+| Reopening | 0.10 s | 0.11 s, no proof and no commitment verified |
+| Audit | — | 501 s: 5,000 proofs and 5,001 checkpoints judged again through the reader, and the venue read again from index zero |
+| Assembling the package | — | 5.7 MiB in 5.1 s |
+
+- *Flat per command:* a view asks the venue for the indices after its kept
+  answers and verifies each held commitment once, in the window that first
+  carries it. With the review's fixes, a run of N = 1,000 gave 73–84 ms per
+  cycle throughout.
+- *Limits:* stand-in proofs, one backing and one segment; a local fixture
+  venue in the same process; no silence or non-service clause, so no
+  admission read the journal's own history (a journal under one still judges
+  every held checkpoint at each admission); the audit and the package follow
+  the history, as before.
 
 ## Invalid-checkpoint evidence
 

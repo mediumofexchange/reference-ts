@@ -12,7 +12,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
   admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
-  type ChainLink, type HeldCommitment, type HeldPrior, type RangeAnswer, type RangeEntry, type RangeLimits, type RecordKind,
+  type AdmittedReplacement, type ChainLink, type HeldCommitment, type HeldPrior, type RangeAnswer, type RangeEntry, type RangeLimits, type RecordKind,
 } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
@@ -108,17 +108,90 @@ function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, 
   }
 }
 
+/** A party's kept §13 answers through one index t of its own venue (§§13.2–13.3). Each kind and subject's
+ * answer is kept in `store` through the index it was read to and read window by window only past it (§13.3's
+ * adjacent earlier answer), so neither memory nor a later read's venue requests grow with the venue's age.
+ * Each call extends its answer to t where needed; what it returns, and every query of the kept rows, is
+ * bounded by t. A read that fails keeps none of its windows. */
+export interface KeptAnswers {
+  /** `backing`'s admitted replacements (C2.5) under its declared rule, each at its first witnessing. */
+  replacements(backing: Uint8Array, rule: Uint8Array | undefined): readonly AdmittedReplacement[];
+  /** The index of `obligor`'s first revocation (C2b.1), if witnessed by t. */
+  revocation(obligor: Uint8Array): bigint | undefined;
+  /** Keep `operator`'s held commitments (C2.3.3) through t and return it, to read them from the store.
+   * `window` is given each answer newly read from the venue, with every record it carries, held or not. */
+  held(operator: Uint8Array, window?: (answer: RangeAnswer) => void): Uint8Array;
+  /** Keep `backing`'s publications (kind 4) through t and return it, to read them from the store. */
+  publications(backing: Uint8Array): Uint8Array;
+}
+/** `charge` counts what an answer keeps against the party's quota. The venue's identity is the caller's own. */
+export function keptAnswers(venue: RecordVenue, venueId: Uint8Array, store: ReplayStore, t: bigint, charge: (bytes: bigint) => void): KeptAnswers {
+  /** Extend the kept answer of `kind` for `subject` to t, unless it already decides t. */
+  const extend = (kind: RecordKind, subject: Uint8Array, decided: (kept: { through: bigint; value: bigint | undefined }) => boolean,
+    windows: (from: bigint, value: bigint | undefined) => bigint | undefined): void => {
+    const kept = store.keptAnswer(kind, subject);
+    if (kept !== undefined && (kept.through >= t || decided(kept))) return;
+    store.keepAnswer(kind, subject, () => ({ through: t, value: windows(kept === undefined ? 0n : kept.through + 1n, kept?.value) }));
+  };
+  return {
+    replacements(backing, rule) {
+      // Admitted replacements are kept at their first witnessing, so one identity counts once across windows and reads.
+      extend(2, backing, () => false, from => {
+        readWindows(venue, venueId, 2, backing, from, t, answer => {
+          for (const entry of answer.entries) {
+            const [admitted] = admittedReplacements({ request: answer.request, entries: [entry] }, rule);
+            if (admitted !== undefined) { charge(BigInt(entry.record.length)); store.putReplacement(backing, admitted.identity, entry.index, entry.record); }
+          }
+        });
+        return undefined;
+      });
+      return admittedReplacements({ request: { venue: venueId, kind: 2, subject: backing, fromIndex: 0n, toIndex: t },
+        entries: store.replacements(backing, t) }, rule);
+    },
+    revocation(obligor) {
+      // K's first revocation decides every later index, so an answer that found one is not extended.
+      extend(3, obligor, kept => kept.value !== undefined, from => {
+        let found: bigint | undefined;
+        readWindows(venue, venueId, 3, obligor, from, t, answer => (found = revocationIndex(answer)) !== undefined);
+        return found;
+      });
+      const revocation = store.keptAnswer(3, obligor)!.value;
+      return revocation !== undefined && revocation <= t ? revocation : undefined;
+    },
+    held(operator, window) {
+      extend(1, operator, () => false, (from, highest) => {
+        let prior: HeldPrior | undefined = from === 0n ? undefined : { fromIndex: from, highest: highest! };
+        readWindows(venue, venueId, 1, operator, from, t, answer => {
+          const { held, next } = heldCommitments(answer, prior);
+          charge(136n * BigInt(held.length)); store.putHeld(operator, held); prior = next;
+          window?.(answer);
+        });
+        return prior?.highest ?? highest ?? 0n;
+      });
+      return operator;
+    },
+    publications(backing) {
+      extend(4, backing, () => false, from => {
+        readWindows(venue, venueId, 4, backing, from, t, answer => {
+          charge(answer.entries.reduce((sum, entry) => sum + BigInt(entry.record.length), 0n));
+          store.putPublications(backing, answer.entries);
+        });
+        return undefined;
+      });
+      return backing;
+    },
+  };
+}
+
 /** §13 reads against the reader's independently selected venue over [0, t]:
  * the replacement chain (C2.5) from the kind-2 answer under the venue's lag,
  * the held commitments (C2.3.3) of every party in force within its term
  * (C2.10.13), each passed by its packaged directory (C2.4.2) or listed as
  * carrying the backing, and K's revocation (C2b.1). The clock and lag are the
- * venue's; a supplied answer is never evidence. Each kind and subject's answer
- * is kept in the reader's store (§13.2) and read window by window only past
- * the index it is kept through (§13.3's adjacent earlier answer), so neither
- * memory nor a later read's venue requests grow with the venue's age. Every
- * query is bounded by t. This view is shared by the original-segment clock
- * and the import walks. Nothing here classifies a checkpoint. */
+ * venue's; a supplied answer is never evidence. The answers are the reader's
+ * kept ones (`keptAnswers`), extended to t. This view is shared by the
+ * original-segment clock and the import walks. Nothing here classifies a
+ * checkpoint. */
 export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">, terms: RootTerms,
   evidence: Pick<WalkEvidence, "directory" | "chargeAnswer">, venue: RecordVenue, reference: VenueReference, store: ReplayStore): Promise<RecordView> {
   // The caller holds this preimage independently of supplied record evidence.
@@ -130,55 +203,12 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
   if (typeof now !== "bigint" || typeof lag !== "bigint" || t > now || (selection.mode === "current-fixture" && t !== now)) {
     throw new EvidenceRefusal("unresolved-evidence");
   }
-  const backing = copyBytes(selection.backing), charge = (bytes: number | bigint): void => evidence.chargeAnswer(BigInt(bytes));
-  /** Extend the kept answer of `kind` for `subject` to t, unless it already decides t. */
-  const extend = (kind: RecordKind, subject: Uint8Array, decided: (kept: { through: bigint; value: bigint | undefined }) => boolean,
-    windows: (from: bigint, value: bigint | undefined) => bigint | undefined): void => {
-    const kept = store.keptAnswer(kind, subject);
-    if (kept !== undefined && (kept.through >= t || decided(kept))) return;
-    store.keepAnswer(kind, subject, () => ({ through: t, value: windows(kept === undefined ? 0n : kept.through + 1n, kept?.value) }));
-  };
-  // Admitted replacements are kept at their first witnessing, so one identity counts once across windows and reads.
-  extend(2, backing, () => false, from => {
-    readWindows(venue, selection.venue, 2, backing, from, t, answer => {
-      for (const entry of answer.entries) {
-        const [admitted] = admittedReplacements({ request: answer.request, entries: [entry] }, terms.replacementRule);
-        if (admitted !== undefined) { charge(entry.record.length); store.putReplacement(backing, admitted.identity, entry.index, entry.record); }
-      }
-    });
-    return undefined;
-  });
-  const admitted = admittedReplacements({ request: { venue: selection.venue, kind: 2, subject: backing, fromIndex: 0n, toIndex: t },
-    entries: store.replacements(backing, t) }, terms.replacementRule);
-  const { chain } = replacementChain(admitted, { backing, original: terms.operator, lag, now: t });
-  // K's first revocation decides every later index, so an answer that found one is not extended.
-  extend(3, terms.obligor, kept => kept.value !== undefined, from => {
-    let found: bigint | undefined;
-    readWindows(venue, selection.venue, 3, terms.obligor, from, t, answer => (found = revocationIndex(answer)) !== undefined);
-    return found;
-  });
-  const revocation = store.keptAnswer(3, terms.obligor)!.value, revokedAt = revocation !== undefined && revocation <= t ? revocation : undefined;
-  const heldOf = (operator: Uint8Array): Uint8Array => {
-    extend(1, operator, () => false, (from, highest) => {
-      let prior: HeldPrior | undefined = from === 0n ? undefined : { fromIndex: from, highest: highest! };
-      readWindows(venue, selection.venue, 1, operator, from, t, answer => {
-        const { held, next } = heldCommitments(answer, prior);
-        charge(136 * held.length); store.putHeld(operator, held); prior = next;
-      });
-      return prior?.highest ?? highest ?? 0n;
-    });
-    return operator;
-  };
-  const publicationsKept = (): Uint8Array => {
-    extend(4, backing, () => false, from => {
-      readWindows(venue, selection.venue, 4, backing, from, t, answer => {
-        charge(answer.entries.reduce((sum, entry) => sum + entry.record.length, 0));
-        store.putPublications(backing, answer.entries);
-      });
-      return undefined;
-    });
-    return backing;
-  };
+  const backing = copyBytes(selection.backing);
+  const answers = keptAnswers(venue, copyBytes(selection.venue), store, t, bytes => evidence.chargeAnswer(bytes));
+  const { chain } = replacementChain(answers.replacements(backing, terms.replacementRule), { backing, original: terms.operator, lag, now: t });
+  const revokedAt = answers.revocation(terms.obligor);
+  const heldOf = (operator: Uint8Array): Uint8Array => answers.held(operator);
+  const publicationsKept = (): Uint8Array => answers.publications(backing);
   const termEnd = (i: number): bigint => (i + 1 < chain.length ? chain[i + 1]!.from - 1n : t);
   const carries = (h: HeldCommitment): SnapshotDigest | undefined => {
     const directory = evidence.directory(h.commitment.root);
