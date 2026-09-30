@@ -16,7 +16,7 @@ M5b.5 runs as three milestones ([split](decisions/2026-09.md#2026-09-29--keep-re
 and verify every held commitment twice per command (about 5 ms per checkpoint; 4,096 bound its life): keep them by
 windows, as the reader does. (2) Serve incrementally and streamed: new objects plus a trail head and the records after the
 reader's checkpoint (`EvidenceStore.importTrail`); lift the 1 MiB caps in `service-wire.ts`/`service-http.ts`/
-`service-client.ts`; `assemble` holds the package whole. *Acceptance:* a journal past 4,096 checkpoints at flat cost per
+`service-client.ts`; `assemble` holds the package whole, and a taking `rescope` copies it in memory. *Acceptance:* a journal past 4,096 checkpoints at flat cost per
 command; a second sync over HTTP fetches only new bytes; memory flat while serving. *Stop:* the wallet.
 **Then M5b.5c, the wallet:** sync from a kept replay file and retained evidence, a scan cursor and kept witnesses (kept
 stores refuse witnesses today). *Acceptance (closes M5b.5):* real proofs past the old 67-statement ceiling through the
@@ -65,7 +65,7 @@ journal, wallet sync and offline-operator recovery.
    twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a transaction.
    (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (k) A read under a silence
    or non-service clause judges every held checkpoint again at each admission (persisting the walk's cursors would bound
-   it). (l) Evidence of a refused scope change stays in the journal database. (j) Verify-only parties could take
+   it). (j) Verify-only parties could take
    identity-checked key bytes, needing no G1 file. (i) (M6) A settlement publishes its output opening (C3.5), so a backer
    seeing it before witnessing can issue the same `cm_out` first; it is refused `OUTPUT` and the acceptance may read as
    the holder's lapse (C3.8). A retry needs a fresh `rho_out` and release; the wallet builds no settlements yet.

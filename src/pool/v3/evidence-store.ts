@@ -386,15 +386,18 @@ export class EvidenceStore {
     };
   }
 
+  /** One import, all or nothing. Inside a host's open transaction it is a savepoint of it, so it commits with the host's command. */
   #transaction<T>(body: () => T): T {
     if (this.#busy) throw new Error("an import is already open on this store");
-    this.#db.exec("BEGIN");
+    const nested = this.#db.isTransaction, [begin, commit, rollback] = nested ?
+      ["SAVEPOINT import", "RELEASE import", "ROLLBACK TO import; RELEASE import"] : ["BEGIN", "COMMIT", "ROLLBACK"];
+    this.#db.exec(begin);
     try {
       const result = body();
-      this.#db.exec("COMMIT");
+      this.#db.exec(commit);
       return result;
     } catch (error) {
-      this.#db.exec("ROLLBACK");
+      this.#db.exec(rollback);
       throw error;
     }
   }

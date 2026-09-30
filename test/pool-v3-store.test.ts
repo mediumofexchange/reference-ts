@@ -435,15 +435,21 @@ describe("the v3 operator journal", () => {
     expect(await second.commit("c2")).toEqual(checkpoint);
     expect([await second.submit(issue()), await second.submit(payment())]).toEqual(receipts);
     expect(verified).toBe(2);
-    // Only the audit verifies again, reading the served evidence from its seed.
+    // Only the audit verifies again, reading the served evidence from its seed; it does not pass over a proof that fails.
     await second.audit();
     expect(verified).toBe(4);
+    const rejecting = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: { verify: () => false } });
+    expect((await rejecting.package()).package).toEqual(served.package);
+    expect(await refusal(rejecting.audit())).toEqual(["STORAGE", "PROOF"]);
+    rejecting.close();
+    const third = open();
+    expect(await refusal(second.submit(burning()))).toEqual(["FENCED", undefined]);
     // A restarted journal waits the lag before it signs or admits again (C2.8.2).
-    expect(await refusal(second.submit(burning()))).toEqual(["SCHEDULE", undefined]);
+    expect(await refusal(third.submit(burning()))).toEqual(["SCHEDULE", undefined]);
     venue.advance(venue.witnessedIndex() + lag);
-    expect(decodeReceipt(await second.submit(burning())).position).toBe(3n);
+    expect(decodeReceipt(await third.submit(burning())).position).toBe(3n);
     expect(verified).toBe(5);
-    expect(decodeReceipt(await second.submit(issue())).position).toBe(1n);
+    expect(decodeReceipt(await third.submit(issue())).position).toBe(1n);
   });
 
   it("requires a persistent path and refuses stored rows that do not reproduce", async () => {

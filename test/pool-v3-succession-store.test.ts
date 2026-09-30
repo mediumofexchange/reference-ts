@@ -174,6 +174,21 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     expect((await successor.takeover("retry", f.signed, f.held.package)).sequence).toBe(1n);
   });
 
+  it("keeps nothing of a refused takeover's evidence: later attempts cannot lean on it", async () => {
+    const f = await fundedFixture(), next = await f.replace(); f.venue.advance(next.effective);
+    const successor = f.create(bSecret, "b"), items = decodeEvidencePackage(f.held.package);
+    // Between them the three refused packages supply every kind.
+    for (const kind of [3, 4, 6]) {
+      await expect(successor.takeover(`missing-${kind}`, f.signed, encodeEvidencePackage(items.filter(item => item.kind !== kind))))
+        .rejects.toMatchObject({ code: "UNAVAILABLE" });
+    }
+    expect((await successor.takeover("complete", f.signed, f.held.package)).sequence).toBe(1n);
+    await successor.publish();
+    // What the successor serves is complete for a fresh reader.
+    expect(decodeEvidencePackage((await successor.package()).package).filter(item => item.kind === 4).length)
+      .toBeGreaterThan(items.filter(item => item.kind === 4).length);
+  });
+
   it("uses B's exact term schedule, ending service before the known B-to-C boundary", async () => {
     const f = await transferred(), third = await f.replace(cSecret, f.next.link);
     // A's old end cannot close B's current segment.

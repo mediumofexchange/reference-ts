@@ -553,10 +553,10 @@ export class V3OperatorJournal {
   /** The journal's reads go through the public reader over the evidence it serves, keeping their classes and
    * replays (§14), so a later read verifies only what it has not. The fence is checked first: a replaced
    * owner reads and keeps nothing. */
-  private readerOptions(store?: ReplayStore) {
+  private readerOptions(store?: ReplayStore, evidence: EvidenceStore = this.evidence) {
     this.transaction(() => {});
     return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference,
-      store: store ?? this.reads(), evidence: this.evidence };
+      store: store ?? this.reads(), evidence };
   }
   /** One read through the public reader. A kept file another handle is writing leaves the operation BUSY. */
   private async whileReading<T>(read: () => Promise<T>): Promise<T> {
@@ -577,12 +577,16 @@ export class V3OperatorJournal {
    * complete descent of the evidence, including proof of an empty book, and a
    * kept backing by the journal's own canonical read. No asserted state,
    * selected predecessor or imported signing counter (C2.7, C2.10.4–7). The
-   * supplied evidence joins what the journal retains and serves; nothing else
-   * is written before the opening is signed. */
+   * supplied evidence is read in a store of its own, beside a copy of what the
+   * journal serves, and joins the journal's evidence only in the transaction
+   * that signs the opening: a refused scope change keeps none of it. */
   private async planRescope(engine: Engine, spec: OwnRescope, at: bigint, target: ReturnType<V3OperatorJournal["rescopeTarget"]>):
-    Promise<{ readonly opened: Opened; readonly imported: ImportSource | undefined; readonly taken: readonly (readonly [number, Uint8Array])[] }> {
+    Promise<{ readonly opened: Opened; readonly imported: ImportSource | undefined; readonly evidence: Uint8Array | undefined;
+      readonly taken: readonly (readonly [number, Uint8Array])[] }> {
     const openings = new Map<string, CanonicalCheckpoint | undefined>(), taken: [number, Uint8Array][] = [];
     let evidence = spec.evidence;
+    const supplied = new EvidenceStore();
+    try {
     const unestablished = (error: unknown): never => {
       if ((error instanceof EvidenceRefusal && error.status === "resource-refusal") || error instanceof PackageLimitError) {
         throw new V3StoreError("REFUSED", "takeover evidence exceeds the reader's budget", "RESOURCE");
@@ -601,11 +605,18 @@ export class V3OperatorJournal {
         evidence = encodeEvidencePackage(provided);
       } catch (error) { unestablished(error); }
     }
+    // A journal with history reads its own checkpoints beside the public evidence: a taken term may follow,
+    // or already hold, one of this key's (C2.7.1).
+    if (target.taken.length > 0 && engine.last !== undefined) {
+      try { supplied.importBytes(this.assemble(engine.last)).release(); } catch (error) {
+        if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
+        if (error instanceof PackageLimitError) unestablished(error);
+        throw error;
+      }
+    }
     for (const entry of target.taken) {
-      // A journal with history reads its own checkpoints beside the public evidence, from what it retains:
-      // a taken term may follow, or already hold, one of this key's (C2.7.1).
       let source: FrontierResult;
-      try { source = await this.whileReading(() => readFrontier(evidence, entry.signed, at, this.readerOptions())); } catch (error) { return unestablished(error); }
+      try { source = await this.whileReading(() => readFrontier(evidence, entry.signed, at, this.readerOptions(undefined, supplied))); } catch (error) { return unestablished(error); }
       const current = source.ranges.chain.at(-1)!;
       requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
       requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
@@ -624,7 +635,8 @@ export class V3OperatorJournal {
       return canonical === undefined ? entry : { ...entry, opening: { operator: copyBytes(canonical.commitment.operator),
         sequence: canonical.commitment.sequence, root: copyBytes(canonical.commitment.root) } };
     }) };
-    return { opened: openedOf(header, target.opened.entries), imported, taken };
+    return { opened: openedOf(header, target.opened.entries), imported, taken, evidence: target.taken.length > 0 ? evidence : undefined };
+    } finally { supplied.close(); }
   }
   /** An opening's import: the one parent's state, or the parents' merged finalized prefixes (C2.10.6). */
   private openingImports(parents: readonly CanonicalCheckpoint[]): ImportSource | undefined {
@@ -816,26 +828,30 @@ export class V3OperatorJournal {
    * omits those checkpoints. The read selects `backing` (by default the
    * scope's first) in any scope; its package is only the configuration and the
    * selected commitment, since every other object is retained. */
-  private async currentRead(engine: Engine, at: bigint, backing = engine.opened?.entries[0]!.backing, store?: ReplayStore): Promise<StateRead> {
+  private async currentRead(engine: Engine, at: bigint, backing = engine.opened?.entries[0]!.backing, audit?: ReplayStore): Promise<StateRead> {
     requireThat(engine.opened !== undefined && backing !== undefined, "STALE", "there is no segment to read");
     const held = heldCommitments(this.ask(1, this.operator, at)).held;
+    let carried = false;
     for (const candidate of [...held].reverse()) {
       const signed = this.ownHeld(candidate);
       if (signed === undefined || !this.directoryOf(signed).some(entry => same(entry.name, backing))) continue;
+      carried = true;
       const c = signed.commitment;
       const selected = encodeEvidencePackage([{ kind: 1, payload: configurationBytes(this.configuration) }, { kind: 2, payload: encodeCommitment(c) }]);
       try {
         const result = await this.whileReading(() => readPackage(selected, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
-          backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions(store)));
+          backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions(audit)));
         requireThat(result.state !== undefined, "UNAVAILABLE", "a journal state read returned a receipt");
         return result;
       } catch (error) {
+        // An audit does not pass over a witnessed checkpoint of its own that a reader excludes.
+        if (error instanceof ReplayRefusal && audit !== undefined) throw new V3StoreError("STORAGE", `a witnessed checkpoint does not replay: ${error.check}`, error.check);
         if (error instanceof ReplayRefusal || (error instanceof EvidenceRefusal && error.status === "lapsed-selection")) continue;
         if (error instanceof EvidenceRefusal) throw new V3StoreError("UNAVAILABLE", `canonical evidence: ${error.status}`);
         throw error;
       }
     }
-    throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available", "CANONICAL");
+    throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available", carried ? undefined : "UNCARRIED");
   }
 
   private serviceClock(source: StateRead, now: bigint): void {
@@ -1007,6 +1023,8 @@ export class V3OperatorJournal {
       const { state, signed } = this.transaction(() => {
         this.stable({ ...engine, opened }, view);
         const next = this.openSegment(engine, opened, plan.imported, at, observed);
+        // What was taken joins the evidence the journal serves, with the opening it supports.
+        if (plan.evidence !== undefined) this.evidence.importBytes(plan.evidence).release();
         const taken = this.db.prepare("INSERT OR IGNORE INTO journal_taken VALUES(?,?)");
         for (const [kind, hash] of plan.taken) taken.run(kind, hash);
         this.append(engine, commandId, request, { kind: "rescope", take: texts, keep: names, evidence: named, at: at.toString(), observed },
@@ -1189,7 +1207,7 @@ export class V3OperatorJournal {
    * Re-verification on request (storage decision item 7). Reopening trusts the rows; this does not:
    * - each scoped backing's canonical checkpoint is read again through the public reader, from the segments'
    *   seeds over the evidence the journal serves, with nothing kept, so every proof through it is verified
-   *   again. Where that checkpoint is of the active segment, the journal's stored state at its position must be
+   *   again. A witnessed checkpoint of this journal that a reader excludes fails the audit, whatever the cause. Where that checkpoint is of the active segment, the journal's stored state at its position must be
    *   the state the read replayed: its chains, totals and every fact it holds, imports included;
    * - every signed row must be the reply its command was given, in order, and carry the publication the log records;
    * - every record of the active segment must have a receipt this key signed, and one naming the active
@@ -1208,7 +1226,7 @@ export class V3OperatorJournal {
           let source: StateRead;
           try { source = await this.currentRead(engine, now, backing, fresh); } catch (error) {
             // Nothing this journal signed is witnessed as carrying the backing yet: there is no read to compare.
-            if (error instanceof V3StoreError && error.check === "CANONICAL") continue;
+            if (error instanceof V3StoreError && error.check === "UNCARRIED") continue;
             throw error;
           }
           const { canonical, state: read } = source;
