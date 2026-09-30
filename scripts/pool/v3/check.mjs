@@ -14,7 +14,7 @@ import { EncodingError } from '../../../dist/bytes.js';
 import { BN254_PARAMETERS, proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
-import { V3_SPECIFICATION } from './provenance.mjs';
+import { V3_SPECIFICATION, sourceClosure, sourceHashes } from './provenance.mjs';
 import { PARAMETER_DIRECTORY, readParameters } from '../prepare-crs.mjs';
 
 const here = import.meta.dirname, root = resolve(here, '../../..');
@@ -30,6 +30,11 @@ const options = Object.freeze({ verifierTarget: 'noir-recursive' });
 const manifest = json(join(here, 'candidate-manifest.json'));
 for (const [name, version] of Object.entries(manifest.toolchain)) assert.equal(json(join(root, 'node_modules', name, 'package.json')).version, version);
 const checks = [], metrics = [], identities = {}, circuits = {}, proofs = {};
+// Every source the verdict depends on: this script and what it imports (the runtime verifier and prover it
+// asserts included), the compiler script, the circuits, the manifest and the locked toolchain.
+const sources = sourceClosure(['scripts/pool/v3/check.mjs', 'scripts/pool/v3/compile.mjs', 'scripts/pool/v3/candidate-manifest.json',
+  ...[...kinds, 'notes'].map(name => `scripts/pool/v3/circuits/${name}.nr`), 'src/pool/circuits/vendor/poseidon2.nr', 'package-lock.json']);
+const sourceDigests = sourceHashes(sources);
 let api;
 try {
   execFileSync(process.execPath, [join(here, 'compile.mjs'), build], { cwd: root, windowsHide: true, stdio: 'inherit', timeout: 300000 });
@@ -56,6 +61,9 @@ try {
     circuits[kind] = { program, backend, vk, noir: new Noir(program), widened, hostile: new Noir(widened) };
     identities[kind] = { source: sha(readFileSync(join(here, 'circuits', kind + '.nr'))), bytecode: sha(Buffer.from(program.bytecode, 'base64')), vk: sha(vk), vkBytes: vk.length };
     assert.equal(identities[kind].source, compiledSourceHashes[kind], kind + ': source changed during build');
+    // The build reproduces the manifest's pinned source, bytecode and key identities.
+    assert.equal(identities[kind].source, manifest.sources[kind + '.nr'], kind + ': source is not the manifest\'s');
+    assert.deepEqual({ bytecode: identities[kind].bytecode, vk: identities[kind].vk }, manifest.circuits[kind], kind + ': identity is not the manifest\'s');
     // Each relation fits the loaded G1 prefix, so a larger one fails here by name, not inside the prover.
     [, identities[kind].dyadicSize] = await api.acirGetCircuitSizes(gunzipSync(Buffer.from(program.bytecode, 'base64')), true, true);
     assert(identities[kind].dyadicSize <= BN254_PARAMETERS.points, kind + ': circuit larger than the loaded G1 points');
@@ -636,10 +644,11 @@ try {
   const report={candidate:'combined six successor relations', referenceBase:git(['rev-parse','HEAD']), referenceTreeClean:git(['status','--porcelain','--untracked-files=no'])==='', companionSpec:V3_SPECIFICATION,
     environment:{node:process.version,platform:process.platform,arch:process.arch,toolchain:manifest.toolchain,verifierTarget:options.verifierTarget,threads:1,parameters},
     counts,identities,sharedSources:Object.fromEntries(['notes.nr','poseidon2.nr'].map(n=>[n,sha(readFileSync(n === 'poseidon2.nr' ? join(root,'src/pool/circuits/vendor/poseidon2.nr') : join(here,'circuits',n)))])),
-    publicInputs:Object.fromEntries(kinds.map(k=>[k,publicInputsOf(k,bases[k])])), checks,metrics,
+    sources:sourceDigests, publicInputs:Object.fromEntries(kinds.map(k=>[k,publicInputsOf(k,bases[k])])), checks,metrics,
     limits:['Synthetic domain, no final configuration hash','Opaque capsules; no receiver decryption claim','No v3 parser, kind router, admission, authorization, replay, finality or venue completeness','Single desktop run, not device budgets']};
   for (const kind of kinds) assert.equal(sha(readFileSync(join(here, 'circuits', kind + '.nr'))), compiledSourceHashes[kind], kind + ': source changed during proving');
   for (const name of ['notes','poseidon2']) assert.equal(report.sharedSources[name + '.nr'], compiledSourceHashes[name], name + ': helper changed during proving');
+  assert.deepEqual(sourceHashes(sources), sourceDigests, 'sources changed during the run');
   writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');
   console.log('PASS: '+checks.length+' checks; '+metrics.length+' real proofs; '+reportPath);
 } finally {
