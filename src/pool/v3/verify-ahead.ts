@@ -11,8 +11,9 @@
 // The only difference is work: a verification started for a record the replay
 // never reaches (it refused earlier) is dropped with its outcome. A replay
 // starts ahead only as many proofs as it has already seen verify, so what it
-// drops is never more than what it used, and a verifier never holds more than
-// the window of started verifications, however many replays abandoned theirs.
+// drops is never more than what it used, and the verifier one read binds never
+// holds more than the window of started verifications, however many of the
+// read's replays abandoned theirs.
 import { compareBytes } from "../../bytes.js";
 import { decodeRecord } from "./records.js";
 import type { Adopted, ProofCheck } from "./state.js";
@@ -25,7 +26,7 @@ const MAX_WINDOW = 128;
 interface Started { readonly kind: number; readonly inputs: readonly bigint[]; readonly proof: Uint8Array; readonly verdict: Promise<unknown> }
 interface Queued { readonly bytes: Uint8Array; readonly at: bigint; started: boolean }
 
-/** Started verifications not yet settled, per verifier object, across every replay that started them. */
+/** Started verifications not yet settled, per verifier object (one read's binding), across every replay that started them. */
 const unsettled = new WeakMap<ProofCheck, { count: number }>();
 
 /** A verifier's declared parallelism read once, for a caller binding the verifier it was given; undefined where none is declared. */
@@ -80,7 +81,8 @@ export function verifyAhead(verifier: ProofCheck, records: Iterable<Uint8Array>,
       const at = started.findIndex(entry => matches(entry, kind, inputs, proof));
       if (at < 0) {
         const verdict: unknown = verifier.verify(kind, inputs, proof);
-        const thenable = verdict !== null && typeof verdict === "object" && typeof (verdict as { then?: unknown }).then === "function";
+        const thenable = verdict !== null && (typeof verdict === "object" || typeof verdict === "function") &&
+          typeof (verdict as { then?: unknown }).then === "function";
         return thenable ? Promise.resolve(verdict).then(seen) as Promise<boolean> : seen(verdict) as boolean;
       }
       // Entries before it belong to records this replay passed without their proof.
