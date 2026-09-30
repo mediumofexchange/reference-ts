@@ -10,21 +10,20 @@ incremental verdicts equal full replay, and corrupt kept state falls back; real 
 the old ceiling through journal, wallet sync and offline-operator recovery; first sync
 measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision).
 
-**Next: M5b.4, kept state across reads** (order in the decision): keep points, file digest, snapshot check, verdict
-rows kept across reads, incremental retrieval, resumption; first reviewed §14 text on kept exclusions. Carry in: keep
-points commit inside a walk (`openWalk` clears a crashed walk's rows); linear result lists (`carrying`, publications,
-force, fault facts) from kept rows; excluding a non-reproducing continuation without replay (C × N, "M5b.3b as built").
-*Acceptance:* resumed and incremental verdicts equal full replay; corrupted, truncated or undigested state falls back.
+**Next: M5b.4b, incremental retrieval** (order in the decision): evidence retained across reads in the party's evidence
+file (committing before the replay file), trails assembled from a head plus the records after the kept position, §13
+answers extended by windows. Carry in from the M5b.4a review: kept-store tests for publications/force, receipt reads and
+compact faults; a kept-read probe at scale measuring the whole-file digest per keep point and open. *Acceptance:*
+incremental verdicts equal full replay with packages carrying only new objects; kept evidence falls back like kept state.
 
 ## Status
-- M5b.3b (PR #51): one forward walk over rows in the replay store (no recursion,
-  no verdict cache), running clocks and force states, §13 answers in windows kept in the evidence batch, no import
-  totals or journal reservations, per-batch evidence quota; [10⁴ checkpoints at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-over-many-checkpoints-m5b3b).
-- M5b.3a (PR #50): packages, bytes or stream, copied into `evidence-store.ts`, one frame reader per frame, u64 items,
-  pin `97ff964`, [10⁵ statements at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-streaming-one-long-segment-m5b3a).
-  M5b.2 (PR #47): every replay in `replay-store.ts`, in memory per read or journal until M5b.4. M5b.1: design and
-  [probe](docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage). [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay):
-  complete, streamed, resumed replay; [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) 10⁶ statements over three years, ≤ 1 GiB, first sync ≤ 24 h.
+- M5b.4a (PR #52, spec 8d48b25): kept classes across reads in the party's replay file (judged again on each read's
+  evidence, only the replay kept), non-extension without replay, digest at keep points; kept stores refuse witnesses (M5b.5).
+- M5b.3b (PR #51): one forward walk over rows, running clocks and force states, §13 answers in windows, no import totals;
+  [10⁴ checkpoints at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-over-many-checkpoints-m5b3b). M5b.3a (PR #50):
+  packages copied into `evidence-store.ts`, [10⁵ statements at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-streaming-one-long-segment-m5b3a).
+  M5b.2 (PR #47): replays in `replay-store.ts`. [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay):
+  [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) 10⁶ statements over three years, ≤ 1 GiB, first sync ≤ 24 h.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
@@ -36,9 +35,9 @@ force, fault facts) from kept rows; excluding a non-reproducing continuation wit
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. **M5b.4** (above), then M5b.5–M5b.6 as the
+1. Slice 8, adoption. **M5b.4b** (above), then M5b.5–M5b.6 as the
    [storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)
-   orders them; M5b.4 names the verifier by circuit identities in the replay identity. M5b.5 also removes the journal's
+   orders them. M5b.5 also keeps the wallet's witnesses in its replay file and removes the journal's
    whole §13 asks in `store.ts` (4,096 held commitments now bound its life). Then M6 Next 5(i) (confirm a host
    rule), M4 certificates/kind-11 fitted to this retention, M7 one-transaction condition, M8 adoption (one
    manifest holding §11.1's parameter identities too, now `BN254_PARAMETERS`), every report re-recorded,
@@ -95,5 +94,5 @@ force, fault facts) from kept rows; excluding a non-reproducing continuation wit
 - Non-blocking: server timeout then eventual journal completion has source review only;
   physical custody is a separate boundary.
 
-Roughly **59% done / 41% remaining**, range **49–68%**, reassessed 2026-09-30 after M5b.3b (the reader holds flat memory
-against statements and checkpoints; kept state, journal and wallet, first sync, adoption, qualified storage, mainnet remain).
+Roughly **60% done / 40% remaining**, range **50–69%**, reassessed 2026-09-30 after M5b.4a (a reader keeps classes and state
+across reads; incremental retrieval, journal and wallet, first sync, adoption, qualified storage, mainnet remain).

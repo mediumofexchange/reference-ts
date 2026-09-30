@@ -4,6 +4,10 @@
 // or authenticated-chain finality verdict. The walk that classifies checkpoints,
 // imports, receipts, force and counts is scope-reader.ts; package-reader.ts is its entry.
 import { sha256 } from "@noble/hashes/sha2.js";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
@@ -13,14 +17,15 @@ import {
 import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import type { Commitment, SnapshotDigest } from "../../venue-records.js";
+import { EMPTY_NOTE_ROOT, EMPTY_NOTE_SUBTREE, NOTE_TREE_DEPTH, noteNode } from "../note-tree.js";
 import { ScopeTree } from "../scope.js";
-import type { Snapshot } from "./commitments.js";
+import { genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, type Snapshot } from "./commitments.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { ReplayRefusal, EvidenceRefusal, requireReplay } from "./refusals.js";
-import type { ReplayStore } from "./replay-store.js";
+import { KeptStateMismatch, type ReplayStore } from "./replay-store.js";
 import {
-  applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type ScanOutput, type SegmentReplay,
+  applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type SegmentReplay, type WitnessPredicate,
 } from "./state.js";
 import type { KeptAnswers, StoredTrail, WalkEvidence } from "./evidence-store.js";
 import type { RootTerms } from "./terms.js";
@@ -179,7 +184,7 @@ export interface ReplayContext {
   readonly scopedTerms?: ReadonlyMap<string, RootTerms | undefined> | undefined;
   readonly header: SegmentHeader;
   readonly verifier: ProofCheck;
-  readonly witness?: ((output: ScanOutput) => boolean) | undefined;
+  readonly witness?: WitnessPredicate | undefined;
 }
 /** A replayed checkpoint's state at its position, as a later replay resumes or imports it. */
 export class ReplayResult extends StateHandle {
@@ -196,9 +201,10 @@ export class ReplayResult extends StateHandle {
   /** Events this segment's opening imported. */
   importedEventCount(): bigint { return this.store.eventCount(this.ns, 0n); }
 }
-/** A segment's last valid checkpoint, carrying its replayed state for resumption. */
+/** A segment's last valid checkpoint, carrying its replayed state for resumption and its snapshot's totals for §14's check. */
 export interface ValidCheckpoint extends LastValid {
   readonly state?: ReplayResult | undefined;
+  readonly totals?: { readonly backing: Uint8Array; readonly issued: bigint; readonly burned: bigint } | undefined;
 }
 /** A predecessor's replayed state or merged finalized prefixes, as imported by a new segment. */
 export type ImportedFrontier = ReplayResult | (MergedImport & { readonly adoptionIndices: ReadonlyMap<string, bigint> });
@@ -217,9 +223,10 @@ export interface TrailOptions {
 }
 
 /** A valid checkpoint as the next one's last valid checkpoint. */
-export function lastValidOf(state: ReplayResult, snapshot: Pick<Snapshot, "historyHash" | "evidenceHash">): ValidCheckpoint {
+export function lastValidOf(state: ReplayResult, snapshot: Pick<Snapshot, "historyHash" | "evidenceHash" | "backing" | "issued" | "burned">): ValidCheckpoint {
   return { position: state.position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash,
-    judgedIndex: position => state.judgedIndex(position), state };
+    judgedIndex: position => state.judgedIndex(position), state,
+    totals: { backing: snapshot.backing, issued: snapshot.issued, burned: snapshot.burned } };
 }
 
 /** One checkpoint's trail under the segment's scope and terms, through the
@@ -234,6 +241,13 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
   const { store, selection, terms, scopedTerms, header, verifier, witness } = context;
   const { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false } = options;
   const scope = new ScopeTree(header.entries).root();
+  // §7.1, §14 non-extension without replay: a continuation's authenticated trail extends the last valid
+  // prefix exactly where its chain value at the prefix's length is the prefix's evidence hash. Otherwise it
+  // is excluded on that ground, and none of its records is replayed.
+  if (lastValid !== undefined) {
+    const at = trail.length < lastValid.position ? undefined : trail.evidence(lastValid.position);
+    requireReplay(at !== undefined && same(at, lastValid.evidenceHash), "CONTINUITY");
+  }
   const identity = replayIdentity(context, snapshot, { imported, block, openingIndex, revokedAt, revocations });
   return store.replay(async () => {
     const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid);
@@ -244,7 +258,6 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     // Records are read from the reader's own storage one at a time.
     for (const bytes of trail.records(state.position)) await applyRecord(state, bytes, replay);
     const position = state.position;
-    requireReplay(lastValid === undefined || position >= lastValid.position, "CONTINUITY");
     const { issued, burned } = state.total(hex(snapshot.backing));
     requireReplay(same(state.history, snapshot.historyHash) && issued === snapshot.issued && burned === snapshot.burned, "SNAPSHOT");
     // Inside the savepoint: a sibling's misstated totals refuse the checkpoint and leave nothing behind.
@@ -259,9 +272,61 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
   });
 }
 
+/** The pool-v3 revision this reader implements. */
+const SPECIFICATION = "pool-v3 8d48b25";
+let rules: Uint8Array | undefined;
+/** The reader rules (§14 kept classes): the specification revision and the implementation's own code, every
+ * file of the package's source or build tree by path and content. Any change to either discards kept state. */
+function replayRules(): Uint8Array {
+  if (rules === undefined) {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..", ".."), hash = createHash("sha256");
+    const add = (name: string, path: string): void => { hash.update(identityFrame([name, readFileSync(path)])); };
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir).sort()) {
+        // Directories are entered only as themselves, so a linked directory cannot loop; a linked file is read.
+        const path = join(dir, name), own = lstatSync(path);
+        if (own.isDirectory()) walk(path);
+        else if (own.isFile() || (own.isSymbolicLink() && statSync(path).isFile())) add(relative(root, path).split(sep).join("/"), path);
+      }
+    };
+    walk(root);
+    // The package's manifest and lockfile, where present, name the dependencies the code runs on.
+    for (const name of ["package.json", "package-lock.json"]) if (existsSync(join(root, "..", name))) add(`../${name}`, join(root, "..", name));
+    rules = sha256(identityFrame(["v3-replay-rules", SPECIFICATION, new Uint8Array(hash.digest())]));
+  }
+  return rules;
+}
+// Named when the module loads, so a later rebuild cannot give old code the new name.
+replayRules();
+/** Objects the reader cannot name by content are named once per process, never equal to another process's. */
+const PROCESS = randomBytes(32);
+const unnamed = new WeakMap<object, Uint8Array>();
+let objects = 0n;
+function processName(object: object): Uint8Array {
+  if (!unnamed.has(object)) unnamed.set(object, sha256(identityFrame(["unnamed", PROCESS, ++objects])));
+  return unnamed.get(object)!;
+}
+/** The selected verifier's name (§14 replay inputs): its circuits' bytecode and key identities where it
+ * declares them (a ProofVerifier derives them from the artifacts it loaded), else a name of this object alone. */
+export function verifierName(verifier: ProofCheck): Uint8Array {
+  const identities = verifier.identities;
+  if (identities === undefined) return processName(verifier);
+  const parts: (Uint8Array | string)[] = ["verifier"];
+  for (const name of Object.keys(identities).sort()) parts.push(name, identities[name]!.bytecode, identities[name]!.vk);
+  return sha256(identityFrame(parts));
+}
+/** A witness predicate's name: the identity it declares, else a name of this object alone. */
+export function witnessName(witness: WitnessPredicate): Uint8Array {
+  return witness.identity instanceof Uint8Array ? sha256(identityFrame(["witness", witness.identity])) : processName(witness);
+}
+/** The context kept classes are reused under (§14): the rules, configuration, venue identity (which fixes its lag), verifier and witness predicate. */
+export function keptContext(parts: { readonly domain: Uint8Array; readonly venue: Uint8Array; readonly verifier: ProofCheck;
+  readonly witness?: WitnessPredicate | undefined }): Uint8Array {
+  return sha256(identityFrame(["v3-kept-context", replayRules(), parts.domain, parts.venue, verifierName(parts.verifier),
+    parts.witness === undefined ? undefined : witnessName(parts.witness)]));
+}
+
 // Framed fields of the replay identity: no delimiter concatenation.
-const verifierIds = new WeakMap<object, number>();
-let verifiers = 0;
 function identityFrame(parts: readonly (Uint8Array | bigint | string | undefined)[]): Uint8Array {
   const chunks: Uint8Array[] = [];
   for (const part of parts) {
@@ -277,21 +342,16 @@ function identityFrame(parts: readonly (Uint8Array | bigint | string | undefined
 
 /** The digest of everything a replayed prefix's state depends on besides its
  * records and the index each was judged at (kept in its event rows): the
- * configuration and backing, the segment and scoped terms, the imported
+ * rules, configuration and backing, the segment and scoped terms, the imported
  * frontier by segment, position and history hash, the adopted block and
- * opening index, the verifier, the witness predicate and the revocation
- * indices. Within one process the verifier and predicate are named by object; M5b.4 names it by its circuit identities. */
+ * opening index, the verifier by its circuit identities, the witness predicate
+ * and the revocation indices (storage decision item 5). */
 function replayIdentity({ selection, terms, scopedTerms, verifier, witness }: ReplayContext, snapshot: Snapshot,
   { imported, block, openingIndex, revokedAt, revocations }: { imported: ImportedFrontier | undefined; block: readonly Adopted[];
     openingIndex: bigint | undefined; revokedAt: bigint | undefined; revocations: ReadonlyMap<string, bigint | undefined> | undefined }): Uint8Array {
-  const id = (object: object | undefined): bigint | undefined => {
-    if (object === undefined) return undefined;
-    if (!verifierIds.has(object)) verifierIds.set(object, ++verifiers);
-    return BigInt(verifierIds.get(object)!);
-  };
   // The witness predicate decides which paths the namespace can answer, so it is part of the identity too.
-  const parts: (Uint8Array | bigint | string | undefined)[] = ["v3-replay-identity", selection.domain, selection.backing, snapshot.segment,
-    openingIndex, id(verifier), id(witness), revokedAt];
+  const parts: (Uint8Array | bigint | string | undefined)[] = ["v3-replay-identity", replayRules(), selection.domain, selection.backing, snapshot.segment,
+    openingIndex, verifierName(verifier), witness === undefined ? undefined : witnessName(witness), revokedAt];
   const obligors = scopedTerms === undefined ? [["selected", terms.obligor] as const] : [...scopedTerms].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([name, t]) => [name, t?.obligor] as const);
   for (const [name, obligor] of obligors) parts.push(name, obligor);
@@ -311,8 +371,8 @@ function replayIdentity({ selection, terms, scopedTerms, verifier, witness }: Re
  * proof and authorization bytes. Under the same replay identity their
  * replayed state is that checkpoint's, so the replay resumes in the
  * namespace whose tip is that checkpoint instead of verifying the prefix
- * again. Anything else replays in a fresh namespace, keeping the first failing
- * check and its order. */
+ * again, once §14's snapshot check passes. Otherwise it replays in a fresh
+ * namespace from the segment's seed. */
 function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array, trail: StoredTrail, lastValid: ValidCheckpoint | undefined): StateHandle | undefined {
   if (lastValid === undefined || trail.length < lastValid.position || !same(trail.segment, segment)) return undefined;
   const own = lastValid.state?.ns, candidates = [...(own === undefined ? [] : [own]), ...store.namespaces(identity).filter(ns => ns !== own)];
@@ -320,10 +380,63 @@ function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array
     const tip = store.tip(ns);
     if (!same(store.identity(ns), identity)) continue;
     if (tip.position !== lastValid.position || !same(tip.history, lastValid.historyHash) || !same(tip.evidence, lastValid.evidenceHash)) continue;
+    if (!keptTipHolds(store, ns, lastValid)) throw new KeptStateMismatch("a resumed tip is not its checkpoint's snapshot");
     const evidence = trail.evidence(tip.position);
     return evidence !== undefined && same(evidence, lastValid.evidenceHash) ? new StateHandle(store, ns) : undefined;
   }
   return undefined;
+}
+
+/** §14 kept classes: a kept valid class's state at position m of namespace `ns`, against its re-authenticated
+ * snapshot. At the tip the snapshot check recomputes it; below, the stored chain values and totals at m must be
+ * the snapshot's, and the file's digest vouches for the other rows at or below m. */
+export function keptStateHolds(store: ReplayStore, ns: number, position: bigint, identity: Uint8Array, snapshot: Snapshot): boolean {
+  if (!store.hasNamespace(ns) || !same(store.identity(ns), identity) || !same(store.tip(ns).segment, snapshot.segment)) return false;
+  const tip = store.tip(ns), checkpoint: ValidCheckpoint = { position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash,
+    totals: { backing: snapshot.backing, issued: snapshot.issued, burned: snapshot.burned } };
+  if (tip.position === position) return keptTipHolds(store, ns, checkpoint);
+  if (tip.position < position) return false;
+  const event = position === 0n ? undefined : store.event(ns, position), total = store.total(ns, position, hex(snapshot.backing));
+  const history = position === 0n ? genesisHistoryHash(snapshot.segment) : event?.history;
+  const evidence = position === 0n ? genesisEvidenceHash(snapshot.segment) : event?.evidence;
+  return history !== undefined && evidence !== undefined && same(history, snapshot.historyHash) && same(evidence, snapshot.evidenceHash) &&
+    total.issued === snapshot.issued && total.burned === snapshot.burned;
+}
+
+/** The note root of a stored frontier: each completed left subtree folded with what lies to its right. */
+function frontierRoot(leaves: bigint, ommers: readonly (bigint | undefined)[]): bigint | undefined {
+  let node: bigint | undefined;
+  for (let h = 0; h < NOTE_TREE_DEPTH; h++) {
+    const left = ommers[h];
+    if ((left !== undefined) !== (((leaves >> BigInt(h)) & 1n) === 1n)) return undefined;
+    if (left !== undefined) node = noteNode(h, left, node ?? EMPTY_NOTE_SUBTREE[h]!);
+    else if (node !== undefined) node = noteNode(h, node, EMPTY_NOTE_SUBTREE[h]!);
+  }
+  return leaves >> BigInt(NOTE_TREE_DEPTH) !== 0n ? undefined : node ?? EMPTY_NOTE_ROOT;
+}
+
+/** §14's snapshot check before resuming: the note root from the stored frontier, the spent root from the
+ * top node's stored children, the totals from their rows and both chains at n from the stored values at
+ * n − 1 and record n's digests, against the checkpoint's authenticated snapshot rather than values stored
+ * beside them; and the stored tip must be that position. */
+function keptTipHolds(store: ReplayStore, ns: number, lastValid: ValidCheckpoint): boolean {
+  const tip = store.tip(ns), n = tip.position, segment = tip.segment;
+  if (n !== lastValid.position) return false;
+  let history = genesisHistoryHash(segment), evidence = genesisEvidenceHash(segment);
+  if (n > 0n) {
+    const event = store.event(ns, n), before = n === 1n ? undefined : store.event(ns, n - 1n), frontier = store.frontier(ns);
+    const noteRoot = frontierRoot(frontier.leaves, frontier.ommers);
+    if (event === undefined || (n > 1n && before === undefined) || noteRoot === undefined) return false;
+    history = nextHistoryHash(before?.history ?? history, event.identity, noteRoot, store.spentRootFromChildren(ns), n);
+    evidence = nextEvidenceHash(before?.evidence ?? evidence,
+      { statementHash: event.identity, proofHash: event.proofHash, signatureHash: event.signatureHash }, n);
+  }
+  const totals = lastValid.totals === undefined ? true : (() => {
+    const kept = store.total(ns, n, hex(lastValid.totals.backing));
+    return kept.issued === lastValid.totals.issued && kept.burned === lastValid.totals.burned;
+  })();
+  return totals && same(history, lastValid.historyHash) && same(evidence, lastValid.evidenceHash) &&
+    same(tip.history, history) && same(tip.evidence, evidence);
 }
 
 /** §9's compact fault evidence as the reader observes it: facts recorded per

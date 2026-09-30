@@ -11,7 +11,12 @@
 //   set's nodes, the note tree's frontier and the incremental witnesses of the
 //   outputs a replay chose to witness. No note-tree interior node is kept.
 // - A refused checkpoint rolls back a savepoint; nothing is copied to undo.
+// - Classes, scopes, bases and publication verdicts are kept across reads under one
+//   context (pool-v3 §14 kept classes). A party's kept file is reopened only where its
+//   digest, recorded at each keep point outside the file, still matches.
 import { sha256 } from "@noble/hashes/sha2.js";
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, writeSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
@@ -95,6 +100,7 @@ export interface WitnessPath { readonly leaf: bigint; readonly anchor: bigint; r
 const EMPTY_SPENT = sha256(V3_SPENT_EMPTY_CONTEXT);
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString("hex");
 const unhex = (text: string): Uint8Array => new Uint8Array(Buffer.from(text, "hex"));
+const equal = (a: Uint8Array, b: Uint8Array): boolean => Buffer.from(a.buffer, a.byteOffset, a.length).equals(b);
 const bytes = (value: unknown): Uint8Array => new Uint8Array(value as Uint8Array);
 const field = (value: unknown): bigint => bytesToField(bytes(value));
 const optional = (value: unknown): bigint | undefined => (value === null || value === undefined ? undefined : BigInt(value as bigint));
@@ -135,22 +141,35 @@ const SCHEMA = `
     PRIMARY KEY(ns, id)) WITHOUT ROWID;
   CREATE TABLE witness (ns INTEGER, leaf INTEGER, cm BLOB NOT NULL, siblings BLOB NOT NULL, PRIMARY KEY(ns, leaf)) WITHOUT ROWID;
   CREATE TABLE merging (ns INTEGER PRIMARY KEY, upto INTEGER NOT NULL);
-  CREATE TABLE walk (id INTEGER PRIMARY KEY AUTOINCREMENT);
-  CREATE TABLE walk_verdict (walk INTEGER, key BLOB, operator BLOB NOT NULL, seq BLOB NOT NULL, root BLOB NOT NULL, signature BLOB NOT NULL,
+  CREATE TABLE kept_context (id INTEGER PRIMARY KEY CHECK (id = 1), key BLOB NOT NULL);
+  CREATE TABLE verdict (key BLOB PRIMARY KEY, operator BLOB NOT NULL, seq BLOB NOT NULL, root BLOB NOT NULL, signature BLOB NOT NULL,
     idx BLOB NOT NULL, class TEXT NOT NULL, detail TEXT, segment BLOB NOT NULL, snapshot BLOB NOT NULL, ns INTEGER, position INTEGER,
-    identity BLOB, issued TEXT, burned TEXT, adoption TEXT, opening BLOB, PRIMARY KEY(walk, key)) WITHOUT ROWID;
-  CREATE INDEX walk_verdict_order ON walk_verdict(walk, idx, seq);
+    identity BLOB, issued TEXT, burned TEXT, adoption TEXT, opening BLOB) WITHOUT ROWID;
+  CREATE TABLE scope (segment BLOB, i INTEGER, bytes BLOB NOT NULL, signature BLOB, PRIMARY KEY(segment, i)) WITHOUT ROWID;
+  CREATE TABLE base (segment BLOB PRIMARY KEY, opening BLOB NOT NULL, parents TEXT NOT NULL, totals TEXT NOT NULL,
+    adoption TEXT NOT NULL) WITHOUT ROWID;
+  CREATE TABLE base_import (segment BLOB, name BLOB, ns INTEGER NOT NULL, upto INTEGER NOT NULL, PRIMARY KEY(segment, name)) WITHOUT ROWID;
+  CREATE TABLE base_block (segment BLOB, n INTEGER, backing BLOB NOT NULL, idx BLOB NOT NULL, ordinal BLOB NOT NULL, bytes BLOB NOT NULL,
+    PRIMARY KEY(segment, n)) WITHOUT ROWID;
+  CREATE TABLE publication (backing BLOB, idx BLOB, ordinal BLOB, record_hash BLOB NOT NULL, force INTEGER NOT NULL, detail TEXT, bytes BLOB,
+    PRIMARY KEY(backing, idx, ordinal)) WITHOUT ROWID;
+  CREATE TABLE walk (id INTEGER PRIMARY KEY AUTOINCREMENT);
+  CREATE TABLE walk_verdict (walk INTEGER, key BLOB, idx BLOB NOT NULL, seq BLOB NOT NULL, operator BLOB NOT NULL, root BLOB NOT NULL,
+    PRIMARY KEY(walk, key)) WITHOUT ROWID;
+  CREATE INDEX walk_verdict_order ON walk_verdict(walk, idx, seq, operator, root);
   CREATE TABLE walk_valid (walk INTEGER, backing BLOB, idx BLOB, seq BLOB, operator BLOB NOT NULL, key BLOB NOT NULL,
-    PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;
-  CREATE TABLE walk_scope (walk INTEGER, segment BLOB, i INTEGER, bytes BLOB NOT NULL, signature BLOB, PRIMARY KEY(walk, segment, i)) WITHOUT ROWID;
-  CREATE TABLE walk_base (walk INTEGER, segment BLOB, opening BLOB NOT NULL, parents TEXT NOT NULL, totals TEXT NOT NULL,
-    adoption TEXT NOT NULL, PRIMARY KEY(walk, segment)) WITHOUT ROWID;
-  CREATE TABLE walk_import (walk INTEGER, segment BLOB, name BLOB, ns INTEGER NOT NULL, upto INTEGER NOT NULL, PRIMARY KEY(walk, segment, name)) WITHOUT ROWID;
-  CREATE TABLE walk_block (walk INTEGER, segment BLOB, n INTEGER, backing BLOB NOT NULL, idx BLOB NOT NULL, ordinal BLOB NOT NULL, bytes BLOB NOT NULL,
-    PRIMARY KEY(walk, segment, n)) WITHOUT ROWID;
-  CREATE TABLE walk_publication (walk INTEGER, backing BLOB, idx BLOB, ordinal BLOB, force INTEGER NOT NULL, detail TEXT, bytes BLOB,
-    PRIMARY KEY(walk, backing, idx, ordinal)) WITHOUT ROWID;`;
-const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_scope", "walk_base", "walk_import", "walk_block", "walk_publication"];
+    PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;`;
+/** Rows one read keeps for itself: what it classified (a verdict it judged or reused) and each backing's valid candidates. */
+const WALK_TABLES = ["walk_verdict", "walk_valid"];
+/** Rows kept across reads (pool-v3 §14 kept classes): each is a function of authenticated bytes and the record before its index. */
+const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication"];
+/** The kept file's layout: another layout's file is discarded rather than read. */
+const SCHEMA_VERSION = 1;
+/** Replayed records between keep points inside one read, by default. */
+const KEEP_EVERY = 10_000;
+/** Every table holding a namespace's rows. */
+const NAMESPACE_TABLES = ["namespace", "import", "event", "event_key", "nullifier", "output", "anchor", "demand", "demand_tag", "demand_end",
+  "total", "spent", "witness"];
 
 /** A u64 as eight big-endian bytes, so stored order is numeric order. */
 const be = (value: bigint): Uint8Array => { const out = new Uint8Array(8); new DataView(out.buffer).setBigUint64(0, value); return out; };
@@ -190,6 +209,17 @@ export interface WalkBase {
 export interface WalkForce { readonly backing: string; readonly index: bigint; readonly ordinal: bigint; readonly bytes: Uint8Array }
 /** A classified publication: forced, or not with the check that refused it (none where it was not a candidate). */
 export interface WalkPublication { readonly index: bigint; readonly ordinal: bigint; readonly force: boolean; readonly check: string | undefined }
+/** A kept file (pool-v3 §14): the state as last committed, vouched for by a digest the party keeps outside it. */
+export interface KeptFile {
+  /** Where the party keeps the file's SHA256, which only it writes. */
+  readonly digest: string;
+  /** Replayed records between keep points inside one read (a long first sync keeps its progress). */
+  readonly every?: number | undefined;
+}
+/** Kept state that failed a check before reuse (§14): the read discards it and classifies again. */
+export class KeptStateMismatch extends Error {
+  constructor(what: string) { super(`kept state does not match: ${what}`); this.name = "KeptStateMismatch"; }
+}
 const mapJson = (map: ReadonlyMap<string, bigint>): string => JSON.stringify([...map].map(([k, v]) => [k, v.toString()]));
 const jsonMap = (text: unknown): Map<string, bigint> => new Map((JSON.parse(text as string) as [string, string][]).map(([k, v]) => [k, BigInt(v)]));
 
@@ -232,17 +262,56 @@ const encodeSiblings = (siblings: readonly bigint[]): Uint8Array => {
 const decodeSiblings = (blob: Uint8Array): bigint[] => Array.from({ length: NOTE_TREE_DEPTH }, (_, h) => bytesToField(blob.subarray(32 * h, 32 * h + 32)));
 const msb = (x: bigint): number => x.toString(2).length - 1;
 
+/** SHA256 of a closed file, read in pieces so memory stays flat. */
+function fileDigest(path: string): string {
+  const hash = createHash("sha256"), buffer = Buffer.alloc(1 << 20), fd = openSync(path, "r");
+  try { for (let n = readSync(fd, buffer); n > 0; n = readSync(fd, buffer)) hash.update(buffer.subarray(0, n)); } finally { closeSync(fd); }
+  return hash.digest("hex");
+}
+/** Replace a small file durably: a crash leaves the old contents or the new, never a torn one. */
+function replaceFile(path: string, text: string): void {
+  const partial = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.partial`, fd = openSync(partial, "w");
+  try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
+  renameSync(partial, path);
+}
+/** Whether a kept file may be reused (§14's digest check): opening it rolls back a crashed transaction's
+ * hot journal, and the closed file must then hash to the digest last recorded, at this layout. */
+function keptFileHolds(path: string, digest: string): boolean {
+  if (!existsSync(path)) return false;
+  try {
+    const db = new DatabaseSync(path, { readBigInts: true });
+    let version: bigint;
+    try { version = (db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version; } finally { db.close(); }
+    return version === BigInt(SCHEMA_VERSION) && existsSync(digest) && readFileSync(digest, "utf8") === fileDigest(path);
+  } catch (error) {
+    // Another store holding the file is the caller's error, never damage to discard.
+    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");
+    return false;
+  }
+}
+
 export class ReplayStore {
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
+  readonly #kept: (KeptFile & { readonly path: string }) | undefined;
   #savepoints = 0;
   #replaying = false;
+  #sinceKeep = 0;
 
-  /** A private in-memory database by default: short reads and tests run the same code. */
-  constructor(path = ":memory:") {
+  /** A private in-memory database by default: short reads and tests run the same code. A path with `kept`
+   * is the party's kept state (§14): reopened only where the digest check passes, discarded otherwise, and
+   * committed with a new digest at each keep point. A path without `kept` is a new file used once. */
+  constructor(path = ":memory:", kept?: KeptFile) {
+    if (kept !== undefined) {
+      if (path === ":memory:" || typeof kept.digest !== "string" || kept.digest === path) throw new TypeError("a kept store is a file with its own digest");
+      if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
+      this.#kept = { ...kept, path };
+      if (!keptFileHolds(path, kept.digest)) for (const file of [path, `${path}-journal`, kept.digest]) rmSync(file, { force: true });
+    }
+    const reopened = kept !== undefined && existsSync(path);
     this.#db = new DatabaseSync(path, { readBigInts: true });
     this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL; PRAGMA temp_store=MEMORY;");
-    this.#db.exec(SCHEMA);
+    if (!reopened) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
     const v = visible("x");
     this.#q = Object.fromEntries(Object.entries({
       tip: "SELECT * FROM namespace WHERE ns = ?",
@@ -292,6 +361,47 @@ export class ReplayStore {
 
   close(): void { if (this.#db.isOpen) this.#db.close(); }
 
+  /** Whether this store is a party's kept file. */
+  get kept(): boolean { return this.#kept !== undefined; }
+
+  /** Record the committed file's digest (a keep point's second half). A crash before this leaves an old
+   * digest, so the next open discards the file and replays in full (storage decision item 6). */
+  #recordDigest(): void {
+    replaceFile(this.#kept!.digest, fileDigest(this.#kept!.path));
+    this.#sinceKeep = 0;
+  }
+  /** A keep point inside a walk where one is due: only between checkpoints (no savepoint or replay open),
+   * once `every` records have replayed since the last, so a killed long read keeps its progress. */
+  keepPoint(): void {
+    const kept = this.#kept;
+    if (kept === undefined || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
+        this.#sinceKeep < (kept.every ?? KEEP_EVERY)) return;
+    this.#db.exec("COMMIT");
+    try { this.#recordDigest(); } finally { this.#db.exec("BEGIN"); }
+  }
+  /** Forget every kept row (§14: kept state that fails a check is discarded); a kept file also drops its namespaces. */
+  discardKept(): void {
+    if (this.#db.isTransaction || this.#replaying) throw new Error("a walk is open on this store");
+    this.#atomic(() => {
+      for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
+      this.#db.prepare("DELETE FROM kept_context").run();
+    });
+    if (this.#kept !== undefined) this.collect([]);
+  }
+  /** The kept note frontier of `ns` (leaf count and completed left subtrees), for §14's snapshot check. */
+  frontier(ns: number): { readonly leaves: bigint; readonly ommers: readonly (bigint | undefined)[] } {
+    const row = this.#q.tip!.get(ns) as Record<string, unknown> | undefined;
+    if (row === undefined) throw new Error("unknown replay namespace");
+    return { leaves: BigInt(row["leaves"] as bigint), ommers: decodeOmmers(bytes(row["ommers"])) };
+  }
+  /** The spent root of `ns` recomputed from its top node's stored children (C1.2.8–9), for §14's snapshot check. */
+  spentRootFromChildren(ns: number): Uint8Array {
+    const top = optional((this.#q.tip!.get(ns) as Record<string, unknown>)["spent_top"]);
+    if (top === undefined) return EMPTY_SPENT;
+    const node = this.#spentNode(ns, top);
+    return node.bit === null ? leafHash(node.key) : branchHash(node.bit, this.#spentNode(ns, node.l!).hash, this.#spentNode(ns, node.r!).hash);
+  }
+
   // --- Namespaces -------------------------------------------------------------------------
 
   /** A fresh namespace for `segment` under `identity`: the empty tree and anchor, the
@@ -315,6 +425,8 @@ export class ReplayStore {
       return ns;
     });
   }
+
+  hasNamespace(ns: number): boolean { return this.#q.tip!.get(ns) !== undefined; }
 
   identity(ns: number): Uint8Array {
     return bytes((this.#db.prepare("SELECT identity FROM namespace WHERE ns = ?").get(ns) as { identity: unknown }).identity);
@@ -388,7 +500,8 @@ export class ReplayStore {
     } finally { this.#savepoints--; }
   }
 
-  /** Drop every namespace that neither `keep` nor anything they import reads. */
+  /** Drop every namespace that neither `keep` nor anything they import reads. Kept rows refer to
+   * namespaces, so dropping any also forgets them: a later read classifies again. */
   collect(keep: readonly number[]): void {
     if (this.#replaying) throw new Error("a replay is open on this store");
     const live = new Set<number>();
@@ -396,11 +509,11 @@ export class ReplayStore {
     const dead = (this.#db.prepare("SELECT ns FROM namespace").all() as { ns: bigint }[]).map(r => Number(r.ns)).filter(ns => !live.has(ns));
     if (dead.length === 0) return;
     this.#atomic(() => {
-      for (const table of ["namespace", "import", "event", "event_key", "nullifier", "output", "anchor", "demand", "demand_tag", "demand_end",
-        "total", "spent", "witness"]) {
+      for (const table of NAMESPACE_TABLES) {
         const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
         for (const ns of dead) drop.run(ns);
       }
+      for (const table of [...KEPT_TABLES, "kept_context"]) this.#db.prepare(`DELETE FROM ${table}`).run();
     });
   }
 
@@ -529,23 +642,36 @@ export class ReplayStore {
     });
   }
 
-  // --- A read's walk (M5b.3b): verdicts, valid candidates, scopes, bases, publications -----
+  // --- A read's walk: verdicts, valid candidates, scopes, bases, publications ---------------
   //
-  // One read's classification lives in rows under its walk id, so the walk holds
-  // no verdict, scope or base in memory; the rows go when the read closes the walk.
+  // A walk's classification lives in rows, so it holds no verdict, scope or base in memory. What a
+  // class, scope, base or publication verdict is depends only on authenticated bytes and the record
+  // before its index (C2.10.11), so those rows are kept across reads under one context (pool-v3 §14
+  // kept classes): the configuration, venue, lag, verifier and witness predicate the reader names.
+  // A walk keeps for itself only what it classified and each backing's valid candidates, which are
+  // bounded by its own judging index; those go when it closes.
 
-  // A walk runs in one transaction: its rows and replays commit once, when it closes, rather than a
-  // commit per row. A walk that overflows the page cache spills to the file, so memory stays bounded.
-  // One walk at a time: a second open while one is open is the caller's error.
-  openWalk(): number {
+  // A walk runs in one transaction: its rows and replays commit once, when it closes, or at a keep point.
+  // A walk that overflows the page cache spills to the file, so memory stays bounded. One walk at a time:
+  // a second open while one is open is the caller's error. Another context than the kept one discards the
+  // kept rows: a store keeps one context.
+  openWalk(context: Uint8Array): number {
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
     this.#db.exec("BEGIN");
     // No walk is open, so any walk rows are a crashed read's: they are no one's.
     for (const table of ["walk", ...WALK_TABLES]) this.#db.prepare(`DELETE FROM ${table}`).run();
+    const kept = this.#db.prepare("SELECT key FROM kept_context WHERE id = 1").get() as { key: unknown } | undefined;
+    if (kept === undefined || !equal(bytes(kept.key), context)) {
+      for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
+      // A kept file's namespaces were replayed under the old context and can never resume under this one.
+      if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
+      this.#db.prepare("INSERT OR REPLACE INTO kept_context VALUES (1, ?)").run(context);
+    }
     return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id);
   }
-  /** Drop the walk's rows and commit what its replays kept, refused read or not. If that fails, nothing
-   * of the walk commits and the store is left without an open transaction. */
+  /** Drop the walk's own rows and commit what it kept, refused read or not; a kept file records its digest
+   * (a keep point). If the commit fails, what the walk wrote since its last keep point is rolled back and no
+   * transaction stays open. */
   closeWalk(walk: number): void {
     try {
       for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
@@ -555,6 +681,7 @@ export class ReplayStore {
       if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
       throw error;
     }
+    if (this.#kept !== undefined) this.#recordDigest();
   }
   /** Rows held for walks still open: none once every read has closed its walk. */
   walkRows(): number {
@@ -562,13 +689,25 @@ export class ReplayStore {
     for (const table of ["walk", ...WALK_TABLES]) rows += Number((this.#db.prepare(`SELECT count(*) AS c FROM ${table}`).get() as { c: bigint }).c);
     return rows;
   }
+  /** Rows kept across reads. */
+  keptRows(): number {
+    let rows = 0;
+    for (const table of KEPT_TABLES) rows += Number((this.#db.prepare(`SELECT count(*) AS c FROM ${table}`).get() as { c: bigint }).c);
+    return rows;
+  }
 
+  /** Keep a class the walk judged, and count it as classified by the walk. */
   putVerdict(walk: number, v: WalkVerdict): void {
     const s = v.state;
-    this.#db.prepare("INSERT INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(walk, v.key, v.operator,
+    this.#db.prepare("INSERT OR REPLACE INTO verdict VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(v.key, v.operator,
       be(v.sequence), v.root, v.signature, be(v.index), v.class, v.detail ?? null, v.segment, v.snapshot, s?.ns ?? null, s?.position ?? null,
       s?.identity ?? null, s === undefined ? null : u64(s.issued), s === undefined ? null : u64(s.burned),
       s === undefined ? null : mapJson(s.adoption), s === undefined ? null : be(s.opening));
+    this.touch(walk, v);
+  }
+  /** Count a kept class as classified by the walk. */
+  touch(walk: number, v: Pick<WalkVerdict, "key" | "index" | "sequence" | "operator" | "root">): void {
+    this.#db.prepare("INSERT INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?)").run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root);
   }
   #verdict(row: Record<string, unknown>): WalkVerdict {
     const state = row["ns"] === null ? undefined : { ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint),
@@ -578,13 +717,21 @@ export class ReplayStore {
       signature: bytes(row["signature"]), index: fromBe(row["idx"]), class: row["class"] as WalkVerdict["class"],
       detail: row["detail"] === null ? undefined : row["detail"] as string, segment: bytes(row["segment"]), snapshot: bytes(row["snapshot"]), state };
   }
+  /** A class the walk classified. */
   verdict(walk: number, key: Uint8Array): WalkVerdict | undefined {
-    const row = this.#db.prepare("SELECT * FROM walk_verdict WHERE walk = ? AND key = ?").get(walk, key) as Record<string, unknown> | undefined;
+    const row = this.#db.prepare("SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ? AND w.key = ?")
+      .get(walk, key) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#verdict(row);
   }
-  /** Every verdict of the walk, by index, sequence, then operator and root bytes. */
+  /** A kept class, whether or not this walk has classified it yet. */
+  keptVerdict(key: Uint8Array): WalkVerdict | undefined {
+    const row = this.#db.prepare("SELECT * FROM verdict WHERE key = ?").get(key) as Record<string, unknown> | undefined;
+    return row === undefined ? undefined : this.#verdict(row);
+  }
+  /** Every class the walk classified, by index, sequence, then operator and root bytes. */
   *verdicts(walk: number): Generator<WalkVerdict> {
-    for (const row of this.#db.prepare("SELECT * FROM walk_verdict WHERE walk = ? ORDER BY idx, seq, operator, root").iterate(walk)) {
+    for (const row of this.#db.prepare(`SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ?
+        ORDER BY w.idx, w.seq, w.operator, w.root`).iterate(walk)) {
       yield this.#verdict(row as Record<string, unknown>);
     }
   }
@@ -605,36 +752,37 @@ export class ReplayStore {
   }
 
   /** A segment's authenticated header (i = -1) and scoped signed terms. */
-  putScope(walk: number, segment: Uint8Array, header: Uint8Array, terms: readonly { readonly terms: Uint8Array; readonly signature: Uint8Array }[]): void {
-    const put = this.#db.prepare("INSERT OR IGNORE INTO walk_scope VALUES (?, ?, ?, ?, ?)");
-    put.run(walk, segment, -1, header, null);
-    terms.forEach((signed, i) => put.run(walk, segment, i, signed.terms, signed.signature));
+  putScope(segment: Uint8Array, header: Uint8Array, terms: readonly { readonly terms: Uint8Array; readonly signature: Uint8Array }[]): void {
+    // This read's authenticated scope replaces a kept one.
+    const put = this.#db.prepare("INSERT OR REPLACE INTO scope VALUES (?, ?, ?, ?)");
+    put.run(segment, -1, header, null);
+    terms.forEach((signed, i) => put.run(segment, i, signed.terms, signed.signature));
   }
-  scope(walk: number, segment: Uint8Array): { header: Uint8Array; terms: { terms: Uint8Array; signature: Uint8Array }[] } | undefined {
-    const rows = this.#db.prepare("SELECT i, bytes, signature FROM walk_scope WHERE walk = ? AND segment = ? ORDER BY i").all(walk, segment) as
+  scope(segment: Uint8Array): { header: Uint8Array; terms: { terms: Uint8Array; signature: Uint8Array }[] } | undefined {
+    const rows = this.#db.prepare("SELECT i, bytes, signature FROM scope WHERE segment = ? ORDER BY i").all(segment) as
       { i: bigint; bytes: unknown; signature: unknown }[];
     if (rows.length === 0) return undefined;
     return { header: bytes(rows[0]!.bytes), terms: rows.slice(1).map(r => ({ terms: bytes(r.bytes), signature: bytes(r.signature) })) };
   }
 
-  putBase(walk: number, segment: Uint8Array, base: WalkBase): void {
-    this.#db.prepare("INSERT INTO walk_base VALUES (?, ?, ?, ?, ?, ?)").run(walk, segment, be(base.openingIndex),
+  putBase(segment: Uint8Array, base: WalkBase): void {
+    this.#db.prepare("INSERT INTO base VALUES (?, ?, ?, ?, ?)").run(segment, be(base.openingIndex),
       JSON.stringify(base.parents.map(key => (key === undefined ? null : hex(key)))),
       JSON.stringify([...base.totals].map(([k, t]) => [k, t.issued.toString(), t.burned.toString()])), mapJson(base.adoption));
-    const put = this.#db.prepare("INSERT INTO walk_import VALUES (?, ?, ?, ?, ?)");
-    for (const [name, entry] of base.imports) put.run(walk, segment, unhex(name), entry.ns, entry.upto);
-    const block = this.#db.prepare("INSERT INTO walk_block VALUES (?, ?, ?, ?, ?, ?, ?)");
-    base.block.forEach((force, n) => block.run(walk, segment, n, unhex(force.backing), be(force.index), be(force.ordinal), force.bytes));
+    const put = this.#db.prepare("INSERT INTO base_import VALUES (?, ?, ?, ?)");
+    for (const [name, entry] of base.imports) put.run(segment, unhex(name), entry.ns, entry.upto);
+    const block = this.#db.prepare("INSERT INTO base_block VALUES (?, ?, ?, ?, ?, ?)");
+    base.block.forEach((force, n) => block.run(segment, n, unhex(force.backing), be(force.index), be(force.ordinal), force.bytes));
   }
-  base(walk: number, segment: Uint8Array): WalkBase | undefined {
-    const row = this.#db.prepare("SELECT * FROM walk_base WHERE walk = ? AND segment = ?").get(walk, segment) as Record<string, unknown> | undefined;
+  base(segment: Uint8Array): WalkBase | undefined {
+    const row = this.#db.prepare("SELECT * FROM base WHERE segment = ?").get(segment) as Record<string, unknown> | undefined;
     if (row === undefined) return undefined;
     const imports = new Map<string, ImportEntry>();
-    for (const r of this.#db.prepare("SELECT name, ns, upto FROM walk_import WHERE walk = ? AND segment = ? ORDER BY name").iterate(walk, segment)) {
+    for (const r of this.#db.prepare("SELECT name, ns, upto FROM base_import WHERE segment = ? ORDER BY name").iterate(segment)) {
       const i = r as { name: unknown; ns: bigint; upto: bigint };
       imports.set(hex(bytes(i.name)), { ns: Number(i.ns), upto: BigInt(i.upto) });
     }
-    const block = (this.#db.prepare("SELECT backing, idx, ordinal, bytes FROM walk_block WHERE walk = ? AND segment = ? ORDER BY n").all(walk, segment) as
+    const block = (this.#db.prepare("SELECT backing, idx, ordinal, bytes FROM base_block WHERE segment = ? ORDER BY n").all(segment) as
       Record<string, unknown>[]).map(b => ({ backing: hex(bytes(b["backing"])), index: fromBe(b["idx"]), ordinal: fromBe(b["ordinal"]), bytes: bytes(b["bytes"]) }));
     return { openingIndex: fromBe(row["opening"]), adoption: jsonMap(row["adoption"]),
       parents: (JSON.parse(row["parents"] as string) as (string | null)[]).map(key => (key === null ? undefined : unhex(key))),
@@ -642,26 +790,33 @@ export class ReplayStore {
       imports, block };
   }
 
-  putPublication(walk: number, backing: Uint8Array, p: WalkPublication, bytes: Uint8Array | undefined): void {
-    this.#db.prepare("INSERT INTO walk_publication VALUES (?, ?, ?, ?, ?, ?, ?)").run(walk, backing, be(p.index), be(p.ordinal), p.force ? 1 : 0,
+  /** Keep a classified publication, with the SHA256 of the venue's record at its position. */
+  putPublication(backing: Uint8Array, p: WalkPublication, recordHash: Uint8Array, bytes: Uint8Array | undefined): void {
+    this.#db.prepare("INSERT INTO publication VALUES (?, ?, ?, ?, ?, ?, ?)").run(backing, be(p.index), be(p.ordinal), recordHash, p.force ? 1 : 0,
       p.check ?? null, bytes ?? null);
   }
+  /** The SHA256 of the record a kept publication verdict was classified from, if one is kept at this position. */
+  publicationRecordHash(backing: Uint8Array, index: bigint, ordinal: bigint): Uint8Array | undefined {
+    const row = this.#db.prepare("SELECT record_hash FROM publication WHERE backing = ? AND idx = ? AND ordinal = ?")
+      .get(backing, be(index), be(ordinal)) as { record_hash: unknown } | undefined;
+    return row === undefined ? undefined : bytes(row.record_hash);
+  }
   /** `backing`'s classified publications through `through`, in venue order. */
-  *publicationVerdicts(walk: number, backing: Uint8Array, through: bigint): Generator<WalkPublication> {
-    for (const row of this.#db.prepare("SELECT idx, ordinal, force, detail FROM walk_publication WHERE walk = ? AND backing = ? AND idx <= ? ORDER BY idx, ordinal")
-      .iterate(walk, backing, be(through))) {
+  *publicationVerdicts(backing: Uint8Array, through: bigint): Generator<WalkPublication> {
+    for (const row of this.#db.prepare("SELECT idx, ordinal, force, detail FROM publication WHERE backing = ? AND idx <= ? ORDER BY idx, ordinal")
+      .iterate(backing, be(through))) {
       const r = row as Record<string, unknown>;
       yield { index: fromBe(r["idx"]), ordinal: fromBe(r["ordinal"]), force: r["force"] === 1n, check: r["detail"] === null ? undefined : r["detail"] as string };
     }
   }
   /** `backing`'s forced publications in (after, through], or through `through` without `after`, in venue order. */
-  *forced(walk: number, backing: Uint8Array, after: bigint | undefined, through: bigint): Generator<WalkForce> {
+  *forced(backing: Uint8Array, after: bigint | undefined, through: bigint): Generator<WalkForce> {
     if (after !== undefined && after >= through) return;
     const rows = after === undefined ?
-      this.#db.prepare(`SELECT idx, ordinal, bytes FROM walk_publication WHERE walk = ? AND backing = ? AND force = 1
-        AND idx <= ? ORDER BY idx, ordinal`).iterate(walk, backing, be(through)) :
-      this.#db.prepare(`SELECT idx, ordinal, bytes FROM walk_publication WHERE walk = ? AND backing = ? AND force = 1
-        AND idx > ? AND idx <= ? ORDER BY idx, ordinal`).iterate(walk, backing, be(after), be(through));
+      this.#db.prepare(`SELECT idx, ordinal, bytes FROM publication WHERE backing = ? AND force = 1
+        AND idx <= ? ORDER BY idx, ordinal`).iterate(backing, be(through)) :
+      this.#db.prepare(`SELECT idx, ordinal, bytes FROM publication WHERE backing = ? AND force = 1
+        AND idx > ? AND idx <= ? ORDER BY idx, ordinal`).iterate(backing, be(after), be(through));
     for (const row of rows) {
       const r = row as Record<string, unknown>;
       yield { backing: hex(backing), index: fromBe(r["idx"]), ordinal: fromBe(r["ordinal"]), bytes: bytes(r["bytes"]) };
@@ -672,6 +827,7 @@ export class ReplayStore {
 
   /** Write one judged record at the tip of `ns`, atomically. */
   append(ns: number, record: Append): Tip {
+    this.#sinceKeep++;
     return this.#atomic(() => {
       const row = this.#q.tip!.get(ns) as Record<string, unknown>;
       const position = BigInt(row["position"] as bigint) + 1n;

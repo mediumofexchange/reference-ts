@@ -252,7 +252,9 @@ export async function checkScopeRecovery({ codec, verifier, configurationBytes, 
     const insideTarget = checkpoint(joined, 9n, 14n, insideRecords, effects);
     const insideComplete = compose([...ancestry, adopted, insideTarget], adopted, publications, y, 14n);
     const full = await accepted(insideComplete);
-    assert.equal(full.audit.range.carrying.find(c => c.sequence === "9").check, "ADOPTION");
+    // Position 8 lies inside the last valid prefix (the adopted checkpoint), so the evidence recurrence
+    // excludes it for non-extension before any record is replayed (pool-v3 §7.1).
+    assert.equal(full.audit.range.carrying.find(c => c.sequence === "9").check, "CONTINUITY");
     const partial = withholdSharedTarget(insideComplete, insideTarget, insideRecords, 8n, x, codec);
     const input = { ...partial, seed: issuerSeed };
     const result = await refused(input, "unresolved-evidence");

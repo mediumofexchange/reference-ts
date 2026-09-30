@@ -34,9 +34,11 @@ const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0
 
 export type StepMode = "admission" | "replay" | "adoption" | "force";
 
-/** The reader's proof verifier: true only for a proof of `kind` over exactly these public inputs. */
+/** The reader's proof verifier: true only for a proof of `kind` over exactly these public inputs. Its circuits'
+ * identities, where it declares them, name it in kept state (§14); an undeclared one is named per object. */
 export interface ProofCheck {
   verify(kind: number, publicInputs: bigint[], proof: Uint8Array): Promise<boolean> | boolean;
+  readonly identities?: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array } } | undefined;
 }
 
 /** What the guards read of a state: note membership and recovery state. */
@@ -48,6 +50,9 @@ export interface StateView extends RecoveryView {
 
 /** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
 export interface ScanOutput { readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record }
+/** Which outputs a replay keeps incremental witnesses for (a wallet's own). The identity it declares names it in kept
+ * state (§14), so it must fix exactly which outputs the predicate accepts; an undeclared one is named per object. */
+export type WitnessPredicate = ((output: ScanOutput) => boolean) & { readonly identity?: Uint8Array | undefined };
 /** The receipt's event, for a receipt read naming this segment and position (C2.10.9a). */
 export interface ReceiptEvent extends EvidenceDigests {
   readonly position: bigint;
@@ -269,7 +274,7 @@ export interface SegmentReplay {
   /** The adopted block, by position from the segment's first record. */
   readonly block: readonly Adopted[];
   /** Outputs to keep an incremental witness for, so their paths can be read later (a wallet's own). */
-  readonly witness?: ((output: ScanOutput) => boolean) | undefined;
+  readonly witness?: WitnessPredicate | undefined;
 }
 
 /** The mode a position applies in: exact adopted bytes inside the adopted block, then the caller's admission or replay. */

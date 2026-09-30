@@ -10,6 +10,7 @@
 // verdict is a row of the read's replay store. A checkpoint's last valid
 // predecessors are then rows already written, so nothing recurses through
 // history and nothing grows in memory with the number of checkpoints.
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { linkInForce, RangeLimitError, type HeldCommitment, type RangeEntry } from "../../record-range.js";
@@ -23,13 +24,13 @@ import { decodeSegmentHeader, segmentBytes, type SegmentHeader } from "./headers
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
 import type { WalkEvidence } from "./evidence-store.js";
-import { lastValidOf, readRecordView, replayTrail, ReplayResult, type CarryingVerdict, type FaultObserver,
+import { keptContext, keptStateHolds, lastValidOf, readRecordView, replayTrail, ReplayResult, type CarryingVerdict, type FaultObserver,
   type ReaderSelection, type RecordView, type ReplayContext, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
 import { decodePublication, decodeRecord, encodeRecord, type Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
-import type { ImportEntry, ReplayStore, WalkForce, WalkVerdict } from "./replay-store.js";
+import { KeptStateMismatch, type ImportEntry, type ReplayStore, type WalkBase, type WalkForce, type WalkVerdict } from "./replay-store.js";
 import { applyForceEffects, applyForceRecord, openForceState, type MergedImport } from "./state.js";
 import { decodeRootTerms, type RootTerms } from "./terms.js";
 
@@ -74,6 +75,12 @@ const rowKey = (c: Identity): Uint8Array => {
   return out;
 };
 const matches = (a: Identity | undefined, b: Identity | undefined): boolean => a !== undefined && b !== undefined && keyOf(a) === keyOf(b);
+/** A segment base in comparable form. */
+const baseKey = (base: WalkBase): string => JSON.stringify([base.openingIndex.toString(), base.parents.map(key => (key === undefined ? null : hex(key))),
+  [...base.imports].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, entry]) => [name, entry.ns, entry.upto.toString()]),
+  [...base.totals].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, t]) => [name, t.issued.toString(), t.burned.toString()]),
+  [...base.adoption].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, at]) => [name, at.toString()]),
+  base.block.map(force => [force.backing, force.index.toString(), force.ordinal.toString(), hex(force.bytes)])]);
 export const venueOrder = (a: { readonly index: bigint; readonly ordinal: bigint }, b: { readonly index: bigint; readonly ordinal: bigint }): number =>
   a.index < b.index ? -1 : a.index > b.index ? 1 : a.ordinal < b.ordinal ? -1 : a.ordinal > b.ordinal ? 1 : 0;
 
@@ -209,7 +216,7 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
     let kept = forceStates.get(name);
     if (kept === undefined || kept.key !== key) {
       const state = openForceState(source);
-      for (const prior of store.forced(walk, backing, source.adoptionIndices.get(name) ?? 0n, entry.index)) applyForceEffects(state, decodeRecord(prior.bytes));
+      for (const prior of store.forced(backing, source.adoptionIndices.get(name) ?? 0n, entry.index)) applyForceEffects(state, decodeRecord(prior.bytes));
       kept = { key, state }; forceStates.set(name, kept);
     }
     const { state } = kept, record = publication.record, bytes = encodeRecord(record);
@@ -242,15 +249,23 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
       if (read.busy) throw new Error("publication prefix order");
       read.busy = true;
       try {
-        const verdict = await classifyPublication(backing, terms, view, duration, entry);
-        store.putPublication(walk, backing, { index: entry.index, ordinal: entry.ordinal, force: verdict.force, check: verdict.check }, verdict.bytes);
+        // A verdict kept by an earlier read stands for the same record at the same venue position (§14 kept classes).
+        const recordHash = sha256(entry.record), kept = store.publicationRecordHash(backing, entry.index, entry.ordinal);
+        if (kept !== undefined) {
+          if (!same(kept, recordHash)) throw new KeptStateMismatch("a kept publication's record");
+          // The running force state did not apply it, so the next classification rebuilds from the rows.
+          forceStates.delete(name);
+        } else {
+          const verdict = await classifyPublication(backing, terms, view, duration, entry);
+          store.putPublication(backing, { index: entry.index, ordinal: entry.ordinal, force: verdict.force, check: verdict.check }, recordHash, verdict.bytes);
+        }
       } finally { read.busy = false; }
       read.last = entry;
     }
     return true;
   };
   const verdictsThrough = (backing: Uint8Array, through: bigint): ScopePublicationVerdict[] =>
-    [...store.publicationVerdicts(walk, backing, through)].map(p => ({ backing: hex(backing), index: p.index.toString(),
+    [...store.publicationVerdicts(backing, through)].map(p => ({ backing: hex(backing), index: p.index.toString(),
       ordinal: p.ordinal.toString(), force: p.force, ...(p.check === undefined ? {} : { check: p.check }) }));
   // The least held index of any of the backing's terms' operators within its own term in [from, to].
   const firstPoint = (view: RecordView, from: bigint, to: bigint): bigint | undefined => {
@@ -406,7 +421,15 @@ type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
  * checkpoint is classified once, into the walk's rows; close() drops them. */
 function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvidence) {
   const { selection, store } = context, faults = context.faults ?? NO_FAULTS;
-  const { trails } = evidence, walk = store.openWalk();
+  // A kept store keeps state across processes, so what names its context must be declared, not per object.
+  // Witnesses stay only at a namespace's tip, so a kept state below it has none; a wallet's kept witnesses are M5b.5's.
+  if (store.kept && (context.verifier.identities === undefined || Object.keys(context.verifier.identities).length === 0)) {
+    throw new TypeError("a kept store needs a verifier with circuit identities");
+  }
+  if (store.kept && context.witness !== undefined) throw new TypeError("a kept store keeps no witnesses");
+  // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
+  const { trails } = evidence, walk = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
+    verifier: context.verifier, witness: context.witness }));
   const views = new Map<string, Promise<RecordView>>(), running = new Map<string, Promise<ScopeVerdict>>();
   const cursors = new Map<string, { term: number; after: bigint | undefined; busy: boolean }>();
   // Whether any classification began, and the bound a refused read's fault pass starts below.
@@ -423,7 +446,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   };
   /** A verdict row as the walk reads it, its scope from the segment's row. */
   const load = (row: WalkVerdict): ScopeVerdict => {
-    const scope = store.scope(walk, row.segment)!, header = decodeSegmentHeader(scope.header);
+    const scope = store.scope(row.segment)!, header = decodeSegmentHeader(scope.header);
     const base: Classified = { commitment: { operator: row.operator, sequence: row.sequence, root: row.root, signature: row.signature },
       index: row.index, segment: row.segment, header, snapshot: decodeSnapshot(row.snapshot) };
     if (row.class === "excluded") return { ...base, class: "excluded", check: row.detail! };
@@ -488,22 +511,47 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     return { clocks, record: { duration: own.duration.toString(), snapshotIndex: own.snapshotIndex.toString(), gap: own.gap.toString(),
       open: own.open, boundary: boundary === undefined ? null : boundary.toString(), opening: own.opening.toString() } };
   };
+  // A kept base row that does not decode is kept state to discard (§14), not a refusal.
+  const keptBase = (segment: Uint8Array): WalkBase | undefined => {
+    try { return store.base(segment); } catch (error) {
+      if (error instanceof SyntaxError || error instanceof RangeError || error instanceof TypeError) throw new KeptStateMismatch("a kept segment base");
+      throw error;
+    }
+  };
   const baseOf = (segment: Uint8Array): SegmentBase | undefined => {
-    const base = store.base(walk, segment);
+    const base = keptBase(segment);
     return base === undefined ? undefined : { openingIndex: base.openingIndex, parents: base.parents, block: base.block,
       imported: { store, frontier: { segments: new Map(base.imports), totals: base.totals }, adoptionIndices: new Map(base.adoption) } };
   };
   const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
-    const id = keyOf(held.commitment), kept = store.verdict(walk, rowKey(held.commitment));
-    if (kept !== undefined) return Promise.resolve(load(kept));
+    const id = keyOf(held.commitment), key = rowKey(held.commitment), classified = store.verdict(walk, key);
+    if (classified !== undefined) return Promise.resolve(load(classified));
     if (running.has(id)) return running.get(id)!;
-    const pending = judge(held, backing).then(verdict => { keep(held, verdict); return verdict; });
+    let kept: WalkVerdict | undefined;
+    try { kept = store.keptVerdict(key); } catch (error) {
+      if (error instanceof SyntaxError || error instanceof RangeError) throw new KeptStateMismatch("a kept class's row");
+      throw error;
+    }
+    // §14 kept classes: the venue must hold the same commitment at the same index.
+    if (kept !== undefined && (kept.index !== held.index || !same(kept.signature, held.commitment.signature))) {
+      return Promise.reject(new KeptStateMismatch("a kept class's commitment"));
+    }
+    const pending = judge(held, backing, kept).then(verdict => {
+      // Every check before replay ran afresh, so a kept class is the one it gives.
+      if (kept !== undefined && verdict.class !== kept.class) throw new KeptStateMismatch("a kept class");
+      // The row is written again from this judgment, so what later reads load comes from this read's evidence.
+      keep(held, verdict);
+      store.keepPoint();
+      return verdict;
+    });
     running.set(id, pending);
     const done = (): void => { running.delete(id); };
     pending.then(done, done);
     return pending;
   };
-  const judge = async (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
+  // Judge a checkpoint. With a kept class, every check and dependency the judgment reads still runs, on this
+  // read's evidence; only the replay is taken from the kept class (§14), once its state passes its checks.
+  const judge = async (held: HeldCommitment, backing: Uint8Array, kept?: WalkVerdict): Promise<ScopeVerdict> => {
     const c = held.commitment, directory = evidence.directory(c.root);
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const entry = directory.find(item => same(item.name, backing));
@@ -513,7 +561,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     await faults.inspect(held, directory, scope);
     // The descent had visited this checkpoint once its faults were inspected.
     began = true;
-    store.putScope(walk, snapshot.segment, segmentBytes(header), scope.terms);
+    store.putScope(snapshot.segment, segmentBytes(header), scope.terms);
     // Required scope is discovered only after its header is authenticated;
     // checkpointScope resolved and verified every scoped terms field.
     const scopedTerms = new Map(header.entries.map((scoped, i) => [hex(scoped.backing), scope.rootTerms[i]!]));
@@ -559,14 +607,16 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           const scoped = header.entries[i]!, name = hex(scoped.backing);
           merged.adoptionIndices.set(name, parents[i]?.state.adoptionIndices.get(name) ?? 0n);
           if (await recovery.forces(scoped.backing, scopedTerms.get(name)!, held.index)) {
-            adopted.push(...store.forced(walk, scoped.backing, merged.adoptionIndices.get(name)!, held.index));
+            adopted.push(...store.forced(scoped.backing, merged.adoptionIndices.get(name)!, held.index));
           }
         }
         segmentBase = { imported: merged, block: adopted.sort(venueOrder), openingIndex: held.index, parents: parents.map(p => p === undefined ? undefined : rowKey(p.commitment)) };
-        if (store.base(walk, snapshot.segment) === undefined) {
-          store.putBase(walk, snapshot.segment, { openingIndex: held.index, parents: segmentBase.parents, imports: merged.frontier.segments,
-            totals: merged.frontier.totals, adoption: merged.adoptionIndices, block: segmentBase.block });
-        }
+        const computed: WalkBase = { openingIndex: held.index, parents: segmentBase.parents, imports: merged.frontier.segments,
+          totals: merged.frontier.totals, adoption: merged.adoptionIndices, block: segmentBase.block };
+        const stored = keptBase(snapshot.segment);
+        if (stored === undefined) store.putBase(snapshot.segment, computed);
+        // A kept base must be the one this read derives (§14 kept classes).
+        else if (baseKey(stored) !== baseKey(computed)) throw new KeptStateMismatch("a kept segment base");
         // The segment stands from here even if this opening's own evidence fails below:
         // a later valid checkpoint of it finalizes (C2.10.12).
         requireReplay(scope.fullTrail().length === 0n, "OPENING");
@@ -624,6 +674,19 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       const intrinsic = !opening && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
       const classification = scope.classificationEvidence(intrinsic);
       if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
+      // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot.
+      const s = kept?.state;
+      if (kept !== undefined) {
+        let verdict: ScopeVerdict;
+        if (kept.class === "excluded" && kept.detail !== undefined) verdict = { ...base, class: "excluded", check: kept.detail };
+        else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot) &&
+            scopedSnapshots.every(sibling => { const t = store.total(s.ns, s.position, hex(sibling.backing)); return t.issued === sibling.issued && t.burned === sibling.burned; })) {
+          const { issued, burned } = store.total(s.ns, s.position, hex(backing));
+          verdict = { ...base, class: "valid", scopedTerms, openingIndex,
+            state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }) };
+        } else throw new KeptStateMismatch("a kept class or its state");
+        return verdict;
+      }
       const revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
       const state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
         snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
@@ -644,7 +707,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       const scopedTerms = valid?.scopedTerms.get(hex(scoped.backing)) ?? terms;
       if (!await recovery.forces(scoped.backing, scopedTerms, selection.judgingIndex)) continue;
       publications.push(...recovery.verdictsThrough(scoped.backing, selection.judgingIndex));
-      for (const forced of store.forced(walk, scoped.backing, undefined, selection.judgingIndex)) force.push(forcedOf(forced));
+      for (const forced of store.forced(scoped.backing, undefined, selection.judgingIndex)) force.push(forcedOf(forced));
     }
     const clock = valid === undefined ? null : (await scopeClocks(valid.header, name => valid.scopedTerms.get(hex(name))!,
       selection.backing, valid.openingIndex, selection.judgingIndex)).record;
