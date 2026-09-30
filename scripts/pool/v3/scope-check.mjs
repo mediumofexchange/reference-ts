@@ -416,12 +416,16 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     const alienPartial = { ...alienCp, trail: codec.encodeTrail({ ...codec.decodeTrail(alienCp.trail, LIMITS), records: [] }, LIMITS) };
     // Even a provable header-context fault cannot exclude missing event evidence.
     await refused(compose([a0, a1, x0, alienPartial, resumed], resumed, y, [toB]), "unresolved-evidence");
-    // Exact snapshot backing is checked even when the signed directory binds it.
+    // Exact snapshot backing is checked even when the signed directory binds it. Judged in the segment its first
+    // entry names (pool-v3 §7.1), the checkpoint is read alike for every backing: this late one is lapsed, since
+    // lapse precedes the snapshot checks, and the valid continuation reads past it.
     const wrong = { ...late, snapshots: late.snapshots.map(bytes => same(codec.decodeSnapshot(bytes).backing, y)
       ? codec.snapshotBytes({ ...codec.decodeSnapshot(bytes), backing: x }) : bytes) };
     wrong.directory = late.directory.map(e => same(e.name, y) ? { ...e, digest: hash(wrong.snapshots[late.directory.findIndex(e => same(e.name, y))]) } : e);
     wrong.commitment = signCommitment(operatorSecret, 3n, directoryRoot(wrong.directory));
-    await refused(compose([a0, a1, x0, wrong, resumed], resumed, y, [toB]), "unresolved-evidence");
+    assert(same(wrong.directory[0].name, x), "the misbound entry is not the first");
+    const passed = await accepted(compose([a0, a1, x0, wrong, resumed], resumed, y, [toB]));
+    assert.deepEqual(passed.audit.range.carrying.map(c => [c.sequence, c.class]), [["1", "valid"], ["2", "valid"], ["3", "lapsed"], ["4", "valid"]]);
   });
   await test("same-index lower held sequences qualify as exact predecessors and stale references fail", async () => {
     const again = segment(operatorSecret, 6n, [entry(x, toA.link, j0), entry(y, y, j0)]);
