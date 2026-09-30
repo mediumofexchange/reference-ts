@@ -61,14 +61,19 @@ Request envelopes are capped at 300,000 bytes, command replies at 4,096 bytes,
 and package replies at 2,100,000 bytes for up to 1 MiB of binary evidence.
 Headers are capped at 8,192 bytes and 32 fields; connections at 16. Hex transport
 roughly doubles evidence bytes and buffers a complete package. These are local
-limits, not a streaming or lifetime scalability claim.
+limits, not a streaming or lifetime scalability claim. The journal itself
+admits, signs and assembles a package of any size from its rows; a package
+past the reply cap is refused by this transport until it serves incrementally
+([storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points), M5b.5).
 
 The client aborts after ten seconds. The server closes a pending response after
 fifteen seconds measured from the request callback, after headers arrive; Node's
 header/request receive timeouts apply separately. Losing a response does not
 cancel or roll back journal work. Recover an uncertain submit or commit by its
-exact saved statement or command ID. Reopening the journal fences older owners;
-operation failures expose bounded codes rather than internal error text.
+exact saved statement or command ID. Reopening the journal fences older owners
+and reads its state from rows without verifying a proof again; it refuses
+stored state that does not reproduce its own tip and the last signed snapshot.
+Operation failures expose bounded codes rather than internal error text.
 
 ## Acceptance and remaining work
 

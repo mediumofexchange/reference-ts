@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 import { fieldToBytes } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT, NoteTree, notePathProves } from "../src/pool/note-tree.js";
 import { ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
@@ -73,5 +74,51 @@ describe("replay storage", () => {
     expect(store.tip(b).noteRoot).toBe(EMPTY_NOTE_ROOT);
     store.collect([b]);
     expect(store.hasOutput(b, 0n, 1n)).toBe(true);
+  });
+
+  it("lives in a host's database: writes join the host's transaction, and only unnamed replays are swept", () => {
+    const db = new DatabaseSync(":memory:", { readBigInts: true });
+    let own: number[] = [];
+    const store = new ReplayStore(db, { live: () => own });
+    expect(() => new ReplayStore(db)).toThrow(TypeError);
+    expect(() => new ReplayStore(":memory:", { live: () => [] })).toThrow(TypeError);
+    // A host's rolled-back transaction takes the namespace and its record with it.
+    db.exec("BEGIN IMMEDIATE");
+    const lost = store.open(new Uint8Array(32).fill(1), new Uint8Array(32), undefined, genesis);
+    store.append(lost, append([1n], [11n]));
+    db.exec("ROLLBACK");
+    expect(store.hasNamespace(lost)).toBe(false);
+    db.exec("BEGIN IMMEDIATE");
+    const a = store.open(new Uint8Array(32).fill(1), new Uint8Array(32), undefined, genesis);
+    store.append(a, append([1n], [11n]));
+    store.append(a, append([2n], [12n], () => false, { kind: 1, supply: { backing: "aa".repeat(32), issued: 5n, burned: 0n } }));
+    db.exec("COMMIT");
+    own = [a];
+    expect(store.tip(a).position).toBe(2n);
+    expect(store.hasIssuance(a, 2n, 0n, "aa".repeat(32))).toBe(true);
+    expect(store.hasIssuance(a, 2n, 2n, "aa".repeat(32))).toBe(false);
+    expect(store.hasIssuance(a, 1n, 0n, "aa".repeat(32))).toBe(false);
+    expect(store.hasIssuance(a, 2n, 0n, "bb".repeat(32))).toBe(false);
+    // A read's replay and one it imports; a successor of the host that imports the first.
+    const read = store.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(7), undefined, genesis);
+    store.append(read, append([1n], [11n]));
+    const stray = store.open(new Uint8Array(32).fill(3), new Uint8Array(32).fill(8), undefined, genesis);
+    const frontier = { segments: new Map([["01".repeat(32), { ns: read, upto: 1n }]]), totals: new Map() };
+    const successor = store.open(new Uint8Array(32).fill(2), new Uint8Array(32).fill(9), frontier, genesis);
+    // Nothing goes until kept rows were discarded; then only what neither the host nor a kept row names.
+    store.sweep();
+    expect(store.hasNamespace(stray)).toBe(true);
+    // What another namespace imports cannot be dropped; the host's retired state can.
+    expect(() => store.drop(read)).toThrow(/still read/);
+    store.drop(a); own = [successor];
+    expect(store.hasNamespace(a)).toBe(false);
+    store.closeWalk(store.openWalk(new Uint8Array(32).fill(1)));
+    store.sweep();
+    expect([successor, read, stray].map(ns => store.hasNamespace(ns))).toEqual([true, true, false]);
+    expect(store.hasNullifier(successor, 0n, 11n)).toBe(true);
+    // Closing is the host's.
+    store.close();
+    expect(db.isOpen).toBe(true);
+    db.close();
   });
 });

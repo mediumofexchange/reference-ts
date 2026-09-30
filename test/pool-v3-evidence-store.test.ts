@@ -70,6 +70,49 @@ function evidenceFile() {
 
 
 describe("v3 evidence store", () => {
+  it("keeps a party's own evidence in a host's transaction and serves it as supplied evidence is served", () => {
+    const db = new DatabaseSync(":memory:", { readBigInts: true }), store = new EvidenceStore(db);
+    const issuer = ed25519.getPublicKey(secret), termsBytes = encodeRootTerms({ obligor: issuer, payout: { thing: "units", quantumExponent: 0, perUnit: 1n },
+      operator: header.operator, configuration: domain, venue: b(2), interval: 10n });
+    const name = rootTermsName(termsBytes), own: SegmentHeader = { ...header, entries: [{ backing: name, link: name }] };
+    const ownSegment = segmentIdentity(own), seed = genesisEvidenceHash(ownSegment);
+    const signed = { terms: termsBytes, signature: ed25519.sign(rootTermsSignatureMessage(termsBytes), secret) };
+    const directory = encodeEvidenceDirectory([{ name, digest: b(8) }]);
+    // A rolled-back host transaction keeps nothing.
+    db.exec("BEGIN"); store.keepHead(segmentBytes(own), [signed]); store.keep(3, directory); db.exec("ROLLBACK");
+    expect([...store.retained().heads(ownSegment)]).toEqual([]);
+    db.exec("BEGIN");
+    // A terms field that does not name its entry's backing or verify is not kept (§12.1).
+    store.keepHead(segmentBytes(own), [{ terms: termsBytes, signature: new Uint8Array(64) }]);
+    expect([...store.retained().heads(ownSegment)][0]!.term(0)).toBeUndefined();
+    store.keepHead(segmentBytes(own), [signed]); store.keep(3, directory); store.keep(4, Uint8Array.of(1, 2, 3));
+    expect(() => store.keep(3, Uint8Array.of(1))).toThrow(EncodingError);
+    // Records append under the evidence recurrence, only after a kept position of that segment.
+    let tip = { segment: ownSegment, position: 0n, evidence: seed };
+    expect(() => store.append({ ...tip, evidence: b(9) }, records[0]!)).toThrow(/no kept trail position/);
+    expect(() => store.append(tip, Uint8Array.of(1, 2, 3))).toThrow(EncodingError);
+    const values = [seed];
+    for (const record of records.slice(0, 3)) { tip = store.append(tip, record); values.push(tip.evidence); }
+    expect(() => store.append({ segment: ownSegment, position: 5n, evidence: tip.evidence }, records[3]!)).toThrow(/no kept trail position/);
+    db.exec("COMMIT");
+    expect(tip.evidence).toEqual(nextEvidenceHash(values[2]!, evidenceHashes(decodeRecord(records[2]!)), 3n));
+    const batch = store.retained();
+    expect(batch.object(3, sha256(directory))).toEqual(directory);
+    expect(batch.directory(sha256(directory))).toEqual([{ name, digest: b(8) }]);
+    expect(batch.snapshot(sha256(Uint8Array.of(1, 2, 3)))).toEqual(Uint8Array.of(1, 2, 3));
+    expect([...batch.heads(ownSegment)][0]!.term(0)).toEqual(signed);
+    expect(recordsOf(batch.trail(ownSegment, values[3]!))).toEqual(records.slice(0, 3).map(r => [...r]));
+    expect(batch.trail(ownSegment, values[2]!)!.length).toBe(2n);
+    expect(batch.trail(ownSegment, seed)!.length).toBe(0n);
+    expect(batch.trail(ownSegment, b(9))).toBeUndefined();
+    // The same rows serve a snapshot as a reader looks them up, and an assembled trail continues after them.
+    const snapshot: Snapshot = { backing: name, segment: ownSegment, historyHash: b(9), evidenceHash: values[3]!, issued: 0n, burned: 0n };
+    expect(batch.served({ backing: name, segment: ownSegment, digest: snapshotDigest(snapshot) }, snapshot)!.length).toBe(3n);
+    store.close();
+    expect(db.isOpen).toBe(true);
+    db.close();
+  });
+
   it("serves each checkpoint's prefix of a stored trail, the same from bytes and from any chunking", async () => {
     const bytes = pack([{ kind: 4, payload: Uint8Array.of(1) }, { kind: 6, payload: trail(6) }, { kind: 6, payload: trail(3) }]);
     for (const load of [(s: EvidenceStore) => s.importBytes(bytes), (s: EvidenceStore) => s.importStream(chunks(bytes, 1)),
