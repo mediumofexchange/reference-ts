@@ -69,8 +69,9 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     checkpoint(held, segment, state, checkpointHeader, classification) {
       const c = held.commitment, own = segment !== undefined && same(segment, receipt.segment);
       const fact = { operator: hex(c.operator), sequence: c.sequence.toString(), index: held.index.toString() };
+      // The segment stands from its opening as witnessed, valid or excluded (C2.10.12); a lapsed one founds nothing.
+      if (own && c.sequence === header.sequence && classification !== "lapsed") opened = true;
       if (classification === "valid" && own) {
-        if (c.sequence === header.sequence) opened = true;
         requireReceipt(opened);
         const event = state!.receiptEvent(receipt.position);
         if (event !== undefined && receiptMatchesEvent(receipt, event)) return finish("final", { includedAt: [fact] });
