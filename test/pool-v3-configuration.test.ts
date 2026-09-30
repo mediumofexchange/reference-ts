@@ -81,5 +81,10 @@ describe("candidate configuration, pool-v3 §11.1; no adoption", () => {
     for (const identities of [{}, fewer, { ...own, withdrawal: own.issue }, { ...own, spend: own.burn, burn: own.spend }]) {
       expect(() => requireConfigurationVerifier(config, identities)).toThrow(refusal);
     }
+    // Malformed identities are the same setup error, not an encoding verdict.
+    for (const identities of [null, "identities", { ...own, spend: null }, { ...own, spend: { bytecode: "x", vk: own.spend.vk } },
+      { ...own, spend: { vk: own.spend.vk } }, { ...own, spend: { ...own.spend, vk: Array.from(own.spend.vk) } }]) {
+      expect(() => requireConfigurationVerifier(config, identities as unknown as typeof own)).toThrow(refusal);
+    }
   });
 });

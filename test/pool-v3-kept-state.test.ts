@@ -229,6 +229,21 @@ describe("pool-v3 §14 kept classes across reads", () => {
     store.close();
   });
 
+  it("discards kept classes and namespaces when the store is opened under another context", async () => {
+    const f = fixture(), kept = files();
+    await f.first();
+    const store = opened(kept.path, kept);
+    await f.read(counting(), store);
+    expect(namespaceCount(kept.path)).toBe(1);
+    // Another configuration, venue or reader version names another context (§14): nothing kept under the old one stays.
+    store.closeWalk(store.openWalk(new Uint8Array(32).fill(7)));
+    expect(namespaceCount(kept.path)).toBe(0);
+    const verifier = counting(), again = await f.read(verifier, store);
+    expect(outcome(again)).toEqual(outcome(await f.read(counting())));
+    expect(verifier.checks).toBe(4);
+    store.close();
+  });
+
   it("commits a keep point between checkpoints inside a long read", async () => {
     const f = fixture(), kept = files();
     await f.first();

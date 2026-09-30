@@ -30,6 +30,9 @@ export const EVIDENCE_QUOTA = Object.freeze({ memory: 268_435_456n, file: 68_719
 /** What an item's own row costs beside its payload: its keys, hash and index entries (about 130 bytes
  * measured on SQLite). Charged per item, so the quota bounds the item count too. */
 const ITEM_ROW_BYTES = 128n;
+/** What a kept trail position's rows cost beside its record's bytes: the position row, its evidence
+ * index entry and the record row's key (about 200 bytes measured on SQLite). */
+const RECORD_ROW_BYTES = 192n;
 /** Kinds a v3 reader reads (§12). A package holding another is unsupported: the import refuses it
  * at that item's header, before its payload and without keeping anything. */
 const READ_KINDS: readonly number[] = Object.freeze([1, 2, 3, 4, 6, 7, 10]);
@@ -191,6 +194,7 @@ export class EvidenceStore {
     return this.#transaction(() => {
       const batch = this.#batch();
       trails.forEach((input, seq) => {
+        batch.charge(ITEM_ROW_BYTES, PackageLimitError);
         this.#q.item!.run(batch.id, seq, 6, null, null, null);
         const receiver = this.#trail(batch, seq, BigInt(input.length));
         receiver.data(input); receiver.end(sha256(input));
@@ -237,7 +241,7 @@ export class EvidenceStore {
       feed = undefined;
       this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
     };
-    try { feed = new FrameFeed(trailReader(this.#rows(batch.id, seq), length)); } catch (error) { drop(error); }
+    try { feed = new FrameFeed(trailReader(this.#rows(batch, seq), length)); } catch (error) { drop(error); }
     return {
       data: piece => {
         // Every trail byte counts toward the quota, kept or not: it is what the supplier sent.
@@ -255,11 +259,11 @@ export class EvidenceStore {
 
   /** A trail's rows. The evidence chain runs over the longest prefix whose records decode (§5); only
    * that prefix can serve a checkpoint (§12.1), so later records are not kept. */
-  #rows(batch: bigint, seq: number): TrailSink {
+  #rows(batch: EvidenceBatch, seq: number): TrailSink {
     let id: bigint | undefined, chain: Uint8Array | undefined;
     return {
       header: (header) => {
-        id = (this.#q.trail!.get(batch, seq, sha256(header), header) as { id: bigint }).id;
+        id = (this.#q.trail!.get(batch.id, seq, sha256(header), header) as { id: bigint }).id;
         chain = genesisEvidenceHash(sha256(header));
       },
       terms: (i, terms, signature) => { this.#q.terms!.run(id!, i, terms ?? null, signature); },
@@ -273,6 +277,7 @@ export class EvidenceStore {
           return;
         }
         chain = nextEvidenceHash(chain, digests, position);
+        batch.charge(RECORD_ROW_BYTES, PackageLimitError);
         this.#q.position!.run(id!, position, chain);
         // The chain value fixes every record through its position, so an existing row holds these bytes.
         if (this.#q.record!.run(chain, record).changes === 0 &&

@@ -65,11 +65,16 @@ export function configurationHash(value: CandidateConfiguration): Uint8Array {
 export function requireConfigurationVerifier(configuration: CandidateConfiguration,
   identities: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array } } | undefined): void {
   if (identities === undefined) return;
-  const names = Object.keys(identities);
-  if (names.length !== RELATIONS.length || !RELATIONS.every(name => {
-    const own = identities[name], expected = configuration.circuits[name];
-    return own !== undefined && compareBytes(own.bytecode, expected.bytecode) === 0 && compareBytes(own.vk, expected.vk) === 0;
-  })) throw new TypeError("the verifier's circuit identities are not the configuration's");
+  const refuse = (): never => { throw new TypeError("the verifier's circuit identities are not the configuration's"); };
+  if (identities === null || typeof identities !== "object" || Object.keys(identities).length !== RELATIONS.length) refuse();
+  for (const name of RELATIONS) {
+    const own: unknown = identities[name], expected = configuration.circuits[name];
+    if (own === null || typeof own !== "object") refuse();
+    const { bytecode, vk } = own as { readonly bytecode: unknown; readonly vk: unknown };
+    let copies: [Uint8Array, Uint8Array];
+    try { copies = [copyUnshared(bytecode as Uint8Array), copyUnshared(vk as Uint8Array)]; } catch { return refuse(); }
+    if (compareBytes(copies[0], expected.bytecode) !== 0 || compareBytes(copies[1], expected.vk) !== 0) refuse();
+  }
 }
 
 /** Expected identities are independently held, never decoded from a package.

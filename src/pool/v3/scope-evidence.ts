@@ -32,9 +32,13 @@ export interface AuthenticatedScope {
 }
 
 /** Scopes authenticated per batch of trails, which do not change once imported. A read judges each
- * checkpoint of a segment against the same scope, so the last few segments' are kept, not re-verified. */
-const SCOPES = 4;
+ * checkpoint of a segment against the same scope, so the latest segments' are kept, not re-verified:
+ * at most four, together scoping no more backings than §8 lets one scope hold. Callers read a kept
+ * scope's bytes and never write them. */
+const SCOPES = 4, SCOPED_ENTRIES = 65_536;
 const authenticated = new WeakMap<TrailEvidence, Map<string, AuthenticatedScope>>();
+const entriesOf = (kept: Map<string, AuthenticatedScope>): number =>
+  [...kept.values()].reduce((sum, scope) => sum + scope.header.entries.length, 0);
 
 export function authenticatedScope(trails: TrailEvidence, segment: Uint8Array): AuthenticatedScope {
   const key = hex(segment);
@@ -52,7 +56,7 @@ export function authenticatedScope(trails: TrailEvidence, segment: Uint8Array): 
   });
   const scope = Object.freeze({ header, terms: Object.freeze(terms), rootTerms: Object.freeze(terms.map(signed => decodeRootTerms(signed.terms))) });
   kept.set(key, scope);
-  if (kept.size > SCOPES) kept.delete(kept.keys().next().value!);
+  while (kept.size > 1 && (kept.size > SCOPES || entriesOf(kept) > SCOPED_ENTRIES)) kept.delete(kept.keys().next().value!);
   return scope;
 }
 

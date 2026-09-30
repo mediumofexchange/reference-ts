@@ -126,6 +126,12 @@ describe("v3 evidence store", () => {
     const one = pack([{ kind: 6, payload: trail(0) }]), exact = new EvidenceStore(":memory:", { maxBatchBytes: 128n + BigInt(trail(0).length) });
     expect(exact.importBytes(one).count(6)).toBe(1);
     expect(() => new EvidenceStore(":memory:", { maxBatchBytes: 127n + BigInt(trail(0).length) }).importBytes(one)).toThrow(PackageLimitError);
+    // Each kept record position costs 192 bytes of rows beside its record's bytes.
+    const two = pack([{ kind: 6, payload: trail(2) }]), cost = 128n + BigInt(trail(2).length) + 2n * 192n;
+    expect(new EvidenceStore(":memory:", { maxBatchBytes: cost }).importBytes(two).count(6)).toBe(1);
+    expect(() => new EvidenceStore(":memory:", { maxBatchBytes: cost - 1n }).importBytes(two)).toThrow(PackageLimitError);
+    // Bare trails, as a harness supplies them, are charged the same.
+    expect(() => new EvidenceStore(":memory:", { maxBatchBytes: cost - 1n }).importTrails([trail(2)])).toThrow(PackageLimitError);
     store.close(); exact.close();
   });
 

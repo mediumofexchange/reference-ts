@@ -233,6 +233,10 @@ describe("single-backing complete frontier reader", () => {
       const again = await f.read(pack([...f.items, { kind: 3, payload }]));
       expect(describeState(again.canonical!.state)).toEqual(describeState(expected.canonical!.state));
       expect(again.carrying).toEqual(expected.carrying);
+      const selected = await readPackage(pack([...f.items, { kind: 1, payload: configurationBytes(configuration) },
+        { kind: 2, payload: encodeCommitment(opening) }, { kind: 3, payload }]), f.selection(opening), f.options);
+      expect(selected.canonical!.commitment).toEqual(opening);
+      expect(describeState(selected.state!)).toEqual(describeState(expected.canonical!.state));
     }
   });
 
