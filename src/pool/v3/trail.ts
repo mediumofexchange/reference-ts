@@ -81,9 +81,15 @@ const u32 = (b: Uint8Array, at = 0): number => new DataView(b.buffer, b.byteOffs
  * A terms field longer than any root terms can never verify (§12.1); unless
  * `keepLongTerms`, it is skipped rather than held. A sink keeps nothing of a
  * frame that is refused.
+ *
+ * With `retained`, the frame is §14's assembled trail: the head, then the
+ * reader's own first `events` records, `bytes` of frame already read and
+ * bounded when they were kept, then the fetched records. Only the head and
+ * the fetched records are fed; `total` counts all three.
  */
 export function* trailReader(sink: TrailSink, total: bigint,
-  options: { readonly keepLongTerms?: boolean; readonly budget?: TrailLimits | undefined } = {}): FrameReader<void> {
+  options: { readonly keepLongTerms?: boolean; readonly budget?: TrailLimits | undefined;
+    readonly retained?: { readonly events: bigint; readonly bytes: bigint } | undefined } = {}): FrameReader<void> {
   if (total < BigInt(FIXED_BYTES + MIN_HEADER_BYTES + 68)) throw new EncodingError("truncated trail");
   const head = yield CONTEXT.length + 4;
   contextAt(head, 0, CONTEXT);
@@ -117,8 +123,12 @@ export function* trailReader(sink: TrailSink, total: bigint,
   consumed += 8n;
   eventBudget(events, options.budget);
   if (4n * events > total - consumed) throw new EncodingError("trail count exceeds remaining bytes");
+  const retained = options.retained ?? { events: 0n, bytes: 0n };
+  // Retained records past the count would be bytes after the frame's last event.
+  if (retained.events > events || retained.bytes > total - consumed) throw new EncodingError("trailing trail bytes");
   sink.count(events);
-  for (let i = 1n; i <= events; i++) {
+  consumed += retained.bytes;
+  for (let i = retained.events + 1n; i <= events; i++) {
     const length = u32(yield 4);
     consumed += 4n;
     if (length > MAX_TRAIL_RECORD_BYTES || consumed + BigInt(length) > total) throw new EncodingError("trail field byte bound");

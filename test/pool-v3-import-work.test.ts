@@ -72,7 +72,7 @@ function fixture(proofVerifier: ProofCheck = verifier) {
         root: selected.root, judgingIndex: venue.witnessedIndex() }, terms, header: target.header, verifier: proofVerifier,
       reference: { context: LOCAL_REFERENCE, label, lag },
     }, venue, { directory: root => directories.get(hex(root)), snapshot: digest => snapshots.find(s => hex(sha256(s)) === hex(digest)),
-      trails: stored, answers: stored });
+      trails: stored, chargeAnswer: amount => stored.chargeAnswer(amount) });
   };
   return { checkpoint, read, venue };
 }

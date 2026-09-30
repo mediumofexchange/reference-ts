@@ -12,7 +12,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
   admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
-  type AdmittedReplacement, type ChainLink, type HeldCommitment, type HeldPrior, type RangeAnswer, type RangeEntry, type RangeLimits, type RecordKind,
+  type ChainLink, type HeldCommitment, type HeldPrior, type RangeAnswer, type RangeEntry, type RangeLimits, type RecordKind,
 } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
@@ -27,7 +27,7 @@ import { KeptStateMismatch, type ReplayStore } from "./replay-store.js";
 import {
   applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type SegmentReplay, type WitnessPredicate,
 } from "./state.js";
-import type { KeptAnswers, StoredTrail, WalkEvidence } from "./evidence-store.js";
+import type { StoredTrail, WalkEvidence } from "./evidence-store.js";
 import type { RootTerms } from "./terms.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
@@ -85,13 +85,13 @@ function read<T>(call: () => T): T {
   return value;
 }
 
-/** One §13 answer over [0, t], read as successive windows. A window over the
+/** One §13 answer over [start, t], read as successive windows. A window over the
  * reader's per-answer budget is asked again in halves; one index over it stays
  * refused (RangeLimitError), as a whole answer over it was. Each window's
  * answer must be the exact answer to its own request (§13.1). */
-function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, subject: Uint8Array, t: bigint,
+function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, subject: Uint8Array, start: bigint, t: bigint,
   take: (answer: RangeAnswer) => boolean | void): void {
-  let from = 0n, span = t + 1n;
+  let from = start, span = t - start + 1n;
   while (from <= t) {
     const to = from + span - 1n > t ? t : from + span - 1n;
     const request = Object.freeze({ venue: copyBytes(venueId), kind, subject: copyBytes(subject), fromIndex: from, toIndex: to });
@@ -113,13 +113,14 @@ function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, 
  * the held commitments (C2.3.3) of every party in force within its term
  * (C2.10.13), each passed by its packaged directory (C2.4.2) or listed as
  * carrying the backing, and K's revocation (C2b.1). The clock and lag are the
- * venue's; a supplied answer is never evidence. Answers are read window by
- * window; held commitments and publications are kept in the read's evidence,
- * each kind and subject once, so memory does not grow with the venue's age.
- * This view is shared by the original-segment clock and the import walks.
- * Nothing here classifies a checkpoint. */
+ * venue's; a supplied answer is never evidence. Each kind and subject's answer
+ * is kept in the reader's store (§13.2) and read window by window only past
+ * the index it is kept through (§13.3's adjacent earlier answer), so neither
+ * memory nor a later read's venue requests grow with the venue's age. Every
+ * query is bounded by t. This view is shared by the original-segment clock
+ * and the import walks. Nothing here classifies a checkpoint. */
 export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">, terms: RootTerms,
-  evidence: Pick<WalkEvidence, "directory" | "answers">, venue: RecordVenue, reference: VenueReference): Promise<RecordView> {
+  evidence: Pick<WalkEvidence, "directory" | "chargeAnswer">, venue: RecordVenue, reference: VenueReference, store: ReplayStore): Promise<RecordView> {
   // The caller holds this preimage independently of supplied record evidence.
   // Candidate v3 never reads a deployment venue, even if it offers valid ranges.
   const lag = read(() => venue.lag());
@@ -129,32 +130,54 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
   if (typeof now !== "bigint" || typeof lag !== "bigint" || t > now || (selection.mode === "current-fixture" && t !== now)) {
     throw new EvidenceRefusal("unresolved-evidence");
   }
-  const { answers } = evidence, backing = copyBytes(selection.backing);
-  // One identity counts once, at its first witnessing, across windows as within one answer.
-  const admitted: AdmittedReplacement[] = [];
-  readWindows(venue, selection.venue, 2, backing, t, answer => {
-    for (const entry of admittedReplacements(answer, terms.replacementRule)) {
-      if (!admitted.some(earlier => same(earlier.identity, entry.identity))) admitted.push(entry);
-    }
-  });
-  const { chain } = replacementChain(admitted, { backing, original: terms.operator, lag, now: t });
-  let revokedAt: bigint | undefined;
-  readWindows(venue, selection.venue, 3, terms.obligor, t, answer => (revokedAt = revocationIndex(answer)) !== undefined);
-  const heldOf = (operator: Uint8Array): KeptAnswers => {
-    if (!answers.kept(1, operator)) answers.keepAnswer(1, operator, () => {
-      let prior: HeldPrior | undefined;
-      readWindows(venue, selection.venue, 1, operator, t, answer => {
-        const { held, next } = heldCommitments(answer, prior);
-        answers.keepHeld(operator, held); prior = next;
-      });
-    });
-    return answers;
+  const backing = copyBytes(selection.backing), charge = (bytes: number | bigint): void => evidence.chargeAnswer(BigInt(bytes));
+  /** Extend the kept answer of `kind` for `subject` to t, unless it already decides t. */
+  const extend = (kind: RecordKind, subject: Uint8Array, decided: (kept: { through: bigint; value: bigint | undefined }) => boolean,
+    windows: (from: bigint, value: bigint | undefined) => bigint | undefined): void => {
+    const kept = store.keptAnswer(kind, subject);
+    if (kept !== undefined && (kept.through >= t || decided(kept))) return;
+    store.keepAnswer(kind, subject, () => ({ through: t, value: windows(kept === undefined ? 0n : kept.through + 1n, kept?.value) }));
   };
-  const publicationsKept = (): KeptAnswers => {
-    if (!answers.kept(4, backing)) answers.keepAnswer(4, backing, () => {
-      readWindows(venue, selection.venue, 4, backing, t, answer => { answers.keepPublications(backing, answer.entries); });
+  // Admitted replacements are kept at their first witnessing, so one identity counts once across windows and reads.
+  extend(2, backing, () => false, from => {
+    readWindows(venue, selection.venue, 2, backing, from, t, answer => {
+      for (const entry of answer.entries) {
+        const [admitted] = admittedReplacements({ request: answer.request, entries: [entry] }, terms.replacementRule);
+        if (admitted !== undefined) { charge(entry.record.length); store.putReplacement(backing, admitted.identity, entry.index, entry.record); }
+      }
     });
-    return answers;
+    return undefined;
+  });
+  const admitted = admittedReplacements({ request: { venue: selection.venue, kind: 2, subject: backing, fromIndex: 0n, toIndex: t },
+    entries: store.replacements(backing, t) }, terms.replacementRule);
+  const { chain } = replacementChain(admitted, { backing, original: terms.operator, lag, now: t });
+  // K's first revocation decides every later index, so an answer that found one is not extended.
+  extend(3, terms.obligor, kept => kept.value !== undefined, from => {
+    let found: bigint | undefined;
+    readWindows(venue, selection.venue, 3, terms.obligor, from, t, answer => (found = revocationIndex(answer)) !== undefined);
+    return found;
+  });
+  const revocation = store.keptAnswer(3, terms.obligor)!.value, revokedAt = revocation !== undefined && revocation <= t ? revocation : undefined;
+  const heldOf = (operator: Uint8Array): Uint8Array => {
+    extend(1, operator, () => false, (from, highest) => {
+      let prior: HeldPrior | undefined = from === 0n ? undefined : { fromIndex: from, highest: highest! };
+      readWindows(venue, selection.venue, 1, operator, from, t, answer => {
+        const { held, next } = heldCommitments(answer, prior);
+        charge(136 * held.length); store.putHeld(operator, held); prior = next;
+      });
+      return prior?.highest ?? highest ?? 0n;
+    });
+    return operator;
+  };
+  const publicationsKept = (): Uint8Array => {
+    extend(4, backing, () => false, from => {
+      readWindows(venue, selection.venue, 4, backing, from, t, answer => {
+        charge(answer.entries.reduce((sum, entry) => sum + entry.record.length, 0));
+        store.putPublications(backing, answer.entries);
+      });
+      return undefined;
+    });
+    return backing;
   };
   const termEnd = (i: number): bigint => (i + 1 < chain.length ? chain[i + 1]!.from - 1n : t);
   const carries = (h: HeldCommitment): SnapshotDigest | undefined => {
@@ -162,16 +185,21 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     return directory.find(entry => same(entry.name, backing));
   };
-  return { t, lag, chain, revokedAt, termEnd, carries,
-    held: operator => heldOf(operator).held(operator),
-    heldAt: (operator, sequence) => heldOf(operator).heldAt(operator, sequence),
-    heldAbove: (operator, sequence) => heldOf(operator).heldAbove(operator, sequence),
-    nextHeld: (operator, fromIndex, after) => heldOf(operator).nextHeld(operator, fromIndex, after),
-    previousHeld: (operator, toIndex, before) => heldOf(operator).previousHeld(operator, toIndex, before),
-    firstHeldIndex: (operator, from, to) => heldOf(operator).firstHeldIndex(operator, from, to),
-    nextPublication: after => publicationsKept().nextPublication(backing, after),
-    publications: () => publicationsKept().publications(backing),
-    publicationCount: () => publicationsKept().publicationCount(backing) };
+  // Iterations take one row per query, so no statement stays open while the walk writes between steps.
+  function* held(operator: Uint8Array): Iterable<HeldCommitment> {
+    for (let next = store.nextHeld(heldOf(operator), 0n, undefined, t); next !== undefined; next = store.nextHeld(operator, 0n, next.commitment.sequence, t)) yield next;
+  }
+  function* publications(): Iterable<RangeEntry> {
+    for (let next = store.nextPublication(publicationsKept(), undefined, t); next !== undefined; next = store.nextPublication(backing, next, t)) yield next;
+  }
+  return { t, lag, chain, revokedAt, termEnd, carries, held,
+    heldAt: (operator, sequence) => store.heldAt(heldOf(operator), sequence, t),
+    heldAbove: (operator, sequence) => store.heldAbove(heldOf(operator), sequence, t),
+    nextHeld: (operator, fromIndex, after) => store.nextHeld(heldOf(operator), fromIndex, after, t),
+    previousHeld: (operator, toIndex, before) => store.previousHeld(heldOf(operator), toIndex, before, t),
+    firstHeldIndex: (operator, from, to) => store.firstHeldIndex(heldOf(operator), from, to < t ? to : t),
+    nextPublication: after => store.nextPublication(publicationsKept(), after, t),
+    publications, publicationCount: () => store.publicationCount(publicationsKept(), t) };
 }
 
 /** What a trail replay reads besides its records: the store its state lives

@@ -49,8 +49,10 @@ describe("v3 evidence store", () => {
       (s: EvidenceStore) => s.importStream(chunks(bytes, 7)), (s: EvidenceStore) => s.importStream(chunks(bytes, 1 << 20))]) {
       const store = new EvidenceStore(), batch = await load(store);
       expect(batch.count(6)).toBe(2);
-      expect(batch.payloads(4)).toEqual([Uint8Array.of(1)]);
-      expect([...batch.heads(segment)].map(head => [...head.header])).toEqual([[...headerBytes], [...headerBytes]]);
+      // A snapshot is retained evidence, found by its digest; only per-read kinds are the package's own payloads.
+      expect([batch.snapshot(sha256(Uint8Array.of(1))), batch.payloads(4)]).toEqual([Uint8Array.of(1), []]);
+      // Two trails with one header and terms are one head, and their records one line.
+      expect([...batch.heads(segment)].map(head => [...head.header])).toEqual([[...headerBytes]]);
       for (let n = 0; n <= 6; n++) {
         const served = batch.served(expectedAt(n), snapshotAt(n))!;
         expect(served.length).toBe(BigInt(n));
@@ -110,8 +112,9 @@ describe("v3 evidence store", () => {
         await expect(store.importStream(chunks(bytes, 5))).rejects.toMatchObject({ status: "unsupported-scope" });
       }
     }
+    // The refused packages' trail was not kept.
     const batch = store.importBytes(pack([{ kind: 3, payload: Uint8Array.of(2) }]));
-    expect(batch.payloads(3)).toEqual([Uint8Array.of(2)]);
+    expect([batch.count(3), batch.served(expectedAt(2), snapshotAt(2))]).toEqual([1, undefined]);
     store.close();
   });
 
@@ -133,22 +136,6 @@ describe("v3 evidence store", () => {
     // Bare trails, as a harness supplies them, are charged the same.
     expect(() => new EvidenceStore(":memory:", { maxBatchBytes: cost - 1n }).importTrails([trail(2)])).toThrow(PackageLimitError);
     store.close(); exact.close();
-  });
-
-  it("refuses to keep a venue answer while another import holds the store's transaction", async () => {
-    const store = new EvidenceStore(), batch = store.importBytes(pack([])), operator = header.operator;
-    const bytes = pack([{ kind: 6, payload: trail(2) }]);
-    let resume!: () => void;
-    const paused = new Promise<void>(resolve => { resume = resolve; });
-    async function* slow(): AsyncGenerator<Uint8Array> { yield bytes.subarray(0, 40); await paused; yield bytes.subarray(40); }
-    const importing = store.importStream(slow());
-    await new Promise(resolve => setImmediate(resolve));
-    expect(() => batch.keepAnswer(1, operator, () => {})).toThrow("an import is open on this evidence store");
-    resume();
-    expect((await importing).count(6)).toBe(1);
-    batch.keepAnswer(1, operator, () => {});
-    expect(batch.kept(1, operator)).toBe(true);
-    store.close();
   });
 
   it("skips a terms field too long to verify, which decodeTrail keeps", () => {
@@ -204,9 +191,11 @@ describe("v3 evidence store", () => {
     expect(batch.count(3)).toBe(3);
     expect(batch.snapshot(sha256(snapshot))).toEqual(snapshot);
     expect(batch.snapshot(b(1))).toBeUndefined();
-    // A directory's bytes under another kind are no directory.
-    expect(store.importBytes(pack([{ kind: 4, payload: encodeEvidenceDirectory(directory) }])).directory(directoryRoot(directory))).toBeUndefined();
     store.close();
+    // A directory's bytes under another kind are no directory.
+    const other = new EvidenceStore();
+    expect(other.importBytes(pack([{ kind: 4, payload: encodeEvidenceDirectory(directory) }])).directory(directoryRoot(directory))).toBeUndefined();
+    other.close();
   });
 
   it("authenticates a segment's scope once per batch, from the first field that names its backing and verifies", () => {
@@ -225,10 +214,11 @@ describe("v3 evidence store", () => {
     const other = store.importBytes(pack([{ kind: 6, payload: trailOf(signed) }]));
     expect(authenticatedScope(other, id)).not.toBe(scope);
     expect(authenticatedScope(other, id)).toEqual(scope);
-    // Without a verifying field the scope stays unresolved, and is not kept.
-    const bare = store.importBytes(pack([{ kind: 6, payload: trailOf(forged) }]));
-    for (let i = 0; i < 2; i++) expect(() => authenticatedScope(bare, id)).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
     store.close();
+    // Without a verifying field the scope stays unresolved, and is not kept.
+    const fresh = new EvidenceStore(), bare = fresh.importBytes(pack([{ kind: 6, payload: trailOf(forged) }]));
+    for (let i = 0; i < 2; i++) expect(() => authenticatedScope(bare, id)).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
+    fresh.close();
   });
 
   it("refuses a batch past the party's quota, keeping nothing, and a venue answer past it as a resource refusal", async () => {
@@ -237,37 +227,9 @@ describe("v3 evidence store", () => {
     await expect(store.importStream(chunks(bytes, 64))).rejects.toThrow(PackageLimitError);
     const batch = store.importBytes(pack([{ kind: 6, payload: trail(2) }]));
     expect([...batch.heads(segment)]).toHaveLength(1);
-    expect(() => batch.keepPublications(backing, [{ index: 1n, ordinal: 0n, record: new Uint8Array(Number(trail(6).length)) }]))
-      .toThrow(expect.objectContaining({ status: "resource-refusal" }));
+    expect(() => batch.chargeAnswer(BigInt(trail(6).length))).toThrow(expect.objectContaining({ status: "resource-refusal" }));
     expect(() => new EvidenceStore(":memory:", { maxBatchBytes: -1n })).toThrow(TypeError);
     store.close();
   });
 
-  it("keeps venue answers in index and venue order, one position for one subject", () => {
-    const store = new EvidenceStore(), batch = store.importBytes(pack([])), operator = header.operator;
-    const held = (index: bigint, sequence: bigint) => ({ index, commitment: { operator, sequence, root: b(Number(sequence)), signature: new Uint8Array(64).fill(1) } });
-    expect(batch.kept(1, operator)).toBe(false);
-    // Two windows of one answer, as a reader reads them.
-    batch.keepAnswer(1, operator, () => { batch.keepHeld(operator, [held(2n, 1n), held(2n, 2n)]); batch.keepHeld(operator, [held(9n, 5n)]); });
-    expect(batch.kept(1, operator)).toBe(true);
-    // An answer whose read fails keeps nothing, not even its earlier windows.
-    const other = b(44);
-    expect(() => batch.keepAnswer(1, other, () => { batch.keepHeld(other, [held(1n, 1n)]); throw new Error("a later window failed"); })).toThrow("a later window failed");
-    expect([batch.kept(1, other), [...batch.held(other)]]).toEqual([false, []]);
-    expect([...batch.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[2n, 1n], [2n, 2n], [9n, 5n]]);
-    expect(batch.heldAt(operator, 5n)).toEqual(held(9n, 5n)); expect(batch.heldAt(operator, 3n)).toBeUndefined();
-    expect([batch.heldAbove(operator, 2n), batch.heldAbove(operator, 5n)]).toEqual([true, false]);
-    expect(batch.nextHeld(operator, 3n)).toEqual(held(9n, 5n));
-    expect(batch.nextHeld(operator, 0n, 1n)).toEqual(held(2n, 2n));
-    expect([batch.firstHeldIndex(operator, 0n, 9n), batch.firstHeldIndex(operator, 3n, 9n), batch.firstHeldIndex(operator, 3n, 8n)]).toEqual([2n, 9n, undefined]);
-    const entry = (index: bigint, ordinal: bigint) => ({ index, ordinal, record: Uint8Array.of(Number(index), Number(ordinal)) });
-    batch.keepPublications(b(5), [entry(1n, 0n), entry(1n, 2n), entry(3n, 0n)]);
-    batch.keepPublications(b(6), [entry(1n, 1n)]);
-    expect([...batch.publications(b(5))]).toEqual([entry(1n, 0n), entry(1n, 2n), entry(3n, 0n)]);
-    expect(batch.nextPublication(b(5), entry(1n, 2n))).toEqual(entry(3n, 0n));
-    expect(batch.publicationCount(b(6))).toBe(1);
-    // One venue position answered under two subjects leaves the read unresolved (§13.1).
-    expect(() => batch.keepPublications(b(6), [entry(3n, 0n)])).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
-    store.close();
-  });
 });
