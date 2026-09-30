@@ -6,9 +6,13 @@
 // verified, when that judgment reaches its proof check (state.ts). So the order
 // of checks, the first failing one and a verifier's throw, surfaced at the
 // record whose proof threw, are those of a replay that asks for each proof in
-// turn. A verification started for a record the replay never reaches (it
-// refused earlier) is dropped with its outcome, which is the only difference:
-// such a verifier may be asked up to the window more than a replay needed.
+// turn; so is a failure reading the trail, raised when its record is due.
+//
+// The only difference is work: a verification started for a record the replay
+// never reaches (it refused earlier) is dropped with its outcome. A replay
+// starts ahead only as many proofs as it has already seen verify, so what it
+// drops is never more than what it used, and a verifier never holds more than
+// the window of started verifications, however many replays abandoned theirs.
 import { compareBytes } from "../../bytes.js";
 import { decodeRecord } from "./records.js";
 import type { Adopted, ProofCheck } from "./state.js";
@@ -19,6 +23,10 @@ const PER_LANE = 2;
 const MAX_WINDOW = 128;
 
 interface Started { readonly kind: number; readonly inputs: readonly bigint[]; readonly proof: Uint8Array; readonly verdict: Promise<unknown> }
+interface Queued { readonly bytes: Uint8Array; readonly at: bigint; started: boolean }
+
+/** Started verifications not yet settled, per verifier object, across every replay that started them. */
+const unsettled = new WeakMap<ProofCheck, { count: number }>();
 
 /** A verifier's declared parallelism read once, for a caller binding the verifier it was given; undefined where none is declared. */
 export function declaredParallel(verifier: ProofCheck): number | undefined {
@@ -40,19 +48,29 @@ export function verifyAhead(verifier: ProofCheck, records: Iterable<Uint8Array>,
   const parallel = declaredParallel(verifier);
   if (parallel === undefined) return { verifier, records };
   const window = Math.min(parallel * PER_LANE, MAX_WINDOW);
+  let shared = unsettled.get(verifier);
+  if (shared === undefined) { shared = { count: 0 }; unsettled.set(verifier, shared); }
+  const held = shared;
+  // Proofs this replay's judgments were handed as valid: the most it may have started and not yet asked for.
+  let earned = 0;
   const started: Started[] = [];
-  const start = (bytes: Uint8Array, at: bigint): void => {
-    if (block[Number(at)] !== undefined) return;
+  const seen = (verdict: unknown): unknown => { if (verdict === true) earned++; return verdict; };
+  const start = (entry: Queued): boolean => {
+    entry.started = true;
+    if (block[Number(entry.at)] !== undefined) return false;
     let record;
-    try { record = decodeRecord(bytes); } catch { return; }
-    if (![1, 2, 3, 4, 6].includes(record.kind)) return;
+    try { record = decodeRecord(entry.bytes); } catch { return false; }
+    if (![1, 2, 3, 4, 6].includes(record.kind)) return false;
     const inputs = [...record.publicInputs], proof = new Uint8Array(record.proof);
     let verdict: Promise<unknown>;
     // A verifier that throws at the call is surfaced as its judgment would see it: at that record's proof check.
     try { verdict = Promise.resolve(verifier.verify(record.kind, [...inputs], new Uint8Array(proof))); } catch (error) { verdict = Promise.reject(error); }
+    held.count++;
+    const release = (): void => { held.count--; };
     // An outcome nobody asks for is dropped, never reported as unhandled.
-    verdict.catch(() => {});
+    void verdict.then(release, release);
     started.push({ kind: record.kind, inputs, proof, verdict });
+    return true;
   };
   const matches = (entry: Started, kind: number, inputs: readonly bigint[], proof: Uint8Array): boolean =>
     entry.kind === kind && entry.inputs.length === inputs.length && entry.inputs.every((value, i) => value === inputs[i]) &&
@@ -60,27 +78,38 @@ export function verifyAhead(verifier: ProofCheck, records: Iterable<Uint8Array>,
   const ahead: ProofCheck = {
     verify(kind, inputs, proof) {
       const at = started.findIndex(entry => matches(entry, kind, inputs, proof));
-      if (at < 0) return verifier.verify(kind, inputs, proof);
+      if (at < 0) {
+        const verdict: unknown = verifier.verify(kind, inputs, proof);
+        const thenable = verdict !== null && typeof verdict === "object" && typeof (verdict as { then?: unknown }).then === "function";
+        return thenable ? Promise.resolve(verdict).then(seen) as Promise<boolean> : seen(verdict) as boolean;
+      }
       // Entries before it belong to records this replay passed without their proof.
       const entry = started.splice(0, at + 1)[at]!;
-      return entry.verdict as Promise<boolean>;
+      return entry.verdict.then(seen) as Promise<boolean>;
     },
     identities: verifier.identities,
     parallel,
   };
   function* ordered(): Generator<Uint8Array> {
-    const source = records[Symbol.iterator](), queued: Uint8Array[] = [];
-    let next = position, done = false;
+    const source = records[Symbol.iterator](), queued: Queued[] = [];
+    let next = position, done = false, failure: { readonly error: unknown } | undefined;
     const fill = (): void => {
       while (!done && queued.length < window) {
-        const step = source.next();
+        let step: IteratorResult<Uint8Array>;
+        // A failure reading ahead is raised when its record is due, after every record before it.
+        try { step = source.next(); } catch (error) { failure = { error }; done = true; break; }
         if (step.done === true) { done = true; break; }
-        start(step.value, next++);
-        queued.push(step.value);
+        queued.push({ bytes: step.value, at: next++, started: false });
+      }
+      for (const entry of queued) {
+        if (entry.started) continue;
+        if (started.length >= Math.min(window, earned) || held.count >= window) break;
+        start(entry);
       }
     };
     try {
-      for (fill(); queued.length > 0; fill()) yield queued.shift()!;
+      for (fill(); queued.length > 0; fill()) yield queued.shift()!.bytes;
+      if (failure !== undefined) throw failure.error;
     } finally {
       source.return?.();
     }

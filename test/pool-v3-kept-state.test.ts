@@ -73,7 +73,7 @@ function fixture() {
       5n, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof, authorization: new Uint8Array(64), capsules };
     return encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), signer) });
   }
-  async function issue(output: bigint, proof?: Uint8Array) {
+  async function issue(output: bigint, proof?: ReturnType<typeof b>) {
     const bytes = issued(output, issuerSecret, proof), scope = new ScopeTree(header.entries).root();
     await applyRecord(segment.state, bytes, { domain, backing, segment: id, scope, terms: fields, verifier: accept, index: 2n, block: [] });
     segment.records.push(bytes);
@@ -557,10 +557,10 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(outcome(read)).toEqual(outcome(expected));
     expect(read.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "valid", undefined], ["2", "valid", undefined],
       ["3", "excluded", "REPEATED_STATEMENT"], ["4", "excluded", "PROOF"], ["5", "excluded", "SIGNATURE"], ["6", "valid", undefined]]);
-    // Every proof judged is verified once; ahead of a refusal, at most the window more (two per instance).
+    // Every proof judged is verified once. Each refusal here comes before its replay has seen a proof verify, so a
+    // replay ahead started nothing it then dropped (verify-ahead.ts bounds what it drops by what it used).
     expect(inTurn.checks).toBe(12);
-    expect(ahead.checks).toBeGreaterThan(inTurn.checks);
-    expect(ahead.checks).toBeLessThanOrEqual(inTurn.checks + 3 * 4);
+    expect(ahead.checks).toBe(inTurn.checks);
     expect(ahead.most).toBeGreaterThan(1);
     // A kept file read ahead keeps what a read in turn keeps.
     const kept = files(), store = opened(kept.path, kept);
