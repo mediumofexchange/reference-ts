@@ -5,8 +5,8 @@ import { hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { decodeRecord } from "./records.js";
 import { V3OperatorJournal, V3StoreError } from "./store.js";
-import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_RESPONSE_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
-  parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, packageReply } from "./service-wire.js";
+import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
+  parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, servedFrames } from "./service-wire.js";
 
 export interface V3ServiceCredentials { readonly walletToken: string; readonly adminToken: string }
 function matches(header: string | undefined, token: string): boolean {
@@ -38,6 +38,9 @@ function failure(error: unknown): { status: number; code: string } {
   return { status: 503, code: "UNAVAILABLE" };
 }
 
+/** Evidence streams served at once, of the sixteen connections; and the slowest peer a stream waits for. */
+const MAX_EVIDENCE_STREAMS = 8, MIN_EVIDENCE_BYTES_PER_MS = 64;
+
 /** Bind to 127.0.0.1. The server also refuses non-loopback connections.
  * Credentials permit operations; protocol proofs/signatures remain authoritative.
  * Connection timeouts never cancel or roll back accepted journal operations. */
@@ -47,6 +50,7 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
     throw new EncodingError("distinct 32-byte credentials required");
   }
   const domain = journal.configurationDomain;
+  let streams = 0;
   const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
     response.setHeader("content-type", "application/json"); response.setHeader("cache-control", "no-store");
     const send = (status: number, value: unknown, maximum = MAX_V3_SERVICE_REPLY_BYTES) => {
@@ -56,6 +60,7 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
     };
     // Bound request/response lifetime after headers, even while work is pending.
     // Journal work keeps its owner and can finish after the caller loses the reply.
+    // Served evidence has no size to bound its time by: a write restarts the bound, within a minimum rate.
     const timer = setTimeout(() => response.destroy(), 15_000);
     response.once("close", () => clearTimeout(timer));
     const remote = request.socket.remoteAddress;
@@ -68,11 +73,39 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
       request.resume(); send(401, { code: "UNAUTHORIZED" }); return;
     }
     try {
-      // A multi-backing scope serves each holder's backing by name (C2.10.3).
-      const served = request.method === "GET" ? /^\/package(?:\?backing=([0-9a-f]{64}))?$/.exec(request.url ?? "") : null;
-      if (served !== null) {
-        const backing = served[1] === undefined ? undefined : hexToBytes(served[1]);
-        send(200, packageReply(await journal.package(backing)), MAX_V3_SERVICE_RESPONSE_BYTES); return;
+      // A multi-backing scope serves each holder's backing by name (C2.10.3). `after` is the sequence the
+      // reader's evidence was served through; the journal then serves only what came after it.
+      const asked = request.method === "GET" ? /^\/evidence\?backing=([0-9a-f]{64})&after=(0|[1-9][0-9]{0,19})$/.exec(request.url ?? "") : null;
+      if (asked !== null) {
+        const after = BigInt(asked[2]!);
+        if (after >= 1n << 64n) throw new EncodingError("invalid served sequence");
+        // Streams leave connections for commands: a slow reader cannot take them all.
+        if (streams >= MAX_EVIDENCE_STREAMS) { request.resume(); send(409, { code: "BUSY" }); return; }
+        streams++;
+        try {
+          const served = await journal.serve(hexToBytes(asked[1]!), after);
+          request.resume();
+          if (response.destroyed) return;
+          response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
+          // The parts are read from rows as the peer takes them. A failure after the headers ends the
+          // connection short of the stream's end mark, which a receiver refuses; the server's owner is told
+          // by an "evidenceError" event. A peer slower than the minimum rate is cut off.
+          const started = Date.now(); let sent = 0;
+          try {
+            for await (const chunk of servedFrames(served)) {
+              if (response.destroyed) return;
+              if (!response.write(chunk)) await new Promise<void>(resolve => {
+                const done = (): void => { response.off("drain", done); response.off("close", done); resolve(); };
+                response.once("drain", done); response.once("close", done);
+              });
+              sent += chunk.length;
+              if (Date.now() - started > 15_000 + sent / MIN_EVIDENCE_BYTES_PER_MS) { response.destroy(); return; }
+              timer.refresh();
+            }
+            response.end();
+          } catch (error) { response.destroy(); server.emit("evidenceError", error); }
+        } finally { streams--; }
+        return;
       }
       if (request.method === "POST" && request.url === "/commands") {
         const command = parseV3ServiceCommand(await readBody(request));

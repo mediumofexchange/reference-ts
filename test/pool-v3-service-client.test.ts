@@ -5,11 +5,14 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
 import { LOCAL_REFERENCE, localVenueIdentity } from "../src/record-venue.js";
 import { encodeReceipt, receiptBytes, type ReceiptFields } from "../src/pool/v3/commitments.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { encodeEvidencePackage } from "../src/pool/v3/package.js";
 import { encodeRecord, evidenceHashes, type Record as StatementRecord } from "../src/pool/v3/records.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
-import { MAX_V3_SERVICE_RESPONSE_BYTES, packageReply, replyFromReceipt, replyFromCommitment } from "../src/pool/v3/service-wire.js";
-import { signCommitment } from "../src/venue-records.js";
+import { MAX_V3_SERVICE_REPLY_BYTES, replyFromReceipt, replyFromCommitment, servedFrames } from "../src/pool/v3/service-wire.js";
+import type { ServedEvidence } from "../src/pool/v3/store.js";
+import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
 const TOKEN = "11".repeat(32), ADMIN = "22".repeat(32);
@@ -24,8 +27,9 @@ const receipt = (fields: Partial<ReceiptFields> = {}, signingKey = secret) => {
   const r = { domain, segment, scopeRoot: 7n, position: 1n, ...evidenceHashes(record()), historyHash: b(8), after: 1n, ...fields };
   return encodeReceipt({ ...r, operator: ed25519.getPublicKey(signingKey), signature: ed25519.sign(receiptBytes(r), signingKey) });
 };
-const served = () => ({ selection: { domain, operator, venue: localVenueIdentity(reference.label, reference.lag), backing,
-  sequence: 1n, root: b(9) }, package: encodeEvidencePackage([], { maxBytes: 1_048_576n, maxItems: 1024n }) });
+/** A selection whose own package carries the commitment it names, and no further parts. */
+const served = (signer = secret, sequence = 1n): ServedEvidence => ({ selection: { domain, operator, venue: localVenueIdentity(reference.label, reference.lag), backing,
+  sequence: 1n, root: b(9) }, package: encodeEvidencePackage([{ kind: 2, payload: encodeCommitment(signCommitment(signer, sequence, b(9))) }]), parts: [] });
 const servers: Server[] = [];
 async function endpoint(handler: RequestListener): Promise<string> {
   const server = createServer(handler); servers.push(server);
@@ -34,6 +38,12 @@ async function endpoint(handler: RequestListener): Promise<string> {
 }
 const responding = (body: unknown) => endpoint((request, response) => {
   request.resume(); response.setHeader("content-type", "application/json"); response.end(JSON.stringify(body));
+});
+/** Answers every request with `value` as a served stream. */
+const serving = (value: ServedEvidence, seen: (url: string | undefined) => void = () => {}) => endpoint(async (request, response) => {
+  seen(request.url); request.resume(); response.setHeader("content-type", "application/octet-stream");
+  for await (const chunk of servedFrames(value)) response.write(chunk);
+  response.end();
 });
 afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => {
@@ -89,18 +99,45 @@ describe("bounded v3 local service client", () => {
     }
   });
 
-  it("pins package routing without treating package metadata as a finality verdict", async () => {
+  it("pins evidence routing and context without treating served metadata as a finality verdict", async () => {
     const good = served(), paths: (string | undefined)[] = [];
-    const url = await endpoint((request, response) => {
-      paths.push(request.url); request.resume(); response.setHeader("content-type", "application/json"); response.end(JSON.stringify(packageReply(good)));
-    });
-    expect(await new V3ServiceClient(url, TOKEN, expected()).package(backing)).toEqual(good);
-    // The holder names its own backing; a multi-backing service selects it.
-    expect(paths).toEqual([`/package?backing=${Buffer.from(backing).toString("hex")}`]);
+    const url = await serving(good, path => paths.push(path));
+    expect(await new V3ServiceClient(url, TOKEN, expected()).package(backing)).toEqual({ selection: good.selection, package: good.package });
+    // The holder names its own backing; a multi-backing service selects it. A whole package is served from nothing.
+    expect(paths).toEqual([`/evidence?backing=${Buffer.from(backing).toString("hex")}&after=0`]);
     for (const field of ["domain", "venue", "operator", "backing"] as const) {
-      const wrong = await responding(packageReply({ ...good, selection: { ...good.selection, [field]: b(26) } }));
+      const wrong = await serving({ ...good, selection: { ...good.selection, [field]: b(26) } });
       await expect(new V3ServiceClient(wrong, TOKEN, expected()).package(backing)).rejects.toThrow("wrong service package context");
     }
+    // The read's own package must carry the named commitment, signed by the expected operator: a sequence
+    // recorded as served is one that operator signed.
+    for (const wrong of [served(b(25)), served(secret, 2n), { ...good, selection: { ...good.selection, root: b(27) } },
+      { ...good, package: encodeEvidencePackage([]) }]) {
+      await expect(new V3ServiceClient(await serving(wrong), TOKEN, expected()).package(backing)).rejects.toThrow("wrong commitment authority");
+    }
+    // A response past the caller's budget is refused as it arrives.
+    await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing, 100n)).rejects.toThrow("served evidence exceeds the reader's budget");
+    // A JSON body where a stream is expected is no served evidence.
+    const json = await responding({ code: "OK" });
+    await expect(new V3ServiceClient(json, TOKEN, expected()).package(backing)).rejects.toThrow("unexpected service response");
+  });
+
+  it("keeps served parts in the caller's store, records the signed sequence, and refuses a part it does not read", async () => {
+    const source = Buffer.concat([domain, localVenueIdentity(reference.label, reference.lag), operator]), object = b(30);
+    const store = new EvidenceStore(), good = { ...served(), parts: [{ package: encodeEvidencePackage([{ kind: 4, payload: object }]) }] };
+    expect(await new V3ServiceClient(await serving(good), TOKEN, expected()).sync(backing, store)).toEqual({ selection: good.selection, package: good.package });
+    expect([store.suppliedThrough(source), store.retained().snapshot(sha256(object))]).toEqual([1n, object]);
+    // A selection with no parts is a complete answer: nothing is new.
+    const empty = new EvidenceStore();
+    await new V3ServiceClient(await serving(served()), TOKEN, expected()).sync(backing, empty);
+    expect(empty.suppliedThrough(source)).toBe(1n);
+    // A kind no v3 reader reads refuses the sync, and another context is refused before any part is kept: no sequence is recorded.
+    const other = new EvidenceStore(), unread = { ...served(), parts: [{ package: encodeEvidencePackage([{ kind: 9, payload: object }]) }] };
+    await expect(new V3ServiceClient(await serving(unread), TOKEN, expected()).sync(backing, other)).rejects.toMatchObject({ status: "unsupported-scope" });
+    await expect(new V3ServiceClient(await serving({ ...good, selection: { ...good.selection, venue: b(26) } }), TOKEN, expected()).sync(backing, other))
+      .rejects.toThrow("wrong service package context");
+    expect([other.suppliedThrough(source), other.retained().snapshot(sha256(object))]).toEqual([0n, undefined]);
+    for (const opened of [store, empty, other]) opened.close();
   });
 
   it("rejects remote or ambiguous URLs and malformed credentials before a request", () => {
@@ -120,33 +157,35 @@ describe("bounded v3 local service client", () => {
     expect(contacted).toBe(false);
   });
 
-  it("bounds declared and chunked response bodies before parsing", async () => {
+  it("bounds declared and chunked reply bodies before parsing", async () => {
     for (const declared of [false, true]) {
       const url = await endpoint((_, response) => {
         response.setHeader("content-type", "application/json");
-        if (declared) response.setHeader("content-length", String(MAX_V3_SERVICE_RESPONSE_BYTES + 1));
+        if (declared) response.setHeader("content-length", String(MAX_V3_SERVICE_REPLY_BYTES + 1));
         else response.flushHeaders();
-        response.end(" ".repeat(MAX_V3_SERVICE_RESPONSE_BYTES + 1));
+        response.end(" ".repeat(MAX_V3_SERVICE_REPLY_BYTES + 1));
       });
-      await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toThrow("response too large");
+      await expect(new V3ServiceClient(url, TOKEN, expected(), ADMIN).commit("test")).rejects.toThrow("response too large");
     }
   });
 
   it("rejects malformed UTF-8, response compression and untrusted error text", async () => {
     const utf8 = await endpoint((_, response) => { response.setHeader("content-type", "application/json"); response.end(Buffer.from([0xff])); });
-    await expect(new V3ServiceClient(utf8, TOKEN, expected()).package(backing)).rejects.toThrow(/JSON|UTF-8/);
+    await expect(new V3ServiceClient(utf8, TOKEN, expected(), ADMIN).commit("test")).rejects.toThrow(/JSON|UTF-8/);
     const compressed = await endpoint((_, response) => {
-      response.setHeader("content-type", "application/json"); response.setHeader("content-encoding", "br"); response.end();
+      response.setHeader("content-type", "application/octet-stream"); response.setHeader("content-encoding", "br"); response.end();
     });
     await expect(new V3ServiceClient(compressed, TOKEN, expected()).package(backing)).rejects.toThrow("unexpected service response");
     const error = await endpoint((_, response) => {
       response.writeHead(503, { "content-type": "application/json" }); response.end(JSON.stringify({ code: `secret ${TOKEN}` }));
     });
     await expect(new V3ServiceClient(error, TOKEN, expected()).package(backing)).rejects.toMatchObject({ code: "UNAVAILABLE", status: 503 });
+    const refused = await endpoint((_, response) => { response.writeHead(409, { "content-type": "application/json" }); response.end(JSON.stringify({ code: "FENCED" })); });
+    await expect(new V3ServiceClient(refused, TOKEN, expected()).package(backing)).rejects.toMatchObject({ code: "FENCED", status: 409 });
   });
 
   it("aborts a real server that stalls after response headers", async () => {
-    const url = await endpoint((_, response) => { response.setHeader("content-type", "application/json"); response.flushHeaders(); });
+    const url = await endpoint((_, response) => { response.setHeader("content-type", "application/octet-stream"); response.flushHeaders(); });
     const started = Date.now();
     await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toMatchObject({ name: "AbortError" });
     expect(Date.now() - started).toBeLessThan(14_000);

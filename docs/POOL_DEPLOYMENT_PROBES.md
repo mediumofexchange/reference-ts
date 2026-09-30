@@ -1019,6 +1019,41 @@ with N = 300, and kept windows at `2ea30c8` with N = 5,000 and `--audit`.
   every held checkpoint at each admission); the audit and the package follow
   the history, as before.
 
+### Serving by stream and incrementally (M5b.5b.2)
+
+`replay-store-probe.mjs journal <N> --every <K> --serve --more <M>` runs the
+journal as above, then serves its history over its HTTP service into a
+reader's evidence file (`V3ServiceClient.sync`), admits M more statements
+under one new checkpoint, and syncs again
+([M5b.5b.2](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+The journal, the transport and the reader's import share one process, and
+memory is sampled as the response is written.
+
+Run of 2026-09-30 on the same desktop with N = 10⁴, K = 1,000, M = 100 and
+14,016-byte stand-in proofs (14.9 KB per statement, the real proof size), on
+the delivered code:
+
+| Step | Result |
+|---|---|
+| First sync: 10⁴ records, 11 checkpoints | 142.3 MiB in 14.0 s, 10.2 MiB/s; one package part and one whole trail |
+| Heap while it is served and kept | 12.0–13.2 MB throughout (12.3 MB before the first byte) |
+| Process memory while it is served and kept | 197 → 229 MB, SQLite's page caches; peak 238 MB over the run |
+| Second sync, after 100 new records (1,492,600 bytes framed) | 1,494,323 bytes in 0.27 s |
+| A sync with nothing new | 809 bytes |
+| Reader's evidence file | 158 MiB |
+
+- *Only new bytes:* the second response is the new records plus 1,723
+  bytes: the frame, the read's own package, the new directory and snapshot,
+  and the trail's head.
+- *Flat:* the heap does not follow the 142 MiB served. Each record is read,
+  checked against its chain step and written on the journal's side, then
+  framed, decoded, chained and stored on the reader's.
+- *Limits:* stand-in proofs, one backing and one segment; loopback, both ends
+  in one process; the reader kept the evidence and did not replay it (the
+  M5b.4b probe measures that read). Before a trail's first record the journal
+  walks its kept links back once, about 7.5 µs per record served in the
+  review's run (0.75 s at 10⁵ records), without yielding.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

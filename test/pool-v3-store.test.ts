@@ -2,7 +2,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
+import type { Server } from "node:http";
 import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE } from "../src/ergo-profile.js";
 import { ErgoPublisher, verifyErgoProof } from "../src/ergo-publisher.js";
 import { MempoolNode, plainBox, SCRIPTS } from "./ergo-chain.js";
@@ -11,14 +12,16 @@ import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, decodeSnapshot, verifyReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
+import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import { CandidateVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
-import { segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
+import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage } from "../src/pool/v3/package.js";
 import { encodeRecord, type Record } from "../src/pool/v3/records.js";
-import type { V3OperatorJournal as Journal, V3StoreError as StoreError } from "../src/pool/v3/store.js";
+import type { ServedPackage, V3OperatorJournal as Journal, V3StoreError as StoreError } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
-import { decodeTrail } from "../src/pool/v3/trail.js";
+import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask, type SegmentContext } from "../src/pool/v3/witness.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { RangeLimitError, type RangeRequest } from "../src/record-range.js";
@@ -128,9 +131,14 @@ describe("a local venue's publishing side", () => {
 describe("the v3 operator journal", () => {
   let V3OperatorJournal: typeof import("../src/pool/v3/store.js").V3OperatorJournal;
   let V3StoreError: typeof import("../src/pool/v3/store.js").V3StoreError;
-  const journals: Journal[] = [], directories: string[] = [], scratch = resolve("scratch");
-  beforeAll(async () => { ({ V3OperatorJournal, V3StoreError } = await import("../src/pool/v3/store.js")); });
-  afterEach(() => {
+  let createV3Service: typeof import("../src/pool/v3/service-http.js").createV3Service;
+  const journals: Journal[] = [], directories: string[] = [], scratch = resolve("scratch"), servers: Server[] = [];
+  beforeAll(async () => {
+    ({ V3OperatorJournal, V3StoreError } = await import("../src/pool/v3/store.js"));
+    ({ createV3Service } = await import("../src/pool/v3/service-http.js"));
+  });
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map(server => new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); })));
     for (const j of journals.splice(0)) { try { j.close(); } catch { /* a fenced or closed handle */ } }
     for (const directory of directories.splice(0)) {
       if (!resolve(directory).startsWith(scratch + sep)) throw new Error("invalid cleanup path");
@@ -768,5 +776,105 @@ describe("the v3 operator journal", () => {
     const fresh = journal(path(), venue);
     await expect(fresh.open("genesis", signed)).rejects.toThrow(/a commitment this journal did not sign/);
     expect(await refusal(fresh.open("genesis", signed))).toEqual(["CONFLICT", undefined]);
+  });
+
+  /** The journal behind its HTTP service, a client of it, and each evidence request with the bytes it was answered by. */
+  async function service(j: Journal) {
+    const tokens = { walletToken: "11".repeat(32), adminToken: "22".repeat(32) }, requests: { url: string; bytes: number }[] = [];
+    const server = createV3Service(j, tokens); servers.push(server);
+    server.prependListener("request", (request, response) => {
+      const entry = { url: request.url ?? "", bytes: 0 }, write = response.write.bind(response) as (...args: unknown[]) => boolean;
+      requests.push(entry);
+      response.write = ((chunk: Uint8Array, ...rest: unknown[]) => { entry.bytes += chunk.length; return write(chunk, ...rest); }) as typeof response.write;
+    });
+    await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(0, "127.0.0.1", done); });
+    const client = new V3ServiceClient(`http://127.0.0.1:${(server.address() as { port: number }).port}/`, tokens.walletToken, { domain, operator, reference });
+    return { client, requests };
+  }
+  const kinds = (parts: Iterable<EvidencePart>): string[] => [...parts].map(part => "package" in part ?
+    `package:${decodeEvidencePackage(part.package).map(item => item.kind).join("")}` : `trail:${part.trail.after?.position ?? "whole"}`);
+
+  it("serves a reader's later sync only what is new, over HTTP, and its reads equal a read of the whole package", async () => {
+    const { j, venue } = await opened(), { client, requests } = await service(j);
+    const evidence = new EvidenceStore(), source = concatBytes(domain, venueId, operator), records = [issue(), payment(), burning()];
+    const read = async (served: ServedPackage, kept?: EvidenceStore) => (await readPackage(served.package,
+      { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+      { configuration, verifier, venue, reference, ...(kept === undefined ? {} : { evidence: kept }) })).state!;
+    const framed = (record: Uint8Array): number => 4 + record.length;
+    const head = encodeTrail({ header: segmentBytes(header), terms: [signed], records: [] }).length;
+
+    await j.submit(records[0]!); await j.commit("c2"); await j.publish();
+    const first = await client.sync(backing, evidence);
+    expect([first.selection.sequence, evidence.suppliedThrough(source)]).toEqual([2n, 2n]);
+    // The read's own package carries only the configuration and the selected commitment; the rest is kept evidence.
+    expect(decodeEvidencePackage(first.package).map(item => item.kind)).toEqual([1, 2]);
+    expect((await read(first, evidence)).position).toBe(1n);
+    expect(requests.map(r => r.url)).toEqual([`/evidence?backing=${bytesToHex(backing)}&after=0`]);
+
+    await j.submit(records[1]!); await j.submit(records[2]!); await j.commit("c3"); await j.publish();
+    // After sequence 2 the journal serves the new checkpoint's directory and snapshot, and the trail's head
+    // with the records after position 1: nothing a reader served through 2 holds.
+    const parts = [...(await j.serve(backing, 2n)).parts];
+    expect(kinds(parts)).toEqual(["package:34", "trail:1"]);
+    const trail = parts[1] as Extract<EvidencePart, { trail: unknown }>, sent = Buffer.concat([...trail.trail.chunks as Iterable<Uint8Array>]);
+    expect(sent.length).toBe(head + framed(records[1]!) + framed(records[2]!));
+    expect([sent.includes(Buffer.from(records[0]!)), sent.includes(Buffer.from(records[1]!)), sent.includes(Buffer.from(records[2]!))]).toEqual([false, true, true]);
+    const second = await client.sync(backing, evidence);
+    expect([second.selection.sequence, evidence.suppliedThrough(source), requests.at(-1)!.url]).toEqual([3n, 3n, `/evidence?backing=${bytesToHex(backing)}&after=2`]);
+    // The response is the frame, the read's own package, one small package part and that trail part.
+    expect(requests.at(-1)!.bytes).toBeLessThan(sent.length + 1200);
+    const whole = await j.package(backing), incremental = await read(second, evidence), complete = await read(whole);
+    expect([incremental.position, incremental.history, incremental.evidence, incremental.issued, incremental.burned])
+      .toEqual([3n, complete.history, complete.evidence, 10n, 5n]);
+    // The whole package over HTTP is the journal's, from the same parts served from nothing.
+    expect(await client.package(backing)).toEqual(whole);
+
+    // Nothing new: the selection and the read's own package only. A sequence past the selection serves nothing either.
+    expect([kinds((await j.serve(backing, 3n)).parts), kinds((await j.serve(backing, 99n)).parts)]).toEqual([[], []]);
+    const third = await client.sync(backing, evidence);
+    expect(third).toEqual(second);
+    expect(requests.at(-1)!.bytes).toBe(20 + 172 + second.package.length + 1);
+    // Checkpoints without records add their objects and no trail.
+    await j.commit("c4"); await j.publish();
+    expect(kinds((await j.serve(backing, 3n)).parts)).toEqual(["package:34"]);
+    expect((await read(await client.sync(backing, evidence), evidence)).position).toBe(3n);
+
+    // A store that lacks what its recorded sequence implies is served again from nothing, once.
+    const lost = new EvidenceStore(); lost.supplied(source, 3n);
+    const before = requests.length, again = await client.sync(backing, lost);
+    expect(requests.slice(before).map(r => r.url.split("&")[1])).toEqual(["after=3"]);
+    await expect(read(again, lost)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    const two = new EvidenceStore(); two.supplied(source, 2n);
+    const from = requests.length, refetched = await client.sync(backing, two);
+    expect(requests.slice(from).map(r => r.url.split("&")[1])).toEqual(["after=2", "after=0"]);
+    expect([(await read(refetched, two)).position, two.suppliedThrough(source)]).toEqual([3n, 4n]);
+    // `full` asks from nothing outright, which resupplies every object.
+    const all = requests.length;
+    expect((await read(await client.sync(backing, lost, { full: true }), lost)).position).toBe(3n);
+    expect(requests.slice(all).map(r => r.url.split("&")[1])).toEqual(["after=0"]);
+    // One response past the caller's budget is refused, and the recorded sequence stays.
+    const bounded = new EvidenceStore();
+    await expect(client.sync(backing, bounded, { maxBytes: 1000n })).rejects.toThrow("served evidence exceeds the reader's budget");
+    expect(bounded.suppliedThrough(source)).toBe(0n);
+    await expect(j.serve(backing, -1n)).rejects.toMatchObject({ code: "REFUSED", check: "SEQUENCE" });
+    for (const store of [evidence, lost, two, bounded]) store.close();
+  });
+
+  it("serves its parts while other commands run, from rows a command never changes", async () => {
+    const { j } = await opened();
+    await j.submit(issue()); await j.commit("c2"); await j.publish();
+    const served = await j.serve(), parts = served.parts[Symbol.iterator]();
+    // Between two parts: an admission, a commitment and its publication.
+    const taken: EvidencePart[] = [parts.next().value as EvidencePart];
+    await j.submit(payment()); await j.commit("c3"); await j.publish();
+    for (let next = parts.next(); next.done !== true; next = parts.next()) taken.push(next.value);
+    // The parts are the selection's: what was admitted and signed meanwhile is not among them.
+    expect(kinds(taken)).toEqual(["package:3344", "trail:whole"]);
+    const evidence = new EvidenceStore();
+    expect(await evidence.take(taken)).toBe(true);
+    expect(evidence.retained().trail(segmentIdentity(header), decodeSnapshot(decodeEvidencePackage((taken[0] as { package: Uint8Array }).package)
+      .filter(item => item.kind === 4).map(item => item.payload).find(payload => decodeSnapshot(payload).issued === 10n)!).evidenceHash)?.length).toBe(1n);
+    expect((await j.package()).selection.sequence).toBe(3n);
+    evidence.close();
   });
 });

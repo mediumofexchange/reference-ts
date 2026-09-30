@@ -57,7 +57,7 @@ try {
   const final = await client('restarted', restarted);
   for (const key of ['receipt', 'commit', 'tail']) assert.equal(final[key], first[key]);
   await stop(restarted);
-  console.log('PASS v3 service processes: changed-proof retry, lost completed commit response, exact restart, old-process fencing, unpublished tail exclusion and independent receiver fulfillment of an HTTP package.');
+  console.log('PASS v3 service processes: changed-proof retry, lost completed commit response, exact restart, old-process fencing, unpublished tail exclusion, independent receiver fulfillment of an HTTP package and reads over an evidence file synced across receiver processes.');
   console.log('Withheld and tampered package evidence refused. Scope: synthetic proof oracle and separately restored fixture venue; no live service or custody claim.');
 } finally {
   const results = await Promise.allSettled(children.map(stop));
