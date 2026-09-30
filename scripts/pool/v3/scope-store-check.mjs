@@ -25,7 +25,7 @@ import { decodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { decodeSegmentHeader, segmentIdentity } from "../../../dist/pool/v3/headers.js";
 import { decodeTrail } from "../../../dist/pool/v3/trail.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
-import { SERVED_PACKAGE_LIMITS, V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
+import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 import { authorizeIssue, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
 import { decodeRecord, encodeRecord } from "../../../dist/pool/v3/records.js";
@@ -244,12 +244,11 @@ async function acceptance(ergo) {
       assert(final.every(result => result.position === "2" && result.carrying.every(item => item.class === "valid")));
     });
     checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
-    assert(Math.max(...packages) + 360 <= Number(SERVED_PACKAGE_LIMITS.maxBytes));
     const report = { status: "passed", specification: V3_SPECIFICATION,
       evidence: ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
       limits: ["candidate configuration only", "two backings, one operator per term", "one wallet payment, in the rejoined scope", "no live broadcasts",
         "no persistence or configuration adoption claim", "empty recovery blocks; forced recovery over a scope is oracle-proof only"],
-      checks, proofs, transactions, maxPackageBytes: Math.max(...packages), receiptHeadroomBytes: 360,
+      checks, proofs, transactions, maxPackageBytes: Math.max(...packages),
       final: { x: final[0], y: final[1] }, elapsedMs: Math.round(performance.now() - started), sourceSha256Lf: hashes };
     writeFileSync(join(root, "docs", `pool-v3-scope-store${ergo ? "-ergo" : ""}-verification.json`), JSON.stringify(report, null, 2) + "\n");
     process.stdout.write(JSON.stringify(report, null, 2) + "\n"); completed = true;

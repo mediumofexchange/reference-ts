@@ -957,6 +957,37 @@ same desktop:
     top-record check per served checkpoint). They add 32 bytes per record
     and one record hash per checkpoint read, and were not re-measured.
 
+### The operator journal on rows (M5b.5a)
+
+`replay-store-probe.mjs journal <N> --every <K> [--audit]` runs the operator
+journal itself: N stand-in statements admitted one transaction each, with a
+published checkpoint every K, then the journal reopened, audited and served
+([M5b.5a](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+
+Runs of 2026-09-30 with N = 10⁴ and K = 1,000 (at `48b2836`, while tests
+shared the desktop) and N = 4,000 on the idle desktop (final code):
+
+| Step | Result |
+|---|---|
+| Heap over 10⁴ admissions | 10.0 → 10.4 MB |
+| Process memory | 87 MB, settling near 190 MB after 4,000 admissions; peak 405 MB during the audit |
+| One admission, idle desktop | 59 ms at the start, 87 ms after four checkpoints |
+| Database | 50 MiB, 5.2 KB per 938-byte statement |
+| Reopening after 10⁴ admissions | 0.14 s, no proof verified |
+| Audit | 467 s: all 10⁴ proofs checked again, through the public reader from the seed |
+| Assembling the 9 MiB package | 4.2 s |
+
+- *Where an admission's time goes:* about two thirds is the note tree's
+  Poseidon2 hashing, as in the storage probe; the synced commit is under a
+  tenth.
+- *The rise per checkpoint:* the journal's view verifies every held
+  commitment of its key twice at each command, about 5 ms per checkpoint.
+  That is the whole-answer read M5b.5b replaces with kept windows; it is
+  linear in checkpoints until then.
+- *Limits:* stand-in proofs, one backing and one segment, 11 checkpoints; no
+  silence clause, so no admission read the journal's own history; the package
+  is assembled whole in memory.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

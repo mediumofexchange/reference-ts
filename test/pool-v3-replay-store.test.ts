@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 import { fieldToBytes } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT, NoteTree, notePathProves } from "../src/pool/note-tree.js";
 import { ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
@@ -73,5 +74,72 @@ describe("replay storage", () => {
     expect(store.tip(b).noteRoot).toBe(EMPTY_NOTE_ROOT);
     store.collect([b]);
     expect(store.hasOutput(b, 0n, 1n)).toBe(true);
+  });
+
+  it("lives in a host's database: writes join the host's transaction, and an imported frontier is copied in once", () => {
+    const db = new DatabaseSync(":memory:", { readBigInts: true }), store = new ReplayStore(db);
+    expect(() => new ReplayStore(db, { digest: "x" })).toThrow(TypeError);
+    expect(() => store.openWalk(new Uint8Array(32))).toThrow(/no walk/);
+    // A host's rolled-back transaction takes the namespace and its record with it.
+    db.exec("BEGIN IMMEDIATE");
+    const lost = store.open(new Uint8Array(32).fill(1), new Uint8Array(32), undefined, genesis);
+    store.append(lost, append([1n], [11n]));
+    db.exec("ROLLBACK");
+    expect(store.hasNamespace(lost)).toBe(false);
+    db.exec("BEGIN IMMEDIATE");
+    const a = store.open(new Uint8Array(32).fill(1), new Uint8Array(32), undefined, genesis);
+    store.append(a, append([1n], [11n]));
+    store.append(a, append([2n], [12n], () => false, { kind: 1, supply: { backing: "aa".repeat(32), issued: 5n, burned: 0n } }));
+    db.exec("COMMIT");
+    expect(store.tip(a).position).toBe(2n);
+    expect(store.hasIssuance(a, 2n, 0n, "aa".repeat(32))).toBe(true);
+    expect(store.hasIssuance(a, 2n, 2n, "aa".repeat(32))).toBe(false);
+    expect(store.hasIssuance(a, 1n, 0n, "aa".repeat(32))).toBe(false);
+    expect(store.hasIssuance(a, 2n, 0n, "bb".repeat(32))).toBe(false);
+
+    // A read in a store of its own: a segment of three records over one it imports at its first.
+    const reads = new ReplayStore(), one = new Uint8Array(32).fill(1), two = new Uint8Array(32).fill(2), name = (n: number) => `0${n}`.repeat(32);
+    const history = (n: number) => () => new Uint8Array(32).fill(n);
+    const base = reads.open(one, new Uint8Array(32).fill(7), undefined, genesis);
+    reads.append(base, append([1n], [11n], () => false, { history: history(1) })); reads.append(base, append([2n], [12n], () => false, { history: history(2) }));
+    const read = reads.open(two, new Uint8Array(32).fill(8), { segments: new Map([[name(1), { ns: base, upto: 1n }]]), totals: new Map() }, genesis);
+    reads.append(read, append([3n], [13n], () => false, { history: history(3), demand: { id: "d1", value: { backing: two, quantity: 1n, tags: [5n, 6n], presenter: one, deadline: 9n } } }));
+    reads.append(read, append([4n], [14n], () => false, { history: history(4), ended: "d1" }));
+    reads.append(read, append([5n], [15n], () => false, { history: history(5) }));
+    const frontier = { segments: new Map([[name(1), { ns: base, upto: 1n }], [name(2), { ns: read, upto: 2n }]]), totals: new Map([["aa".repeat(32), { issued: 7n, burned: 1n }]]) };
+    const identity = (segment: Uint8Array) => new Uint8Array(32).fill(segment[0]! + 100);
+    const copied = store.copyFrontier(reads, frontier, identity);
+    expect(copied.totals).toEqual(frontier.totals);
+    expect([...copied.segments.values()].map(entry => entry.upto)).toEqual([1n, 2n]);
+    const successor = store.open(new Uint8Array(32).fill(3), new Uint8Array(32).fill(9), copied, genesis);
+    // The successor reads the imported prefixes, to their positions and no further, from the host's own rows.
+    expect([11n, 12n, 13n, 14n, 15n].map(nf => store.hasNullifier(successor, 0n, nf))).toEqual([true, false, true, true, false]);
+    expect([1n, 2n, 3n, 4n, 5n].map(cm => store.hasOutput(successor, 0n, cm))).toEqual([true, false, true, true, false]);
+    expect(store.demand(successor, 0n, "d1")).toBeUndefined();
+    expect(store.eventCount(successor, 0n)).toBe(3n);
+    expect(store.total(successor, 0n, "aa".repeat(32))).toEqual({ issued: 7n, burned: 1n });
+    const spent = new RadixSpentSet(); [11n, 13n, 14n].forEach(nf => spent.insert(fieldToBytes(nf)));
+    expect(store.tip(successor).spentRoot).toEqual(spent.root());
+    // The successor over the copies holds exactly the facts a successor over the read's own namespaces holds.
+    const direct = reads.open(new Uint8Array(32).fill(3), new Uint8Array(32).fill(9), frontier, genesis);
+    expect(store.factDigest(successor, 0n)).toEqual(reads.factDigest(direct, 0n));
+    expect(store.factDigest(successor, 0n)).not.toEqual(reads.factDigest(read, 3n));
+    // The same prefix again is the copy already here; a longer one of the same segment is copied anew.
+    const again = new ReplayStore(), twin = again.open(one, new Uint8Array(32).fill(7), undefined, genesis);
+    again.append(twin, append([1n], [11n], () => false, { history: history(1) })); again.append(twin, append([2n], [12n], () => false, { history: history(2) }));
+    const once = store.copyFrontier(again, { segments: new Map([[name(1), { ns: twin, upto: 1n }]]), totals: new Map() }, identity);
+    expect(once.segments.get(name(1))!.ns).toBe(copied.segments.get(name(1))!.ns);
+    const longer = store.copyFrontier(again, { segments: new Map([[name(1), { ns: twin, upto: 2n }]]), totals: new Map() }, identity);
+    expect(longer.segments.get(name(1))!.ns).not.toBe(copied.segments.get(name(1))!.ns);
+    expect(() => store.copyFrontier(again, { segments: new Map([[name(1), { ns: twin, upto: 3n }]]), totals: new Map() }, identity)).toThrow(/no replayed position/);
+    again.close(); reads.close();
+    // What another namespace imports cannot be dropped; the host's retired state can.
+    expect(() => store.drop(copied.segments.get(name(2))!.ns)).toThrow(/still read/);
+    store.drop(a);
+    expect(store.hasNamespace(a)).toBe(false);
+    // Closing is the host's.
+    store.close();
+    expect(db.isOpen).toBe(true);
+    db.close();
   });
 });

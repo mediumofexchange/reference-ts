@@ -363,11 +363,12 @@ try {
       venue: { tip: { ...input.venue.tip, parent: { ...input.venue.tip.parent, section: [] } } } }));
   });
   const finalPackage = await serviceClient.package(backing);
-  await test("a reopened journal replays its commands to the same package and replies", async () => {
+  await test("a reopened journal reads its rows to the same package and replies, and its audit proves them again", async () => {
     journal.close();
-    // Reopening re-verifies every admitted proof: under a verifier that accepts none the journal does not load.
+    // Reopening verifies no proof: under a verifier that accepts none the journal still loads, and only its audit refuses.
     journal = new V3OperatorJournal(journalPath, { ...options, verifier: { verify: () => false } });
-    await refusal(journal.package(), "STORAGE");
+    assert.deepEqual((await journal.package(backing)).package, finalPackage.package);
+    await refusal(journal.audit(), "STORAGE", "PROOF");
     journal.close();
     const reopenApi = await startBackend(parameters);
     try {
@@ -377,6 +378,7 @@ try {
         await serve();
         assert.deepEqual(await serviceClient.package(backing), finalPackage);
         for (const kind of ["issue", "pay", "burn"]) assert.deepEqual(await submit(records[kind]), receipts[kind]);
+        await journal.audit();
       } finally { await again.close(); }
     } finally { await reopenApi.destroy(); }
   });

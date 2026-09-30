@@ -431,6 +431,13 @@ export function keptStateHolds(store: ReplayStore, ns: number, position: bigint,
     total.issued === snapshot.issued && total.burned === snapshot.burned;
 }
 
+/** Whether a namespace's stored tip reproduces from its own rows (§14's snapshot check with the tip's chain values in
+ * the snapshot's place): an operator's journal checks its admission state so when it reopens, without re-verifying. */
+export function storedTipHolds(store: ReplayStore, ns: number): boolean {
+  const tip = store.tip(ns);
+  return keptTipHolds(store, ns, { position: tip.position, historyHash: tip.history, evidenceHash: tip.evidence });
+}
+
 /** The note root of a stored frontier: each completed left subtree folded with what lies to its right. */
 function frontierRoot(leaves: bigint, ommers: readonly (bigint | undefined)[]): bigint | undefined {
   let node: bigint | undefined;

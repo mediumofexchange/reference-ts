@@ -1,13 +1,28 @@
 // Node 24 optional entry point. The pool-v3 operator journal (v3 runtime plan,
-// slices 1–3): one durable command log per operator key and venue, fenced to one
-// owner, in one SQLite database. It serves one backing, admits ordinary
-// and recovery records through the state machine's admission
-// mode (state.ts) with original signed receipts (§7.2), signs checkpoint
-// commitments over v3 directories and snapshots (§7), publishes them through
-// the record venue from an outbox, and serves §12 packages a reader verifies
-// alone. A witnessed silence boundary permits an empty return opening, then
-// exact adoption through its witnessed index before service. Replacement imports
-// the record-derived frontier; reopening replays the journal commands.
+// slices 1–3): one durable database per operator key and venue, fenced to one
+// owner. It serves one scope, admits ordinary and recovery records through the
+// state machine's admission mode (state.ts) with original signed receipts
+// (§7.2), signs checkpoint commitments over v3 directories and snapshots (§7),
+// publishes them through the record venue from an outbox, and serves §12
+// packages a reader verifies alone. A witnessed silence boundary permits an
+// empty return opening, then exact adoption through its witnessed index before
+// service. Replacement imports the record-derived frontier.
+//
+// The database is the operator's authoritative log (storage decision
+// 2026-09-29 item 7, M5b.5a). One transaction commits a command with all it
+// changes: the admission state (a ReplayStore hosted here), the record,
+// directory, snapshots and segment head it adds to the evidence the journal
+// serves (an EvidenceStore hosted here), the receipt and the signed commitment.
+// Nothing but the active segment's scope is held in memory, and reopening
+// reads rows: it verifies no proof. It checks instead that the stored state
+// reproduces its own tip and the last signed snapshot, and that the log's
+// latest signed reply is the latest signed row. The journal's own reads of its
+// history go through the public reader over the same evidence. Their classes
+// and replays are a reader's kept state (§14) in a file of their own beside
+// the database, so a read never holds the journal's connection and each
+// record is verified there once; what a new segment imports from a read is
+// copied into the database with the command that opens it. `audit`
+// re-verifies from the evidence alone, keeping nothing.
 //
 // Candidate only: the configuration comes from the caller's manifest check
 // and the venue must be a reference venue (guard.ts). Time is the venue's
@@ -26,35 +41,42 @@ import {
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment, type SnapshotDigest } from "../../venue-records.js";
-import { identifierOf } from "../field.js";
-import { scopeSchedule } from "../schedule.js";
 import { ScopeTree } from "../scope.js";
-import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapshot } from "./commitments.js";
+import { scopeSchedule } from "../schedule.js";
+import { decodeReceipt, decodeSnapshot, encodeReceipt, receiptBytes, receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt,
+  type Snapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
+import { EvidenceStore, MAX_ITEM_BYTES, type EvidenceBatch } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
-import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
-import { RANGE_LIMITS, type SignedTerms } from "./reader.js";
+import { decodeSegmentHeader, segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
+import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "./package.js";
+import { keptStateHolds, RANGE_LIMITS, storedTipHolds, type SignedTerms } from "./reader.js";
 import { readFrontier, readPackage } from "./package-reader.js";
-import { decodeRecord, encodeRecord, evidenceHashes, statementHash } from "./records.js";
+import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
 import { ReplayStore } from "./replay-store.js";
-import { applyRecord, openSegmentState, type ImportSource, type ProofCheck, type SegmentReplay, type SegmentState } from "./state.js";
+import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type Judged, type ProofCheck, type SegmentReplay,
+  type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
-import { encodeTrail, TrailLimitError } from "./trail.js";
+import { encodeTrail } from "./trail.js";
 
-const PROFILE = "pool-store/v3";
+const PROFILE = "pool-store/v3/2";
 const U64 = 1n << 64n;
 const SQLITE_LIMIT = (1n << 63n) - 1n;
-/** The reference reader's package budget; a reader applies its own. */
-export const SERVED_PACKAGE_LIMITS: PackageLimits = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
-/** What a served package may fill: the budget less one receipt item (§12 kind 10, a 355-byte record), so a receipt query still fits. */
-const SERVED_ROOM: PackageLimits = Object.freeze({ maxBytes: SERVED_PACKAGE_LIMITS.maxBytes - 360n, maxItems: SERVED_PACKAGE_LIMITS.maxItems - 1n });
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
+const bytes = (value: unknown): Uint8Array => new Uint8Array(value as Uint8Array);
 const hexOf = (c: Commitment | undefined): string | null => (c === undefined ? null : bytesToHex(encodeCommitment(c)));
 const copyCommitment = (c: Commitment): Commitment => decodeCommitment(encodeCommitment(c));
+/** The replay identity a segment's admission state is kept under: the journal's own, never a reader's. */
+const admissionIdentity = (segment: Uint8Array): Uint8Array => sha256(concatBytes(utf8ToBytes("v3-journal-admission"), segment));
+/** The identity an imported segment's copied prefix is kept under. */
+const importIdentity = (segment: Uint8Array): Uint8Array => sha256(concatBytes(utf8ToBytes("v3-journal-import"), segment));
+/** A genesis segment: opened by `open`, each backing under its original term with nothing imported. Every other
+ * opening waits for adoption (C2b.4.2, C2.10.9). */
+const isGenesis = (header: SegmentHeader): boolean => header.sequence === 1n &&
+  header.entries.every(entry => entry.opening === undefined && same(entry.link, entry.backing));
 
 export class V3StoreError extends Error {
   constructor(readonly code: "STORAGE" | "FENCED" | "BUSY" | "CONFLICT" | "UNAVAILABLE" | "STALE" | "SCHEDULE" | "UNSUPPORTED" | "REFUSED",
@@ -70,45 +92,19 @@ function decimal(value: unknown): bigint {
   return BigInt(value);
 }
 
-/** Signed terms as stored: hex terms and signature. */
+/** Signed terms as a command names them: hex terms and signature. */
 type TermsText = readonly [string, string];
+/** One row of the command log: what was asked, beside the reply it got. The records, evidence and state a
+ * command added are rows of their own, committed with it. */
 type Command =
   | { kind: "open"; scope: readonly TermsText[]; at: string; observed: string | null }
   | { kind: "rescope"; take: readonly TermsText[]; keep: readonly string[]; evidence: string; at: string; observed: string | null }
   | { kind: "commit"; at: string; observed: string | null }
-  | { kind: "admit"; record: string; horizon: string }
+  | { kind: "admit"; horizon: string }
   | { kind: "return"; at: string; observed: string | null }
   | { kind: "adopt"; at: string; opening: string }
   | { kind: "published"; sequence: string };
-const signedOf = ([terms, signature]: TermsText): SignedTerms => ({ terms: hexToBytes(terms), signature: hexToBytes(signature) });
 const termsText = (signed: SignedTerms): TermsText => [bytesToHex(signed.terms), bytesToHex(signed.signature)];
-const HEX = /^(?:[0-9a-f]{2})*$/;
-const hexList = (value: unknown): readonly string[] => {
-  requireThat(Array.isArray(value) && value.every(item => typeof item === "string" && HEX.test(item)), "STORAGE", "invalid journal command");
-  return value as string[];
-};
-const termsList = (value: unknown): readonly TermsText[] => {
-  requireThat(Array.isArray(value), "STORAGE", "invalid journal command");
-  return value.map(pair => {
-    const [terms, signature, ...rest] = hexList(pair);
-    requireThat(terms !== undefined && signature !== undefined && rest.length === 0, "STORAGE", "invalid journal command");
-    return [terms, signature] as const;
-  });
-};
-function commandText(c: Command): string {
-  switch (c?.kind) {
-    case "open": return JSON.stringify({ kind: c.kind, scope: termsList(c.scope), at: c.at, observed: c.observed });
-    case "rescope": requireThat(hexList(c.keep).every(name => name.length === 64), "STORAGE", "invalid journal command");
-      return JSON.stringify({ kind: c.kind, take: termsList(c.take), keep: hexList(c.keep), evidence: hexList([c.evidence])[0],
-      at: c.at, observed: c.observed });
-    case "commit": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
-    case "admit": return JSON.stringify({ kind: c.kind, record: c.record, horizon: c.horizon });
-    case "return": return JSON.stringify({ kind: c.kind, at: c.at, observed: c.observed });
-    case "adopt": return JSON.stringify({ kind: c.kind, at: c.at, opening: c.opening });
-    case "published": return JSON.stringify({ kind: c.kind, sequence: c.sequence });
-    default: throw new V3StoreError("STORAGE", "unknown journal command");
-  }
-}
 
 /** One scoped backing: its name and original signed terms. */
 interface Scoped {
@@ -125,6 +121,8 @@ interface Opened {
   readonly entries: readonly Scoped[];
 }
 function openedOf(header: SegmentHeader, entries: readonly Scoped[]): Opened {
+  // A reader takes a directory as one whole item: a scope whose directory passes that budget could not be served.
+  requireThat(9n + 64n * BigInt(entries.length) <= MAX_ITEM_BYTES, "REFUSED", "the scope's directory would pass a reader's item budget", "RESOURCE");
   return { header, headerBytes: segmentBytes(header), segment: segmentIdentity(header), scope: new ScopeTree(header.entries).root(), entries };
 }
 /** C2.10.2: one clock per scope. A reader excludes a scope whose silence durations differ (SILENCE_SCOPE). */
@@ -135,18 +133,14 @@ function oneClock(entries: readonly Scoped[]): void {
 /** The term link a segment's header names for `backing`. */
 const linkOf = (opened: Opened, backing: Uint8Array): Uint8Array => opened.header.entries.find(entry => same(entry.backing, backing))!.link;
 const isTermsList = (value: SignedTerms | readonly SignedTerms[]): value is readonly SignedTerms[] => Array.isArray(value);
-/** Snapshots have fixed width (commitments.ts). */
-const SNAPSHOT_BYTES = snapshotBytes({ backing: new Uint8Array(32), segment: new Uint8Array(32), historyHash: new Uint8Array(32),
-  evidenceHash: new Uint8Array(32), issued: 0n, burned: 0n }).length;
+/** A signed commitment as its row keeps it: the segment and length it carries, the index it was signed at and
+ * what the venue held of this key then. Its directory and snapshots are evidence, found by its root. */
 interface Signed {
-  readonly opened: Opened;
   readonly commitment: Commitment;
+  readonly segment: Uint8Array;
   readonly length: bigint;
   readonly at: bigint;
   readonly observed: string | null;
-  readonly directory: readonly SnapshotDigest[];
-  /** One snapshot per scoped backing, in directory order. */
-  readonly snapshots: readonly Uint8Array[];
   published: boolean;
 }
 /** A scope change (C2.10.9): successor terms to take from public evidence and
@@ -158,18 +152,13 @@ export interface Rescope {
   readonly evidence?: Uint8Array;
 }
 interface OwnRescope { readonly take: readonly SignedTerms[]; readonly keep: readonly Uint8Array[]; readonly evidence: Uint8Array }
+/** What the journal holds in memory: its revision, the active segment's scope and state handle, and the latest
+ * signed commitment. Everything that grows with history is rows. */
 interface Engine {
   revision: bigint;
   opened: Opened | undefined;
   state: SegmentState | undefined;
-  readonly records: Uint8Array[];
-  readonly receipts: Map<string, Uint8Array>;
-  readonly signed: Signed[];
-  /** The last admission's horizon; horizons never move back. */
-  horizon: bigint;
-  readonly archives: { readonly opened: Opened; readonly records: readonly Uint8Array[] }[];
-  /** Public imported dependencies, never this key's signing history. */
-  readonly evidence: EvidenceItem[];
+  last: Signed | undefined;
   pendingReturn: boolean;
 }
 type StateRead = Extract<ScopeResult, { readonly state: object }>;
@@ -221,14 +210,19 @@ export class V3OperatorJournal {
   private readonly reference: VenueReference;
   private readonly owner: bigint;
   private readonly resumedAt: bigint | undefined;
+  private readonly path: string;
+  /** The admission state and the imported prefixes it reads, in this database. */
+  private readonly replays: ReplayStore;
+  /** The kept state of the journal's own reads, opened at the first read: a file beside the database where the
+   * verifier declares its circuits (§14 names kept state by them), else memory dropped after each operation. */
+  private reading: ReplayStore | undefined;
+  /** The evidence the journal serves and reads: its own records, heads, directories and snapshots, and what a takeover took. */
+  private readonly evidence: EvidenceStore;
+  private readonly retained: EvidenceBatch;
   private observedIndex: bigint;
   private engine: Engine | undefined;
   private busy = false;
-  /** Set once an action changes memory or writes the journal; see run(). */
-  private diverging = false;
   private closed = false;
-  /** The operator's replay state and its own reads' (M5b.5 moves it into the journal database). */
-  private readonly replays = new ReplayStore();
 
   constructor(path: string, options: V3StoreOptions) {
     requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"), "STORAGE", "a persistent filesystem path is required");
@@ -240,35 +234,47 @@ export class V3OperatorJournal {
     requireConfigurationVerifier(this.configuration, verifier.identities);
     this.venue = venue; this.lag = venue.lag(); this.verifier = verifier;
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
-    this.observedIndex = 0n;
+    this.observedIndex = 0n; this.path = path;
     const now = this.clock();
-    this.db = new DatabaseSync(path, { timeout: 5000 });
+    this.db = new DatabaseSync(path, { timeout: 5000, readBigInts: true });
     try {
       this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
       requireThat(this.db.prepare("PRAGMA journal_mode").get()?.journal_mode === "wal" &&
-        this.db.prepare("PRAGMA synchronous").get()?.synchronous === 2, "STORAGE", "persistent WAL with FULL synchronization is required");
-      this.db.exec("BEGIN IMMEDIATE");
+        this.db.prepare("PRAGMA synchronous").get()?.synchronous === 2n, "STORAGE", "persistent WAL with FULL synchronization is required");
+      try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
+        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+        throw error;
+      }
       this.db.exec(`CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id=1),
         profile TEXT NOT NULL, domain TEXT NOT NULL, operator TEXT NOT NULL, venue TEXT NOT NULL,
         owner INTEGER NOT NULL, tip INTEGER NOT NULL, observed TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY CHECK(seq>0), id TEXT NOT NULL UNIQUE,
         request TEXT NOT NULL, command TEXT NOT NULL, response TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS ergo_publisher (id INTEGER PRIMARY KEY CHECK(id=1),
-        revision INTEGER NOT NULL CHECK(revision>0), snapshot TEXT NOT NULL) STRICT;`);
+        revision INTEGER NOT NULL CHECK(revision>0), snapshot TEXT NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS journal_state (id INTEGER PRIMARY KEY CHECK(id=1), segment BLOB NOT NULL, ns INTEGER NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS journal_signed (sequence INTEGER PRIMARY KEY CHECK(sequence>0), commitment BLOB NOT NULL,
+        segment BLOB NOT NULL, length INTEGER NOT NULL, at TEXT NOT NULL, observed TEXT, published INTEGER NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS journal_receipt (statement BLOB PRIMARY KEY, receipt BLOB NOT NULL) STRICT, WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS journal_taken (kind INTEGER NOT NULL, hash BLOB NOT NULL, PRIMARY KEY(kind, hash)) STRICT, WITHOUT ROWID;`);
       let meta = this.metadata();
       if (meta === undefined) {
-        requireThat(this.db.prepare("SELECT COUNT(*) AS n FROM events").get()?.n === 0, "STORAGE", "journal identity is missing");
+        requireThat(this.db.prepare("SELECT COUNT(*) AS n FROM events").get()?.n === 0n, "STORAGE", "journal identity is missing");
         this.db.prepare("INSERT INTO identity VALUES(1,?,?,?,?,0,0,?)").run(PROFILE, bytesToHex(this.domain),
           bytesToHex(this.operator), bytesToHex(this.venueId), now.toString());
         meta = this.metadata()!;
       }
-      this.identity(meta);
+      this.identity(meta, true);
       requireThat(now >= decimal(meta.observed), "STORAGE", "venue clock is behind the durable journal");
       requireThat(typeof meta.owner === "bigint" && meta.owner < SQLITE_LIMIT, "STORAGE", "journal owner counter exhausted");
       this.owner = meta.owner + 1n;
       // C2.8.2: a restarted journal waits the lag before it signs again.
       this.resumedAt = meta.tip === 0n ? undefined : now;
       this.db.prepare("UPDATE identity SET owner=?,observed=? WHERE id=1").run(this.owner, now.toString());
+      // Both stores' tables are part of this database's layout, which PROFILE names.
+      this.replays = new ReplayStore(this.db);
+      this.evidence = new EvidenceStore(this.db);
+      this.retained = this.evidence.retained();
       this.db.exec("COMMIT");
     } catch (error) {
       try { this.db.exec("ROLLBACK"); } catch { /* preserve the original failure */ }
@@ -287,10 +293,7 @@ export class V3OperatorJournal {
    * adapter also fences stale publisher instances sharing the same owner. */
   publisherPersistence(): ErgoPublisherPersistence {
     let revision: bigint | undefined;
-    const row = () => {
-      const query = this.db.prepare("SELECT revision,snapshot FROM ergo_publisher WHERE id=1"); query.setReadBigInts(true);
-      return query.get();
-    };
+    const row = () => this.db.prepare("SELECT revision,snapshot FROM ergo_publisher WHERE id=1").get();
     const current = () => {
       const found = row();
       requireThat(revision === undefined || (found?.revision ?? 0n) === revision, "FENCED", "another publisher changed this outbox");
@@ -316,16 +319,15 @@ export class V3OperatorJournal {
     });
   }
 
-  private metadata() {
-    const query = this.db.prepare("SELECT * FROM identity WHERE id=1"); query.setReadBigInts(true);
-    return query.get();
-  }
-  private identity(meta: ReturnType<V3OperatorJournal["metadata"]>): void {
+  private metadata() { return this.db.prepare("SELECT * FROM identity WHERE id=1").get(); }
+  /** The journal is this configuration's, key's and venue's, and its log ends at the recorded tip. Opening also
+   * counts the log, once: a count at every transaction would cost each command the whole history. */
+  private identity(meta: ReturnType<V3OperatorJournal["metadata"]>, opening = false): void {
     requireThat(meta?.profile === PROFILE && meta.domain === bytesToHex(this.domain) &&
       meta.operator === bytesToHex(this.operator) && meta.venue === bytesToHex(this.venueId), "STORAGE", "journal identity does not match");
-    const query = this.db.prepare("SELECT COUNT(*) AS n, COALESCE(MAX(seq),0) AS tip FROM events"); query.setReadBigInts(true);
-    const counts = query.get()!;
-    requireThat(typeof meta.tip === "bigint" && meta.tip === counts.tip && meta.tip === counts.n, "STORAGE", "journal is truncated or noncontiguous");
+    const tip = this.db.prepare("SELECT COALESCE(MAX(seq),0) AS tip FROM events").get()!.tip;
+    requireThat(typeof meta.tip === "bigint" && meta.tip === tip &&
+      (!opening || this.db.prepare("SELECT COUNT(*) AS n FROM events").get()!.n === tip), "STORAGE", "journal is truncated or noncontiguous");
   }
   private clock(): bigint {
     let now: unknown, lag: unknown, id: unknown;
@@ -338,16 +340,22 @@ export class V3OperatorJournal {
     }
     this.observedIndex = now; return now;
   }
+  /** One durable step under the owner fence. A failure rolls every row back and drops what memory holds, so the
+   * next operation reads the journal as stored. */
   private transaction<T>(action: () => T): T {
     requireThat(!this.closed, "STORAGE", "store is closed");
-    this.db.exec("BEGIN IMMEDIATE");
+    try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
+      // Another handle holds the database past the busy timeout: nothing was read or written here.
+      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+      throw error;
+    }
     try {
       const meta = this.metadata(); this.identity(meta);
       requireThat(meta!.owner === this.owner, "FENCED", "another process owns this journal");
       requireThat(this.engine === undefined || meta!.tip === this.engine.revision, "STORAGE", "journal changed behind its owner");
       const result = action(); this.db.exec("COMMIT"); return result;
     } catch (error) {
-      try { this.db.exec("ROLLBACK"); } catch { /* an uncertain commit is recovered by replay */ }
+      try { this.db.exec("ROLLBACK"); } catch { /* an uncertain commit is read back from the rows */ }
       this.engine = undefined; throw error;
     }
   }
@@ -355,120 +363,97 @@ export class V3OperatorJournal {
     requireThat(!this.closed, "STORAGE", "store is closed");
     requireThat(!this.busy, "BUSY", "a journal operation is in progress");
     this.busy = true;
-    this.diverging = false;
-    try { await this.load(); return await action(this.engine!); }
+    try { this.load(); return await action(this.engine!); }
     catch (error) {
-      // Memory is discarded where it may differ from the journal: after a
-      // transition or write this action has not finished reflecting, or on an
-      // unexpected failure. A refusal before either leaves it as it was.
-      if (this.diverging || !(error instanceof V3StoreError || error instanceof EncodingError)) this.engine = undefined;
+      // Memory follows the rows only after they commit, so a refusal leaves it as it was; an unexpected failure drops it.
+      if (!(error instanceof V3StoreError || error instanceof EncodingError)) this.engine = undefined;
       throw error;
     }
     finally {
       this.busy = false;
-      // Reads made during the action are dropped; the segment's state and what it imports stay.
-      if (!this.closed) this.replays.collect(this.engine?.state === undefined ? [] : [this.engine.state.ns]);
+      // Reads kept only in memory are dropped between operations; their venue answers stay.
+      if (this.reading !== undefined && !this.reading.kept) this.reading.collect([]);
     }
+  }
+  /** The store the journal's own reads keep their classes and replays in. */
+  private reads(): ReplayStore {
+    if (this.reading === undefined) {
+      const declared = this.verifier.identities !== undefined && Object.keys(this.verifier.identities).length > 0;
+      try { this.reading = declared ? new ReplayStore(`${this.path}.reads`, { digest: `${this.path}.reads.sha256` }) : new ReplayStore(); } catch (error) {
+        if (error instanceof Error && /in use/.test(error.message)) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
+        throw error;
+      }
+    }
+    return this.reading;
   }
 
-  private async load(): Promise<void> {
+  /** Memory from the rows, under the fence. Nothing is verified again: the stored state must reproduce (storage
+   * decision item 7). */
+  private load(): void {
     if (this.engine !== undefined) { this.transaction(() => {}); return; }
-    const rows = this.transaction(() => {
-      const q = this.db.prepare("SELECT seq,id,request,command,response FROM events ORDER BY seq"); q.setReadBigInts(true);
-      return q.all();
+    this.engine = this.transaction(() => {
+      try { return this.stored(); } catch (error) {
+        if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "stored journal state does not decode");
+        throw error;
+      }
     });
-    const engine: Engine = { revision: 0n, opened: undefined, state: undefined, records: [], receipts: new Map(), signed: [], horizon: 0n,
-      archives: [], evidence: [], pendingReturn: false };
-    for (const row of rows) {
-      requireThat(row.seq === engine.revision + 1n && typeof row.command === "string" && typeof row.response === "string" &&
-        typeof row.id === "string" && typeof row.request === "string", "STORAGE", "invalid journal row");
-      let command: Command;
-      try { command = JSON.parse(row.command) as Command; } catch { throw new V3StoreError("STORAGE", "invalid journal command"); }
-      requireThat(commandText(command) === row.command, "STORAGE", "noncanonical journal command");
-      await this.replay(engine, command, row.id, row.request, row.response);
-      engine.revision++;
-    }
-    this.engine = engine;
-    this.transaction(() => {}); // A new owner may have appeared while proofs were verified.
   }
-  /** Re-apply one stored command and require its stored reply to be the one it produces. */
-  private async replay(engine: Engine, command: Command, id: string, request: string, response: string): Promise<void> {
-    const at = (value: string): bigint => {
-      const index = decimal(value);
-      requireThat(index <= this.observedIndex && index >= (engine.signed.at(-1)?.at ?? 0n), "STORAGE", "stored signing clock is inconsistent");
-      return index;
-    };
-    if (command.kind === "open") {
-      requireThat(engine.opened === undefined && /^command:/.test(id) && request === this.openRequest(command.scope),
-        "STORAGE", "stored opening disagrees with replay");
-      let opened: Opened;
-      try { opened = this.opening(command.scope.map(signedOf)); } catch (error) {
-        if (error instanceof V3StoreError) throw new V3StoreError("STORAGE", "a stored opening no longer opens");
-        throw error;
-      }
-      engine.opened = opened;
-      engine.state = this.segmentState(opened.segment, undefined);
-      this.replaySigned(engine, command, at(command.at), response);
-    } else if (command.kind === "rescope") {
-      requireThat(/^command:/.test(id) && request === this.rescopeRequest(command.take, command.keep, command.evidence),
-        "STORAGE", "stored scope change disagrees with replay");
-      const index = at(command.at);
-      try {
-        await this.prepareRescope(engine, { take: command.take.map(signedOf), keep: command.keep.map(hexToBytes),
-          evidence: hexToBytes(command.evidence) }, index);
-      } catch (error) {
-        // A venue without an answer stays retryable; any other refusal means the row disagrees.
-        if (error instanceof V3StoreError && error.code !== "UNAVAILABLE") throw new V3StoreError("STORAGE", "a stored scope change no longer applies");
-        throw error;
-      }
-      this.replaySigned(engine, command, index, response);
-    } else if (command.kind === "commit") {
-      requireThat(engine.opened !== undefined && /^command:/.test(id) && request === "commit", "STORAGE", "stored commitment disagrees with replay");
-      this.replaySigned(engine, command, at(command.at), response);
-    } else if (command.kind === "return") {
-      requireThat(engine.opened !== undefined && !engine.pendingReturn && /^command:/.test(id) && request === "return", "STORAGE", "invalid return command");
-      const index = at(command.at), source = await this.currentRead(engine, index);
-      this.prepareReturn(engine, source, index);
-      this.replaySigned(engine, command, index, response);
-    } else if (command.kind === "adopt") {
-      const opening = engine.opened;
-      requireThat(opening !== undefined && engine.pendingReturn && command.opening === opening.header.sequence.toString() &&
-        id === `adopt:${command.opening}` && request === "adopt", "STORAGE", "invalid adoption command");
-      const index = decimal(command.at), source = await this.currentRead(engine, index);
-      requireThat(source.canonical.index === index && source.canonical.commitment.sequence === opening.header.sequence, "STORAGE", "adoption index differs from the witnessed opening");
-      const receipts = await this.applyAdoption(engine, source);
-      requireThat(response === JSON.stringify(receipts.map(bytesToHex)), "STORAGE", "adoption receipts disagree with replay");
-    } else if (command.kind === "admit") {
-      const state = engine.state, opened = engine.opened;
-      requireThat(state !== undefined && opened !== undefined, "STORAGE", "a receipt without a segment");
-      const bytes = hexToBytes(command.record), hash = bytesToHex(statementHash(decodeRecord(bytes)));
-      requireThat(id === `statement:${hash}` && request === hash && bytesToHex(encodeRecord(decodeRecord(bytes))) === command.record,
-        "STORAGE", "stored statement disagrees with replay");
-      // The original judgment at its horizon; the venue reads it made are not repeated.
-      const horizon = decimal(command.horizon);
-      requireThat(horizon >= engine.horizon && horizon <= this.observedIndex + this.lag, "STORAGE", "stored horizon is inconsistent");
-      engine.horizon = horizon;
-      try { await applyRecord(state, bytes, this.replayOf(opened, horizon, new Map())); } catch (error) {
-        if (error instanceof ReplayRefusal || error instanceof EvidenceRefusal) throw new V3StoreError("STORAGE", "a stored statement no longer admits");
-        throw error;
-      }
-      requireThat(response === bytesToHex(this.receipt(engine, bytes)), "STORAGE", "stored receipt disagrees with replay");
-      engine.records.push(bytes); engine.receipts.set(hash, hexToBytes(response));
-    } else {
-      const last = engine.signed.at(-1);
-      requireThat(last !== undefined && last.commitment.sequence === decimal(command.sequence) && id === `published:${command.sequence}` &&
-        request === "published" && response === "", "STORAGE", "publication names another commitment");
-      last.published = true;
+  private stored(): Engine {
+    const meta = this.metadata()!, row = this.db.prepare("SELECT segment,ns FROM journal_state WHERE id=1").get();
+    const found = this.db.prepare("SELECT * FROM journal_signed ORDER BY sequence DESC LIMIT 1").get();
+    requireThat((row === undefined) === (meta.tip === 0n) && (row === undefined) === (found === undefined), "STORAGE", "journal state disagrees with its command log");
+    if (row === undefined || found === undefined) return { revision: 0n, opened: undefined, state: undefined, last: undefined, pendingReturn: false };
+    const segment = bytes(row.segment), ns = Number(row.ns), last = this.signedOf(found), identity = admissionIdentity(segment);
+    requireThat(this.replays.hasNamespace(ns) && same(this.replays.identity(ns), identity) && same(this.replays.tip(ns).segment, segment),
+      "STORAGE", "the admission state is not the active segment's");
+    const opened = this.openedFrom(segment), state = new StateHandle(this.replays, ns);
+    requireThat(same(last.segment, segment) && same(last.commitment.operator, this.operator) && verifyCommitment(last.commitment) &&
+      last.length <= state.position && last.at <= this.observedIndex, "STORAGE", "the last signed commitment is not this journal's");
+    // Every signed sequence has its row, and the log's latest signing reply is the latest row: a lost row
+    // would let the next commitment reuse its sequence.
+    const count = this.db.prepare("SELECT COUNT(*) AS n FROM journal_signed").get()!.n;
+    const reply = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq DESC LIMIT 1").get()?.response;
+    requireThat(count === last.commitment.sequence && reply === hexOf(last.commitment), "STORAGE", "the signed commitments disagree with the command log");
+    // The roots and chains recomputed from the stored state, against the last signed snapshot of every scoped backing.
+    const directory = this.retained.directory(last.commitment.root);
+    requireThat(directory !== undefined && directory.length === opened.entries.length, "STORAGE", "the last signed directory is missing");
+    for (const entry of directory) {
+      const snapshot = this.retained.snapshot(entry.digest);
+      requireThat(snapshot !== undefined && keptStateHolds(this.replays, ns, last.length, identity, decodeSnapshot(snapshot)),
+        "STORAGE", "the stored state does not reproduce the last signed snapshot");
     }
+    requireThat(storedTipHolds(this.replays, ns), "STORAGE", "the stored state does not reproduce its own tip");
+    requireThat(this.retained.trail(segment, state.evidence)?.length === state.position, "STORAGE", "the stored trail does not reach the admission state");
+    // An opening other than the genesis is pending until its adoption is logged.
+    const adopted = this.db.prepare("SELECT 1 FROM events WHERE id=?").get(`adopt:${opened.header.sequence}`) !== undefined;
+    return { revision: meta.tip as bigint, opened, state, last, pendingReturn: !isGenesis(opened.header) && !adopted };
   }
-  private replaySigned(engine: Engine, command: { observed: string | null }, at: bigint, response: string): void {
-    const { directory, snapshots } = this.checkpoint(engine);
-    const commitment = decodeCommitment(hexToBytes(response)), highest = engine.signed.at(-1)?.commitment.sequence ?? 0n;
-    requireThat(hexOf(commitment) === response && verifyCommitment(commitment) && same(commitment.operator, this.operator) &&
-      commitment.sequence === highest + 1n && same(commitment.root, directoryRoot(directory)), "STORAGE", "stored commitment disagrees with replay");
-    // What the venue held of this key at signing: nothing yet, or a commitment this journal signed before.
-    requireThat(command.observed === null || engine.signed.some(s => hexOf(s.commitment) === command.observed), "STORAGE", "invalid observed commitment");
-    engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at, observed: command.observed, directory, snapshots, published: false });
+  /** The active segment's scope from its kept head: the header and each scoped backing's terms, which its name binds. */
+  private openedFrom(segment: Uint8Array): Opened {
+    const [head] = this.retained.heads(segment);
+    requireThat(head !== undefined, "STORAGE", "the active segment's head is missing");
+    const header = decodeSegmentHeader(head.header);
+    return openedOf(header, header.entries.map((entry, i) => {
+      const signed = head.term(i);
+      requireThat(signed !== undefined && same(rootTermsName(signed.terms), entry.backing), "STORAGE", "the active segment's terms are missing");
+      return { backing: entry.backing, terms: decodeRootTerms(signed.terms), signed };
+    }));
+  }
+  private signedOf(row: { [column: string]: unknown }): Signed {
+    return { commitment: decodeCommitment(bytes(row.commitment)), segment: bytes(row.segment), length: row.length as bigint,
+      at: decimal(row.at), observed: row.observed as string | null, published: row.published === 1n };
+  }
+  /** The commitment this journal signed at `sequence`, if any. */
+  private signedAt(sequence: bigint): Signed | undefined {
+    if (sequence > SQLITE_LIMIT) return undefined;
+    const row = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(sequence);
+    return row === undefined ? undefined : this.signedOf(row);
+  }
+  /** A signed commitment's directory, from the evidence the journal serves. */
+  private directoryOf(signed: Signed): readonly SnapshotDigest[] {
+    const directory = this.retained.directory(signed.commitment.root);
+    requireThat(directory !== undefined, "STORAGE", "a signed directory is missing");
+    return directory;
   }
 
   private openRequest(scope: readonly TermsText[]): string {
@@ -551,30 +536,57 @@ export class V3OperatorJournal {
       }
     }
     if (old !== undefined && !lapsed) {
-      const last = engine.signed.at(-1)!, held = heldCommitments(this.ask(1, this.operator, at)).held;
-      requireThat(!engine.pendingReturn && same(last.opened.segment, old.segment) && last.length === BigInt(engine.records.length) &&
+      const last = engine.last!, held = heldCommitments(this.ask(1, this.operator, at)).held;
+      requireThat(!engine.pendingReturn && same(last.segment, old.segment) && last.length === engine.state!.position &&
         held.some(h => hexOf(h.commitment) === hexOf(last.commitment)), "STALE", "an elective scope change first witnesses the whole tail", "TAIL");
     }
-    const sequence = (engine.signed.at(-1)?.commitment.sequence ?? 0n) + 1n;
-    requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
+    const sequence = this.nextSequence(engine);
     const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence,
       entries: all.map(({ backing }) => ({ backing, link: links.get(bytesToHex(backing))!.link })) };
     return { opened: openedOf(header, all), taken, links };
   }
-  private readerOptions() {
-    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference, store: this.replays };
+  private nextSequence(engine: Engine): bigint {
+    const sequence = (engine.last?.commitment.sequence ?? 0n) + 1n;
+    requireThat(sequence < SQLITE_LIMIT && sequence < U64, "STORAGE", "signed sequence counter exhausted");
+    return sequence;
   }
-  /** A fresh admission state for the active segment over its import, kept under the journal's own identity. */
+  /** The journal's reads go through the public reader over the evidence it serves, keeping their classes and
+   * replays (§14), so a later read verifies only what it has not. The fence is checked first: a replaced
+   * owner reads and keeps nothing. */
+  private readerOptions(store?: ReplayStore, evidence: EvidenceStore = this.evidence) {
+    this.transaction(() => {});
+    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference,
+      store: store ?? this.reads(), evidence };
+  }
+  /** One read through the public reader. A kept file another handle is writing leaves the operation BUSY. */
+  private async whileReading<T>(read: () => Promise<T>): Promise<T> {
+    try { return await read(); } catch (error) {
+      if (error instanceof Error && error.message === "the kept replay file is in use") throw new V3StoreError("BUSY", "another handle is reading this journal's history");
+      throw error;
+    }
+  }
+  /** A fresh admission state for a segment, kept under the journal's own identity, over its import: the
+   * frontier a read replayed, copied into this database inside the command's transaction. */
   private segmentState(segment: Uint8Array, imported: ImportSource | undefined): SegmentState {
-    return openSegmentState(this.replays, segment, sha256(concatBytes(utf8ToBytes("v3-journal-admission"), segment)), imported);
+    if (imported === undefined) return openSegmentState(this.replays, segment, admissionIdentity(segment), undefined);
+    const frontier = imported instanceof StateHandle ? imported.frontier() : imported.frontier;
+    return openSegmentState(this.replays, segment, admissionIdentity(segment),
+      { store: this.replays, frontier: this.replays.copyFrontier(imported.store, frontier, importIdentity) });
   }
   /** Read every opening from bytes: a taken term by the public reader's
    * complete descent of the evidence, including proof of an empty book, and a
    * kept backing by the journal's own canonical read. No asserted state,
-   * selected predecessor or imported signing counter (C2.7, C2.10.4–7). */
-  private async prepareRescope(engine: Engine, spec: OwnRescope, at: bigint): Promise<void> {
-    const target = this.rescopeTarget(engine, spec, at), openings = new Map<string, CanonicalCheckpoint | undefined>();
-    let provided: EvidenceItem[] = [], evidence = spec.evidence;
+   * selected predecessor or imported signing counter (C2.7, C2.10.4–7). The
+   * supplied evidence is read in a store of its own, beside a copy of what the
+   * journal serves, and joins the journal's evidence only in the transaction
+   * that signs the opening: a refused scope change keeps none of it. */
+  private async planRescope(engine: Engine, spec: OwnRescope, at: bigint, target: ReturnType<V3OperatorJournal["rescopeTarget"]>):
+    Promise<{ readonly opened: Opened; readonly imported: ImportSource | undefined; readonly evidence: Uint8Array | undefined;
+      readonly taken: readonly (readonly [number, Uint8Array])[] }> {
+    const openings = new Map<string, CanonicalCheckpoint | undefined>(), taken: [number, Uint8Array][] = [];
+    let evidence = spec.evidence;
+    const supplied = new EvidenceStore();
+    try {
     const unestablished = (error: unknown): never => {
       if ((error instanceof EvidenceRefusal && error.status === "resource-refusal") || error instanceof PackageLimitError) {
         throw new V3StoreError("REFUSED", "takeover evidence exceeds the reader's budget", "RESOURCE");
@@ -585,16 +597,26 @@ export class V3OperatorJournal {
       throw error;
     };
     if (target.taken.length > 0) {
-      try { provided = decodeEvidencePackage(spec.evidence, SERVED_PACKAGE_LIMITS).filter(item => [3, 4, 6, 7].includes(item.kind)); }
-      catch (error) { unestablished(error); }
-      // A journal with history reads its own checkpoints beside the public
-      // evidence: a taken term may follow, or already hold, one of this key's (C2.7.1).
-      if (engine.opened !== undefined) evidence = this.encodePackage(engine.opened, engine.signed, engine.signed.at(-1)!.commitment,
-        engine.records, engine.archives, [...engine.evidence, ...provided]);
+      // Only public dependencies are read from the supplied package: directories, snapshots, trails and, for
+      // these reads alone, faults. The first three are served from now on beside the journal's own.
+      try {
+        const provided = decodeEvidencePackage(spec.evidence).filter(item => [3, 4, 6, 7].includes(item.kind));
+        for (const item of provided) if (item.kind !== 7) taken.push([item.kind, sha256(item.payload)]);
+        evidence = encodeEvidencePackage(provided);
+      } catch (error) { unestablished(error); }
+    }
+    // A journal with history reads its own checkpoints beside the public evidence: a taken term may follow,
+    // or already hold, one of this key's (C2.7.1).
+    if (target.taken.length > 0 && engine.last !== undefined) {
+      try { supplied.importBytes(this.assemble(engine.last)).release(); } catch (error) {
+        if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
+        if (error instanceof PackageLimitError) unestablished(error);
+        throw error;
+      }
     }
     for (const entry of target.taken) {
       let source: FrontierResult;
-      try { source = await readFrontier(evidence, entry.signed, at, this.readerOptions()); } catch (error) { return unestablished(error); }
+      try { source = await this.whileReading(() => readFrontier(evidence, entry.signed, at, this.readerOptions(undefined, supplied))); } catch (error) { return unestablished(error); }
       const current = source.ranges.chain.at(-1)!;
       requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
       requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
@@ -613,23 +635,13 @@ export class V3OperatorJournal {
       return canonical === undefined ? entry : { ...entry, opening: { operator: copyBytes(canonical.commitment.operator),
         sequence: canonical.commitment.sequence, root: copyBytes(canonical.commitment.root) } };
     }) };
-    const opened = openedOf(header, target.opened.entries);
-    this.diverging = true;
-    if (engine.opened !== undefined) engine.archives.push({ opened: engine.opened, records: [...engine.records] });
-    if (target.taken.length > 0) {
-      const retained = new Map(engine.evidence.map(item => [`${item.kind}:${bytesToHex(sha256(item.payload))}`, item]));
-      for (const item of provided) if (item.kind !== 7) retained.set(`${item.kind}:${bytesToHex(sha256(item.payload))}`, item);
-      engine.evidence.splice(0, engine.evidence.length, ...retained.values());
-    }
-    engine.records.splice(0);
-    engine.opened = opened;
-    engine.state = this.segmentState(opened.segment, imported);
-    engine.pendingReturn = true;
+    return { opened: openedOf(header, target.opened.entries), imported, taken, evidence: target.taken.length > 0 ? evidence : undefined };
+    } finally { supplied.close(); }
   }
   /** An opening's import: the one parent's state, or the parents' merged finalized prefixes (C2.10.6). */
   private openingImports(parents: readonly CanonicalCheckpoint[]): ImportSource | undefined {
     let merged;
-    try { merged = mergeFinalizedPrefixes(this.replays, parents.map(parent => ({ state: parent.state }))); } catch (error) {
+    try { merged = mergeFinalizedPrefixes(this.reads(), parents.map(parent => ({ state: parent.state }))); } catch (error) {
       if (error instanceof ReplayRefusal) throw new V3StoreError("UNAVAILABLE", "the imported histories conflict");
       throw error;
     }
@@ -639,7 +651,7 @@ export class V3OperatorJournal {
   private revocations(opened: Opened, at: bigint): Map<string, bigint | undefined> {
     return new Map(opened.entries.map(({ backing, terms }) => [bytesToHex(backing), revocationIndex(this.ask(3, terms.obligor, at))]));
   }
-  /** Admission, or a stored judgment, under the scope's terms and each scoped K's revocation. */
+  /** Admission, or an adopted block's judgment, under the scope's terms and each scoped K's revocation. */
   private replayOf(opened: Opened, horizon: bigint, revocations: ReadonlyMap<string, bigint | undefined>): SegmentReplay {
     const first = opened.entries[0]!, scoped = opened.entries.length > 1;
     return { domain: this.domain, backing: first.backing, segment: opened.segment, scope: opened.scope, terms: first.terms,
@@ -648,8 +660,7 @@ export class V3OperatorJournal {
       verifier: this.verifier, index: horizon, lag: this.lag, admission: true, block: [] };
   }
   /** Every scoped backing's current snapshot and the directory over them (§7, C2.10.3). */
-  private checkpoint(engine: Engine): { readonly directory: readonly SnapshotDigest[]; readonly snapshots: readonly Uint8Array[] } {
-    const opened = engine.opened!, state = engine.state!;
+  private checkpoint(opened: Opened, state: SegmentState): { readonly directory: readonly SnapshotDigest[]; readonly snapshots: readonly Uint8Array[] } {
     const snapshots: Snapshot[] = opened.entries.map(({ backing }) => {
       const totals = state.total(bytesToHex(backing));
       return { backing, segment: opened.segment, historyHash: state.history, evidenceHash: state.evidence, issued: totals.issued, burned: totals.burned };
@@ -657,20 +668,60 @@ export class V3OperatorJournal {
     return { directory: snapshots.map(s => ({ name: copyBytes(s.backing), digest: snapshotDigest(s) })), snapshots: snapshots.map(snapshotBytes) };
   }
   /** The receipt of the record just applied at the state's position (§7.2), after the last signed commitment. */
-  private receipt(engine: Engine, bytes: Uint8Array): Uint8Array {
-    const opened = engine.opened!, state = engine.state!, record = decodeRecord(bytes);
+  private receipt(opened: Opened, state: SegmentState, record: Record, after: bigint): Uint8Array {
     const fields = { domain: this.domain, segment: opened.segment, scopeRoot: opened.scope, position: state.position,
-      ...evidenceHashes(record), historyHash: state.history, after: engine.signed.at(-1)!.commitment.sequence };
+      ...evidenceHashes(record), historyHash: state.history, after };
     return encodeReceipt({ ...fields, operator: this.operator, signature: ed25519.sign(receiptBytes(fields), this.secret) });
+  }
+
+  // --- Inside a command's transaction: each writes rows that commit with the command's log row. ---
+
+  /** Apply one judged record to the admission state, keep its bytes in the segment's served trail and sign its
+   * receipt. A statement keeps the first receipt it was given. */
+  private admit(engine: Engine, judged: Judged, replay: SegmentReplay): Uint8Array {
+    const opened = engine.opened!, state = engine.state!;
+    const tip = { segment: opened.segment, position: state.position, evidence: state.evidence };
+    applyJudged(state, judged, replay);
+    this.evidence.append(tip, judged.bytes);
+    const receipt = this.receipt(opened, state, judged.record, engine.last!.commitment.sequence);
+    this.db.prepare("INSERT OR IGNORE INTO journal_receipt VALUES(?,?)").run(judged.identity, receipt);
+    return receipt;
+  }
+  /** Sign the commitment at `sequence` over `state`'s directory, and keep the directory and snapshots that serve it. */
+  private sign(opened: Opened, state: SegmentState, sequence: bigint, at: bigint, observed: string | null): Signed {
+    const { directory, snapshots } = this.checkpoint(opened, state);
+    const commitment = signCommitment(this.secret, sequence, directoryRoot(directory));
+    this.evidence.keep(3, encodeEvidenceDirectory(directory));
+    for (const snapshot of snapshots) this.evidence.keep(4, snapshot);
+    this.db.prepare("INSERT INTO journal_signed VALUES(?,?,?,?,?,?,0)").run(sequence, encodeCommitment(commitment), opened.segment,
+      state.position, at.toString(), observed);
+    return { commitment, segment: opened.segment, length: state.position, at, observed, published: false };
+  }
+  /** Open a segment's admission state over its import, keep its head as evidence and sign its empty opening;
+   * the state of the segment it replaces, which nothing imports, goes. */
+  private openSegment(engine: Engine, opened: Opened, imported: ImportSource | undefined, at: bigint, observed: string | null):
+    { readonly state: SegmentState; readonly signed: Signed } {
+    const state = this.segmentState(opened.segment, imported);
+    if (engine.state !== undefined) this.replays.drop(engine.state.ns);
+    this.evidence.keepHead(opened.headerBytes, opened.entries.map(entry => entry.signed));
+    const signed = this.sign(opened, state, opened.header.sequence, at, observed);
+    this.db.prepare("INSERT INTO journal_state VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET segment=excluded.segment,ns=excluded.ns").run(opened.segment, state.ns);
+    return { state, signed };
+  }
+  private append(engine: Engine, id: string, request: string, command: Command, response: string): void {
+    requireThat(engine.revision < SQLITE_LIMIT, "STORAGE", "journal is full");
+    this.db.prepare("INSERT INTO events VALUES(?,?,?,?,?)").run(engine.revision + 1n, id, request, JSON.stringify(command), response);
+    this.db.prepare("UPDATE identity SET tip=?,observed=? WHERE id=1").run(engine.revision + 1n, this.observedIndex.toString());
+    // Memory follows only after SQLite commits; every uncertain outcome reads the rows again.
   }
 
   /** §13 answer over [0, now]; a venue that cannot answer leaves the operation unavailable. */
   private ask(kind: RecordKind, subject: Uint8Array, now: bigint): RangeAnswer {
     const request = Object.freeze({ venue: copyBytes(this.venueId), kind, subject: copyBytes(subject), fromIndex: 0n, toIndex: now });
     try {
-      const bytes: unknown = this.venue.range(request, RANGE_LIMITS);
-      if (!(bytes instanceof Uint8Array)) throw new V3StoreError("UNAVAILABLE", "the venue has no answer");
-      return decodeRangeAnswer(bytes, request, RANGE_LIMITS);
+      const answer: unknown = this.venue.range(request, RANGE_LIMITS);
+      if (!(answer instanceof Uint8Array)) throw new V3StoreError("UNAVAILABLE", "the venue has no answer");
+      return decodeRangeAnswer(answer, request, RANGE_LIMITS);
     } catch (error) {
       if (error instanceof VenueError || error instanceof RangeLimitError || error instanceof EncodingError) {
         throw new V3StoreError("UNAVAILABLE", "the venue has no answer");
@@ -680,16 +731,16 @@ export class V3OperatorJournal {
   }
   private view(engine: Engine): View {
     const now = this.clock(), answer = this.ask(1, this.operator, now), held = heldCommitments(answer).held;
-    const signed = new Set(engine.signed.map(s => hexOf(s.commitment)));
     // C2.3.3 selects held state; it does not erase evidence that another
     // process has signed with this key (§13.3, invariant 22). Exact local
-    // bytes were authenticated when signed or reloaded. Verify every other
-    // same-key record before treating it as a conflict, including old twins.
+    // bytes were authenticated when signed. Verify every other same-key
+    // record before treating it as a conflict, including old twins.
     const conflict = answer.entries.some(entry => {
-      if (signed.has(bytesToHex(entry.record))) return false;
       let c: Commitment;
       try { c = decodeCommitment(entry.record); }
       catch (error) { if (error instanceof EncodingError) return false; throw error; }
+      const own = this.signedAt(c.sequence);
+      if (own !== undefined && same(encodeCommitment(own.commitment), entry.record)) return false;
       return same(c.operator, this.operator) && verifyCommitment(c);
     });
     const boundaries: bigint[] = [], revocations = new Map<string, bigint | undefined>();
@@ -732,6 +783,11 @@ export class V3OperatorJournal {
     requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
     requireThat(admission ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
   }
+  /** Whether the venue holds exactly the commitment this journal signed at that sequence. */
+  private ownHeld(held: HeldCommitment): Signed | undefined {
+    const signed = this.signedAt(held.commitment.sequence);
+    return signed !== undefined && hexOf(signed.commitment) === hexOf(held.commitment) ? signed : undefined;
+  }
   private isHeld(view: View, signed: Signed): boolean {
     const held = view.held.find(h => h.commitment.sequence === signed.commitment.sequence);
     return held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment);
@@ -739,59 +795,63 @@ export class V3OperatorJournal {
   /** Service needs the current signed state, the scope's schedule open, and for issuance an unrevoked backer. */
   private async ready(engine: Engine, view: View, action: "admit" | "commit"): Promise<void> {
     this.exclusive(view);
-    requireThat(engine.opened !== undefined && engine.state !== undefined, "STALE", "open the segment first");
+    const opened = engine.opened, state = engine.state, last = engine.last;
+    requireThat(opened !== undefined && state !== undefined && last !== undefined, "STALE", "open the segment first");
     requireThat(!engine.pendingReturn, "STALE", "the return opening must be witnessed and its block adopted before service");
-    const last = engine.signed.at(-1)!, latest = hexOf(view.held.at(-1)?.commitment);
+    const latest = hexOf(view.held.at(-1)?.commitment);
     const current = latest === hexOf(last.commitment) || (last.published && view.now < last.at + view.lag && latest === last.observed);
     requireThat(current, "STALE", "the signed state is not current");
     const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
       ...(this.isHeld(view, last) ? {} : { unwitnessedSignedAt: last.at }), ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
     requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
     requireThat(action === "admit" ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
-    if (engine.evidence.length > 0 || engine.opened.entries.some(({ terms }) => terms.silence !== undefined || terms.nonService !== undefined)) {
+    if (this.db.prepare("SELECT 1 FROM journal_taken LIMIT 1").get() !== undefined ||
+        opened.entries.some(({ terms }) => terms.silence !== undefined || terms.nonService !== undefined)) {
       const source = await this.currentRead(engine, view.now);
       this.serviceClock(source, view.now);
     }
-    for (const { backing } of engine.opened.entries) {
+    for (const { backing } of opened.entries) {
       const revokedAt = view.revocations.get(bytesToHex(backing));
       if (revokedAt === undefined) continue;
       // Only issuance finalized before K's revocation stays; a later tail needs recovery (slice 3).
       let finalized = 0n;
-      for (const signed of engine.signed) {
-        const held = view.held.find(h => h.commitment.sequence === signed.commitment.sequence);
-        if (same(signed.opened.segment, engine.opened.segment) && held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment) && held.index < revokedAt && signed.length > finalized) finalized = signed.length;
+      for (const held of view.held) {
+        const signed = held.index < revokedAt ? this.ownHeld(held) : undefined;
+        if (signed !== undefined && same(signed.segment, opened.segment) && signed.length > finalized) finalized = signed.length;
       }
-      requireThat(!engine.records.slice(Number(finalized)).some(bytes => {
-        const record = decodeRecord(bytes);
-        return record.kind === 1 && same(identifierOf(record.publicInputs[5]!, record.publicInputs[6]!), backing);
-      }), "UNSUPPORTED", "issuance without pre-revocation finality needs recovery");
+      requireThat(!state.hasIssuanceAfter(finalized, bytesToHex(backing)), "UNSUPPORTED", "issuance without pre-revocation finality needs recovery");
     }
   }
 
-  /** Read all dependencies from bytes, including later lapsed/excluded signed
-   * checkpoints. Trying an older selection never omits those checkpoints.
-   * The read selects `backing` (by default the scope's first) in any scope. */
-  private async currentRead(engine: Engine, at: bigint, backing = engine.opened?.entries[0]!.backing): Promise<StateRead> {
-    const opened = engine.opened;
-    requireThat(opened !== undefined && backing !== undefined, "STALE", "there is no segment to read");
+  /** Read all dependencies from the evidence the journal serves, including
+   * later lapsed/excluded signed checkpoints. Trying an older selection never
+   * omits those checkpoints. The read selects `backing` (by default the
+   * scope's first) in any scope; its package is only the configuration and the
+   * selected commitment, since every other object is retained. */
+  private async currentRead(engine: Engine, at: bigint, backing = engine.opened?.entries[0]!.backing, audit?: ReplayStore): Promise<StateRead> {
+    requireThat(engine.opened !== undefined && backing !== undefined, "STALE", "there is no segment to read");
     const held = heldCommitments(this.ask(1, this.operator, at)).held;
-    for (const candidate of [...engine.signed].reverse()) {
-      if (!held.some(h => hexOf(h.commitment) === hexOf(candidate.commitment))) continue;
-      if (!candidate.directory.some(entry => same(entry.name, backing))) continue;
-      const c = candidate.commitment;
-      const bytes = this.encodePackage(opened, engine.signed, c, engine.records, engine.archives, engine.evidence);
+    let carried = false;
+    for (const candidate of [...held].reverse()) {
+      const signed = this.ownHeld(candidate);
+      if (signed === undefined || !this.directoryOf(signed).some(entry => same(entry.name, backing))) continue;
+      carried = true;
+      const c = signed.commitment;
+      const selected = encodeEvidencePackage([{ kind: 1, payload: configurationBytes(this.configuration) }, { kind: 2, payload: encodeCommitment(c) }]);
       try {
-        const result = await readPackage(bytes, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
-          backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions());
+        const result = await this.whileReading(() => readPackage(selected, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
+          backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions(audit)));
         requireThat(result.state !== undefined, "UNAVAILABLE", "a journal state read returned a receipt");
         return result;
       } catch (error) {
+        // An audit does not pass over a witnessed checkpoint of its own that a reader excludes.
+        if (error instanceof ReplayRefusal && audit !== undefined) throw new V3StoreError("STORAGE", `a witnessed checkpoint does not replay: ${error.check}`, error.check);
         if (error instanceof ReplayRefusal || (error instanceof EvidenceRefusal && error.status === "lapsed-selection")) continue;
         if (error instanceof EvidenceRefusal) throw new V3StoreError("UNAVAILABLE", `canonical evidence: ${error.status}`);
         throw error;
       }
     }
-    throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available");
+    throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available", carried ? undefined : "UNCARRIED");
   }
 
   private serviceClock(source: StateRead, now: bigint): void {
@@ -811,47 +871,16 @@ export class V3OperatorJournal {
       event.index > (state.adoptionIndices.get(event.backing) ?? 0n));
   }
 
-  /** Change only the in-memory segment; the caller atomically records the
-   * signed empty opening. Old bytes stay as evidence, not live accepted state. */
-  private prepareReturn(engine: Engine, source: StateRead, at: bigint): void {
+  /** The empty successor of the active segment at a witnessed silence boundary (C2b.4.1): the whole scope
+   * returns from its one canonical checkpoint (C2.10.3). Old bytes stay as evidence, not live accepted state. */
+  private returnOpening(engine: Engine, source: StateRead, at: bigint): Opened {
     const old = engine.opened!;
     requireThat(!engine.pendingReturn && source.clock?.boundary !== null && source.clock?.boundary !== undefined &&
       BigInt(source.clock.boundary) <= at && same(source.canonical.segment, old.segment), "STALE", "return needs the active segment's witnessed silence boundary");
-    const sequence = engine.signed.at(-1)!.commitment.sequence + 1n;
-    requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
-    // The whole scope returns from its one canonical checkpoint (C2.10.3).
-    const predecessor = source.canonical.commitment;
+    const sequence = this.nextSequence(engine), predecessor = source.canonical.commitment;
     const header: SegmentHeader = { ...old.header, sequence, entries: old.header.entries.map(({ backing, link }) => ({ backing, link,
       opening: { operator: copyBytes(predecessor.operator), sequence: predecessor.sequence, root: copyBytes(predecessor.root) } })) };
-    const opened = openedOf(header, old.entries);
-    engine.archives.push({ opened: old, records: [...engine.records] });
-    engine.records.splice(0);
-    engine.opened = opened;
-    engine.state = this.segmentState(opened.segment, source.state);
-    engine.pendingReturn = true;
-  }
-
-  /** The verified opening determines the exact block. Force was checked by
-   * the reader at each original index; adoption changes the fresh local tree. */
-  private async applyAdoption(engine: Engine, source: StateRead, beforeReceipt?: () => void): Promise<Uint8Array[]> {
-    const opened = engine.opened!, state = engine.state!;
-    requireThat(engine.pendingReturn && source.canonical.commitment.sequence === opened.header.sequence &&
-      same(source.canonical.segment, opened.segment), "STALE", "the witnessed opening is not this return");
-    const block = this.unadopted(source), receipts: Uint8Array[] = [];
-    const replay: SegmentReplay = { ...this.replayOf(opened, source.canonical.index, this.revocations(opened, source.canonical.index)),
-      admission: false, block };
-    for (const event of block) {
-      await applyRecord(state, event.bytes, replay);
-      engine.records.push(copyBytes(event.bytes));
-      // Live adoption rechecks after every await and before signing; journal
-      // reload only reproduces already durable replies and supplies no guard.
-      beforeReceipt?.();
-      const receipt = this.receipt(engine, event.bytes), identity = bytesToHex(statementHash(event.record));
-      receipts.push(receipt);
-      if (!engine.receipts.has(identity)) engine.receipts.set(identity, receipt);
-    }
-    engine.pendingReturn = false;
-    return receipts;
+    return openedOf(header, old.entries);
   }
 
   /** C2b.4.1: sign an empty successor only after witnessed silence. This does
@@ -868,52 +897,49 @@ export class V3OperatorJournal {
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
       const source = await this.currentRead(engine, view.now);
-      this.diverging = true;
-      this.prepareReturn(engine, source, view.now);
-      const opened = engine.opened!, { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
-      const previous = engine.signed.at(-1)!.commitment;
-      this.encodePackage(opened, [...engine.signed, { directory, snapshots }], previous, [], engine.archives, engine.evidence);
-      const commitment = this.transaction(() => {
+      const opened = this.returnOpening(engine, source, view.now), observed = hexOf(view.held.at(-1)?.commitment);
+      const { state, signed } = this.transaction(() => {
         this.stable(engine, view);
-        const c = signCommitment(this.secret, opened.header.sequence, directoryRoot(directory));
-        this.append(engine, commandId, "return", { kind: "return", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(c)));
-        return c;
+        const next = this.openSegment(engine, opened, source.state, view.now, observed);
+        this.append(engine, commandId, "return", { kind: "return", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(next.signed.commitment)));
+        return next;
       });
-      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed, directory, snapshots, published: false });
-      engine.revision++;
-      return copyCommitment(commitment);
+      engine.opened = opened; engine.state = state; engine.last = signed; engine.pendingReturn = true; engine.revision++;
+      return copyCommitment(signed.commitment);
     });
   }
 
   /** C2b.4.2: wait for the actual opening index r and re-read through r before
-   * co-signing its exact adopted block. Exact retry returns the same receipts. */
+   * co-signing its exact adopted block: the verified opening determines it, and
+   * force was checked by the reader at each original index. The block, its
+   * receipts and the end of the pending return commit together. Exact retry
+   * returns the same receipts. */
   async adopt(): Promise<readonly Uint8Array[]> {
     return this.run(async engine => {
-      const opened = engine.opened;
-      requireThat(opened !== undefined, "STALE", "no return opening exists");
+      const opened = engine.opened, state = engine.state, last = engine.last;
+      requireThat(opened !== undefined && state !== undefined && last !== undefined, "STALE", "no return opening exists");
       const id = `adopt:${opened.header.sequence}`, prior = this.prior(id, "adopt");
       if (prior !== undefined) return (JSON.parse(prior) as string[]).map(hexToBytes);
       requireThat(engine.pendingReturn, "STALE", "the segment is not a pending return");
       const view = this.view(engine), held = view.held.find(h => h.commitment.sequence === opened.header.sequence);
       this.exclusive(view);
       this.signingSchedule(view, true);
-      requireThat(held !== undefined && hexOf(held.commitment) === hexOf(engine.signed.at(-1)!.commitment), "UNAVAILABLE", "the return opening is not witnessed");
+      requireThat(held !== undefined && hexOf(held.commitment) === hexOf(last.commitment), "UNAVAILABLE", "the return opening is not witnessed");
       const current = await this.currentRead(engine, view.now);
       this.serviceClock(current, view.now);
       const source = await this.currentRead(engine, held.index);
+      requireThat(source.canonical.commitment.sequence === opened.header.sequence && same(source.canonical.segment, opened.segment),
+        "STALE", "the witnessed opening is not this return");
       const block = this.unadopted(source);
-      this.encodePackage(opened, [...engine.signed, this.placeholder(opened)],
-        held.commitment, [...engine.records, ...block.map(event => event.bytes)], engine.archives, engine.evidence);
-      this.diverging = true;
-      const receipts = await this.applyAdoption(engine, source, () => {
+      const replay: SegmentReplay = { ...this.replayOf(opened, source.canonical.index, this.revocations(opened, source.canonical.index)),
+        admission: false, block };
+      const receipts = this.transaction(() => {
         this.stable(engine, view); this.signingSchedule(view, true);
-      }), { directory, snapshots } = this.checkpoint(engine);
-      this.encodePackage(opened, [...engine.signed, { directory, snapshots }], held.commitment, engine.records, engine.archives, engine.evidence);
-      this.transaction(() => {
-        this.stable(engine, view);
-        this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(receipts.map(bytesToHex)));
+        const signed = block.map(event => this.admit(engine, judgeAdopted(state, event.bytes, replay), replay));
+        this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(signed.map(bytesToHex)));
+        return signed;
       });
-      engine.revision++;
+      engine.pendingReturn = false; engine.revision++;
       return receipts.map(copyBytes);
     });
   }
@@ -931,13 +957,6 @@ export class V3OperatorJournal {
   private commandId(id: string): string {
     requireThat(typeof id === "string" && /^[a-zA-Z0-9._:-]{1,128}$/.test(id), "CONFLICT", "invalid command identifier");
     return `command:${id}`;
-  }
-  private append(engine: Engine, id: string, request: string, command: Command, response: string): void {
-    this.diverging = true;
-    requireThat(engine.revision < SQLITE_LIMIT, "STORAGE", "journal is full");
-    this.db.prepare("INSERT INTO events VALUES(?,?,?,?,?)").run(engine.revision + 1n, id, request, commandText(command), response);
-    this.db.prepare("UPDATE identity SET tip=?,observed=? WHERE id=1").run(engine.revision + 1n, this.observedIndex.toString());
-    // Memory follows only after SQLite commits; every uncertain outcome reloads.
   }
 
   /** Open and sign the genesis segment of the backings `signed` names, one or
@@ -964,19 +983,14 @@ export class V3OperatorJournal {
       const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries,
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(schedule.commitNow, "SCHEDULE", "the opening's signing schedule is closed");
-      const state = this.segmentState(opened.segment, undefined);
-      const { directory, snapshots } = this.checkpoint({ ...engine, opened, state });
-      this.encodePackage(opened, [{ directory, snapshots }], this.unsigned(1n, directory), []);
-      const commitment = this.transaction(() => {
+      const { state, signed: first } = this.transaction(() => {
         this.stable(engine, view);
-        const c = signCommitment(this.secret, 1n, directoryRoot(directory));
-        this.append(engine, commandId, request, { kind: "open", scope, at: view.now.toString(), observed: null }, bytesToHex(encodeCommitment(c)));
-        return c;
+        const next = this.openSegment(engine, opened, undefined, view.now, null);
+        this.append(engine, commandId, request, { kind: "open", scope, at: view.now.toString(), observed: null }, bytesToHex(encodeCommitment(next.signed.commitment)));
+        return next;
       });
-      engine.opened = opened; engine.state = state;
-      engine.signed.push({ opened, commitment, length: 0n, at: view.now, observed: null, directory, snapshots, published: false });
-      engine.revision++;
-      return copyCommitment(commitment);
+      engine.opened = opened; engine.state = state; engine.last = first; engine.revision++;
+      return copyCommitment(first.commitment);
     });
   }
 
@@ -995,8 +1009,9 @@ export class V3OperatorJournal {
     requireThat(keep.every(name => name.length === 32) && (take.length > 0) === (change?.evidence !== undefined), "REFUSED",
       "evidence accompanies exactly the taken terms; kept backings are 32-byte names", "SCOPE");
     const own: OwnRescope = { take, keep, evidence };
-    const texts = take.map(termsText), names = keep.map(name => bytesToHex(name)), encoded = bytesToHex(evidence);
-    const request = this.rescopeRequest(texts, names, encoded);
+    // The command names its evidence by hash: the evidence itself is kept once, among what the journal serves.
+    const texts = take.map(termsText), names = keep.map(name => bytesToHex(name)), named = bytesToHex(sha256(evidence));
+    const request = this.rescopeRequest(texts, names, named);
     return this.run(async engine => {
       const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
@@ -1004,21 +1019,20 @@ export class V3OperatorJournal {
       const view = this.view({ ...engine, opened: target.opened });
       requireThat(view.now === at, "STALE", "the venue changed during the scope change");
       this.exclusive(view); this.signingSchedule(view);
-      await this.prepareRescope(engine, own, at);
-      const opened = engine.opened!, { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
-      // Budget the exact wire shape before signing. Signature bytes have fixed size.
-      this.encodePackage(opened, [...engine.signed, { directory, snapshots }], this.unsigned(opened.header.sequence, directory), [],
-        engine.archives, engine.evidence);
-      const commitment = this.transaction(() => {
-        this.stable(engine, view);
-        const c = signCommitment(this.secret, opened.header.sequence, directoryRoot(directory));
-        this.append(engine, commandId, request, { kind: "rescope", take: texts, keep: names, evidence: encoded, at: at.toString(), observed },
-          bytesToHex(encodeCommitment(c)));
-        return c;
+      const plan = await this.planRescope(engine, own, at, target), opened = plan.opened, observed = hexOf(view.held.at(-1)?.commitment);
+      const { state, signed } = this.transaction(() => {
+        this.stable({ ...engine, opened }, view);
+        const next = this.openSegment(engine, opened, plan.imported, at, observed);
+        // What was taken joins the evidence the journal serves, with the opening it supports.
+        if (plan.evidence !== undefined) this.evidence.importBytes(plan.evidence).release();
+        const taken = this.db.prepare("INSERT OR IGNORE INTO journal_taken VALUES(?,?)");
+        for (const [kind, hash] of plan.taken) taken.run(kind, hash);
+        this.append(engine, commandId, request, { kind: "rescope", take: texts, keep: names, evidence: named, at: at.toString(), observed },
+          bytesToHex(encodeCommitment(next.signed.commitment)));
+        return next;
       });
-      engine.signed.push({ opened, commitment, length: 0n, at, observed, directory, snapshots, published: false });
-      engine.revision++;
-      return copyCommitment(commitment);
+      engine.opened = opened; engine.state = state; engine.last = signed; engine.pendingReturn = true; engine.revision++;
+      return copyCommitment(signed.commitment);
     });
   }
 
@@ -1027,56 +1041,44 @@ export class V3OperatorJournal {
   takeover(id: string, signed: SignedTerms, evidence: Uint8Array): Promise<Commitment> {
     return this.rescope(id, { take: [signed], evidence });
   }
-  /** A commitment's wire size before signing: signatures have fixed width. */
-  private unsigned(sequence: bigint, directory: readonly SnapshotDigest[]): Commitment {
-    return { operator: this.operator, sequence, root: directoryRoot(directory), signature: new Uint8Array(64) };
-  }
-  /** A checkpoint's wire size before its state is known: every scoped snapshot
-   * and directory entry has fixed width; distinct fills never deduplicate. */
-  private placeholder(opened: Opened): Pick<Signed, "directory" | "snapshots"> {
-    return { directory: opened.entries.map(({ backing }) => ({ name: backing, digest: new Uint8Array(32) })),
-      snapshots: opened.entries.map((_, i) => { const bytes = new Uint8Array(SNAPSHOT_BYTES); new DataView(bytes.buffer).setUint32(0, i + 1); return bytes; }) };
-  }
 
   /**
    * Admit one kind 1–6 record at the horizon (the read index plus the lag)
    * and return its original signed receipt record (§7.2). An exact statement
    * already admitted returns its original receipt, even with another proof.
+   * The proof is verified before the transaction that applies the record,
+   * keeps its bytes and signs its receipt, all or nothing.
    */
   async submit(record: Uint8Array): Promise<Uint8Array> {
-    let bytes: Uint8Array, hash: string;
-    try { bytes = encodeRecord(decodeRecord(copyBytes(record))); hash = bytesToHex(statementHash(decodeRecord(bytes))); } catch (error) {
+    let own: Uint8Array, statement: Uint8Array;
+    try { own = encodeRecord(decodeRecord(copyBytes(record))); statement = statementHash(decodeRecord(own)); } catch (error) {
       if (error instanceof EncodingError) throw new V3StoreError("REFUSED", "the record does not decode", "MALFORMED");
       throw error;
     }
+    const hash = bytesToHex(statement);
     return this.run(async engine => {
-      const prior = engine.receipts.get(hash);
-      if (prior !== undefined) return copyBytes(prior);
+      const prior = this.db.prepare("SELECT receipt FROM journal_receipt WHERE statement=?").get(statement);
+      if (prior !== undefined) return bytes(prior.receipt);
       const view = this.view(engine);
       await this.ready(engine, view, "admit");
       const opened = engine.opened!, state = engine.state!, horizon = view.now + view.lag;
       requireThat(horizon < U64, "SCHEDULE", "the horizon is past the venue's index space");
-      // The checkpoint that will carry this record must still be served within the reader's budget.
-      const last = engine.signed.at(-1)!;
-      this.encodePackage(opened, [...engine.signed, this.placeholder(opened)],
-        last.commitment, [...engine.records, bytes], engine.archives, engine.evidence);
-      const before = state.position;
-      try { await applyRecord(state, bytes, this.replayOf(opened, horizon, view.revocations)); }
+      const replay = this.replayOf(opened, horizon, view.revocations);
+      let judged: Judged;
+      try { judged = await judgeRecord(state, own, replay); }
       catch (error) {
-        if (state.position !== before) this.diverging = true;
         if (error instanceof ReplayRefusal) throw new V3StoreError("REFUSED", `admission refused: ${error.check}`, error.check);
         if (error instanceof EvidenceRefusal) throw new V3StoreError("UNSUPPORTED", "the record needs evidence admission does not hold");
         throw error;
       }
-      this.diverging = true;
       const receipt = this.transaction(() => {
         // The proof was verified between the reads; judge against the same view or not at all.
         this.stable(engine, view);
-        const r = this.receipt(engine, bytes);
-        this.append(engine, `statement:${hash}`, hash, { kind: "admit", record: bytesToHex(bytes), horizon: horizon.toString() }, bytesToHex(r));
-        return r;
+        const signed = this.admit(engine, judged, replay);
+        this.append(engine, `statement:${hash}`, hash, { kind: "admit", horizon: horizon.toString() }, bytesToHex(signed));
+        return signed;
       });
-      engine.records.push(bytes); engine.receipts.set(hash, receipt); engine.horizon = horizon; engine.revision++;
+      engine.revision++;
       return copyBytes(receipt);
     });
   }
@@ -1089,26 +1091,22 @@ export class V3OperatorJournal {
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       const view = this.view(engine);
       await this.ready(engine, view, "commit");
-      const last = engine.signed.at(-1)!, sequence = last.commitment.sequence + 1n;
-      requireThat(sequence < U64, "STORAGE", "signed sequence counter exhausted");
-      const { directory, snapshots } = this.checkpoint(engine), observed = hexOf(view.held.at(-1)?.commitment);
-      this.encodePackage(engine.opened!, [...engine.signed, { directory, snapshots }], last.commitment, engine.records, engine.archives, engine.evidence);
-      const commitment = this.transaction(() => {
+      const sequence = this.nextSequence(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      const signed = this.transaction(() => {
         this.stable(engine, view);
-        const c = signCommitment(this.secret, sequence, directoryRoot(directory));
-        this.append(engine, commandId, "commit", { kind: "commit", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(c)));
-        return c;
+        const next = this.sign(engine.opened!, engine.state!, sequence, view.now, observed);
+        this.append(engine, commandId, "commit", { kind: "commit", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(next.commitment)));
+        return next;
       });
-      engine.signed.push({ opened: engine.opened!, commitment, length: BigInt(engine.records.length), at: view.now, observed, directory, snapshots, published: false });
-      engine.revision++;
-      return copyCommitment(commitment);
+      engine.last = signed; engine.revision++;
+      return copyCommitment(signed.commitment);
     });
   }
 
   /** Publish the latest signed commitment from the outbox, unless the venue already holds exactly it. */
   async publish(): Promise<Commitment> {
     return this.run(async engine => {
-      const last = engine.signed.at(-1);
+      const last = engine.last;
       requireThat(last !== undefined, "STALE", "no signed commitment to publish");
       const held = this.isHeld(this.view(engine), last);
       this.transaction(() => {}); // Fence again before the venue call.
@@ -1119,8 +1117,10 @@ export class V3OperatorJournal {
         }
       }
       if (!last.published) {
-        this.transaction(() => this.append(engine, `published:${last.commitment.sequence}`, "published",
-          { kind: "published", sequence: last.commitment.sequence.toString() }, ""));
+        this.transaction(() => {
+          this.db.prepare("UPDATE journal_signed SET published=1 WHERE sequence=?").run(last.commitment.sequence);
+          this.append(engine, `published:${last.commitment.sequence}`, "published", { kind: "published", sequence: last.commitment.sequence.toString() }, "");
+        });
         last.published = true; engine.revision++;
       }
       return copyCommitment(last.commitment);
@@ -1128,31 +1128,46 @@ export class V3OperatorJournal {
   }
 
   /**
-   * The served §12 package: the configuration, `selected`, every directory and
-   * snapshot of `signed`, and the one trail through `records`, whose prefixes
-   * serve each earlier checkpoint (§12.1). A package past the served package
-   * limit (`SERVED_PACKAGE_LIMITS` with room for one receipt) refuses as RESOURCE, so the
-   * journal admits and signs only what it can still serve.
+   * The served §12 package, assembled from rows: the configuration, `selected`,
+   * every directory and snapshot signed through it, what a takeover took, and
+   * for each segment those snapshots name one trail, through the furthest of
+   * them, whose prefixes serve each earlier checkpoint (§12.1). Held whole in
+   * memory; per-object budgets are the reader's (§14).
    */
-  private encodePackage(opened: Opened, signed: readonly Pick<Signed, "directory" | "snapshots">[], selected: Commitment,
-    records: readonly Uint8Array[], archives: Engine["archives"] = [], evidence: Engine["evidence"] = []): Uint8Array {
-    try {
-      const payloads = new Map<string, EvidenceItem>();
-      const add = (kind: number, payload: Uint8Array): void => { payloads.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
-      for (const item of evidence) add(item.kind, item.payload);
-      add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected));
-      const termsOf = (scope: Opened): SignedTerms[] => scope.entries.map(entry => entry.signed);
-      add(6, encodeTrail({ header: opened.headerBytes, terms: termsOf(opened), records }));
-      for (const archive of archives) add(6, encodeTrail({ header: archive.opened.headerBytes, terms: termsOf(archive.opened), records: archive.records }));
-      for (const s of signed) { add(3, encodeEvidenceDirectory(s.directory, SERVED_PACKAGE_LIMITS)); for (const snapshot of s.snapshots) add(4, snapshot); }
-      const items = [...payloads.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload)));
-      return encodeEvidencePackage(items, SERVED_ROOM);
-    } catch (error) {
-      if (error instanceof TrailLimitError || error instanceof PackageLimitError) {
-        throw new V3StoreError("REFUSED", "the served package would pass the reader's budget", "RESOURCE");
+  private assemble(selected: Signed): Uint8Array {
+    const items = new Map<string, EvidenceItem>(), tops = new Map<string, { segment: Uint8Array; evidence: Uint8Array; length: bigint }>();
+    const add = (kind: number, payload: Uint8Array): void => { items.set(`${kind}:${bytesToHex(sha256(payload))}`, { kind, payload }); };
+    // A snapshot names the furthest record of its segment that a reader of it needs.
+    const snapshot = (payload: Uint8Array): void => {
+      let named: Snapshot;
+      try { named = decodeSnapshot(payload); } catch (error) { if (error instanceof EncodingError) return; throw error; }
+      const length = this.retained.trail(named.segment, named.evidenceHash)?.length, top = tops.get(bytesToHex(named.segment));
+      if (length !== undefined && (top === undefined || top.length < length)) tops.set(bytesToHex(named.segment), { segment: named.segment, evidence: named.evidenceHash, length });
+    };
+    add(1, configurationBytes(this.configuration)); add(2, encodeCommitment(selected.commitment));
+    for (const row of this.db.prepare("SELECT commitment FROM journal_signed WHERE sequence<=? ORDER BY sequence").all(selected.commitment.sequence)) {
+      const directory = this.retained.object(3, decodeCommitment(bytes(row.commitment)).root);
+      requireThat(directory !== undefined, "STORAGE", "a signed directory is missing");
+      add(3, directory);
+      for (const entry of decodeEvidenceDirectory(directory)) {
+        const payload = this.retained.snapshot(entry.digest);
+        requireThat(payload !== undefined, "STORAGE", "a signed snapshot is missing");
+        add(4, payload); snapshot(payload);
       }
-      throw error;
     }
+    for (const row of this.db.prepare("SELECT kind,hash FROM journal_taken WHERE kind IN (3,4) ORDER BY kind,hash").all()) {
+      const kind = row.kind === 3n ? 3 : 4, payload = this.retained.object(kind, bytes(row.hash));
+      if (payload === undefined) continue;
+      add(kind, payload);
+      if (kind === 4) snapshot(payload);
+    }
+    for (const top of tops.values()) {
+      const trail = this.retained.trail(top.segment, top.evidence)!, count = decodeSegmentHeader(trail.header).entries.length;
+      // A scoped terms field the evidence does not hold is served empty: it names no backing, so it is no evidence (§12.1).
+      add(6, encodeTrail({ header: trail.header, records: [...trail.records()],
+        terms: Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }) }));
+    }
+    return encodeEvidencePackage([...items.values()].sort((a, b) => a.kind - b.kind || compareBytes(sha256(a.payload), sha256(b.payload))));
   }
 
   /**
@@ -1165,21 +1180,91 @@ export class V3OperatorJournal {
   async package(backing?: Uint8Array): Promise<ServedPackage> {
     const named = backing === undefined ? undefined : copyBytes(backing);
     return this.run(async engine => {
-      const view = this.view(engine), opened = engine.opened, at = engine.signed.findLastIndex(s => s.published || this.isHeld(view, s));
-      requireThat(opened !== undefined && at >= 0, "STALE", "no published commitment to serve");
-      const selected = engine.signed[at]!, through = engine.signed.slice(0, at + 1);
+      const view = this.view(engine);
+      let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
+      for (const held of [...view.held].reverse()) {
+        if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
+        if (this.ownHeld(held) === undefined) continue;
+        selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);
+        break;
+      }
+      requireThat(engine.opened !== undefined && selected !== undefined, "STALE", "no published commitment to serve");
+      const signed = this.signedOf(selected), directory = this.directoryOf(signed);
       // The selection names `backing`, by default the scope's first; its directory must carry it.
-      const name = named ?? selected.opened.entries[0]!.backing;
-      requireThat(selected.directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
+      const name = named ?? directory[0]!.name;
+      requireThat(directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
+      let served: Uint8Array;
+      try { served = this.assemble(signed); } catch (error) {
+        if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
+        throw error;
+      }
       return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
-        operator: copyBytes(this.operator), sequence: selected.commitment.sequence, root: copyBytes(selected.commitment.root) },
-      package: this.encodePackage(opened, through, selected.commitment,
-        same(selected.opened.segment, opened.segment) ? engine.records.slice(0, Number(selected.length)) : [], engine.archives, engine.evidence) };
+        operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) }, package: served };
+    });
+  }
+
+  /**
+   * Re-verification on request (storage decision item 7). Reopening trusts the rows; this does not:
+   * - each scoped backing's canonical checkpoint is read again through the public reader, from the segments'
+   *   seeds over the evidence the journal serves, with nothing kept, so every proof through it is verified
+   *   again. A witnessed checkpoint of this journal that a reader excludes fails the audit, whatever the cause. Where that checkpoint is of the active segment, the journal's stored state at its position must be
+   *   the state the read replayed: its chains, totals and every fact it holds, imports included;
+   * - every signed row must be the reply its command was given, in order, and carry the publication the log records;
+   * - every record of the active segment must have a receipt this key signed, and one naming the active
+   *   segment must be its row's.
+   * Records admitted after the canonical checkpoint are not proved again here: no reader has judged them.
+   * A failure is STORAGE; evidence that no longer reads is UNAVAILABLE, as for any of the journal's reads.
+   */
+  async audit(): Promise<void> {
+    return this.run(async engine => {
+      const opened = engine.opened, state = engine.state;
+      if (opened === undefined || state === undefined) return;
+      const now = this.clock();
+      for (const { backing } of opened.entries) {
+        const fresh = new ReplayStore();
+        try {
+          let source: StateRead;
+          try { source = await this.currentRead(engine, now, backing, fresh); } catch (error) {
+            // Nothing this journal signed is witnessed as carrying the backing yet: there is no read to compare.
+            if (error instanceof V3StoreError && error.check === "UNCARRIED") continue;
+            throw error;
+          }
+          const { canonical, state: read } = source;
+          if (!same(canonical.segment, opened.segment)) continue;
+          requireThat(read.position <= state.position, "STORAGE", "the stored state is behind the witnessed evidence");
+          const mine = state.at(read.position), totals = mine.total(bytesToHex(backing));
+          requireThat(same(mine.history, read.history) && same(mine.evidence, read.evidence) && totals.issued === read.issued &&
+            totals.burned === read.burned && same(this.replays.factDigest(mine.ns, mine.position), fresh.factDigest(read.ns, read.position)),
+            "STORAGE", "the stored state is not the state the evidence replays to");
+        } finally { fresh.close(); }
+      }
+      // The signed rows against the log, in step.
+      const replies = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq").iterate();
+      for (const row of this.db.prepare("SELECT sequence,commitment,published FROM journal_signed ORDER BY sequence").all()) {
+        const reply = replies.next().value?.response;
+        requireThat(reply === bytesToHex(bytes(row.commitment)), "STORAGE", "a signed row is not its command's reply");
+        const logged = this.db.prepare("SELECT 1 FROM events WHERE id=?").get(`published:${row.sequence}`) !== undefined;
+        requireThat(logged === (row.published === 1n), "STORAGE", "a signed row's publication disagrees with the log");
+      }
+      requireThat(replies.next().done === true, "STORAGE", "a signing reply has no signed row");
+      for (let position = 1n; position <= state.position; position++) {
+        const event = state.receiptEvent(position)!, row = this.db.prepare("SELECT receipt FROM journal_receipt WHERE statement=?").get(event.statementHash);
+        requireThat(row !== undefined, "STORAGE", "an admitted record has no receipt");
+        let receipt;
+        try { receipt = decodeReceipt(bytes(row.receipt)); } catch (error) {
+          if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "a stored receipt does not decode");
+          throw error;
+        }
+        // A statement first admitted in an earlier segment keeps that segment's receipt, signed by this key.
+        const here = same(receipt.segment, opened.segment);
+        requireThat(verifyReceipt({ domain: this.domain, segment: receipt.segment, scopeRoot: receipt.scopeRoot, operator: this.operator }, receipt) &&
+          (!here || (receipt.scopeRoot === opened.scope && receiptMatchesEvent(receipt, event))), "STORAGE", "a stored receipt does not authenticate its record");
+      }
     });
   }
 
   close(): void {
     requireThat(!this.busy, "BUSY", "cannot close during a journal operation");
-    if (!this.closed) { this.db.close(); this.replays.close(); this.secret.fill(0); this.engine = undefined; this.closed = true; }
+    if (!this.closed) { this.db.close(); this.reading?.close(); this.secret.fill(0); this.engine = undefined; this.closed = true; }
   }
 }

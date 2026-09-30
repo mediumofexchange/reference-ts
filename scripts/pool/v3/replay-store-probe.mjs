@@ -7,6 +7,9 @@
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs stored <events> [options]
 //   node --expose-gc scripts/pool/v3/replay-store-probe.mjs read <events> [--every <events>] [--silence] [--proof <bytes>] [--dir <directory>]
 //     [--kept <events>]
+//   node --expose-gc scripts/pool/v3/replay-store-probe.mjs journal <events> [--every <events>] [--proof <bytes>] [--dir <directory>]
+// journal (M5b.5a): the operator journal (V3OperatorJournal) admitting <events> statements in its own database,
+//   one synced transaction each, with a published checkpoint every --every; then reopened, audited and served.
 // baseline: the runtime state machine (dist state.ts) over synthetic records, stub verifier.
 // read (M5b.3 acceptance): the runtime reader (readPackage) streaming a package file of one
 //   segment's <events> statements into its own evidence and replay files, stub verifier.
@@ -50,10 +53,11 @@ import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { rootTermsSignatureMessage } from "../../../dist/pool/v3/terms.js";
+import { V3OperatorJournal } from "../../../dist/pool/v3/store.js";
 
 const [mode, countText, ...rest] = process.argv.slice(2);
 const option = (name, fallback) => { const i = rest.indexOf(name); return i < 0 ? fallback : rest[i + 1]; };
-assert(["baseline", "stored", "read"].includes(mode) && /^[1-9][0-9]*$/.test(countText ?? ""), "usage: replay-store-probe.mjs baseline|stored|read <events> [...]");
+assert(["baseline", "stored", "read", "journal"].includes(mode) && /^[1-9][0-9]*$/.test(countText ?? ""), "usage: replay-store-probe.mjs baseline|stored|read|journal <events> [...]");
 const N = Number(countText), PROOF = Number(option("--proof", "32")), SAMPLE = Math.max(1, Math.floor(N / 20));
 const sha = (...parts) => { const h = createHash("sha256"); for (const p of parts) h.update(p); return h.digest(); };
 const gc = () => { if (globalThis.gc) { globalThis.gc(); globalThis.gc(); } };
@@ -364,6 +368,69 @@ if (mode === "baseline") {
     keeps: keeps.length > 8 ? [...keeps.slice(0, 3), ...keeps.slice(-3)] : keeps, rowDigest,
     resume: { reopenAndDigestMs: Math.round(digestMs), recomputeMs: Math.round(recomputeMs) },
     maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, samples }, null, 1));
+} else if (mode === "journal") {
+  // M5b.5a: the journal's memory and time per admission as its history grows, and what reopening costs.
+  const dir = resolve(option("--dir", "scratch/replay-store-probe/journal")), file = join(dir, "journal.sqlite");
+  mkdirSync(dir, { recursive: true });
+  for (const suffix of ["", "-wal", "-shm"]) if (existsSync(file + suffix)) rmSync(file + suffix);
+  const b = n => new Uint8Array(32).fill(n), label = b(2), lag = 2n, issuerSecret = b(15), operatorSecret = b(16);
+  const configuration = { helper: Buffer.from("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8", "hex"), circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) };
+  const domain = configurationHash(configuration), venue = FixtureVenue.reference(label, lag), reference = { context: LOCAL_REFERENCE, label, lag };
+  const obligor = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
+  const termsBytes = encodeRootTerms({ obligor, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n }, operator,
+    configuration: domain, venue: venue.id, interval: 10n });
+  const backing = rootTermsName(termsBytes), entries = [{ backing, link: backing }];
+  const segment = sha(segmentBytes({ domain, venue: venue.id, operator, sequence: 1n, entries })), scope = new ScopeTree(entries).root();
+  const prefix = [...limbsOf(domain), ...limbsOf(segment), scope], capsule = () => { const c = new Uint8Array(randomBytes(89)); c[0] = 1; return c; };
+  const digest = (outputs, capsules) => limbsOf(deliveryHash(domain, outputs, capsules));
+  const signedTerms = { terms: termsBytes, signature: ed25519.sign(rootTermsSignatureMessage(termsBytes), issuerSecret) };
+  let verified = 0;
+  const verifier = { identities: configuration.circuits, verify: () => { verified++; return true; } };
+  const open = () => new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier });
+  const EVERY = Number(option("--every", String(Math.max(1, Math.floor(N / 10)))));
+  let journal = open(), checkpoints = 1;
+  await journal.open("genesis", signedTerms); await journal.publish();
+  const start = performance.now(); let recordBytes = 0, last = start;
+  for (let i = 0; i < N; i++) {
+    let record;
+    if (i === 0) {
+      const cm = fieldOf(), caps = [capsule()];
+      record = { domain, kind: 1, publicInputs: [...prefix, ...limbsOf(backing), 1000n, cm, ...digest([cm], caps)],
+        proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(64), capsules: caps };
+      record.authorization = ed25519.sign(statementBytes(record), issuerSecret);
+    } else {
+      const nfs = [fieldOf(), fieldOf()], outs = [fieldOf(), fieldOf(), fieldOf(), fieldOf()], caps = outs.map(capsule);
+      record = { domain, kind: 2, publicInputs: [...prefix, EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, ...nfs, ...outs, ...digest(outs, caps)],
+        proof: new Uint8Array(randomBytes(PROOF)), authorization: new Uint8Array(), capsules: caps };
+    }
+    const bytes = encodeRecord(record); recordBytes += bytes.length;
+    await journal.submit(bytes);
+    if ((i + 1) % EVERY === 0 || i + 1 === N) { await journal.commit(`c${++checkpoints}`); await journal.publish(); }
+    if ((i + 1) % SAMPLE === 0) { const now = performance.now(); sample(i + 1, { msPerAdmission: +((now - last) / SAMPLE).toFixed(2) }); last = now; }
+  }
+  const admitMs = performance.now() - start, admitted = verified;
+  journal.close();
+  const size = () => ["", "-wal"].reduce((sum, suffix) => sum + (existsSync(file + suffix) ? statSync(file + suffix).size : 0), 0);
+  // Reopening reads rows: its cost must not follow the history, and it verifies nothing.
+  const reopenStart = performance.now(); journal = open();
+  venue.advance(venue.witnessedIndex() + lag);
+  const again = await journal.commit(`c${checkpoints}`);
+  const reopenMs = performance.now() - reopenStart, reopenVerified = verified - admitted;
+  assert.equal(again.sequence, BigInt(checkpoints));
+  gc(); const afterReopen = process.memoryUsage();
+  const result = { mode, events: N, checkpoints, proofBytes: PROOF, recordBytes: Math.round(recordBytes / N), msPerAdmission: +(admitMs / N).toFixed(2),
+    heapGrowthMiB: +(samples.at(-1).heapMiB - samples[0].heapMiB).toFixed(1), rssGrowthMiB: +(samples.at(-1).rssMiB - samples[0].rssMiB).toFixed(1),
+    databaseMiB: mib(size()), bytesPerEvent: Math.round(size() / N), reopenMs: Math.round(reopenMs), reopenVerified,
+    heapAfterReopenMiB: mib(afterReopen.heapUsed) };
+  if (rest.includes("--audit")) {
+    // The audit and the served package read the whole history: both follow it, as a first read does.
+    const auditStart = performance.now(); await journal.audit();
+    result.auditMs = Math.round(performance.now() - auditStart); result.auditVerified = verified - admitted - reopenVerified;
+    const serveStart = performance.now(), served = await journal.package();
+    result.serveMs = Math.round(performance.now() - serveStart); result.packageMiB = mib(served.package.length);
+  }
+  journal.close();
+  console.log(JSON.stringify({ ...result, maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, samples }, null, 1));
 } else {
   // M5b.3's acceptance: the runtime reader over one segment of N statements, the
   // baseline's shape, in one trail. The operator's side writes the package file

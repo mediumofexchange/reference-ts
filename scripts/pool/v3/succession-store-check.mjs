@@ -24,7 +24,7 @@ import { decodeEvidencePackage, encodeEvidencePackage, encodeEvidenceDirectory }
 import { decodeSegmentHeader } from "../../../dist/pool/v3/headers.js";
 import { decodeTrail } from "../../../dist/pool/v3/trail.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
-import { SERVED_PACKAGE_LIMITS, V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
+import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { authorizeIssue, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
 import { encodeRecord } from "../../../dist/pool/v3/records.js";
 import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
@@ -221,11 +221,10 @@ async function acceptance(ergo) {
       packages.push(evidence.package.length); final = summary(answer);
     });
     checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
-    assert(Math.max(...packages) + 360 <= Number(SERVED_PACKAGE_LIMITS.maxBytes));
     const report = { status: "passed", specification: V3_SPECIFICATION,
       evidence: ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
       limits: ["candidate configuration only", "single backing", "no live broadcasts", "no persistence or configuration adoption claim", "empty recovery block; forced recovery acceptance is separate"],
-      checks, proofs, transactions, maxPackageBytes: Math.max(...packages), receiptHeadroomBytes: 360, final,
+      checks, proofs, transactions, maxPackageBytes: Math.max(...packages), final,
       elapsedMs: Math.round(performance.now() - started), sourceSha256Lf: hashes };
     writeFileSync(join(root, "docs", `pool-v3-succession-store${ergo ? "-ergo" : ""}-verification.json`), JSON.stringify(report, null, 2) + "\n");
     process.stdout.write(JSON.stringify(report, null, 2) + "\n"); completed = true;

@@ -24,7 +24,7 @@ import { decodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { decodeTrail } from "../../../dist/pool/v3/trail.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
-import { SERVED_PACKAGE_LIMITS, V3OperatorJournal } from "../../../dist/pool/v3/store.js";
+import { V3OperatorJournal } from "../../../dist/pool/v3/store.js";
 import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, issueTask, requestTask, settleTask,
   withdrawalRecord } from "../../../dist/pool/v3/witness.js";
 import { encodePublication, encodeRecord, statementHash } from "../../../dist/pool/v3/records.js";
@@ -236,7 +236,6 @@ async function acceptance(ergo, liveMode = false) {
       }), "the return segment carries the exact adopted proof and signature bytes in venue order");
       for (const kind of [3, 4, 6]) await assert.rejects(read({ ...input,
         package: encodeEvidencePackage(items.filter(item => item.kind !== kind)) }), error => error.status === "unresolved-evidence");
-      assert(Math.max(...packages) + 360 <= Number(SERVED_PACKAGE_LIMITS.maxBytes), "complete ancestry plus receipt headroom must fit the served package limit");
     });
     checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
     let funding;
@@ -260,7 +259,7 @@ async function acceptance(ergo, liveMode = false) {
     }
     const report = { status: "passed", specification: V3_SPECIFICATION, evidence: liveMode ? "live-testnet-runtime-real-proofs" : ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
       limits: ["candidate configuration only", "single backing", liveMode ? "live testnet only; same-index return covered synthetically" : "no live broadcasts", "no persistence or adoption claim"],
-      checks, proofs, transactions, funding, maxPackageBytes: Math.max(...packages), receiptHeadroomBytes: 360, final,
+      checks, proofs, transactions, funding, maxPackageBytes: Math.max(...packages), final,
       elapsedMs: Math.round(performance.now() - started), sourceSha256Lf: hashes };
     writeFileSync(join(root, "docs", `pool-v3-recovery-store${liveMode ? "-testnet" : ergo ? "-ergo" : ""}-verification.json`), JSON.stringify(report, null, 2) + "\n");
     process.stdout.write(JSON.stringify(report, null, 2) + "\n"); completed = true;

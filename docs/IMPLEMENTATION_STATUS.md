@@ -29,8 +29,12 @@ Cancellation/release, multi-backing payment, continuous backup and physical
 qualification remain open. Every read keeps its replay state in node:sqlite
 (`replay-store.ts`, [storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
 append-only facts read at a position, savepoints for refused checkpoints and
-witnesses for a wallet's own notes. The store is in memory per read or per
-journal; kept state across reads, streamed evidence and flat memory are M5b.3–M5b.6.
+witnesses for a wallet's own notes. A reader may keep its classes, replays and
+evidence in files across reads. The operator journal keeps its admission state,
+records and served evidence in its own database, commits each command with all
+it changes and reopens without verifying again (M5b.5a). Its whole §13 asks,
+incremental serving, the wallet's kept file and verification workers are
+M5b.5b–M5b.6.
 
 Pool-v2 is retired: every remaining v2 check was mapped to a v3 case, a v2-only
 mechanism or a later slice

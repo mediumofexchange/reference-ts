@@ -102,6 +102,8 @@ export class StateHandle implements StateView {
   hasSpentTag(tag: bigint): boolean { return this.store.hasSpentTag(this.ns, this.position, tag); }
   isEffective(id: string): boolean { return this.store.isEffective(this.ns, this.position, id); }
   hasStatement(identity: Uint8Array): boolean { return this.store.hasStatement(this.ns, this.position, identity); }
+  /** An issuance of `backing` (hex) among this segment's own records after position `after`. */
+  hasIssuanceAfter(after: bigint, backing: string): boolean { return this.store.hasIssuance(this.ns, this.position, after, backing); }
   demand(id: string): Demand | undefined { return this.store.demand(this.ns, this.position, id); }
   demandsWithTag(tag: bigint): [string, Demand][] { return this.store.demandsWithTag(this.ns, this.position, tag); }
   demands(): [string, Demand][] { return this.store.demands(this.ns, this.position); }
@@ -303,6 +305,24 @@ export interface Judged {
  * EvidenceRefusal; the verifier's own failures propagate.
  */
 export async function judgeRecord(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Promise<Judged> {
+  const judgment = judgmentOf(state, bytes, replay);
+  if (judgment.proof) await checkProof(judgment.record, replay.verifier);
+  return judgment.finish();
+}
+
+/**
+ * Judge the record at `state.position` inside the adopted block, without
+ * awaiting: exact adopted bytes carry the proof the force judgment verified
+ * (mode table above), so an operator can judge and apply its whole block in
+ * one transaction. A position outside the block is the caller's error.
+ */
+export function judgeAdopted(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Judged {
+  if (modeAt(replay, state.position) !== "adoption") throw new TypeError("the position is outside the adopted block");
+  return judgmentOf(state, bytes, replay).finish();
+}
+
+/** The checks before the proof, whether the proof is checked, and the checks after it, in one order for every caller. */
+function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): { readonly proof: boolean; readonly record: Record; finish(): Judged } {
   const position = state.position, mode = modeAt(replay, position), adopted = replay.block[Number(position)];
   const record = decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
   // A request (kind 7) decodes but is never a history event (§7): a trail carrying one fails replay (§10.1).
@@ -339,23 +359,24 @@ export async function judgeRecord(state: SegmentState, bytes: Uint8Array, replay
     const cutoff = replay.revocations === undefined ? replay.revokedAt : replay.revocations.get(hex(backing));
     requireReplay(cutoff === undefined || cutoff > replay.index, "REVOKED");
   }
-  if (mode !== "adoption") await checkProof(record, replay.verifier);
-  if (kind !== 2 && kind !== 5) {
-    requireReplay(scoped || same(backing, replay.backing), "BACKING");
-    if (kind === 1) {
-      requireReplay(verifySignatureStrict(record.authorization, statementBytes(record), issuerKey), "SIGNATURE");
-      requireReplay(total.issued + p[7]! < VALUE_BOUND, "SUPPLY");
-    } else if (kind === 3) requireReplay(p[7]! <= total.issued - total.burned, "SUPPLY");
-  }
-  const { nfs, roots, outputs } = effectOf(record);
-  if (mode !== "adoption") {
-    requireReplay(roots.every(root => state.hasAnchor(root)), "ANCHOR");
-    checkRecovery(record, state, { check: requireReplay, backing, issuer: issuerKey, at,
-      ...(replay.lag === undefined ? {} : { lag: replay.lag }), door: mode === "admission" && kind >= 4 });
-  }
-  checkUniqueEffects(nfs, outputs, state);
-  requireReplay(state.leaves + BigInt(outputs.length) <= NOTE_TREE_CAPACITY && position + 1n < VALUE_BOUND, "CAPACITY");
-  return { bytes, record, identity, at, evidence, digests, backing: key, demand, demandId, position };
+  return { proof: mode !== "adoption", record, finish: (): Judged => {
+    if (kind !== 2 && kind !== 5) {
+      requireReplay(scoped || same(backing, replay.backing), "BACKING");
+      if (kind === 1) {
+        requireReplay(verifySignatureStrict(record.authorization, statementBytes(record), issuerKey), "SIGNATURE");
+        requireReplay(total.issued + p[7]! < VALUE_BOUND, "SUPPLY");
+      } else if (kind === 3) requireReplay(p[7]! <= total.issued - total.burned, "SUPPLY");
+    }
+    const { nfs, roots, outputs } = effectOf(record);
+    if (mode !== "adoption") {
+      requireReplay(roots.every(root => state.hasAnchor(root)), "ANCHOR");
+      checkRecovery(record, state, { check: requireReplay, backing, issuer: issuerKey, at,
+        ...(replay.lag === undefined ? {} : { lag: replay.lag }), door: mode === "admission" && kind >= 4 });
+    }
+    checkUniqueEffects(nfs, outputs, state);
+    requireReplay(state.leaves + BigInt(outputs.length) <= NOTE_TREE_CAPACITY && position + 1n < VALUE_BOUND, "CAPACITY");
+    return { bytes, record, identity, at, evidence, digests, backing: key, demand, demandId, position };
+  } };
 }
 
 /**
