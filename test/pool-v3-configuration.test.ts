@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { configurationBytes, configurationHash, decodeConfiguration, verifyConfiguration, RELATIONS,
+import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, verifyConfiguration, RELATIONS,
   type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { EncodingError } from "../src/bytes.js";
 import { flipping, lookAlikes } from "./hostile-bytes.js";
@@ -66,5 +66,20 @@ describe("candidate configuration, pool-v3 §11.1; no adoption", () => {
     // Look-alikes answer false, not a TypeError; a helper judged once is the helper written.
     for (const fake of lookAlikes(439)) expect(verifyConfiguration(fake, config)).toBe(false);
     expect(configurationBytes(flipping(config, "helper", config.helper, new Uint8Array(32)))).toEqual(configurationBytes(config));
+  });
+  it("binds a verifier that names its circuits to exactly the configuration's six identities", () => {
+    const config = fixture(), own = config.circuits, refusal = new TypeError("the verifier's circuit identities are not the configuration's");
+    expect(() => requireConfigurationVerifier(config, own)).not.toThrow();
+    expect(() => requireConfigurationVerifier(config, structuredClone(own))).not.toThrow();
+    // A verifier naming none is a test double: nothing to compare.
+    expect(() => requireConfigurationVerifier(config, undefined)).not.toThrow();
+    const { request: _request, ...fewer } = own;
+    for (const name of RELATIONS) for (const field of ["bytecode", "vk"] as const) {
+      const changed = Uint8Array.from(own[name][field]); changed[31] = changed[31]! ^ 1;
+      expect(() => requireConfigurationVerifier(config, { ...own, [name]: { ...own[name], [field]: changed } })).toThrow(refusal);
+    }
+    for (const identities of [{}, fewer, { ...own, withdrawal: own.issue }, { ...own, spend: own.burn, burn: own.spend }]) {
+      expect(() => requireConfigurationVerifier(config, identities)).toThrow(refusal);
+    }
   });
 });

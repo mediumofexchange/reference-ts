@@ -21,7 +21,7 @@ import { commitmentOf } from "../notes.js";
 import { ScopeTree } from "../scope.js";
 import { prepareExactOutput, type PreparedOutput } from "./capsules.js";
 import { decodeReceipt, encodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration } from "./configuration.js";
+import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier } from "./configuration.js";
 import { requireReferenceVenue } from "./guard.js";
 import { decodeSegmentHeader, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
@@ -106,7 +106,10 @@ function ownOptions(options: PackageReader) {
   const { configuration, verifier, venue, reference } = options;
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
   const ownConfiguration = decodeConfiguration(configurationBytes(configuration)), verify = verifier.verify.bind(verifier);
-  const reader: PackageReader = { configuration: ownConfiguration, verifier: { verify }, venue, reference: ownReference };
+  const identities = verifier.identities;
+  requireConfigurationVerifier(ownConfiguration, identities);
+  const reader: PackageReader = { configuration: ownConfiguration, verifier: identities === undefined ? { verify } : { verify, identities },
+    venue, reference: ownReference };
   return { domain: configurationHash(ownConfiguration), venueId, reader };
 }
 export interface Fulfillment {

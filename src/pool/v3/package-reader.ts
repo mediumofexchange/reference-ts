@@ -7,7 +7,7 @@ import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
+import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
@@ -53,8 +53,9 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
   return { mode, sequence, judgingIndex, backing: fixed(backing), domain: fixed(domain), operator: fixed(operator), root: fixed(root), venue: fixed(venue) };
 }
 
-/** The caller's verifier bound once, with a copy of the circuit identities it declares, which name it in kept state (§14). */
-function ownVerifier(verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
+/** The caller's verifier bound once, with a copy of the circuit identities it declares, which must be the
+ * configuration's (§11.1) and name it in kept state (§14). */
+function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
   const declared = verifierIn.identities;
   if (declared === undefined) return { verify: verify.bind(verifierIn) };
   if (declared === null || typeof declared !== "object") throw new TypeError("invalid verifier identities");
@@ -66,6 +67,7 @@ function ownVerifier(verifierIn: ProofCheck, verify: ProofCheck["verify"]): Proo
     if (bytecode.length !== 32 || vk.length !== 32) throw new TypeError("invalid verifier identities");
     identities[name] = Object.freeze({ bytecode, vk });
   }
+  requireConfigurationVerifier(configuration, identities);
   return { verify: verify.bind(verifierIn), identities: Object.freeze(identities) };
 }
 
@@ -117,7 +119,7 @@ function ownPackageRead(selected: ReaderSelection, options: PackageReader) {
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(verifierIn, verify);
+  const verifier = ownVerifier(configuration, verifierIn, verify);
   const reference = structuredClone(referenceIn), expectedVenue = requireReferenceVenue(reference, venue);
   const selection = ownSelection(selected);
   requireReplay(same(selection.venue, expectedVenue), "VENUE_REFERENCE");
@@ -173,7 +175,7 @@ function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: Pac
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(verifierIn, verify);
+  const verifier = ownVerifier(configuration, verifierIn, verify);
   const reference = structuredClone(referenceIn);
   if (!isValue(judgingIndex)) throw new EncodingError("invalid judging index");
   const termsBytes = copyUnshared(signed.terms), signature = copyUnshared(signed.signature);

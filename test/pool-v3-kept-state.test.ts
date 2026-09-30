@@ -35,8 +35,8 @@ const domain = configurationHash(configuration), label = b(2), lag = 2n, referen
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
   a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))));
 /** A verifier that names itself by circuit identities, as a ProofVerifier does, and counts its checks. */
-const counting = (name = b(40)) => {
-  const verifier = { checks: 0, identities: { spend: { bytecode: name, vk: b(50) } },
+const counting = (identities: CandidateConfiguration["circuits"] = configuration.circuits) => {
+  const verifier = { checks: 0, identities,
     verify(_kind: number, _inputs: bigint[], proof: Uint8Array) { verifier.checks++; return proof[0] !== 99; } };
   return verifier;
 };
@@ -210,19 +210,22 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(verifier.checks).toBe(0);
   });
 
-  it("reuses kept classes only under the same verifier identities", async () => {
+  it("reuses kept classes only under the configuration's verifier identities", async () => {
     const f = fixture(), kept = files();
     await f.first();
     const store = opened(kept.path, kept);
     await f.read(counting(), store);
-    const other = counting(b(41)), again = await f.read(other, store);
+    // A verifier naming other circuits is refused before anything is read (§11.1): no class is judged or reused under another key.
+    const other = counting({ ...configuration.circuits, spend: { bytecode: b(98), vk: b(99) } });
+    await expect(f.read(other, store)).rejects.toThrow(new TypeError("the verifier's circuit identities are not the configuration's"));
+    expect(other.checks).toBe(0);
+    const same = counting(), again = await f.read(same, store);
     expect(outcome(again)).toEqual(outcome(await f.read(counting())));
-    expect(other.checks).toBe(4);
-    // The old context's namespaces went with its classes.
+    expect(same.checks).toBe(0);
     expect(namespaceCount(kept.path)).toBe(1);
     // A verifier that declares no circuit identities could never be reused across processes.
     await expect(f.read({ verify: () => true }, store)).rejects.toThrow("a kept store needs");
-    await expect(f.read({ verify: () => true, identities: {} }, store)).rejects.toThrow("a kept store needs");
+    await expect(f.read({ verify: () => true, identities: {} }, store)).rejects.toThrow("the verifier's circuit identities are not the configuration's");
     store.close();
   });
 

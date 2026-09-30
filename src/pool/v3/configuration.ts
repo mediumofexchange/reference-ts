@@ -56,6 +56,22 @@ export function configurationHash(value: CandidateConfiguration): Uint8Array {
   return sha256(configurationBytes(value));
 }
 
+/**
+ * §11.1: a verifier that names its circuits must name exactly this configuration's six relations, each by its
+ * bytecode and key identity, relations a trail never uses included; otherwise every proof would be judged under
+ * another key. A caller's setup error, so a TypeError, never an evidence verdict. A verifier that names none
+ * (a test double) has nothing to compare, and a kept store refuses it.
+ */
+export function requireConfigurationVerifier(configuration: CandidateConfiguration,
+  identities: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array } } | undefined): void {
+  if (identities === undefined) return;
+  const names = Object.keys(identities);
+  if (names.length !== RELATIONS.length || !RELATIONS.every(name => {
+    const own = identities[name], expected = configuration.circuits[name];
+    return own !== undefined && compareBytes(own.bytecode, expected.bytecode) === 0 && compareBytes(own.vk, expected.vk) === 0;
+  })) throw new TypeError("the verifier's circuit identities are not the configuration's");
+}
+
 /** Expected identities are independently held, never decoded from a package.
  * This checks framing/identity only; it cannot approve a configuration. */
 export function verifyConfiguration(input: Uint8Array, expected: CandidateConfiguration): boolean {

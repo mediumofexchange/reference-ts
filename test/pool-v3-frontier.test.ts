@@ -236,6 +236,21 @@ describe("single-backing complete frontier reader", () => {
     }
   });
 
+  it("refuses a verifier that names circuits other than the configuration's before reading (§11.1)", async () => {
+    const f = fixture(), opening = f.checkpoint(f.segment(), 1n), own = configuration.circuits;
+    const named = (identities: ProofCheck["identities"]): ProofCheck => ({ verify: () => true, identities });
+    expect((await readFrontier(pack(f.items), f.signed, 10n, { ...f.options, verifier: named(own) })).canonical!.commitment).toEqual(opening);
+    const { request: _request, ...fewer } = own;
+    for (const identities of [{ ...own, spend: { ...own.spend, vk: b(99) } }, { ...own, issue: { ...own.issue, bytecode: b(99) } }, fewer,
+      { ...own, extra: own.issue }, { ...own, spend: own.burn, burn: own.spend }]) {
+      const options = { ...f.options, verifier: named(identities) };
+      for (const read of [readFrontier(pack(f.items), f.signed, 10n, options), readPackage(f.selectedPackage(opening), f.selection(opening), options)]) {
+        await expect(read).rejects.toThrow(new TypeError("the verifier's circuit identities are not the configuration's"));
+      }
+    }
+    expect((await readPackage(f.selectedPackage(opening), f.selection(opening), { ...f.options, verifier: named(own) })).canonical!.commitment).toEqual(opening);
+  });
+
   it("owns caller bytes and options before the first asynchronous venue descent", async () => {
     const f = fixture(), opening = f.checkpoint(f.segment(), 1n);
     const bytes = Buffer.from(pack(f.items)), signed = { terms: Buffer.from(f.signed.terms), signature: Buffer.from(f.signed.signature) };
