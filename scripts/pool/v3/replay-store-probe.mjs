@@ -411,6 +411,8 @@ if (mode === "baseline") {
   put(Buffer.concat([V3_TRAIL_CONTEXT, u32(header.length), header, u32(termsBytes.length), termsBytes, signedTerms.signature]));
   const countAt = written.bytes; put(u64(0));
   const verifier = { verify: () => true }, operatorStore = new ReplayStore(operatorFile);
+  // The operator writes its whole history in one transaction (a walk's), not one synced commit per record.
+  const operatorWalk = operatorStore.openWalk(sha("operator"));
   const state = openSegmentState(operatorStore, segment, sha("operator"), undefined);
   const opening = { backing, segment, historyHash: state.history, evidenceHash: state.evidence, issued: 0n, burned: 0n };
   const snapshots = [opening], snapshotOf = () => ({ backing, segment, historyHash: state.history, evidenceHash: state.evidence,
@@ -436,6 +438,7 @@ if (mode === "baseline") {
     if ((i + 1) % EVERY === 0 || i + 1 === N) snapshots.push(snapshotOf());
     if ((i + 1) % SAMPLE === 0) console.error(JSON.stringify({ generated: i + 1, msPerEvent: +((performance.now() - generateStart) / (i + 1)).toFixed(2) }));
   }
+  operatorStore.closeWalk(operatorWalk);
   const generateMs = performance.now() - generateStart;
   assert.equal(snapshots.length, C);
   const snapshot = snapshots.at(-1);
@@ -495,7 +498,7 @@ if (mode === "baseline") {
     maxRssMiB: Math.round(process.resourceUsage().maxRSS / 1024), node: process.version, importSamples, replaySamples }, null, 1));
   if (MORE !== undefined) {
     // The operator continues: MORE spends and one more checkpoint, witnessed later.
-    const suffix = [];
+    const suffix = [], moreWalk = operatorStore.openWalk(sha("operator"));
     for (let i = 0; i < MORE; i++) {
       const nfs = [fieldOf(), fieldOf()], outs = [fieldOf(), fieldOf(), fieldOf(), fieldOf()], caps = outs.map(capsule);
       const bytes = encodeRecord({ domain, kind: 2, publicInputs: [...prefix, EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, ...nfs, ...outs, ...digest(outs, caps)],
@@ -503,6 +506,7 @@ if (mode === "baseline") {
       await applyRecord(state, bytes, replay);
       suffix.push(u32(bytes.length), bytes);
     }
+    operatorStore.closeWalk(moreWalk);
     const later = snapshotOf(), directory = [{ name: backing, digest: snapshotDigest(later) }];
     const next = signCommitment(operatorSecret, BigInt(C + 1), directoryRoot(directory));
     operatorStore.close();
