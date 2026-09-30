@@ -921,6 +921,42 @@ harness:
 - *Limits:* stand-in proofs and one backing, with no imports, recovery
   publications or faults. Timings are from a shared host.
 
+### Kept state and incremental retrieval (M5b.4b)
+
+`replay-store-probe.mjs read <N> --every <K> --kept <M>` first reads the
+M5b.3a shape with the replay file kept under its digest. The file commits a
+keep point every 10,000 replayed records. The operator then adds M spends and
+a checkpoint. The reader reopens its kept file, which runs the digest check,
+and fetches the trail's head and the M records after its checkpoint
+(`importTrail`). It then reads a package carrying only the configuration, the
+new commitment, its directory and its snapshot
+([M5b.4b](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+
+Run of 2026-09-30 at `b4e9b09`, with N = 10⁵, K = 10⁴ and M = 1,000, on the
+same desktop:
+
+| Step | Result |
+|---|---|
+| First read, 10⁵ records, 11 checkpoints | 39.3 ms per record (37.1 ms without a kept file at M5b.3a); heap 10.2 → 10.5 MB; peak process memory 274 MB |
+| Files after it | state 212 MiB, evidence 124 MiB |
+| One SHA-256 of the state file (a keep point's cost) | 0.71 s |
+| Reopening the kept file (digest check) | 0.68 s |
+| Fetched head and 1,000 records; the package | 0.9 MiB; 871 bytes |
+| Assembly (`importTrail`) | 0.49 s |
+| Second read | 43.1 s: 1,000 proofs checked, 43 ms per new record |
+
+- *Keep points:* ten of them cost about 7 s over a 65-minute read. At the
+  design point's 1.27 GB state file, the M5b.1 probe measured 4.6–6.7 s per
+  digest, so the interval should grow with the file (M5b.6).
+- *The second read:* its cost follows the new records, not the 10⁵ before
+  them. It still judges the 11 kept checkpoints again (M5b.4a), which costs
+  lookups and signatures, not proofs.
+- *Limits:*
+  - stand-in proofs, one backing and one segment;
+  - the run predates the review fixes (records bound to their segment, a
+    top-record check per served checkpoint). They add 32 bytes per record
+    and one record hash per checkpoint read, and were not re-measured.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing
