@@ -38,7 +38,7 @@ export type StepMode = "admission" | "replay" | "adoption" | "force";
  * identities, where it declares them, name it in kept state (§14); an undeclared one is named per object. */
 export interface ProofCheck {
   verify(kind: number, publicInputs: bigint[], proof: Uint8Array): Promise<boolean> | boolean;
-  readonly identities?: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array } } | undefined;
+  readonly identities?: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array; readonly kind?: number } } | undefined;
 }
 
 /** What the guards read of a state: note membership and recovery state. */

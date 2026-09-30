@@ -37,6 +37,8 @@ export interface CompiledProgram {
 export interface CircuitIdentity {
   readonly bytecode: Uint8Array;
   readonly vk: Uint8Array;
+  /** The statement kind whose proofs are verified under this key. */
+  readonly kind: number;
 }
 
 /** One circuit of a construction: the statement kind it proves, its artifact's name, its public-input count. */
@@ -248,7 +250,7 @@ export async function proofVerifier(
     const { text, bytecode } = texts[i]!;
     const vk = await new UltraHonkBackend(text, api).getVerificationKey(PROOF_OPTIONS);
     keys.set(kind, Object.freeze({ vk, publicInputs }));
-    identities[name] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk) });
+    identities[name] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk), kind });
   }
   // The verifier's own instance; undefined before its first verification and after each throw.
   let current: { readonly api: Barretenberg; readonly backend: UltraHonkVerifierBackend } | undefined;

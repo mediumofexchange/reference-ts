@@ -115,8 +115,7 @@ function ownOptions(options: PackageReader) {
   const { configuration, verifier, venue, reference } = options;
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
   const ownConfiguration = decodeConfiguration(configurationBytes(configuration)), verify = verifier.verify.bind(verifier);
-  const identities = verifier.identities;
-  requireConfigurationVerifier(ownConfiguration, identities);
+  const identities = requireConfigurationVerifier(ownConfiguration, verifier.identities);
   const reader: PackageReader = { configuration: ownConfiguration, verifier: identities === undefined ? { verify } : { verify, identities },
     venue, reference: ownReference };
   return { domain: configurationHash(ownConfiguration), venueId, reader };
@@ -346,7 +345,8 @@ export class V3Wallet {
   private evidence(): EvidenceStore {
     // A file of another layout, or one that is no database, is never replaced here: it may be the holder's
     // only copy of the evidence. The holder removes it to sync again from nothing.
-    try { return this.retained ??= new EvidenceStore(`${this.path}.evidence`); } catch {
+    try { return this.retained ??= new EvidenceStore(`${this.path}.evidence`); } catch (error) {
+      if (error instanceof Error && /in use/.test(error.message)) throw new V3WalletError("STORAGE", "another handle holds this wallet's evidence file");
       throw new V3WalletError("STORAGE", "the wallet's evidence file cannot be read; remove it to sync again");
     }
   }
@@ -424,9 +424,11 @@ export class V3Wallet {
         let force: ForceState | undefined, notes: OwnedNote[] = [];
         if (canonical !== undefined) {
           force = openForceState(canonical.state);
-          // This backing's own adoption index: each scoped backing has its own.
-          const adopted = canonical.state.adoptionIndices.get(hex(backing)) ?? 0n;
-          for (const publication of result.force) if (publication.index > adopted) applyForceEffects(force, publication.record);
+          // Each publication past its own backing's adoption index: each scoped backing has its own.
+          const adoption = canonical.state.adoptionIndices;
+          for (const publication of result.force) {
+            if (publication.index > (adoption.get(publication.backing) ?? 0n)) applyForceEffects(force, publication.record);
+          }
           const spent = force;
           // The scan ran inside the replay, once per output: only this seed's witnessed outputs are read here.
           notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));

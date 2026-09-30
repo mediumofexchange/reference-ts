@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import type { Server } from "node:http";
 import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE } from "../src/ergo-profile.js";
@@ -10,15 +11,15 @@ import { MempoolNode, plainBox, SCRIPTS } from "./ergo-chain.js";
 import { Chain } from "../src/ergo-synthetic.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
-import { decodeReceipt, decodeSnapshot, verifyReceipt } from "../src/pool/v3/commitments.js";
+import { decodeReceipt, decodeSnapshot, genesisEvidenceHash, nextEvidenceHash, snapshotBytes, verifyReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import { CandidateVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
-import { decodeEvidenceDirectory, decodeEvidencePackage } from "../src/pool/v3/package.js";
-import { encodeRecord, type Record } from "../src/pool/v3/records.js";
+import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
+import { decodeRecord, encodeRecord, evidenceHashes, type Record } from "../src/pool/v3/records.js";
 import type { ServedPackage, V3OperatorJournal as Journal, V3StoreError as StoreError } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
@@ -876,5 +877,28 @@ describe("the v3 operator journal", () => {
       .filter(item => item.kind === 4).map(item => item.payload).find(payload => decodeSnapshot(payload).issued === 10n)!).evidenceHash)?.length).toBe(1n);
     expect((await j.package()).selection.sequence).toBe(3n);
     evidence.close();
+  });
+
+  it("serves a trail for each fork of a taken segment", async () => {
+    const { file, venue, j } = await opened(); j.close();
+    // A predecessor segment of another operator whose two taken snapshots lie on different forks, as a taking
+    // rescope keeps them: the objects in the journal's evidence and an opening's journal_taken rows.
+    const P: SegmentHeader = { ...header, operator: ed25519.getPublicKey(b(17)) }, id = segmentIdentity(P), pContext = { domain, header: P };
+    const issued = (seed: number, value: bigint) => encodeRecord(authorizeIssue(record(issueTask(pContext, output(b(seed), seed + 10, value))), issuerSecret));
+    const forks = [[issued(41, 10n)], [issued(42, 7n), issued(43, 3n)]];
+    const chain = (records: Uint8Array[]) => records.reduce((previous, bytes, i) =>
+      nextEvidenceHash(previous, evidenceHashes(decodeRecord(bytes)), BigInt(i + 1)), genesisEvidenceHash(id));
+    const snapshots = forks.map(records => snapshotBytes({ backing, segment: id, historyHash: b(1), evidenceHash: chain(records), issued: 10n, burned: 0n }));
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(file, { readBigInts: true }), store = new EvidenceStore(db);
+    const items = [...snapshots.map(payload => ({ kind: 4, payload })),
+      ...forks.map(records => ({ kind: 6, payload: encodeTrail({ header: segmentBytes(P), terms: [signed], records }) }))];
+    store.importBytes(encodeEvidencePackage(items.sort((a, z) => a.kind - z.kind || bytesToHex(sha256(a.payload)).localeCompare(bytesToHex(sha256(z.payload)))))).release();
+    for (const payload of snapshots) db.prepare("INSERT INTO journal_taken VALUES (1, 4, ?)").run(sha256(payload));
+    db.close();
+    const reopened = journal(file, venue);
+    const served = decodeEvidencePackage((await reopened.package()).package, { maxBytes: 1n << 24n, maxItems: 1n << 12n });
+    const trails = served.filter(item => item.kind === 6).map(item => decodeTrail(item.payload)).filter(trail => bytesToHex(sha256(trail.header)) === bytesToHex(id));
+    expect(trails.map(trail => trail.records.length).sort()).toEqual([1, 2]);
   });
 });

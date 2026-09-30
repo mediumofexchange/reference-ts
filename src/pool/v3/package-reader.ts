@@ -7,7 +7,7 @@ import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
+import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration, type VerifierIdentities } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
@@ -60,16 +60,15 @@ function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofChe
   const declared = verifierIn.identities;
   if (declared === undefined) return { verify: verify.bind(verifierIn) };
   if (declared === null || typeof declared !== "object") throw new TypeError("invalid verifier identities");
-  const identities: { [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array } } = {};
+  const identities: { [name: string]: VerifierIdentities[string] } = {};
   for (const name of Object.keys(declared)) {
     const entry = declared[name];
     if (entry === null || typeof entry !== "object") throw new TypeError("invalid verifier identities");
-    const bytecode = copyBytes(entry.bytecode), vk = copyBytes(entry.vk);
+    const { kind } = entry, bytecode = copyBytes(entry.bytecode), vk = copyBytes(entry.vk);
     if (bytecode.length !== 32 || vk.length !== 32) throw new TypeError("invalid verifier identities");
-    identities[name] = Object.freeze({ bytecode, vk });
+    identities[name] = { bytecode, vk, ...(kind === undefined ? {} : { kind }) };
   }
-  requireConfigurationVerifier(configuration, identities);
-  return { verify: verify.bind(verifierIn), identities: Object.freeze(identities) };
+  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(configuration, identities) };
 }
 
 /** Copy the package into the reader's evidence storage, then read only the copy and what the store retains.
