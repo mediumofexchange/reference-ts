@@ -1,6 +1,6 @@
 {
   "purpose": "conformance-only",
-  "specification": "8d48b25",
+  "specification": "bd23810",
   "toolchain": {
     "@aztec/bb.js": "5.2.0",
     "@noir-lang/noir_js": "1.0.0-beta.26",

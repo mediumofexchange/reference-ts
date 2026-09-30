@@ -27,7 +27,7 @@ completed security audit or live deployment is claimed. The earlier pool-v2
 runtime is retired and remains in Git history.
 
 The runtime tracks specification revision
-[`8d48b2536f1950dccccae96d70d5955c427baadb`](https://github.com/mediumofexchange/money-from-first-principles/tree/8d48b2536f1950dccccae96d70d5955c427baadb).
+[`bd23810f6d2342462b9e02cdb2f29ed64e561839`](https://github.com/mediumofexchange/money-from-first-principles/tree/bd23810f6d2342462b9e02cdb2f29ed64e561839).
 See [implementation status](docs/IMPLEMENTATION_STATUS.md) for component
 evidence and the pins of individual rules, and [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
 for the remaining acceptance criteria.

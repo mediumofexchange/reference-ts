@@ -417,7 +417,7 @@ physical power-loss or wallet custody evidence is added.
 ## Runtime pin and recovery models
 
 The runtime follows specification revision
-[`8d48b2536f1950dccccae96d70d5955c427baadb`](https://github.com/mediumofexchange/money-from-first-principles/tree/8d48b2536f1950dccccae96d70d5955c427baadb):
+[`bd23810f6d2342462b9e02cdb2f29ed64e561839`](https://github.com/mediumofexchange/money-from-first-principles/tree/bd23810f6d2342462b9e02cdb2f29ed64e561839):
 `pool-v3.md` for the construction, with the Ergo venue profile's
 `venue-ergo.md`; the v3 reports bind the revision they check
 (`V3_SPECIFICATION` in `scripts/pool/v3/provenance.mjs`), which names both
