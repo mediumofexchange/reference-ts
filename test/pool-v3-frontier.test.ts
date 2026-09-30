@@ -226,6 +226,16 @@ describe("single-backing complete frontier reader", () => {
     await expect(f.read(pack([{ kind: 1, payload: b(1) }]))).rejects.toMatchObject({ check: "CONFIGURATION" });
   });
 
+  it("reads a package the same with a directory no commitment names, whether or not it decodes", async () => {
+    const f = fixture(), opening = f.checkpoint(f.segment(), 1n), expected = await f.read();
+    expect(expected.canonical!.commitment).toEqual(opening);
+    for (const payload of [Uint8Array.of(1, 2, 3), encodeEvidenceDirectory([{ name: b(77), digest: b(78) }])]) {
+      const again = await f.read(pack([...f.items, { kind: 3, payload }]));
+      expect(describeState(again.canonical!.state)).toEqual(describeState(expected.canonical!.state));
+      expect(again.carrying).toEqual(expected.carrying);
+    }
+  });
+
   it("owns caller bytes and options before the first asynchronous venue descent", async () => {
     const f = fixture(), opening = f.checkpoint(f.segment(), 1n);
     const bytes = Buffer.from(pack(f.items)), signed = { terms: Buffer.from(f.signed.terms), signature: Buffer.from(f.signed.signature) };

@@ -10,7 +10,7 @@ import { decodeSnapshot } from "./commitments.js";
 import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { EvidenceStore, READ_KINDS, type EvidenceBatch } from "./evidence-store.js";
+import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
 import type { ReaderSelection, SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
@@ -81,15 +81,9 @@ async function withEvidence<T>(source: PackageSource, options: PackageReader, re
   } finally { if (own) store.close(); }
 }
 
-/** The kinds a v3 reader reads, each of 1, 2 and 10 at most once. */
+/** Each of kinds 1, 2 and 10 at most once; the import refused kinds a v3 reader does not read. */
 function readKinds(batch: EvidenceBatch): void {
-  if (batch.kinds().some(kind => !READ_KINDS.includes(kind)) || [1, 2, 10].some(kind => batch.count(kind) > 1)) {
-    throw new EvidenceRefusal("unsupported-scope");
-  }
-}
-/** Directories are found by root in the batch; one that does not decode makes the package malformed. */
-function directoriesOf(batch: EvidenceBatch): void {
-  if (batch.malformedDirectory()) throw new EncodingError("malformed directory");
+  if ([1, 2, 10].some(kind => batch.count(kind) > 1)) throw new EvidenceRefusal("unsupported-scope");
 }
 
 /** Returns a complete reference verdict/state or throws a named evidence/replay
@@ -142,7 +136,6 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   if (!same(commitment.operator, selection.operator) || commitment.sequence !== selection.sequence || !same(commitment.root, selection.root)) {
     throw new EvidenceRefusal("selection-mismatch");
   }
-  directoriesOf(batch);
   const entry = batch.directory(commitment.root)?.find(value => same(value.name, selection.backing));
   if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const snapshotBytes = batch.snapshot(entry.digest);
@@ -195,7 +188,6 @@ function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontier
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
   if (batch.count(1) !== 0) requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
-  directoriesOf(batch);
   // Invoke the external adapter only after every caller-owned input is copied.
   const venueId = requireReferenceVenue(reference, venue);
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");

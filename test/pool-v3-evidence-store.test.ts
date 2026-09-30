@@ -9,7 +9,8 @@ import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
 import { directoryRoot } from "../src/venue-records.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
-import { MAX_ROOT_TERMS_BYTES } from "../src/pool/v3/terms.js";
+import { authenticatedScope } from "../src/pool/v3/scope-evidence.js";
+import { encodeRootTerms, MAX_ROOT_TERMS_BYTES, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
 
 // The store's own contract: one copy of the supplied bytes, each trail's
@@ -98,15 +99,49 @@ describe("v3 evidence store", () => {
     store.close();
   });
 
-  it("bounds each whole item, not a trail, and passes over kinds a reader does not read", () => {
+  it("bounds each whole item, not a trail, and refuses a kind a reader does not read at its header, keeping nothing", async () => {
     const store = new EvidenceStore(), big = new Uint8Array(Number(MAX_ITEM_BYTES) + 1);
     expect(() => store.importBytes(pack([{ kind: 4, payload: big }]))).toThrow(PackageLimitError);
-    expect(() => store.importBytes(pack([{ kind: 11, payload: big }]))).toThrow(PackageLimitError);
-    const batch = store.importBytes(pack([{ kind: 11, payload: Uint8Array.of(9) }, { kind: 5, payload: Uint8Array.of(1) }, { kind: 3, payload: Uint8Array.of(2) }]));
-    expect(batch.kinds().sort((a, z) => a - z)).toEqual([3, 5, 11]);
-    expect(batch.count(11)).toBe(1);
-    expect(batch.payloads(11)).toEqual([]);
+    for (const kind of [5, 8, 9, 11]) {
+      // Refused before its payload is read or budgeted, and before any later item.
+      for (const payload of [big, Uint8Array.of(9)]) {
+        const bytes = pack([{ kind: 3, payload: Uint8Array.of(2) }, { kind, payload }, { kind: 6, payload: trail(2) }]);
+        expect(() => store.importBytes(bytes)).toThrow(expect.objectContaining({ status: "unsupported-scope" }));
+        await expect(store.importStream(chunks(bytes, 5))).rejects.toMatchObject({ status: "unsupported-scope" });
+      }
+    }
+    const batch = store.importBytes(pack([{ kind: 3, payload: Uint8Array.of(2) }]));
     expect(batch.payloads(3)).toEqual([Uint8Array.of(2)]);
+    store.close();
+  });
+
+  it("charges every item's own row against the quota, so the quota bounds the item count", async () => {
+    const items = (n: number) => pack(Array.from({ length: n }, (_, i) => ({ kind: 4, payload: Uint8Array.of(i) })));
+    // Each one-byte item costs its byte and a 128-byte row; payload bytes alone would admit 257 of them.
+    const store = new EvidenceStore(":memory:", { maxBatchBytes: 2n * 129n });
+    expect(store.importBytes(items(2)).count(4)).toBe(2);
+    expect(() => store.importBytes(items(3))).toThrow(PackageLimitError);
+    await expect(store.importStream(chunks(items(3), 3))).rejects.toThrow(PackageLimitError);
+    // A trail's item row counts beside its bytes.
+    const one = pack([{ kind: 6, payload: trail(0) }]), exact = new EvidenceStore(":memory:", { maxBatchBytes: 128n + BigInt(trail(0).length) });
+    expect(exact.importBytes(one).count(6)).toBe(1);
+    expect(() => new EvidenceStore(":memory:", { maxBatchBytes: 127n + BigInt(trail(0).length) }).importBytes(one)).toThrow(PackageLimitError);
+    store.close(); exact.close();
+  });
+
+  it("refuses to keep a venue answer while another import holds the store's transaction", async () => {
+    const store = new EvidenceStore(), batch = store.importBytes(pack([])), operator = header.operator;
+    const bytes = pack([{ kind: 6, payload: trail(2) }]);
+    let resume!: () => void;
+    const paused = new Promise<void>(resolve => { resume = resolve; });
+    async function* slow(): AsyncGenerator<Uint8Array> { yield bytes.subarray(0, 40); await paused; yield bytes.subarray(40); }
+    const importing = store.importStream(slow());
+    await new Promise(resolve => setImmediate(resolve));
+    expect(() => batch.keepAnswer(1, operator, () => {})).toThrow("an import is open on this evidence store");
+    resume();
+    expect((await importing).count(6)).toBe(1);
+    batch.keepAnswer(1, operator, () => {});
+    expect(batch.kept(1, operator)).toBe(true);
     store.close();
   });
 
@@ -150,15 +185,43 @@ describe("v3 evidence store", () => {
     store.close();
   });
 
-  it("finds directories by root and snapshots by digest, and marks a directory that does not decode", () => {
+  it("finds directories by root and snapshots by digest; a directory that does not decode has no root", () => {
     const directory = [{ name: backing, digest: b(8) }], snapshot = snapshotBytes(snapshotAt(2)), store = new EvidenceStore();
-    const batch = store.importBytes(pack([{ kind: 3, payload: encodeEvidenceDirectory(directory) }, { kind: 4, payload: snapshot }]));
+    const malformed = Uint8Array.of(1, 2, 3), unordered = Uint8Array.of(...encodeEvidenceDirectory([{ name: b(1), digest: b(8) }, { name: b(2), digest: b(8) }]));
+    unordered.set(b(3), 9);
+    const batch = store.importBytes(pack([{ kind: 3, payload: encodeEvidenceDirectory(directory) }, { kind: 4, payload: snapshot },
+      { kind: 3, payload: malformed }, { kind: 3, payload: unordered }]));
     expect(batch.directory(directoryRoot(directory))).toEqual(directory);
     expect(batch.directory(b(1))).toBeUndefined();
+    // A payload that is no directory is found by no root, not even its own hash, and refuses nothing else.
+    expect([batch.directory(sha256(malformed)), batch.directory(sha256(unordered))]).toEqual([undefined, undefined]);
+    expect(batch.count(3)).toBe(3);
     expect(batch.snapshot(sha256(snapshot))).toEqual(snapshot);
     expect(batch.snapshot(b(1))).toBeUndefined();
-    expect(batch.malformedDirectory()).toBe(false);
-    expect(store.importBytes(pack([{ kind: 3, payload: Uint8Array.of(1, 2, 3) }])).malformedDirectory()).toBe(true);
+    // A directory's bytes under another kind are no directory.
+    expect(store.importBytes(pack([{ kind: 4, payload: encodeEvidenceDirectory(directory) }])).directory(directoryRoot(directory))).toBeUndefined();
+    store.close();
+  });
+
+  it("authenticates a segment's scope once per batch, from the first field that names its backing and verifies", () => {
+    const issuerSecret = b(12), terms = encodeRootTerms({ obligor: ed25519.getPublicKey(issuerSecret), payout: { thing: "t", quantumExponent: 0, perUnit: 1n },
+      operator: header.operator, configuration: domain, venue: header.venue, interval: 1n });
+    const named = { ...header, entries: [{ backing: rootTermsName(terms), link: b(6) }] }, id = segmentIdentity(named);
+    const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
+    const forged = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), b(13)) };
+    const trailOf = (field: typeof signed) => encodeTrail({ header: segmentBytes(named), terms: [field], records: [] });
+    const store = new EvidenceStore(), batch = store.importBytes(pack([{ kind: 6, payload: trailOf(forged) },
+      { kind: 6, payload: trailOf({ terms: Uint8Array.of(1), signature: signed.signature }) }, { kind: 6, payload: trailOf(signed) }]));
+    const scope = authenticatedScope(batch, id);
+    expect(scope.terms).toEqual([signed]);
+    expect(authenticatedScope(batch, id)).toBe(scope);
+    // Another batch of the same bytes authenticates its own.
+    const other = store.importBytes(pack([{ kind: 6, payload: trailOf(signed) }]));
+    expect(authenticatedScope(other, id)).not.toBe(scope);
+    expect(authenticatedScope(other, id)).toEqual(scope);
+    // Without a verifying field the scope stays unresolved, and is not kept.
+    const bare = store.importBytes(pack([{ kind: 6, payload: trailOf(forged) }]));
+    for (let i = 0; i < 2; i++) expect(() => authenticatedScope(bare, id)).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
     store.close();
   });
 

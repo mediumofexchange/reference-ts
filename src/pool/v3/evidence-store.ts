@@ -13,7 +13,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { compareBytes, copyUnshared, EncodingError, FrameFeed } from "../../bytes.js";
 import type { HeldCommitment, RangeEntry } from "../../record-range.js";
-import { directoryRoot, type SnapshotDigest } from "../../venue-records.js";
+import type { SnapshotDigest } from "../../venue-records.js";
 import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "./commitments.js";
 import type { ExpectedSnapshot } from "./fault-evidence.js";
 import { decodeSegmentHeader } from "./headers.js";
@@ -27,8 +27,12 @@ export const MAX_ITEM_BYTES = 1_048_576n;
 /** The bytes one batch may keep by default: a party's storage quota, never a protocol bound. A file is
  * sized for a closure at the design point (about 20 GB); memory for the short reads it serves. */
 export const EVIDENCE_QUOTA = Object.freeze({ memory: 268_435_456n, file: 68_719_476_736n });
-/** Kinds a v3 reader reads (§12): others are passed over unstored and refused as unsupported by the reader. */
-export const READ_KINDS: readonly number[] = Object.freeze([1, 2, 3, 4, 6, 7, 10]);
+/** What an item's own row costs beside its payload: its keys, hash and index entries (about 130 bytes
+ * measured on SQLite). Charged per item, so the quota bounds the item count too. */
+const ITEM_ROW_BYTES = 128n;
+/** Kinds a v3 reader reads (§12). A package holding another is unsupported: the import refuses it
+ * at that item's header, before its payload and without keeping anything. */
+const READ_KINDS: readonly number[] = Object.freeze([1, 2, 3, 4, 6, 7, 10]);
 
 export interface SignedTermsField { readonly terms: Uint8Array; readonly signature: Uint8Array }
 /** A stored trail's header, and its scoped terms field `i` read on demand; a field too long to verify is undefined. */
@@ -138,8 +142,6 @@ export class EvidenceStore {
       item: "INSERT INTO item VALUES (?, ?, ?, ?, ?, ?)",
       payloads: "SELECT payload FROM item WHERE batch = ? AND kind = ? ORDER BY seq",
       count: "SELECT count(*) AS c FROM item WHERE batch = ? AND kind = ?",
-      kinds: "SELECT DISTINCT kind FROM item WHERE batch = ?",
-      unrooted: "SELECT 1 FROM item WHERE batch = ? AND kind = 3 AND root IS NULL LIMIT 1",
       byHash: "SELECT payload FROM item WHERE batch = ? AND kind = ? AND hash = ? ORDER BY seq LIMIT 1",
       byRoot: "SELECT payload FROM item WHERE batch = ? AND root = ? ORDER BY seq LIMIT 1",
       trail: "INSERT INTO trail VALUES (NULL, ?, ?, ?, ?, NULL) RETURNING id",
@@ -199,29 +201,26 @@ export class EvidenceStore {
 
   #batch(): EvidenceBatch {
     const id = (this.#q.batch!.get() as { id: bigint }).id;
-    return new EvidenceBatch(this.#db, this.#q, id, this.#quota);
+    return new EvidenceBatch(this.#db, this.#q, id, this.#quota, () => this.#busy);
   }
 
   #sink(batch: EvidenceBatch): PackageSink {
     let seq = 0;
     return {
       stream: (kind, length): PayloadSink | undefined => {
-        if (kind === 6) {
-          this.#q.item!.run(batch.id, seq, 6, null, null, null);
-          return this.#trail(batch, seq++, length);
-        }
-        if (READ_KINDS.includes(kind)) return undefined;
-        // Passed over unkept, but still under the per-object budget.
-        if (length > MAX_ITEM_BYTES) throw new PackageLimitError("package item exceeds the reader's budget");
-        this.#q.item!.run(batch.id, seq++, kind, null, null, null);
-        return { data: () => {}, end: () => {} };
+        if (!READ_KINDS.includes(kind)) throw new EvidenceRefusal("unsupported-scope");
+        batch.charge(ITEM_ROW_BYTES, PackageLimitError);
+        if (kind !== 6) return undefined;
+        this.#q.item!.run(batch.id, seq, 6, null, null, null);
+        return this.#trail(batch, seq++, length);
       },
       item: (kind, payload, hash) => {
         batch.charge(BigInt(payload.length), PackageLimitError);
-        // A directory is found by its root; one that does not decode has none, and the reader refuses it as malformed.
+        // A directory is found by its root, the SHA256 of its canonical preimage. One that does not decode
+        // has none, so no commitment finds it: like a trail that does not frame, it is no evidence (§12).
         let root: Uint8Array | null = null;
         if (kind === 3) {
-          try { root = directoryRoot(decodeEvidenceDirectory(payload)); } catch (error) { if (!(error instanceof EncodingError)) throw error; }
+          try { decodeEvidenceDirectory(payload); root = hash; } catch (error) { if (!(error instanceof EncodingError)) throw error; }
         }
         this.#q.item!.run(batch.id, seq++, kind, hash, payload, root);
       },
@@ -326,11 +325,12 @@ export class EvidenceBatch implements WalkEvidence, KeptAnswers {
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
   readonly #quota: bigint;
+  readonly #importing: () => boolean;
   #bytes = 0n;
   readonly id: bigint;
 
-  constructor(db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint) {
-    this.#db = db; this.#q = q; this.id = id; this.#quota = quota;
+  constructor(db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint, importing: () => boolean) {
+    this.#db = db; this.#q = q; this.id = id; this.#quota = quota; this.#importing = importing;
   }
 
   /** Count kept bytes against the party's quota. */
@@ -342,15 +342,12 @@ export class EvidenceBatch implements WalkEvidence, KeptAnswers {
   get trails(): TrailEvidence { return this; }
   get answers(): KeptAnswers { return this; }
 
-  /** Every item of `kind`, in frame order; payloads of kinds a reader does not read are not kept. */
+  /** Every whole item of `kind`, in frame order; a trail's bytes are kept in its own rows instead. */
   payloads(kind: number): Uint8Array[] {
     return this.#q.payloads!.all(this.id, kind).filter(row => (row as { payload: unknown }).payload !== null)
       .map(row => bytes((row as { payload: unknown }).payload));
   }
   count(kind: number): number { return Number((this.#q.count!.get(this.id, kind) as { c: bigint }).c); }
-  kinds(): number[] { return this.#q.kinds!.all(this.id).map(row => Number((row as { kind: bigint }).kind)); }
-  /** Whether some directory item does not decode. */
-  malformedDirectory(): boolean { return this.#q.unrooted!.get(this.id) !== undefined; }
 
   /** The first directory item with this root, decoded. */
   directory(root: Uint8Array): readonly SnapshotDigest[] | undefined {
@@ -409,6 +406,9 @@ export class EvidenceBatch implements WalkEvidence, KeptAnswers {
 
   kept(kind: 1 | 4, subject: Uint8Array): boolean { return this.#q.kept!.get(this.id, kind, subject) !== undefined; }
   keepAnswer(kind: 1 | 4, subject: Uint8Array, read: () => void): void {
+    // An open streamed import holds the database's transaction across awaits: rows written now would join it,
+    // and its rollback would take them.
+    if (this.#importing()) throw new Error("an import is open on this evidence store");
     if (this.kept(kind, subject)) throw new Error("this answer is already kept");
     // One savepoint: the answer commits once, and one that fails leaves no rows or quota behind.
     const charged = this.#bytes;
