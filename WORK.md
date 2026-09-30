@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-30
+Updated: 2026-10-01
 
 ## Goal
 Slice 8 (adoption), M5b: every party's memory independent of history
@@ -16,8 +16,8 @@ to learn whether workers or Poseidon2 on Barretenberg decide the 24 h. Measure R
 *Stop:* M5b closed. Open beside it: a taking `rescope` takes its evidence as bytes in memory; a successor's journal serves its readers the predecessor's trails again.
 
 ## Status
-- Review-code 2026-09-30 (main since e57fc31): a checkpoint is judged in its directory's first entry's segment ([decision](decisions/2026-09.md#2026-09-30--judge-a-checkpoint-in-the-segment-its-directorys-first-entry-names),
-  spec 298b6f5), receipts past an excluded opening, verifier kinds, keep-point lock, replay temp files, supply quota; deferred as Next 5(o)–(s).
+- Review-code 2026-09-30 (PR #61, main since e57fc31): a checkpoint is judged in its directory's first entry's segment ([decision](decisions/2026-09.md#2026-09-30--judge-a-checkpoint-in-the-segment-its-directorys-first-entry-names),
+  spec 298b6f5), receipts past an excluded opening, verifier kinds, keep-point lock, replay temp files, supply quota; reports re-recorded from CI (conformance now binds its sources); deferred as Next 5(o)–(s).
 - M5b.5c.2 (PR #60): [real proofs past the old package](docs/POOL_DEPLOYMENT_PROBES.md#real-proofs-past-the-old-package-m5b5c2):
   73 statements through journal, wallet sync and an offline-operator recovery read from kept files
   (`check:pool:v3-history`); owed kept-path, second-handle and read-crash tests added. M5b.5 is closed.
