@@ -144,10 +144,15 @@ describe("v3 recovery journal and independent package reader", () => {
     await f.venue.publishRecord(4, f.backing, f.publication(1, f.demand(6n)));
     await f.j.return("return"); await f.j.publish();
     const saved = await f.j.package(), twin = encodeCommitment(signCommitment(operatorSecret, 1n, b(255)));
-    duringProof = () => { f.venue.witness(1, operator, f.venue.witnessedIndex(), twin); };
+    // A witnessed index is final (§13.2): a record witnessed during verification moves the venue's clock, and
+    // the adoption judged by the earlier view signs nothing.
+    duringProof = () => {
+      duringProof = () => {};
+      f.venue.advance(f.venue.witnessedIndex() + 1n); f.venue.witness(1, operator, f.venue.witnessedIndex(), twin);
+    };
     const sign = vi.spyOn(ed25519, "sign");
     try {
-      await expect(f.j.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(f.j.adopt()).rejects.toMatchObject({ code: "STALE" });
       expect(sign).not.toHaveBeenCalled();
     } finally { sign.mockRestore(); }
     // Failed adoption must not persist receipts or make exact retry succeed.

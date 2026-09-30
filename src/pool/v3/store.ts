@@ -24,6 +24,16 @@
 // copied into the database with the command that opens it. `audit`
 // re-verifies from the evidence alone, keeping nothing.
 //
+// What the journal reads of the venue for its own commands is kept in the
+// database too (§§13.2–13.3): this key's held commitments, each scoped
+// backing's admitted replacements and each K's revocation, through the index
+// they were read to. A command asks the venue only for the windows after that
+// index and verifies each commitment once, so neither grows with the venue's
+// age. An answer stands while the venue's finality rule does (§13.2), so a
+// command is judged by the view it read while the venue's clock has not moved. The kept answers are
+// the journal's own rows, trusted as the rest of its state is; `audit` reads
+// the venue again from its first index and compares.
+//
 // Candidate only: the configuration comes from the caller's manifest check
 // and the venue must be a reference venue (guard.ts). Time is the venue's
 // witnessed index. SQLite fences handles of this journal; it cannot fence
@@ -34,10 +44,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
-import {
-  admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
-  type ChainLink, type HeldCommitment, type RangeAnswer, type RecordKind,
-} from "../../record-range.js";
+import { RangeLimitError, replacementChain, type ChainLink, type HeldCommitment, type RangeAnswer, type RangeEntry,
+  type ReplacementChain } from "../../record-range.js";
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment, type SnapshotDigest } from "../../venue-records.js";
@@ -50,7 +58,7 @@ import { EvidenceStore, MAX_ITEM_BYTES, type EvidenceBatch } from "./evidence-st
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { decodeSegmentHeader, segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "./package.js";
-import { keptStateHolds, RANGE_LIMITS, storedTipHolds, type SignedTerms } from "./reader.js";
+import { keptAnswers, keptStateHolds, storedTipHolds, type KeptAnswers, type SignedTerms } from "./reader.js";
 import { readFrontier, readPackage } from "./package-reader.js";
 import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
@@ -162,18 +170,18 @@ interface Engine {
   pendingReturn: boolean;
 }
 type StateRead = Extract<ScopeResult, { readonly state: object }>;
-/** The venue at one instant: its clock and lag, this key's held commitments, every scoped backing's term boundary and each K's revocation. */
+/** The venue at one instant: its clock and lag, the latest commitment it holds of this key, every scoped backing's
+ * term boundary and each K's revocation. The held commitments themselves are rows, read through `now`. */
 interface View {
   readonly now: bigint;
   readonly lag: bigint;
-  readonly held: readonly HeldCommitment[];
+  readonly latest: HeldCommitment | undefined;
   /** An authentic record of this key outside the durable signing history,
    * including records the venue's holding rule does not select. */
   readonly conflict: boolean;
   readonly boundaries: readonly bigint[];
   /** Each scoped backing's K revocation index, by backing name. */
   readonly revocations: ReadonlyMap<string, bigint | undefined>;
-  readonly key: string;
 }
 
 /** What the journal needs besides its path. */
@@ -256,7 +264,8 @@ export class V3OperatorJournal {
         CREATE TABLE IF NOT EXISTS journal_signed (sequence INTEGER PRIMARY KEY CHECK(sequence>0), commitment BLOB NOT NULL,
         segment BLOB NOT NULL, length INTEGER NOT NULL, at TEXT NOT NULL, observed TEXT, published INTEGER NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS journal_receipt (statement BLOB PRIMARY KEY, receipt BLOB NOT NULL) STRICT, WITHOUT ROWID;
-        CREATE TABLE IF NOT EXISTS journal_taken (kind INTEGER NOT NULL, hash BLOB NOT NULL, PRIMARY KEY(kind, hash)) STRICT, WITHOUT ROWID;`);
+        CREATE TABLE IF NOT EXISTS journal_taken (kind INTEGER NOT NULL, hash BLOB NOT NULL, PRIMARY KEY(kind, hash)) STRICT, WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS journal_conflict (id INTEGER PRIMARY KEY CHECK(id=1), idx TEXT NOT NULL, record BLOB NOT NULL) STRICT;`);
       let meta = this.metadata();
       if (meta === undefined) {
         requireThat(this.db.prepare("SELECT COUNT(*) AS n FROM events").get()?.n === 0n, "STORAGE", "journal identity is missing");
@@ -492,8 +501,8 @@ export class V3OperatorJournal {
     return entries;
   }
   /** A backing's witnessed term chain at `at` and any pending replacement. */
-  private chain(backing: Uint8Array, terms: RootTerms, at: bigint) {
-    return replacementChain(admittedReplacements(this.ask(2, backing, at), terms.replacementRule),
+  private chain(backing: Uint8Array, terms: RootTerms, at: bigint, store = this.replays): ReplacementChain {
+    return replacementChain(this.answers(at, answers => answers.replacements(backing, terms.replacementRule), store),
       { backing, original: terms.operator, lag: this.lag, now: at });
   }
   /**
@@ -536,9 +545,9 @@ export class V3OperatorJournal {
       }
     }
     if (old !== undefined && !lapsed) {
-      const last = engine.last!, held = heldCommitments(this.ask(1, this.operator, at)).held;
+      const last = engine.last!;
       requireThat(!engine.pendingReturn && same(last.segment, old.segment) && last.length === engine.state!.position &&
-        held.some(h => hexOf(h.commitment) === hexOf(last.commitment)), "STALE", "an elective scope change first witnesses the whole tail", "TAIL");
+        this.isHeld(at, last), "STALE", "an elective scope change first witnesses the whole tail", "TAIL");
     }
     const sequence = this.nextSequence(engine);
     const header: SegmentHeader = { domain: this.domain, venue: this.venueId, operator: this.operator, sequence,
@@ -647,9 +656,9 @@ export class V3OperatorJournal {
     }
     return parents.length === 0 ? undefined : parents.length === 1 ? parents[0]!.state : merged;
   }
-  /** Each scoped K's revocation index as witnessed through `at`. */
-  private revocations(opened: Opened, at: bigint): Map<string, bigint | undefined> {
-    return new Map(opened.entries.map(({ backing, terms }) => [bytesToHex(backing), revocationIndex(this.ask(3, terms.obligor, at))]));
+  /** Each scoped K's revocation index as witnessed through `at`, an index the view reaches. */
+  private revocations(view: View, at: bigint): Map<string, bigint | undefined> {
+    return new Map([...view.revocations].map(([name, revoked]) => [name, revoked !== undefined && revoked <= at ? revoked : undefined]));
   }
   /** Admission, or an adopted block's judgment, under the scope's terms and each scoped K's revocation. */
   private replayOf(opened: Opened, horizon: bigint, revocations: ReadonlyMap<string, bigint | undefined>): SegmentReplay {
@@ -715,27 +724,23 @@ export class V3OperatorJournal {
     // Memory follows only after SQLite commits; every uncertain outcome reads the rows again.
   }
 
-  /** §13 answer over [0, now]; a venue that cannot answer leaves the operation unavailable. */
-  private ask(kind: RecordKind, subject: Uint8Array, now: bigint): RangeAnswer {
-    const request = Object.freeze({ venue: copyBytes(this.venueId), kind, subject: copyBytes(subject), fromIndex: 0n, toIndex: now });
-    try {
-      const answer: unknown = this.venue.range(request, RANGE_LIMITS);
-      if (!(answer instanceof Uint8Array)) throw new V3StoreError("UNAVAILABLE", "the venue has no answer");
-      return decodeRangeAnswer(answer, request, RANGE_LIMITS);
-    } catch (error) {
-      if (error instanceof VenueError || error instanceof RangeLimitError || error instanceof EncodingError) {
+  /** The journal's kept §13 answers through `at` (§§13.2–13.3), by default in its own database, where no
+   * reader's quota bounds them. Extending one there writes, so it runs inside a journal transaction, under
+   * the fence. A venue that cannot answer, or one index past the per-answer budget, leaves the operation unavailable. */
+  private answers<T>(at: bigint, read: (answers: KeptAnswers) => T, store = this.replays): T {
+    if (store === this.replays && !this.db.isTransaction) throw new Error("venue answers are kept inside a journal transaction");
+    try { return read(keptAnswers(this.venue, this.venueId, store, at, () => {})); } catch (error) {
+      if (error instanceof EvidenceRefusal || error instanceof RangeLimitError || error instanceof EncodingError) {
         throw new V3StoreError("UNAVAILABLE", "the venue has no answer");
       }
       throw error;
     }
   }
-  private view(engine: Engine): View {
-    const now = this.clock(), answer = this.ask(1, this.operator, now), held = heldCommitments(answer).held;
-    // C2.3.3 selects held state; it does not erase evidence that another
-    // process has signed with this key (§13.3, invariant 22). Exact local
-    // bytes were authenticated when signed. Verify every other same-key
-    // record before treating it as a conflict, including old twins.
-    const conflict = answer.entries.some(entry => {
+  /** C2.3.3 selects held state; it does not erase evidence that another process has signed with this key
+   * (§13.3, invariant 22). Exact local bytes were authenticated when signed. Every other same-key record of
+   * a newly read window is verified before it counts as a conflict, including old twins. */
+  private foreign(window: RangeAnswer): RangeEntry | undefined {
+    return window.entries.find(entry => {
       let c: Commitment;
       try { c = decodeCommitment(entry.record); }
       catch (error) { if (error instanceof EncodingError) return false; throw error; }
@@ -743,39 +748,53 @@ export class V3OperatorJournal {
       if (own !== undefined && same(encodeCommitment(own.commitment), entry.record)) return false;
       return same(c.operator, this.operator) && verifyCommitment(c);
     });
+  }
+  /**
+   * The venue through `now`, from the answers `store` keeps: this key's held commitments, read by windows
+   * past the index they are kept through, and every scoped backing's term chain and K's revocation; the
+   * scope's schedule follows its earliest term boundary (C2.10.9). `found` is given the first record of a
+   * newly read window that this key signed and this journal did not; `conflicted` says whether one was ever found.
+   */
+  private observe(opened: Opened | undefined, now: bigint, store: ReplayStore, found: (entry: RangeEntry) => void, conflicted: () => boolean): View {
+    this.answers(now, answers => answers.held(this.operator, window => {
+      // One conflict ends service for good, so later windows are not searched for another.
+      const entry = conflicted() ? undefined : this.foreign(window);
+      if (entry !== undefined) found(entry);
+    }), store);
     const boundaries: bigint[] = [], revocations = new Map<string, bigint | undefined>();
-    const evidence: string[] = [];
-    const bind = (answer: RangeAnswer): void => {
-      evidence.push(JSON.stringify(answer.entries.map(e => [e.index.toString(), e.ordinal.toString(), bytesToHex(sha256(e.record))])));
-    };
-    bind(answer);
-    // Every scoped backing's term chain, K's revocation and publications; the
-    // scope's schedule follows its earliest term boundary (C2.10.9).
-    for (const { backing, terms } of engine.opened?.entries ?? []) {
-      const replacements = this.ask(2, backing, now); bind(replacements);
-      const admitted = admittedReplacements(replacements, terms.replacementRule);
-      const { chain, pending } = replacementChain(admitted, { backing, original: terms.operator, lag: this.lag, now });
-      const term = chain.findIndex(link => same(link.link, linkOf(engine.opened!, backing)) && same(link.operator, this.operator));
+    for (const { backing, terms } of opened?.entries ?? []) {
+      const { chain, pending } = this.chain(backing, terms, now, store);
+      const term = chain.findIndex(link => same(link.link, linkOf(opened!, backing)) && same(link.operator, this.operator));
       requireThat(term >= 0, "STALE", "the segment's term is not in the witnessed chain");
       const end = chain[term + 1]?.from ?? pending?.from;
       if (end !== undefined) boundaries.push(end);
-      const revoked = this.ask(3, terms.obligor, now); bind(revoked);
-      revocations.set(bytesToHex(backing), revocationIndex(revoked));
-      const operators = new Map(chain.map(link => [bytesToHex(link.operator), link.operator]));
-      for (const operator of operators.values()) if (!same(operator, this.operator)) bind(this.ask(1, operator, now));
-      if (terms.silence !== undefined || terms.nonService !== undefined) bind(this.ask(4, backing, now));
+      revocations.set(bytesToHex(backing), this.answers(now, answers => answers.revocation(terms.obligor), store));
     }
-    const key = JSON.stringify([now.toString(), evidence, conflict, boundaries.map(String),
-      [...revocations].map(([name, at]) => [name, at?.toString() ?? null])]);
-    return { now, lag: this.lag, held, conflict, boundaries, revocations, key };
+    return { now, lag: this.lag, latest: store.previousHeld(this.operator, now, undefined, now), conflict: conflicted(), boundaries, revocations };
+  }
+  /** Inside a journal transaction: the view at the venue's clock, from the journal's kept answers. The first
+   * conflict found is kept with the answer that showed it, so it stands for every later command. */
+  private viewed(opened: Opened | undefined): View {
+    const conflict = (): boolean => this.db.prepare("SELECT 1 FROM journal_conflict WHERE id=1").get() !== undefined;
+    return this.observe(opened, this.clock(), this.replays, entry => {
+      this.db.prepare("INSERT OR IGNORE INTO journal_conflict VALUES(1,?,?)").run(entry.index.toString(), entry.record);
+    }, conflict);
+  }
+  private view(engine: Engine): View {
+    return this.transaction(() => this.viewed(engine.opened));
   }
   private exclusive(view: View): void {
     requireThat(!view.conflict, "CONFLICT", "the venue contains a commitment this journal did not sign");
   }
-  private stable(engine: Engine, view: View): void {
-    const current = this.view(engine);
-    this.exclusive(current);
-    requireThat(current.key === view.key, "STALE", "the venue changed during the journal operation");
+  /** Inside a command's transaction: the venue's clock has not moved since `view` was read, so every answer
+   * the command was judged by still stands (a witnessed index is final, §§13.1–13.2). */
+  private stable(view: View): void {
+    requireThat(this.clock() === view.now, "STALE", "the venue changed during the journal operation");
+  }
+  /** This key's latest commitment the venue holds at or below `index`, below sequence `before` if given; the
+   * view has kept them through its clock. */
+  private heldBelow(index: bigint, before?: bigint): HeldCommitment | undefined {
+    return this.replays.previousHeld(this.operator, index, before, index);
   }
   private signingSchedule(view: View, admission = false): void {
     const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
@@ -788,9 +807,9 @@ export class V3OperatorJournal {
     const signed = this.signedAt(held.commitment.sequence);
     return signed !== undefined && hexOf(signed.commitment) === hexOf(held.commitment) ? signed : undefined;
   }
-  private isHeld(view: View, signed: Signed): boolean {
-    const held = view.held.find(h => h.commitment.sequence === signed.commitment.sequence);
-    return held !== undefined && hexOf(held.commitment) === hexOf(signed.commitment);
+  /** Whether the venue holds exactly `signed` by index `at`, which the kept answers reach. */
+  private isHeld(at: bigint, signed: Signed): boolean {
+    return hexOf(this.replays.heldAt(this.operator, signed.commitment.sequence, at)?.commitment) === hexOf(signed.commitment);
   }
   /** Service needs the current signed state, the scope's schedule open, and for issuance an unrevoked backer. */
   private async ready(engine: Engine, view: View, action: "admit" | "commit"): Promise<void> {
@@ -798,11 +817,11 @@ export class V3OperatorJournal {
     const opened = engine.opened, state = engine.state, last = engine.last;
     requireThat(opened !== undefined && state !== undefined && last !== undefined, "STALE", "open the segment first");
     requireThat(!engine.pendingReturn, "STALE", "the return opening must be witnessed and its block adopted before service");
-    const latest = hexOf(view.held.at(-1)?.commitment);
+    const latest = hexOf(view.latest?.commitment);
     const current = latest === hexOf(last.commitment) || (last.published && view.now < last.at + view.lag && latest === last.observed);
     requireThat(current, "STALE", "the signed state is not current");
     const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
-      ...(this.isHeld(view, last) ? {} : { unwitnessedSignedAt: last.at }), ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
+      ...(this.isHeld(view.now, last) ? {} : { unwitnessedSignedAt: last.at }), ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
     requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
     requireThat(action === "admit" ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
     if (this.db.prepare("SELECT 1 FROM journal_taken LIMIT 1").get() !== undefined ||
@@ -813,11 +832,14 @@ export class V3OperatorJournal {
     for (const { backing } of opened.entries) {
       const revokedAt = view.revocations.get(bytesToHex(backing));
       if (revokedAt === undefined) continue;
-      // Only issuance finalized before K's revocation stays; a later tail needs recovery (slice 3).
+      // Only issuance finalized before K's revocation stays; a later tail needs recovery (slice 3). The active
+      // segment's commitments are this key's from its opening sequence on, each at least as long as the one
+      // before, so the latest of them held before the revocation carries the finalized length.
       let finalized = 0n;
-      for (const held of view.held) {
-        const signed = held.index < revokedAt ? this.ownHeld(held) : undefined;
-        if (signed !== undefined && same(signed.segment, opened.segment) && signed.length > finalized) finalized = signed.length;
+      for (let held = revokedAt === 0n ? undefined : this.heldBelow(revokedAt - 1n);
+        held !== undefined && held.commitment.sequence >= opened.header.sequence; held = this.heldBelow(revokedAt - 1n, held.commitment.sequence)) {
+        const signed = this.ownHeld(held);
+        if (signed !== undefined && same(signed.segment, opened.segment)) { finalized = signed.length; break; }
       }
       requireThat(!state.hasIssuanceAfter(finalized, bytesToHex(backing)), "UNSUPPORTED", "issuance without pre-revocation finality needs recovery");
     }
@@ -830,9 +852,8 @@ export class V3OperatorJournal {
    * selected commitment, since every other object is retained. */
   private async currentRead(engine: Engine, at: bigint, backing = engine.opened?.entries[0]!.backing, audit?: ReplayStore): Promise<StateRead> {
     requireThat(engine.opened !== undefined && backing !== undefined, "STALE", "there is no segment to read");
-    const held = heldCommitments(this.ask(1, this.operator, at)).held;
     let carried = false;
-    for (const candidate of [...held].reverse()) {
+    for (let candidate = this.heldBelow(at); candidate !== undefined; candidate = this.heldBelow(at, candidate.commitment.sequence)) {
       const signed = this.ownHeld(candidate);
       if (signed === undefined || !this.directoryOf(signed).some(entry => same(entry.name, backing))) continue;
       carried = true;
@@ -897,9 +918,9 @@ export class V3OperatorJournal {
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
       const source = await this.currentRead(engine, view.now);
-      const opened = this.returnOpening(engine, source, view.now), observed = hexOf(view.held.at(-1)?.commitment);
+      const opened = this.returnOpening(engine, source, view.now), observed = hexOf(view.latest?.commitment);
       const { state, signed } = this.transaction(() => {
-        this.stable(engine, view);
+        this.stable(view);
         const next = this.openSegment(engine, opened, source.state, view.now, observed);
         this.append(engine, commandId, "return", { kind: "return", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(next.signed.commitment)));
         return next;
@@ -921,7 +942,7 @@ export class V3OperatorJournal {
       const id = `adopt:${opened.header.sequence}`, prior = this.prior(id, "adopt");
       if (prior !== undefined) return (JSON.parse(prior) as string[]).map(hexToBytes);
       requireThat(engine.pendingReturn, "STALE", "the segment is not a pending return");
-      const view = this.view(engine), held = view.held.find(h => h.commitment.sequence === opened.header.sequence);
+      const view = this.view(engine), held = this.replays.heldAt(this.operator, opened.header.sequence, view.now);
       this.exclusive(view);
       this.signingSchedule(view, true);
       requireThat(held !== undefined && hexOf(held.commitment) === hexOf(last.commitment), "UNAVAILABLE", "the return opening is not witnessed");
@@ -931,10 +952,10 @@ export class V3OperatorJournal {
       requireThat(source.canonical.commitment.sequence === opened.header.sequence && same(source.canonical.segment, opened.segment),
         "STALE", "the witnessed opening is not this return");
       const block = this.unadopted(source);
-      const replay: SegmentReplay = { ...this.replayOf(opened, source.canonical.index, this.revocations(opened, source.canonical.index)),
+      const replay: SegmentReplay = { ...this.replayOf(opened, source.canonical.index, this.revocations(view, source.canonical.index)),
         admission: false, block };
       const receipts = this.transaction(() => {
-        this.stable(engine, view); this.signingSchedule(view, true);
+        this.stable(view); this.signingSchedule(view, true);
         const signed = block.map(event => this.admit(engine, judgeAdopted(state, event.bytes, replay), replay));
         this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(signed.map(bytesToHex)));
         return signed;
@@ -971,20 +992,23 @@ export class V3OperatorJournal {
       requireThat(engine.opened === undefined, "UNSUPPORTED", "the journal holds one genesis segment");
       const opened = this.opening(own), view = this.view(engine);
       this.exclusive(view);
-      requireThat(view.held.length === 0, "CONFLICT", "this key already has commitments on the venue");
+      requireThat(view.latest === undefined, "CONFLICT", "this key already has commitments on the venue");
       // A witnessed replacement ends a term at its effective index: the opening is signed by C2.6.1's last signing index.
-      const boundaries: bigint[] = [];
-      for (const { backing, terms } of opened.entries) {
-        const { chain, pending } = this.chain(backing, terms, view.now);
-        requireThat(chain.length === 1, "STALE", "the operator's term has ended");
-        requireThat(revocationIndex(this.ask(3, terms.obligor, view.now)) === undefined, "UNSUPPORTED", "the backer has revoked K");
-        if (pending !== undefined) boundaries.push(pending.from);
-      }
+      const boundaries = this.transaction(() => {
+        const ends: bigint[] = [];
+        for (const { backing, terms } of opened.entries) {
+          const { chain, pending } = this.chain(backing, terms, view.now);
+          requireThat(chain.length === 1, "STALE", "the operator's term has ended");
+          requireThat(this.answers(view.now, answers => answers.revocation(terms.obligor)) === undefined, "UNSUPPORTED", "the backer has revoked K");
+          if (pending !== undefined) ends.push(pending.from);
+        }
+        return ends;
+      });
       const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries,
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(schedule.commitNow, "SCHEDULE", "the opening's signing schedule is closed");
       const { state, signed: first } = this.transaction(() => {
-        this.stable(engine, view);
+        this.stable(view);
         const next = this.openSegment(engine, opened, undefined, view.now, null);
         this.append(engine, commandId, request, { kind: "open", scope, at: view.now.toString(), observed: null }, bytesToHex(encodeCommitment(next.signed.commitment)));
         return next;
@@ -1015,13 +1039,16 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
-      const at = this.clock(), target = this.rescopeTarget(engine, own, at);
-      const view = this.view({ ...engine, opened: target.opened });
-      requireThat(view.now === at, "STALE", "the venue changed during the scope change");
+      const { at, target, view } = this.transaction(() => {
+        // This key's held commitments are kept through the clock first: the target's checks read them.
+        const at = this.viewed(undefined).now, target = this.rescopeTarget(engine, own, at), view = this.viewed(target.opened);
+        requireThat(view.now === at, "STALE", "the venue changed during the scope change");
+        return { at, target, view };
+      });
       this.exclusive(view); this.signingSchedule(view);
-      const plan = await this.planRescope(engine, own, at, target), opened = plan.opened, observed = hexOf(view.held.at(-1)?.commitment);
+      const plan = await this.planRescope(engine, own, at, target), opened = plan.opened, observed = hexOf(view.latest?.commitment);
       const { state, signed } = this.transaction(() => {
-        this.stable({ ...engine, opened }, view);
+        this.stable(view);
         const next = this.openSegment(engine, opened, plan.imported, at, observed);
         // What was taken joins the evidence the journal serves, with the opening it supports.
         if (plan.evidence !== undefined) this.evidence.importBytes(plan.evidence).release();
@@ -1073,7 +1100,7 @@ export class V3OperatorJournal {
       }
       const receipt = this.transaction(() => {
         // The proof was verified between the reads; judge against the same view or not at all.
-        this.stable(engine, view);
+        this.stable(view);
         const signed = this.admit(engine, judged, replay);
         this.append(engine, `statement:${hash}`, hash, { kind: "admit", horizon: horizon.toString() }, bytesToHex(signed));
         return signed;
@@ -1091,9 +1118,9 @@ export class V3OperatorJournal {
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
       const view = this.view(engine);
       await this.ready(engine, view, "commit");
-      const sequence = this.nextSequence(engine), observed = hexOf(view.held.at(-1)?.commitment);
+      const sequence = this.nextSequence(engine), observed = hexOf(view.latest?.commitment);
       const signed = this.transaction(() => {
-        this.stable(engine, view);
+        this.stable(view);
         const next = this.sign(engine.opened!, engine.state!, sequence, view.now, observed);
         this.append(engine, commandId, "commit", { kind: "commit", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(next.commitment)));
         return next;
@@ -1108,7 +1135,7 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const last = engine.last;
       requireThat(last !== undefined, "STALE", "no signed commitment to publish");
-      const held = this.isHeld(this.view(engine), last);
+      const held = this.isHeld(this.view(engine).now, last);
       this.transaction(() => {}); // Fence again before the venue call.
       if (!held) {
         try { await this.venue.publishRecord(1, this.operator, encodeCommitment(last.commitment)); } catch (error) {
@@ -1182,7 +1209,7 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const view = this.view(engine);
       let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
-      for (const held of [...view.held].reverse()) {
+      for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
         if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
         if (this.ownHeld(held) === undefined) continue;
         selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);
@@ -1219,7 +1246,8 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const opened = engine.opened, state = engine.state;
       if (opened === undefined || state === undefined) return;
-      const now = this.clock();
+      const view = this.view(engine), now = view.now;
+      this.auditAnswers(opened, view);
       for (const { backing } of opened.entries) {
         const fresh = new ReplayStore();
         try {
@@ -1261,6 +1289,24 @@ export class V3OperatorJournal {
           (!here || (receipt.scopeRoot === opened.scope && receiptMatchesEvent(receipt, event))), "STORAGE", "a stored receipt does not authenticate its record");
       }
     });
+  }
+
+  /** The kept venue answers against the venue itself, read again from its first index into a store of its
+   * own: the same view, and the same held commitments of this key at the same indices. */
+  private auditAnswers(opened: Opened, view: View): void {
+    const fresh = new ReplayStore(), failed = "the kept venue answers are not the venue's";
+    try {
+      let conflict = false;
+      const again = this.observe(opened, view.now, fresh, () => { conflict = true; }, () => conflict);
+      const text = (v: View): string => JSON.stringify([v.conflict, v.boundaries.map(String),
+        [...v.revocations].map(([name, at]) => [name, at?.toString() ?? null])]);
+      requireThat(text(again) === text(view), "STORAGE", failed);
+      const next = (store: ReplayStore, after?: HeldCommitment): HeldCommitment | undefined =>
+        store.nextHeld(this.operator, 0n, after?.commitment.sequence, view.now);
+      for (let kept = next(this.replays), read = next(fresh); kept !== undefined || read !== undefined; kept = next(this.replays, kept), read = next(fresh, read)) {
+        requireThat(kept !== undefined && read !== undefined && kept.index === read.index && hexOf(kept.commitment) === hexOf(read.commitment), "STORAGE", failed);
+      }
+    } finally { fresh.close(); }
   }
 
   close(): void {

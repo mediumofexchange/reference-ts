@@ -228,8 +228,8 @@ real proofs for A→B→A, inherited spending, imported double-spend refusal and
 revoked issuance. Pending/cancelled handovers refuse; a fresh seedless process
 reads only public evidence. Fully evidenced hostile checkpoints are excluded,
 while missing ancestry remains unresolved. Focused tests additionally exercise
-empty-book takeover, a nonempty force block, same-index evidence changes and
-authority ending during adoption. The real-proof drill's adoption block is empty;
+empty-book takeover, a nonempty force block, a record witnessed during
+verification and authority ending during adoption. The real-proof drill's adoption block is empty;
 the recovery drill above supplies real-proof force/adoption evidence.
 The [local](pool-v3-succession-store-verification.json) and
 [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) reports own the

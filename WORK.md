@@ -12,12 +12,17 @@ measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the dec
 
 M5b.5 runs as three milestones ([split](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)); 5a is delivered.
 
-**Next: M5b.5b, the journal's venue reads and incremental serving.** (1) `store.ts` `view`/`ask` read whole §13 answers
-and verify every held commitment twice per command (about 5 ms per checkpoint; 4,096 bound its life): keep them by
-windows, as the reader does. (2) Serve incrementally and streamed: new objects plus a trail head and the records after the
+M5b.5b runs as two milestones. **Open: M5b.5b.1, the journal's venue view by kept windows** (branch
+`feat/m5b5b-journal-venue-windows`). `store.ts` `view`/`ask` read whole §13 answers and verify every held commitment
+twice per command (about 5 ms per checkpoint; 4,096 bound its life). The journal keeps each answer through the index it
+read and extends it by windows, with the reader's own window code. *Acceptance:* a journal signs, publishes and serves
+past 4,096 checkpoints; a command asks the venue only past the kept index and verifies each held commitment once; the
+audit compares the kept answers with the venue; time per command flat in the probe. *Evidence limit:* stand-in proofs;
+a journal under a silence or non-service clause still judges every checkpoint at each admission (Next 5(k)). *Stop:* serving.
+**Then M5b.5b.2, incremental and streamed serving:** new objects plus a trail head and the records after the
 reader's checkpoint (`EvidenceStore.importTrail`); lift the 1 MiB caps in `service-wire.ts`/`service-http.ts`/
-`service-client.ts`; `assemble` holds the package whole, and a taking `rescope` copies it in memory. *Acceptance:* a journal past 4,096 checkpoints at flat cost per
-command; a second sync over HTTP fetches only new bytes; memory flat while serving. *Stop:* the wallet.
+`service-client.ts`; `assemble` holds the package whole, and a taking `rescope` copies it in memory. *Acceptance:* a
+second sync over HTTP fetches only new bytes; memory flat while serving. *Stop:* the wallet.
 **Then M5b.5c, the wallet:** sync from a kept replay file and retained evidence, a scan cursor and kept witnesses (kept
 stores refuse witnesses today). *Acceptance (closes M5b.5):* real proofs past the old 67-statement ceiling through the
 journal, wallet sync and offline-operator recovery.
