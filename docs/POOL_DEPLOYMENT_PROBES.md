@@ -1090,6 +1090,50 @@ M = 100 and 14,656-byte stand-in proofs (15.6 KB per statement):
   each of them at every record; that cost was not measured here
   (WORK.md Next 5(n)).
 
+### Real proofs past the old package (M5b.5c.2)
+
+`npm run check:pool:v3-history` (`scripts/pool/v3/history-store-check.mjs`)
+closes M5b.5's acceptance with real proofs on the local reference venue
+([M5b.5c.2](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+One package in a reader's memory held one megabyte, about 67 statements. Here
+the journal admits 73: an issue to a holder, 36 to a payer wallet, and 36
+payments the wallet proves from its kept witnesses, in rounds of twelve per
+checkpoint. The operator then falls silent with a 74th statement admitted and
+uncommitted. With the service down, a holder reads its own kept files, proves
+two demands and a settlement from its kept witness (the history's first
+output) and publishes them. The operator returns and adopts that block
+exactly; the wallet proves its lapsed payment again in the returned segment
+and pays once more. A fresh seedless process, holding only its own evidence
+and replay files, reads at each stage.
+
+The [retained report](pool-v3-history-store-verification.json) is the CI run
+(Linux, Node 24) of 2026-09-30 at `7214e4b`, 3.8 minutes:
+
+| Step | Result |
+|---|---|
+| Proofs made | 79, each 14,656 bytes: 37 issues at 1.0 s, 39 spends at 3.1 s, 2 demands and a settlement at 2.6 s |
+| Payer, first sync and read (37 statements) | 566 KB fetched, 37 proofs checked, 1.6 s |
+| Payer, each later round (12 statements) | 189 KB fetched, 12 proofs checked, 0.75 s; preparing a payment checks its own proof only and asks the venue nothing |
+| Payer after a restart, nothing new | 809 bytes fetched, no proof checked, no venue request, 0.16 s |
+| Fresh seedless process, first sync (73 statements) | 1.13 MB fetched, 73 proofs checked, read 3.0 s (41 ms per statement), process peak 449 MB |
+| The same process's files, service down, after the force | nothing fetched, 3 proofs checked, read 0.4 s |
+| Payer after the return | 48 KB fetched, no proof checked (it read the force at its original indices) |
+| The same process's files after the return | 80 KB fetched, 2 proofs checked; equal to a new process from nothing (1.21 MB, 78 proofs) |
+| Wallet restored from the seed, first sync | 78 proofs checked, 3.7 s; the payer's holdings exactly |
+| Reopened journal's audit | 3.0 s |
+| The acceptance process (prover, journal, service, both wallets) | peak 640 MB |
+
+- *What the circuits check:* every payment's membership path is the wallet's
+  kept witness, in the genesis segment and, after the return, under the
+  returned segment's imports; the holder's is a kept witness moved through
+  every later output. A wrong path fails its proof.
+- *Limits:* tens of statements, one backing and the local reference venue.
+  The target scale has the stand-in-proof measurements above only. The reader
+  process's peak is one verifier backend's; the budget of the whole process
+  with its verification workers is M5b.6's. On this desktop two local runs
+  were stopped under host memory pressure while the process stayed under
+  350 MB; the acceptance was taken from CI.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing
