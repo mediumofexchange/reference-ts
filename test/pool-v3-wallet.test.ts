@@ -56,7 +56,8 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
       silence: { noCommitmentDuration: 4n, challengeWindow: 5n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    const reader: PackageReader = { configuration, venue, reference, verifier: options.readerVerifier ?? verifier };
+    // The wallet's verifier declares the configuration's circuits, so its reads keep their state in a file (§14).
+    const reader: PackageReader = { configuration, venue, reference, verifier: { ...(options.readerVerifier ?? verifier), identities: configuration.circuits } };
     const path = join(directory, "receiver.db");
     const reopen = (selected = reader) => { const wallet = new V3Wallet(path, selected); wallets.push(wallet); return wallet; };
     const wallet = reopen(), request = wallet.request("invoice", backing, 7n);
@@ -132,12 +133,13 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     expect(f.wallet.fulfillment("invoice")).toBeUndefined();
     const fulfilled = await f.wallet.fulfill("invoice", f.served.package, f.signed);
     expect(fulfilled.request).toEqual(f.request); expect(fulfilled.checkpoint).toEqual(f.checkpoint);
-    expect(fulfilled.judgingIndex).toBe(f.venue.witnessedIndex()); expect(fulfilled.package).toEqual(f.served.package);
+    expect(fulfilled.judgingIndex).toBe(f.venue.witnessedIndex()); expect(fulfilled.terms).toEqual(f.signed);
+    expect(Object.keys(fulfilled).sort()).toEqual(["checkpoint", "judgingIndex", "request", "terms"]);
     f.wallet.close(); const next = f.reopen();
     expect(next.fulfillment("invoice")).toEqual(fulfilled);
     await expect(next.fulfill("invoice", f.served.package, f.signed)).rejects.toMatchObject({ code: "CONFLICT" });
-    fulfilled.package.fill(0); fulfilled.terms.terms.fill(0); fulfilled.checkpoint.root.fill(0); fulfilled.request.capsule.fill(0);
-    expect(next.fulfillment("invoice")!.package).toEqual(f.served.package);
+    fulfilled.terms.terms.fill(0); fulfilled.checkpoint.root.fill(0); fulfilled.request.capsule.fill(0);
+    expect(next.fulfillment("invoice")!.terms).toEqual(f.signed);
     next.request("second-invoice", f.backing, 7n);
     await expect(next.fulfill("second-invoice", f.served.package, f.signed)).rejects.toMatchObject({ code: "ABSENT" });
   });
@@ -181,20 +183,26 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     const pending = f.wallet.fulfill("invoice", bytes, signed);
     bytes.fill(0); signed.terms.fill(0); signed.signature.fill(0);
     const fulfilled = await pending;
-    expect(fulfilled.package).toEqual(f.served.package); expect(fulfilled.terms).toEqual(f.signed);
+    expect(fulfilled.request).toEqual(f.request); expect(fulfilled.terms).toEqual(f.signed);
   });
 
-  it.each([false, true])("refuses venue drift during proof callbacks, including same-index changes (%s)", async sameIndex => {
+  it("refuses a venue whose clock moved during proof callbacks, and asks no range twice", async () => {
     let mutate = () => {};
     const f = await fixture({ readerVerifier: { verify: (...args) => { mutate(); return verifier.verify(...args); } } });
+    // A record witnessed while a read verifies moves the venue's clock (§13.1: an answer through a witnessed index is final).
     let changed = false;
     mutate = () => {
       if (changed) return; changed = true;
-      if (!sameIndex) f.venue.advance(f.venue.witnessedIndex() + 1n);
-      else f.venue.witness(1, operator, f.venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 99n, b(90))));
+      f.venue.advance(f.venue.witnessedIndex() + 1n);
+      f.venue.witness(1, operator, f.venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 99n, b(90))));
     };
     await expect(f.wallet.fulfill("invoice", f.served.package, f.signed)).rejects.toMatchObject({ code: "CHANGED_VIEW" });
     expect(f.wallet.fulfillment("invoice")).toBeUndefined();
+    // The view is held by the clock alone: a read that stands asks each range once.
+    const asked: string[] = [], range = f.venue.range.bind(f.venue);
+    f.venue.range = (request, limits) => { asked.push(`${request.kind}:${Buffer.from(request.subject).toString("hex")}:${request.fromIndex}:${request.toIndex}`); return range(request, limits); };
+    await expect(f.wallet.fulfill("invoice", f.served.package, f.signed)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(asked.length).toBeGreaterThan(0); expect(new Set(asked).size).toBe(asked.length);
   });
 
   it("fences an old handle and an in-flight fulfillment after reopening", async () => {

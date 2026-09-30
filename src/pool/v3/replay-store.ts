@@ -724,9 +724,12 @@ export class ReplayStore {
     for (const row of this.#q.nullifiers!.iterate({ ns, p })) yield field((row as { nf: unknown }).nf);
   }
 
-  /** The path of a witnessed output at `ns`'s tip, which must be at `position`. */
+  /** The path of a witnessed output at `ns`'s tip, which must be at `position`. Witnesses are kept only at the
+   * tip: a kept file whose namespace an earlier read moved past `position` cannot answer, so it is discarded
+   * and the read replays (§14); within one read no path is read below a tip. */
   witness(ns: number, position: bigint, leaf: bigint): WitnessPath | undefined {
     const tip = this.tip(ns);
+    if (tip.position !== position && this.#kept !== undefined) throw new KeptStateMismatch("a kept witness is past the read position");
     if (tip.position !== position) throw new Error("the witnessed namespace has moved past the read position");
     const row = this.#q.witness!.get(ns, leaf) as { siblings: Uint8Array } | undefined;
     if (row === undefined) return undefined;

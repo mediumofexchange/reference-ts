@@ -1,6 +1,7 @@
 // Separate receiver/admin process. Operation results and packages arrive over
 // HTTP; the judging venue and signed terms are held independently of replies.
 import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -25,6 +26,11 @@ if (mode === 'prepare') {
   process.exit(0);
 }
 const client = new V3ServiceClient(baseUrl, WALLET, { domain, operator, reference }, ADMIN);
+// The receiver wallet's verifier declares its circuits, so its reads keep their state beside its database
+// across its processes, and counts what it is asked to verify.
+let verified = 0;
+const counting = { identities: configuration.circuits, verify: (...args) => { verified++; return verifier.verify(...args); } };
+const openWallet = () => new V3Wallet(walletPath, { configuration, venue: FixtureVenue.from(load(join(directory, 'venue.v8'))), reference, verifier: counting });
 const fixture = load(join(directory, 'public.v8'));
 assert.deepEqual(fixture.signed.terms, terms, 'terms are pinned separately from the service response');
 const encoded = commitment => bytesToHex(encodeCommitment(commitment));
@@ -64,22 +70,32 @@ if (mode === 'initial') {
   await client.submit(fixture.tail);
   const tail = await client.commit('tail'); assert.equal(tail.sequence, 3n);
   assert.deepEqual(await client.package(backing), complete, 'committed unpublished records/checkpoint are excluded');
-  const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
-  const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
+  // A wallet that holds nothing else refuses a package with its trails withheld or a snapshot altered. Each
+  // attempt starts from an empty evidence file: a wallet keeps what it is given, so later packages add to it.
+  const items = decodeEvidencePackage(complete.package);
+  const withheld = encodeEvidencePackage(items.filter(item => item.kind !== 6));
+  const tampered = encodeEvidencePackage(items.map(item => {
+    if (item.kind !== 4) return item;
+    const payload = item.payload.slice(); payload[payload.length - 1] ^= 1; return { kind: item.kind, payload };
+  }).sort((a, b) => a.kind - b.kind || Buffer.compare(sha256(a.payload), sha256(b.payload))));
+  for (const hostile of [withheld, tampered]) {
+    const wallet = openWallet();
+    try {
+      await assert.rejects(wallet.fulfill('invoice', hostile, fixture.signed), { status: 'unresolved-evidence' });
+      assert.equal(wallet.fulfillment('invoice'), undefined, 'refused evidence cannot credit the invoice');
+    } finally { wallet.close(); }
+    rmSync(`${walletPath}.evidence`);
+  }
+  // The wallet syncs its own evidence file from the service, then reads with the read's own package alone.
+  const wallet = openWallet();
   try {
-    const items = decodeEvidencePackage(complete.package);
-    const withheld = encodeEvidencePackage(items.filter(item => item.kind !== 6));
-    await assert.rejects(wallet.fulfill('invoice', withheld, fixture.signed), { status: 'unresolved-evidence' });
-    const tampered = items.map(item => {
-      if (item.kind !== 4) return item;
-      const payload = item.payload.slice(); payload[payload.length - 1] ^= 1; return { kind: item.kind, payload };
-    }).sort((a, b) => a.kind - b.kind || Buffer.compare(sha256(a.payload), sha256(b.payload)));
-    await assert.rejects(wallet.fulfill('invoice', encodeEvidencePackage(tampered), fixture.signed),
-      { status: 'unresolved-evidence' });
-    assert.equal(wallet.fulfillment('invoice'), undefined, 'refused evidence cannot credit the invoice');
-    const fulfilled = await wallet.fulfill('invoice', complete.package, fixture.signed);
+    verified = 0;
+    const served = await wallet.supply(evidence => client.sync(backing, evidence));
+    assert.deepEqual(decodeEvidencePackage(served.package).map(item => item.kind), [1, 2]);
+    const fulfilled = await wallet.fulfill('invoice', served.package, fixture.signed);
     assert.deepEqual(fulfilled.request, load(join(directory, 'request.v8')));
     assert.deepEqual(fulfilled.checkpoint, checkpoint);
+    assert.equal(verified, 2, 'a first read verifies both records');
     save(join(directory, 'fulfilled.v8'), fulfilled);
   } finally { wallet.close(); }
   save(join(directory, 'published.v8'), complete);
@@ -97,9 +113,17 @@ if (mode === 'initial') {
   assert.equal(encoded(await client.publish()), encoded(tail));
   assert.equal((await client.package(backing)).selection.sequence, 3n);
   await synced({ before: mode === 'resumed' ? 2n : 3n, sequence: 3n }, 3n);
-  const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
-  const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
-  try { assert.deepEqual(wallet.fulfillment('invoice'), load(join(directory, 'fulfilled.v8'))); } finally { wallet.close(); }
+  // A later process of the wallet fetches and verifies only what its files do not hold: the tail record
+  // once, then nothing.
+  const wallet = openWallet();
+  try {
+    assert.deepEqual(wallet.fulfillment('invoice'), load(join(directory, 'fulfilled.v8')));
+    const served = await wallet.supply(evidence => client.sync(backing, evidence));
+    const view = await wallet.sync(served.package, fixture.signed);
+    assert.equal(encoded(view.checkpoint), encoded(tail));
+    assert.deepEqual(view.holdings.map(h => [h.value, h.status]), [[7n, 'available']]);
+    assert.equal(verified, mode === 'resumed' ? 1 : 0);
+  } finally { wallet.close(); }
   result = { receipt: first, commit: encoded(commit), tail: encoded(tail) };
 } else throw new Error('invalid acceptance client mode');
 console.log(JSON.stringify({ ...result, pid: process.pid }));

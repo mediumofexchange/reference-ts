@@ -4,7 +4,7 @@
 [pool-delivery C4.1–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-delivery.md)
 and pays under [pool-fees C1.2.3–5](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
 It uses the candidate configuration and recomputed reference venue guard. It is
-not exported from the root barrel. Node 24 is required for the SQLite journal.
+not exported from the root barrel. Node 24 is required for its SQLite storage.
 
 The caller opens `V3Wallet(path, readerOptions)` with its independently
 held configuration, proof verifier, venue and reference identity preimage. The
@@ -69,7 +69,41 @@ bodies, redirects, acknowledgments, deadlines) and the delivery envelope have no
 v3 counterpart, because v3 has no receiver endpoint, credential or private
 delivery. Restoration of wallet state belongs to encrypted backup.
 
-`fulfill(alias, packageBytes, signedRootTerms)` reads the complete canonical
+## Evidence and kept state
+
+Every read (`fulfill`, `sync`, `prepare`, `reprove`) is the reader's frontier
+read ([package reader](../src/pool/v3/package-reader.ts)) over the wallet's own
+files, so it costs what is new, not the history
+([M5b.5c](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
+
+- `<path>.evidence` is the wallet's copy of the public evidence (pool-v3 §14).
+  `supply(transport)` runs the caller's transport into it, for example
+  `evidence => client.sync(backing, evidence)` ([service](POOL_V3_SERVICE.md)),
+  which fetches only what came after the sequence the file was served through.
+  The package a read is then given carries only that read's own items: the
+  configuration and, where a read needs them, fault evidence. A whole package
+  from any source works the same way; the wallet keeps what it carries. What
+  the file holds is authenticated when a read uses it and selects nothing.
+- `<path>.replay`, with its digest `<path>.replay.sha256`, keeps the classes,
+  replay state and venue answers of the wallet's reads, and an incremental
+  witness for each positive output of this seed. A later read verifies and
+  scans only records it has not replayed, asks the venue only for indices past
+  the last read's, and takes its notes' paths from the kept witnesses. It is
+  kept where the verifier declares its circuits, which name kept state;
+  otherwise each read replays in memory.
+
+Neither file holds a secret or is part of a backup. Losing one, or damage to
+it, costs a first sync or a full read and nothing else: a kept file that fails
+its digest, a kept class that fails a check and a witness past the venue view
+being read are discarded and replayed, and evidence that no longer hashes reads
+as absent. A read left `unresolved-evidence` over what the file holds is
+answered by supplying again in full (`{ full: true }`). The replay file shows
+which outputs are this seed's, so it needs the database's protection. Reads and
+supplies of one wallet take turns. The holder remains responsible for retaining
+the public evidence (C2.10.13): the evidence file is that retention only as
+long as it is kept.
+
+`fulfill(alias, package, signedRootTerms)` reads the complete canonical
 frontier of the terms' backing, in any scope (C2.10.3–7), through the venue's current witnessed index. It accepts
 only the saved exact positive output and capsule in verified finalized history,
 with no current nullifier spend or standing demand lock. Valid force publications
@@ -77,18 +111,21 @@ after the canonical adoption index contribute their spend/lock effects. A receip
 alone cannot fulfill. Missing ranges, withheld ancestry, wrong terms, invalid
 proofs, changed capsules and spent/locked notes cannot create a fulfillment.
 
-Proof verification is asynchronous. The wallet owns its input bytes, records the
-independent venue answers used by replay, then synchronously rechecks every answer
-and the venue identity, lag and index before writing. This catches same-index
-changes as well as index advancement. It reuses the existing reader and performs
-no second proof verification. The recheck costs another read of each used range;
-the transcript consumes memory within the reader's existing bounded workload.
+Proof verification is asynchronous. The wallet owns its input bytes and holds
+the venue's view at the witnessed index it read. Before every write or proof it
+checks synchronously that the venue's identity, lag and witnessed index are
+still those (`CHANGED_VIEW` otherwise). An answer through a witnessed index is
+final (pool-v3 §13.1–13.2), so a clock that has not moved means every answer
+the read used still stands, and no range is asked twice. A record a local
+venue's owner witnesses at an index already read is outside that rule and is
+not seen, as for the journal.
 
-The accepted package, signed terms, canonical checkpoint and judging index are
-saved with the fulfillment in one WAL/FULL transaction before acknowledgment.
-The caller must also arrange independent retention of the complete public evidence
-and authenticated venue evidence. A saved package does not prove permanent
-availability, and stored range answers are not a substitute for venue authority.
+The signed terms, canonical checkpoint and judging index are saved with the
+fulfillment in one WAL/FULL transaction before acknowledgment. The evidence it
+was read from is what the evidence file retains; the caller must also arrange
+independent retention of the complete public evidence and authenticated venue
+evidence. A kept copy does not prove permanent availability, and kept range
+answers are not a substitute for venue authority.
 An uncertain write poisons the handle; reopening reads the committed state.
 
 `fulfillment(alias)` retrieves the original historical result after a lost reply.
@@ -100,9 +137,10 @@ spendability. Local aliases and accounting acknowledgments need their own backup
 ## Paying
 
 Holdings are never a local ledger. `sync(package, signedTerms)` and `prepare`
-read the same complete canonical frontier as `fulfill` and scan every output of
-that backing's history with the seed (C4.6–7, `holdings.ts`): one AEAD trial per
-capsule and one owner derivation per lit settlement. Zero, spent and
+read the same complete canonical frontier as `fulfill`. The seed scans each output of
+that backing's history once, as its record is replayed (C4.6–7, `holdings.ts`): one AEAD trial per
+capsule and one owner derivation per lit settlement; a later read scans only
+new records and reads this seed's notes from their kept witnesses. Zero, spent and
 force-spent notes are not holdings; notes under a standing demand are `locked`,
 and inputs of a saved payment are `reserved`. The view covers one backing at
 one witnessed index; it is not a global balance, and restoring from the seed
@@ -125,8 +163,8 @@ request already in a saved payment or already in canonical outputs, then
 selects the smallest single covering note or the least-total pair. A single
 input is padded with a fresh zero note. The wallet adds its own change and
 zero outputs under fresh request identifiers, shuffles the four positions and
-builds the spend in the canonical segment, whose header it takes from the
-package trail matching that segment's identity. The caller's `prove` runs
+builds the spend in the canonical segment, whose header is the one the read
+authenticated for the canonical checkpoint. The caller's `prove` runs
 locally and receives spend secrets. The wallet requires the returned record to
 be exactly the task and to verify under its own verifier, then saves it with
 unique input-nullifier and output-commitment reservations, every output opening
@@ -140,9 +178,11 @@ backing declares silence, a boundary is witnessed or the witnessing horizon
 (index plus lag since the canonical checkpoint) exceeds the clock's duration
 (`SILENCE`), the journal's own admission rule. A published handover not yet
 effective is not predicted; such a payment is resolved by reproof. The venue
-answers behind these decisions are rechecked before proving, so a venue that
+view behind these decisions is checked before proving, so a venue that
 advances during the read refuses `CHANGED_VIEW` with nothing reserved; callers
-on a live venue retry.
+on a live venue retry. Two orders that each read the same note free both prove;
+the second to save refuses `CONFLICT`, and an order read after that save finds
+the note reserved.
 
 A direct fee is the fee recipient's own exact request (pool-fees C1.2.4). That
 recipient learns the backing, its fee output and its association with the
@@ -169,8 +209,8 @@ already final or failed without proving. While the record names the canonical
 segment it returns the payment unchanged if that segment can admit it, and
 otherwise refuses with the admission code (`CONFLICT` for an ended term with
 no successor yet, `SILENCE` for a clock that closes admission), so a stuck
-payment is distinguishable from a live one. Otherwise, after rechecking the
-venue answers, it rebuilds the saved statement in the canonical segment: the same input nullifiers (the reserved notes, found again by the seed
+payment is distinguishable from a live one. Otherwise, after checking the
+venue view, it rebuilds the saved statement in the canonical segment: the same input nullifiers (the reserved notes, found again by the seed
 scan in imported history, and the saved zero input), the same outputs,
 capsules and order; only segment, scope and anchors change. Admission is
 checked as for preparation, an input missing from canonical history refuses
@@ -191,8 +231,9 @@ input stays reserved although it is unspent, so a copy that breaks the
 one-active-copy rule can strand it until the seed is restored into a new
 wallet. Release with other outputs (cancellation), same-segment tail repair
 (C2.10.9a) and release of never-admitted inputs are not implemented. Multi-backing payments and
-cross-backing fees are refused. The wallet profile is `moe/wallet/v3/2`; a
-first-profile payer database, which kept no output openings, is refused.
+cross-backing fees are refused. The wallet profile is `moe/wallet/v3/3`; a
+database of an earlier profile (no output openings, or a package saved with
+each fulfillment) is refused.
 
 ## Backup and restoration
 
@@ -212,7 +253,7 @@ alias. Losing labels therefore loses accounting, never money, and cannot credit
 anything twice.
 
 **Encrypted offline handoff** moves the complete local state to one new
-database: seed, aliases, unfulfilled requests, fulfillments with their evidence,
+database: seed, aliases, unfulfilled requests, fulfillments,
 payments with records, reservations, output openings, receipts and superseded
 records. `exportBackup(key)` takes a random 32-byte key (for example from
 `createWalletBackupKey()`). One transaction reads every state row, seals the
@@ -273,7 +314,13 @@ a submission already sent, so quiesce operations before exporting.
 `test/pool-v3-wallet.test.ts` ports receiver cases with oracle proofs, including
 four-output association, exact request retry, caller mutations, capsule
 substitution, later spentness, incomplete old packages, forced demand/settlement,
-same-index venue drift, owner fencing and competing fulfillment calls.
+a venue clock that moves during verification, owner fencing and competing fulfillment calls.
+`test/pool-v3-wallet-kept.test.ts` covers the kept files: a sync past the old
+one-megabyte package over HTTP, a second sync that fetches, verifies and asks
+the venue only for what is new, a seed-restored wallet's equal view, a restart,
+and the fallbacks for a damaged replay file, a venue view older than the kept
+witnesses and lost evidence. The wallet, payer and multi-backing suites run on
+the kept path; the backup suite runs without declared circuits, in memory.
 `test/pool-v3-payer.test.ts` ports the v2 payment cases: single/pair selection
 and three-note refusal, agreed terms, repeated or already paid requests, prover
 failure and substituted statements, concurrent retry, forged and lost receipts,

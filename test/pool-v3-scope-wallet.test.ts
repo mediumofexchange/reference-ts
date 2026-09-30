@@ -66,7 +66,8 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
       return { name: rootTermsName(terms), issuer, signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuer) } };
     };
     const x = backingOf("scope wallet x", issuerX), y = backingOf("scope wallet y", issuerY);
-    const reader = { configuration, venue, reference, verifier };
+    // The wallet's verifier declares the configuration's circuits, so its reads keep their state in a file (§14).
+    const reader = { configuration, venue, reference, verifier: { ...verifier, identities: configuration.circuits } };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
     const create = (secret: Uint8Array, name: string): Journal => {
       const j = new V3OperatorJournal(join(directory, `${name}.db`), { configuration, secret, venue, reference, verifier });

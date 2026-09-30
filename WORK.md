@@ -11,13 +11,15 @@ the old ceiling through journal, wallet sync and offline-operator recovery; firs
 measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision). M5b.5 runs as 5a, 5b.1, 5b.2
 (delivered) and 5c.
 
-**Next: M5b.5c, the wallet.** `V3Wallet` syncs from its own evidence file (`V3ServiceClient.sync`, then `readPackage`
-over the store with the read's own package) and a kept replay file, with a scan cursor and kept witnesses (kept stores
-refuse witnesses today); its view check still re-asks whole answers (`CHANGED_VIEW`). On an unresolved read it syncs
-again with `{ full: true }`; the `package()` collectors then stay only for checks. Open beside it: a taking `rescope`
-takes its evidence as bytes in memory; a successor's journal serves its readers the predecessor's trails again
-(reader-stated positions would spare them). *Acceptance (closes M5b.5):* real proofs past the old 67-statement
-ceiling through the journal, wallet sync and offline-operator recovery. *Stop:* M5b.6.
+**In progress: M5b.5c.1, the wallet on kept evidence** (branch `feat/m5b5c-wallet-kept-evidence`). *Goal:* a
+`V3Wallet` read costs what is new: its own evidence file (`supply` runs the caller's transport, `V3ServiceClient.sync`,
+into it; each read's package carries only its own items), a kept replay file with its notes' witnesses at the tips,
+and a view held stable by the venue's clock instead of re-asked answers. *Acceptance:* stand-in proofs past the
+67-statement ceiling through journal, HTTP sync and wallet; a second sync verifies and scans only the new records and
+equals a fresh wallet's view; damaged or unusable kept state falls back to a full read; existing wallet tests and
+checks pass on the kept path. *Stop:* M5b.5c.2, real proofs past the ceiling through the journal, wallet sync and
+offline-operator recovery (closes M5b.5), then M5b.6. Open beside it: a taking `rescope` takes its evidence as bytes
+in memory; a successor's journal serves its readers the predecessor's trails again.
 
 ## Status
 - M5b.5b.2 (PR #58): the journal serves by parts from rows (`serve`): objects signed after the sequence a reader was

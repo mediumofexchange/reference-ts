@@ -5,14 +5,15 @@
 // The scan runs inside the replay: its predicate marks this seed's outputs, the
 // replay keeps an incremental witness for each, and the notes are read back
 // from those witnessed outputs with their paths.
-import { compareBytes } from "../../bytes.js";
+import { hkdfSync } from "node:crypto";
+import { compareBytes, copyBytes } from "../../bytes.js";
 import { identifierOf } from "../field.js";
 import type { NotePath } from "../note-tree.js";
 import { commitmentOf, nullifierOf, ownerOf, type NoteOpening } from "../notes.js";
 import { createCapsuleScanner, deriveSettlementOwnerSecret } from "./capsules.js";
 import { settlementAuthorization } from "./records.js";
 import { requireReplay } from "./refusals.js";
-import type { ScanOutput, StateHandle } from "./state.js";
+import type { ScanOutput, StateHandle, WitnessPredicate } from "./state.js";
 import type { SpendableNote } from "./witness.js";
 
 /** A restored note, its leaf, its path to `anchor`, and whether its segment is the replayed one itself. */
@@ -43,15 +44,24 @@ export function seedScanner(seed: Uint8Array, domain: Uint8Array): (output: Scan
   };
 }
 
-/** The replay's witness predicate for this seed: every output it owns. It
+/** A local name only: it labels the kept replay state of one seed under one configuration and enters no protocol message. */
+const WITNESS_INFO = new TextEncoder().encode("moe/wallet/v3/kept-witness");
+
+/** The replay's witness predicate for this seed: every positive output it
+ * owns. A zero note is never a holding and spends without membership
+ * (pool-fees C1.2.3), so it needs no path and no witness is kept for it. It
  * never throws, so a seed's reading cannot change a checkpoint's verdict; an
  * output it cannot read (a settlement whose opening does not give its
- * commitment, which settle's proof rules out) is not witnessed or held. */
-export function seedWitness(seed: Uint8Array, domain: Uint8Array): (output: ScanOutput) => boolean {
+ * commitment, which settle's proof rules out) is not witnessed or held.
+ * The seed and domain fix which outputs it accepts, so it declares an identity
+ * derived from them one way (pool-v3 §14 kept context): a kept replay file is
+ * then reused only by the same seed, and holds nothing the seed is read from. */
+export function seedWitness(seed: Uint8Array, domain: Uint8Array): WitnessPredicate {
   const scan = seedScanner(seed, domain);
-  return output => {
-    try { return scan(output) !== undefined; } catch { return false; }
-  };
+  const identity = new Uint8Array(hkdfSync("sha256", copyBytes(seed), copyBytes(domain), WITNESS_INFO, 32));
+  return Object.assign((output: ScanOutput): boolean => {
+    try { const note = scan(output); return note !== undefined && note.opening.value > 0n; } catch { return false; }
+  }, { identity });
 }
 
 /** This seed's unspent positive notes of `backing` in a state replayed with

@@ -43,6 +43,8 @@ export interface ImportContext extends ReplayContext {
 }
 export interface CanonicalCheckpoint {
   readonly commitment: Commitment; readonly index: bigint; readonly segment: Uint8Array; readonly scope: bigint;
+  /** The segment's header as the read authenticated it: `segment` is its identity and `scope` its entries' root. */
+  readonly header: SegmentHeader;
   readonly state: ReplayResult;
 }
 export interface ForcedPublication { readonly index: bigint; readonly record: Record; readonly bytes: Uint8Array }
@@ -412,7 +414,7 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
 }
 
 const canonicalOf = (valid: ValidScope): CanonicalCheckpoint => ({ commitment: valid.commitment, index: valid.index, segment: valid.segment,
-  scope: new ScopeTree(valid.header.entries).root(), state: valid.state });
+  scope: new ScopeTree(valid.header.entries).root(), header: valid.header, state: valid.state });
 
 /** What a scope read needs besides a selected checkpoint or backing. */
 type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
@@ -421,12 +423,15 @@ type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
  * checkpoint is classified once, into the walk's rows; close() drops them. */
 function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvidence) {
   const { selection, store } = context, faults = context.faults ?? NO_FAULTS;
-  // A kept store keeps state across processes, so what names its context must be declared, not per object.
-  // Witnesses stay only at a namespace's tip, so a kept state below it has none; a wallet's kept witnesses are M5b.5's.
+  // A kept store keeps state across processes, so what names its context must be declared, not per object:
+  // the verifier's circuits and, where the read witnesses outputs, the predicate's identity. Witnesses stay
+  // only at a namespace's tip; a path read below it discards the kept state (replay-store.ts `witness`).
   if (store.kept && (context.verifier.identities === undefined || Object.keys(context.verifier.identities).length === 0)) {
     throw new TypeError("a kept store needs a verifier with circuit identities");
   }
-  if (store.kept && context.witness !== undefined) throw new TypeError("a kept store keeps no witnesses");
+  if (store.kept && context.witness !== undefined && !(context.witness.identity instanceof Uint8Array)) {
+    throw new TypeError("a kept store needs a witness predicate that declares its identity");
+  }
   // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
   const { trails } = evidence, walk = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
     verifier: context.verifier, witness: context.witness }));

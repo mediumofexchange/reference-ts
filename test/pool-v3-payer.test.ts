@@ -59,7 +59,8 @@ describe("v3 payer custody over restored holdings", () => {
       interval: 20n, payout: { thing: "payer units", quantumExponent: 0, perUnit: 1n }, ...clauses });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    const reader = { configuration, venue, reference, verifier: readerVerifier };
+    // The wallet's verifier declares the configuration's circuits, so its reads keep their state in a file (§14).
+    const reader = { configuration, venue, reference, verifier: { ...readerVerifier, identities: configuration.circuits } };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
     const payer = open("payer"), receiver = open("receiver");
     const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier, secret: operatorSecret });
@@ -216,11 +217,18 @@ describe("v3 payer custody over restored holdings", () => {
     const [first, second] = await Promise.all([f.payer.prepare("shop", f.order, f.served, f.signed, prove),
       f.payer.prepare("shop", f.order, f.served, f.signed, prove)]);
     expect(second).toEqual(first);
+    // Two orders that both read the one note free: each proves, and the second to save finds it reserved.
     const g = await fixture([10n]), other = g.receiver.request("other", g.backing, 2n);
-    const results = await Promise.allSettled([g.payer.prepare("one", g.order, g.served, g.signed, prove),
-      g.payer.prepare("two", { request: other, value: 2n }, g.served, g.signed, prove)]);
+    let proving = 0, both = () => {};
+    const together = new Promise<void>(resolve => { both = resolve; });
+    const gated: LocalProver = async task => { if (++proving === 2) both(); await together; return record(task); };
+    const results = await Promise.allSettled([g.payer.prepare("one", g.order, g.served, g.signed, gated),
+      g.payer.prepare("two", { request: other, value: 2n }, g.served, g.signed, gated)]);
     expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
-    expect(results.find(r => r.status === "rejected")).toMatchObject({ reason: { code: "CONFLICT" } });
+    expect(results.find(r => r.status === "rejected")).toMatchObject({ reason: { code: "CONFLICT", message: "an input is reserved by another payment" } });
+    // A third order, read after that save, finds no note free to select.
+    await expect(g.payer.prepare("three", { request: g.receiver.request("third", g.backing, 2n), value: 2n }, g.served, g.signed, prove))
+      .rejects.toMatchObject({ code: "FUNDS" });
   });
 
   it("keeps the first authenticated receipt and refuses one for another statement or operator", async () => {
@@ -272,20 +280,21 @@ describe("v3 payer custody over restored holdings", () => {
     await expect(f.j.submit(payment.record)).rejects.toMatchObject({ code: "REFUSED" });
   });
 
-  it("answers an exact retry with the saved record when the winner reserved the only note during its read", async () => {
-    let gate: Promise<void> | undefined, release = () => {}, entered = () => {};
-    const blocked = new Promise<void>(resolve => { entered = resolve; });
-    const f = await fixture([10n], { verify: async (...args) => {
-      const held = gate;
-      if (held !== undefined) { gate = undefined; entered(); await held; }
-      return verifier.verify(...args);
-    } });
-    gate = new Promise(resolve => { release = resolve; });
-    const late = f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+  it("answers an exact retry with the saved record when the winner reserved the only note meanwhile", async () => {
+    // A wallet's reads take turns, so the first call is overtaken while it proves, or while it waits its turn to read.
+    let release = () => {}, entered = () => {};
+    const blocked = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
+    const f = await fixture([10n]);
+    const late = f.payer.prepare("shop", f.order, f.served, f.signed, async task => { entered(); await gate; return record(task); });
     await blocked;
     const winner = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
     release();
     expect(await late).toEqual(winner);
+    // Waiting its turn behind another read: the saved record answers before any selection or proof.
+    const g = await fixture([10n]);
+    const first = g.payer.prepare("shop", g.order, g.served, g.signed, prove);
+    const queued = g.payer.prepare("shop", g.order, g.served, g.signed, async () => { throw new Error("a saved order is not proved again"); });
+    expect(await queued).toEqual(await first);
   });
 
   it("refuses the same alias with another order, including a concurrent one", async () => {

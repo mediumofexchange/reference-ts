@@ -53,6 +53,9 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
   let streams = 0;
   const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
     response.setHeader("content-type", "application/json"); response.setHeader("cache-control", "no-store");
+    // One exchange per connection. A caller's verification blocks its event loop between requests, so an idle
+    // connection this server has timed out meanwhile would be reused before the caller sees it closed.
+    response.setHeader("connection", "close");
     const send = (status: number, value: unknown, maximum = MAX_V3_SERVICE_REPLY_BYTES) => {
       const body = JSON.stringify(value);
       if (Buffer.byteLength(body) > maximum) throw new EncodingError("response too large");

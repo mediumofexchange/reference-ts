@@ -34,7 +34,7 @@ const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicIn
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);
 const TABLES = ["receiver_requests", "receiver_fulfilled", "payer_payments", "payer_inputs", "payer_outputs", "payer_superseded"];
-const COLUMNS = [5, 7, 15, 2, 5, 4];
+const COLUMNS = [5, 6, 15, 2, 5, 4];
 /** The specific refusal, not merely a throw. */
 function throws(action: () => unknown, shape: unknown): void {
   let thrown: unknown;
@@ -79,7 +79,7 @@ describe("v3 wallet backup envelope", () => {
   });
 
   it("decodes only the exact snapshot framing", () => {
-    const snapshot = { profile: "moe/wallet/v3/2", seed: b(3), tables: [[["a", new Uint8Array([1]), null]], []] };
+    const snapshot = { profile: "moe/wallet/v3/3", seed: b(3), tables: [[["a", new Uint8Array([1]), null]], []] };
     const bytes = encodeWalletSnapshot(snapshot);
     expect(decodeWalletSnapshot(bytes, [3, 2])).toEqual(snapshot);
     for (const bad of [bytes.subarray(0, bytes.length - 1), Uint8Array.from([...bytes, 0])]) {
@@ -131,6 +131,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
       interval: 20n, payout: { thing: "backup units", quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
+    // This verifier declares no circuits, so each read here keeps its replay state in memory, as a wallet's does without them.
     const reader = { configuration, venue, reference, verifier: readerVerifier };
     const path = (name: string) => join(directory, `${name}.db`);
     const open = (name: string) => track(new V3Wallet(path(name), reader));
@@ -260,9 +261,9 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     const refused = (pair: readonly [Uint8Array, string], message: RegExp) =>
       throws(attempt(f.reader, pair[0], key, pair[1]), expect.objectContaining({ code: "INVALID", message: expect.stringMatching(message) }));
     refused(sealed(new TextEncoder().encode("[[],[],[],[],[],[]]")), /invalid wallet snapshot/);
-    refused(variant(() => {}, "moe/wallet/v3/1"), /another profile/);
+    refused(variant(() => {}, "moe/wallet/v3/2"), /another profile/);
     refused(variant(t => { t[3]!.push(["1", "nobody"]); }), /does not fit|unmatched references/);
-    refused(variant(t => { t[1]!.push(["stranger", "123", b(1), "0", b(2), b(3), b(4)]); }), /unmatched references/);
+    refused(variant(t => { t[1]!.push(["stranger", "123", b(1), "0", b(3), b(4)]); }), /unmatched references/);
     refused(variant(t => { t[0]![0]![3] = new Uint8Array([1]) as never; }), /does not fit/);
     refused(variant(t => { t[2]![0]![9] = "cancelled"; }), /does not fit/);
     refused(variant(t => { t[0]!.push(t[0]![0]!); }), /does not fit/);
