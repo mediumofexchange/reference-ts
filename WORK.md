@@ -93,8 +93,7 @@ M5b.5):* real proofs past the old 67-statement ceiling through the journal, wall
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- Non-blocking: server timeout then eventual journal completion has source review only;
-  physical custody is a separate boundary.
+- Non-blocking: server timeout then eventual journal completion has source review only; physical custody is a separate boundary.
 
 Roughly **60% done / 40% remaining**, range **50–69%**, reassessed 2026-09-30 after M5b.5a, unchanged by M5b.5b.1 (the journal's
 storage is rows and its venue reads are kept; incremental serving, the wallet's kept sync, first sync, adoption, qualified storage, mainnet remain).
