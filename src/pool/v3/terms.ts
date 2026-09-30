@@ -159,18 +159,19 @@ export function rootTermsName(bytes: Uint8Array): Uint8Array {
   decodeRootTerms(snapshot);
   return sha256(snapshot);
 }
-export function rootTermsSignatureMessage(bytes: Uint8Array): Uint8Array {
+function signatureMessage(name: Uint8Array): Uint8Array {
   const w = new ByteWriter();
-  w.context(BACKING_SIGNATURE_CONTEXT); w.key32(rootTermsName(bytes), "backing name");
+  w.context(BACKING_SIGNATURE_CONTEXT); w.key32(name, "backing name");
   return w.finish();
 }
+export function rootTermsSignatureMessage(bytes: Uint8Array): Uint8Array { return signatureMessage(rootTermsName(bytes)); }
 /** A true result authenticates terms only; no current authority is inferred. */
 export function verifyRootTermsSignature(bytes: Uint8Array, signature: Uint8Array): boolean {
   try {
     const snapshot = own(bytes, MAX_ROOT_TERMS_BYTES, "root terms");
     const sig = own(signature, 64, "signature", true);
     const fields = decodeRootTerms(snapshot);
-    return verifySignatureStrict(sig, rootTermsSignatureMessage(snapshot), fields.obligor);
+    return verifySignatureStrict(sig, signatureMessage(sha256(snapshot)), fields.obligor);
   } catch (error) {
     if (error instanceof EncodingError) return false;
     throw error;

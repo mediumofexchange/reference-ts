@@ -79,6 +79,20 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     return { wallet, reopen, reader, path, request, backing, signed, venue, j, served, checkpoint, context, inputs };
   }
 
+  it("refuses, in the wallet and the journal, a verifier naming circuits other than the configuration's (§11.1)", () => {
+    mkdirSync(scratch, { recursive: true });
+    const directory = mkdtempSync(join(scratch, "v3-wallet-test-")); directories.push(directory);
+    const venue = FixtureVenue.reference(label, lag), own = configuration.circuits;
+    const other = { ...verifier, identities: { ...own, burn: own.spend, spend: own.burn } };
+    const refusal = new TypeError("the verifier's circuit identities are not the configuration's");
+    expect(() => new V3Wallet(join(directory, "wallet.db"), { configuration, venue, reference, verifier: other })).toThrow(refusal);
+    expect(() => new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier: other, secret: operatorSecret }))
+      .toThrow(refusal);
+    const named = { ...verifier, identities: own };
+    wallets.push(new V3Wallet(join(directory, "wallet.db"), { configuration, venue, reference, verifier: named }));
+    journals.push(new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier: named, secret: operatorSecret }));
+  });
+
   it("persists a random exact request before exposure and owns recovery material across restart", async () => {
     const f = await fixture(), seed = f.wallet.recoverySeed();
     expect(Object.keys(f.request).sort()).toEqual(["capsule", "cm", "domain", "opening"]);

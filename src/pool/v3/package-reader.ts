@@ -7,10 +7,10 @@ import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
+import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
-import { EvidenceStore, READ_KINDS, type EvidenceBatch } from "./evidence-store.js";
+import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
 import type { ReaderSelection, SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import { checkpointScope } from "./scope-evidence.js";
@@ -53,8 +53,9 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
   return { mode, sequence, judgingIndex, backing: fixed(backing), domain: fixed(domain), operator: fixed(operator), root: fixed(root), venue: fixed(venue) };
 }
 
-/** The caller's verifier bound once, with a copy of the circuit identities it declares, which name it in kept state (§14). */
-function ownVerifier(verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
+/** The caller's verifier bound once, with a copy of the circuit identities it declares, which must be the
+ * configuration's (§11.1) and name it in kept state (§14). */
+function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
   const declared = verifierIn.identities;
   if (declared === undefined) return { verify: verify.bind(verifierIn) };
   if (declared === null || typeof declared !== "object") throw new TypeError("invalid verifier identities");
@@ -66,6 +67,7 @@ function ownVerifier(verifierIn: ProofCheck, verify: ProofCheck["verify"]): Proo
     if (bytecode.length !== 32 || vk.length !== 32) throw new TypeError("invalid verifier identities");
     identities[name] = Object.freeze({ bytecode, vk });
   }
+  requireConfigurationVerifier(configuration, identities);
   return { verify: verify.bind(verifierIn), identities: Object.freeze(identities) };
 }
 
@@ -81,15 +83,9 @@ async function withEvidence<T>(source: PackageSource, options: PackageReader, re
   } finally { if (own) store.close(); }
 }
 
-/** The kinds a v3 reader reads, each of 1, 2 and 10 at most once. */
+/** Each of kinds 1, 2 and 10 at most once; the import refused kinds a v3 reader does not read. */
 function readKinds(batch: EvidenceBatch): void {
-  if (batch.kinds().some(kind => !READ_KINDS.includes(kind)) || [1, 2, 10].some(kind => batch.count(kind) > 1)) {
-    throw new EvidenceRefusal("unsupported-scope");
-  }
-}
-/** Directories are found by root in the batch; one that does not decode makes the package malformed. */
-function directoriesOf(batch: EvidenceBatch): void {
-  if (batch.malformedDirectory()) throw new EncodingError("malformed directory");
+  if ([1, 2, 10].some(kind => batch.count(kind) > 1)) throw new EvidenceRefusal("unsupported-scope");
 }
 
 /** Returns a complete reference verdict/state or throws a named evidence/replay
@@ -123,7 +119,7 @@ function ownPackageRead(selected: ReaderSelection, options: PackageReader) {
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(verifierIn, verify);
+  const verifier = ownVerifier(configuration, verifierIn, verify);
   const reference = structuredClone(referenceIn), expectedVenue = requireReferenceVenue(reference, venue);
   const selection = ownSelection(selected);
   requireReplay(same(selection.venue, expectedVenue), "VENUE_REFERENCE");
@@ -142,7 +138,6 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   if (!same(commitment.operator, selection.operator) || commitment.sequence !== selection.sequence || !same(commitment.root, selection.root)) {
     throw new EvidenceRefusal("selection-mismatch");
   }
-  directoriesOf(batch);
   const entry = batch.directory(commitment.root)?.find(value => same(value.name, selection.backing));
   if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const snapshotBytes = batch.snapshot(entry.digest);
@@ -180,7 +175,7 @@ function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: Pac
   const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(verifierIn, verify);
+  const verifier = ownVerifier(configuration, verifierIn, verify);
   const reference = structuredClone(referenceIn);
   if (!isValue(judgingIndex)) throw new EncodingError("invalid judging index");
   const termsBytes = copyUnshared(signed.terms), signature = copyUnshared(signed.signature);
@@ -195,7 +190,6 @@ function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontier
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
   if (batch.count(1) !== 0) requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
-  directoriesOf(batch);
   // Invoke the external adapter only after every caller-owned input is copied.
   const venueId = requireReferenceVenue(reference, venue);
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");

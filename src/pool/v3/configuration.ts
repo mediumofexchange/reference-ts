@@ -56,6 +56,27 @@ export function configurationHash(value: CandidateConfiguration): Uint8Array {
   return sha256(configurationBytes(value));
 }
 
+/**
+ * §11.1: a verifier that names its circuits must name exactly this configuration's six relations, each by its
+ * bytecode and key identity, relations a trail never uses included; otherwise every proof would be judged under
+ * another key. A caller's setup error, so a TypeError, never an evidence verdict. A verifier that names none
+ * (a test double) has nothing to compare, and a kept store refuses it.
+ */
+export function requireConfigurationVerifier(configuration: CandidateConfiguration,
+  identities: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array } } | undefined): void {
+  if (identities === undefined) return;
+  const refuse = (): never => { throw new TypeError("the verifier's circuit identities are not the configuration's"); };
+  if (identities === null || typeof identities !== "object" || Object.keys(identities).length !== RELATIONS.length) refuse();
+  for (const name of RELATIONS) {
+    const own: unknown = identities[name], expected = configuration.circuits[name];
+    if (own === null || typeof own !== "object") refuse();
+    const { bytecode, vk } = own as { readonly bytecode: unknown; readonly vk: unknown };
+    let copies: [Uint8Array, Uint8Array];
+    try { copies = [copyUnshared(bytecode as Uint8Array), copyUnshared(vk as Uint8Array)]; } catch { return refuse(); }
+    if (compareBytes(copies[0], expected.bytecode) !== 0 || compareBytes(copies[1], expected.vk) !== 0) refuse();
+  }
+}
+
 /** Expected identities are independently held, never decoded from a package.
  * This checks framing/identity only; it cannot approve a configuration. */
 export function verifyConfiguration(input: Uint8Array, expected: CandidateConfiguration): boolean {

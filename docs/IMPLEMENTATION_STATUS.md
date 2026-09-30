@@ -285,7 +285,9 @@ directory-root preimage. A reader first copies the package into its own
 evidence storage (`src/pool/v3/evidence-store.ts`, node:sqlite in memory or a
 file) and reads only the copy: whole items under a 1 MiB per-object budget,
 and trails by record, each record kept once under its evidence chain value, so
-replay reads one record at a time
+replay reads one record at a time. A kind the reader does not read refuses the
+import at its header; every item's row counts against the party's quota; a
+directory that does not decode is found by no root rather than refusing the read
 ([decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
 Fresh local replay uses a package with exactly one configuration and signed commitment; the
 selection's snapshot is the one its directory names and its trail the one
@@ -434,7 +436,9 @@ are Ignition's ([probe](POOL_DEPLOYMENT_PROBES.md#proving-parameters)). Every
 backend instance starts through `startBackend` (`src/pool/proof-verifier.ts`),
 which loads only the leading 2^15 G1 points and `[x]_2` whose hashes are
 `BN254_PARAMETERS`; the verifier and prover refuse any other instance, and the
-suite records the hashes it loaded. V3 remains
+suite records the hashes it loaded. Readers, the journal and the wallet refuse
+a verifier that names circuits other than the configuration's six (§11.1).
+V3 remains
 an incomplete construction: no approved configuration hash or artifact pins,
 backing adoption or deployment support is defined; the runtime candidate
 remains guarded to reference venues.

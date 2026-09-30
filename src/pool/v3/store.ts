@@ -30,7 +30,7 @@ import { identifierOf } from "../field.js";
 import { scopeSchedule } from "../schedule.js";
 import { ScopeTree } from "../scope.js";
 import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapshot } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration, type CandidateConfiguration } from "./configuration.js";
+import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem, type PackageLimits } from "./package.js";
@@ -237,6 +237,7 @@ export class V3OperatorJournal {
     this.venueId = requireReferenceVenue(reference, venue);
     this.reference = structuredClone(reference);
     this.configuration = decodeConfiguration(configurationBytes(configuration)); this.domain = configurationHash(this.configuration);
+    requireConfigurationVerifier(this.configuration, verifier.identities);
     this.venue = venue; this.lag = venue.lag(); this.verifier = verifier;
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
     this.observedIndex = 0n;
