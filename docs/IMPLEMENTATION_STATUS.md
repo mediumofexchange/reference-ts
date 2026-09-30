@@ -284,11 +284,18 @@ one frame reader for memory and streams, and the existing MOED
 directory-root preimage. A reader first copies the package into its own
 evidence storage (`src/pool/v3/evidence-store.ts`, node:sqlite in memory or a
 file) and reads only the copy: whole items under a 1 MiB per-object budget,
-and trails by record, each record kept once under its evidence chain value, so
-replay reads one record at a time. A kind the reader does not read refuses the
-import at its header; every item's row counts against the party's quota; a
-directory that does not decode is found by no root rather than refusing the read
-([decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+and trails by record, each record kept once under its evidence chain value
+with the value before it, so replay reads one record at a time. A party's file
+retains directories, snapshots and trails across reads, each checked by its
+hash or chain step on use, so a later package carries only new objects and a
+later trail is assembled from its head and the records after the reader's
+checkpoint ([§14](https://github.com/mediumofexchange/money-from-first-principles/blob/8d48b25/pool-v3.md#14-replay-retention-and-resource-bounds));
+the configuration, selected commitment, faults and receipt stay one read's own.
+A kind the reader does not read refuses the import at its header; every item's
+row counts against the party's quota; a directory that does not decode is
+found by no root rather than refusing the read. The §13 answers a read asks
+are kept in its replay store and extended by windows past the index they are
+kept through ([decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
 Fresh local replay uses a package with exactly one configuration and signed commitment; the
 selection's snapshot is the one its directory names and its trail the one
 that authenticates it, both by hash, with the directory preimages, snapshots

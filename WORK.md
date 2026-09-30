@@ -10,25 +10,17 @@ incremental verdicts equal full replay, and corrupt kept state falls back; real 
 the old ceiling through journal, wallet sync and offline-operator recovery; first sync
 measured against 24 h; reports re-recorded. *Stop:* M5b.6 (milestones in the decision).
 
-**Active: M5b.4b, incremental retrieval** (branch `feat/m5b4b-incremental-retrieval`). Design (no spec change: §13.2
-permits kept answers, §13.3 extension from the reader's own adjacent answer, §14 assembly):
-- *Answers* move to the replay store as kept rows (digest-protected, dropped with the kept context): each kind and
-  subject kept through an index, extended by windows after it, every query bounded by the read's own t.
-- *Evidence* is retained across reads in the party's evidence file: directories and snapshots by content, trails as
-  heads plus deduplicated chain lines (a new line only at a fork); per-read items (1, 2, 7, 10) stay per batch and go
-  when the read ends. Faults stay per read (FAULT_LIMITS bound them), so a package re-carries the fault items it needs.
-- *Re-authentication:* every retained object is checked by its hash on use and every record by the chain step; damage
-  deletes the object or line and the read retries (`KeptEvidenceMismatch`), so it can only become unresolved.
-- *Assembly:* `importTrail(head + suffix, after)` runs §10's frame over head, retained events and suffix to the end.
-*Acceptance:* incremental verdicts equal full replay with packages carrying only new objects (faults excepted); a kept
-read asks the venue only windows after its kept index; damaged evidence never excludes; kept-store tests for
-publications/force, receipt reads and compact faults; a kept-read probe at scale (digest per keep point and open).
-*Stop:* delivered, reviewed, merged; journal/wallet serving and syncing incrementally stay M5b.5.
+**Active: M5b.4b, incremental retrieval** (branch `feat/m5b4b-incremental-retrieval`; design in the decision's
+"M5b.4b as built"; no spec change). Retained evidence file (objects by hash, records under their chain value with the
+value before), `importTrail` assembly, kept §13 answers in the replay store extended by windows. *Acceptance:*
+incremental verdicts equal full replay with packages carrying only new objects (faults excepted); a kept read asks
+the venue only past its kept index; damaged evidence never excludes; kept-store tests for publications/force,
+receipts and compact faults; a kept-read probe at scale. *Stop:* delivered, reviewed, merged; journal/wallet serving
+and syncing incrementally stay M5b.5.
 
 ## Status
-- M5b.4a (PR #52, spec 8d48b25): kept classes across reads in the party's replay file (judged again on each read's
-  evidence, only the replay kept), non-extension without replay, digest at keep points; kept stores refuse witnesses (M5b.5).
-- M5b.3b (PR #51): one forward walk over rows, running clocks and force states, §13 answers in windows, no import totals;
+- M5b.4a (PR #52, spec 8d48b25): kept classes in the party's replay file, non-extension without replay; kept stores
+  refuse witnesses (M5b.5). M5b.3b (PR #51): one forward walk over rows, running clocks and force states, no import totals;
   [10⁴ checkpoints at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-over-many-checkpoints-m5b3b). M5b.3a (PR #50):
   packages copied into `evidence-store.ts`, [10⁵ statements at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-streaming-one-long-segment-m5b3a).
   M5b.2 (PR #47): replays in `replay-store.ts`. [M5](decisions/2026-09.md#2026-09-29--verify-pool-lifetimes-by-complete-streamed-and-resumed-replay):
