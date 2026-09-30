@@ -408,7 +408,7 @@ describe("the v3 operator journal", () => {
     expect(asked).toBe(0);
     // A restart on a venue behind the index the kept answers reach is refused.
     restored.close();
-    expect(await refusal((async () => journal(file, FixtureVenue.reference(label, lag, venue.witnessedIndex() - 1n)))())).toEqual(["STORAGE", undefined]);
+    expect(await refusal((async () => journal(file, FixtureVenue.reference(label, lag, venue.witnessedIndex() - 1n)))())).toEqual(["UNAVAILABLE", undefined]);
   });
 
   it("refuses terms for another operator, venue or configuration and accepts silence terms", async () => {

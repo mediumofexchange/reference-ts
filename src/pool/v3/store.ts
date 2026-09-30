@@ -274,7 +274,8 @@ export class V3OperatorJournal {
         meta = this.metadata()!;
       }
       this.identity(meta, true);
-      requireThat(now >= decimal(meta.observed), "STORAGE", "venue clock is behind the durable journal");
+      // A venue still catching up to what this journal has read of it: nothing is wrong with the rows.
+      requireThat(now >= decimal(meta.observed), "UNAVAILABLE", "the venue's clock is behind what this journal has read");
       requireThat(typeof meta.owner === "bigint" && meta.owner < SQLITE_LIMIT, "STORAGE", "journal owner counter exhausted");
       this.owner = meta.owner + 1n;
       // C2.8.2: a restarted journal waits the lag before it signs again.
