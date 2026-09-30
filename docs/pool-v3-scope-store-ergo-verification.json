@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1027
+      "elapsedMs": 1411
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 763
+      "elapsedMs": 1110
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2365
+      "elapsedMs": 3430
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2282
+      "elapsedMs": 3397
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 742
+      "elapsedMs": 1095
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2306
+      "elapsedMs": 3401
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2430
+      "elapsedMs": 3396
     }
   ],
   "transactions": [
@@ -105,8 +105,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "4b89e0e98ae778423091c25bdf4c50ec866816043cdb435812431945fa10eecc",
-      "history": "e85d9afed473f07a7ffb6622e4dad708cb0f38dd4a68a9f429978de8564d60b4",
+      "spentRoot": "a5d1c6c89ebe714b7c7afe4bf4a4def857ecd4d71ef905d1b17fe06b99ddaec3",
+      "history": "f9effac0f666a9bd305c3c4800fbc688521bef5fd3456edaedf7a9a0389b1a50",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -179,8 +179,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "4b89e0e98ae778423091c25bdf4c50ec866816043cdb435812431945fa10eecc",
-      "history": "e85d9afed473f07a7ffb6622e4dad708cb0f38dd4a68a9f429978de8564d60b4",
+      "spentRoot": "a5d1c6c89ebe714b7c7afe4bf4a4def857ecd4d71ef905d1b17fe06b99ddaec3",
+      "history": "f9effac0f666a9bd305c3c4800fbc688521bef5fd3456edaedf7a9a0389b1a50",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -250,7 +250,7 @@
       ]
     }
   },
-  "elapsedMs": 30453,
+  "elapsedMs": 42128,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
@@ -271,15 +271,15 @@
     "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
     "dist/pool/v3/capsules.js": "594dfaaf85da7ec968a00c636598642634805d36ce3525c3e20a1fa5bf75e324",
     "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
-    "dist/pool/v3/configuration.js": "225a94dbcda3cfaea355b999c287043f8ee5b1a53f88fd5904d7af8f7444c830",
-    "dist/pool/v3/evidence-store.js": "5151d57e7b016fd46447e20a7545a24c23d2c2555fb8938b267bb86150aa4f19",
+    "dist/pool/v3/configuration.js": "7e56fae94da6dbd60d24fc1686943ade94e5938b79f3a71b1ac83731691354c3",
+    "dist/pool/v3/evidence-store.js": "d2a33ef8e0da0edfc65b6cd13a38d21d58d3bd64108452871c4f07fc71155eb1",
     "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
     "dist/pool/v3/fault-observer.js": "e67dcc0954c558e2432593c3478db0aaf183f2d1381e7581c334676144958ae5",
     "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
     "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
     "dist/pool/v3/holdings.js": "ab32ac07c167a3a9a638b60e0ac1fc9fc54f9eb742b198f38723326a25f4373a",
     "dist/pool/v3/non-service.js": "d7497c5d4a2e43c1cd01440961d23a77b7851b982594553b9137f8c78f1e3bea",
-    "dist/pool/v3/package-reader.js": "a312fcce9114e21f779e75e7eb99d3b16bfd87a9b57c9092649ed48730b750d8",
+    "dist/pool/v3/package-reader.js": "33027c36dae096ff56a2df586af4e086343fe67ef8154590556427a850999ccd",
     "dist/pool/v3/package.js": "198b0665b94820324a131698b4c86ae4f6d7a1c8c3dbf28b7b5c849f682bd775",
     "dist/pool/v3/prover.js": "27ef13796b7cbf7c3612d4173e3c6b41eebc2d6deabf674d9b07398be5bafada",
     "dist/pool/v3/reader.js": "7e09a5600050ef67657f236b3d8a246dd47d7ab131bfa488f4ab9c1d33a1c32a",
@@ -288,15 +288,15 @@
     "dist/pool/v3/recovery.js": "85c05c69336abc977f612c0664f1b6e0fb18be44bb62aba8191bc72ac3d6f603",
     "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
     "dist/pool/v3/replay-store.js": "a47799014fd2c9f0d99e3a88e8d2e929bbddb50f3762db10f045873e5350e512",
-    "dist/pool/v3/scope-evidence.js": "8e98a2d88d94f37bce9637e3b0483c0ac887d31e64f179b08c088e8cf5ab5b24",
+    "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
     "dist/pool/v3/scope-reader.js": "f66fa021f9c3165f4dd5b1cf954daa5bab1998b83631eb480fa49de2ce260312",
     "dist/pool/v3/state.js": "df07a9134854fc36bebb6c4b7b8945f9c429f4023a6337f8e061c99f6e437c82",
-    "dist/pool/v3/store.js": "d0602049384d5e0816471cfc47075de7f950c04cbf913520c42e1dc029cc74e2",
-    "dist/pool/v3/terms.js": "7a7c4432cb7b49b8e8e5018829567946b2c2aebaf9ca13c4f3f8cb79d0d547f5",
+    "dist/pool/v3/store.js": "5a0171ffb2b2f28582b95f2b0e1c88912e697b0cffea702bc5b29d6d8cd231e5",
+    "dist/pool/v3/terms.js": "97c37f5dcc46aa1362eb44b6f5473ca188dcac91959f6bebadb504ae348d78a3",
     "dist/pool/v3/trail.js": "d22f503dac5ee838020a5f37b878f138eee33ede57e5f06166e7419457a8c999",
     "dist/pool/v3/wallet-backup.js": "ed2c1d580e7c49ae2cd80aa5d3cc7fd6edfc0c68a3135aa7a5ea931ad63e31dc",
     "dist/pool/v3/wallet-request.js": "a9e017276511b5af8a909465d504a60456c79fdbfc50e0f2683bc971a9e3cda2",
-    "dist/pool/v3/wallet-store.js": "8a72a441ce7956712b0a5a9716e2c3452fd6cbee1659983a1f0a3001619f6aec",
+    "dist/pool/v3/wallet-store.js": "df7d3fb4e7d4d9b97dd4f817b6993672ec39ed52b53e04089ebfd8bb86482963",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
     "dist/record-range.js": "d7e1c2f8cb58256abbbce621e32f152c021e55a7eb0471dbbd906a07c6c23a8c",
     "dist/record-venue.js": "5d66c88d298800211a159d4db8f3b2fcd4adcf28131e976817e070e6d16fb916",
@@ -344,15 +344,15 @@
     "src/pool/v3/authorization-evidence.ts": "3abf5ba67308ba03752183f7e2065d7e0b1990ad1dbec21930d03960289a492e",
     "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
-    "src/pool/v3/configuration.ts": "cec9026ac24d98495f80902180c130cc043e563823323705e316708cc27fe245",
-    "src/pool/v3/evidence-store.ts": "1b407320b8c6c6eb150174882743579553701462c5aa3c750ac9be5f90ce4235",
+    "src/pool/v3/configuration.ts": "067a110b6cfde53937d403b3d692ca229cb864b0e41bc703c18e6969cd34b1d3",
+    "src/pool/v3/evidence-store.ts": "79779bccd1579ad6c293dfe3bf1e9448822485bc6d8c0097ff5263b1ab805ac0",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
     "src/pool/v3/fault-observer.ts": "0891d5e2c6fccba206aeeab342b605de80a58bb182bb955189e52749bfe2b307",
     "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
     "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
     "src/pool/v3/holdings.ts": "e131820bb33b9e316f705382c0c42167d6fef094d0251bd92b007ddfe0ca6591",
     "src/pool/v3/non-service.ts": "6572a0d87bcb20e93f95594238173d2252b1255bddd647537df5ca524575a95e",
-    "src/pool/v3/package-reader.ts": "89a6394074b5964f4d222aca775e4a42b6ff5412614a3182d7950f97d439250e",
+    "src/pool/v3/package-reader.ts": "77224d106ba4709c962c45b074c5be1021c4dec3f2bf4158a85530435318aae9",
     "src/pool/v3/package.ts": "d007bd04dfc0f1b27b500d19eca172f3228b186bb04145603b69bc519acb4dca",
     "src/pool/v3/prover.ts": "b9be116d0f72994a3c0fd82ba01d836043520f3b433348b7863ffca5a59e9138",
     "src/pool/v3/reader.ts": "67e756b46b71601aa279d44f14b87950494d5106f41664c271fc727115df79f8",
@@ -361,15 +361,15 @@
     "src/pool/v3/recovery.ts": "6a351c42dd6a7f10337bd557f372d69fc5bdc4c114bf43081893dbf175f8b80d",
     "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
     "src/pool/v3/replay-store.ts": "7ef675ee672da5e98ffeca38c10dfe3058811d81127b82bc948de00319a1f5be",
-    "src/pool/v3/scope-evidence.ts": "712b3a5959d12dee42f985cebf2ccdb828a1d0bfba89b3e014e075dc01f6627d",
+    "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
     "src/pool/v3/scope-reader.ts": "65c452960168e8a0f1cd9fa51188467e5d2ae999c4db91bf6bbfbe9443553fec",
     "src/pool/v3/state.ts": "d44b2341fc52a0cbd29d198caa85c5058a4dc49a39fe0f99018fe472fae6f813",
-    "src/pool/v3/store.ts": "ed6aadf8a475481fd50996647de2448303ba434eec4affcefde3b240473bbfe0",
-    "src/pool/v3/terms.ts": "d70b26e03d11e303f88b6a19d396cea01cb74275891b8fe898d195b35faeff04",
+    "src/pool/v3/store.ts": "33c1f4e0666a0a4c152c1a83e83ea38ecc4f4e226751424d71fc861261138f2d",
+    "src/pool/v3/terms.ts": "ddc7c00a5e1349a187aa548f01cc2e8e975516df45987e94cbeb69d57ce0a484",
     "src/pool/v3/trail.ts": "b385ffe81a97840196098e3480826685fb4a45925b7f3f1ecd8fed8a39e6f037",
     "src/pool/v3/wallet-backup.ts": "b51105bfdba12ec8a23a882d90da366198b94f78f3ae782511eea52494f9d06e",
     "src/pool/v3/wallet-request.ts": "65f043159a6f3eeabfa092f9ca25545355a932e843b702219fcf678fc45c6470",
-    "src/pool/v3/wallet-store.ts": "e022dbbee4c0ca5e7d232e87f5b570dcf3b7e331d6e1d67bae224899eccb1317",
+    "src/pool/v3/wallet-store.ts": "02f3d7bfaf9b089124adbba8a01fcefffb38445e31bb79658fdfc46d8cc02e59",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
     "src/record-range.ts": "0658a6592bba3883c5f9c7fd368cdee07f9fe8049ab5ee041af40df78577a840",
     "src/record-venue.ts": "19cc7913cd90de844d4b9e6b977ef452d0f682dbb7e8947843341908ff771233",
