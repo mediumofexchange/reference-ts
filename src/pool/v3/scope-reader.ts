@@ -422,9 +422,11 @@ type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
 function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvidence) {
   const { selection, store } = context, faults = context.faults ?? NO_FAULTS;
   // A kept store keeps state across processes, so what names its context must be declared, not per object.
-  if (store.kept && (context.verifier.identities === undefined || (context.witness !== undefined && !(context.witness.identity instanceof Uint8Array)))) {
-    throw new TypeError("a kept store needs a verifier with circuit identities and a witness predicate with an identity");
+  // Witnesses stay only at a namespace's tip, so a kept state below it has none; a wallet's kept witnesses are M5b.5's.
+  if (store.kept && (context.verifier.identities === undefined || Object.keys(context.verifier.identities).length === 0)) {
+    throw new TypeError("a kept store needs a verifier with circuit identities");
   }
+  if (store.kept && context.witness !== undefined) throw new TypeError("a kept store keeps no witnesses");
   // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
   const { trails } = evidence, walk = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
     verifier: context.verifier, witness: context.witness }));
@@ -509,8 +511,15 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     return { clocks, record: { duration: own.duration.toString(), snapshotIndex: own.snapshotIndex.toString(), gap: own.gap.toString(),
       open: own.open, boundary: boundary === undefined ? null : boundary.toString(), opening: own.opening.toString() } };
   };
+  // A kept base row that does not decode is kept state to discard (§14), not a refusal.
+  const keptBase = (segment: Uint8Array): WalkBase | undefined => {
+    try { return store.base(segment); } catch (error) {
+      if (error instanceof SyntaxError || error instanceof RangeError || error instanceof TypeError) throw new KeptStateMismatch("a kept segment base");
+      throw error;
+    }
+  };
   const baseOf = (segment: Uint8Array): SegmentBase | undefined => {
-    const base = store.base(segment);
+    const base = keptBase(segment);
     return base === undefined ? undefined : { openingIndex: base.openingIndex, parents: base.parents, block: base.block,
       imported: { store, frontier: { segments: new Map(base.imports), totals: base.totals }, adoptionIndices: new Map(base.adoption) } };
   };
@@ -604,7 +613,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         segmentBase = { imported: merged, block: adopted.sort(venueOrder), openingIndex: held.index, parents: parents.map(p => p === undefined ? undefined : rowKey(p.commitment)) };
         const computed: WalkBase = { openingIndex: held.index, parents: segmentBase.parents, imports: merged.frontier.segments,
           totals: merged.frontier.totals, adoption: merged.adoptionIndices, block: segmentBase.block };
-        const stored = store.base(snapshot.segment);
+        const stored = keptBase(snapshot.segment);
         if (stored === undefined) store.putBase(snapshot.segment, computed);
         // A kept base must be the one this read derives (§14 kept classes).
         else if (baseKey(stored) !== baseKey(computed)) throw new KeptStateMismatch("a kept segment base");
@@ -665,10 +674,9 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       const intrinsic = !opening && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
       const classification = scope.classificationEvidence(intrinsic);
       if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
-      // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot; a
-      // witnessing read replays afresh where the state lies below its namespace's tip, whose witnesses have moved on.
+      // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot.
       const s = kept?.state;
-      if (kept !== undefined && !(s !== undefined && context.witness !== undefined && store.hasNamespace(s.ns) && store.tip(s.ns).position > s.position)) {
+      if (kept !== undefined) {
         let verdict: ScopeVerdict;
         if (kept.class === "excluded" && kept.detail !== undefined) verdict = { ...base, class: "excluded", check: kept.detail };
         else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot) &&

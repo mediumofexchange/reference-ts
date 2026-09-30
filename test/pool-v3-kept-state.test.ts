@@ -220,10 +220,9 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(other.checks).toBe(4);
     // The old context's namespaces went with its classes.
     expect(namespaceCount(kept.path)).toBe(1);
-    // A verifier or witness predicate that declares no name could never be reused across processes.
+    // A verifier that declares no circuit identities could never be reused across processes.
     await expect(f.read({ verify: () => true }, store)).rejects.toThrow("a kept store needs");
-    const anonymous: WitnessPredicate = () => true;
-    await expect(f.read(counting(), store, { witness: anonymous })).rejects.toThrow("a kept store needs");
+    await expect(f.read({ verify: () => true, identities: {} }, store)).rejects.toThrow("a kept store needs");
     store.close();
   });
 
@@ -253,17 +252,14 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(await refusal(f.read(counting(), undefined, { withoutTrails: true }))).toContain("unresolved-evidence");
   });
 
-  it("gives a witnessing read at a lower index the paths a fresh read gives", async () => {
+  it("keeps no witnesses: a witnessing read refuses a kept store and reads in memory as before", async () => {
+    // Witnesses stay only at a namespace's tip, so kept state below it could not answer paths (M5b.5 keeps a wallet's).
     const f = fixture(), kept = files(), witness: WitnessPredicate = Object.assign(() => true, { identity: b(77) });
     await f.first();
-    f.venue.advance(12n); await f.issue(107n); await f.issue(108n); f.checkpoint(f.segment, 6n, 11n);
     const store = opened(kept.path, kept);
-    await f.read(counting(), store, { witness });
-    const lower = await f.read(counting(), store, { at: 10n, witness }), fresh = await f.read(counting(), undefined, { at: 10n, witness });
-    expect(outcome(lower)).toEqual(outcome(fresh));
-    const path = lower.canonical!.state.path(106n), expected = fresh.canonical!.state.path(106n);
-    expect(path).toBeDefined();
-    expect(path).toEqual(expected);
+    await expect(f.read(counting(), store, { witness })).rejects.toThrow("a kept store keeps no witnesses");
+    const fresh = await f.read(counting(), undefined, { witness });
+    expect(fresh.canonical!.state.path(106n)).toBeDefined();
   });
 
   it("classifies a scope's dependencies on a kept read as a fresh read does (two backings)", async () => {

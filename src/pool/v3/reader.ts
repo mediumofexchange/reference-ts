@@ -5,7 +5,7 @@
 // imports, receipts, force and counts is scope-reader.ts; package-reader.ts is its entry.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
@@ -283,9 +283,10 @@ function replayRules(): Uint8Array {
     const add = (name: string, path: string): void => { hash.update(identityFrame([name, readFileSync(path)])); };
     const walk = (dir: string): void => {
       for (const name of readdirSync(dir).sort()) {
-        const path = join(dir, name), stat = statSync(path);
-        if (stat.isDirectory()) walk(path);
-        else if (stat.isFile()) add(relative(root, path).split(sep).join("/"), path);
+        // Directories are entered only as themselves, so a linked directory cannot loop; a linked file is read.
+        const path = join(dir, name), own = lstatSync(path);
+        if (own.isDirectory()) walk(path);
+        else if (own.isFile() || (own.isSymbolicLink() && statSync(path).isFile())) add(relative(root, path).split(sep).join("/"), path);
       }
     };
     walk(root);
