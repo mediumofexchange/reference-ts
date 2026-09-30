@@ -34,8 +34,8 @@ one-clause summary, not numbers or dated status. `CLAUDE.md` contains exactly `@
 The shielded pool is the active claim layer (Construction C1.2). Develop v3 in `src/pool/v3/`:
 one moded state machine and one reader over the neutral core and the shared primitives in
 `src/pool/`, guarded to recomputed local/synthetic or testnet reference identities. Pool-v2 is
-retired (Git history at `a020215`); do not restore its mechanisms without a decision.
-V3 is unadopted; remaining model/harness work is conditional evidence. See implementation status.
+retired (Git history at `a020215`); do not restore its mechanisms without a decision. V3 is
+unadopted; remaining model/harness work is conditional evidence (see implementation status).
 
 The transparent path is frozen as a differential oracle and adversarial case library. Port cases as
 pool rules land, then retire covered material. Do not review or extend it otherwise, or port the
@@ -43,16 +43,15 @@ retired exhibit walk/signed opening claim. Keep one production path and never re
 versions. Develop wallet, transport and witness feasibility alongside the core.
 
 Standing authorization effective 2026-09-08 covers development, protocol decisions and merge/push
-after verification until superseded, without renewed permission; it excludes real funds, public
-releases, live deployment, destructive data/history operations and access-control changes unless
-separately authorized. Deleting disposable files in ignored `scratch/` is authorized (2026-09-25),
-except WORK.md's retained local state. Pause only for unavailable access/physical input, a
-departure from core intent, or actions outside authority; continue safe work.
+after verification until superseded; it excludes real funds, public releases, live deployment,
+destructive data/history operations and access-control changes unless separately authorized.
+Deleting disposable files in ignored `scratch/` is authorized (2026-09-25), except WORK.md's
+retained local state. Pause only for unavailable access/physical input, a departure from core
+intent, or actions outside authority; continue safe work.
 
 Preserve open entry, independent verification, private payments, public supply verification, holder
-authorization and compartmentalized failure. Prefer fewer mechanisms and lower measured compute,
-storage, bandwidth and operating costs within those boundaries. Do not weaken an invariant to pass a
-test or benchmark.
+authorization and compartmentalized failure. Within those, prefer fewer mechanisms and lower measured
+compute, storage, bandwidth and operating costs. Never weaken an invariant for a test or benchmark.
 
 ## Engineering contract
 
@@ -117,8 +116,7 @@ work. Give outcomes, constraints, sources and acceptance criteria; let agents ch
 primary owns integration. Writers own disjoint files or isolated worktrees (`git worktree add
 scratch/wt/<name>`; dependencies resolve from the checkout) and never concurrently change a shared
 branch/index. Reviewers are read-only and report path:line, trigger, impact and fix. Check a
-finished agent's commits and leftovers rather than trusting its summary. Do not assume or install
-another provider/model.
+finished agent's commits and leftovers, not its summary. Never assume/install another provider/model.
 
 ## Verification and delivery
 
@@ -146,18 +144,19 @@ binds, so a report generator hashes every source its verdict depends on (includi
 parsers) and takes specification pins from one constant. Rerun affected checks after fixes and
 required checks on final code. Do not duplicate unchanged passing CI locally or weaken checks after
 failures. A negative test asserts the specific refusal (code, check or reason), not merely a throw.
-Below ~4 GB free memory, skip local full/real-proof runs and take v3 reports from the CI run's
-`pool-v3-reports-ubuntu-latest` artifact (`gh run download <id> -n <name> -D scratch/ci-artifact`).
+Below ~4 GB free memory, skip local full/real-proof runs, take v3 reports from the CI run's
+`pool-v3-reports-ubuntu-latest` artifact (`gh run download <id> -n <name> -D scratch/ci-artifact`)
+and wait in foreground `timeout 570` slices: background jobs are reaped; do not restart one.
 
 Preserve unrelated changes. Make logical commits, fetch/inspect upstream, integrate without
 rewriting others' work, satisfy protections and required checks, then merge/push under standing
 authority. Verify final commit, clean status and remote parity. Distinguish pending from passed CI
-for that revision: once checks are listed, wait with one background `gh pr checks <n> --watch
---interval 60` (real-proof jobs take 15–30 min), not per-job turns. Never bypass failed or
-unavailable required gates. After a verified merge, delete the merged branch locally and remotely,
-its worktrees and the slice's disposable scratch; only WORK.md's retained local state outlives a
-slice. Refused deletions go into the one deletion list under WORK.md's Open questions. Prefer one
-complete handoff in the delivery commit; follow up only for new evidence or a correction.
+for that revision: wait on the run, not per job, with `gh run watch <id> --interval 60 --exit-status`
+(real-proof jobs take 15–30 min; `gh pr checks --watch` exits 1 before checks are listed). Never
+bypass failed or unavailable required gates. After a verified merge, delete the merged branch
+locally and remotely, its worktrees and the slice's disposable scratch; only WORK.md's retained
+local state outlives a slice. Refused deletions go into the one deletion list under WORK.md's Open
+questions. Prefer one complete handoff in the delivery commit; follow up only for new evidence.
 
 A slice is complete when acceptance is demonstrated, relevant hostile cases pass, material review
 findings are resolved, specification/code/docs agree, and delivery is verified. Models and fixture
@@ -182,18 +181,20 @@ and useful verified caches; no clones/dependency trees at the workspace root. Ap
 workflow improvements; put larger ones in WORK.md without derailing the slice.
 
 The host is Windows (Git Bash, PowerShell; LF files). Use absolute paths or `git -C`; the shell's
-directory drifts. Write large scripts to scratch with the editor, not a heredoc or `node -e`.
-Search with `rg`/`git grep` and size with `du` only outside `scratch/ergo-nodes` (tens of GB).
-Commands that can pass two minutes run detached with output and exit code in scratch; clear old
-completion markers before starting and wait with an until-loop or Monitor, never `sleep N; check`.
-WORK.md names detached jobs; change files they read only on a branch/worktree, merging after they end.
-Ergo nodes (own and archive) run only while a task uses them: start early for catch-up sync, stop after.
-Stay read-only when unexplained commits/file changes or a confirmed active session show concurrent
-editing of this checkout; an idle or unrelated agent process alone does not establish that.
+directory drifts. Write scripts to scratch with the editor, not a heredoc or `node -e` (backticks and
+backslashes break); there is no Python. Run checks through `npm run` (`.npmrc` quiets node:sqlite's
+warning for stderr-exact checks). Search with `rg`/`git grep` and size with `du` only outside
+`scratch/ergo-nodes` (tens of GB). Commands that can pass two minutes run detached with output and
+exit code in scratch (past the harness's 2 h background cap, PowerShell `Start-Process`); clear old
+completion markers first and wait with an until-loop or Monitor, never `sleep N; check`. WORK.md
+names detached jobs; change files they read (`dist` too: no rebuild during a check or probe) only on
+a branch/worktree, merging after they end. Local real-proof checks rewrite `docs/*.json` reports:
+restore them. Ergo nodes (own and archive) run only while a task uses them: start early for catch-up
+sync, stop after. Stay read-only when unexplained commits/file changes or a confirmed active session
+show concurrent editing of this checkout; an idle or unrelated agent process alone does not.
 
 WORK.md alone holds the coarse product-effort estimate (method in production requirements).
 Reassess from gathered evidence after meaningful product progress or a major blocker, without extra
 research; credit reusable progress, never commit/test counts or cleanup; report it when changed.
-
 Final reports state behavior, verification/review, delivery, remaining limits and a stay/switch
 recommendation by next work and context freshness. WORK.md must suffice to resume independently.

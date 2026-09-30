@@ -18,7 +18,8 @@ const WORK_MD_MAX_LINES = 100;
 const problems = [];
 const fail = (msg) => problems.push(msg);
 
-const lines = (path) => readFileSync(path, "utf8").split("\n");
+// A file's final newline ends its last line; it does not start another.
+const lines = (path) => readFileSync(path, "utf8").replace(/\n$/, "").split("\n");
 
 // Claude Code reads CLAUDE.md and follows this import; other agents read
 // AGENTS.md directly. Keep the shim exact so the two never drift.
