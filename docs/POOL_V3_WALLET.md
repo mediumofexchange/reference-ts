@@ -348,7 +348,9 @@ without freezing, submit and fulfillment completions racing the freeze, an
 interleaved destination, continuation of pending work including reproof after
 takeover, and seed restoration of holdings with change.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
-payment, receipt, reproof, export and restore commit boundaries with synthetic evidence. These are process-exit
+payment, receipt, reproof, export and restore commit boundaries with synthetic evidence, and at a read's
+commits to its evidence file and its kept replay file (before either, the kept state stands; between the
+replay commit and its digest, the file is discarded and replayed). These are process-exit
 tests, not physical power-loss or qualified-storage evidence.
 
 The real-proof `scripts/pool/v3/store-check.mjs` obtains the payment request
@@ -358,8 +360,12 @@ through the [local service](POOL_V3_SERVICE.md). The payer reconciles the
 payment final; the receiver fulfills from independently replayed public
 evidence downloaded over HTTP. The source-bound
 [journal report](pool-v3-store-verification.json) records that acceptance.
-Reproof is oracle-tested only; a real-proof spend of inherited notes in a
-successor segment is covered by the succession check.
+`history-store-check.mjs` runs the wallet on its kept files with real proofs
+past the old one-package ceiling: it pays from kept witnesses, refuses to
+prepare under silence, and after the operator's return proves its lapsed
+payment again in the returned segment ([report](pool-v3-history-store-verification.json)).
+A real-proof spend of inherited notes after a takeover is covered by the
+succession check.
 
 That harness hands the request object across directly; the request frame and
 digest are oracle-tested. A human authentication channel is not qualified.

@@ -1,5 +1,6 @@
 // C4.2/5 and pool-fees C1.2.5 process-restart acceptance (request, fulfillment,
-// payment, receipt, reproof, offline export and restore) with a synthetic venue and proof oracle.
+// payment, receipt, reproof, offline export and restore, and a read's commits to its evidence and
+// kept replay files) with a synthetic venue and proof oracle.
 // Abrupt process exits exercise SQLite transaction boundaries, not power loss,
 // physical custody, rollback resistance, real proofs or live venue operation.
 import assert from 'node:assert/strict';
@@ -97,21 +98,35 @@ async function worker(directory, operation, phase, action) {
           // The operator admitted the saved record; its reply to the wallet is what the crash loses.
           fixture.receipt = await journal.submit((await wallet.prepare('shop', order(fixture), fixture.package, signed, prove)).record);
         }
+        if (operation === 'read') {
+          // The wallet reads the first checkpoint and keeps it; the crash interrupts its read of the second.
+          await wallet.sync(fixture.package, signed);
+          await journal.submit(encodeRecord(authorizeIssue(record(issueTask(context, wallet.request('more', backing, 5n))), issuerSecret)));
+          fixture.checkpoint = await journal.commit('more'); await journal.publish();
+          fixture.package = (await journal.package()).package;
+        }
         fixture.venue = venue.export();
       } finally { journal.close(); }
     }
     wallet.close(); save(fixturePath, fixture); return;
   }
-  const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue), reader = { configuration, venue, reference, verifier: declared };
+  // What this process's reads verify: kept state that stands is not verified again.
+  let verified = 0;
+  const counted = { identities: declared.identities, verify: (...args) => { verified++; return verifier.verify(...args); } };
+  const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue), reader = { configuration, venue, reference, verifier: counted };
   const wallet = new V3Wallet(path, reader);
   if (action === 'crash') {
     // Initialization has committed. Arm only the operation's own COMMIT; the
     // deliberate exit leaves its DB handle open, without rollback or close. The wallet's
     // evidence and kept replay files commit before it; only the wallet's database (or the
-    // restore's staging file) is armed.
+    // restore's staging file) is armed. A read arms one of those two files instead: the evidence
+    // file's first COMMIT (the package's import) or the replay file's (its walk closing), which
+    // its digest follows.
     const original = DatabaseSync.prototype.exec;
+    const armed = operation !== 'read' ? location => !/.(evidence|replay)$/.test(location) :
+      location => location.endsWith(phase === 'evidence' ? '.evidence' : '.replay');
     DatabaseSync.prototype.exec = function (sql) {
-      if (sql.trim().toUpperCase() !== 'COMMIT' || !this.location() || /.(evidence|replay)$/.test(this.location())) return original.call(this, sql);
+      if (sql.trim().toUpperCase() !== 'COMMIT' || !this.location() || !armed(this.location())) return original.call(this, sql);
       if (operation === 'request') {
         const row = this.prepare('SELECT * FROM receiver_requests WHERE alias=?').get('invoice');
         const seed = this.prepare('SELECT seed FROM wallet_identity WHERE id=1').get().seed;
@@ -125,7 +140,7 @@ async function worker(directory, operation, phase, action) {
       }
       // The encrypted export commits with the source's freeze; before COMMIT neither survives.
       if (operation === 'export') save(`${path}.candidate`, this.prepare('SELECT export FROM wallet_custody WHERE id=1').get().export);
-      if (phase === 'before') process.exit(71);
+      if (phase !== 'after' && phase !== 'digest') process.exit(71);
       original.call(this, sql);
       process.exit(72);
     };
@@ -136,12 +151,16 @@ async function worker(directory, operation, phase, action) {
     else if (operation === 'export') wallet.exportBackup(backupKey);
     // The restore's one COMMIT installs identity, state and provenance together in its staging file.
     else if (operation === 'import') V3Wallet.restoreBackup(`${path}.restored`, reader, fixture.backup, backupKey, fixture.digest);
+    else if (operation === 'read') await wallet.sync(fixture.package, fixture.signed);
     else await wallet.fulfill('invoice', fixture.package, fixture.signed);
     assert.fail('operation did not reach its crash boundary');
   }
   try {
     if (operation === 'request') save(`${path}.${action}`, wallet.request('invoice', fixture.backing, 7n));
-    else if (operation === 'export') {
+    else if (operation === 'read') {
+      const view = await wallet.sync(fixture.package, fixture.signed);
+      save(`${path}.${action}`, { checkpoint: view.checkpoint, holdings: view.holdings.map(h => [h.value, h.status]).sort(([a], [c]) => Number(a - c)), verified });
+    } else if (operation === 'export') {
       // A lost export reply retries the exact committed bytes; an uncommitted export froze nothing.
       assert.equal(wallet.custody().frozen, !(action === 'restore' && phase === 'before'));
       save(`${path}.${action}`, wallet.exportBackup(backupKey));
@@ -202,7 +221,7 @@ if (process.argv[2] === '--worker') {
   const scratch = realpathSync(scratchPath), directory = realpathSync(mkdtempSync(join(scratch, 'v3-wallet-crash-')));
   const runFile = promisify(execFile);
   const run = async (operation, phase, action) => {
-    const expected = action === 'crash' ? (phase === 'before' ? 71 : 72) : 0;
+    const expected = action === 'crash' ? (phase === 'after' || phase === 'digest' ? 72 : 71) : 0;
     try {
       await runFile(process.execPath, [script, '--worker', directory, operation, phase, action],
         { cwd: root, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 });
@@ -268,7 +287,23 @@ if (process.argv[2] === '--worker') {
         judgingIndex: fixture.venue.witnessedIndex, terms: fixture.signed });
       console.log(`PASS v3 wallet ${operation}/${phase}: abrupt COMMIT exit, exact restart and retry.`);
     }
-    console.log('V3 wallet crash check passed: fourteen abrupt exits; synthetic process evidence only.');
+    // A read commits its evidence file, then its kept replay file, then that file's digest (storage decision
+    // item 6). Exiting before either commit leaves the first checkpoint's kept state standing, so the next
+    // read verifies the new record only; exiting between the replay commit and its digest leaves a file its
+    // digest does not name, which is discarded and replayed in full. Every case reads the same view.
+    for (const phase of ['evidence', 'replay', 'digest']) {
+      const path = join(directory, `read-${phase}.sqlite`);
+      await run('read', phase, 'setup');
+      const digest = readFileSync(`${path}.replay.sha256`, 'utf8');
+      await run('read', phase, 'crash');
+      assert.equal(readFileSync(`${path}.replay.sha256`, 'utf8'), digest, 'no crash point records a new digest');
+      await run('read', phase, 'restore'); await run('read', phase, 'retry');
+      const fixture = load(`${path}.fixture`), restored = load(`${path}.restore`);
+      assert.deepEqual(restored, { checkpoint: fixture.checkpoint, holdings: [[5n, 'available'], [10n, 'available']], verified: phase === 'digest' ? 2 : 1 });
+      assert.deepEqual(load(`${path}.retry`), { ...restored, verified: 0 }, 'a later process reads the kept state and verifies nothing');
+      console.log(`PASS v3 wallet read/${phase}: abrupt exit at the ${phase === 'evidence' ? 'evidence' : 'replay'} file's COMMIT, same view after restart.`);
+    }
+    console.log('V3 wallet crash check passed: seventeen abrupt exits; synthetic process evidence only.');
   } finally {
     const target = realpathSync(directory);
     assert.ok(dirname(target) === scratch && target.startsWith(scratch + sep) && target.startsWith(join(scratch, 'v3-wallet-crash-')),

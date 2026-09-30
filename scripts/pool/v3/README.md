@@ -32,6 +32,15 @@ synthetic chain and candidate configuration establish no deployment or adoption.
 Both modes guard journal and reader entries against the caller's independently
 held reference identity preimage.
 
+`history-store-check.mjs` (`npm run check:pool:v3-history`) is the real-proof
+acceptance of storage independent of history, on the local reference venue:
+73 statements, more than one package in memory once held, served by stream; a
+payer wallet on its kept evidence and replay files paying from kept witnesses;
+a fresh seedless reader process (`--reader`) on files of its own; and an
+offline-operator recovery in which a holder forces redemption with the service
+down, the operator returns and adopts, and the wallet proves its lapsed payment
+again. It records `docs/pool-v3-history-store-verification.json`.
+
 `node scripts/pool/v3/store-check.mjs --testnet` is an explicit live acceptance
 command after a build. It uses the own v6.0.6 testnet node at `127.0.0.1:9052`
 and the throwaway wallet in `scratch/ergo-testnet/wallet.json`, and submits

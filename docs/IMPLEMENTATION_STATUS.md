@@ -364,6 +364,19 @@ acceptance is retained for the current reader; WORK.md records its checked CI ba
 The separately authorized [live testnet recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
 and retained public-bundle readback also passed. That live evidence is historical
 at `a72888b`; later journal changes need their own acceptance evidence.
+
+Each party's storage is independent of history ([decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
+the journal's rows, a reader's or wallet's evidence file and its kept replay
+file. `npm run check:pool:v3-history` is the real-proof acceptance past the
+old ceiling of one package in memory (one megabyte, about 67 statements). The
+journal admits 73 statements and serves them by stream. A payer wallet syncs
+over HTTP and pays from its kept witnesses. A fresh seedless process verifies
+the history from its own files. With the service down a holder forces
+redemption from its kept files; the operator returns and adopts, and the
+wallet proves its lapsed payment again ([report](pool-v3-history-store-verification.json)).
+It runs on the local reference venue at tens of statements: the target scale
+has stand-in-proof measurements only
+([probes](POOL_DEPLOYMENT_PROBES.md#replay-state-storage)).
 [Measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
 distinguish this single-backing candidate drill from deployment acceptance.
 Complete trails remain bounded; imports do not erase ancestry or reset the

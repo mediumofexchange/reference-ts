@@ -1,0 +1,391 @@
+{
+  "status": "passed",
+  "specification": "8d48b25",
+  "evidence": "local-runtime-real-proofs",
+  "node": "v24.21.0",
+  "platform": "linux",
+  "limits": [
+    "candidate configuration only",
+    "single backing on the local reference venue; no chain venue or live broadcast",
+    "one process holds the prover, the journal, its loopback service and both wallets; the seedless reader is its own process",
+    "a history of tens of statements: past the old package, not the target scale",
+    "no persistence-fault, adoption or custody claim"
+  ],
+  "history": {
+    "statements": 73,
+    "oldStatements": 67,
+    "oldPackageBytes": 1048576,
+    "issues": 37,
+    "payments": 36,
+    "checkpoints": "8"
+  },
+  "checks": [
+    "the journal admits 73 real-proof statements and the payer pays 36 times from its kept witnesses",
+    "a fresh seedless process syncs the whole history over HTTP, past the old package, and verifies every proof",
+    "a restarted payer fetches, verifies and asks nothing; the receiver syncs once and finds every invoice paid",
+    "the operator falls silent with an admitted payment uncommitted: service and new payments are refused",
+    "with the service down, the holder forces redemption from its kept files and a fresh process reads the force",
+    "the operator returns and adopts the forced block exactly; the wallet re-proves its lapsed payment and pays again",
+    "kept and fresh reads agree: the fresh process incrementally, a new one from nothing, and a wallet restored from the seed",
+    "a reopened journal reads its rows and its audit proves every record again"
+  ],
+  "proofs": [
+    {
+      "kind": 1,
+      "count": 37,
+      "bytes": 14656,
+      "totalMs": 37074,
+      "maxMs": 1310
+    },
+    {
+      "kind": 2,
+      "count": 39,
+      "bytes": 14656,
+      "totalMs": 119391,
+      "maxMs": 3074
+    },
+    {
+      "kind": 4,
+      "count": 2,
+      "bytes": 14656,
+      "totalMs": 5160,
+      "maxMs": 2582
+    },
+    {
+      "kind": 6,
+      "count": 1,
+      "bytes": 14656,
+      "totalMs": 2581,
+      "maxMs": 2581
+    }
+  ],
+  "reads": {
+    "payerFirstRead": {
+      "statements": 37,
+      "verified": 37,
+      "ms": 1625,
+      "fetchedBytes": 565631
+    },
+    "payerLaterReads": [
+      {
+        "verified": 12,
+        "asked": 4,
+        "ms": 767,
+        "fetchedBytes": 188545
+      },
+      {
+        "verified": 12,
+        "asked": 4,
+        "ms": 741,
+        "fetchedBytes": 188545
+      },
+      {
+        "verified": 12,
+        "asked": 4,
+        "ms": 772,
+        "fetchedBytes": 188545
+      }
+    ],
+    "payerRestart": {
+      "verified": 0,
+      "asked": 0,
+      "ms": 160,
+      "fetchedBytes": 809
+    },
+    "receiver": {
+      "firstReadVerified": 73,
+      "firstReadMs": 3023,
+      "fulfilled": 36,
+      "fulfillMs": 4061
+    },
+    "payerAfterReturn": {
+      "verified": 0,
+      "asked": 4,
+      "ms": 223,
+      "fetchedBytes": 48192
+    },
+    "restoredWallet": {
+      "verified": 78,
+      "ms": 3699,
+      "fetchedBytes": 1205514
+    },
+    "journalAudit": {
+      "ms": 2982
+    }
+  },
+  "readers": {
+    "first": {
+      "summary": {
+        "supply": "82",
+        "position": "73",
+        "sequence": "5",
+        "canonicalIndex": "5",
+        "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
+        "spentRoot": "d72357db537d1ad0f0e9c62a023b7febd3fbd1d44b3831c30fe39b9b616f82db",
+        "history": "28243f79d037fcde9e5b9b1d8a8fd0f7eee4dadab120439198269ec981509c5a",
+        "force": [],
+        "clock": {
+          "duration": "16",
+          "snapshotIndex": "4",
+          "gap": "1",
+          "open": false,
+          "boundary": null,
+          "opening": "1"
+        }
+      },
+      "verified": 73,
+      "readMs": 3001,
+      "maxRssBytes": 449081344,
+      "heapUsedBytes": 27881416,
+      "fetchedBytes": 1126772
+    },
+    "offline": {
+      "summary": {
+        "supply": "82",
+        "position": "73",
+        "sequence": "5",
+        "canonicalIndex": "5",
+        "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
+        "spentRoot": "d72357db537d1ad0f0e9c62a023b7febd3fbd1d44b3831c30fe39b9b616f82db",
+        "history": "28243f79d037fcde9e5b9b1d8a8fd0f7eee4dadab120439198269ec981509c5a",
+        "force": [
+          {
+            "index": "23",
+            "kind": 4
+          },
+          {
+            "index": "24",
+            "kind": 5
+          },
+          {
+            "index": "25",
+            "kind": 4
+          },
+          {
+            "index": "26",
+            "kind": 6
+          }
+        ],
+        "clock": {
+          "duration": "16",
+          "snapshotIndex": "5",
+          "gap": "21",
+          "open": true,
+          "boundary": "22",
+          "opening": "1"
+        }
+      },
+      "verified": 3,
+      "readMs": 398,
+      "maxRssBytes": 372379648,
+      "heapUsedBytes": 24139576,
+      "fetchedBytes": 0
+    },
+    "kept": {
+      "summary": {
+        "supply": "82",
+        "position": "6",
+        "sequence": "8",
+        "canonicalIndex": "29",
+        "segment": "8e937edaa3fb839d4bc3f8e4b2876ef2e8edcddda0e4186906afc450f1db9add",
+        "spentRoot": "8db6fa2cb29e0a7b0708112561ecb7e6fdc53c09f6f7175eb3b22b1d1174d148",
+        "history": "0be9896d7a7c9ba3aa65b884a3b5cca16e105559bfc4c39fe97549669bf09c90",
+        "force": [
+          {
+            "index": "23",
+            "kind": 4
+          },
+          {
+            "index": "24",
+            "kind": 5
+          },
+          {
+            "index": "25",
+            "kind": 4
+          },
+          {
+            "index": "26",
+            "kind": 6
+          }
+        ],
+        "clock": {
+          "duration": "16",
+          "snapshotIndex": "28",
+          "gap": "1",
+          "open": false,
+          "boundary": null,
+          "opening": "27"
+        }
+      },
+      "verified": 2,
+      "readMs": 434,
+      "maxRssBytes": 379228160,
+      "heapUsedBytes": 24940336,
+      "fetchedBytes": 79579
+    },
+    "scratch": {
+      "summary": {
+        "supply": "82",
+        "position": "6",
+        "sequence": "8",
+        "canonicalIndex": "29",
+        "segment": "8e937edaa3fb839d4bc3f8e4b2876ef2e8edcddda0e4186906afc450f1db9add",
+        "spentRoot": "8db6fa2cb29e0a7b0708112561ecb7e6fdc53c09f6f7175eb3b22b1d1174d148",
+        "history": "0be9896d7a7c9ba3aa65b884a3b5cca16e105559bfc4c39fe97549669bf09c90",
+        "force": [
+          {
+            "index": "23",
+            "kind": 4
+          },
+          {
+            "index": "24",
+            "kind": 5
+          },
+          {
+            "index": "25",
+            "kind": 4
+          },
+          {
+            "index": "26",
+            "kind": 6
+          }
+        ],
+        "clock": {
+          "duration": "16",
+          "snapshotIndex": "28",
+          "gap": "1",
+          "open": false,
+          "boundary": null,
+          "opening": "27"
+        }
+      },
+      "verified": 78,
+      "readMs": 3225,
+      "maxRssBytes": 421138432,
+      "heapUsedBytes": 34769072,
+      "fetchedBytes": 1205514
+    }
+  },
+  "process": {
+    "maxRssBytes": 639664128,
+    "heapUsedBytes": 27575480
+  },
+  "elapsedMs": 230572,
+  "sourceSha256Lf": {
+    "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
+    "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
+    "dist/ergo-profile.js": "6accb1f4e0307f6570e8ebfdccb656fcb3a9dd10ecaae4d3ab1d7fe80e77c36c",
+    "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
+    "dist/pool/field.js": "8348d48159c397cb49bcb03ced9e606103d689d7892072b27b9a05b50e9f2bb8",
+    "dist/pool/note-tree.js": "48fa3cfdcc8183f5aaa86889c9a066a775afc6ff79148d294933d26a1fbf40d1",
+    "dist/pool/notes.js": "eb63d7562dea56fa98ab5313b8049524d51f8e733b26a09e25e666a967bbeb31",
+    "dist/pool/poseidon2.js": "4731ae2cec4ef774eb93ffb10b8a8d152e95b6d1f127e7546002481a6c7bf2d4",
+    "dist/pool/proof-verifier.js": "ec0a67ea1d15cc543fd7b90c7e8c2e97ac7009cbad261225668ced1041b93a7d",
+    "dist/pool/schedule.js": "47136b811c6f4cb3aea5edb82bfe7f051a76583c943bfc0a892714ca6718c967",
+    "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
+    "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
+    "dist/pool/v3/capsules.js": "594dfaaf85da7ec968a00c636598642634805d36ce3525c3e20a1fa5bf75e324",
+    "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
+    "dist/pool/v3/configuration.js": "7e56fae94da6dbd60d24fc1686943ade94e5938b79f3a71b1ac83731691354c3",
+    "dist/pool/v3/evidence-store.js": "dd0ac0f22e8733bf26ec73ee8bb6b4f3243c5bfe7f7c49272f3c762f1ebc6ee8",
+    "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
+    "dist/pool/v3/fault-observer.js": "e67dcc0954c558e2432593c3478db0aaf183f2d1381e7581c334676144958ae5",
+    "dist/pool/v3/guard.js": "022fcfe559809db0681cc0aeedb1ebba030f9f4964853fc8def2b7b0418f088e",
+    "dist/pool/v3/headers.js": "932184def09c7f76e27da3699f9d205bc56677df742a0285cdf5fd45b3a9c6ff",
+    "dist/pool/v3/holdings.js": "00f520f919748cb718d5b7a0ac428e2217a9cec688731160fb4e5a1619a5bf80",
+    "dist/pool/v3/non-service.js": "d7497c5d4a2e43c1cd01440961d23a77b7851b982594553b9137f8c78f1e3bea",
+    "dist/pool/v3/package-reader.js": "7d7955a6af45d991f32fe981ec9272ab94c011d098768b28ef0f4d1fa657256c",
+    "dist/pool/v3/package.js": "198b0665b94820324a131698b4c86ae4f6d7a1c8c3dbf28b7b5c849f682bd775",
+    "dist/pool/v3/prover.js": "27ef13796b7cbf7c3612d4173e3c6b41eebc2d6deabf674d9b07398be5bafada",
+    "dist/pool/v3/reader.js": "b4bd087a40e57bb7568f702b8c7e32d8328854ac2d88683b466ce6299481a9fb",
+    "dist/pool/v3/receipt-state.js": "f8f576ce6b771eebc41ef587eb048c1b0c06a582f7c4a6a28278c95d23418ab6",
+    "dist/pool/v3/records.js": "61be901b5a91950785c06f46679f90f689e5eea86d1a1450d3c3f5c36d17069b",
+    "dist/pool/v3/recovery.js": "85c05c69336abc977f612c0664f1b6e0fb18be44bb62aba8191bc72ac3d6f603",
+    "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
+    "dist/pool/v3/replay-store.js": "c200a1badb4253d1380e670e7c12d112fba9de65382aaf48cd47a07250cea9b6",
+    "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
+    "dist/pool/v3/scope-reader.js": "d1c1f357047cb2c7661808e29361e889141d2a5711ffdd26f7e7bef5a239c5be",
+    "dist/pool/v3/service-client.js": "1a16eab9c6838abe131a2b8c10e3f5f2ece18b0659a832e7fdf2292fe7228c85",
+    "dist/pool/v3/service-http.js": "7a9eff7a46070a2a165077e6bf9a83229f7da4b621b4c5af8382eadd61e5a955",
+    "dist/pool/v3/service-wire.js": "e024bd4640a15b5ac536f3f44f0f41d8bfb3f9c88ca4bc1d9750c77c1ec11df1",
+    "dist/pool/v3/state.js": "770f846cf562909a9c8ea1a26d7243bb94e4f42025d701afed34d8b6752f874e",
+    "dist/pool/v3/store.js": "fd2253de880e2ee1d3491b74c06b2b563d35dccf86c6868f504371c08b6583a1",
+    "dist/pool/v3/terms.js": "97c37f5dcc46aa1362eb44b6f5473ca188dcac91959f6bebadb504ae348d78a3",
+    "dist/pool/v3/trail.js": "f3705bc9636e2c497b85a226a8bc5ac88f08a3c5d03eefb2566ee1ebc9b1dae1",
+    "dist/pool/v3/wallet-backup.js": "ed2c1d580e7c49ae2cd80aa5d3cc7fd6edfc0c68a3135aa7a5ea931ad63e31dc",
+    "dist/pool/v3/wallet-request.js": "a9e017276511b5af8a909465d504a60456c79fdbfc50e0f2683bc971a9e3cda2",
+    "dist/pool/v3/wallet-store.js": "6e926a4bfcb46e961b58a71f9fb6ea60f42ebdaf61855d1afc10a58133a3a154",
+    "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
+    "dist/record-range.js": "d7e1c2f8cb58256abbbce621e32f152c021e55a7eb0471dbbd906a07c6c23a8c",
+    "dist/record-venue.js": "5d66c88d298800211a159d4db8f3b2fcd4adcf28131e976817e070e6d16fb916",
+    "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
+    "dist/venue-records.js": "9a5ef5790e349c69c108d8a2894ae231f87e3e32030de4cfcfb622e637429b8f",
+    "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
+    "scripts/pool/prepare-crs.mjs": "a19e538feab20a58847c03f1f0bf42ec1182799cf8518e545d5336f5357a63ef",
+    "scripts/pool/v3/candidate-manifest.json": "1ba730b84448b26e691486fa729e7d2e12004b42dc7374f1afea4c453bf1be19",
+    "scripts/pool/v3/candidate.mjs": "51273e876c6fe3a6bb76d57e81e379cc82115f942802436ca81e71fd07b1a460",
+    "scripts/pool/v3/circuits/burn.nr": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",
+    "scripts/pool/v3/circuits/demand.nr": "b48f7f86c8ee80aa5fea7e6d2ea0b709d2a95f670b3473b2a1abc7a0afd5bf9e",
+    "scripts/pool/v3/circuits/issue.nr": "0160497d77500bec7a62548b13908f46be122dfaf6f54cc0b720cf328a9c6ad6",
+    "scripts/pool/v3/circuits/notes.nr": "034f123da4aafbac55ecaa75a3d37bbb016b70f06040a8c7092f598fbc1662d3",
+    "scripts/pool/v3/circuits/request.nr": "2da922cbc425297aa09d231562de48eaf6f55fd392a1e060c523bd2ac981baee",
+    "scripts/pool/v3/circuits/settle.nr": "cb865bea2f8087213f3d79d2eee5e07c5221cc1511d72ae6f5ee727bd690fadd",
+    "scripts/pool/v3/circuits/spend.nr": "920c4702d2ae0c3e2d0f251fe298c39c0d658a390220b0c4d68b4e06c31ae695",
+    "scripts/pool/v3/codec.mjs": "7857587335e2b6bd00a9cbc7305bf5dffadc9a135ef009a9083ee4352941c910",
+    "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
+    "scripts/pool/v3/evidence-reader.mjs": "d36c7f99a1a4b6fff10f0217cbe0cbb0540561c3d9ab7c0ff221a99d470e0b09",
+    "scripts/pool/v3/history-store-check.mjs": "a62cd455d6270f24f8bbfab6260587f1db738102afe89405f01f1f4c439b7372",
+    "scripts/pool/v3/provenance.mjs": "644486c7e50582c328f66b9811f74a6916863331e120dff900e091d88166245a",
+    "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
+    "src/contexts.ts": "555dcc03061a6c451ffd6dc63f2486ad920014186e4ec01d164ec7282b27764b",
+    "src/ergo-profile.ts": "12ee44043a1dce07e8c86984b061b87cb79fa3193365b162d97db7632c21d631",
+    "src/ergo-publisher.ts": "4ce8cc1f8c3086e1a8a6b04dae3d2f439d1ff3fa1adc782cd624369bcf593b64",
+    "src/ergo-supplier.ts": "b9bb52129f4e2fcfdb936682294476ba11e2fa55e27c5775f4000914cdae73f7",
+    "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
+    "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
+    "src/pool/note-tree.ts": "05087d8637faa1db300b8b98af7002eff3a6eb40b8e48900c7c90ee5a51a8fbb",
+    "src/pool/notes.ts": "df1ced5d5384fa5de5b8071071ecc1f057ddaca4cc38ad252984b326a7e2e3a7",
+    "src/pool/poseidon2.ts": "eadd2f03b20e64e76077494fc4769fc4626796723f5d2ec77d8479e18dfaab6c",
+    "src/pool/proof-verifier.ts": "00eb1e3dbb0924b7aeb4b8808889ff7b0696cf2d858aaf3df845f9ebd73d0e18",
+    "src/pool/schedule.ts": "4c4936504b7e1445548df649bbbc1a120196ff155a7954a138ffab29b578834a",
+    "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
+    "src/pool/v3/authorization-evidence.ts": "3abf5ba67308ba03752183f7e2065d7e0b1990ad1dbec21930d03960289a492e",
+    "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
+    "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
+    "src/pool/v3/configuration.ts": "067a110b6cfde53937d403b3d692ca229cb864b0e41bc703c18e6969cd34b1d3",
+    "src/pool/v3/evidence-store.ts": "431f4f21d5f5771e4312363ab4421523ae9a1e03257454e86e2da6d0c5cade25",
+    "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
+    "src/pool/v3/fault-observer.ts": "0891d5e2c6fccba206aeeab342b605de80a58bb182bb955189e52749bfe2b307",
+    "src/pool/v3/guard.ts": "aeb6252e1f9ba92d1d8ac9d047ef74c9e87b8b9e385edcbf5758621536d06a5b",
+    "src/pool/v3/headers.ts": "2c9c9969dd43c07c1125f07625c94f7ad995b8c0c1274692eeed426ff26c4618",
+    "src/pool/v3/holdings.ts": "3bae790f353cc97aeec19ce5e7ba781438550f485a1fb92357c8c72c819aa0bc",
+    "src/pool/v3/non-service.ts": "6572a0d87bcb20e93f95594238173d2252b1255bddd647537df5ca524575a95e",
+    "src/pool/v3/package-reader.ts": "73a01d7baf44ac6474203285fa1ce109c9d436e7d35311ed2d10c01e5a0ba6ea",
+    "src/pool/v3/package.ts": "d007bd04dfc0f1b27b500d19eca172f3228b186bb04145603b69bc519acb4dca",
+    "src/pool/v3/prover.ts": "b9be116d0f72994a3c0fd82ba01d836043520f3b433348b7863ffca5a59e9138",
+    "src/pool/v3/reader.ts": "5d269cafd23a1091333f1ae98e23e413c96444ef2543fbee99378ac9ef295e0f",
+    "src/pool/v3/receipt-state.ts": "7b1a4913d83fbbffa00e6c2ba55bb7e3bd4158ed869e27f9ceebd798fc1ff7af",
+    "src/pool/v3/records.ts": "5cb68ec45d9babeb147ea60b592470fac5d08096df137993257b933718ac36f6",
+    "src/pool/v3/recovery.ts": "6a351c42dd6a7f10337bd557f372d69fc5bdc4c114bf43081893dbf175f8b80d",
+    "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
+    "src/pool/v3/replay-store.ts": "096639165a5324bfcd12c8213fdce0e1bab5c1353dd1d15f9f748d8f46708933",
+    "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
+    "src/pool/v3/scope-reader.ts": "85b6df622fad8a632925346e80f405c15451f9bb5b37ec1fd2ada9d0e3906167",
+    "src/pool/v3/service-client.ts": "100191031ecb20c7138ab056fd52c445d5b508389c0b77dd76243314d329d54b",
+    "src/pool/v3/service-http.ts": "c0fb983594ae5903f349ebb7ca5f3d0e601ee4b57f45a1cabe376fe86f517b0d",
+    "src/pool/v3/service-wire.ts": "fcb500f5f1856c7bc239f456960c429dffd065662df267c05d24a8afa61974b6",
+    "src/pool/v3/state.ts": "aaea2d928834bfca28fc118da02c732854cd8ff9bf47f5a7fc75951afe666302",
+    "src/pool/v3/store.ts": "5eed93f202c106a18b114d6b864a35d7e96ad0140d5ad6ab3c7d0e5185732462",
+    "src/pool/v3/terms.ts": "ddc7c00a5e1349a187aa548f01cc2e8e975516df45987e94cbeb69d57ce0a484",
+    "src/pool/v3/trail.ts": "b9bea043061fa0c474097a38f1034453a723eb1ad79a14e3eb5a14d11f47130d",
+    "src/pool/v3/wallet-backup.ts": "b51105bfdba12ec8a23a882d90da366198b94f78f3ae782511eea52494f9d06e",
+    "src/pool/v3/wallet-request.ts": "65f043159a6f3eeabfa092f9ca25545355a932e843b702219fcf678fc45c6470",
+    "src/pool/v3/wallet-store.ts": "93bc824f44ec96db6bfcf68512b2aa47bd5dfe71a98919009230752c6fd6d318",
+    "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
+    "src/record-range.ts": "0658a6592bba3883c5f9c7fd368cdee07f9fe8049ab5ee041af40df78577a840",
+    "src/record-venue.ts": "19cc7913cd90de844d4b9e6b977ef452d0f682dbb7e8947843341908ff771233",
+    "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
+    "src/venue-records.ts": "72c93b2d55255c500918620a3e19ef70e1fe7dda587242222fccdb9171171abe"
+  }
+}
