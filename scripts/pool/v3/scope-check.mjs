@@ -423,9 +423,12 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
       ? codec.snapshotBytes({ ...codec.decodeSnapshot(bytes), backing: x }) : bytes) };
     wrong.directory = late.directory.map(e => same(e.name, y) ? { ...e, digest: hash(wrong.snapshots[late.directory.findIndex(e => same(e.name, y))]) } : e);
     wrong.commitment = signCommitment(operatorSecret, 3n, directoryRoot(wrong.directory));
-    assert(same(wrong.directory[0].name, x), "the misbound entry is not the first");
-    const passed = await accepted(compose([a0, a1, x0, wrong, resumed], resumed, y, [toB]));
-    assert.deepEqual(passed.audit.range.carrying.map(c => [c.sequence, c.class]), [["1", "valid"], ["2", "valid"], ["3", "lapsed"], ["4", "valid"]]);
+    // The names' order follows the configuration's identities: a misbound first entry authenticates nothing, so the
+    // checkpoint is unresolved for every reader; a misbound later one leaves the lapse to be read.
+    const misbound = compose([a0, a1, x0, wrong, resumed], resumed, y, [toB]);
+    if (same(wrong.directory[0].name, y)) await refused(misbound, "unresolved-evidence");
+    else assert.deepEqual((await accepted(misbound)).audit.range.carrying.map(c => [c.sequence, c.class]),
+      [["1", "valid"], ["2", "valid"], ["3", "lapsed"], ["4", "valid"]]);
   });
   await test("same-index lower held sequences qualify as exact predecessors and stale references fail", async () => {
     const again = segment(operatorSecret, 6n, [entry(x, toA.link, j0), entry(y, y, j0)]);
