@@ -34,8 +34,10 @@ evidence in files across reads. The operator journal keeps its admission state,
 records and served evidence in its own database, commits each command with all
 it changes and reopens without verifying again (M5b.5a). It keeps its venue
 answers there too and asks the venue only past the index they reach (M5b.5b.1).
-Incremental serving, the wallet's kept file and verification workers are
-M5b.5b.2–M5b.6.
+It serves by stream and incrementally (M5b.5b.2); the wallet reads from kept
+files (M5b.5c). A reader's replay verifies proofs ahead on a pool of verifier
+instances, with verdicts and first failures unchanged (M5b.6,
+[decision](../decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)).
 
 Pool-v2 is retired: every remaining v2 check was mapped to a v3 case, a v2-only
 mechanism or a later slice

@@ -757,7 +757,9 @@ budget.
 
 Slice 8 M5b asks where replay state lives so that memory is independent of
 history (pool-v3 §14; [decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-The probe is `node --expose-gc scripts/pool/v3/replay-store-probe.mjs`. It
+The probe was `node --expose-gc scripts/pool/v3/replay-store-probe.mjs`, retired after M5b.6
+([at its last revision](https://github.com/mediumofexchange/reference-ts/blob/6c7d8f2/scripts/pool/v3/replay-store-probe.mjs));
+the subsections below name its modes. It
 uses the replay-cost shape: an issue, then spends of two fresh nullifiers into
 four outputs, anchored at the empty root, with 932-byte stand-in records. It
 has two modes:
@@ -1133,6 +1135,94 @@ The [retained report](pool-v3-history-store-verification.json) is the CI run
   with its verification workers is M5b.6's. On this desktop two local runs
   were stopped under host memory pressure while the process stayed under
   350 MB; the acceptance was taken from CI.
+
+### Verification ahead and the first sync (M5b.6)
+
+M5b.6 asks whether proof verification beside the replay brings a reader's
+first sync within 24 h at the design point, with the whole process in
+1 GiB ([decision](../decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)).
+The host is one Windows desktop with 2 physical cores (4 threads), below the
+reader's declared 8, and Node 24.6.
+
+*The cheapest probe first* (a scratch script, eight real issue proofs):
+
+| Measure | Result |
+|---|---:|
+| One verification, sequential | 30.5 ms |
+| Throughput over 2, 3, 4 instances | 17.3, 14.7, 13.6 ms a proof |
+| Process memory with the caller's instance, then with 1 to 4 verifier instances | 114 MB, then 237, 359, 314, 378 MB |
+| One verification while 34 JavaScript node hashes run beside it (49 ms alone) | 62.8 ms for both, against 88 ms in turn |
+| A note-tree node hash, JavaScript against Barretenberg's synchronous WASM | 1.14 ms against 0.12 ms, equal outputs |
+
+The recorded CI verification is 18 ms a proof
+([conformance](pool-v3-conformance-verification.json)), and the
+[history check's](#real-proofs-past-the-old-package-m5b5c2) fresh read took
+41 ms a statement there. The replay, not verification, is the larger cost
+on both hosts.
+
+*The runtime reader with real verification load.*
+`replay-store-probe.mjs read <N> --real <directory> [--instances <k>] [--in-turn]`
+([at its last revision](https://github.com/mediumofexchange/reference-ts/blob/6c7d8f2/scripts/pool/v3/replay-store-probe.mjs))
+reads the M5b.3a shape with real-size records (14,656-byte stand-in proofs,
+15,562-byte records). At each proof check it verifies a real proof on the
+runtime verifier, cycling through the eight. The records' own proofs are
+stand-ins, so this is real verification load and memory, not their
+verdicts. Runs of 2026-10-01 at 2,000 statements, a checkpoint every 200:
+
+| Verification | Replay per statement | Peak process memory |
+|---|---:|---:|
+| Stub | 40.2 ms | 166 MB |
+| Real, one instance, in turn | 80.5 ms | 396 MB |
+| Real, one instance, ahead | 51.5 ms | 406 MB |
+| Real, three instances, ahead | 52.9 ms | 579 MB |
+
+On two cores the replay's own 40 ms bounds the read: more instances add
+memory, not speed. Process memory with verifier instances oscillates by
+about 50 MB as their WASM memory reaches its high-water mark; it levelled
+after about 700 statements.
+
+*The first sync at 10⁵ statements*, the same shape with a checkpoint every
+10,000, verified ahead on two instances, into a kept replay file committed
+and digested at every 10,000th record. With `--kept 1000`, 1,000 more
+records are then read incrementally. Run of 2026-10-01 at `6c7d8f2`, the
+desktop otherwise idle:
+
+| Phase | Result |
+|---|---|
+| Copy the 1.48 GB package into the evidence file | 78 s, process memory 334 → 368 MB |
+| Replay 10⁵ statements with real verification ahead, keep points included | 52.7 ms a statement, 88 minutes |
+| Heap over the replay | 15.7 → 17.1 MB, 3 bytes a statement |
+| Process memory over the replay (verifier instances and the caller's key-deriving instance included) | quarter means 419, 444, 466, 449 MB; peak 543 MB |
+| Files | evidence 1.57 GB, state 212 MB |
+| Incremental read of 1,000 more records from the kept file | digest check 0.7 s, 45 s in all |
+
+*Against the design point.* A first sync of 10⁶ statements on this desktop
+is about 15.5–16 h. That is 52.7 ms a statement, plus the 2–4 ms the
+[storage probe](#replay-state-storage) adds per event as its database grows
+towards 10⁶, plus about 14 minutes to copy 15.6 GB of records. With the
+Ergo header check of about 4.5 h run after it rather than beside it, the
+total is about 20.5 h, within the 24 h budget. Load is the remaining risk:
+it doubled earlier timings on this host. The declared reader has 8 cores,
+so verification and the header check run beside the replay, which sets the
+time.
+- *The replay's own work* is now the cost: about 40 ms here and about 23 ms
+  in CI. The JavaScript note tree is most of it. Barretenberg's synchronous
+  Poseidon2, measured above at a ninth of the JavaScript hash's time, would
+  bring the replay below the verification time on two cores. It is the
+  lever if load or slower hardware takes the sync over 24 h.
+- *Memory:* process memory rose by about 45 MB over the first half and
+  levelled in the second, against flat heap. SQLite runs at its default
+  cache of about 2 MB per connection, and the keep-point digest reads in
+  1 MiB chunks, so neither accounts for it; it is unattributed. Each
+  verifier instance settles near 85 MB once it has verified. A
+  verify-only party may destroy its key-deriving instance once the
+  verifier is built (here it stayed open).
+- *Limits:*
+  - one desktop below the declared hardware, one run;
+  - stand-in records verified against eight real issue proofs, not their
+    own;
+  - one backing and segment on the reference venue, with no venue ranges;
+  - the 10⁶ figure is extrapolated, not run.
 
 ## Invalid-checkpoint evidence
 

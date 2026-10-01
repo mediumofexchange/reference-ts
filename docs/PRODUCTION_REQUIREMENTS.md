@@ -183,14 +183,18 @@ The design point's cost, modelled from the [replay](POOL_DEPLOYMENT_PROBES.md#re
 and [header](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) measurements:
 - *Bytes:* 15.6 GB of records. Venue ranges from index zero add about 4.2 GB
   of Ergo sections (3.8 GB kept) and 0.17 GB of headers.
-- *Compute:* sequential host replay takes 10–13 h. The JavaScript note tree
-  is about 26 ms of each event; Barretenberg's Poseidon2 would cut the note
-  tree's share to about 1.1 h, and the replay to roughly 4–6 h. Proof
-  verification takes 21–36 core-hours and the header check about 4.5 h once;
-  both are assumed to run on the other cores beside the replay.
-- *Result:* a first sync takes about 10–13 h on a quiet host, and load can
-  double it. Steady state is about 2.5 CPU-minutes a day, with about 33 MB
-  transferred through node JSON and 18 MB kept.
+- *Compute:* the reader verifies proofs on a pool of verifier instances
+  ahead of its replay, so the sequential replay sets the time. The JavaScript
+  note tree is most of the replay's own work; Barretenberg's Poseidon2 would
+  cut it about ninefold, an untaken lever. The header check takes about
+  4.5 h once.
+- *Result:* a measured first sync of 10⁵ statements with real verification
+  load, extrapolated to the design point, takes about 15.5–16 h on a 2-core
+  desktop below the declared hardware, or 20.5 h with the header check run
+  after it. Its process peaked at 543 MB
+  ([first sync](POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)).
+  Load can double it. Steady state is about 2.5 CPU-minutes a day, with
+  about 33 MB transferred through node JSON and 18 MB kept.
 
 A phone wallet is outside the release target, as a scope choice. It
 verifies independently only through a reader its holder runs. Its own first

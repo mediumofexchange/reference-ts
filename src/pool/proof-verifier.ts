@@ -65,7 +65,8 @@ export interface ProofVerifier {
   close(): Promise<void>;
 }
 
-/** How the verifier's own instances run: `instances` of them (default one), each a WASM worker of about 50 MB. */
+/** How the verifier's own instances run: `instances` of them (default one), each a WASM worker whose memory settles
+ * near 85 MB once it has verified (the M5b.6 probe); a party sizes the count against its 1 GiB budget. */
 export interface VerifierOptions extends BackendOptions {
   readonly instances?: number;
 }
@@ -220,7 +221,9 @@ function allFields(values: unknown, count: number): values is readonly bigint[] 
 /**
  * Derive one key per circuit of `table` over the caller's backend instance,
  * which `startBackend` must have started, and build the verifier. `close` on
- * the result does not destroy the instance the caller owns.
+ * the result does not destroy the instance the caller owns, and the verifier
+ * never uses that instance again: a verify-only party may destroy it once the
+ * verifier is built, freeing the memory key derivation took.
  *
  * A proof bb.js throws on leaves its instance behind: each such throw leaks
  * in the WASM instance, and after enough of them every later verification

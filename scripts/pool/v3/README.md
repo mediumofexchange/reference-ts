@@ -93,9 +93,10 @@ prefix of any longer supplied trail of its segment whose decodable first n
 records reproduce its evidence hash, and signed terms are resolved by backing
 name from any strictly verifying field ([pool-v3 §12.1 at 786f962](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#121-a-package-is-not-a-complete-certificate)),
 so a package needs one trail per chain of prefixes ([time and bytes](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost)).
-`node --expose-gc scripts/pool/v3/replay-store-probe.mjs` measures this state's
-memory against the storage layout M5b moves it to, and its `read` mode the runtime
-reader streaming one long segment ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage)).
+The replay-state probe, retired after M5b.6 ([at its last revision](https://github.com/mediumofexchange/reference-ts/blob/6c7d8f2/scripts/pool/v3/replay-store-probe.mjs)),
+measured this state's memory against the storage layout M5b moved it to, the runtime
+reader, journal and wallet over long histories, and the first sync with real
+verification load ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage)).
 Silence-bearing imports read the independently answered publication
 range, classify demand/withdrawal/release force against each original snapshot,
 and preserve retirement after another segment resets the clock. A returning
