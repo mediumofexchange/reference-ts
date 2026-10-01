@@ -104,7 +104,7 @@ export function recoveryEffect(record: Record): RecoveryEffect {
   const p = record.publicInputs;
   if (record.kind === 4) {
     return { demand: { id: hex(statementHash(record)), value: { backing: identifierOf(p[5]!, p[6]!), quantity: p[7]!, tags: p.slice(10, 12),
-      presenter: identifierOf(p[12]!, p[13]!), deadline: p[15]! } }, ended: undefined };
+      presenter: identifierOf(p[12]!, p[13]!), instant: p[14]!, deadline: p[15]! } }, ended: undefined };
   }
   if (record.kind === 5 || record.kind === 6) {
     const i = record.kind === 5 ? 5 : 15;

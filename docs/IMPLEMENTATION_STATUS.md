@@ -28,7 +28,9 @@ complete local state from an encrypted offline handoff that freezes the source.
 It also holds the redemption acts under service (issue, demand, accept, settle,
 withdraw, burn; [guide](POOL_V3_WALLET.md#redeeming-and-issuing)) and, in a gap with the operator offline, publishes
 demands, withdrawals and releases bound to the snapshot, with the disclosure count read from releases witnessed
-without force. Stand-in proofs only so far (slice 9, M9a and M9b1).
+without force. A wallet restored from its seed finds its standing demands by their presenter keys and
+withdraws or settles them; an act whose segment ended fails and is made again. Stand-in proofs only so far
+(slice 9, M9a–M9b2).
 Cancellation/release, multi-backing payment, continuous backup and physical
 qualification remain open. Every read keeps its replay state in node:sqlite
 (`replay-store.ts`, [storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):

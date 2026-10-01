@@ -13,13 +13,14 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../sr
 import type { BackerSigner, LocalProver, V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import type { ProofTask } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
+import { encodeReplacement, replacementMessage, type Replacement } from "../src/venue-records.js";
 
 // Stand-in proofs isolate the wallet's redemption custody (slice 9, M9a): the backer issues, accepts and burns
 // through its own wallet and signer, the holder demands, settles and withdraws through its own, under service.
 const b = (n: number) => new Uint8Array(32).fill(n);
 const domain = configurationHash(adoptedConfiguration());
-const issuerSecret = b(15), operatorSecret = b(16);
-const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
+const issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
+const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret), successorKey = ed25519.getPublicKey(successorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
 const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
@@ -67,7 +68,25 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
       await backer.submit(`issue-${i}`, service);
     }
     await publish();
-    return { directory, venue, signed, backing, backer, holder, open, j, publish, service, served: () => served };
+    /** The backer replaces the operator with B; once effective, B takes over from A's published package and adopts. */
+    const replace = async () => {
+      const effective = venue.witnessedIndex() + 2n * lag + 2n;
+      const unsigned: Replacement = { role: 1, successor: successorKey, predecessor: backing, effective,
+        signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+      const message = replacementMessage(backing, unsigned);
+      await venue.publishRecord(2, backing, encodeReplacement(backing,
+        { ...unsigned, signature: ed25519.sign(message, issuerSecret), successorSignature: ed25519.sign(message, successorSecret) }));
+      venue.advance(effective);
+    };
+    const takeover = async () => {
+      const b2 = new V3OperatorJournal(join(directory, "successor.db"), { venue, reference, verifier, secret: successorSecret });
+      journals.push(b2); await b2.takeover("takeover", signed, (await j.package()).package); await b2.publish(); await b2.adopt();
+      return b2;
+    };
+    const restore = (name: string, wallet: Wallet) => {
+      const restored = V3Wallet.restoreSeed(join(directory, `${name}.db`), reader, wallet.recoverySeed()); wallets.push(restored); return restored;
+    };
+    return { directory, venue, signed, backing, backer, holder, open, j, publish, service, served: () => served, replace, takeover, restore };
   }
 
   it("issues, demands, accepts, settles and burns through wallet operations with unchanged supply until the burn", async () => {
@@ -87,17 +106,20 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const p = decodeRecord(demand.record).publicInputs;
     expect(p[14]).toBe(at);
     expect(identifierOf(p[12]!, p[13]!)).toEqual(ed25519.getPublicKey(presenterSecret(f.holder.recoverySeed(), domain, p.slice(10, 12), at, deadline)));
+    // A prepared demand reserves its notes; once it stands, its lock holds them (C3.7).
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["reserved"]);
     await f.holder.submit("redeem", f.service);
     await f.publish();
     const locked = await f.holder.sync(f.served(), f.signed);
-    expect(locked.holdings.map(h => h.status)).toEqual(["reserved"]);
+    expect(locked.holdings.map(h => h.status)).toEqual(["locked"]);
+    expect(locked.demands).toEqual([{ id: demand.demand, quantity: 10n, instant: at, deadline, holdings: [locked.holdings[0]!.cm] }]);
     expect(f.holder.act("redeem")!.status).toBe("final");
 
     const acceptance = await f.backer.accept("answer", demand.demand!, deadline - 5n, f.served(), f.signed, sign);
     expect(ed25519.verify(acceptance.signature, acceptanceBytes(acceptance), issuer)).toBe(true);
     expect(await f.backer.accept("answer", demand.demand!, deadline - 5n, new Uint8Array(), f.signed, undefined as never)).toEqual(acceptance);
 
-    const settled = await f.holder.settle("settle", "redeem", acceptance, f.served(), f.signed, prove);
+    const settled = await f.holder.settle("settle", acceptance, f.served(), f.signed, prove);
     const s = decodeRecord(settled.record);
     expect(s.kind).toBe(6);
     expect(settlementAuthorization(s).acceptance).toMatchObject({ owner: acceptance.owner, deadline: acceptance.deadline });
@@ -131,7 +153,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(demand.inputs.length).toBe(2);
     await f.holder.submit("pair", f.service); await f.publish();
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => [h.value, h.status]).sort())
-      .toEqual([[4n, "reserved"], [5n, "available"], [6n, "reserved"]].sort());
+      .toEqual([[4n, "locked"], [5n, "available"], [6n, "locked"]].sort());
 
     const stranger: BackerSigner = message => ed25519.sign(message, b(77));
     await expect(f.backer.accept("bad", demand.demand!, deadline - 1n, f.served(), f.signed, stranger))
@@ -143,18 +165,18 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // An acceptance the obligor never signed is refused before any proof.
     const good = await f.backer.accept("good", demand.demand!, deadline - 1n, f.served(), f.signed, sign);
     const forged = { ...good, signature: ed25519.sign(acceptanceBytes(good), b(77)) };
-    await expect(f.holder.settle("forged", "pair", forged, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "INVALID" });
-    await expect(f.holder.settle("other", "pair", { ...good, owner: good.owner + 1n }, f.served(), f.signed, prove))
+    await expect(f.holder.settle("forged", forged, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "INVALID" });
+    await expect(f.holder.settle("other", { ...good, owner: good.owner + 1n }, f.served(), f.signed, prove))
       .rejects.toMatchObject({ code: "INVALID" });
 
-    const withdrawn = await f.holder.withdraw("back", "pair", f.served(), f.signed);
+    const withdrawn = await f.holder.withdraw("back", f.holder.act("pair")!.demand!, f.served(), f.signed);
     expect(withdrawn).toMatchObject({ kind: 5, demand: demand.demand });
     await f.holder.submit("back", f.service); await f.publish();
     const view = await f.holder.sync(f.served(), f.signed);
     expect(f.holder.act("back")!.status).toBe("final");
     expect(view.holdings.map(h => h.status)).toEqual(["available", "available", "available"]);
     // The withdrawn demand can no longer be settled.
-    await expect(f.holder.settle("after", "pair", good, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "ABSENT" });
+    await expect(f.holder.settle("after", good, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "ABSENT" });
     expect(statementHash(decodeRecord(withdrawn.record))).toEqual(withdrawn.statement);
     // The freed notes can be demanded again under a new alias; one acceptance is saved under one alias.
     await expect(f.backer.accept("good-again", demand.demand!, deadline - 1n, f.served(), f.signed, sign))
@@ -162,7 +184,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const again = await f.holder.demand("again", 10n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
     expect(again.inputs).toEqual(demand.inputs);
     await f.holder.submit("again", f.service); await f.publish();
-    expect((await f.holder.sync(f.served(), f.signed)).holdings.filter(h => h.status === "reserved").length).toBe(2);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.filter(h => h.status === "locked").length).toBe(2);
   });
 
   it("fails a demand whose instant left the window unadmitted and frees its notes; never decides by output alone", async () => {
@@ -207,7 +229,96 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     wallets.push(restored);
     expect(restored.act("redeem")).toEqual(demand);
     await restored.submit("redeem", f.service); await f.publish();
-    expect((await restored.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["reserved"]);
+    expect((await restored.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["locked"]);
+    // The lock ends at the demand's deadline (C3.7): unsettled by then, its notes are available with no withdrawal.
+    const deadline = decodeRecord(demand.record).publicInputs[15]!;
+    f.venue.advance(deadline);
+    expect((await restored.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["locked"]);
+    f.venue.advance(deadline + 1n);
+    const lapsed = await restored.sync(f.served(), f.signed);
+    expect(lapsed.holdings.map(h => h.status)).toEqual(["available"]);
+    expect(lapsed.demands.map(d => d.id)).toEqual([demand.demand]);
+  });
+
+  it("finds a demand again from the seed alone and settles it as the lost wallet would, by the demand's identity", async () => {
+    const f = await fixture([10n, 6n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 30n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service); await f.publish();
+    // The device is lost after the demand stood: a wallet from the seed alone has no saved record of it.
+    const restored = f.restore("restored", f.holder);
+    expect(restored.act("redeem")).toBeUndefined();
+    const view = await restored.sync(f.served(), f.signed), ten = view.holdings.find(h => h.value === 10n)!;
+    // The seed's derived presenter key recognizes the standing demand; its note is locked by it, not reserved.
+    expect(view.demands).toEqual([{ id: demand.demand, quantity: 10n, instant: decodeRecord(demand.record).publicInputs[14], deadline,
+      holdings: [ten.cm] }]);
+    expect(view.holdings.map(h => [h.value, h.status]).sort()).toEqual([[10n, "locked"], [6n, "available"]].sort());
+    await expect(restored.demand("again", 10n, deadline, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "FUNDS" });
+    // Another seed's view lists none, and it can neither withdraw nor settle the demand.
+    expect((await f.backer.sync(f.served(), f.signed)).demands).toEqual([]);
+    await expect(f.backer.withdraw("theirs", demand.demand!, f.served(), f.signed)).rejects
+      .toMatchObject({ code: "UNKNOWN", message: "the demand is not this wallet's" });
+    expect(f.backer.act("theirs")).toBeUndefined();
+    await expect(restored.withdraw("missing", b(9), f.served(), f.signed)).rejects.toMatchObject({ code: "ABSENT" });
+
+    const acceptance = await f.backer.accept("answer", demand.demand!, deadline - 5n, f.served(), f.signed, sign);
+    await expect(f.backer.settle("theirs", acceptance, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "UNKNOWN" });
+    await expect(restored.settle("late", { ...acceptance, deadline: deadline + 1n, signature: ed25519.sign(acceptanceBytes(
+      { ...acceptance, deadline: deadline + 1n }), issuerSecret) }, f.served(), f.signed, prove)).rejects
+      .toMatchObject({ code: "INVALID", message: "the acceptance is due after the demand" });
+    // The lost wallet's settlement and the restored one's are the same record: one segment, one disclosure count.
+    const lost = await f.holder.settle("settle", acceptance, f.served(), f.signed, prove);
+    const settled = await restored.settle("settle", acceptance, f.served(), f.signed, prove);
+    expect(settled.record).toEqual(lost.record);
+    expect(await restored.settle("settle", acceptance, new Uint8Array(), f.signed, undefined as never)).toEqual(settled);
+    await restored.submit("settle", f.service); await f.publish();
+    const after = await restored.sync(f.served(), f.signed);
+    expect(after.holdings.map(h => [h.value, h.status])).toEqual([[6n, "available"]]);
+    expect(after.demands).toEqual([]);
+    expect(restored.act("settle")!.status).toBe("final");
+    await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("settle")!.status).toBe("final");
+  });
+
+  it("fails an act whose segment ended; after succession a restored seed finds the demand and settles it again", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 40n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    const acceptance = await f.backer.accept("answer", demand.demand!, deadline - 5n, f.served(), f.signed, sign);
+    // A admits the settlement but its term ends before any checkpoint includes it.
+    const old = await f.holder.settle("settle", acceptance, f.served(), f.signed, prove);
+    const receipt = await f.holder.submit("settle", f.service);
+    await f.replace();
+    const successor = await f.takeover(), served = (await successor.package()).package;
+    const view = await f.holder.sync(served, f.signed);
+    expect(f.holder.act("settle")).toMatchObject({ status: "failed", receipt });
+    // The demand stands in the imported history; its lock holds its notes.
+    expect(view.demands.map(d => d.id)).toEqual([demand.demand]);
+    expect(view.holdings.map(h => h.status)).toEqual(["locked"]);
+    // A wallet from the seed finds it in B's segment too. The acceptance stands (C2.10.8): a settlement under a new
+    // alias re-proves the same nullifiers for the successor's segment, into an output derived for that segment.
+    const restored = f.restore("restored", f.holder);
+    expect((await restored.sync(served, f.signed)).demands.map(d => d.id)).toEqual([demand.demand]);
+    const again = await restored.settle("again", acceptance, served, f.signed, prove);
+    const s = decodeRecord(again.record).publicInputs, o = decodeRecord(old.record).publicInputs, segment = identifierOf(s[2]!, s[3]!);
+    expect(segment).not.toEqual(identifierOf(o[2]!, o[3]!));
+    expect(s.slice(12, 14)).toEqual(o.slice(12, 14));
+    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 0n));
+    expect(s[14]).not.toBe(o[14]);
+    const next = await restored.submit("again", { submit: async bytes => decodeReceipt(await successor.submit(bytes)) });
+    expect(next.operator).toEqual(successorKey);
+    await successor.commit("settled"); await successor.publish();
+    const final = (await successor.package()).package;
+    expect((await restored.sync(final, f.signed)).holdings).toEqual([]);
+    expect(restored.act("again")!.status).toBe("final");
+    expect((await f.holder.sync(final, f.signed)).holdings).toEqual([]);
+    expect(f.holder.act("settle")!.status).toBe("failed");
+    // The backer's seed finds the settled note in the successor's segment.
+    expect((await f.backer.sync(final, f.signed)).holdings.map(h => [h.value, h.status])).toEqual([[10n, "available"]]);
   });
 
   /** A fixture whose operator goes offline after funding: the venue clock is moved to the first index whose horizon
@@ -239,13 +350,13 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // A retry sends the same bytes; this venue witnesses an exact record once.
     await f.holder.publish("redeem", f.venue);
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => [h.value, h.status]).sort())
-      .toEqual([[10n, "reserved"], [4n, "available"], [6n, "available"]].sort());
+      .toEqual([[10n, "locked"], [4n, "available"], [6n, "available"]].sort());
     expect(f.holder.act("redeem")!.status).toBe("final");
 
     // The backer answers the forced demand; the holder's release is bound to the snapshot's segment and has force.
     await f.backer.sync(f.served(), f.signed);
     const acceptance = await f.backer.accept("answer", demand.demand!, at + 25n, f.served(), f.signed, sign);
-    const settleAt = f.venue.witnessedIndex(), settled = await f.holder.settle("settle", "redeem", acceptance, f.served(), f.signed, prove);
+    const settleAt = f.venue.witnessedIndex(), settled = await f.holder.settle("settle", acceptance, f.served(), f.signed, prove);
     const s = decodeRecord(settled.record).publicInputs;
     expect(identifierOf(s[2]!, s[3]!)).toEqual(segment);
     expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 0n));
@@ -259,12 +370,34 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const pairAt = f.venue.witnessedIndex();
     await f.holder.demand("pair", 10n, pairAt + 30n, f.served(), f.signed, prove);
     await f.relay(f.holder, "pair", pairAt);
-    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["reserved", "reserved"]);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["locked", "locked"]);
     const backAt = f.venue.witnessedIndex();
-    await f.holder.withdraw("back", "pair", f.served(), f.signed);
+    await f.holder.withdraw("back", f.holder.act("pair")!.demand!, f.served(), f.signed);
     await f.relay(f.holder, "back", backAt);
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["available", "available"]);
     expect([f.holder.act("pair")!.status, f.holder.act("back")!.status]).toEqual(["final", "final"]);
+  });
+
+  it("withdraws in a gap a demand with force that a wallet restored from the seed found again", async () => {
+    const f = await gap([4n, 6n]);
+    const at = f.venue.witnessedIndex();
+    const demand = await f.holder.demand("pair", 10n, at + 30n, f.served(), f.signed, prove);
+    await f.relay(f.holder, "pair", at);
+    const restored = f.restore("restored", f.holder);
+    const view = await restored.sync(f.served(), f.signed);
+    expect(view.demands.map(d => [d.id, d.quantity, d.holdings.length])).toEqual([[demand.demand, 10n, 2]]);
+    expect(view.holdings.map(h => h.status)).toEqual(["locked", "locked"]);
+    const backAt = f.venue.witnessedIndex();
+    const withdrawn = await restored.withdraw("back", demand.demand!, f.served(), f.signed);
+    expect(await restored.withdraw("back", demand.demand!, new Uint8Array(), f.signed)).toEqual(withdrawn);
+    await expect(restored.withdraw("back", b(9), f.served(), f.signed)).rejects.toMatchObject({ code: "CONFLICT" });
+    await f.relay(restored, "back", backAt);
+    const after = await restored.sync(f.served(), f.signed);
+    expect(after.holdings.map(h => h.status)).toEqual(["available", "available"]);
+    expect(after.demands).toEqual([]);
+    expect(restored.act("back")!.status).toBe("final");
+    // The lost wallet reads its demand ended by the withdrawal, so its notes are free there too.
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["available", "available"]);
   });
 
   it("counts releases witnessed without force, so the next settlement names an output nobody has seen", async () => {
@@ -274,7 +407,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.relay(f.holder, "redeem", at);
     await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
     const now = f.venue.witnessedIndex(), early = await f.backer.accept("early", demand.demand!, now + lag + 1n, f.served(), f.signed, sign);
-    const late = await f.holder.settle("late", "redeem", early, f.served(), f.signed, prove);
+    const late = await f.holder.settle("late", early, f.served(), f.signed, prove);
     // Published after its acceptance deadline, the release has no force but discloses its output.
     f.venue.advance(early.deadline);
     await f.holder.publish("late", f.venue);
@@ -292,7 +425,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
 
     await f.backer.sync(f.served(), f.signed);
     const later = await f.backer.accept("later", demand.demand!, f.venue.witnessedIndex() + 20n, f.served(), f.signed, sign);
-    const settleAt = f.venue.witnessedIndex(), again = await f.holder.settle("again", "redeem", later, f.served(), f.signed, prove);
+    const settleAt = f.venue.witnessedIndex(), again = await f.holder.settle("again", later, f.served(), f.signed, prove);
     const s = decodeRecord(again.record).publicInputs, l = decodeRecord(late.record).publicInputs, segment = identifierOf(s[2]!, s[3]!);
     expect(s.slice(12, 14)).toEqual(l.slice(12, 14));
     expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 1n));
@@ -315,16 +448,16 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
     const first = await f.backer.accept("first", demand.demand!, deadline - 2n, f.served(), f.signed, sign);
     const second = await f.backer.accept("second", demand.demand!, deadline - 1n, f.served(), f.signed, sign);
-    const s0 = await f.holder.settle("s0", "redeem", first, f.served(), f.signed, prove);
+    const s0 = await f.holder.settle("s0", first, f.served(), f.signed, prove);
     // rho_out reads no acceptance: a second settlement at the same count would disclose with the first.
-    await expect(f.holder.settle("s0b", "redeem", second, f.served(), f.signed, prove))
+    await expect(f.holder.settle("s0b", second, f.served(), f.signed, prove))
       .rejects.toMatchObject({ code: "CONFLICT", message: "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it" });
     // Only an act a venue record carries is published.
     await expect(f.backer.publish("issue-0", f.venue)).rejects.toMatchObject({ code: "INVALID",
       message: "only a demand, a withdrawal or a release is published" });
     // No gap can open here, so the release has no force; it still discloses its output and counts.
     await f.holder.publish("s0", f.venue);
-    const s1 = await f.holder.settle("s1", "redeem", second, f.served(), f.signed, prove);
+    const s1 = await f.holder.settle("s1", second, f.served(), f.signed, prove);
     const p0 = decodeRecord(s0.record).publicInputs, p1 = decodeRecord(s1.record).publicInputs, segment = identifierOf(p1[2]!, p1[3]!);
     expect(identifierOf(p0[2]!, p0[3]!)).toEqual(segment);
     expect(p1[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, p1.slice(12, 14), segment, 1n));
