@@ -1,8 +1,8 @@
 // The v3 reader over one segment: pool-v3 §13 record reads through a
 // RecordVenue and a checkpoint's trail replayed record by record through the
-// state machine (state.ts). Candidate until adoption: no approved configuration
-// or authenticated-chain finality verdict. The walk that classifies checkpoints,
-// imports, receipts, force and counts is scope-reader.ts; package-reader.ts is its entry.
+// state machine (state.ts), on reference venues only (guard.ts). The walk that
+// classifies checkpoints, imports, receipts, force and counts is
+// scope-reader.ts; package-reader.ts is its entry.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -196,7 +196,7 @@ export function keptAnswers(venue: RecordVenue, venueId: Uint8Array, store: Repl
 export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">, terms: RootTerms,
   evidence: Pick<WalkEvidence, "directory" | "chargeAnswer">, venue: RecordVenue, reference: VenueReference, store: ReplayStore): Promise<RecordView> {
   // The caller holds this preimage independently of supplied record evidence.
-  // Candidate v3 never reads a deployment venue, even if it offers valid ranges.
+  // The reference never reads a deployment venue, even if it offers valid ranges (guard.ts).
   const lag = read(() => venue.lag());
   const id = requireReferenceVenue(reference, { id: venue.id, lag: () => lag });
   if (!same(id, selection.venue)) throw new EvidenceRefusal("selection-mismatch");
@@ -333,7 +333,7 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
 }
 
 /** The pool-v3 revision this reader implements. */
-const SPECIFICATION = "pool-v3 01f922c";
+const SPECIFICATION = "pool-v3 e7f7f24";
 let rules: Uint8Array | undefined;
 /** The reader rules (§14 kept classes): the specification revision and the implementation's own code, every
  * file of the package's source or build tree by path and content. Any change to either discards kept state. */

@@ -35,7 +35,7 @@ import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, i
   withdrawalRecord } from "../../../dist/pool/v3/witness.js";
 import { PROOF_OPTIONS, proofVerifier, startBackend } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
-import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
+import { RELATION_KINDS, loadManifest, checkSources, adoptedDomain, readKeys } from "./manifest.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 
@@ -60,9 +60,9 @@ const summary = result => {
  * keys it derives from artifacts it checks against the manifest, and the terms and venue it is handed beside
  * (never from the service). With a service it syncs first; without one it reads what its files hold. */
 async function reader(build, directory) {
-  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-  const configuration = candidateConfiguration(manifest, codec), domain = codec.configurationHash(configuration);
-  readCandidateKeys(build, manifest);
+  const manifest = loadManifest(); checkSources(manifest);
+  const domain = adoptedDomain();
+  readKeys(build, manifest);
   const chunks = []; let length = 0;
   for await (const chunk of process.stdin) { length += chunk.length; assert(length <= 4_194_304, "reader input budget"); chunks.push(chunk); }
   const input = deserialize(Buffer.concat(chunks));
@@ -85,7 +85,7 @@ async function reader(build, directory) {
     }
     const began = performance.now();
     const result = await readFrontier(new Uint8Array(readFileSync(own)), input.signed, venue.witnessedIndex(),
-      { configuration, verifier, venue, reference, evidence, store });
+      { verifier, venue, reference, evidence, store });
     process.stdout.write(JSON.stringify({ summary: summary(result), verified, instances: runtime.parallel, readMs: Math.round(performance.now() - began),
       maxRssBytes: process.resourceUsage().maxRSS * 1024, heapUsedBytes: process.memoryUsage().heapUsed }));
   } finally { store?.close(); evidence?.close(); await runtime?.close(); await api.destroy(); }
@@ -96,7 +96,7 @@ async function acceptance() {
   const scratch = realpathSync(join(root, "scratch")), build = realpathSync(mkdtempSync(join(scratch, "v3-history-store-")));
   const checks = [], proofs = new Map(), measures = {}, started = performance.now();
   const test = async (name, fn) => { await fn(); checks.push(name); process.stderr.write(`passed: ${name}\n`); };
-  const sources = sourceClosure(["scripts/pool/v3/history-store-check.mjs", "scripts/pool/v3/compile.mjs", "scripts/pool/v3/candidate-manifest.json",
+  const sources = sourceClosure(["scripts/pool/v3/history-store-check.mjs", "scripts/pool/v3/compile.mjs", 
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const hashes = sourceHashes(sources);
@@ -107,14 +107,14 @@ async function acceptance() {
     await new Promise((done, failed) => { closing.close(error => error ? failed(error) : done()); closing.closeAllConnections(); });
   };
   try {
-    const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-    const configuration = candidateConfiguration(manifest, codec), domain = codec.configurationHash(configuration);
+    const manifest = loadManifest(); checkSources(manifest);
+    const domain = adoptedDomain();
     execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
     api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
     const programs = programsOf(build);
     for (const [kind, name] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
-    readCandidateKeys(build, manifest);
-    prover = await openV3Prover(api, programs, configuration);
+    readKeys(build, manifest);
+    prover = await openV3Prover(api, programs);
     const prove = async task => {
       const began = performance.now(), record = await prover.prove(task), ms = Math.round(performance.now() - began);
       const entry = proofs.get(task.kind) ?? { kind: task.kind, count: 0, bytes: record.proof.length, totalMs: 0, maxMs: 0 };
@@ -139,7 +139,7 @@ async function acceptance() {
       payout: { thing: "history reference units", quantumExponent: 0, perUnit: 1n }, silence: { noCommitmentDuration: silence, challengeWindow: 5n } });
     const backing = codec.rootTermsName(terms), signed = { terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuerSecret) };
     const genesis = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    const options = { configuration, venue: seen, reference, verifier: counting };
+    const options = { venue: seen, reference, verifier: counting };
     const open = name => new V3Wallet(join(build, `${name}.db`), options);
     payer = open("payer"); receiver = open("receiver");
     // The holder keeps no wallet: a seed, its own evidence file and its own kept replay file with that seed's witnesses.
@@ -151,7 +151,7 @@ async function acceptance() {
       { ...options, evidence: holderEvidence, store: holderReplay, witness: seedWitness(holderSeed, domain) });
     const holderNotes = result => ownedNotes(holderSeed, domain, backing, result.canonical.state);
 
-    const journalPath = join(build, "journal.db"), journalOptions = { configuration, secret: operatorSecret, venue, reference, verifier: prover.verifier };
+    const journalPath = join(build, "journal.db"), journalOptions = { secret: operatorSecret, venue, reference, verifier: prover.verifier };
     journal = new V3OperatorJournal(journalPath, journalOptions);
     const credentials = { walletToken: randomBytes(32).toString("hex"), adminToken: randomBytes(32).toString("hex") }, requests = [];
     const serve = async () => {
@@ -368,9 +368,9 @@ async function acceptance() {
       measures.journalAudit = { ms: Math.round(performance.now() - began) };
     });
 
-    checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
+    checkSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
     const report = { status: "passed", specification: V3_SPECIFICATION, evidence: "local-runtime-real-proofs", node: process.version, platform: process.platform,
-      limits: ["candidate configuration only", "single backing on the local reference venue; no chain venue or live broadcast",
+      limits: ["the adopted configuration on reference venues only", "single backing on the local reference venue; no chain venue or live broadcast",
         "one process holds the prover, the journal, its loopback service and both wallets; the seedless reader is its own process",
         "a history of tens of statements: past the old package, not the target scale", "no persistence-fault, adoption or custody claim"],
       history: { statements: HISTORY, oldStatements: OLD_STATEMENTS, oldPackageBytes: OLD_PACKAGE_BYTES, issues: 1 + ISSUES, payments: PAYMENTS, checkpoints: String(own.selection.sequence) },

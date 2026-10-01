@@ -13,7 +13,7 @@ import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentRep
 import type { RootTerms } from "../src/pool/v3/terms.js";
 import { RangeLimitError } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../src/record-venue.js";
-import { CandidateVenueError, referenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
+import { ReferenceVenueError, referenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
 import { PROOF_BYTES } from "../src/pool/v3/configuration.js";
 import { ergoRunCapacity } from "../src/ergo-publisher.js";
 import { ERGO_SYNTHETIC_REFERENCE } from "../src/ergo-profile.js";
@@ -299,7 +299,7 @@ describe("the reader's venue", () => {
     }
     expect(referenceVenue(profile(sized(carried))).lag).toBe(3n);
     expect(() => referenceVenue(profile(sized(carried + 1)))).toThrow(
-      new CandidateVenueError("the venue's kind-4 location cannot carry the configuration's longest publication in one transaction"));
+      new ReferenceVenueError("the venue's kind-4 location cannot carry the configuration's longest publication in one transaction"));
     expect(carried).toBeGreaterThan(3_000);
   });
 
@@ -310,10 +310,10 @@ describe("the reader's venue", () => {
     const refused = (r: VenueReference, v = venue) => readRecordView(selection, terms, noEvidence(), v, r, new ReplayStore());
     for (const r of [undefined, { ...reference, label: b(13) }, { ...reference, lag: 3n },
       { context: "moe/venue/ergo-testnet/reference" }, { context: "moe/venue/ergo/mainnet" }]) {
-      await expect(refused(r as VenueReference)).rejects.toThrow(CandidateVenueError);
+      await expect(refused(r as VenueReference)).rejects.toThrow(ReferenceVenueError);
     }
-    await expect(refused(reference, { ...venue, id: b(12) })).rejects.toThrow(CandidateVenueError);
-    await expect(refused(reference, { ...venue, lag: () => 3n })).rejects.toThrow(CandidateVenueError);
+    await expect(refused(reference, { ...venue, id: b(12) })).rejects.toThrow(ReferenceVenueError);
+    await expect(refused(reference, { ...venue, lag: () => 3n })).rejects.toThrow(ReferenceVenueError);
     expect(reads).toBe(0);
     let lagReads = 0;
     const fixture = FixtureVenue.reference(b(12), 2n, 4n);

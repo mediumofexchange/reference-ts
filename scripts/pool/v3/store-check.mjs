@@ -26,7 +26,7 @@ import { copyPaymentRequest } from "../../../dist/pool/v3/wallet-request.js";
 import { decodeReceipt, encodeReceipt } from "../../../dist/pool/v3/commitments.js";
 import { createV3Service } from "../../../dist/pool/v3/service-http.js";
 import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
-import { CandidateVenueError } from "../../../dist/pool/v3/guard.js";
+import { ReferenceVenueError } from "../../../dist/pool/v3/guard.js";
 import { openV3Prover, ProverError } from "../../../dist/pool/v3/prover.js";
 import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { authorizeIssue, burnTask, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
@@ -34,7 +34,7 @@ import { encodeRecord } from "../../../dist/pool/v3/records.js";
 import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { PACKAGE_LIMITS, recordReader, replayEvidencePackage } from "./local-replay.mjs";
-import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
+import { RELATION_KINDS, loadManifest, checkSources, adoptedDomain, readKeys } from "./manifest.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { publicArtifactFiles } from "./public-artifacts.mjs";
@@ -60,7 +60,7 @@ const refusal = async (action, code, check) => {
   assert.equal(error.code, code); assert.equal(error.check, check);
 };
 const sources = sourceClosure(["scripts/pool/v3/store-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
-  "scripts/pool/v3/candidate-manifest.json",
+  
   ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
   "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
 const sourceSha256Lf = sourceHashes(sources), runStarted = performance.now();
@@ -72,10 +72,9 @@ async function stopService() {
 }
 try {
   const live = withTestnet ? await testnet.openTestnet() : undefined;
-  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-  const configuration = candidateConfiguration(manifest, codec);
+  const manifest = loadManifest(); checkSources(manifest);
   execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
-  checkCandidateSources(manifest);
+  checkSources(manifest);
   const parameters = await readParameters(PARAMETER_DIRECTORY);
   api = await startBackend(parameters);
   const programs = Object.fromEntries(RELATION_KINDS.map(([, name]) => [name, JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"))]));
@@ -83,8 +82,8 @@ try {
   for (const [kind, name] of RELATION_KINDS) {
     writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
   }
-  readCandidateKeys(build, manifest);
-  const prover = await openV3Prover(api, programs, configuration);
+  readKeys(build, manifest);
+  const prover = await openV3Prover(api, programs);
   async function prove(task, label) {
     const start = performance.now(), record = await prover.prove(task);
     metrics.push({ label, kind: task.kind, proofBytes: record.proof.length, elapsedMs: Math.round(performance.now() - start) });
@@ -113,18 +112,18 @@ try {
     supplier.mempool.fund(plainBox(publisher.tree, 100_000_000n, ERGO_CHAIN.anchor.height));
     await mineAndSync();
   }
-  const verifier = { configuration, reference, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
+  const verifier = { reference, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
     record: data => withTestnet ? testnet.testnetRecord(live.selection(), live.pin)
       : withErgo ? ergoRecord(data, { pin }) : recordReader(FixtureVenue.from(data), evidenceKind) };
   // The range-replay harness needs a venue-presence marker. Testnet's marker
   // is reader-owned and empty: its factory always fetches node bytes itself.
   const replay = input => replayEvidencePackage(withTestnet ? { ...input, venue: {} } : input, verifier, codec);
-  const domain = codec.configurationHash(configuration);
+  const domain = adoptedDomain();
   const termsBytes = codec.encodeRootTerms({ obligor: issuer, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
     operator, configuration: domain, venue: venue.id, interval: withTestnet ? BigInt(testnet.TESTNET_LIMITS.maxBlocks) : 10n });
   const signed = { terms: termsBytes, signature: ed25519.sign(codec.rootTermsSignatureMessage(termsBytes), issuerSecret) };
   const backing = codec.rootTermsName(termsBytes);
-  const receiverPath = join(build, "receiver.db"), receiverOptions = { configuration, venue, reference, verifier: prover.verifier };
+  const receiverPath = join(build, "receiver.db"), receiverOptions = { venue, reference, verifier: prover.verifier };
   receiverWallet = new V3Wallet(receiverPath, receiverOptions);
   const receiverSeed = receiverWallet.recoverySeed();
   const paidRequest = receiverWallet.request("payment", backing, 7n);
@@ -144,7 +143,7 @@ try {
   const feeRequest = copyPaymentRequest({ domain, opening: fee.opening, cm: fee.cm, capsule: fee.capsule }, { domain, backing, value: 1n });
   const pad = request(payerSeed, 36, 0n);
   const burnChange = request(receiverSeed, 37, 2n), receiverPad = request(receiverSeed, 38, 0n);
-  const journalPath = join(build, "journal.db"), options = { configuration, secret: operatorSecret, venue, reference, verifier: prover.verifier };
+  const journalPath = join(build, "journal.db"), options = { secret: operatorSecret, venue, reference, verifier: prover.verifier };
   const credentials = { walletToken: randomBytes(32).toString("hex"), adminToken: randomBytes(32).toString("hex") };
   async function serve() {
     await stopService();
@@ -191,22 +190,22 @@ try {
 
   const records = {}, receipts = {};
   let spent;
-  await test("the prover refuses artifacts whose keys are not the configuration's", async () => {
-    const changed = { ...configuration, circuits: { ...configuration.circuits, spend: { ...configuration.circuits.spend, vk: b(9) } } };
-    const error = await openV3Prover(api, programs, changed).then(() => undefined, e => e);
+  await test("the prover refuses artifacts whose identities are not the adopted configuration's", async () => {
+    // Burn's artifact in spend's place: both take 15 public inputs, so only the derived identities differ.
+    const error = await openV3Prover(api, { ...programs, spend: programs.burn }).then(() => undefined, e => e);
     assert(error instanceof ProverError); assert.equal(error.code, "IDENTITY");
   });
   await test("the prover refuses a backend instance startBackend did not start (pool-v3 §4)", async () => {
     const unchecked = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, skipSrsInit: true });
     try {
-      await assert.rejects(openV3Prover(unchecked, programs, configuration),
+      await assert.rejects(openV3Prover(unchecked, programs),
         { name: "ParameterError", code: "UNCHECKED", message: "the backend instance was not started from checked parameters" });
     } finally { await unchecked.destroy(); }
   });
   await test("the journal runs only on a venue whose identity recomputes from its reference preimage", () => {
-    assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, venue: new FixtureVenue(b(12), 0n, lag) }), CandidateVenueError);
+    assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, venue: new FixtureVenue(b(12), 0n, lag) }), ReferenceVenueError);
     const wrongReference = withTestnet || withErgo ? { ...reference, profile: { ...reference.profile, depth: reference.profile.depth + 1n } } : { ...reference, lag: 3n };
-    assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, reference: wrongReference }), CandidateVenueError);
+    assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, reference: wrongReference }), ReferenceVenueError);
   });
   journal = new V3OperatorJournal(journalPath, options);
   await test("the operator opens and publishes the genesis segment the backer's terms name", async () => {
@@ -372,7 +371,7 @@ try {
     journal.close();
     const reopenApi = await startBackend(parameters);
     try {
-      const again = await openV3Prover(reopenApi, programs, configuration);
+      const again = await openV3Prover(reopenApi, programs);
       try {
         journal = new V3OperatorJournal(journalPath, { ...options, verifier: again.verifier });
         await serve();
@@ -414,7 +413,7 @@ try {
   if (withTestnet) assert(elapsedMs < testnet.TESTNET_LIMITS.runMs, "testnet run time budget");
   const report = { schema: withTestnet ? "moe-v3-testnet-journal-1" : "moe-v3-operator-journal-1",
     specification: V3_SPECIFICATION, node: process.version, platform: process.platform, elapsedMs,
-    candidateDomain: hex(domain), backing: hex(backing), venue: { context: reference.context, lag: lag.toString(), id: hex(venue.id),
+    configHash: hex(domain), backing: hex(backing), venue: { context: reference.context, lag: lag.toString(), id: hex(venue.id),
       ...(withTestnet ? { ...live.readerConfig(), witnessedBlock: hex(pin), tipHeight: live.tipHeight.toString(),
         anchorContextSha256: hex(sha(Buffer.concat(live.context))), funding: "throwaway testnet key", publisher: "ErgoPublisher",
         submittedTransactions: live.submitted, budgets: testnet.TESTNET_LIMITS }
@@ -424,10 +423,10 @@ try {
     venueRecords: audit.audit.range.carrying.length, sourceSha256Lf, audit, holdings, receiptReads, fresh,
     ...(publicBundle === undefined ? {} : { publicBundle }),
     limits: [withTestnet
-      ? "Explicit live testnet only, own node v6.0.6, depth 2. The independently selected already-final anchor and its pre-anchor ancestry are trust inputs. Header work, testnet difficulty, linkage and transaction sections after that anchor are verified by ErgoVenue. The fresh seedless reader holds its manifest, keys, endpoint, profile and witnessed pin outside the package and fetches node bytes itself. No mainnet, adopted domain, deployment or production finality claim."
+      ? "Explicit live testnet only, own node v6.0.6, depth 2. The independently selected already-final anchor and its pre-anchor ancestry are trust inputs. Header work, testnet difficulty, linkage and transaction sections after that anchor are verified by ErgoVenue. The fresh seedless reader holds its manifest, keys, endpoint, profile and witnessed pin outside the package and fetches node bytes itself. No mainnet, deployment or production finality claim."
       : withErgo
-      ? "Candidate configuration from the independently held manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment, adopted domain or real-chain finality."
-      : "Candidate configuration from the independently held manifest and a local reference venue whose identity the guard recomputes; no adopted domain, chain venue or finality.",
+      ? "The adopted configuration from the runtime manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment or real-chain finality."
+      : "The adopted configuration from the runtime manifest and a local reference venue whose identity the guard recomputes; no chain venue or finality.",
       "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
       "The payer wallet restores its note from the served package, selects and pads its inputs, prepares its own change and zero outputs beside the receiver's and operator's exact requests, proves through the runtime prover, saves and submits the exact record, and reconciles it final. The receiver wallet persists an exact request and final fulfillment across reopening. Submission, commitment, publication and evidence retrieval use the authenticated loopback v3 service. Receiver invitation transport and fee quotes remain outside this fixture; the burn and hostile cases restore paths and prove through the existing reader/prover.",
       "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."] };

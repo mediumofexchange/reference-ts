@@ -14,7 +14,7 @@ export async function checkCompactRuntime({ payload, result, verifier, codec, po
   const trail = codec.decodeTrail(payload.package.trail, LIMITS);
   if (codec.decodeSegmentHeader(trail.header).entries.length !== 1) return false;
   const bytes = portable(payload).package;
-  const options = { configuration: verifier.configuration, verifier, reference: verifier.reference,
+  const options = { verifier, reference: verifier.reference,
     venue: await verifier.record(payload.venue) };
   if (!["selected-local-replay", "historical-local-replay", "receipt-status"].includes(result.status)) {
     await assert.rejects(() => readPackage(bytes, payload.selection, options), error =>

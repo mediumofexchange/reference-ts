@@ -7,7 +7,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { deserialize } from "node:v8";
-import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, readCandidateKeys } from "./candidate.mjs";
+import { RELATION_KINDS, loadManifest, checkSources, readKeys } from "./manifest.mjs";
 import { publicArtifactFiles } from "./public-artifacts.mjs";
 import { sourceClosure, sourceHashes } from "./provenance.mjs";
 
@@ -19,7 +19,7 @@ const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const livePath = "docs/pool-v3-testnet-verification.json", liveBytes = readFileSync(join(root, livePath));
 const live = JSON.parse(liveBytes), bundle = join(scratch, "pool-v3-testnet-reader");
 const sources = sourceClosure(["scripts/pool/v3/testnet-reader-check.mjs", "scripts/pool/v3/store-check.mjs",
-  "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs", "scripts/pool/v3/candidate-manifest.json",
+  "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs", 
   ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
   "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
 const sourceSha256Lf = sourceHashes(sources);
@@ -30,7 +30,7 @@ try {
     assert(!name.includes("/") && !name.includes("\\"), "bundle file name");
     assert.equal(sha(readFileSync(join(bundle, name))), digest, `original live bundle: ${name}`);
   }
-  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
+  const manifest = loadManifest(); checkSources(manifest);
   execFileSync(process.execPath, [join(import.meta.dirname, "compile.mjs"), build],
     { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
   for (const [kind] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), readFileSync(join(bundle, `${kind}.vk`)));
@@ -38,11 +38,11 @@ try {
     if (live.publicBundle.sha256[name] !== undefined) assert.equal(sha(bytes), live.publicBundle.sha256[name]);
     writeFileSync(join(bundle, name), bytes);
   }
-  readCandidateKeys(bundle, manifest);
+  readKeys(bundle, manifest);
   const artifactPath = join(build, "issue.json"), original = readFileSync(artifactPath);
   try {
     writeFileSync(artifactPath, JSON.stringify({ bytecode: Buffer.from("altered public bytecode").toString("base64") }));
-    assert.throws(() => readCandidateKeys(build, manifest), /candidate identity mismatch: issue bytecode/);
+    assert.throws(() => readKeys(build, manifest), /manifest identity mismatch: issue bytecode/);
   } finally { writeFileSync(artifactPath, original); }
   const expected = ["input.bin", "testnet-reader.json", "ergo-pin.bin", "replay.mjs",
     ...RELATION_KINDS.flatMap(([kind, name]) => [`${kind}.vk`, `${name}.json`])].sort();
@@ -63,7 +63,7 @@ try {
     liveObservation: { report: livePath, sha256: sha(liveBytes),
       originalFilesUnchanged: Object.keys(live.publicBundle.sha256).length },
     bundle: { directory: live.publicBundle.directory, totalBytes, sha256: Object.fromEntries(files.map(([name, bytes]) => [name, sha(bytes)])) },
-    checks: ["original live input hashes unchanged", "all six bytecode and key identities match the fixed candidate manifest",
+    checks: ["original live input hashes unchanged", "all six bytecode and key identities match the runtime manifest",
       "altered bytecode refused by its specific identity check", "public-only bundle file and input fields",
       "standalone fresh seedless replay exactly matches the original live audit"], replay,
     limits: ["Read-only replay of retained live records; no new transactions or re-execution of the publication flow.",

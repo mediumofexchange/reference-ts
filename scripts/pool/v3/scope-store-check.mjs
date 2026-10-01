@@ -33,7 +33,7 @@ import { identifierOf } from "../../../dist/pool/field.js";
 import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { field } from "../fixtures.mjs";
-import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
+import { RELATION_KINDS, loadManifest, checkSources, adoptedDomain, readKeys } from "./manifest.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { ERGO_CHAIN, ERGO_PROFILE } from "./ergo-check.mjs";
@@ -51,8 +51,8 @@ const summary = result => {
 };
 
 async function worker(directory, ergo) {
-  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-  const configuration = candidateConfiguration(manifest, codec), keys = readCandidateKeys(directory, manifest);
+  const manifest = loadManifest(); checkSources(manifest);
+  const keys = readKeys(directory, manifest);
   const chunks = []; let length = 0;
   for await (const chunk of process.stdin) { length += chunk.length; assert(length <= 4_194_304, "worker input budget"); chunks.push(chunk); }
   const input = deserialize(Buffer.concat(chunks));
@@ -68,7 +68,7 @@ async function worker(directory, ergo) {
       assert.equal(hex(answer.witnessedHeaderId), hex(readFileSync(join(directory, "ergo-pin.bin"))));
     } else venue = FixtureVenue.from(input.venue);
     process.stdout.write(JSON.stringify(summary(await readPackage(input.package, input.selection,
-      { configuration, verifier, venue, reference: referenceFor(ergo) }))));
+      { verifier, venue, reference: referenceFor(ergo) }))));
   } finally { await api.destroy(); }
 }
 
@@ -79,20 +79,20 @@ async function acceptance(ergo) {
   const test = async (name, fn) => { await fn(); checks.push(name); process.stderr.write(`passed: ${name}\n`); };
   const refusal = (action, code, check) => assert.rejects(action, error => error instanceof V3StoreError && error.code === code &&
     (check === undefined || error.check === check));
-  const sources = sourceClosure(["scripts/pool/v3/scope-store-check.mjs", "scripts/pool/v3/compile.mjs", "scripts/pool/v3/candidate-manifest.json",
+  const sources = sourceClosure(["scripts/pool/v3/scope-store-check.mjs", "scripts/pool/v3/compile.mjs", 
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const hashes = sourceHashes(sources);
   let api, prover, completed = false; const wallets = [];
   try {
-    const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-    const configuration = candidateConfiguration(manifest, codec), domain = codec.configurationHash(configuration);
+    const manifest = loadManifest(); checkSources(manifest);
+    const domain = adoptedDomain();
     execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
     api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
     const programs = Object.fromEntries(RELATION_KINDS.map(([, name]) => [name, JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"))]));
     for (const [kind, name] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
-    readCandidateKeys(build, manifest);
-    prover = await openV3Prover(api, programs, configuration);
+    readKeys(build, manifest);
+    prover = await openV3Prover(api, programs);
     const prove = async (task, name) => { const began = performance.now(), record = await prover.prove(task);
       proofs.push({ name, kind: task.kind, bytes: record.proof.length, elapsedMs: Math.round(performance.now() - began) }); return record; };
     const reference = referenceFor(ergo), supplier = ergo ? new MiningSupplier("scope-synthetic", ERGO_CHAIN, verifyErgoProof) : undefined;
@@ -118,15 +118,15 @@ async function acceptance(ergo) {
     };
     const x = backingOf("scope reference x units", b(15)), y = backingOf("scope reference y units", b(14));
     const create = (name, secret) => { const journal = new V3OperatorJournal(join(build, `${name}.db`),
-      { configuration, secret, venue, reference, verifier: prover.verifier }); journals.push(journal); return journal; };
+      { secret, venue, reference, verifier: prover.verifier }); journals.push(journal); return journal; };
     const a = create("a", aSecret), successor = create("b", bSecret);
-    const wallet = name => { const opened = new V3Wallet(join(build, `${name}.db`), { configuration, verifier: prover.verifier, venue, reference });
+    const wallet = name => { const opened = new V3Wallet(join(build, `${name}.db`), { verifier: prover.verifier, venue, reference });
       wallets.push(opened); return opened; };
     const payer = wallet("payer"), receiver = wallet("receiver");
     const served = async (journal, backing) => { const value = await journal.package(backing.name); packages.push(value.package.length); return {
       package: value.package, selection: { ...value.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       venue: ergo ? { tip: supplier.tip } : venue.export() }; };
-    const read = input => readPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference });
+    const read = input => readPackage(input.package, input.selection, { verifier: prover.verifier, venue, reference });
     const fresh = input => {
       if (ergo) writeFileSync(join(build, "ergo-pin.bin"), pin);
       const child = spawnSync(process.execPath, [import.meta.filename, "--worker", build, ...(ergo ? ["--ergo"] : [])],
@@ -243,11 +243,11 @@ async function acceptance(ergo) {
       final = await both(a, [10n, 25n]);
       assert(final.every(result => result.position === "2" && result.carrying.every(item => item.class === "valid")));
     });
-    checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
+    checkSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
     const report = { status: "passed", specification: V3_SPECIFICATION,
       evidence: ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
-      limits: ["candidate configuration only", "two backings, one operator per term", "one wallet payment, in the rejoined scope", "no live broadcasts",
-        "no persistence or configuration adoption claim", "empty recovery blocks; forced recovery over a scope is oracle-proof only"],
+      limits: ["the adopted configuration on reference venues only", "two backings, one operator per term", "one wallet payment, in the rejoined scope", "no live broadcasts",
+        "no persistence claim", "empty recovery blocks; forced recovery over a scope is oracle-proof only"],
       checks, proofs, transactions, maxPackageBytes: Math.max(...packages),
       final: { x: final[0], y: final[1] }, elapsedMs: Math.round(performance.now() - started), sourceSha256Lf: hashes };
     writeFileSync(join(root, "docs", `pool-v3-scope-store${ergo ? "-ergo" : ""}-verification.json`), JSON.stringify(report, null, 2) + "\n");

@@ -29,7 +29,7 @@ import { identifierOf, isValue } from "../field.js";
 import { commitmentOf } from "../notes.js";
 import { prepareExactOutput, type PreparedOutput } from "./capsules.js";
 import { decodeReceipt, encodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier } from "./configuration.js";
+import { adoptedDomain, requireConfigurationVerifier } from "./configuration.js";
 import { requireReferenceVenue } from "./guard.js";
 import { EvidenceStore } from "./evidence-store.js";
 import type { SegmentHeader } from "./headers.js";
@@ -113,14 +113,14 @@ function persistentPath(path: string): void {
 /** Each caller field read once: the wallet's domain, guarded venue identity and
  * the owned reader options every later step uses. */
 function ownOptions(options: PackageReader) {
-  const { configuration, verifier, venue, reference } = options;
+  const { verifier, venue, reference } = options;
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
-  const ownConfiguration = decodeConfiguration(configurationBytes(configuration)), verify = verifier.verify.bind(verifier);
-  const identities = requireConfigurationVerifier(ownConfiguration, verifier.identities), parallel = declaredParallel(verifier);
-  const reader: PackageReader = { configuration: ownConfiguration, verifier: { verify, ...(identities === undefined ? {} : { identities }),
+  const verify = verifier.verify.bind(verifier);
+  const identities = requireConfigurationVerifier(verifier.identities), parallel = declaredParallel(verifier);
+  const reader: PackageReader = { verifier: { verify, ...(identities === undefined ? {} : { identities }),
     ...(parallel === undefined ? {} : { parallel }) },
     venue, reference: ownReference };
-  return { domain: configurationHash(ownConfiguration), venueId, reader };
+  return { domain: adoptedDomain(), venueId, reader };
 }
 /** The canonical checkpoint and witnessed index a request was found paid at. Its evidence is what the
  * wallet's evidence file retains; nothing here stores or proves that evidence. */

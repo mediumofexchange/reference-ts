@@ -1,4 +1,4 @@
-// Candidate root-terms bytes for pool-v3 §§11.2–11.3 at 916bffb.
+// Root-terms bytes for pool-v3 §§11.2–11.3.
 // Identity/signature evidence supplies no registration, currentness or adoption.
 import { sha256 } from "@noble/hashes/sha2.js";
 import {

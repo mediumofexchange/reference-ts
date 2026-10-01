@@ -3,23 +3,25 @@
 // §4). The backend's legacy `keccak` mode disables zero knowledge and is no
 // construction here.
 //
-// Construction-neutral: a construction passes its circuits as data — each
-// statement kind, the name of its compiled artifact and its public-input count
-// — with its proof-size bound. The verifier derives one key per kind from the
-// artifact's bytecode, names each circuit's identity for the caller to pin
-// against its configuration, and verifies a kind against that kind's key and
-// nothing else; it never accepts a verification key supplied with a statement.
+// A construction passes its circuits as data — each statement kind, the name
+// of its compiled artifact and its public-input count — with its proof-size
+// bound. The verifier derives one key per kind from the artifact's bytecode,
+// names each circuit's identity for the caller to pin against its
+// configuration, and verifies a kind against that kind's key and nothing else;
+// it never accepts a verification key supplied with a statement.
 // `v3/prover.ts` binds pool-v3's table.
 //
 // Every backend instance is started here from proving parameters whose hashes
-// match `BN254_PARAMETERS` (pool-v3 §4's check before loading); the backend's
-// own loader, which reads an unchecked directory or downloads, is never used.
+// match `BN254_PARAMETERS` (`parameters.ts`, pool-v3 §4's check before loading);
+// the backend's own loader, which reads an unchecked directory or downloads,
+// is never used.
 // This module and `v3/prover.ts` are the only ones that import `@aztec/bb.js`,
 // an optional peer dependency.
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
+import { BN254_PARAMETERS } from "./parameters.js";
 import { copyArray, copyBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { fieldToHex, isField } from "./field.js";
 
@@ -73,20 +75,6 @@ export interface VerifierOptions extends BackendOptions {
 /** The most instances one verifier starts. */
 const MAX_INSTANCES = 64;
 
-/**
- * The proving parameters this implementation loads (pool-v3 §4), one accepted
- * layout per input, as SHA-256. `g1` is the leading `points` G1 points of Aztec
- * Ignition's transcript00, uncompressed as the backend reads them (each point
- * `x || y`, 32-byte big-endian; the first is `[1]_1`). `points` is the size of
- * the largest relation proved here, pool-v3's spend: the backend refuses to
- * derive a key or prove for a larger circuit. `g2` is `[x]_2`, which the
- * backend's loader also requires.
- */
-export const BN254_PARAMETERS = Object.freeze({
-  points: 32768,
-  g1: "50d2f4e9567be2b8e382cedfd078b96a3428a94597b7e88c4116e105d578ce77",
-  g2: "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f",
-});
 const POINT_BYTES = 64;
 const G2_BYTES = 128;
 

@@ -11,11 +11,11 @@ import { Chain } from "../src/ergo-synthetic.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, decodeSnapshot, verifyReceipt } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
-import { CandidateVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
+import { ReferenceVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { decodeEvidenceDirectory, decodeEvidencePackage } from "../src/pool/v3/package.js";
 import { encodeRecord, type Record } from "../src/pool/v3/records.js";
@@ -35,10 +35,7 @@ import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, sig
 
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
 const HELPER = hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8");
-const configuration: CandidateConfiguration = {
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"],
-  helper: HELPER,
-};
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration);
 const issuerSecret = b(15), operatorSecret = b(16), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference: VenueReference = { context: LOCAL_REFERENCE, label, lag };
@@ -80,14 +77,14 @@ describe("the candidate guard", () => {
     expect(requireReferenceVenue(reference, venue)).toEqual(venueId);
     const refused = (ref: VenueReference, v: { id: Uint8Array; lag(): bigint }) => () => requireReferenceVenue(ref, v);
     // A caller-chosen identity, another label, another lag, and a lag the venue misstates.
-    expect(refused(reference, new FixtureVenue(b(12), 0n, lag))).toThrow(CandidateVenueError);
-    expect(refused({ ...reference, label: b(13) }, venue)).toThrow(CandidateVenueError);
-    expect(refused({ ...reference, lag: 3n }, venue)).toThrow(CandidateVenueError);
-    expect(refused(reference, { id: venue.id, lag: () => 3n })).toThrow(CandidateVenueError);
+    expect(refused(reference, new FixtureVenue(b(12), 0n, lag))).toThrow(ReferenceVenueError);
+    expect(refused({ ...reference, label: b(13) }, venue)).toThrow(ReferenceVenueError);
+    expect(refused({ ...reference, lag: 3n }, venue)).toThrow(ReferenceVenueError);
+    expect(refused(reference, { id: venue.id, lag: () => 3n })).toThrow(ReferenceVenueError);
     // Contexts outside the closed set, and malformed preimages.
-    expect(refused({ context: "moe/venue/ergo/v3" } as unknown as VenueReference, venue)).toThrow(CandidateVenueError);
-    expect(refused({ ...reference, label: b(1).subarray(1) }, venue)).toThrow(CandidateVenueError);
-    expect(refused(null as unknown as VenueReference, venue)).toThrow(CandidateVenueError);
+    expect(refused({ context: "moe/venue/ergo/v3" } as unknown as VenueReference, venue)).toThrow(ReferenceVenueError);
+    expect(refused({ ...reference, label: b(1).subarray(1) }, venue)).toThrow(ReferenceVenueError);
+    expect(refused(null as unknown as VenueReference, venue)).toThrow(ReferenceVenueError);
   });
   it("recomputes the synthetic chain's identity and refuses every deployment profile", () => {
     const profile = new Chain().profile(1n), synthetic = referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile });
@@ -95,7 +92,7 @@ describe("the candidate guard", () => {
     expect(requireReferenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile }, { id: synthetic.id, lag: () => 2n })).toEqual(synthetic.id);
     // The same anchor, depth and locations under venue-ergo's own context: the mainnet profile.
     const { reference: _, ...mainnet } = profile;
-    expect(() => referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: mainnet })).toThrow(CandidateVenueError);
+    expect(() => referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: mainnet })).toThrow(ReferenceVenueError);
     // A context that reads as synthetic once and as venue-ergo's afterwards is hashed as it was checked.
     let reads = 0;
     const shifting = { ...mainnet, get reference() { return reads++ === 0 ? ERGO_SYNTHETIC_REFERENCE : undefined; } };
@@ -109,11 +106,11 @@ describe("the candidate guard", () => {
     expect(requireReferenceVenue(reference, { id: expected.id, lag: () => 3n })).toEqual(expected.id);
     const synthetic = { ...profile, reference: ERGO_SYNTHETIC_REFERENCE } as const;
     expect(referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile: synthetic }).id).not.toEqual(expected.id);
-    expect(() => referenceVenue({ ...reference, profile: synthetic })).toThrow(CandidateVenueError);
-    expect(() => referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile })).toThrow(CandidateVenueError);
+    expect(() => referenceVenue({ ...reference, profile: synthetic })).toThrow(ReferenceVenueError);
+    expect(() => referenceVenue({ context: ERGO_SYNTHETIC_REFERENCE, profile })).toThrow(ReferenceVenueError);
     const { reference: _, ...deployment } = profile;
-    expect(() => referenceVenue({ ...reference, profile: deployment })).toThrow(CandidateVenueError);
-    expect(() => requireReferenceVenue(reference, { id: expected.id, lag: () => 2n })).toThrow(CandidateVenueError);
+    expect(() => referenceVenue({ ...reference, profile: deployment })).toThrow(ReferenceVenueError);
+    expect(() => requireReferenceVenue(reference, { id: expected.id, lag: () => 2n })).toThrow(ReferenceVenueError);
   });
 });
 
@@ -155,7 +152,7 @@ describe("the v3 operator journal", () => {
   /** A verifier that accepts exactly the stand-in proofs whose first byte is the kind. */
   const verifier = { verify: (kind: number, _inputs: bigint[], proof: Uint8Array) => proof[0] === kind };
   function journal(file: string, venue: RecordVenue & RecordPublisher, secret = operatorSecret): Journal {
-    const j = new V3OperatorJournal(file, { configuration, secret, venue, reference, verifier }); journals.push(j); return j;
+    const j = new V3OperatorJournal(file, { secret, venue, reference, verifier }); journals.push(j); return j;
   }
   /** `venue`, telling `asked` each range request the journal makes of it. */
   const asking = (venue: FixtureVenue, asked: (request: RangeRequest) => void): RecordVenue & RecordPublisher => ({
@@ -230,8 +227,8 @@ describe("the v3 operator journal", () => {
   });
 
   it("refuses a venue the guard does not recompute before touching the path", () => {
-    expect(() => new V3OperatorJournal(path(), { configuration, secret: operatorSecret, venue: new FixtureVenue(venueId, 0n, 3n), reference, verifier }))
-      .toThrow(CandidateVenueError);
+    expect(() => new V3OperatorJournal(path(), { secret: operatorSecret, venue: new FixtureVenue(venueId, 0n, 3n), reference, verifier }))
+      .toThrow(ReferenceVenueError);
   });
 
   it("opens, admits issue, payment with a fee and burn, commits and serves the package", async () => {
@@ -376,7 +373,7 @@ describe("the v3 operator journal", () => {
   it("rechecks hidden conflicts after proof verification before signing a receipt", async () => {
     const venue = FixtureVenue.reference(label, lag);
     let duringProof = () => {};
-    const j = new V3OperatorJournal(path(), { configuration, secret: operatorSecret, venue, reference,
+    const j = new V3OperatorJournal(path(), { secret: operatorSecret, venue, reference,
       verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
     journals.push(j);
     const own = await j.open("genesis", signed); await j.publish();
@@ -395,7 +392,7 @@ describe("the v3 operator journal", () => {
   it("refuses a command whose view the venue's clock has left, and admits it on the next view", async () => {
     const venue = FixtureVenue.reference(label, lag);
     let duringProof = () => {};
-    const j = new V3OperatorJournal(path(), { configuration, secret: operatorSecret, venue, reference,
+    const j = new V3OperatorJournal(path(), { secret: operatorSecret, venue, reference,
       verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
     journals.push(j);
     await j.open("genesis", signed); await j.publish();
@@ -442,7 +439,7 @@ describe("the v3 operator journal", () => {
     const served = await j.package();
     expect(served.package.length).toBeGreaterThan(1_048_576);
     const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
-      { configuration, verifier, venue, reference });
+      { verifier, venue, reference });
     expect(result.state?.position).toBe(12n);
     expect(result.state?.issued).toBe(12n);
   });
@@ -459,7 +456,7 @@ describe("the v3 operator journal", () => {
     const served = await j.package();
     expect(served.selection.sequence).toBe(41n);
     const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
-      { configuration, verifier, venue, reference });
+      { verifier, venue, reference });
     expect(result.carrying?.length).toBe(41);
     expect(result.state?.position).toBe(1n);
   }, 90_000);
@@ -504,7 +501,7 @@ describe("the v3 operator journal", () => {
     await j.audit();
     expect(answered.some(request => request.kind === 1 && request.fromIndex === 0n)).toBe(true);
     const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
-      { configuration, verifier, venue, reference });
+      { verifier, venue, reference });
     expect([result.carrying?.length, result.state?.issued]).toEqual([6, 5n]);
   });
 
@@ -573,7 +570,7 @@ describe("the v3 operator journal", () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     let verified = 0;
     const counting = { verify: (...args: Parameters<typeof verifier.verify>) => { verified++; return verifier.verify(...args); } };
-    const open = (): Journal => { const j = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: counting }); journals.push(j); return j; };
+    const open = (): Journal => { const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: counting }); journals.push(j); return j; };
     const j = open();
     await j.open("genesis", signed); await j.publish();
     const receipts = [await j.submit(issue()), await j.submit(payment())];
@@ -590,7 +587,7 @@ describe("the v3 operator journal", () => {
     // Only the audit verifies again, reading the served evidence from its seed; it does not pass over a proof that fails.
     await second.audit();
     expect(verified).toBe(4);
-    const rejecting = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: { verify: () => false } });
+    const rejecting = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: { verify: () => false } });
     expect((await rejecting.package()).package).toEqual(served.package);
     expect(await refusal(rejecting.audit())).toEqual(["STORAGE", "PROOF"]);
     rejecting.close();
@@ -656,7 +653,7 @@ describe("the v3 operator journal", () => {
     let verified = 0;
     // A verifier that declares the configuration's circuits names the kept context across reads and processes (§14).
     const declared = { identities: configuration.circuits, verify: (...args: Parameters<typeof verifier.verify>) => { verified++; return verifier.verify(...args); } };
-    const open = (): Journal => { const j = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: declared }); journals.push(j); return j; };
+    const open = (): Journal => { const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: declared }); journals.push(j); return j; };
     // A silence clause makes every admission read the journal's own canonical checkpoint first.
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
@@ -681,7 +678,7 @@ describe("the v3 operator journal", () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     let during = () => {};
     const hooked = { verify: (...args: Parameters<typeof verifier.verify>) => { during(); return verifier.verify(...args); } };
-    const j = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
+    const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
     const issued = (n: number): Uint8Array =>
@@ -708,7 +705,7 @@ describe("the v3 operator journal", () => {
     let during: () => Promise<void> = async () => {};
     const declared = { identities: configuration.circuits,
       verify: async (...args: Parameters<typeof verifier.verify>) => { await during(); return verifier.verify(...args); } };
-    const open = (): Journal => { const j = new V3OperatorJournal(file, { configuration, secret: operatorSecret, venue, reference, verifier: declared }); journals.push(j); return j; };
+    const open = (): Journal => { const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: declared }); journals.push(j); return j; };
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
     const issued = (n: number): Uint8Array =>
@@ -801,7 +798,7 @@ describe("the v3 operator journal", () => {
     const evidence = new EvidenceStore(), source = concatBytes(domain, venueId, operator), records = [issue(), payment(), burning()];
     const read = async (served: ServedPackage, kept?: EvidenceStore) => (await readPackage(served.package,
       { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
-      { configuration, verifier, venue, reference, ...(kept === undefined ? {} : { evidence: kept }) })).state!;
+      { verifier, venue, reference, ...(kept === undefined ? {} : { evidence: kept }) })).state!;
     const framed = (record: Uint8Array): number => 4 + record.length;
     const head = encodeTrail({ header: segmentBytes(header), terms: [signed], records: [] }).length;
 

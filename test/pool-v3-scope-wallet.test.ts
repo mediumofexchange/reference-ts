@@ -8,7 +8,7 @@ import { identifierOf } from "../src/pool/field.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput, recoverCapsule } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, segmentIdentity } from "../src/pool/v3/headers.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
 import { decodeRecord, encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
@@ -25,8 +25,7 @@ import { encodeReplacement, replacementHash, replacementMessage, type Replacemen
 // proofs isolate custody and scope reads; scope-store-check.mjs proves a wallet
 // payment in the rejoined scope under the candidate keys.
 const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), aSecret = b(16), bSecret = b(17), ruleSecret = b(19);
 const issuerX = b(14), issuerY = b(15), aKey = ed25519.getPublicKey(aSecret), bKey = ed25519.getPublicKey(bSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -67,10 +66,10 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
     };
     const x = backingOf("scope wallet x", issuerX), y = backingOf("scope wallet y", issuerY);
     // The wallet's verifier declares the configuration's circuits, so its reads keep their state in a file (§14).
-    const reader = { configuration, venue, reference, verifier: { ...verifier, identities: configuration.circuits } };
+    const reader = { venue, reference, verifier: { ...verifier, identities: configuration.circuits } };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
     const create = (secret: Uint8Array, name: string): Journal => {
-      const j = new V3OperatorJournal(join(directory, `${name}.db`), { configuration, secret, venue, reference, verifier });
+      const j = new V3OperatorJournal(join(directory, `${name}.db`), { secret, venue, reference, verifier });
       journals.push(j); return j;
     };
     /** Appoint `secret` to x after `predecessor` and wait until it is effective. */

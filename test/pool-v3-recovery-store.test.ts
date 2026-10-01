@@ -7,7 +7,7 @@ import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -25,8 +25,7 @@ import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 // Journal and reader integration with explicit stand-in proofs. The companion
 // recovery-store-check.mjs runs these recovery builders under all real keys.
 const b = (n: number) => new Uint8Array(32).fill(n);
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), presenterSecret = b(17);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -57,7 +56,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const funded = prepareExactOutput(b(21), domain, b(31), backing, 10n), pad = prepareExactOutput(b(21), domain, b(32), backing, 0n);
     const tree = new NoteTree(); tree.append(funded.cm);
     const input = { note: funded, anchor: tree.root(), path: tree.path(0n) }, inputs = [input, { ...input, note: pad }];
-    const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, secret: operatorSecret, venue, reference,
+    const j = new V3OperatorJournal(join(directory, "journal.db"), { secret: operatorSecret, venue, reference,
       verifier: { verify: (...args) => { beforeVerify(); return verifier.verify(...args); } } }); journals.push(j);
     await j.open("genesis", signed); await j.publish();
     await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, funded)), issuerSecret)));
@@ -65,7 +64,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const held = await j.package();
     const read = async (served: ServedPackage = held) => {
       const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
-        { configuration, verifier, venue, reference });
+        { verifier, venue, reference });
       if (result.state === undefined) throw new Error("unexpected receipt verdict");
       return result;
     };
@@ -209,7 +208,7 @@ describe("v3 recovery journal and independent package reader", () => {
     try {
       const identified = { verify: verifier.verify, identities: configuration.circuits };
       const read = (packageBytes: Uint8Array, kept: { store?: ReplayStore; evidence?: EvidenceStore } = {}) => readPackage(packageBytes,
-        { ...f.held.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { configuration, verifier: identified, venue: f.venue, reference, ...kept });
+        { ...f.held.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier: identified, venue: f.venue, reference, ...kept });
       const comparable = async (result: ReturnType<typeof read>) => {
         const r = await result;
         if (r.state === undefined) throw new Error("unexpected receipt verdict");
@@ -241,6 +240,6 @@ describe("v3 recovery journal and independent package reader", () => {
     expect((await f.read()).ranges.nonService?.count).toBe("1");
     const unavailable = { id: f.venue.id, lag: () => lag, witnessedIndex: () => 5n, range: () => undefined };
     await expect(readPackage(f.held.package, { ...f.held.selection, judgingIndex: 5n, mode: "current-fixture" },
-      { configuration, verifier, venue: unavailable, reference })).rejects.toMatchObject({ status: "unresolved-evidence" });
+      { verifier, venue: unavailable, reference })).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 });

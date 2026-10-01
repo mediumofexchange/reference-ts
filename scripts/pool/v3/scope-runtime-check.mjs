@@ -35,7 +35,7 @@ function observed(result) {
       ...(ranges.nonService === undefined ? {} : { nonService: ranges.nonService }) } }, ...faults(result) };
 }
 
-export async function checkScopeRuntime({ pairs, portable, configuration, verifier, reference, codec, test }) {
+export async function checkScopeRuntime({ pairs, portable, verifier, reference, codec, test }) {
   let compared = 0;
   await test("the runtime package reader reads every multi-backing scope group to the harness verdict", async () => {
     for (const { payload, result } of pairs) {
@@ -44,7 +44,7 @@ export async function checkScopeRuntime({ pairs, portable, configuration, verifi
       const { package: bytes, selection, venue } = portable(payload);
       let actual;
       try {
-        actual = observed(await readPackage(bytes, selection, { configuration, verifier: { verify: verifier.verify }, venue: FixtureVenue.from(venue), reference }));
+        actual = observed(await readPackage(bytes, selection, { verifier: { verify: verifier.verify }, venue: FixtureVenue.from(venue), reference }));
       } catch (error) {
         if (error instanceof ReplayRefusal) actual = { status: "invalid-local-replay", check: error.check };
         else if (error instanceof EvidenceRefusal) actual = { status: error.status, check: null, ...(error.clock === undefined ? {} : { clock: error.clock }) };

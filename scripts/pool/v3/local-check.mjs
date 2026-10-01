@@ -27,8 +27,7 @@ import { checkScopeRecovery } from "./scope-recovery-check.mjs";
 import { checkRecovery } from "./recovery-check.mjs";
 import { checkErgoReplay, ERGO_PROFILE, ERGO_VENUE, replayPairs, underErgo } from "./ergo-check.mjs";
 import { field } from "../fixtures.mjs";
-import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration,
-  readCandidateKeys } from "./candidate.mjs";
+import { RELATION_KINDS, loadManifest, checkSources, adoptedConfiguration, readKeys } from "./manifest.mjs";
 import { v3Codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { checkCompactRuntime } from "./compact-runtime-check.mjs";
@@ -60,10 +59,10 @@ try {
       ...(p.receipt === undefined ? [] : [{ kind: 10, payload: p.receipt }]),
     ]), PACKAGE_LIMITS) };
   }
-  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-  const configuration = candidateConfiguration(manifest, codec), configurationBytes = codec.configurationBytes(configuration);
+  const manifest = loadManifest(); checkSources(manifest);
+  const configuration = adoptedConfiguration(), configurationBytes = codec.configurationBytes(configuration);
   execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
-  checkCandidateSources(manifest);
+  checkSources(manifest);
   const circuits = {}, identities = {}, options = { verifierTarget: manifest.verifierTarget };
   api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
   for (const [kind, name] of RELATION_KINDS) {
@@ -74,13 +73,13 @@ try {
     assert.deepEqual(identities[name], manifest.circuits[name]);
     writeFileSync(join(build, `${kind}.vk`), vk);
   }
-  const keys = readCandidateKeys(build, manifest);
+  const keys = readKeys(build, manifest);
   const verifierBackend = new UltraHonkVerifierBackend(api);
   // The harness selects the range verifier: a fixture venue rebuilt from the
   // fixture's own witnessed records (pool-v3 §13.2), never from the package.
   const reference = withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE }
     : { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
-  const verifier = { configuration, reference, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
+  const verifier = { reference, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, options), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
   // Under --ergo every fixture names the synthetic chain's venue identity, so any group can be replayed through ErgoVenue.
@@ -290,7 +289,7 @@ try {
   await test("all six candidate sources, bytecodes and retained keys match independent pins", () => {
     for (const [kind, name] of RELATION_KINDS) {
       const bad = clone(manifest); bad.sources[`${name}.nr`] = "00".repeat(32);
-      assert.throws(() => checkCandidateSources(bad), /candidate identity mismatch/);
+      assert.throws(() => checkSources(bad), /manifest identity mismatch/);
       for (const filename of [`${kind}.vk`, `${name}.json`]) {
         const path = join(build, filename), original = readFileSync(path);
         try {
@@ -300,7 +299,7 @@ try {
             const artifact = JSON.parse(original); const changed = Buffer.from(artifact.bytecode, "base64");
             changed[0] ^= 1; artifact.bytecode = changed.toString("base64"); writeFileSync(path, JSON.stringify(artifact));
           }
-          assert.throws(() => readCandidateKeys(build, manifest), /candidate identity mismatch/);
+          assert.throws(() => readKeys(build, manifest), /manifest identity mismatch/);
         } finally { writeFileSync(path, original); }
       }
     }
@@ -785,7 +784,7 @@ try {
     for (let i = 0; i <= Number(RANGE_LIMITS.maxEntries); i++) flooded.venue.records.push({ kind: 1, subject: operator, index: 2n, record: junk });
     const refusal = await replayLocalPackage(flooded, verifier, codec);
     assert.equal(refusal.status, "resource-refusal"); assert.equal(refusal.audit, null);
-    assert.equal((await replayLocalPackage(complete, { configuration, reference, verify: verifier.verify }, codec)).status, "unresolved-evidence");
+    assert.equal((await replayLocalPackage(complete, { reference, verify: verifier.verify }, codec)).status, "unresolved-evidence");
     const failure = new Error("range service unavailable");
     await assert.rejects(replayLocalPackage(complete, { ...verifier, record: () => ({ id: venue, range() { throw failure; }, witnessedIndex: () => 20n, lag: () => 2n }) }, codec), error => error === failure);
     const { venue: omitted, ...withoutVenue } = complete;
@@ -1101,7 +1100,7 @@ try {
   await test("history-free term and silence lapse agree in portable packages", async () => {
     for (const { payload, result } of lapsePairs) assert.deepEqual(await replayEvidencePackage(portable(payload), verifier, codec), result);
   });
-  const scopeRuntime = await checkScopeRuntime({ portable, configuration, verifier, reference, codec, test, pairs: [
+  const scopeRuntime = await checkScopeRuntime({ portable, verifier, reference, codec, test, pairs: [
     { payload: scoped.payload, result: scoped.result },
     { payload: scopeRecovery.payload, result: scopeRecovery.result }, { payload: scopeRecovery.payloadY, result: scopeRecovery.resultY },
     scopeRecovery.unequal, scoped.compact, scoped.lapse, scopeRecovery.lapse, ...scoped.intrinsicCases, ...scopeRecovery.intrinsicCases,
@@ -1261,7 +1260,7 @@ try {
   });
   await test("successful replay retains unresolved production authority; ranges are the fixture verifier's only", () => {
     for (const result of [receiver, audit, dependency, imported.result, imported.receiver, scoped.result, scoped.receiver, scoped.receiverY, silent.result, silent.receiver, recovery.result, recovery.receiver]) {
-      assert.equal(result.candidateConfigurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
+      assert.equal(result.configurationChecked, true); assert.equal(result.signedTermsAuthenticated, true);
       assert.equal(result.currentRangeAuthenticated, true); assert.equal(result.termsAuthorityAuthenticated, true);
       assert.equal(result.rangeEvidence, "fixture-verifier");
       for (const key of ["fullV3Replay", "completenessClaim", "noMatchesMeansZeroBalance", "spendable"]) assert.equal(result[key], false);
@@ -1273,10 +1272,10 @@ try {
   // sources) and the circuits, helpers and manifest the pinned identities come from.
   // Packages are bound by the lockfile.
   const sources = sourceClosure(["scripts/pool/v3/local-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
-    "scripts/pool/v3/candidate-manifest.json",
+    
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
-  checkCandidateSources(manifest);
+  checkSources(manifest);
   const report = { schema: "moe-v3-local-replay-experiment-24", specification: V3_SPECIFICATION, node: process.version,
     compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactAuthorizations: authorizationPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
@@ -1286,7 +1285,7 @@ try {
       excludedImport: imported.compact.result, lapsedScope: scoped.compact.result },
     packageBytes: portable(complete).package.length, dependencyPackageBytes: portable(extended).package.length,
     fixtureVenueRecords: complete.venue.records.length,
-    candidateDomain: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
+    configHash: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
     sourceSha256Lf: sourceHashes(sources),
     compactRuntimeGroups,
@@ -1317,7 +1316,7 @@ try {
       recoveryOtherBacking: scopeRecovery.nonService.resultY.audit.range.nonService },
     ...(withErgo ? { ergo: { evidence: "ergo-venue-verified-synthetic-chain", profile: hex(ERGO_VENUE),
       ...ergo.counts, freshProcesses: ergo.processes.length, audit: ergo.primary.result } } : {}),
-    limits: ["Candidate configuration and signed constant-root terms checked; no adopted domain. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results name their synthetic-chain provenance; neither establishes mainnet chain evidence.",
+    limits: ["The adopted configuration (pool-v3 §11.4) and signed constant-root terms checked. The base suite establishes replacement chain, checkpoint prefix, currency, operator force and absent revocation against a harness-owned fixture record. The optional Ergo results name their synthetic-chain provenance; neither establishes mainnet chain evidence.",
       "Multi-backing imports validate every scoped predecessor and snapshot, merge shared events once with causal recovery conflict checks, and retain per-backing totals, adoption indices and original-tree paths through split, rejoin, exact recovery adoption and continuation. Receipt queries authenticate the complete original scope and exact original/adopted inclusion, retaining liability and the earliest silence/term boundary. Non-service counts use each selected backing's own clause and canonical state strictly before judgment, preserving request ages, imported roots and spent/lock state across scopes and recovery. Import lapse uses snapshot-bound scope and signed terms without its event history; silence still requires the opening and canonical clock dependencies. Live validity requires full committed event evidence; single-backing or shared-scope continuations with complete sibling state and silence-clock dependencies may replace only an intrinsically faulty target trail under section 9.1 after complete opening/predecessor resolution, at a target position after the record-derived adopted block. Selected state retains its complete selection envelope. Checkpoint/event work remains bounded; large histories can refuse resources.",
       "Compact openings authenticate committed target bytes and retain proof/signature-rejection facts through import refusal or scope lapse. Issue and acceptance read the exact scoped obligor; withdrawal and release resolve the named demand's canonical statement preimage. A matching preimage establishes no demand admission/standing and its enclosing opening need not authenticate. Signature facts do not require a valid proof; unsupported authorization widths and zero-owner acceptance messages are not classified. The classifier may consume exact proof/issue-K rejection to exclude only a supported continuation with complete scoped snapshots and terms, a valid opening, known last-valid state, every resolved sibling clock and a target position after its record-derived adopted block; positions inside the block keep ordinary evidence. Other facts remain observational; missing ancestors, ranges or unsupported contexts still refuse. No target fact supplies state or permits rollback. Local budgets can refuse resources; verifier failures are not rejection.",
       "Real proof/signature/state replay and local membership paths do not grant full finality, complete-certificate verdicts or spending permission."] };

@@ -2,7 +2,7 @@
 // backing or several: whole-scope classification, merged finalized prefixes
 // with per-backing totals and adoption indices, publication force and silence
 // clocks per backing, receipt reads across a scope, the non-service count and
-// compact faults. Candidate until adoption: reference venues only, no finality verdict.
+// compact faults. Reference venues only (guard.ts).
 //
 // The walk goes forward (M5b.3b): each backing's held checkpoints are
 // classified once, in rank order, by a cursor over that backing's terms, and

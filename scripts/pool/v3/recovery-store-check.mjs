@@ -31,7 +31,7 @@ import { encodePublication, encodeRecord, statementHash } from "../../../dist/po
 import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { field } from "../fixtures.mjs";
-import { RELATION_KINDS, loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
+import { RELATION_KINDS, loadManifest, checkSources, adoptedDomain, readKeys } from "./manifest.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { ERGO_CHAIN, ERGO_PROFILE } from "./ergo-check.mjs";
@@ -53,8 +53,8 @@ const summary = result => {
 };
 
 async function worker(directory, ergo, liveMode = false) {
-  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-  const configuration = candidateConfiguration(manifest, codec), keys = readCandidateKeys(directory, manifest);
+  const manifest = loadManifest(); checkSources(manifest);
+  const keys = readKeys(directory, manifest);
   const chunks = []; let length = 0;
   for await (const chunk of process.stdin) { length += chunk.length; assert(length <= 4_194_304, "worker input budget"); chunks.push(chunk); }
   const input = deserialize(Buffer.concat(chunks));
@@ -76,7 +76,7 @@ async function worker(directory, ergo, liveMode = false) {
       assert.equal(hex(answer.witnessedHeaderId), hex(readFileSync(join(directory, "ergo-pin.bin"))));
     } else venue = FixtureVenue.from(input.venue);
     process.stdout.write(JSON.stringify(summary(await readPackage(input.package, input.selection,
-      { configuration, verifier, venue, reference }))));
+      { verifier, venue, reference }))));
   } finally { await api.destroy(); }
 }
 
@@ -85,20 +85,20 @@ async function acceptance(ergo, liveMode = false) {
   const scratch = realpathSync(join(root, "scratch")), build = realpathSync(mkdtempSync(join(scratch, "v3-recovery-store-")));
   const checks = [], proofs = [], packages = [], transactions = [], started = performance.now();
   const test = async (name, fn) => { await fn(); checks.push(name); process.stderr.write(`passed: ${name}\n`); };
-  const sources = sourceClosure(["scripts/pool/v3/recovery-store-check.mjs", "scripts/pool/v3/compile.mjs", "scripts/pool/v3/candidate-manifest.json",
+  const sources = sourceClosure(["scripts/pool/v3/recovery-store-check.mjs", "scripts/pool/v3/compile.mjs", 
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const hashes = sourceHashes(sources);
   let api, prover, journal, completed = false;
   try {
-    const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-    const configuration = candidateConfiguration(manifest, codec), domain = codec.configurationHash(configuration);
+    const manifest = loadManifest(); checkSources(manifest);
+    const domain = adoptedDomain();
     execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
     api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
     const programs = Object.fromEntries(RELATION_KINDS.map(([, name]) => [name, JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"))]));
     for (const [kind, name] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
-    readCandidateKeys(build, manifest);
-    prover = await openV3Prover(api, programs, configuration);
+    readKeys(build, manifest);
+    prover = await openV3Prover(api, programs);
     const prove = async (task, name) => { const began = performance.now(), r = await prover.prove(task);
       proofs.push({ name, kind: task.kind, bytes: r.proof.length, elapsedMs: Math.round(performance.now() - began) }); return r; };
     const testnet = liveMode ? await import("./testnet.mjs") : undefined;
@@ -148,11 +148,11 @@ async function acceptance(ergo, liveMode = false) {
       return authorizeSettlement(await prove(settleTask(context, held(index), output, id), name),
         authorizeAcceptance({ domain, demand: id, owner: opening.owner, deadline }, issuerSecret), secret);
     };
-    journal = new V3OperatorJournal(join(build, "journal.db"), { configuration, secret: operatorSecret, venue, reference, verifier: prover.verifier });
+    journal = new V3OperatorJournal(join(build, "journal.db"), { secret: operatorSecret, venue, reference, verifier: prover.verifier });
     const served = async () => { const s = await journal.package(); packages.push(s.package.length); return {
       package: s.package, selection: { ...s.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       ...(liveMode ? {} : { venue: ergo ? { tip: supplier.tip } : venue.export() }) }; };
-    const read = input => readPackage(input.package, input.selection, { configuration, verifier: prover.verifier, venue, reference });
+    const read = input => readPackage(input.package, input.selection, { verifier: prover.verifier, venue, reference });
     const fresh = input => {
       if (liveMode) { writeFileSync(join(build, "ergo-pin.bin"), live.pin); writeFileSync(join(build, "testnet-reader.json"), JSON.stringify(live.readerConfig())); }
       else if (ergo) writeFileSync(join(build, "ergo-pin.bin"), pin);
@@ -237,7 +237,7 @@ async function acceptance(ergo, liveMode = false) {
       for (const kind of [3, 4, 6]) await assert.rejects(read({ ...input,
         package: encodeEvidencePackage(items.filter(item => item.kind !== kind)) }), error => error.status === "unresolved-evidence");
     });
-    checkCandidateSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
+    checkSources(manifest); assert.deepEqual(sourceHashes(sources), hashes, "sources changed during acceptance");
     let funding;
     if (liveMode) {
       funding = budget.report(); assert.equal(funding.transactions.length, 10);
@@ -258,7 +258,7 @@ async function acceptance(ergo, liveMode = false) {
         feeNanoErg: String(DEFAULT_ERGO_FEE * BigInt(transactions.length)), recordMinimumNanoErg: String(spent - DEFAULT_ERGO_FEE * BigInt(transactions.length)) };
     }
     const report = { status: "passed", specification: V3_SPECIFICATION, evidence: liveMode ? "live-testnet-runtime-real-proofs" : ergo ? "synthetic-ergo-runtime-real-proofs" : "local-runtime-real-proofs",
-      limits: ["candidate configuration only", "single backing", liveMode ? "live testnet only; same-index return covered synthetically" : "no live broadcasts", "no persistence or adoption claim"],
+      limits: ["the adopted configuration on reference venues only", "single backing", liveMode ? "live testnet only; same-index return covered synthetically" : "no live broadcasts", "no persistence or adoption claim"],
       checks, proofs, transactions, funding, maxPackageBytes: Math.max(...packages), final,
       elapsedMs: Math.round(performance.now() - started), sourceSha256Lf: hashes };
     writeFileSync(join(root, "docs", `pool-v3-recovery-store${liveMode ? "-testnet" : ergo ? "-ergo" : ""}-verification.json`), JSON.stringify(report, null, 2) + "\n");

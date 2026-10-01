@@ -3,10 +3,9 @@
 // `@noir-lang/noir_js` and proofs made with `@aztec/bb.js` under UltraHonk's
 // zero-knowledge target, both optional peer dependencies like the verifier.
 //
-// The caller supplies the six compiled artifacts and the candidate
-// configuration from its own manifest check (pool-v3 §11.1); the prover
-// derives each circuit's bytecode and key identity itself and refuses unless
-// all six equal the configuration's. It proves a task built by `witness.ts`,
+// The caller supplies the six compiled artifacts; the prover derives each
+// circuit's bytecode and key identity itself and refuses unless all six equal
+// the adopted configuration's (pool-v3 §11.4). It proves a task built by `witness.ts`,
 // requires the proof's public inputs to equal the task's exactly, and checks
 // the proof with the verifier over the same keys, routed by kind (§4), before
 // returning the record. Nothing here admits, signs a receipt or chooses a
@@ -17,7 +16,7 @@ import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { identifierOf } from "../field.js";
 import { PROOF_OPTIONS, proofVerifier, type BackendOptions, type CircuitTable, type ProofVerifier } from "../proof-verifier.js";
-import { RELATION_KINDS, RELATIONS, type CandidateConfiguration, type Relation } from "./configuration.js";
+import { adoptedConfiguration, RELATION_KINDS, RELATIONS, type Relation } from "./configuration.js";
 import type { Record } from "./records.js";
 import type { ProofTask } from "./witness.js";
 
@@ -51,12 +50,12 @@ export interface V3Prover {
 /**
  * Build the prover over the caller's backend instance, which `startBackend`
  * must have started from checked parameters: derive the six keys, refuse
- * unless every identity is the configuration's, and keep the programs.
+ * unless every identity is the adopted configuration's, and keep the programs.
  * Proving runs on the caller's instance; verification on the verifier's own.
  */
 export async function openV3Prover(api: Barretenberg, programs: Readonly<{ [name in Relation]: NoirProgram }>,
-  configuration: CandidateConfiguration, options: BackendOptions = {}): Promise<V3Prover> {
-  const own = new Map<Relation, NoirProgram>();
+  options: BackendOptions = {}): Promise<V3Prover> {
+  const own = new Map<Relation, NoirProgram>(), configuration = adoptedConfiguration();
   for (const name of RELATIONS) {
     const program = programs[name];
     if (program === null || typeof program !== "object") throw new ProverError("IDENTITY", `${name} artifact is missing`);

@@ -7,7 +7,7 @@ import { EncodingError } from "../src/bytes.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, recoverCapsule } from "../src/pool/v3/capsules.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import type { PackageReader } from "../src/pool/v3/package-reader.js";
 import { encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
@@ -22,8 +22,7 @@ import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 // Stand-in proofs isolate custody and receiving checks. The acceptance harness
 // proves the corresponding four-output spend under the actual candidate keys.
 const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), presenterSecret = b(17);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -57,11 +56,11 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
     // The wallet's verifier declares the configuration's circuits, so its reads keep their state in a file (§14).
-    const reader: PackageReader = { configuration, venue, reference, verifier: { ...(options.readerVerifier ?? verifier), identities: configuration.circuits } };
+    const reader: PackageReader = { venue, reference, verifier: { ...(options.readerVerifier ?? verifier), identities: configuration.circuits } };
     const path = join(directory, "receiver.db");
     const reopen = (selected = reader) => { const wallet = new V3Wallet(path, selected); wallets.push(wallet); return wallet; };
     const wallet = reopen(), request = wallet.request("invoice", backing, 7n);
-    const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier, secret: operatorSecret });
+    const j = new V3OperatorJournal(join(directory, "journal.db"), { venue, reference, verifier, secret: operatorSecret });
     journals.push(j); await j.open("genesis", signed); await j.publish();
     const funded = prepareExactOutput(b(21), domain, b(31), backing, 10n), pad = prepareExactOutput(b(21), domain, b(32), backing, 0n);
     await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, funded)), issuerSecret)));
@@ -86,12 +85,12 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     const venue = FixtureVenue.reference(label, lag), own = configuration.circuits;
     const other = { ...verifier, identities: { ...own, burn: own.spend, spend: own.burn } };
     const refusal = new TypeError("the verifier's circuit identities are not the configuration's");
-    expect(() => new V3Wallet(join(directory, "wallet.db"), { configuration, venue, reference, verifier: other })).toThrow(refusal);
-    expect(() => new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier: other, secret: operatorSecret }))
+    expect(() => new V3Wallet(join(directory, "wallet.db"), { venue, reference, verifier: other })).toThrow(refusal);
+    expect(() => new V3OperatorJournal(join(directory, "journal.db"), { venue, reference, verifier: other, secret: operatorSecret }))
       .toThrow(refusal);
     const named = { ...verifier, identities: own };
-    wallets.push(new V3Wallet(join(directory, "wallet.db"), { configuration, venue, reference, verifier: named }));
-    journals.push(new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier: named, secret: operatorSecret }));
+    wallets.push(new V3Wallet(join(directory, "wallet.db"), { venue, reference, verifier: named }));
+    journals.push(new V3OperatorJournal(join(directory, "journal.db"), { venue, reference, verifier: named, secret: operatorSecret }));
   });
 
   it("persists a random exact request before exposure and owns recovery material across restart", async () => {

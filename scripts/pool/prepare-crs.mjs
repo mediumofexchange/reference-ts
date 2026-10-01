@@ -4,7 +4,7 @@
 // transcript00's leading points (docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters):
 // their source, not the ceremony's trust. The runtime checks the same hashes
 // again before loading (`startBackend`, src/pool/proof-verifier.ts); a test
-// holds these entries equal to its `BN254_PARAMETERS`.
+// holds these entries equal to `BN254_PARAMETERS` (src/pool/parameters.ts).
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';

@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { BN254_PARAMETERS, ParameterError, proofVerifier, startBackend, type CircuitTable, type ProvingParameters } from "../src/pool/proof-verifier.js";
+import { ParameterError, proofVerifier, startBackend, type CircuitTable, type ProvingParameters } from "../src/pool/proof-verifier.js";
+import { BN254_PARAMETERS } from "../src/pool/parameters.js";
 
 // The table is checked before any key is derived, so no backend is needed:
 // an instance that is touched at all would throw a TypeError instead.

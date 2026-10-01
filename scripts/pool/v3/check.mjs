@@ -1,4 +1,5 @@
-// Combined successor relation evidence. No production admission/configuration.
+// pool-v3's conformance build (§4): the six relations compiled together, their keys derived and compared with the
+// runtime manifest of §11.4's adopted configuration, and every relation proved and mutated. No admission.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -11,9 +12,9 @@ import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend }
 import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
 import { asFields, assertions, bypass, failedOpcode, FRAME, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
 import { EncodingError } from '../../../dist/bytes.js';
-import { BN254_PARAMETERS, proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
+import { proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
-import { PROOF_BYTES } from '../../../dist/pool/v3/configuration.js';
+import { adoptedConfigurationBytes, adoptedDomain, configurationBytes, POOL_V3_MANIFEST, PROOF_BYTES, RELATIONS } from '../../../dist/pool/v3/configuration.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from './provenance.mjs';
 import { PARAMETER_DIRECTORY, readParameters } from '../prepare-crs.mjs';
@@ -28,12 +29,13 @@ const sha = b => createHash('sha256').update(b).digest('hex');
 const kinds = ['issue','spend','burn','demand','settle','request'];
 const counts = { issue: 11, spend: 15, burn: 15, demand: 16, settle: 17, request: 7 };
 const options = Object.freeze({ verifierTarget: 'noir-recursive' });
-const manifest = json(join(here, 'candidate-manifest.json'));
+const manifest = POOL_V3_MANIFEST, BN254_PARAMETERS = manifest.parameters;
+assert.equal(options.verifierTarget, manifest.verifierTarget);
 for (const [name, version] of Object.entries(manifest.toolchain)) assert.equal(json(join(root, 'node_modules', name, 'package.json')).version, version);
 const checks = [], metrics = [], identities = {}, circuits = {}, proofs = {};
 // Every source the verdict depends on: this script and what it imports (the runtime verifier and prover it
-// asserts included), the compiler script, the circuits, the manifest and the locked toolchain.
-const sources = sourceClosure(['scripts/pool/v3/check.mjs', 'scripts/pool/v3/compile.mjs', 'scripts/pool/v3/candidate-manifest.json',
+// asserts and the manifest included), the compiler script, the circuits and the locked toolchain.
+const sources = sourceClosure(['scripts/pool/v3/check.mjs', 'scripts/pool/v3/compile.mjs',
   ...[...kinds, 'notes'].map(name => `scripts/pool/v3/circuits/${name}.nr`), 'src/pool/circuits/vendor/poseidon2.nr', 'package-lock.json']);
 const sourceDigests = sourceHashes(sources);
 let api;
@@ -70,6 +72,11 @@ try {
     assert(identities[kind].dyadicSize <= BN254_PARAMETERS.points, kind + ': circuit larger than the loaded G1 points');
   }
   checks.push(`every relation's dyadic size is at most the ${BN254_PARAMETERS.points} G1 points loaded`);
+  // The derived identities frame §11.4's configuration and hash (pool-v3 §11.1).
+  const derived = configurationBytes({ circuits: Object.fromEntries(RELATIONS.map(name => [name, { bytecode: Buffer.from(identities[name].bytecode, 'hex'),
+    vk: Buffer.from(identities[name].vk, 'hex') }])), helper: Buffer.from(compiledSourceHashes.poseidon2, 'hex') });
+  assert.deepEqual(Buffer.from(derived), Buffer.from(adoptedConfigurationBytes()));
+  checks.push(`the six derived identities and the helper frame the adopted configuration, configHash ${Buffer.from(adoptedDomain()).toString('hex')} (pool-v3 §11.4)`);
   assert.equal(new Set(kinds.map(k => identities[k].vk)).size, 6);
   // Limbs below 2^128, values below 2^64 and direction bits are the circuit's own
   // constraints, not the ABI encoder's; public inputs are exactly their ABI witnesses.
@@ -669,11 +676,11 @@ try {
     checks.push('a verifier of two instances verifies concurrent calls on both, replaces each instance after its own throw, and refuses once closed');
   }
   const git=args=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:30_000}).trim();
-  const report={candidate:'combined six successor relations', referenceBase:git(['rev-parse','HEAD']), referenceTreeClean:git(['status','--porcelain','--untracked-files=no'])==='', companionSpec:V3_SPECIFICATION,
+  const report={subject:'the six pool-v3 relations under the adopted configuration', configHash:Buffer.from(adoptedDomain()).toString('hex'), referenceBase:git(['rev-parse','HEAD']), referenceTreeClean:git(['status','--porcelain','--untracked-files=no'])==='', companionSpec:V3_SPECIFICATION,
     environment:{node:process.version,platform:process.platform,arch:process.arch,toolchain:manifest.toolchain,verifierTarget:options.verifierTarget,threads:1,parameters},
     counts,identities,sharedSources:Object.fromEntries(['notes.nr','poseidon2.nr'].map(n=>[n,sha(readFileSync(n === 'poseidon2.nr' ? join(root,'src/pool/circuits/vendor/poseidon2.nr') : join(here,'circuits',n)))])),
     sources:sourceDigests, publicInputs:Object.fromEntries(kinds.map(k=>[k,publicInputsOf(k,bases[k])])), checks,metrics,
-    limits:['Synthetic domain, no final configuration hash','Opaque capsules; no receiver decryption claim','No v3 parser, kind router, admission, authorization, replay, finality or venue completeness','Single desktop run, not device budgets']};
+    limits:['Proved over fixture statements with a synthetic domain field','Opaque capsules; no receiver decryption claim','No v3 parser, kind router, admission, authorization, replay, finality or venue completeness','Single desktop run, not device budgets']};
   for (const kind of kinds) assert.equal(sha(readFileSync(join(here, 'circuits', kind + '.nr'))), compiledSourceHashes[kind], kind + ': source changed during proving');
   for (const name of ['notes','poseidon2']) assert.equal(report.sharedSources[name + '.nr'], compiledSourceHashes[name], name + ': helper changed during proving');
   assert.deepEqual(sourceHashes(sources), sourceDigests, 'sources changed during the run');

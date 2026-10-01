@@ -20,7 +20,7 @@ const [mode, directory, baseUrl] = process.argv.slice(2);
 const walletPath = join(directory, 'receiver.sqlite'), evidencePath = join(directory, 'receiver-evidence.sqlite');
 if (mode === 'prepare') {
   const venue = FixtureVenue.reference(reference.label, reference.lag);
-  const wallet = new V3Wallet(walletPath, { configuration, venue, reference, verifier });
+  const wallet = new V3Wallet(walletPath, { venue, reference, verifier });
   try { save(join(directory, 'request.v8'), wallet.request('invoice', backing, 7n)); } finally { wallet.close(); }
   console.log(JSON.stringify({ pid: process.pid }));
   process.exit(0);
@@ -30,7 +30,7 @@ const client = new V3ServiceClient(baseUrl, WALLET, { domain, operator, referenc
 // across its processes, and counts what it is asked to verify.
 let verified = 0;
 const counting = { identities: configuration.circuits, verify: (...args) => { verified++; return verifier.verify(...args); } };
-const openWallet = () => new V3Wallet(walletPath, { configuration, venue: FixtureVenue.from(load(join(directory, 'venue.v8'))), reference, verifier: counting });
+const openWallet = () => new V3Wallet(walletPath, { venue: FixtureVenue.from(load(join(directory, 'venue.v8'))), reference, verifier: counting });
 const fixture = load(join(directory, 'public.v8'));
 assert.deepEqual(fixture.signed.terms, terms, 'terms are pinned separately from the service response');
 const encoded = commitment => bytesToHex(encodeCommitment(commitment));
@@ -45,7 +45,7 @@ async function synced(expected, position) {
     assert.deepEqual(decodeEvidencePackage(served.package).map(item => item.kind), [1, 2]);
     const venue = FixtureVenue.from(load(join(directory, 'venue.v8')));
     const read = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: 'current-fixture' },
-      { configuration, verifier, venue, reference, evidence });
+      { verifier, venue, reference, evidence });
     assert.equal(read.state.position, position);
   } finally { evidence.close(); }
 }

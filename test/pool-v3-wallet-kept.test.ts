@@ -9,7 +9,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { ownedNotes, seedWitness } from "../src/pool/v3/holdings.js";
@@ -25,8 +25,7 @@ import { authorizeIssue, issueTask, type ProofTask } from "../src/pool/v3/witnes
 import { FixtureVenue, LOCAL_REFERENCE, type RecordVenue } from "../src/record-venue.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -75,10 +74,10 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     } };
     const seen: RecordVenue = { get id() { return venue.id; }, lag: () => venue.lag(), witnessedIndex: () => view.at ?? venue.witnessedIndex(),
       range: (request, limits) => { counts.asked++; return venue.range(request, limits); } };
-    const reader = { configuration, venue: seen, reference, verifier: counting };
+    const reader = { venue: seen, reference, verifier: counting };
     const path = (name: string) => join(directory, `${name}.db`);
     const open = (name: string) => { const wallet = new V3Wallet(path(name), reader); wallets.push(wallet); return wallet; };
-    const j = new V3OperatorJournal(path("journal"), { configuration, venue, reference, verifier, secret: operatorSecret });
+    const j = new V3OperatorJournal(path("journal"), { venue, reference, verifier, secret: operatorSecret });
     journals.push(j); await j.open("genesis", signed); await j.publish();
     const tokens = { walletToken: "11".repeat(32), adminToken: "22".repeat(32) }, requests: { url: string; bytes: number }[] = [];
     const server = createV3Service(j, tokens); servers.push(server);

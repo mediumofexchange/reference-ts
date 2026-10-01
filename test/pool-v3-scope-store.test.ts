@@ -7,7 +7,7 @@ import { compareBytes } from "../src/bytes.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader } from "../src/pool/v3/headers.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
@@ -25,8 +25,7 @@ import { encodeReplacement, replacementHash, replacementMessage, type Replacemen
 // agrees per backing. Proof bytes are explicit stand-ins; real-key acceptance
 // is a separate gate.
 const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), aSecret = b(16), bSecret = b(17), ruleSecret = b(19);
 const issuerX = b(14), issuerY = b(15), aKey = ed25519.getPublicKey(aSecret), bKey = ed25519.getPublicKey(bSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -59,7 +58,7 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     };
     const x = backingOf("scope journal x", issuerX), y = backingOf("scope journal y", issuerY);
     const create = (secret = aSecret, name = "a"): Journal => {
-      const j = new V3OperatorJournal(join(directory, `${name}.db`), { configuration, secret, venue, reference, verifier });
+      const j = new V3OperatorJournal(join(directory, `${name}.db`), { secret, venue, reference, verifier });
       journals.push(j); return j;
     };
     /** Appoint `secret` to x after `predecessor`, effective after the lag. */
@@ -81,7 +80,7 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     /** The independent reader's verdict for `backing` at the venue's current index. */
     const read = async (served: ServedPackage, backing: Uint8Array) => {
       const result = await readPackage(served.package, { ...served.selection, backing, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
-        { configuration, verifier, venue, reference });
+        { verifier, venue, reference });
       if (result.state === undefined) throw new Error("unexpected receipt verdict");
       return result;
     };
