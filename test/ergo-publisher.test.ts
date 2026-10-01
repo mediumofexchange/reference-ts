@@ -757,7 +757,8 @@ describe("replacement, settlement and supplier cost", () => {
     n.pool.splice(0); n.boxes.clear(); n.fund(funding);
     delay = 20;
     let attempts = 0;
-    for (; attempts < 8 && n.pool.length < 30; attempts++) await p.publish(request(new Uint8Array(136).fill(30))).catch(() => {});
+    // Each attempt resends what the deadline allows; a coarse host timer (about 16 ms on Windows) sends less per walk.
+    for (; attempts < 30 && n.pool.length < 30; attempts++) await p.publish(request(new Uint8Array(136).fill(30))).catch(() => {});
     expect(n.pool).toHaveLength(30);
     expect(attempts).toBeGreaterThan(1);
   });
