@@ -43,6 +43,7 @@ try {
   execFileSync(process.execPath, [join(here, 'compile.mjs'), build], { cwd: root, windowsHide: true, stdio: 'inherit', timeout: 300000 });
   const compiledSourceHashes = json(join(build, 'source-hashes.json'));
   assert.equal(compiledSourceHashes.poseidon2, manifest.sources['poseidon2.nr']);
+  assert.equal(compiledSourceHashes.notes, manifest.sources['notes.nr'], 'notes.nr: source is not the manifest\'s');
   // The bytes every instance here proves and verifies from, checked before loading (pool-v3 §4):
   // Ignition's leading 2^15 BN254 G1 points and [x]_2, and where they were read.
   const parameterBytes = await readParameters(PARAMETER_DIRECTORY);

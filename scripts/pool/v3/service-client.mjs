@@ -25,7 +25,7 @@ if (mode === 'prepare') {
   console.log(JSON.stringify({ pid: process.pid }));
   process.exit(0);
 }
-const client = new V3ServiceClient(baseUrl, WALLET, { domain, operator, reference }, ADMIN);
+const client = new V3ServiceClient(baseUrl, WALLET, { operator, reference }, ADMIN);
 // The receiver wallet's verifier declares its circuits, so its reads keep their state beside its database
 // across its processes, and counts what it is asked to verify.
 let verified = 0;

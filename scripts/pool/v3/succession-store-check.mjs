@@ -76,7 +76,7 @@ async function acceptance(ergo) {
   const test = async (name, fn) => { await fn(); checks.push(name); process.stderr.write(`passed: ${name}\n`); };
   const refusal = (action, code, check) => assert.rejects(action, error => error instanceof V3StoreError && error.code === code &&
     (check === undefined || error.check === check));
-  const sources = sourceClosure(["scripts/pool/v3/succession-store-check.mjs", "scripts/pool/v3/compile.mjs", 
+  const sources = sourceClosure(["scripts/pool/v3/succession-store-check.mjs", "scripts/pool/v3/compile.mjs",
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const hashes = sourceHashes(sources);

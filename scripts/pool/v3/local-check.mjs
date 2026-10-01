@@ -1272,7 +1272,6 @@ try {
   // sources) and the circuits, helpers and manifest the pinned identities come from.
   // Packages are bound by the lockfile.
   const sources = sourceClosure(["scripts/pool/v3/local-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
-    
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   checkSources(manifest);

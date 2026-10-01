@@ -80,7 +80,7 @@ async function reader(build, directory) {
     store = new ReplayStore(join(directory, "replay.db"), { digest: join(directory, "replay.db.sha256") });
     const own = join(directory, "own.bin");
     if (input.service !== undefined) {
-      const client = new V3ServiceClient(input.service.url, input.service.token, { domain, operator: terms.operator, reference });
+      const client = new V3ServiceClient(input.service.url, input.service.token, { operator: terms.operator, reference });
       writeFileSync(own, (await client.sync(backing, evidence)).package);
     }
     const began = performance.now();
@@ -96,7 +96,7 @@ async function acceptance() {
   const scratch = realpathSync(join(root, "scratch")), build = realpathSync(mkdtempSync(join(scratch, "v3-history-store-")));
   const checks = [], proofs = new Map(), measures = {}, started = performance.now();
   const test = async (name, fn) => { await fn(); checks.push(name); process.stderr.write(`passed: ${name}\n`); };
-  const sources = sourceClosure(["scripts/pool/v3/history-store-check.mjs", "scripts/pool/v3/compile.mjs", 
+  const sources = sourceClosure(["scripts/pool/v3/history-store-check.mjs", "scripts/pool/v3/compile.mjs",
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const hashes = sourceHashes(sources);
@@ -162,7 +162,7 @@ async function acceptance() {
         response.write = (chunk, ...rest) => { entry.bytes += chunk.length; return write(chunk, ...rest); };
       });
       await new Promise((done, failed) => server.listen(0, "127.0.0.1", done).once("error", failed));
-      client = new V3ServiceClient(`http://127.0.0.1:${server.address().port}/`, credentials.walletToken, { domain, operator, reference }, credentials.adminToken);
+      client = new V3ServiceClient(`http://127.0.0.1:${server.address().port}/`, credentials.walletToken, { operator, reference }, credentials.adminToken);
     };
     const fetched = () => requests.findLast(entry => entry.url.startsWith("/evidence"));
     const checkpoint = async id => { await client.commit(id); return client.publish(); };

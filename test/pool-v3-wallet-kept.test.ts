@@ -87,7 +87,7 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
       response.write = ((chunk: Uint8Array, ...rest: unknown[]) => { entry.bytes += chunk.length; return write(chunk, ...rest); }) as typeof response.write;
     });
     await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(0, "127.0.0.1", done); });
-    const client = new V3ServiceClient(`http://127.0.0.1:${(server.address() as { port: number }).port}/`, tokens.walletToken, { domain, operator, reference });
+    const client = new V3ServiceClient(`http://127.0.0.1:${(server.address() as { port: number }).port}/`, tokens.walletToken, { operator, reference });
     const payer = open("payer"), receiver = open("receiver");
     // The backer issues one unit to each of the payer's requests: `notes` statements in one checkpoint.
     for (let i = 0; i < notes; i++) {

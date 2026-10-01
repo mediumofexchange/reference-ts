@@ -85,7 +85,7 @@ async function acceptance(ergo, liveMode = false) {
   const scratch = realpathSync(join(root, "scratch")), build = realpathSync(mkdtempSync(join(scratch, "v3-recovery-store-")));
   const checks = [], proofs = [], packages = [], transactions = [], started = performance.now();
   const test = async (name, fn) => { await fn(); checks.push(name); process.stderr.write(`passed: ${name}\n`); };
-  const sources = sourceClosure(["scripts/pool/v3/recovery-store-check.mjs", "scripts/pool/v3/compile.mjs", 
+  const sources = sourceClosure(["scripts/pool/v3/recovery-store-check.mjs", "scripts/pool/v3/compile.mjs",
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   const hashes = sourceHashes(sources);

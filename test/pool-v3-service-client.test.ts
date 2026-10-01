@@ -5,6 +5,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
 import { LOCAL_REFERENCE, localVenueIdentity } from "../src/record-venue.js";
 import { encodeReceipt, receiptBytes, type ReceiptFields } from "../src/pool/v3/commitments.js";
+import { adoptedDomain } from "../src/pool/v3/configuration.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { encodeEvidencePackage } from "../src/pool/v3/package.js";
@@ -16,9 +17,9 @@ import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
 const TOKEN = "11".repeat(32), ADMIN = "22".repeat(32);
-const domain = b(1), segment = b(2), secret = b(3), operator = ed25519.getPublicKey(secret), backing = b(4);
+const domain = adoptedDomain(), segment = b(2), secret = b(3), operator = ed25519.getPublicKey(secret), backing = b(4);
 const reference = { context: LOCAL_REFERENCE, label: b(5), lag: 2n } as const;
-const expected = () => ({ domain: domain.slice(), operator: operator.slice(), reference: { ...reference, label: reference.label.slice() } });
+const expected = () => ({ operator: operator.slice(), reference: { ...reference, label: reference.label.slice() } });
 // A bounded burn-lock record gives changed-proof retries without capsule fixtures.
 const record = (): StatementRecord => ({ domain, kind: 4, publicInputs: [...limbsOf(domain), ...limbsOf(segment), 7n,
   ...limbsOf(backing), 10n, 11n, 12n, 13n, 14n, ...limbsOf(b(6)), 20n, 30n],
@@ -65,7 +66,7 @@ describe("bounded v3 local service client", () => {
       });
     });
     const client = new V3ServiceClient(url, TOKEN, authority, ADMIN);
-    authority.domain.fill(0); authority.operator.fill(0); authority.reference.label.fill(0);
+    authority.operator.fill(0); authority.reference.label.fill(0);
     const submitted = client.submit(encoded); encoded.fill(0);
     expect((await submitted).position).toBe(1n);
     expect(JSON.stringify(client)).not.toContain(TOKEN); expect(JSON.stringify(client)).not.toContain(ADMIN);

@@ -60,7 +60,6 @@ const refusal = async (action, code, check) => {
   assert.equal(error.code, code); assert.equal(error.check, check);
 };
 const sources = sourceClosure(["scripts/pool/v3/store-check.mjs", "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
-  
   ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
   "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
 const sourceSha256Lf = sourceHashes(sources), runStarted = performance.now();
@@ -150,7 +149,7 @@ try {
     serviceServer = createV3Service(journal, credentials);
     await new Promise((resolve, reject) => serviceServer.listen(0, "127.0.0.1", resolve).once("error", reject));
     serviceClient = new V3ServiceClient(`http://127.0.0.1:${serviceServer.address().port}/`, credentials.walletToken,
-      { domain, operator, reference }, credentials.adminToken);
+      { operator, reference }, credentials.adminToken);
   }
   const submit = async bytes => encodeReceipt(await serviceClient.submit(bytes));
 

@@ -19,7 +19,7 @@ const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const livePath = "docs/pool-v3-testnet-verification.json", liveBytes = readFileSync(join(root, livePath));
 const live = JSON.parse(liveBytes), bundle = join(scratch, "pool-v3-testnet-reader");
 const sources = sourceClosure(["scripts/pool/v3/testnet-reader-check.mjs", "scripts/pool/v3/store-check.mjs",
-  "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs", 
+  "scripts/pool/v3/local-worker.mjs", "scripts/pool/v3/compile.mjs",
   ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
   "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
 const sourceSha256Lf = sourceHashes(sources);

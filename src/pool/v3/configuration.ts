@@ -126,11 +126,11 @@ export function requireConfigurationVerifier(identities: VerifierIdentities | un
   return Object.freeze(owned);
 }
 
-/** Whether `input` is exactly the adopted configuration's bytes: a served preimage is compared with the manifest,
- * never decoded into a configuration of its own. */
+/** Whether `input` is exactly the adopted configuration's 439 bytes, compared as an owned copy: a served preimage
+ * is judged against the manifest, never read as a configuration of its own. */
 export function verifyConfiguration(input: Uint8Array): boolean {
   try {
-    return compareBytes(configurationBytes(decodeConfiguration(input)), ADOPTED) === 0;
+    return compareBytes(copyUnshared(input), ADOPTED) === 0;
   } catch (error) {
     if (error instanceof EncodingError) return false;
     throw error;
