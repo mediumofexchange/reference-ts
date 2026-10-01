@@ -101,7 +101,10 @@ that cannot be opened at all refuses `STORAGE` and is never replaced by the
 wallet, since it may be the holder's only copy; the holder removes it. One
 that another handle holds refuses `STORAGE` as in use. A
 package handed to a read is kept even when the read refuses, and nothing prunes
-the file. A read left `unresolved-evidence` over what the file holds is
+the file ([decision](../decisions/2026-10.md#2026-10-01--add-no-certificate-encoding-keep-12-to-the-kinds-a-reader-reads-and-prune-no-retained-evidence-m4)).
+A file a hostile supplier grew is replaced, never removed first: sync a new
+file from another supplier, check that its reads resolve, then swap the
+files. A read left `unresolved-evidence` over what the file holds is
 answered by supplying again in full (`{ full: true }`). The replay file shows
 which outputs are this seed's, so it needs the database's protection; during a
 read, SQLite's temporary files for it (savepoint journals past the page cache)

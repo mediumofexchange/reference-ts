@@ -261,8 +261,8 @@ proof or evidence of presenter-key participation. Single desktop timings
 do not establish device budgets.
 
 **Final pinning acceptance.** Section 11 fixes configuration framing and the
-delivery-profile byte. Settle remaining certificate/replay/resource bounds,
-then independently review and
+delivery-profile byte; §§12.1 and 14 settle certificates (none), replay and
+resource bounds. Then independently review and
 commit the complete source/helper/toolchain/bytecode/key identities together
 before runtime adoption. Rerun affected proofs on that exact build and domain.
 A passing v2 proof or this uninstantiated-domain suite cannot substitute for
@@ -333,7 +333,7 @@ or unparseable data is never replaced with empty fields. Real-signature tests
 distinguish committed bad authorization from replica substitutions. These
 primitives supply neither a standalone certificate nor a checkpoint verdict.
 Segment headers are fixed in §8; §10 fixes the outer served-trail transport.
-Complete certificate encoding and replay integration remain open.
+Pool-v3 §12.1 adds no certificate encoding and §14 consolidates replay (M4, M5).
 
 [Pool-v3 §9](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records)
 now frames the target byte preimages and suffix as a portable fault-evidence
@@ -937,8 +937,8 @@ orders; statement records and authorization slots; publication bodies and
 acceptance/release/withdrawal bytes; and history/evidence/snapshot/receipt
 frames, segment headers, portable fault-evidence records and served-trail transport. Remaining
 prerequisites are authenticated range-source evidence, replay/import/adoption
-state and order, complete opening verification and its certificate dependency
-frames and final approved artifact/configuration identities. Section 11 now
+state and order, complete opening verification and final approved
+artifact/configuration identities. Section 11 now
 fixes the configuration frame over all six bytecode/key pairs, the helper,
 bounds and delivery profile, plus signed constant-root terms. Candidate
 configuration/terms checks leave adoption and authority unresolved.

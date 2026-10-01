@@ -5,23 +5,24 @@ Updated: 2026-10-01
 ## Goal
 Slice 8 (adoption). M5b is closed: every party's memory is independent of history and a reader's first sync fits 24 h at
 the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-**Next: pruning retained evidence no read used** (decision limits): state its goal, acceptance and stop here before
-building. M6 is decided (below); no v3 reader of C3.8's dishonour exists yet (Next 2).
+M6 and M4 are decided (below). **Next: M7**, venue-ergo §8's one-transaction condition checked against the configuration:
+state its goal, acceptance and stop here before building. No v3 reader of C3.8's dishonour exists yet (Next 2).
 
 ## Status
+- M4 (spec 5584732, [decision](decisions/2026-10.md#2026-10-01--add-no-certificate-encoding-keep-12-to-the-kinds-a-reader-reads-and-prune-no-retained-evidence-m4)):
+  no certificate encoding (a verdict's certificate is its §12.1 closure plus the reader's own venue reads; §9.1 the one compact
+  replacement); §12 kinds 5, 8, 9, 11 unassigned (a header with its terms travels as a count-zero trail; venue evidence only through
+  the reader's verifier). The runtime's `READ_KINDS` already matched; no code or report changed, runtime pin kept. Use-based pruning
+  of retained evidence is not built (it breaks incremental supply and later backings' reads); the wallet guide gives the
+  replace-not-remove remedy. Review: one blocker (§13.2 still named kind 11) and four material findings, all fixed.
 - M6 (spec 740adaa, PR #63, [decision](decisions/2026-10.md#2026-10-01--read-a-gap-release-taken-by-another-demands-settlement-as-released)):
-  a gap release refused only because another demand's settlement already inserted its `cm_out` releases its acceptance for C3.8,
-  so a backer front-running a waiting release with its own settlement gains no holder's lapse; a disclosed output sends the holder's re-proof
-  to a fresh `rho_out`. Spec-only (pool-recovery C3.4/C3.5/C3.8/§8, pool-authority C2.10.8);
-  `test/pool-v3-force.test.ts` shows the taking in force. Review blocked the first proposal (acceptance naming `rho_out` with a void:
-  anyone could pay the backer into the output and write its dishonour); read-backs fixed re-proof, residual and counter. Runtime pins unchanged.
+  a gap release refused only because another demand's settlement inserted its `cm_out` releases its acceptance (C3.8); a disclosed
+  output sends the re-proof to a fresh `rho_out`. Spec-only; `test/pool-v3-force.test.ts` shows the taking in force.
 - M5b.6 (PR #62, [decision](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)):
   proofs verified ahead of the replay on a pool of verifier instances; [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
   10⁵ statements at 52.7 ms each, peak 543 MB, 10⁶ extrapolated to 15.5–16 h here. The ten current v3 reports are from CI run 36806514822.
-- Review-code 2026-09-30 (PR #61): checkpoints judged in their directory's first entry's segment (spec 298b6f5) and fixes; deferred Next 5(o)–(s).
-- Earlier M5b: M5b.5c (PRs #59, #60) the wallet on kept files and real proofs past the old package; M5b.5a–b (PRs #55, #56, #58) the
-  journal's storage, kept venue answers and streamed serving; M5b.4 (PRs #52, #54) kept classes; M5b.3 (PRs #50, #51) streamed evidence.
-  [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets): 10⁶ statements over three years, ≤ 1 GiB, first sync ≤ 24 h.
+- Review-code 2026-09-30 (PR #61, spec 298b6f5; deferred Next 5(o)–(s)). Earlier M5b: PRs #50–#60 (streamed evidence, kept classes,
+  journal storage and serving, wallet kept files). [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets): 10⁶ statements, ≤ 1 GiB, first sync ≤ 24 h.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
@@ -33,8 +34,7 @@ building. M6 is decided (below); no v3 reader of C3.8's dishonour exists yet (Ne
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. Pruning retained evidence no read used (decision limits). Then M4
-   certificates/kind-11 fitted to this retention, M7 one-transaction condition, M8 adoption (one manifest holding §11.1's parameter identities too, now
+1. Slice 8, adoption. M7 one-transaction condition, then M8 adoption (one manifest holding §11.1's parameter identities too, now
    `BN254_PARAMETERS`), every report re-recorded, live two-backing drill. Mainnet needs separate authority.
 2. Slice 9, installable commands on the testnet: holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
    directories, issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
@@ -46,6 +46,7 @@ building. M6 is decided (below); no v3 reader of C3.8's dishonour exists yet (Ne
 4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail
    caller-object cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one is in flight
    (`store.ts` `ready`). One setup module for the store-check family and one `receiptFields` for the two receipt checks; retire `header-verify`, `testnet-header-check`, `publisher-check` unless a mainnet slice needs them.
+   `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11 (unassigned since M4; reports bind the file).
 5. Review findings deferred: (a) `guard.ts` accepts a testnet-context profile anchored on a mainnet header until the next
    epoch boundary (<=127 blocks); fix by a difficulty bound. (b) `store.ts` `package()` serves a published commitment
    never held after the lag (C2.4.3). (c) `store.ts` `submit` may return an old-segment receipt for an adopted forced
@@ -72,7 +73,8 @@ building. M6 is decided (below); no v3 reader of C3.8's dishonour exists yet (Ne
 6. Only when a gate needs them: cancellation, batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, Poseidon2 on
    Barretenberg (0.12 against 1.14 ms a node hash, the replay's largest cost; if load takes a first sync past 24 h), a 10⁶ first-sync run to
    attribute the 10⁵ run's ~45 MB rise in process memory, sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-acceptance receipt handoff, store-check's request
-   through the frame, same-segment rescoping. Phone-first wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
+   through the frame, same-segment rescoping. Against hostile evidence growth (M4): a per-supply bound tied to what the venue newly
+   holds; serving a reader only the segments its backing's checkpoints name (the journal serves every segment its directories name). Phone-first wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
 7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`. After 5(h), read every `local-check`
    group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`). To cut CI failures, run the harness's proof-free cases in vitest with stand-in proofs, and consider a real-proof job only for PRs marked ready.
 
