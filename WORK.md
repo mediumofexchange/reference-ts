@@ -66,7 +66,8 @@ state its goal, acceptance and stop here before building.
    append-only SQLite rows (its limits and plan: the [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)'s
    decision 4). Levers (Poseidon2 on Barretenberg at 0.12 against 1.14 ms a node hash, a 10⁶ first-sync run) only if a budget fails.
 6. Release assurance: reproducible builds of the package and its artifacts, installed-package interoperability, backup and restore drills
-   within the standing authority, and the independent review (Open questions).
+   within the standing authority. Security reviews until then are done by separate AI instances (fresh reviewers, the rolling audits);
+   the external independent review comes only once the product is complete (answered 2026-10-01).
 7. Harness as a second package reader (retires in slice 10): `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`.
    After 4(h), read every `local-check` group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete
    `{compact,scope}-runtime-check.mjs`; retire `verifyTrailEvidence`. Run the harness's proof-free cases in vitest with stand-in proofs; consider a real-proof job only for ready PRs.
@@ -92,9 +93,7 @@ state its goal, acceptance and stop here before building.
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- 2026-10-01, non-blocking: **independent security review.** Release assurance needs a reviewer outside the project (generated audits do not
-  count). Pool-v3's relations and rules are adopted and fixed (spec e7f7f24), so a review of `src/pool/circuits/`, pool-v3.md and pool-recovery.md
-  can start now, the runtime after slice 10. Needed: choose and engage a reviewer. Nothing is blocked until release assurance (Next 6).
+- None.
 
 Roughly **60% done / 40% remaining**, range **50–70%**, reassessed 2026-10-01 (direction): the remainder lacked redemption's operations,
 the visibility table and release assurance; with them installable commands, the design point, qualified storage and mainnet remain.
