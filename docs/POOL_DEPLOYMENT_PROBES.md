@@ -1508,6 +1508,9 @@ frame's 131,914-byte ceiling is a parser bound no configuration-conformant
 publication approaches. A configuration is publishable here only where its
 largest publication fits one transaction, which the selected profile makes
 normative ([venue-ergo.md §8](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md#8-publishing)).
+That count took the output index as two bytes; it is a one-byte VLQ, and the
+last piece can take the room left, so M7 replaced these numbers with the
+runtime's `ergoRunCapacity` and a [live capacity run](ergo-publisher-verification.json).
 
 ## Real-chain exhaustion cost from a real anchor
 
