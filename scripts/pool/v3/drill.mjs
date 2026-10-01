@@ -40,9 +40,9 @@ export function drillMode(argv, name, { testnet = false } = {}) {
   throw new Error(`${name} takes --ergo${testnet ? " or explicit --testnet --authorized-testnet" : ""}`);
 }
 
-/** A fresh holder-only reader: `<check> --worker <directory> [--ergo|--testnet]`, the input on stdin. */
-export async function drillWorker(argv, answer) {
-  assert(argv.length === 1 || (argv.length === 2 && ["--ergo", "--testnet"].includes(argv[1])), "worker takes a directory and a mode flag");
+/** A fresh holder-only reader: `<check> --worker <directory> [--ergo|--testnet]`, the input on stdin; --testnet only for a check with a live mode. */
+export async function drillWorker(argv, answer, { testnet = false } = {}) {
+  assert(argv.length === 1 || (argv.length === 2 && ["--ergo", ...(testnet ? ["--testnet"] : [])].includes(argv[1])), "worker takes a directory and a mode flag");
   const directory = argv[0], mode = argv[1] === "--ergo" ? "ergo" : argv[1] === "--testnet" ? "testnet" : "local";
   const manifest = loadManifest(); checkSources(manifest);
   const keys = readKeys(directory, manifest);
@@ -106,7 +106,13 @@ export async function openDrill(mode, { name, script, budget }) {
     // Witness `count` more indices: the fixture moves, the synthetic chain mines, the live node is waited on.
     const advance = async count => {
       assert(count >= 0n && count <= 1024n);
-      if (live !== undefined) { await live.waitUntil(venue.witnessedIndex() + count); pin = live.pin; }
+      if (live !== undefined) {
+        // At most eight indices per wait, so each step keeps its own wait budget on slow blocks.
+        const target = venue.witnessedIndex() + count;
+        while (venue.witnessedIndex() < target) {
+          const next = venue.witnessedIndex() + 8n; await live.waitUntil(next < target ? next : target); pin = live.pin;
+        }
+      }
       else if (supplier !== undefined) {
         for (const tx of supplier.mempool.pool) transactions.push({ unsignedBytes: tx.unsigned.length });
         supplier.mine(Number(count)); const synced = await venue.sync([supplier]);
@@ -131,11 +137,12 @@ export async function openDrill(mode, { name, script, budget }) {
         const began = performance.now(), record = await prover.prove(task);
         proofs.push({ name: label, kind: task.kind, bytes: record.proof.length, elapsedMs: Math.round(performance.now() - began) }); return record;
       },
-      /** Publish a venue record and wait until it is witnessed. */
+      /** Publish a venue record and wait until it is witnessed; live, return the index that included it. */
       async publishRecord(kind, subject, bytes) {
         await venue.publishRecord(kind, subject, bytes);
-        if (live !== undefined) { await live.waitForRecord(kind, subject, bytes); pin = live.pin; }
-        else if (supplier !== undefined) await advance(LAG);
+        if (live !== undefined) { const at = await live.waitForRecord(kind, subject, bytes); pin = live.pin; return at; }
+        if (supplier !== undefined) await advance(LAG);
+        return undefined;
       },
       /** Publish a journal's pending commitment and wait until it is witnessed. */
       async publish(journal) {

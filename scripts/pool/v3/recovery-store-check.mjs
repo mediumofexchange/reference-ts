@@ -162,5 +162,5 @@ async function acceptance(mode) {
 }
 
 if (process.argv[2] === "--worker") await drillWorker(process.argv.slice(3),
-  async (input, options) => summary(await readPackage(input.package, input.selection, options)));
+  async (input, options) => summary(await readPackage(input.package, input.selection, options)), { testnet: true });
 else await acceptance(drillMode(process.argv.slice(2), "recovery-store-check", { testnet: true }));

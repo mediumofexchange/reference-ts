@@ -85,7 +85,8 @@ async function acceptance(mode) {
       const fields = { role: ROLE_OPERATOR, successor: ed25519.getPublicKey(secret), predecessor,
         effective: venue.witnessedIndex() + 3n * lag + 2n + drill.inclusionSlack, signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
       const message = replacementMessage(x.name, fields), replacement = { ...fields, signature: ed25519.sign(message, ruleSecret), successorSignature: ed25519.sign(message, secret) };
-      await publishRecord(2, x.name, encodeReplacement(x.name, replacement));
+      const at = await publishRecord(2, x.name, encodeReplacement(x.name, replacement));
+      assert(at === undefined || at + 2n * lag + 1n <= fields.effective, "replacement included after its lead floor; readers ignore it");
       return { effective: fields.effective, link: replacementHash(x.name, replacement) };
     };
     const force = async replacement => { const wait = replacement.effective - venue.witnessedIndex(); if (wait > 0n) await advance(wait); };
@@ -192,5 +193,5 @@ async function acceptance(mode) {
 }
 
 if (process.argv[2] === "--worker") await drillWorker(process.argv.slice(3),
-  async (input, options) => summary(await readPackage(input.package, input.selection, options)));
+  async (input, options) => summary(await readPackage(input.package, input.selection, options)), { testnet: true });
 else await acceptance(drillMode(process.argv.slice(2), "scope-store-check", { testnet: true }));
