@@ -369,6 +369,7 @@ export class ReplayStore {
       anchor: `SELECT 1 FROM anchor x WHERE x.root = :key AND ${v}`,
       spentTag: `SELECT 1 FROM nullifier x WHERE x.tag = :key AND ${v}`,
       effective: `SELECT 1 FROM event x WHERE x.identity = :key AND x.kind >= 4 AND ${v}`,
+      visibleEvent: `SELECT 1 FROM event x WHERE x.identity = :key AND ${v}`,
       statement: "SELECT 1 FROM event WHERE identity = ? AND ns = ? AND position <= ?",
       demand: `SELECT x.* FROM demand x WHERE x.id = :key AND ${v} AND NOT EXISTS (SELECT 1 FROM demand_end y WHERE y.id = x.id AND ${visible("y")})`,
       demandsWithTag: `SELECT x.* FROM demand_tag t JOIN demand x ON x.id = t.id AND x.ns = t.ns WHERE t.tag = :key AND ${v}
@@ -647,6 +648,8 @@ export class ReplayStore {
   hasSpentTag(ns: number, p: bigint, tag: bigint): boolean { return this.#has("spentTag", ns, p, fieldToBytes(tag)); }
   /** A recovery statement (kind 4–6) already effective in the visible history. */
   isEffective(ns: number, p: bigint, id: string): boolean { return this.#has("effective", ns, p, unhex(id)); }
+  /** A statement of any kind in the visible history, imports included. */
+  hasEvent(ns: number, p: bigint, identity: Uint8Array): boolean { return this.#has("visibleEvent", ns, p, identity); }
   /** A statement already in this segment's own history (imports are not statements of it). */
   hasStatement(ns: number, p: bigint, identity: Uint8Array): boolean { return this.#q.statement!.get(identity, ns, p) !== undefined; }
   /** A digest of every fact visible from (ns, p), imports included, whatever namespaces hold them: an audit

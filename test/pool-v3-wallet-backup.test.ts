@@ -33,7 +33,7 @@ const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicIn
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);
 const TABLES = ["receiver_requests", "receiver_fulfilled", "payer_payments", "payer_inputs", "payer_outputs", "payer_superseded"];
-const COLUMNS = [5, 6, 15, 2, 5, 4];
+const COLUMNS = [5, 6, 15, 2, 5, 4, 13, 2, 5];
 /** The specific refusal, not merely a throw. */
 function throws(action: () => unknown, shape: unknown): void {
   let thrown: unknown;
@@ -260,9 +260,10 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     };
     const refused = (pair: readonly [Uint8Array, string], message: RegExp) =>
       throws(attempt(f.reader, pair[0], key, pair[1]), expect.objectContaining({ code: "INVALID", message: expect.stringMatching(message) }));
-    refused(sealed(new TextEncoder().encode("[[],[],[],[],[],[]]")), /invalid wallet snapshot/);
-    refused(variant(() => {}, "moe/wallet/v3/2"), /another profile/);
+    refused(sealed(new TextEncoder().encode("[[],[],[],[],[],[],[],[],[]]")), /invalid wallet snapshot/);
+    refused(variant(() => {}, "moe/wallet/v3/3"), /another profile/);
     refused(variant(t => { t[3]!.push(["1", "nobody"]); }), /does not fit|unmatched references/);
+    refused(variant(t => { t[7]!.push(["1", "nobody"]); }), /does not fit|unmatched references/);
     refused(variant(t => { t[1]!.push(["stranger", "123", b(1), "0", b(3), b(4)]); }), /unmatched references/);
     refused(variant(t => { t[0]![0]![3] = new Uint8Array([1]) as never; }), /does not fit/);
     refused(variant(t => { t[2]![0]![9] = "cancelled"; }), /does not fit/);

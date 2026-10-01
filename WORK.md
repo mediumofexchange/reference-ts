@@ -3,17 +3,22 @@
 Updated: 2026-10-01
 
 ## Goal
-Slice 8 (adoption) is complete. Pool-v3 is adopted with one configuration (spec e7f7f24, §11.4: configHash `7ddbb7e8…a618`;
-[decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)).
-Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is pool-v4.
-**Next: slice 9, redemption in the wallet** (Next 1; [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
-state its goal, acceptance and stop here before building.
+Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
+a byte, identity or verdict change (C3.8's residual too) is pool-v4.
+**Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
+`V3Wallet` owns both redemption roles; acceptance and stop: Next 1. **M9a done** (PR #69, branch `feat/m9a-redemption-wallet`):
+`issue`/`accept`/`burn` (K signs through a caller `BackerSigner` checked against the obligor), `demand`/`settle`/`withdraw` (presenter,
+padding and `rho_out` derived from the seed, [redemption.ts](src/pool/v3/redemption.ts)), saved acts, one `submit`, resolution by statement
+(`hasEvent`) in `sync`, profile `moe/wallet/v3/4`; stand-in proofs under service ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)).
+Reviewed by a fresh instance: stale reservations, final-by-output, double terms read and the window bound fixed and read back.
+**Next: M9b** gap: publish demand/settle/withdraw at the venue with the operator offline; the disclosure count read from witnessed
+releases without force (zero today); demands found again after a seed restore; reproof of an act whose segment ended (today it fails and
+a new alias acts). **M9c** the C3.8 reader (void, lapse, taken release, dishonour) and Next 4 (a)–(c), (e), (q). **M9d** real-proof drills in
+fresh processes, local and synthetic Ergo, crash drills at the act commit boundaries (`wallet-crash.mjs`), review, merge.
 
 ## Status
-- M8b (PR #68): the live two-backing drill passed on the own testnet node ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json));
-  `scripts/pool/v3/drill.mjs` owns the recovery, succession and scope drills, `testnet-budget.mjs` caps each live drill.
-- M8a (PR #67, spec e7f7f24, the runtime pin): `POOL_V3_MANIFEST` in `src/pool/v3/configuration.ts` holds every identity; the guard
-  (`ReferenceVenueError`) still refuses mainnet. Earlier: M7 (PR #66), area 28 (PR #65), M4/M6, [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6), M5b PRs #50–#62.
+- Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)), `drill.mjs`
+  and `testnet-budget.mjs`; M8a (PR #67, spec e7f7f24) `POOL_V3_MANIFEST`, guard refuses mainnet; earlier M7 (PR #66), area 28, M4–M6, M5b.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
@@ -24,12 +29,8 @@ state its goal, acceptance and stop here before building.
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 9, redemption in the wallet (reference venues): no runtime operation issues, demands, accepts, settles, releases, withdraws or burns
-   (`witness.ts` tasks are driven by tests/scripts). Backer role: issue under signed terms, accept with C4.7's owner (distinct per demand, C3.4),
-   take and burn settled notes. Holder role: demand with a fresh presenter key, settle with C3.5's `rho_out` (segment, disclosure count read from
-   the record), release, withdraw; persisted and exactly retried as payments are. A v3 C3.8 reader: demand void by a spent tag, the holder's
-   lapse, releases taken by another demand's settlement (keep each output's inserting demand); a settle refused under service reads as unreleased
-   (C3.8's adopted limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet
+1. Slice 9 (Goal above): C3.8 reader keeps each output's inserting demand; a settle refused under service reads as unreleased (C3.8's
+   adopted limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet
    operations in fresh processes, local and synthetic Ergo, under service and in a gap with the operator offline; crash/exact-retry drills at the
    new commit boundaries; C3.4–C3.8 hostile cases. Close Next 4 (a)–(c), (e), (q). Adversarial review before merge.
 2. Profile visibility table (docs/spec, any time before slice 10's wallet text): pool-v3 on Ergo per party and per issuer/operator/witness
