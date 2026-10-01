@@ -259,7 +259,7 @@ Actual inclusion can still occur too late; the independent reader then refuses
 its force, and the drill retains the fees and partial-run evidence limit.
 The public reader bundle retains package bytes, selection, verification keys,
 artifact identities and independently held venue profile/pin, without seeds or
-journal contents. Offline guard checks run with `recovery-testnet.mjs --check`.
+journal contents. Offline guard checks run with `testnet-budget.mjs --check`.
 
 The authorized 2026-09-27 [live testnet acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
 passed all four groups with nine real proofs and ten distinct transactions.
