@@ -9,7 +9,7 @@ pin changes; dated decisions retain the reasoning behind those changes.
 way to try the implementation. There is no published npm release, no
 deployment, and no completed security audit.
 
-The pool runtime is the guarded pool-v3 candidate in `src/pool/v3/`, over the
+The pool runtime is the guarded pool-v3 runtime in `src/pool/v3/`, under the adopted configuration (pool-v3 §11.4), over the
 shared primitives in `src/pool/` (field, Poseidon2, notes, note tree, scope and
 proof verifier). It implements issue, payment, burn, single-backing recovery
 and Ergo publication with bounded venue/publisher process persistence. The [v3 wallet](POOL_V3_WALLET.md) now persists C4.1–2 exact
@@ -65,7 +65,7 @@ retired once the v3 wallet took over its cases; the wallet restores from its see
 with full replay.
 The [conditional initial-segment replay](POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay)
 adds real successor proof/signature checks, replayed roots/totals and local note
-paths, with a fresh seedless audit process. It checks candidate configuration
+paths, with a fresh seedless audit process. It checks the configuration
 and all six artifact identities plus canonical signed root terms under
 [pool-v3 §11](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
 With [pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence)
@@ -112,7 +112,7 @@ full committed event evidence, and selected state retains its complete selection
 envelope. Compact §9 proof openings carried as §12 kind-7 items
 report authenticated committed bad proofs beside import results, including
 unresolved reads and lapsed shared scopes. The reader binds every scoped term to
-the candidate configuration and checks the target against its independently
+the adopted configuration and checks the target against its independently
 selected key. Individual reports establish no admission or state. Signature
 observations additionally cover issuance,
 withdrawal and both settlement roles. The target backing's scoped terms identify
@@ -150,9 +150,7 @@ refuse; an inside-block record is ignored, never consumed, beside an after-block
 one. The original classifier now explicitly excludes nonempty opening checkpoints
 before establishing the compact path's valid-opening condition.
 Local limits bound compact bytes, items and suffix
-work, and verifier exceptions remain visible. Runtime adoption remains open.
-Configuration adoption, runtime reading of the selected venue profile and
-runtime imports remain open. Signed non-service terms drive single and multi-backing
+work, and verifier exceptions remain visible. Signed non-service terms drive single and multi-backing
 real-proof counts against each selected backing's strictly preceding canonical
 state, preserving first request indices, distinct tags and spent/lock status
 across scope changes and handover. Unadopted publications and checkpoints at
@@ -269,8 +267,8 @@ using real signatures. Authentication alone supplies no checkpoint verdict.
 `src/pool/v3/headers.ts` implements [v3 segment headers](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers)
 with canonical scope/opening references and bounded strict decoding. Its
 signed-directory and hostile-byte tests establish header conformance. The reader
-checks single-backing opening evidence and recovery adoption; configuration
-adoption remains open (no certificate format is added, M4). Reference-venue succession is
+checks single-backing opening evidence and recovery adoption; no certificate
+format is added (M4). Reference-venue succession is
 covered by the slice-4 runtime below.
 `src/pool/v3/fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
 exact raw target bytes and an evidence suffix, checked against an externally
@@ -331,7 +329,7 @@ remain open.
 The operator side runs in `src/pool/v3/` on reference venues only
 ([decision](../decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)):
 the runtime prover (`prover.ts`, `witness.ts`), admission at the horizon in
-`state.ts`, the operator journal (`store.ts`) and the candidate guard
+`state.ts`, the operator journal (`store.ts`) and the reference guard
 (`guard.ts`), also enforced at the reader's entry with a caller-held reference
 preimage. `npm run check:pool:v3-store` exercises an issue, a payment with a
 fee to the operator's own request and a burn through the journal on the local
@@ -419,15 +417,16 @@ physical power-loss or wallet custody evidence is added.
 ## Runtime pin and recovery models
 
 The runtime follows specification revision
-[`01f922c3839c62b2e5a385eb30b7611047a139a4`](https://github.com/mediumofexchange/money-from-first-principles/tree/01f922c3839c62b2e5a385eb30b7611047a139a4):
-`pool-v3.md` for the construction, with the Ergo venue profile's
+[`e7f7f246a5a57741b9ceeaaa9efef67a7b0bccad`](https://github.com/mediumofexchange/money-from-first-principles/tree/e7f7f246a5a57741b9ceeaaa9efef67a7b0bccad):
+`pool-v3.md` for the construction, adopted with §11.4's configuration, with the Ergo venue profile's
 `venue-ergo.md`; the v3 reports bind the revision they check
 (`V3_SPECIFICATION` in `scripts/pool/v3/provenance.mjs`), which names both
 documents' text for Ergo reports. The circuit sources cite rules by document
 and section, not revision, so a later revision that keeps those rules leaves
 their source identities unchanged. The pin includes venue-ergo §2's clock
 on a heavier, shorter chain (`dce3ae1`, `298cc06`) and §8's one-transaction
-condition (`01f922c`), which the v3 guard checks against `PROOF_BYTES`.
+condition (`01f922c`), which the v3 guard checks against `PROOF_BYTES`, and
+pool-v3's adoption (`e7f7f24`), whose manifest the runtime holds.
 `740adaa` (pool-recovery C3.4, C3.5 and C3.8) is in it, but no v3 code reads
 it yet. Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding
@@ -469,10 +468,9 @@ rejection. See the [conformance suite](../scripts/pool/v3/README.md). The
 are Ignition's ([probe](POOL_DEPLOYMENT_PROBES.md#proving-parameters)). Every
 backend instance starts through `startBackend` (`src/pool/proof-verifier.ts`),
 which loads only the leading 2^15 G1 points and `[x]_2` whose hashes are
-`BN254_PARAMETERS`; the verifier and prover refuse any other instance, and the
+`BN254_PARAMETERS`, the manifest's parameter identities; the verifier and prover refuse any other instance, and the
 suite records the hashes it loaded. Readers, the journal and the wallet refuse
 a verifier that names circuits other than the configuration's six (§11.1).
-V3 remains
-an incomplete construction: no approved configuration hash or artifact pins,
-backing adoption or deployment support is defined; the runtime candidate
-remains guarded to reference venues.
+Pool-v3 §11.4 adopts the configuration whose identities the suite reproduces;
+the runtime holds that manifest (`src/pool/v3/configuration.ts`), takes no
+configuration from a caller, and remains guarded to reference venues.

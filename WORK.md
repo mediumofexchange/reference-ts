@@ -3,23 +3,20 @@
 Updated: 2026-10-01
 
 ## Goal
-Slice 8 (adoption). M5b is closed for the pool's own state: every party's replay and evidence memory is independent of history and a
-reader's first sync fits 24 h at the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are decided. No v3 reader of C3.8's dishonour exists yet (Next 2).
+Slice 8 (adoption). Pool-v3 is adopted with one configuration (spec e7f7f24, §11.4: configHash `7ddbb7e8…a618`, the candidate's
+identities unchanged; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)).
+Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is pool-v4. Open: the Ergo view (Next 8), C3.8 reader (Next 2).
 
-**Next: M8** adoption (Next 1): state its goal, acceptance and stop here before building.
+**Next: M8b**, the live two-backing drill (Next 1): state its goal, acceptance and stop here before building.
 
 ## Status
-- M7, venue-ergo §8's one-transaction condition (PR #66, spec 01f922c, now the runtime pin, [decision](decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)):
-  `PROOF_BYTES` (the backend refuses a proof a word longer or shorter) and `publicationBound` fix the longest publication (15,498);
-  pieces fill 4,096-byte boxes at a one-byte index; inputs take only the room left; `ergoRunCarries`/`ergoRunCapacity` (95,910 at
-  P2PK under every option); the v3 guard refuses a kind-4 location that cannot carry it. Testnet: a capacity run mined and read back.
-  The ten current v3 reports are from CI run 36857984250 (new conformance check: proof length and its variants).
-- Audit area 28 (PR #65, spec dce3ae1 + 298cc06): an Ergo index stays witnessed while the best chain keeps its block; a publication is
-  replaced only on a supplier's answer, at most 8 per record; settling asks no supplier; supplier cost bounded.
-- M4 (spec 5584732): no certificate encoding; M6 (spec 740adaa, PR #63): a gap release taken by another demand's settlement releases (C3.8).
-- M5b.6 (PR #62): [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6) 10⁵ statements at 52.7 ms each, peak 543 MB;
-  [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) 10⁶ statements, ≤ 1 GiB, first sync ≤ 24 h. Earlier: PR #61, M5b PRs #50–#60.
+- M8a adoption (PR #67, spec e7f7f24, now the runtime pin): `POOL_V3_MANIFEST` in `src/pool/v3/configuration.ts` holds the toolchain,
+  verifier target, sources, identities, `BN254_PARAMETERS` (now `src/pool/parameters.ts`, neutral core) and `PROOF_BYTES`; journal,
+  readers, wallet and prover take no configuration; `scripts/pool/v3/manifest.mjs` replaced `candidate.mjs`/`candidate-manifest.json`;
+  check.mjs asserts the derived identities frame the adopted bytes. Guard renamed (`ReferenceVenueError`), still refusing mainnet.
+  Every current v3 report is re-recorded from CI run PENDING_RUN.
+- Earlier slice 8: M7 one transaction (PR #66), area 28 (PR #65), M4/M6 (spec 5584732, 740adaa), M5b.6 [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
+  against the [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) (PR #62), M5b PRs #50–#61.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 8).
@@ -30,14 +27,16 @@ The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are 
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, M8 adoption: one manifest holding §11.1's parameter identities too (now `BN254_PARAMETERS`) and `PROOF_BYTES`, every
-   report re-recorded, live two-backing drill. Mainnet needs separate authority.
-2. Slice 9, installable commands on the testnet: holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
+1. Slice 8, M8b: the live two-backing drill on the own testnet node. `scope-store-check.mjs` has local and `--ergo` modes; add
+   `--testnet --authorized-testnet` as `recovery-store-check.mjs` does (`testnet.mjs`, `scratch/ergo-testnet/wallet.json`): split,
+   rejoin, a wallet payment in the rejoined scope, a fresh reader. Mainnet needs separate authority.
+2. Slice 9, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
+   holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
    directories, issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
    and Next 8 before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
    the verifier (M5b.6). Wallet settlements derive `rho_out` per segment and disclosure counter (C3.5). A v3 dishonour reader (C3.8) for redeem: demand void by a spent tag, the holder's lapse, releases taken by another
-   demand's settlement (keep each output's inserting demand); residual: a settle refused under service reads as unreleased (a release witnessed
-   at the venue outside a gap could count, as the backer can relay it, but needs a judging state; decide first). Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
+   demand's settlement (keep each output's inserting demand); a settle refused under service reads as unreleased (C3.8's adopted limit; counting a
+   release witnessed outside a gap would be pool-v4). Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements spending several backings from the wallet; single-backing openings over-reserve by |E|.
 4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail
    caller-object cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one is in flight
@@ -93,8 +92,9 @@ The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are 
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-None.
+- 2026-10-01, non-blocking: the site still calls the v3 runtime an "unadopted candidate". Branch `docs/v3-adopted` of
+  mediumofexchange.github.io (one sentence in `index.html`) says pool-v3 is adopted; merging it to main deploys the site, which needs
+  the maintainer: `git -C site merge --ff-only origin/docs/v3-adopted && git -C site push`. Nothing else waits on it.
 
-Roughly **63% done / 37% remaining**, range **54–71%**, reassessed 2026-10-01 after the area 28 audit found the Ergo view's memory, sync
-work and restart grow with venue age (Next 8, a slice of its own); the pool's own state stores, serves, syncs and recovers without bounds on
-history, and adoption, installable commands, qualified storage and mainnet remain.
+Roughly **65% done / 35% remaining**, range **56–72%**, reassessed 2026-10-01 at adoption (M8a): the configuration is fixed and the runtime
+holds it; the Ergo view's growth with venue age (Next 8), installable commands, qualified storage and mainnet remain.

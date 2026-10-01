@@ -3,7 +3,7 @@
 `src/pool/v3/wallet-store.ts` implements one local wallet seed that receives under
 [pool-delivery C4.1–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-delivery.md)
 and pays under [pool-fees C1.2.3–5](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
-It uses the candidate configuration and recomputed reference venue guard. It is
+It runs under the adopted configuration (pool-v3 §11.4) and the recomputed reference venue guard. It is
 not exported from the root barrel. Node 24 is required for its SQLite storage.
 
 The caller opens `V3Wallet(path, readerOptions)` with its independently

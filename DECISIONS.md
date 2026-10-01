@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-01` [Adopt pool-v3 with one configuration and hold its manifest in the runtime (M8a)](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)
 - `2026-10-01` [Check the one-transaction condition in the guard and fill Ergo boxes at their real output index](decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)
 - `2026-10-01` [Keep an Ergo index witnessed while the best chain keeps its block, and replace a publication only on a supplier's answer](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)
 - `2026-10-01` [Add no certificate encoding, keep §12 to the kinds a reader reads, and prune no retained evidence (M4)](decisions/2026-10.md#2026-10-01--add-no-certificate-encoding-keep-12-to-the-kinds-a-reader-reads-and-prune-no-retained-evidence-m4)

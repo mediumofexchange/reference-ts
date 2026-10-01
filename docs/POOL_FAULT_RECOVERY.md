@@ -103,7 +103,7 @@ chain needs later recurrence inputs for an interior-event certificate: three
 directory proof and ancestry. A tree could reduce suffix cost.
 
 The successor's [pool-v3 §7 frames](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts)
-are implemented in `src/pool/v3/commitments.ts`, candidate runtime code.
+are implemented in `src/pool/v3/commitments.ts`.
 `test/pool-v3-commitments.test.ts` authenticates exact evidence against signed
 directories, distinguishing a committed failing backer signature from replica
 substitution. It checks raw malformed-length fields, snapshot/receipt bytes,
