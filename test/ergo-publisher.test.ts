@@ -76,7 +76,7 @@ describe("durable publisher exact retry", () => {
     expect((await second.publish(request(new Uint8Array(100).fill(8)))).signed).toEqual(child.signed);
   });
 
-  it("retains settled change and reserved inputs after restart", async () => {
+  it("retains settled change after restart, and releases a settled publication's inputs", async () => {
     const { persistence } = storage(), n = funded([10_000_000n]);
     const first = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
     const published = await first.publish(request());
@@ -86,12 +86,20 @@ describe("durable publisher exact retry", () => {
     expect((await reopened.publish(request(new Uint8Array(100).fill(2)))).inputs).toEqual([published.change!.id]);
 
     const separate = storage(), refusing = funded([10_000_000n]); refusing.refuse = () => true;
+    const firstInputs: string[] = [], submit = refusing.submit.bind(refusing);
+    refusing.submit = async (signed, id) => { firstInputs.push(hex(signed.subarray(1, 33))); return submit(signed, id); };
     const reserved = new ErgoPublisher({ secretKey: SECRET, suppliers: [refusing], persistence: separate.persistence });
     await expect(reserved.publish(request())).rejects.toThrow(/kept and sent again/);
-    await reserved.settle(() => true); // another publisher witnessed it; own input is still reserved
+    // Another publisher's transaction carried the record, and settling asks no supplier whether this one landed: its
+    // change stays the publisher's until a build finds it gone, and its input is released.
+    await reserved.settle(() => true);
     const after = new ErgoPublisher({ secretKey: SECRET, suppliers: [refusing], persistence: separate.persistence });
-    await expect(after.publish(request(new Uint8Array(100).fill(3)))).rejects.toThrow(/no supplier offered/);
-    expect(refusing.submitted).toHaveLength(1);
+    expect(after.unsettled).toBe(0);
+    await expect(after.publish(request(new Uint8Array(100).fill(3)))).rejects.toThrow(/kept and sent again/);
+    expect(firstInputs[1]).not.toBe(firstInputs[0]); // the unlanded change
+    // That change is gone, so the next attempt spends the released input again: it conflicts with the first.
+    await expect(after.publish(request(new Uint8Array(100).fill(3)))).rejects.toThrow(/kept and sent again/);
+    expect(firstInputs.slice(2)).toEqual([firstInputs[1], firstInputs[0]]);
   });
 
   it("fails before send, poisons uncertain state and keeps the old reservation when rebuilding fails", async () => {
@@ -578,6 +586,134 @@ describe("a publication is sent once, and publications chain", () => {
   });
 });
 
+describe("replacement, settlement and supplier cost", () => {
+  const never = (): Promise<never> => new Promise(() => {});
+  /** `n` as a supplier that answers nothing while `down()`. */
+  const switched = (n: MempoolNode, down: () => boolean, onSubmit: () => void = () => {}): ErgoPublishingSupplier => ({ name: n.name,
+    unspentBoxes: t => (down() ? Promise.reject(new Error("down")) : n.unspentBoxes(t)),
+    hasBox: id => (down() ? Promise.reject(new Error("down")) : n.hasBox(id)),
+    hasTransaction: id => (down() ? Promise.reject(new Error("down")) : n.hasTransaction(id)),
+    submit: async (signed, id) => { if (down()) throw new Error("down"); await n.submit(signed, id); onSubmit(); } });
+  const carried = (n: MempoolNode, record: Uint8Array): number =>
+    attributeBlock(new Chain().profile(3n), n.pool).filter(object => hex(object.record) === hex(record)).length;
+
+  it("replaces nothing while no supplier answers, so a tip that moved meanwhile builds no second transaction", async () => {
+    for (const acknowledged of [false, true]) {
+      const n = funded([10_000_000n]);
+      let down = false, lost = !acknowledged;
+      const p = new ErgoPublisher({ secretKey: SECRET, timeoutMs: 50,
+        suppliers: [switched(n, () => down, () => { if (lost) throw new Error("connection reset"); })] });
+      if (acknowledged) await p.publish(request());
+      else await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
+      lost = false; down = true;
+      await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n))).rejects.toThrow(/kept and sent again/);
+      down = false;
+      await p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n));
+      expect(n.pool).toHaveLength(1);
+      expect(carried(n, RECORD)).toBe(1);
+    }
+  });
+
+  it("builds no replacement beside a transaction it replaced that a supplier holds, across a restart", async () => {
+    const state: { text?: string } = {};
+    const persistence: ErgoPublisherPersistence = { load: () => state.text, save: text => { state.text = text; }, guard: () => {} };
+    const n = funded([10_000_000n]), lagging = node("lagging");
+    for (const box of n.boxes.values()) lagging.fund(box); // it holds the funding box and none of the publisher's transactions
+    lagging.refuse = () => true; // and takes nothing, say at this height
+    let down = false;
+    const suppliers = [switched(n, () => down), lagging];
+    const first = await new ErgoPublisher({ secretKey: SECRET, suppliers, persistence, timeoutMs: 50 }).publish(request());
+    down = true;
+    // Only the lagging node answers, and it lacks the transaction: it is replaced on the same inputs at the new height.
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers, persistence, timeoutMs: 50 });
+    await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n))).rejects.toThrow(/kept and sent again/);
+    down = false;
+    // The replacement is refused where the first landed in the pool, its input spent. The first is the record's,
+    // so no third transaction is built on the funding box's successor, the first's change.
+    const reopened = new ErgoPublisher({ secretKey: SECRET, suppliers, persistence, timeoutMs: 50 });
+    const resolved = await reopened.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n));
+    expect(hex(resolved.id)).not.toBe(hex(first.id));
+    expect(n.pool.map(t => hex(hash(t.unsigned)))).toEqual([hex(first.id)]);
+    expect(new Set(n.submitted)).toEqual(new Set([hex(first.id), hex(resolved.id)]));
+    expect(carried(n, RECORD)).toBe(1);
+  });
+
+  it("replaces one record's transaction at most eight times in all", async () => {
+    const n = funded([10_000_000n]);
+    n.refuse = () => true;
+    const p = publisher([n]);
+    for (let i = 0n; i < 12n; i++) await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + i))).rejects.toThrow(/kept and sent again/);
+    expect(new Set(n.submitted).size).toBe(8);
+  });
+
+  it("settles asking no supplier: landed change stays its own, and no settled input stays reserved", async () => {
+    const state: { text?: string } = {};
+    const persistence: ErgoPublisherPersistence = { load: () => state.text, save: text => { state.text = text; }, guard: () => {} };
+    const n = funded([100_000_000n]);
+    let down = false;
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [switched(n, () => down)], persistence, timeoutMs: 50 });
+    const published: { change?: { id: Uint8Array } }[] = [];
+    for (let i = 1; i <= 20; i++) published.push(await p.publish(request(new Uint8Array(136).fill(i))));
+    n.take(); // mined: each spent the change of the one before
+    for (const id of [...n.boxes.keys()]) if (!n.confirmed.has(id) || readPlainBox(n.boxes.get(id)!, TREE) === undefined) n.boxes.delete(id); // record boxes swept
+    down = true; // no supplier answers while it settles
+    await p.settle(() => true);
+    expect(p.unsettled).toBe(0);
+    const saved = JSON.parse(state.text!);
+    expect(saved.pending).toEqual([]);
+    expect(saved.created.map((box: { id: { bytes: string } }) => box.id.bytes)).toEqual([hex(published[19]!.change!.id)]);
+    down = false;
+    n.unspentBoxes = async () => []; // an index that does not list the change yet
+    expect((await p.publish(request(new Uint8Array(136).fill(21)))).inputs).toEqual([published[19]!.change!.id]);
+  });
+
+  it("costs a supplier that invents boxes and never answers about them a timeout or two, not one per box", async () => {
+    const n = funded([10_000_000n]), funding = [...n.boxes.keys()];
+    const invented = Array.from({ length: 200 }, (_, i) => plainBox(TREE, 1_000_000_000n + BigInt(i), HEIGHT - 1n));
+    const liar: ErgoPublishingSupplier = { name: "liar", unspentBoxes: async () => invented, hasBox: never, hasTransaction: never, submit: never };
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [liar, n], timeoutMs: 100 });
+    const started = performance.now();
+    const publication = await p.publish(request());
+    // Two hundred boxes the honest node denies at once; its own funding waits once for the liar; sending waits once more.
+    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(publication.inputs.map(hex)).toEqual(funding);
+  });
+
+  it("walks no ancestry for a supplier that does not answer whether it holds the transaction", async () => {
+    const n = funded([10_000_000_000n]), funding = [...n.boxes.keys()][0]!;
+    let slow = false, asked = 0;
+    const lagging: ErgoPublishingSupplier = { name: "lagging", unspentBoxes: async () => [], hasBox: async id => hex(id) === funding,
+      hasTransaction: () => { asked++; return slow ? never() : Promise.resolve(false); }, submit: async () => {} };
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n, lagging], timeoutMs: 50 });
+    for (let i = 1; i <= 30; i++) await p.publish(request(new Uint8Array(136).fill(i)));
+    slow = true; asked = 0;
+    await p.publish(request(new Uint8Array(136).fill(31)));
+    expect(asked).toBe(1);
+  });
+
+  it("takes no box that would carry a transaction's inputs past one box's value", async () => {
+    const small = plainBox(TREE, 700_000n, HEIGHT - 5n), lost = plainBox(TREE, 800_000n, HEIGHT - 5n), extra = plainBox(TREE, 5_000_000n, HEIGHT - 5n);
+    const huge = plainBox(TREE, (1n << 64n) - 1n, HEIGHT - 5n), hugeId = hex(hash(huge)), n = node();
+    n.fund(small); n.fund(lost);
+    let offering = false;
+    // The honest node never answers about the invented box; the liar vouches for it.
+    const honest: ErgoPublishingSupplier = { name: "honest", unspentBoxes: t => n.unspentBoxes(t), hasTransaction: id => n.hasTransaction(id),
+      hasBox: id => (hex(id) === hugeId ? Promise.reject(new Error("no answer")) : n.hasBox(id)), submit: (s, id) => n.submit(s, id) };
+    const liar: ErgoPublishingSupplier = { name: "liar", unspentBoxes: async () => (offering ? [huge] : []),
+      hasBox: async id => { if (hex(id) === hugeId) return true; throw new Error("no answer"); },
+      hasTransaction: async () => { throw new Error("no answer"); }, submit: async () => { throw new Error("refused"); } };
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [honest, liar], timeoutMs: 50 });
+    const first = await p.publish(request());
+    expect(first.inputs).toHaveLength(2);
+    // The network dropped it and one input is gone for good; the rebuild keeps the other and needs more.
+    n.pool.splice(0); n.boxes.clear(); n.fund(small); n.fund(extra);
+    offering = true;
+    const rebuilt = await p.publish(request());
+    expect(rebuilt.inputs.map(hex)).toEqual([hex(hash(small)), hex(hash(extra))]);
+    expect(n.pool).toHaveLength(1);
+  });
+});
+
 // --- Through the verifying view ---------------------------------------------------------------------------
 
 const chain = new Chain();
@@ -760,6 +896,14 @@ describe("a node as a publishing supplier", () => {
       url.includes("/unconfirmed/") ? new Response("", { status: 500 }) : new Response(`{ "id" : "${id}" }`, { status: index })).fetch });
     expect(await failingMempool(200).hasTransaction(idBytes)).toBe(true);
     await expect(failingMempool(503).hasTransaction(idBytes)).rejects.toThrow(/500|503/);
+  });
+
+  it("reads at most 4 MiB of a node's answer, whatever length it declares", async () => {
+    let pulled = 0;
+    const endless = (): Response => new Response(new ReadableStream({ pull(controller) { pulled += 65_536; controller.enqueue(new Uint8Array(65_536).fill(0x20)); } }));
+    const supplier = ergoNodePublisher("http://node", { fetch: async () => endless() });
+    await expect(supplier.hasBox(new Uint8Array(32))).rejects.toThrow(/response over 4194304 bytes/);
+    expect(pulled).toBeLessThan(5 * 1024 * 1024);
   });
 
   it("takes a submission as accepted only where the node answers with the transaction's id", async () => {
