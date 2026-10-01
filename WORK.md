@@ -6,11 +6,10 @@ Updated: 2026-10-01
 Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
 a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 **Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
-`V3Wallet` owns both redemption roles; acceptance and stop: Next 1. **M9a done** (PR #69, branch `feat/m9a-redemption-wallet`):
+`V3Wallet` owns both redemption roles; acceptance and stop: Next 1. **M9a done** (PR #69, merged 2fd0f08):
 `issue`/`accept`/`burn` (K signs through a caller `BackerSigner` checked against the obligor), `demand`/`settle`/`withdraw` (presenter,
 padding and `rho_out` derived from the seed, [redemption.ts](src/pool/v3/redemption.ts)), saved acts, one `submit`, resolution by statement
-(`hasEvent`) in `sync`, profile `moe/wallet/v3/4`; stand-in proofs under service ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)).
-Reviewed by a fresh instance: stale reservations, final-by-output, double terms read and the window bound fixed and read back.
+(`hasEvent`) in `sync`, profile `moe/wallet/v3/4`; stand-in proofs under service ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); fresh-instance review resolved.
 **Next: M9b** gap: publish demand/settle/withdraw at the venue with the operator offline; the disclosure count read from witnessed
 releases without force (zero today); demands found again after a seed restore; reproof of an act whose segment ended (today it fails and
 a new alias acts). **M9c** the C3.8 reader (void, lapse, taken release, dishonour) and Next 4 (a)–(c), (e), (q). **M9d** real-proof drills in
@@ -94,7 +93,8 @@ fresh processes, local and synthetic Ergo, crash drills at the act commit bounda
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- None.
+- Deletion list (non-blocking, 2026-10-01): the cloud session's proxy refused deleting merged remote branch `feat/m9a-redemption-wallet`
+  (PR #69): `git push origin --delete feat/m9a-redemption-wallet`.
 
 Roughly **60% done / 40% remaining**, range **50–70%**, reassessed 2026-10-01 (direction): the remainder lacked redemption's operations,
 the visibility table and release assurance; with them installable commands, the design point, qualified storage and mainnet remain.
