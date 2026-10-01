@@ -6,19 +6,13 @@ Updated: 2026-10-01
 Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
 a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 **Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
-`V3Wallet` owns both redemption roles; acceptance and stop: Next 1. **M9a done** (PR #69): saved `issue`/`accept`/`burn` (K via `BackerSigner`),
-`demand`/`settle`/`withdraw` (seed-derived presenter, padding, `rho_out`), `submit`, `sync` resolution, stand-in proofs ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)).
-Payments and acts are one saved record (PR #71, merged bbfd091; `saved_records`, kind 2 a payment; profile `moe/wallet/v3/5`); a failed payment frees its other input.
-**M9b1 done** (PR #70, merged 16d6180): in a gap (horizon past the canonical checkpoint by more than the silence duration)
-`demand`/`withdraw`/`settle` bind to the snapshot and `publish` puts them at the venue; acts go final by force; the disclosure count is
-distinct outputs of presenter-signed unforced releases of the demand in the segment (frontier `releases`, settle reads only); reviewed, CI
-green. **Active: M9b2** (branch `claude/peaceful-tesla-zgcppb`) demands found again from the seed. Acceptance: a wallet restored from the seed
-alone lists in `sync` this seed's standing demands (replay state keeps each demand's instant, so the derived presenter key recognizes them)
-and withdraws or settles one by its identity, under service and in a gap, after an operator succession too, with the same `rho_out` the lost
-wallet would derive; another seed's demand refuses; unit suite, `check:scripts`, review. Choice: an act whose segment ended fails and is made
-again under a new alias, and `reprove` stays the payments' (C1.2.5 binds a payment's outputs to its payee; an act's are the request's under any
-alias or its own); covered by a succession test. Stop: no C3.8 reader, real-proof or crash drills (M9c, M9d). **M9c** the C3.8 reader (void,
-lapse, taken release, dishonour), acceptance published (C3.4), Next 4 (a)–(c), (e), (q). **M9d** real-proof and crash drills, review.
+`V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PR #69) saved
+issue/accept/burn and demand/settle/withdraw under service, one saved record (PR #71); **M9b1** (PR #70) gap acts bound to the snapshot,
+`publish`, disclosure count from unforced releases. **M9b2** (branch `claude/peaceful-tesla-zgcppb`, eae49f9): replay keeps a demand's instant,
+so the seed's presenter key finds its standing demands (`sync` `demands`); `withdraw(alias, id)`/`settle(alias, acceptance)` read the notice
+from the view; a standing demand's notes are held by its lock, not a reservation; an act whose segment ended fails and is made again
+(no act reproof); profiles wallet v3/6, journal pool-store/v3/4. **M9c** the C3.8 reader (void, lapse, taken release, dishonour), acceptance
+published (C3.4), Next 4 (a)–(c), (e), (q). **M9d** real-proof and crash drills, review.
 
 ## Status
 - Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)); M8a (PR #67) manifest, mainnet guard; M7, M4–M6, M5b.
