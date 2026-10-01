@@ -167,6 +167,10 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.sync(f.served(), f.signed);
     const at = f.venue.witnessedIndex();
     await f.holder.demand("late", 10n, at + 30n, f.served(), f.signed, prove);
+    // At instant + 2·lag a relayed publication could still be witnessed inside C3.3's window.
+    f.venue.advance(at + 2n * lag);
+    await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("late")!.status).toBe("prepared");
     f.venue.advance(at + 2n * lag + 1n);
     await expect(f.holder.submit("late", f.service)).rejects.toMatchObject({ check: "DEADLINE" });
     await f.publish();

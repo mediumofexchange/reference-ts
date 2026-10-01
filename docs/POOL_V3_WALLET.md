@@ -280,7 +280,8 @@ venue; an output alone never decides, since a settlement's or issue's output
 is public before admission and another statement can create it first (C3.8).
 An act fails when it can no longer take effect as saved: its segment is no
 longer canonical, a demand's instant has left C3.3's window for good
-(witnessed index past instant + lag), its output exists from another
+(witnessed index past instant + 2·lag, the latest a relayed publication
+could still be witnessed in it), its output exists from another
 statement, a reserved input was spent otherwise, or its demand ended
 otherwise. A failed act's notes are free again; one that evidence later shows
 admitted (an operator reading behind the wallet) becomes final. A burn the

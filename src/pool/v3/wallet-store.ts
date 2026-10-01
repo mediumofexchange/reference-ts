@@ -557,9 +557,9 @@ export class V3Wallet {
       // A failure read from one view is local accounting: an operator reading behind this wallet may still admit it.
       else if (row.status === "failed") continue;
       else if (record.kind === 4) {
-        // An operator's horizon is at least at + lag, and a later publication's index at least at, so the window
-        // (C3.3: horizon − 2·lag ≤ instant) is closed for good once at > instant + lag.
-        status = ended(demand!, "5") || ended(demand!, "6") ? "final" : dead || at > p[14]! + lag || spent(name) ? "failed" : undefined;
+        // A relayed publication is witnessed at an index w ≥ at, so C3.3's window (w − 2·lag ≤ instant) is closed
+        // for good once at > instant + 2·lag. An operator reading behind the venue is covered by failed → final.
+        status = ended(demand!, "5") || ended(demand!, "6") ? "final" : dead || at > p[14]! + 2n * lag || spent(name) ? "failed" : undefined;
       } else if (dead) status = "failed";
       else switch (record.kind) {
         case 1: status = canonical.state.hasOutput(p[8]!) ? "failed" : undefined; break;
