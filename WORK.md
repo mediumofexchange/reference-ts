@@ -11,9 +11,14 @@ issue/accept/burn and demand/settle/withdraw under service, one saved record (PR
 `publish`, disclosure count from unforced releases; **M9b2** (PR #72, merged d2fd9e3): replay keeps a demand's instant, so the seed's presenter key finds
 its standing demands (`sync` `demands`); `withdraw(alias, id)`/`settle(alias, acceptance)` read the notice from the view; a standing demand's
 notes are held by its lock, a prepared settlement reserves them; no build from a view older than the wallet's (`CHANGED_VIEW`); an act whose
-segment ended fails and is made again ([decision](decisions/2026-10.md#2026-10-01--find-a-seeds-standing-demands-by-their-presenter-keys-hold-them-by-their-locks-and-make-an-act-of-an-ended-segment-again)); reviewed. **Next:** **M9c** the C3.8 reader (void, lapse, taken release, dishonour), acceptance
-published (C3.4), Next 4 (a)–(c), (e), (q); M9b2 review gaps: a stale view failing no payment, a scoped backing's demand refused
-as another's (untested). **M9d** real-proof and crash drills (seed-restored demands among them), review.
+segment ended fails and is made again ([decision](decisions/2026-10.md#2026-10-01--find-a-seeds-standing-demands-by-their-presenter-keys-hold-them-by-their-locks-and-make-an-act-of-an-ended-segment-again)); reviewed.
+**In progress: M9c1** (branch `claude/m9c-dishonour-reader`): the C3.8 reading in the wallet. Acceptance, stand-in proofs on the local venue
+(`test/pool-v3-dishonour.test.ts`): a wallet reads a demand's outcome from public evidence at its index — standing, settled, withdrawn or voided
+from the index witnessed, else past its deadline the backer's dishonour or the holder's lapse, with the indices it stood so (latched); the backer
+publishes its acceptance (C3.4); a gap release refused only for an output another demand's settlement inserted reads `TAKEN` and releases its
+acceptance; mis-signed, mis-routed or late acceptances count nothing; a scoped backing's demand refused as another's. Unit suite,
+`check:scripts`, docs; fresh adversarial review. Stop: Next 4 (a)–(c), (e), (q) are **M9c2**; **M9d** real-proof and crash drills
+(seed-restored demands among them), review.
 
 ## Status
 - Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)); M8a (PR #67) manifest, mainnet guard; M7, M4–M6, M5b.
