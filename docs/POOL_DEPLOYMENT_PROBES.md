@@ -278,7 +278,7 @@ local/synthetic scope drill under the adopted configuration on the own testnet
 node, through the shared `drill.mjs` and the same pre-broadcast guard, capped at
 twelve transactions (four openings, two replacements, six checkpoints). Live
 replacements add eight indices of inclusion slack to the lead floor. The
-2026-10-01 [live scope report](pool-v3-scope-store-testnet-verification.json)
+2026-10-01 [live scope report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)
 passed all four groups in 69 minutes with seven real proofs and twelve distinct
 transactions spending 0.01434984 tERG (0.0132 tERG fees), equal to the synthetic
 run's spend: one segment over two backings, B's takeover of x beside A's split
@@ -1107,7 +1107,7 @@ M = 100 and 14,656-byte stand-in proofs (15.6 KB per statement):
   owns none of the outputs. A replay updates every kept witness of its segment
   at each record that adds outputs, so a wallet holding many notes pays for
   each of them at every record; that cost was not measured here
-  (WORK.md Next 5(n)).
+  (WORK.md Next 4(n)).
 
 ### Real proofs past the old package (M5b.5c.2)
 
