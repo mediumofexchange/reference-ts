@@ -9,13 +9,12 @@ a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 `V3Wallet` owns both redemption roles; acceptance and stop: Next 1. **M9a done** (PR #69, 2fd0f08): saved `issue`/`accept`/`burn`
 (K through a caller `BackerSigner`) and `demand`/`settle`/`withdraw` (seed-derived presenter, padding, `rho_out`), `submit`, resolution by
 statement in `sync`, profile `moe/wallet/v3/4`, stand-in proofs under service ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)).
-**M9b1** (branch `claude/peaceful-tesla-b5svw8`): in a gap (horizon past the canonical checkpoint by more than the silence duration)
+**M9b1 done** (PR #70, merged 16d6180): in a gap (horizon past the canonical checkpoint by more than the silence duration)
 `demand`/`withdraw`/`settle` bind to the snapshot and `publish` puts them at the venue; acts go final by force; the disclosure count is
-the distinct outputs of presenter-signed releases of the demand in the segment witnessed without force (frontier `releases`). Acceptance:
-gap cases of `test/pool-v3-redemption.test.ts`, operator offline; review resolved, PR #70. **M9b2** demands found again after a seed restore
+distinct outputs of presenter-signed unforced releases of the demand in the segment (frontier `releases`, settle reads only); stand-in
+proofs, fresh-instance review resolved, CI green incl. real-proof `pool-v3`. **Next: M9b2** demands found again after a seed restore
 (standing demands over this seed's tags with the derived presenter); reproof of an act whose segment ended. **M9c** the C3.8 reader (void,
-lapse, taken release, dishonour), the backer's acceptance published (C3.4), Next 4 (a)–(c), (e), (q). **M9d** real-proof drills in fresh
-processes, local and synthetic Ergo, act crash drills (`wallet-crash.mjs`), review.
+lapse, taken release, dishonour), acceptance published (C3.4), Next 4 (a)–(c), (e), (q). **M9d** real-proof and crash drills, review.
 
 ## Status
 - Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)); M8a (PR #67) manifest, mainnet guard; M7, M4–M6, M5b.
@@ -93,8 +92,9 @@ processes, local and synthetic Ergo, act crash drills (`wallet-crash.mjs`), revi
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Deletion list (non-blocking, 2026-10-01): the cloud session's proxy refused deleting merged remote branch `feat/m9a-redemption-wallet`
-  (PR #69): `git push origin --delete feat/m9a-redemption-wallet`.
+- Deletion list (non-blocking, 2026-10-01): the proxy refused `git push origin --delete feat/m9a-redemption-wallet` (merged PR #69).
+- Non-blocking (2026-10-01): cloud runs get HTTP 403 from both CRS hosts (`prepare-crs.mjs`), so real-proof checks run only in CI or locally;
+  M9d's drills need the local machine or a network policy allowing `crs.aztec-cdn.foundation`/`crs.aztec-labs.com`.
 
 Roughly **60% done / 40% remaining**, range **50–70%**, reassessed 2026-10-01 (direction): the remainder lacked redemption's operations,
 the visibility table and release assurance; with them installable commands, the design point, qualified storage and mainnet remain.
