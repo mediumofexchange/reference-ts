@@ -10,11 +10,11 @@ The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are 
 **Next: M8** adoption (Next 1): state its goal, acceptance and stop here before building.
 
 ## Status
-- M7, venue-ergo §8's one-transaction condition (PR __PR__, spec 01f922c, now the runtime pin, [decision](decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)):
+- M7, venue-ergo §8's one-transaction condition (PR #66, spec 01f922c, now the runtime pin, [decision](decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)):
   `PROOF_BYTES` (the backend refuses a proof a word longer or shorter) and `publicationBound` fix the longest publication (15,498);
   pieces fill 4,096-byte boxes at a one-byte index; inputs take only the room left; `ergoRunCarries`/`ergoRunCapacity` (95,910 at
   P2PK under every option); the v3 guard refuses a kind-4 location that cannot carry it. Testnet: a capacity run mined and read back.
-  The ten current v3 reports are from CI run __RUN__ (new conformance check: proof length and its variants).
+  The ten current v3 reports are from CI run 36857984250 (new conformance check: proof length and its variants).
 - Audit area 28 (PR #65, spec dce3ae1 + 298cc06): an Ergo index stays witnessed while the best chain keeps its block; a publication is
   replaced only on a supplier's answer, at most 8 per record; settling asks no supplier; supplier cost bounded.
 - M4 (spec 5584732): no certificate encoding; M6 (spec 740adaa, PR #63): a gap release taken by another demand's settlement releases (C3.8).
