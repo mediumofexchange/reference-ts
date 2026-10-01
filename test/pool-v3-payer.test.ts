@@ -279,6 +279,31 @@ describe("v3 payer custody over restored holdings", () => {
     await expect(f.j.submit(payment.record)).rejects.toMatchObject({ code: "REFUSED" });
   });
 
+  it("frees a failed payment's other input, as a failed act's, and keeps one alias namespace for payments and acts", async () => {
+    const f = await fixture([3n, 6n]);
+    const payment = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    expect(payment.inputs).toHaveLength(2);
+    // A restored copy of the same seed burns the three-unit note elsewhere.
+    const note = recoverCapsule(f.payer.recoverySeed(), domain, f.funding[0]!.cm, f.funding[0]!.capsule)!;
+    const tree = new NoteTree(); for (const request of f.funding) tree.append(request.cm);
+    const input = { note, anchor: tree.root(), path: tree.path(0n) };
+    const change = prepareExactOutput(f.payer.recoverySeed(), domain, b(80), f.backing, 1n);
+    await f.j.submit(encodeRecord(record(burnTask(f.context, 2n, [input, { ...input, note: prepareExactOutput(b(81), domain, b(82), f.backing, 0n) }], change))));
+    const served = await f.publish();
+    const view = await f.payer.sync(served, f.signed);
+    expect(f.payer.payment("shop")).toMatchObject({ status: "failed", inputs: payment.inputs });
+    expect(view.holdings.map(h => [h.cm, h.value, h.status])).toEqual([[f.funding[1]!.cm, 6n, "available"], [change.cm, 1n, "available"]]);
+    const other = f.receiver.request("other", f.backing, 5n);
+    expect((await f.payer.prepare("other", { request: other, value: 5n }, served, f.signed, prove)).inputs)
+      .toEqual(payment.inputs.filter(nf => nf !== note.nf));
+    // An act's alias is no payment's, and a payment's is no act's: both refuse before reading or proving.
+    await f.payer.demand("redeem", 1n, f.venue.witnessedIndex() + 20n, served, f.signed, prove);
+    await expect(f.payer.prepare("redeem", f.order, new Uint8Array(), f.signed, prove))
+      .rejects.toMatchObject({ code: "CONFLICT", message: "alias names a saved act" });
+    await expect(f.payer.burn("shop", 1n, new Uint8Array(), f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT", message: "alias names a payment" });
+    await expect(f.payer.publish("shop", f.venue)).rejects.toMatchObject({ code: "UNKNOWN" });
+  });
+
   it("answers an exact retry with the saved record when the winner reserved the only note meanwhile", async () => {
     // A wallet's reads take turns, so the first call is overtaken while it proves, or while it waits its turn to read.
     let release = () => {}, entered = () => {};
