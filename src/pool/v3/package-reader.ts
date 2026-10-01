@@ -38,6 +38,9 @@ export interface PackageReader {
   /** Outputs to keep incremental witnesses for (a wallet's own), so their paths can be read from the result. */
   readonly witness?: WitnessPredicate | undefined;
 }
+/** A frontier read's options: `releases` also lists the backing's releases witnessed without force, read from the
+ * venue's publications (a holder settling reads its disclosure count from them, C3.5); other reads leave it unset. */
+export interface FrontierReader extends PackageReader { readonly releases?: boolean | undefined }
 
 /** Own selection bytes and primitive fields before any asynchronous proof check. */
 export function ownSelection(input: ReaderSelection): ReaderSelection {
@@ -166,7 +169,7 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
  * is proved by the complete venue descent, never by missing package objects.
  * Selection and receipt metadata supply no frontier authority. */
 export async function readFrontier(source: PackageSource, signed: SignedTerms, judgingIndex: bigint,
-  options: PackageReader): Promise<FrontierResult & FaultResult> {
+  options: FrontierReader): Promise<FrontierResult & FaultResult> {
   const owned = ownFrontierRead(signed, judgingIndex, options);
   return withEvidence(source, options, batch => keptOrAgain(options, async () => {
     const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
@@ -191,7 +194,7 @@ function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: Pac
   return { domain, verifier, reference, terms, backing };
 }
 
-function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontierRead>, judgingIndex: bigint, options: PackageReader) {
+function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontierRead>, judgingIndex: bigint, options: FrontierReader) {
   const { domain, verifier, reference, terms, backing } = owned, { venue } = options;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
@@ -201,6 +204,7 @@ function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontier
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
   const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
   const faults = faultObserver(payloads(7), selection, verifier);
-  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, verifier, reference, faults };
+  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, verifier, reference, faults,
+    releases: options.releases === true };
   return { context, faults, venue };
 }

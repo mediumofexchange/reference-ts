@@ -250,8 +250,9 @@ saved with each fulfillment) is refused.
 The same wallet holds the backer's and the holder's redemption acts
 (pool-recovery C3, pool-v3 §3), each saved before it is returned, retried
 exactly under its alias without evidence, proving or signing, refused under an
-alias holding another act or a payment, sent by `submit` and resolved by
-`sync` (slice 9, M9a: under service on the local venue).
+alias holding another act or a payment, sent by `submit` (or, in a gap,
+`publish`) and resolved by `sync` (slice 9, M9a under service and M9b1 in a
+gap, on the local venue).
 
 - **Backer.** `issue` proves an issue to an exact payment request; K signs it
   through a caller `BackerSigner`, whose answer must verify strictly under the
@@ -274,6 +275,38 @@ alias holding another act or a payment, sent by `submit` and resolved by
   nullifiers, the segment and the disclosure count (C3.5), and signs the
   release. `withdraw` signs the withdrawal for the canonical segment.
 
+**In a gap** (C2b.3.2) the holder redeems with the operator offline. Where
+the backing declares silence and the horizon is past the canonical
+checkpoint by more than its duration, the operator would refuse
+(`SILENCE`), and while no later checkpoint is witnessed the gap is open at
+every index an act could first be witnessed at. `demand`, `withdraw` and
+`settle` then bind their statement to that checkpoint, the snapshot, whoever's
+term it fell in, and `publish(alias, publisher)` publishes the saved act at
+the backing's venue, routed to its backing, exactly as saved; a retry
+republishes the same publication. A gap demand's deadline must lie after
+every index C3.3's window lets it be witnessed at (index + 2·lag). `sync`
+reads the act final once its publication has force. The backer `accept`s a
+demand with force as one admitted, and its settled note waits for the
+operator's return to be adopted before it can be burnt; an issue, a burn or a
+payment still refuses `SILENCE`. A publication outside an open gap has no
+force, and a release published so discloses its output.
+
+The disclosure count is read from the venue record. For `settle` alone, the
+frontier read lists every release (publication kind 3) of the backing
+witnessed without force, whether or not the terms declare silence, keeping its
+demand, segment, output, `rho_out` and release signature but not its proof;
+other reads do not ask the venue for publications they do not need. The count is the number of
+distinct outputs among those naming the demand and the segment and signed by
+the demand's presenter key. So a settlement after a release without force
+names an output nobody has seen, and any wallet holding the demand reads the
+same count from the same record (finding a demand again from the seed alone is
+M9b2). A copy, or a "release" with a signature that does not verify, adds
+nothing. An output disclosed only to an operator is not counted (C3.5).
+Because `rho_out` reads no acceptance or owner, `settle` refuses (`CONFLICT`)
+while another settlement of the demand is prepared at the same count: one
+published release would otherwise let K compute the other's output for any
+owner. Publish or resolve the prepared one first.
+
 Resolution: an act is final once its statement is in canonical history,
 imports included, or (a demand, withdrawal or settlement) has force at the
 venue; an output alone never decides, since a settlement's or issue's output
@@ -282,14 +315,15 @@ An act fails when it can no longer take effect as saved: its segment is no
 longer canonical, a demand's instant has left C3.3's window for good
 (witnessed index past instant + 2·lag, the latest a relayed publication
 could still be witnessed in it), its output exists from another
-statement, a reserved input was spent otherwise, or its demand ended
-otherwise. A failed act's notes are free again; one that evidence later shows
-admitted (an operator reading behind the wallet) becomes final. A burn the
-operator refuses in a live segment stays reserved, as a refused payment's
-inputs do. Not yet: publication in a gap, the disclosure count read from
-witnessed releases (it is zero, since this wallet publishes none), demands
-found again after a seed restore, reproof of an act whose segment ended, and a
-C3.8 dishonour reading (slice 9, M9b and M9c in [WORK.md](../WORK.md)).
+statement (a settlement's also from one with force), a reserved input was
+spent otherwise, its demand ended otherwise, or a settlement's acceptance
+deadline has passed. A failed act's notes are free again; one that evidence
+later shows admitted (an operator reading behind the wallet) becomes final. A
+burn the operator refuses in a live segment stays reserved, as a refused
+payment's inputs do. Not yet: demands found again after a seed restore,
+reproof of an act whose segment ended, the backer's acceptance published as
+evidence, and a C3.8 dishonour reading (slice 9, M9b2 and M9c in
+[WORK.md](../WORK.md)).
 
 ## Backup and restoration
 
@@ -402,7 +436,14 @@ takeover, and seed restoration of holdings with change.
 `test/pool-v3-redemption.test.ts` runs issue → demand → accept → settle → burn through two wallets and a journal with
 stand-in proofs: exact retries and alias conflicts, the seed's presenter and `rho_out`, reservation and its
 release by a final withdrawal, a re-demand of freed notes, non-exact quantities, horizon deadlines, foreign
-signers, forged or altered acceptances, settlement after withdrawal, and acts across an offline backup.
+signers, forged or altered acceptances, settlement after withdrawal, and acts across an offline backup. In a gap
+with the operator offline it demands, settles and withdraws by publication: issue, payment and burn refuse `SILENCE`,
+a deadline inside C3.3's window refuses, and acts become final by force. A release
+published after its acceptance deadline has no force, fails its act and counts, so the next settlement re-proves the
+same nullifiers into a new output; a forged release to another output is witnessed and not counted. A release published
+under terms without silence counts too, a second settlement at one count refuses, and only demands, withdrawals and
+releases are published. Not covered: a release of the demand in another segment, a gap across several backings, an
+ended term or a return, and a venue that witnesses an exact republication again.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
 payment, receipt, reproof, export and restore commit boundaries with synthetic evidence, and at a read's
 commits to its evidence file and its kept replay file (before either, the kept state stands; between the
