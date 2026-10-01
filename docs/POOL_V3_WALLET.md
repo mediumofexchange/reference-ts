@@ -241,9 +241,45 @@ input stays reserved although it is unspent, so a copy that breaks the
 one-active-copy rule can strand it until the seed is restored into a new
 wallet. Release with other outputs (cancellation), same-segment tail repair
 (C2.10.9a) and release of never-admitted inputs are not implemented. Multi-backing payments and
-cross-backing fees are refused. The wallet profile is `moe/wallet/v3/3`; a
-database of an earlier profile (no output openings, or a package saved with
-each fulfillment) is refused.
+cross-backing fees are refused. The wallet profile is `moe/wallet/v3/4`; a
+database of an earlier profile (no saved acts, no output openings, or a package
+saved with each fulfillment) is refused.
+
+## Redeeming and issuing
+
+The same wallet holds the backer's and the holder's redemption acts
+(pool-recovery C3, pool-v3 §3), each saved before it is returned, retried
+exactly under its alias without evidence, proving or signing, refused under an
+alias holding another act or a payment, sent by `submit` and resolved by
+`sync` (slice 9, M9a: under service on the local venue).
+
+- **Backer.** `issue` proves an issue to an exact payment request; K signs it
+  through a caller `BackerSigner`, whose answer must verify strictly under the
+  terms' obligor, so K's secret never enters the wallet. `accept` answers a
+  demand standing over the backing with C4.7's owner derived from this seed,
+  the demand and the acceptance deadline (distinct demands never share an
+  owner, C3.4); the deadline is at or before the demand's and later than the
+  horizon. The settled note is found by `sync` through that owner, and
+  `burn` destroys a quantity from available notes with fresh change.
+- **Holder.** `demand` presents whole notes: one of exactly the quantity or a
+  pair summing to it (otherwise pay yourself that amount first, C3.3), the
+  instant at the read's witnessed index and the holder's deadline strictly
+  ahead of the horizon. Its presenter key comes from the seed and the notice
+  (tags, instant, deadline), and a one-note demand's zero padding from the
+  seed and the note's nullifier, so a retry or a rebuilt wallet names the same
+  demand. Its notes stay reserved until its withdrawal is final.
+  `settle` checks the acceptance against the obligor, the demand and the
+  horizon, re-proves the demand's positions into one output to the
+  acceptance's owner with `rho_out` derived from the seed, the input
+  nullifiers, the segment and the disclosure count (C3.5), and signs the
+  release. `withdraw` signs the withdrawal for the canonical segment.
+
+Resolution: an issue, burn or settlement is final once its output is in
+canonical history; a demand, withdrawal or settlement once its statement is
+effective there. Not yet: publication in a gap, the disclosure count read from
+witnessed releases (it is zero, since this wallet publishes none), demands
+found again after a seed restore, reproof of an act whose segment ended, and a
+C3.8 dishonour reading (slice 9, M9b and M9c in [WORK.md](../WORK.md)).
 
 ## Backup and restoration
 
@@ -353,6 +389,10 @@ wallet could write, occupied destinations, unsupported schema and oversize
 without freezing, submit and fulfillment completions racing the freeze, an
 interleaved destination, continuation of pending work including reproof after
 takeover, and seed restoration of holdings with change.
+`test/pool-v3-redemption.test.ts` runs issue → demand → accept → settle → burn through two wallets and a journal with
+stand-in proofs: exact retries and alias conflicts, the seed's presenter and `rho_out`, reservation and its
+release by a final withdrawal, a re-demand of freed notes, non-exact quantities, horizon deadlines, foreign
+signers, forged or altered acceptances, settlement after withdrawal, and acts across an offline backup.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
 payment, receipt, reproof, export and restore commit boundaries with synthetic evidence, and at a read's
 commits to its evidence file and its kept replay file (before either, the kept state stands; between the

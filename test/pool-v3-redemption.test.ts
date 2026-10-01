@@ -153,6 +153,13 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // The withdrawn demand can no longer be settled.
     await expect(f.holder.settle("after", "pair", good, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "ABSENT" });
     expect(statementHash(decodeRecord(withdrawn.record))).toEqual(withdrawn.statement);
+    // The freed notes can be demanded again under a new alias; one acceptance is saved under one alias.
+    await expect(f.backer.accept("good-again", demand.demand!, deadline - 1n, f.served(), f.signed, sign))
+      .rejects.toMatchObject({ code: "CONFLICT" });
+    const again = await f.holder.demand("again", 10n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
+    expect(again.inputs).toEqual(demand.inputs);
+    await f.holder.submit("again", f.service); await f.publish();
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.filter(h => h.status === "reserved").length).toBe(2);
   });
 
   it("keeps acts across an offline backup and refuses a payment alias for an act", async () => {

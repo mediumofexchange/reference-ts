@@ -93,7 +93,8 @@ const SCHEMA = `
     statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL, backing BLOB NOT NULL, operator BLOB NOT NULL, demand TEXT,
     status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
     judged TEXT NOT NULL) STRICT;
-  CREATE TABLE IF NOT EXISTS wallet_act_inputs (nf TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES wallet_acts(alias)) STRICT;
+  CREATE TABLE IF NOT EXISTS wallet_act_inputs (nf TEXT NOT NULL, alias TEXT NOT NULL REFERENCES wallet_acts(alias),
+    PRIMARY KEY(nf, alias)) STRICT;
   CREATE TABLE IF NOT EXISTS backer_acceptances (alias TEXT PRIMARY KEY, demand TEXT NOT NULL, deadline TEXT NOT NULL,
     owner TEXT NOT NULL, signature BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
   CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`;
@@ -1126,6 +1127,9 @@ export class V3Wallet {
     };
     const existing = saved();
     if (existing !== undefined) return existing;
+    const taken = () => requireThat(this.db.prepare("SELECT 1 FROM backer_acceptances WHERE demand=? AND deadline=?")
+      .get(key, deadline.toString()) === undefined, "CONFLICT", "another alias saved this acceptance");
+    taken();
     requireThat(typeof sign === "function", "INVALID", "a backer signer is required");
     const owner = ownerOf(deriveSettlementOwnerSecret(this.seed, this.domain, id, deadline).value);
     requireThat(owner !== 0n, "STORAGE", "the derived owner is zero");
@@ -1140,6 +1144,7 @@ export class V3Wallet {
     const signature = await this.backerSignature(sign, acceptanceBytes(acceptance), obligor);
     this.transaction(() => {
       if (this.db.prepare("SELECT 1 FROM backer_acceptances WHERE alias=?").get(name) !== undefined) return;
+      taken();
       this.db.prepare("INSERT INTO backer_acceptances VALUES(?,?,?,?,?)").run(name, key, deadline.toString(), owner.toString(), signature);
     });
     return saved()!;
