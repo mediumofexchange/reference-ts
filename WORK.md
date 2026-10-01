@@ -3,14 +3,10 @@
 Updated: 2026-10-01
 
 ## Goal
-Slice 8 (adoption) is complete. Pool-v3 is adopted with one configuration (spec e7f7f24, §11.4: configHash `7ddbb7e8…a618`;
-[decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)).
-Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is pool-v4.
-**Active: slice 9, redemption in the wallet** (Next 1; [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)).
-Goal: `V3Wallet` owns both redemption roles, so no runtime act of the path is driven by tests or scripts. Acceptance and stop: Next 1's
-(real-proof path in fresh processes, local and synthetic Ergo, service and gap, crash/exact-retry drills, C3.4–C3.8 hostile cases,
-adversarial review, merge). Milestones: **M9a** (branch `feat/m9a-redemption-wallet`, in progress) the wallet's operations under service on
-the local venue with stand-in proofs: `issue` (K signs through a caller signer checked against the terms' obligor; K's secret never enters
+Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
+a byte, identity or verdict change (C3.8's residual too) is pool-v4.
+**Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
+`V3Wallet` owns both redemption roles (today `witness.ts` tasks are driven by tests/scripts); acceptance and stop: Next 1. **M9a** (branch `feat/m9a-redemption-wallet`, in progress): the wallet's operations under service on the local venue with stand-in proofs: `issue` (K signs through a caller signer checked against the terms' obligor; K's secret never enters
 the wallet), `demand` (exact whole notes, presenter key and zero padding derived from the seed, instant = read index), `accept` (C4.7 owner,
 distinct per demand), `settle` (C3.5 `rho_out` from the seed, input nullifiers, segment and disclosure count; release signed), `withdraw`,
 `burn`; persisted acts with exact alias retry, one `submit` and resolution in `sync`; wallet profile `moe/wallet/v3/4`.
@@ -33,12 +29,8 @@ without force; demands found again after a seed restore. **M9c** the C3.8 reader
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 9, redemption in the wallet (reference venues): no runtime operation issues, demands, accepts, settles, releases, withdraws or burns
-   (`witness.ts` tasks are driven by tests/scripts). Backer role: issue under signed terms, accept with C4.7's owner (distinct per demand, C3.4),
-   take and burn settled notes. Holder role: demand with a fresh presenter key, settle with C3.5's `rho_out` (segment, disclosure count read from
-   the record), release, withdraw; persisted and exactly retried as payments are. A v3 C3.8 reader: demand void by a spent tag, the holder's
-   lapse, releases taken by another demand's settlement (keep each output's inserting demand); a settle refused under service reads as unreleased
-   (C3.8's adopted limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet
+1. Slice 9 (Goal above): C3.8 reader keeps each output's inserting demand; a settle refused under service reads as unreleased (C3.8's
+   adopted limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet
    operations in fresh processes, local and synthetic Ergo, under service and in a gap with the operator offline; crash/exact-retry drills at the
    new commit boundaries; C3.4–C3.8 hostile cases. Close Next 4 (a)–(c), (e), (q). Adversarial review before merge.
 2. Profile visibility table (docs/spec, any time before slice 10's wallet text): pool-v3 on Ergo per party and per issuer/operator/witness
