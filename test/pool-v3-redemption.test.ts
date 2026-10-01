@@ -280,7 +280,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.publish("late", f.venue);
     await f.holder.sync(f.served(), f.signed);
     expect(f.holder.act("late")!.status).toBe("failed");
-    const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier });
+    const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, releases: true });
     expect(read.releases.map(r => r.output)).toEqual([decodeRecord(late.record).publicInputs[14]]);
     expect(read.force.map(x => x.record.kind)).toEqual([4]);
     // Another party's settlement of this demand to another output, with a release no presenter signed, is
@@ -301,7 +301,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
     expect(f.holder.act("again")!.status).toBe("final");
     // The reader lists releases without force only: the forged one and the late one, not the one with force.
-    const after = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier });
+    const after = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, releases: true });
     expect(after.force.map(x => x.record.kind)).toEqual([4, 6]);
     expect(after.releases.map(r => r.output)).toEqual([l[14], l[14]! + 1n]);
   });
@@ -318,7 +318,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const s0 = await f.holder.settle("s0", "redeem", first, f.served(), f.signed, prove);
     // rho_out reads no acceptance: a second settlement at the same count would disclose with the first.
     await expect(f.holder.settle("s0b", "redeem", second, f.served(), f.signed, prove))
-      .rejects.toMatchObject({ code: "CONFLICT", message: "another settlement of this demand is prepared at this disclosure count" });
+      .rejects.toMatchObject({ code: "CONFLICT", message: "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it" });
     // Only an act a venue record carries is published.
     await expect(f.backer.publish("issue-0", f.venue)).rejects.toMatchObject({ code: "INVALID",
       message: "only a demand, a withdrawal or a release is published" });

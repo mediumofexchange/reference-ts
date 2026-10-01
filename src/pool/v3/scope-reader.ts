@@ -60,6 +60,8 @@ export interface ImportCarryingVerdict extends CarryingVerdict { readonly operat
 /** A complete backing descent without an asserted selected checkpoint. */
 export interface FrontierContext extends Omit<ImportContext, "selection" | "header" | "receiptBytes" | "receiptWalk"> {
   readonly selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">;
+  /** List the backing's unforced releases (`FrontierResult.releases`); otherwise none is read for them. */
+  readonly releases?: boolean;
 }
 export interface FrontierResult {
   readonly canonical: CanonicalCheckpoint | undefined;
@@ -71,8 +73,9 @@ export interface FrontierResult {
    * canonical segment scopes, keyed by hex name. One ended term ends the
    * segment for all of them (C2.10.9). */
   readonly scopeChains: ReadonlyMap<string, RecordView["chain"]>;
-  /** The selected backing's releases witnessed through the judging index without force, routed to it and
-   * summarized without proofs, in venue order: what a holder's disclosure count (C3.5) reads. Nothing here checks a release. */
+  /** Where the read asks for them (`FrontierContext.releases`), the selected backing's releases witnessed through the
+   * judging index without force, routed to it and summarized without proofs, in venue order: what a holder's
+   * disclosure count (C3.5) reads; otherwise empty. Nothing here checks a release. */
   readonly releases: readonly UnforcedRelease[];
 }
 export const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
@@ -419,7 +422,7 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
     const name = hex(selection.backing), forced = new Set(around.publications.filter(p => p.force && p.backing === name)
       .map(p => `${p.index}:${p.ordinal}`));
     const releases: UnforcedRelease[] = [];
-    for (const entry of view.publications()) {
+    for (const entry of context.releases === true ? view.publications() : []) {
       if (forced.has(`${entry.index}:${entry.ordinal}`)) continue;
       let publication, release;
       try {

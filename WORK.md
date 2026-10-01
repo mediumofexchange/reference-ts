@@ -60,7 +60,7 @@ processes, local and synthetic Ergo, act crash drills (`wallet-crash.mjs`), revi
    before silence lapse (label, or an answer where lapse is unresolved). (s) Journal: an older own segment's lost trail is skipped silently when serving; each wallet GET `/evidence` takes the
    journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed; `client.package()` peaks near
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
-   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) Each frontier read decodes every unforced release of the backing (M9b1); count inside the read if slice 11 shows it.
+   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle read decodes every unforced release of the backing (M9b1); count inside the read if slice 11 shows it.
 5. Slice 11, the design point: measure operator admission at peak, reader first sync and wallet steady state through the commands against the
    [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), with Next 4 (k)–(n), (s), and rebuild the Ergo view on
    append-only SQLite rows (its limits and plan: the [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)'s

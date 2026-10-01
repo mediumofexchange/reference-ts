@@ -291,10 +291,11 @@ operator's return to be adopted before it can be burnt; an issue, a burn or a
 payment still refuses `SILENCE`. A publication outside an open gap has no
 force, and a release published so discloses its output.
 
-The disclosure count is read from the venue record. The frontier reader lists
-every release (publication kind 3) of the backing witnessed without force,
-whether or not the terms declare silence, keeping its demand, segment, output,
-`rho_out` and release signature but not its proof. The count is the number of
+The disclosure count is read from the venue record. For `settle` alone, the
+frontier read lists every release (publication kind 3) of the backing
+witnessed without force, whether or not the terms declare silence, keeping its
+demand, segment, output, `rho_out` and release signature but not its proof;
+other reads do not ask the venue for publications they do not need. The count is the number of
 distinct outputs among those naming the demand and the segment and signed by
 the demand's presenter key. So a settlement after a release without force
 names an output nobody has seen, and any wallet holding the demand reads the

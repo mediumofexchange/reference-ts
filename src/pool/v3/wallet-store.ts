@@ -435,14 +435,14 @@ export class V3Wallet {
    * the view synchronously, inside the read's turn: the state it reads is the
    * kept file's, which a later read moves on. The caller's bytes are copied
    * before the first await. */
-  private async read<T>(packageBytes: Uint8Array, signed: SignedTerms, use: (view: Frontier) => T): Promise<T> {
+  private async read<T>(packageBytes: Uint8Array, signed: SignedTerms, use: (view: Frontier) => T, releases = false): Promise<T> {
     const bytes = copyUnshared(packageBytes), terms = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
     const backing = rootTermsName(terms.terms);
     return this.inTurn(async () => {
       let view: Frontier;
       try {
         this.mutable();
-        view = await this.frontier(bytes, terms, backing);
+        view = await this.frontier(bytes, terms, backing, releases);
       } catch (error) {
         // A replaced or exported handle says so, whatever its read met once another handle held the files.
         if (!(error instanceof V3WalletError)) this.mutable();
@@ -456,7 +456,7 @@ export class V3Wallet {
       return use(view);
     });
   }
-  private async frontier(bytes: Uint8Array, terms: SignedTerms, backing: Uint8Array) {
+  private async frontier(bytes: Uint8Array, terms: SignedTerms, backing: Uint8Array, releases: boolean) {
     const at = this.options.venue.witnessedIndex();
     requireThat(isValue(at), "INVALID", "invalid witnessed index");
     const observed = heldView(this.options.venue, this.venueId, at), store = this.kept();
@@ -466,7 +466,7 @@ export class V3Wallet {
     const seen = store?.answersThrough();
     if (store !== undefined && seen !== undefined && at < seen) store.discardKept();
     // The scanner's keys live for this read only.
-    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(),
+    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(), releases,
       ...(store === undefined ? {} : { store }) };
     for (let again = false; ; again = true) {
       try {
@@ -1065,7 +1065,7 @@ export class V3Wallet {
       requireThat(this.db.prepare("SELECT 1 FROM wallet_acts WHERE statement=?").get(statement) === undefined, "CONFLICT",
         "another alias saved this statement");
       requireThat(kind !== 6 || !this.pendingSettlement(demand!, record.publicInputs[9]!), "CONFLICT",
-        "another settlement of this demand is prepared at this disclosure count");
+        "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it");
       this.db.prepare("INSERT INTO wallet_acts VALUES(?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?)").run(name, String(kind), intent,
         statement, bytes, backing, operator, demand ?? null, at.toString());
       for (const nf of inputs) this.db.prepare("INSERT INTO wallet_act_inputs VALUES(?,?)").run(nf.toString(), name);
@@ -1240,10 +1240,10 @@ export class V3Wallet {
       const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, count);
       const opening = { backing, value: demand.quantity, owner: own.owner, rho }, cm = commitmentOf(this.domain, opening);
       requireThat(!force!.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
-      requireThat(!this.pendingSettlement(key, rho), "CONFLICT", "another settlement of this demand is prepared at this disclosure count");
+      requireThat(!this.pendingSettlement(key, rho), "CONFLICT", "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it");
       observed.check();
       return { header, inputs, output: { opening, cm }, at };
-    });
+    }, true);
     if (planned === undefined) return this.act(name)!;
     const { header, inputs, output, at } = planned;
     const proven = await this.proven(settleTask({ domain: this.domain, header }, inputs, output, demand.id), prove);
