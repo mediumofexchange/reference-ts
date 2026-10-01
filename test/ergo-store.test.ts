@@ -7,7 +7,7 @@ import { ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
 import { encodeCommitment, signCommitment } from "../src/commitment.js";
 import { ergoProfileIdentity } from "../src/ergo-profile.js";
 import { decodeRangeAnswer, heldCommitments } from "../src/record-range.js";
-import { BranchSupplier, Chain, recordOutput, transaction, type Block } from "./ergo-chain.js";
+import { BranchSupplier, Chain, recordOutput, transaction, WorkedChain, type Block } from "./ergo-chain.js";
 import type { ErgoVenueJournal as Journal } from "../src/ergo-store.js";
 
 let ErgoVenueJournal: typeof import("../src/ergo-store.js").ErgoVenueJournal;
@@ -40,6 +40,25 @@ function answer(venue: ErgoVenue, subject = first.operator, kind: 1 | 4 = 1, toI
 }
 
 describe("durable independently replayed Ergo view", () => {
+  it("keeps its clock when a heavier but shorter chain keeps the block it stands on, live and on reopening (venue-ergo §2)", async () => {
+    // The anchor two below an epoch's end: index 0 is the trunk, and each branch's first block ends the epoch.
+    const worked = new WorkedChain(4n, 900_094n), trunk = worked.mine(worked.anchor);
+    const edgeA = worked.mine(trunk, trunk.header.timestamp + 1_000_000_000n), edgeB = worked.mine(trunk);
+    const a = worked.extend(edgeA, 3), b = worked.extend(edgeB, 2);
+    // A far-future timestamp at A's edge halves its next epoch's difficulty: B outscores A (4 + 2·4 > 4 + 3·2) a block shorter.
+    expect([a[0]!.difficulty, b[0]!.difficulty]).toEqual([2n, 4n]);
+    const profile = worked.profile(4n), path = file();
+    const durable = () => { const journal = new ErgoVenueJournal(path, ergoProfileIdentity(profile)); journals.push(journal); return journal; };
+    const journal = durable(), view = new ErgoVenue(profile, worked.context, {}, undefined, journal);
+    expect((await view.sync([worked.supplier("A", a.at(-1)!)])).witnessedIndex).toBe(0n);
+    const report = await view.sync([worked.supplier("B", b.at(-1)!)]);
+    // The chain alone no longer makes index 0 final, but the block the clock stands on is on it: the clock stays.
+    expect([report.witnessedIndex, report.chainWitnessedIndex, report.tipHeight]).toEqual([0n, undefined, b.at(-1)!.height]);
+    expect(bytesToHex(report.witnessedHeaderId!)).toBe(bytesToHex(trunk.id));
+    journal.close();
+    expect(new ErgoVenue(profile, worked.context, {}, undefined, durable()).witnessedIndex()).toBe(0n);
+  });
+
   it("reopens offline with byte-identical ranges, empty answers and non-held twins, then continues only new sections", async () => {
     const path = file(), blocks = records(), old = opened(path);
     await old.venue.sync([supplier(blocks)]);
@@ -179,9 +198,10 @@ describe("durable independently replayed Ergo view", () => {
       if (change === "protection") stored.protectedHeaders = ["00".repeat(32)];
       const payload = JSON.stringify(stored), digest = bytesToHex(sha256(new TextEncoder().encode(payload)));
       db.prepare("UPDATE ergo_checkpoint SET payload=?,digest=?").run(payload, change === "digest" ? "00".repeat(32) : digest); db.close();
-      expect(() => opened(path)).toThrow(/stored Ergo/);
+      // A payload that is not the one committed is no checkpoint; one that is, but does not reproduce its view, is refused for that.
+      expect(() => opened(path)).toThrow(change === "digest" ? "invalid stored Ergo checkpoint" : "stored Ergo evidence does not reproduce its witnessed view");
     }
     const path = file(), old = opened(path); old.journal.close();
-    expect(() => new ErgoVenueJournal(path, new Uint8Array(32).fill(9))).toThrow(/stored Ergo/);
+    expect(() => new ErgoVenueJournal(path, new Uint8Array(32).fill(9))).toThrow("invalid stored Ergo checkpoint");
   });
 });
