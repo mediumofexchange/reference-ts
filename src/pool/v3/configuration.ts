@@ -14,6 +14,10 @@ export interface CandidateConfiguration {
   readonly circuits: Readonly<Record<Relation, { readonly bytecode: Uint8Array; readonly vk: Uint8Array }>>;
   readonly helper: Uint8Array;
 }
+/** Every relation's proof length under the pinned backend and verifier target (pool-v2 §12): the backend
+ * refuses a valid proof with a word added or removed, so it fixes the configuration's longest publication
+ * (`publicationBound`), which venue-ergo §8 requires to fit one transaction. The conformance check asserts both. */
+export const PROOF_BYTES = 14656;
 const BOUNDS = Uint8Array.of(32, 16, 2, 4, 1);
 const HELPER = Uint8Array.from("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8".match(/../g)!, x => parseInt(x, 16));
 export const CONFIGURATION_BYTES = 439;

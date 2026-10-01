@@ -5,20 +5,21 @@ Updated: 2026-10-01
 ## Goal
 Slice 8 (adoption). M5b is closed for the pool's own state: every party's replay and evidence memory is independent of history and a
 reader's first sync fits 24 h at the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are decided. **Next: M7**, venue-ergo §8's one-transaction
-condition checked against the configuration: state its goal, acceptance and stop here before building. No v3 reader of C3.8's dishonour exists yet (Next 2).
+The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are decided. No v3 reader of C3.8's dishonour exists yet (Next 2).
+
+**Next: M8** adoption (Next 1): state its goal, acceptance and stop here before building.
 
 ## Status
-- Audit area 28, venue core and Ergo view/publisher (PR #65, spec dce3ae1 + 298cc06, [decision](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)):
-  an index stays witnessed while the best chain keeps its block (a durable view now reopens on a heavier, shorter chain); a publication is
-  replaced only on a supplier's answer, never beside one it replaced that a supplier holds, at most 8 per record; settling asks no supplier;
-  a slow or lying supplier costs a few timeouts; node bodies bounded; held records indexed; read-once intake (FixtureVenue, venue records,
-  proof verifier). The ten current v3 reports are from CI run 36835000109 (checks unchanged but one new verifier case).
-- M4 (spec 5584732): no certificate encoding, §12 kinds 5, 8, 9, 11 unassigned, retained evidence replaced, never pruned by use. M6 (spec
-  740adaa, PR #63): a gap release taken by another demand's settlement releases its acceptance (C3.8). Decisions in [2026-10](decisions/2026-10.md).
-- M5b.6 (PR #62): proofs verified ahead on a verifier pool; [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
-  10⁵ statements at 52.7 ms each, peak 543 MB, 10⁶ extrapolated to 15.5–16 h here. [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
-  10⁶ statements, ≤ 1 GiB, first sync ≤ 24 h. Earlier: review-code PR #61 (Next 5(o)–(s)), M5b PRs #50–#60.
+- M7, venue-ergo §8's one-transaction condition (PR #66, spec 01f922c, now the runtime pin, [decision](decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)):
+  `PROOF_BYTES` (the backend refuses a proof a word longer or shorter) and `publicationBound` fix the longest publication (15,498);
+  pieces fill 4,096-byte boxes at a one-byte index; inputs take only the room left; `ergoRunCarries`/`ergoRunCapacity` (95,910 at
+  P2PK under every option); the v3 guard refuses a kind-4 location that cannot carry it. Testnet: a capacity run mined and read back.
+  The ten current v3 reports are from CI run 36857984250 (new conformance check: proof length and its variants).
+- Audit area 28 (PR #65, spec dce3ae1 + 298cc06): an Ergo index stays witnessed while the best chain keeps its block; a publication is
+  replaced only on a supplier's answer, at most 8 per record; settling asks no supplier; supplier cost bounded.
+- M4 (spec 5584732): no certificate encoding; M6 (spec 740adaa, PR #63): a gap release taken by another demand's settlement releases (C3.8).
+- M5b.6 (PR #62): [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6) 10⁵ statements at 52.7 ms each, peak 543 MB;
+  [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) 10⁶ statements, ≤ 1 GiB, first sync ≤ 24 h. Earlier: PR #61, M5b PRs #50–#60.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 8).
@@ -29,9 +30,8 @@ condition checked against the configuration: state its goal, acceptance and stop
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. M7 one-transaction condition (the publisher's kind-4 pieces reserve a 3-byte output index: 3,980 bytes, not
-   §8's 3,981, so 95,544 bytes take 25 outputs; its fee is flat whatever the size), then M8 adoption (one manifest holding §11.1's parameter identities too, now
-   `BN254_PARAMETERS`), every report re-recorded, live two-backing drill. Mainnet needs separate authority.
+1. Slice 8, M8 adoption: one manifest holding §11.1's parameter identities too (now `BN254_PARAMETERS`) and `PROOF_BYTES`, every
+   report re-recorded, live two-backing drill. Mainnet needs separate authority.
 2. Slice 9, installable commands on the testnet: holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
    directories, issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
    and Next 8 before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
@@ -41,7 +41,7 @@ condition checked against the configuration: state its goal, acceptance and stop
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements spending several backings from the wallet; single-backing openings over-reserve by |E|.
 4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail
    caller-object cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one is in flight
-   (`store.ts` `ready`). One setup module for the store-check family and one `receiptFields` for the two receipt checks; retire `header-verify`, `testnet-header-check`, `publisher-check` unless a mainnet slice needs them.
+   (`store.ts` `ready`). One setup module for the store-check family and one `receiptFields` for the two receipt checks; retire `header-verify` and `testnet-header-check` unless a mainnet slice needs them (`publisher-check` carries §8's live capacity run).
    `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11 (unassigned since M4; reports bind the file).
 5. Review findings deferred: (a) `guard.ts` accepts a testnet-context profile anchored on a mainnet header until the next
    epoch boundary (<=127 blocks); fix by a difficulty bound. (b) `store.ts` `package()` serves a published commitment
@@ -68,7 +68,8 @@ condition checked against the configuration: state its goal, acceptance and stop
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result.
 6. Only when a gate needs them: cancellation, batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, Poseidon2 on
    Barretenberg (0.12 against 1.14 ms a node hash, the replay's largest cost; if load takes a first sync past 24 h), a 10⁶ first-sync run to
-   attribute the 10⁵ run's ~45 MB rise in process memory, sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-acceptance receipt handoff, store-check's request
+   attribute the 10⁵ run's ~45 MB rise in process memory, sponsored holder funding, operator fee quotes, a kind-4 fee by length (fee-per-byte nodes rank a long run at the default fee last
+   once a pool fills; C3 deadlines), a text/QR request frame, C4.5 pending-acceptance receipt handoff, store-check's request
    through the frame, same-segment rescoping. Against hostile evidence growth (M4): a per-supply bound tied to what the venue newly
    holds; serving a reader only the segments its backing's checkpoints name (the journal serves every segment its directories name). Phone-first wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
 7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`. After 5(h), read every `local-check`
@@ -89,8 +90,7 @@ condition checked against the configuration: state its goal, acceptance and stop
   and `node-startup/`, `sync-preparation/` caches; do not allocate another.
 - Archive node `C:\Users\Bob\ergo-node` (outside this project): synced with its index, stopped 2026-09-29; nothing uses it. Delete
   slice scratch after delivery; preserve legacy Temp/moeclean. Node management is authorized.
-- Qualified hardware/device custody, theft/power-loss/backup drills and continuous
-  recovery need separate provisioning authority. Configuration/mainnet remain disabled.
+- Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
 None.

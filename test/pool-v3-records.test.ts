@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import * as codec from "../src/pool/v3/records.js";
 import { EncodingError } from "../src/bytes.js";
+import { PROOF_BYTES } from "../src/pool/v3/configuration.js";
+import { MAX_RANGE_RECORD_BYTES } from "../src/record-range.js";
 import { FIELD_MODULUS } from "../src/pool/field.js";
 import { verifySignatureStrict } from "../src/keys.js";
 
@@ -241,6 +243,18 @@ describe("v3 publication and signed-object bytes", () => {
       expect(Buffer.from(codec.encodePublication(codec.decodePublication(bytes)))).toEqual(bytes);
       const oversized = join(mutate32(bytes, 88, maximum + 1), Uint8Array.of(0));
       expect(() => codec.decodePublication(oversized)).toThrow(EncodingError);
+    }
+  });
+  it("bounds every publication by its proof length: the frame's ceiling at §5's bound, a release at the configuration's", () => {
+    expect(codec.publicationBound(131072)).toBe(MAX_RANGE_RECORD_BYTES[4]);
+    // At the configuration's proof length the longest publication is a release (kind 3), as written.
+    const release = publication(3);
+    if (release.kind !== 3) throw new Error("not a release");
+    const written = codec.encodePublication({ ...release, record: { ...release.record, proof: new Uint8Array(PROOF_BYTES) } });
+    expect(codec.publicationBound(PROOF_BYTES)).toBe(written.length);
+    expect(written.length).toBe(15_498);
+    for (const proofBytes of [0, 31, PROOF_BYTES + 1, 131104, 1.5, Number.NaN]) {
+      expect(() => codec.publicationBound(proofBytes)).toThrow(new EncodingError("wrong proof length"));
     }
   });
   it.each([1, 2, 3, 4, 5] as const)("publication %i matches independent bytes, bounds and truncations", kind => {

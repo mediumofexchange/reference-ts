@@ -139,26 +139,29 @@ separately records publication and public supply verification.
   The header root, not the supplier, authenticates the unsigned bytes and
   the witness id.
 - A kind-4 object is one transaction's run, so a publication must fit one
-  transaction. Under this layout a box carries a 3,981-byte piece within
-  Ergo's 4,096-byte box limit, and one transaction under the pinned node's
-  98,304-byte mempool policy carries 24 pieces, 95,544 bytes of
-  publication ([measured](ergo-range-profile-verification.json)). §13's
-  kind-4 ceiling of 131,914 bytes is the frame's parser bound over pool-v2
-  §12's generic 131,072-byte proof limit; a configuration fixes its proof
-  size through its pinned keys (pool-v3 §11.1), and every retained relation
-  proves in 14,656 bytes, so the largest publication is a release of 15,498
-  bytes in four pieces. A configuration is publishable here only where its
-  largest publication fits one transaction, which holds for any proof up to
-  94,702 bytes; that is an adoption condition of the profile, not a change
-  to the frame ([decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction)).
-  Signed under this layout with the pinned build, a full piece box is 4,095
-  bytes and a four-piece release transaction about 16,077 bytes; under the node's
-  dust rule (its votable `minValuePerByte` over the full box bytes, 360 on
-  the testnet) a full piece box needs 1,474,200 nanoERG and a release
-  5,743,440 plus the fee, which sigma-rust's candidate-only estimate
-  understates by 33 bytes a box. The public testnet node accepted a release,
-  its reassembly cases and their sweep at exactly those values
-  ([P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)).
+  transaction (venue-ergo §8). §13's kind-4 ceiling of 131,914 bytes is the
+  frame's parser bound over pool-v2 §12's generic proof limit; the pinned
+  backend proves every relation in `PROOF_BYTES` = 14,656 bytes and refuses
+  a valid proof a word longer or shorter (the conformance check), so the
+  largest publication, `publicationBound(PROOF_BYTES)`, is a 15,498-byte
+  release. The node counts a box with its transaction id and a one-byte
+  output index against 4,096 bytes, so a pay-to-public-key piece box at a
+  current height holds 3,982 bytes; `ergoRunCapacity` is the longest record
+  one transaction (one input, change, fee) carries at a location under every
+  height and publisher option (`ergoRunCarries`): 95,910 bytes at a pay-to-public-key location,
+  room for proofs up to 95,040 bytes, and too little for a release past a
+  3,368-byte tree. The v3 guard refuses an Ergo profile whose kind-4
+  location cannot carry the largest publication, and the publisher takes
+  only the inputs its outputs leave room for. A run of that capacity was
+  [accepted, included and read back on the testnet](ergo-publisher-verification.json)
+  ([decision](../decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)).
+  The node's dust rule is its votable `minValuePerByte` over the full box
+  bytes (360 on both networks), so a full piece box needs 1,474,560 nanoERG;
+  the fee is the deployment's, and on about half the nodes a long run at the
+  default fee ranks below short transactions once a pool fills (venue-ergo
+  §8). The retired P2 probe's 3,981-byte pieces, 4,095-byte boxes and
+  16,077-byte release were accepted by the public testnet node at exactly the
+  minimum values ([P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)).
 - Exhaustion costs the range's block bytes. The replacement chain and a
   revocation are read from index zero (§13.3), which is the anchor's child:
   the cost is bounded by the deployment's age rather than the chain's
@@ -333,7 +336,8 @@ until the journal is reopened.
   each complete box fits 4096 bytes, and the complete signed transaction must
   fit the pinned v6.0.6 node's 98,304-byte limit (`application.conf`). The larger
   §13 record limit is a reading bound, not a promise that every such record can
-  be published. Oversized transactions refuse before signing or submission.
+  be published. A run whose outputs leave no room for an input refuses before signing or submission;
+  `ergoRunCapacity` is the length that always has room.
   Raw publication checks kind, subject and record dimensions;
   signatures and force are the reader's checks under §6. The older typed
   commitment and revocation helpers additionally refuse invalid signatures.

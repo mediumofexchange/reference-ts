@@ -419,16 +419,17 @@ physical power-loss or wallet custody evidence is added.
 ## Runtime pin and recovery models
 
 The runtime follows specification revision
-[`298b6f59edcc26e353a7b8fd00ac6385bfb33a82`](https://github.com/mediumofexchange/money-from-first-principles/tree/298b6f59edcc26e353a7b8fd00ac6385bfb33a82):
+[`01f922c3839c62b2e5a385eb30b7611047a139a4`](https://github.com/mediumofexchange/money-from-first-principles/tree/01f922c3839c62b2e5a385eb30b7611047a139a4):
 `pool-v3.md` for the construction, with the Ergo venue profile's
 `venue-ergo.md`; the v3 reports bind the revision they check
 (`V3_SPECIFICATION` in `scripts/pool/v3/provenance.mjs`), which names both
 documents' text for Ergo reports. The circuit sources cite rules by document
 and section, not revision, so a later revision that keeps those rules leaves
-their source identities unchanged. Later revisions change no rule the
-runtime reads: `740adaa` (pool-recovery C3.4, C3.5 and C3.8, which no v3 code
-reads yet) and `5584732` (pool-v3 §12's kinds and §12.1's certificate rule,
-which the runtime's `READ_KINDS` already meets). Earlier revisions
+their source identities unchanged. The pin includes venue-ergo §2's clock
+on a heavier, shorter chain (`dce3ae1`, `298cc06`) and §8's one-transaction
+condition (`01f922c`), which the v3 guard checks against `PROOF_BYTES`.
+`740adaa` (pool-recovery C3.4, C3.5 and C3.8) is in it, but no v3 code reads
+it yet. Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is frozen.
 `pool-recovery.md` specifies presentation, the non-service count, snapshot

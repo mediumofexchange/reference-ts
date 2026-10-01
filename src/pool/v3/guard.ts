@@ -10,7 +10,13 @@
 // reference identity while delegating elsewhere is outside what bytes can check.
 import { compareBytes, copyBytes } from "../../bytes.js";
 import { ergoLag, ergoProfileIdentity, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ownErgoProfile, type ErgoProfile } from "../../ergo-profile.js";
+import { ergoRunCarries } from "../../ergo-publisher.js";
 import { LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../../record-venue.js";
+import { PROOF_BYTES } from "./configuration.js";
+import { publicationBound } from "./records.js";
+
+/** The configuration's longest publication: venue-ergo §8 requires it to fit one transaction at an Ergo venue's kind-4 location. */
+const LONGEST_PUBLICATION = publicationBound(PROOF_BYTES);
 
 /** A reference venue's identity preimage, as the caller independently holds it. */
 export type VenueReference =
@@ -39,6 +45,9 @@ export function referenceVenue(reference: VenueReference): { readonly id: Uint8A
       const profile = ownErgoProfile(reference.profile);
       // The preimage must select this same reference context; absence names the mainnet profile.
       if (profile.reference !== context) throw new CandidateVenueError("the candidate requires the selected reference profile");
+      // venue-ergo §8: a configuration is publishable on the venue only where its longest publication fits one
+      // transaction at the kind-4 location.
+      if (!ergoRunCarries(profile.scripts[4], LONGEST_PUBLICATION)) throw new CandidateVenueError("the venue's kind-4 location cannot carry the configuration's longest publication in one transaction");
       return { id: ergoProfileIdentity(profile), lag: ergoLag(profile) };
     }
   } catch (error) {

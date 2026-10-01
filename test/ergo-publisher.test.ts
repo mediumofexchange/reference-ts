@@ -9,7 +9,7 @@ import { encodeCommitment, signCommitment, type Commitment } from "../src/commit
 import { ErgoVenue } from "../src/ergo.js";
 import { attributeBlock, collBytes, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
 import {
-  DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof,
+  DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, ergoRunCapacity, ergoRunCarries, payToPublicKeyTree, readPlainBox, verifyErgoProof,
   type ErgoPublishingSupplier, type ErgoPublisherPersistence, type NodeRequestInit,
 } from "../src/ergo-publisher.js";
 import { VenueError } from "../src/venue-error.js";
@@ -133,6 +133,8 @@ describe("durable publisher exact retry", () => {
       (s: any) => { s.pending[0].publication.recordBox.bytes = "00".repeat(32); },
       (s: any) => { s.spent = []; },
       (s: any) => { s.created[0].bytes.bytes = "00"; },
+      // A layout before kind-4 pieces filled their boxes at a one-byte index.
+      (s: any) => { s.version = 2; },
     ]) {
       const damaged = JSON.parse(saved); mutate(damaged); state.text = JSON.stringify(damaged);
       expect(() => new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence })).toThrow(/saved publisher|saved publication/);
@@ -266,24 +268,58 @@ describe("kind-4 publications are one adjacent output run", () => {
     expect(frameTransaction(dust.unsigned)).toHaveLength(pieces.length + 1);
   });
 
-  it("enforces the pinned node's signed transaction size, including every input proof, before remembering or submitting", async () => {
-    // These fixture lengths leave exactly 98,304 signed bytes with the
-    // fixed tree, height, fee and change above. A second input adds 90 bytes.
-    for (const [values, length] of [[ [100_000_000n], 96_027 ], [ [20_000_000n, 20_000_000n], 95_937 ]] as const) {
-      const n = funded(values), p = publisher([n]);
-      await expect(p.publish(publicationRequest(new Uint8Array(length + 1)))).rejects.toThrow(/signed transaction exceeds.*98304/);
-      expect(p.unsettled).toBe(0);
-      expect(n.submitted).toEqual([]);
-      const fitting = await p.publish(publicationRequest(new Uint8Array(length)));
-      expect(fitting.signed).toHaveLength(98_304);
-      expect(fitting.inputs).toHaveLength(values.length);
-      expect(p.unsettled).toBe(1);
-      expect(n.submitted).toHaveLength(1);
-    }
-    const n = funded([100_000_000n]), p = publisher([n]);
-    await expect(p.publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4])))).rejects.toThrow(/signed transaction exceeds.*98304/);
+  it("fills each piece's box to the node's 4,096 bytes at its one-byte output index", async () => {
+    const n = funded([100_000_000n]);
+    const publication = await publisher([n]).publish(publicationRequest(new Uint8Array(3 * 3_982 + 1)));
+    const pieces = frameTransaction(publication.unsigned)!.slice(0, -2).map(output => collBytes(output.registers.R5!)!.length);
+    expect(pieces).toEqual([3_982, 3_982, 3_982, 1]);
+    const boxes = [...n.boxes.values()].filter(bytes => !readPlainBox(bytes, TREE) && !readPlainBox(bytes, Buffer.from(MINER_FEE_TREE_HEX, "hex")));
+    expect(boxes.map(bytes => bytes.length)).toEqual([4_096, 4_096, 4_096, 114]);
+  });
+
+  it("carries a record of the location's capacity in one transaction at any height and option, and refuses one byte more before remembering or submitting", async () => {
+    const capacity = ergoRunCapacity(SCRIPTS[4]);
+    expect(capacity).toBe(95_910);
+    expect([ergoRunCarries(SCRIPTS[4], capacity), ergoRunCarries(SCRIPTS[4], capacity + 1)]).toEqual([true, false]);
+    for (const length of [-1, 1.5, MAX_RANGE_RECORD_BYTES[4] + 1]) expect(() => ergoRunCarries(SCRIPTS[4], length)).toThrow(VenueError);
+    // Every option at its longest encoding: a fee whose VLQ is ten bytes, the highest per-byte minimum, the
+    // highest height; the change is then shorter than the largest the capacity allows for.
+    const fee = 1n << 63n, height = 0xffff_ffffn, options = { fee, minValuePerByte: 1_000_000n };
+    const worst = (record: Uint8Array) => ({ ...publicationRequest(record), height });
+    const n = funded([fee + 1_000_000_000_000n]), p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], ...options });
+    await expect(p.publish(worst(new Uint8Array(capacity + 1)))).rejects.toThrow(/does not fit one transaction$/);
     expect(p.unsettled).toBe(0);
     expect(n.submitted).toEqual([]);
+    const record = Uint8Array.from({ length: capacity }, (_, i) => i % 251);
+    const fitting = await p.publish(worst(record));
+    expect(fitting.signed.length).toBeLessThanOrEqual(98_304);
+    expect(fitting.inputs).toHaveLength(1);
+    expect(attributeBlock(new Chain().profile(3n), n.pool)).toMatchObject([{ kind: 4, ordinal: 0n, record }]);
+    // At the defaults and a current height the same record leaves room to spare.
+    const easy = await publisher([funded([100_000_000n])]).publish(publicationRequest(record));
+    expect(easy.signed.length).toBeLessThan(fitting.signed.length);
+    // The whole frame's bound does not fit, and a longer location tree carries less.
+    await expect(publisher([funded([100_000_000n])]).publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4])))).rejects.toThrow(/does not fit one transaction$/);
+    const sized = (length: number) => Uint8Array.of(0x08, 0x88, 0x1b, ...new Uint8Array(length));
+    expect(ergoRunCapacity(sized(3_464))).toBeLessThan(capacity);
+    // A tree of 4,016 bytes leaves no room in a box for even an empty piece.
+    expect(ergoRunCapacity(Uint8Array.of(0x08, 0xad, 0x1f, ...new Uint8Array(4_013)))).toBe(-1);
+    expect(() => ergoRunCapacity(new Uint8Array(new SharedArrayBuffer(4)))).toThrow(VenueError);
+  });
+
+  it("takes only the inputs the outputs leave room for, so a long record is never refused for the transaction's size", async () => {
+    const capacity = ergoRunCapacity(SCRIPTS[4]), fee = 1n << 63n, height = 0xffff_ffffn;
+    const worst = (length: number) => ({ ...publicationRequest(new Uint8Array(length)), height });
+    const two = () => {
+      const n = funded([fee + 50_000_000_000n, 1_000_000_000_000n]);
+      return new ErgoPublisher({ secretKey: SECRET, suppliers: [n], fee, minValuePerByte: 1_000_000n });
+    };
+    // Paying for this run takes both boxes, but the outputs leave room for one input: the boxes do not cover it.
+    await expect(two().publish(worst(capacity))).rejects.toThrow(/do not cover/);
+    // Eight pieces fewer leave room for both.
+    const shorter = await two().publish(worst(capacity - 8 * 4_000));
+    expect(shorter.inputs).toHaveLength(2);
+    expect(shorter.signed.length).toBeLessThanOrEqual(98_304);
   });
 
   it("does not reassemble interrupted, reordered, truncated or cross-transaction pieces into the original record", async () => {

@@ -94,8 +94,16 @@ const MAX_BOX_BYTES = 4096;
  * signed transaction, separate from the profile's 131,914-byte record bound. */
 const MAX_TRANSACTION_BYTES = 98_304;
 const MAX_U16 = 0xffff;
+const MAX_U32 = 0xffff_ffffn;
 const MAX_U64 = (1n << 64n) - 1n;
 const MAX_INPUTS = 64;
+/** The signed bytes one input adds: its box id, the proof's one-byte length, the proof and an empty extension. */
+const SIGNED_INPUT_BYTES = 32 + 1 + PROOF_BYTES + 1;
+/** The highest output index whose VLQ is one byte. A run of full boxes reaches about 25 outputs before the
+ * transaction limit, so every output of a transaction that fits has a one-byte index. */
+const MAX_RUN_INDEX = 127;
+/** The highest per-byte minimum the publisher accepts. */
+const MAX_PER_BYTE = 1_000_000n;
 /** Unsettled publications remembered at once; a view settles them as it reads their records. */
 const PENDING_LIMIT = 1024;
 /** Transactions one record may have: past it a refused one is kept, and its replacements cost no further fee. */
@@ -272,17 +280,18 @@ function recordOutputs(request: ErgoRecordRequest, perByte: bigint): Candidate[]
     ({ tree: request.location, registers: [coll(request.subject), coll(piece)] });
   let size = request.record.length;
   if (request.chunked) {
-    // Reserve the largest encoded output index. The piece itself stays below
-    // the framer's Coll[Byte] bound, and its full box below the node's bound.
+    // Each piece fills its box to the node's bound at a one-byte output index;
+    // the piece itself stays below the framer's Coll[Byte] bound.
     let low = 0, high = Math.min(MAX_U16, MAX_BOX_BYTES);
     while (low < high) {
       const middle = Math.ceil((low + high) / 2), candidate = output(new Uint8Array(middle));
-      const value = minimumValue(candidate, request.height, MAX_U16, perByte);
-      if (boxLength({ ...candidate, value }, request.height, MAX_U16) <= MAX_BOX_BYTES) low = middle;
+      const value = minimumValue(candidate, request.height, MAX_RUN_INDEX, perByte);
+      if (boxLength({ ...candidate, value }, request.height, MAX_RUN_INDEX) <= MAX_BOX_BYTES) low = middle;
       else high = middle - 1;
     }
     size = low;
-    if (size === 0 || Math.max(1, Math.ceil(request.record.length / size)) > MAX_U16 - 2) {
+    // The run, change and fee all at one-byte indices.
+    if (size === 0 || Math.max(1, Math.ceil(request.record.length / size)) + 2 > MAX_RUN_INDEX + 1) {
       throw new VenueError("the publication does not fit one transaction's output run");
     }
   }
@@ -303,6 +312,51 @@ const publicationCost = (request: ErgoRecordRequest, tree: Uint8Array, fee: bigi
   return outputs.reduce((sum, output) => sum + output.value, 0n) + fee +
     minimumValue({ tree, registers: [] }, request.height, outputs.length, perByte);
 };
+/** A transaction's bytes after its inputs: no data inputs, no tokens, then the outputs. */
+const bodyBytes = (outputs: readonly Candidate[], height: bigint): Uint8Array =>
+  concat(vlq(0n), vlq(0n), vlq(BigInt(outputs.length)), ...outputs.map(o => candidateBytes(o, height)));
+/** How many signed inputs fit beside the record's outputs, change of the largest value a box holds and the
+ * fee within the node's transaction limit (the input count is one byte), at most `MAX_INPUTS`; zero where
+ * not even one does. Change below its minimum joins the fee, which only shortens the transaction. */
+function inputRoom(request: ErgoRecordRequest, tree: Uint8Array, fee: bigint, perByte: bigint): number {
+  const outputs = [...recordOutputs(request, perByte), { tree, registers: [], value: MAX_U64 }, { tree: FEE_TREE, registers: [], value: fee }];
+  const room = MAX_TRANSACTION_BYTES - 1 - bodyBytes(outputs, request.height).length;
+  return room < SIGNED_INPUT_BYTES ? 0 : Math.min(MAX_INPUTS, Math.floor(room / SIGNED_INPUT_BYTES));
+}
+
+/**
+ * venue-ergo §8 at a kind-4 location: whether this publisher carries a record of `length` bytes in one
+ * transaction as an adjacent run, with one input, change and the fee, at every height and with every fee
+ * and per-byte minimum it accepts. Such a record always fits one transaction the pinned node relays, given
+ * one funding box that covers it; a configuration is publishable at the location only where its longest
+ * publication is carried. It holds for every shorter record too.
+ */
+export function ergoRunCarries(location: Uint8Array, length: number): boolean {
+  if (!isRealBytes(location) || !Number.isSafeInteger(length) || length < 0 || length > MAX_RANGE_RECORD_BYTES[4]) {
+    throw new VenueError("a run is an ErgoTree's bytes and a record length within the kind-4 bound");
+  }
+  try {
+    const request = { location, subject: new Uint8Array(32), record: new Uint8Array(length), chunked: true, height: MAX_U32 };
+    return inputRoom(request, concat(P2PK_PREFIX, new Uint8Array(33)), MAX_U64, MAX_PER_BYTE) > 0;
+  } catch (error) {
+    if (error instanceof VenueError) return false;
+    throw error;
+  }
+}
+
+/** The longest record `ergoRunCarries` holds for at `location` (95,910 bytes at a pay-to-public-key
+ * location), or -1 where it holds for none. Under a lower fee, per-byte minimum or height the publisher
+ * builds somewhat longer records; this is the length it carries under every option. */
+export function ergoRunCapacity(location: Uint8Array): number {
+  if (!ergoRunCarries(location, 0)) return -1;
+  let low = 0, high = MAX_RANGE_RECORD_BYTES[4];
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (ergoRunCarries(location, middle)) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+}
 
 /** The unsigned and signed transaction carrying one record, from these inputs
  * (all of `key`'s tree, in order): the record output or adjacent run at its
@@ -326,7 +380,7 @@ function buildPublication(key: ErgoKey, tree: Uint8Array, inputs: readonly ErgoP
     throw new VenueError("the fee is below its box's minimum value");
   }
   outputs.push({ tree: FEE_TREE, registers: [], value: paid });
-  const body = concat(vlq(0n), vlq(0n), vlq(BigInt(outputs.length)), ...outputs.map(o => candidateBytes(o, height)));
+  const body = bodyBytes(outputs, height);
   const unsigned = concat(vlq(BigInt(inputs.length)), ...inputs.map(box => concat(box.id, vlq(0n), Uint8Array.of(0))), body);
   // Each proveDlog proof adds exactly 56 bytes: its length prefix, like the
   // unsigned empty proof's, is one byte. Check the complete signed size once
@@ -408,7 +462,8 @@ interface PublisherState {
   readonly created: readonly CreatedBox[];
 }
 /** The saved state's layout; a state of another layout is refused, never read as this one. */
-const STATE_VERSION = 2;
+// 3: kind-4 pieces fill their boxes at a one-byte output index (venue-ergo §8), so a version-2 run rebuilds otherwise.
+const STATE_VERSION = 3;
 const stateText = (state: PublisherState): string => JSON.stringify(state, (_key, value: unknown) =>
   typeof value === "bigint" ? { integer: value.toString() } : isRealBytes(value) ? { bytes: bytesToHex(value) } : value);
 function copyPublication(p: ErgoPublication): ErgoPublication {
@@ -454,7 +509,7 @@ export class ErgoPublisher {
     this.#perByte = options.minValuePerByte ?? DEFAULT_MIN_VALUE_PER_BYTE;
     this.#timeoutMs = options.timeoutMs ?? 60_000;
     this.#persistence = options.persistence;
-    if (typeof this.#fee !== "bigint" || typeof this.#perByte !== "bigint" || this.#perByte < 1n || this.#perByte > 1_000_000n ||
+    if (typeof this.#fee !== "bigint" || typeof this.#perByte !== "bigint" || this.#perByte < 1n || this.#perByte > MAX_PER_BYTE ||
         this.#fee > MAX_U64 || !Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs <= 0 || this.#timeoutMs > MAX_TIMEOUT_MS) throw new VenueError("invalid Ergo publisher options");
     // The fee box is a box too: it must reach the minimum at any height.
     if (this.#fee < minimumValue({ tree: FEE_TREE, registers: [] }, 0xffff_ffffn, 2, this.#perByte)) {
@@ -710,7 +765,11 @@ export class ErgoPublisher {
     const request: ErgoRecordRequest = floor === asked.height ? asked : Object.freeze({ ...asked, height: floor });
     const avoided = new Set(excluded);
     for (const earlier of replaced) if (earlier.change !== undefined) avoided.add(bytesToHex(earlier.change));
-    const selected = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte), required, avoided);
+    // Inputs take only the room the outputs leave, so a record within the location's capacity is never
+    // refused for the transaction's size.
+    const room = inputRoom(request, this.#tree, this.#fee, this.#perByte);
+    if (room === 0 || room < required.length) throw new VenueError("the publication does not fit one transaction");
+    const selected = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte), required, avoided, room);
     const inputs = selected.map(box => Object.freeze({ id: copyBytes(box.id), value: box.value, creationHeight: box.creationHeight }));
     const pending: Pending = Object.freeze({ key, request, inputs: Object.freeze(inputs),
       publication: buildPublication(this.#key, this.#tree, inputs, request, this.#fee, this.#perByte), replaced: Object.freeze([...replaced]) });
@@ -816,13 +875,13 @@ export class ErgoPublisher {
 
   /**
    * `required`, then boxes covering the record's minimum, the fee and a
-   * change box, at most `MAX_INPUTS` and one box's value in all: first change
+   * change box, at most `room` and one box's value in all: first change
    * this publisher created and has not spent, then plain boxes of the key
    * that suppliers offer, largest first, each taken only as bytes hashing to
    * its id and only where no supplier answers that it lacks the box, so a
    * supplier inventing a box cannot outvote one that knows better.
    */
-  async #select(height: bigint, needed: bigint, required: readonly ErgoPlainBox[], excluded: ReadonlySet<string>): Promise<ErgoPlainBox[]> {
+  async #select(height: bigint, needed: bigint, required: readonly ErgoPlainBox[], excluded: ReadonlySet<string>, room: number): Promise<ErgoPlainBox[]> {
     const reserved = this.#reserved(), requiredIds = new Set(required.map(box => bytesToHex(box.id)));
     const usable = ([id, box]: [string, ErgoPlainBox]): boolean =>
       !reserved.has(id) && !excluded.has(id) && !requiredIds.has(id) && box.creationHeight <= height;
@@ -843,7 +902,7 @@ export class ErgoPublisher {
     }
     const chosen: ErgoPlainBox[] = [...required];
     let total = required.reduce((sum, box) => sum + box.value, 0n);
-    const wanted = (): boolean => chosen.length < MAX_INPUTS && total < needed;
+    const wanted = (): boolean => chosen.length < room && total < needed;
     const take = (box: ErgoPlainBox): void => {
       if (wanted() && total + box.value <= MAX_U64) { chosen.push(box); total += box.value; }
     };
