@@ -236,6 +236,22 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
     expect(values(view)).toEqual([[20n, "available"]]);
   });
 
+  it("acts on and reads a demand only under its own backing's terms in a shared segment", async () => {
+    const f = await shared();
+    await f.payer.sync(f.held, f.y.signed);
+    const deadline = f.venue.witnessedIndex() + 30n;
+    const demand = await f.payer.demand("dy", 20n, deadline, f.held, f.y.signed, prove), id = demand.demand!;
+    await f.payer.submit("dy", f.service(f.a)); await f.checkpoint(f.a, "demanded");
+    const served = await f.served(f.a), signX = (message: Uint8Array) => ed25519.sign(message, issuerX);
+    // The shared history holds y's demand, but x's terms never reach it: no withdrawal, acceptance or reading under x.
+    await expect(f.payer.withdraw("wx", id, served, f.x.signed)).rejects.toMatchObject({ code: "ABSENT" });
+    await expect(f.payer.accept("ax", id, deadline - 2n, served, f.x.signed, signX)).rejects.toMatchObject({ code: "ABSENT" });
+    await expect(f.payer.presentation(id, served, f.x.signed)).rejects.toMatchObject({ code: "ABSENT" });
+    expect(f.payer.act("wx")).toBeUndefined();
+    expect(await f.payer.presentation(id, served, f.y.signed)).toMatchObject({ backing: f.y.name, quantity: 20n, deadline, ended: undefined });
+    expect(await f.payer.withdraw("wy", id, served, f.y.signed)).toMatchObject({ kind: 5, demand: id });
+  });
+
   it("closes admission for every scoped backing on the scope's one silence clock", async () => {
     const f = await shared(4n);
     f.venue.advance(f.venue.witnessedIndex() + 5n);

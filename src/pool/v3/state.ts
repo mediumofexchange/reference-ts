@@ -49,6 +49,8 @@ export interface StateView extends RecoveryView {
   hasNullifier(nf: bigint): boolean;
   hasOutput(cm: bigint): boolean;
   hasAnchor(root: bigint): boolean;
+  /** The demand (hex identity) whose settlement created output `cm`, where a settlement did (C3.8's taken release). */
+  settledFor(cm: bigint): string | undefined;
 }
 
 /** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
@@ -102,6 +104,10 @@ export class StateHandle implements StateView {
   hasNullifier(nf: bigint): boolean { return this.store.hasNullifier(this.ns, this.position, nf); }
   hasOutput(cm: bigint): boolean { return this.store.hasOutput(this.ns, this.position, cm); }
   hasAnchor(root: bigint): boolean { return this.store.hasAnchor(this.ns, this.position, root); }
+  settledFor(cm: bigint): string | undefined {
+    const stored = this.store.output(this.ns, this.position, cm);
+    return stored?.settlement === true ? recoveryEffect(decodeRecord(this.store.event(stored.ns, stored.position)!.settlement!)).ended : undefined;
+  }
   hasSpentTag(tag: bigint): boolean { return this.store.hasSpentTag(this.ns, this.position, tag); }
   isEffective(id: string): boolean { return this.store.isEffective(this.ns, this.position, id); }
   hasStatement(identity: Uint8Array): boolean { return this.store.hasStatement(this.ns, this.position, identity); }
@@ -112,6 +118,10 @@ export class StateHandle implements StateView {
   demand(id: string): Demand | undefined { return this.store.demand(this.ns, this.position, id); }
   demandsWithTag(tag: bigint): [string, Demand][] { return this.store.demandsWithTag(this.ns, this.position, tag); }
   demands(): [string, Demand][] { return this.store.demands(this.ns, this.position); }
+  /** A demand visible here, ended or not, with the events that stood it up and ended it (C3.8). */
+  presented(id: string): ReturnType<ReplayStore["presented"]> { return this.store.presented(this.ns, this.position, id); }
+  /** The visible events that spent a nullifier of tag `tag` (C3.8's void). */
+  tagSpends(tag: bigint): StoredEvent[] { return this.store.tagSpends(this.ns, this.position, tag); }
   total(backing: string): Totals { return this.store.total(this.ns, this.position, backing); }
   totals(): Map<string, Totals> { return this.store.totals(this.ns, this.position); }
   nullifiers(): bigint[] { return [...this.store.nullifiers(this.ns, this.position)]; }
@@ -172,10 +182,13 @@ export class ForceState implements StateView {
   readonly ended = new Set<string>();
   readonly effective = new Set<string>();
   readonly spentTags = new Set<bigint>();
+  /** Each forced settlement's output, with its demand. */
+  readonly settled = new Map<bigint, string>();
   constructor(base: StateView) { this.base = base; }
   hasNullifier(nf: bigint): boolean { return this.nullifiers.has(nf) || this.base.hasNullifier(nf); }
   hasOutput(cm: bigint): boolean { return this.outputs.has(cm) || this.base.hasOutput(cm); }
   hasAnchor(root: bigint): boolean { return this.base.hasAnchor(root); }
+  settledFor(cm: bigint): string | undefined { return this.settled.get(cm) ?? this.base.settledFor(cm); }
   hasSpentTag(tag: bigint): boolean { return this.spentTags.has(tag) || this.base.hasSpentTag(tag); }
   isEffective(id: string): boolean { return this.effective.has(id) || this.base.isEffective(id); }
   demand(id: string): Demand | undefined { return this.ended.has(id) ? undefined : this.added.get(id) ?? this.base.demand(id); }
@@ -202,6 +215,13 @@ function checkUniqueEffects(nfs: readonly bigint[], outputs: readonly bigint[], 
   requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !state.hasNullifier(nf)), "SPENT");
   requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !state.hasOutput(cm)), "OUTPUT");
 }
+/** C3.8: a release whose every other condition holds is **taken** where its output already exists as the output of a
+ * settlement of another demand, in the snapshot or forced earlier since its adoption index. It has no force either
+ * way; a taken one releases its acceptance for the dishonour reading (dishonour.ts). */
+function checkTaken(record: Record, state: ForceState): void {
+  const { ended } = recoveryEffect(record), by = record.kind === 6 ? state.settledFor(record.publicInputs[14]!) : undefined;
+  requireReplay(by === undefined || by === ended, "TAKEN");
+}
 /** Apply only an already-verified forced publication's effects when rebuilding its prefix. */
 export function applyForceEffects(state: ForceState, record: Record): void {
   if (record.kind !== 4 && record.kind !== 5 && record.kind !== 6) throw new EvidenceRefusal("unsupported-scope");
@@ -212,9 +232,11 @@ export function applyForceEffects(state: ForceState, record: Record): void {
   const { nfs, outputs } = effectOf(record);
   for (const nf of nfs) { state.nullifiers.add(nf); state.spentTags.add(tagOf(nf)); }
   outputs.forEach(cm => state.outputs.add(cm));
+  if (record.kind === 6) state.settled.set(outputs[0]!, ended!);
 }
 /** The reader establishes routing, an open gap, the strictly earlier snapshot and venue order.
- * Every check precedes mutation; force never extends the snapshot's forest. */
+ * Every check precedes mutation; force never extends the snapshot's forest. The checks run in replay's order,
+ * new nullifiers and outputs last, so a release refused only for its output is told apart (`checkTaken`). */
 export async function applyForceRecord(state: ForceState, bytes: Uint8Array, context: ForceContext): Promise<void> {
   const record = decodeRecord(bytes), p = record.publicInputs;
   if (context.mode !== "force" || ![4, 5, 6].includes(record.kind)) throw new EvidenceRefusal("unsupported-scope");
@@ -223,9 +245,11 @@ export async function applyForceRecord(state: ForceState, bytes: Uint8Array, con
   await checkProof(record, context.verifier);
   const { roots, nfs, outputs } = effectOf(record);
   requireReplay(roots.every(root => state.hasAnchor(root)), "ANCHOR");
-  checkUniqueEffects(nfs, outputs, state);
   checkRecovery(record, state, { check: requireReplay, backing: context.backing, issuer: context.issuer,
     at: context.index, lag: context.lag, door: true });
+  checkUniqueEffects(nfs, [], state);
+  checkTaken(record, state);
+  checkUniqueEffects([], outputs, state);
   applyForceEffects(state, record);
 }
 

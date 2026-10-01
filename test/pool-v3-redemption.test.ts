@@ -2,11 +2,12 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { identifierOf } from "../src/pool/field.js";
+import { identifierOf, limbsOf } from "../src/pool/field.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
-import { acceptanceBytes, decodeRecord, encodePublication, settlementAuthorization, statementHash, type Record } from "../src/pool/v3/records.js";
+import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeSettlementAuthorization, releaseBytes, settlementAuthorization,
+  statementHash, type Acceptance, type Record } from "../src/pool/v3/records.js";
 import { presenterSecret, settlementRho } from "../src/pool/v3/redemption.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -471,8 +472,9 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.publish("late", f.venue);
     await f.holder.sync(f.served(), f.signed);
     expect(f.holder.act("late")!.status).toBe("failed");
-    const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, releases: true });
-    expect(read.releases.map(r => r.output)).toEqual([decodeRecord(late.record).publicInputs[14]]);
+    const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, answers: true });
+    expect(read.answers.map(a => [a.release?.output, a.release?.force, a.release?.check]))
+      .toEqual([[decodeRecord(late.record).publicInputs[14], false, "DEADLINE"]]);
     expect(read.force.map(x => x.record.kind)).toEqual([4]);
     // Another party's settlement of this demand to another output, with a release no presenter signed, is
     // witnessed without force too and is not counted.
@@ -491,10 +493,10 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.relay(f.holder, "again", settleAt);
     expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
     expect(f.holder.act("again")!.status).toBe("final");
-    // The reader lists releases without force only: the forged one and the late one, not the one with force.
-    const after = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, releases: true });
+    // The reader lists every release with its verdict: the late and the forged one without force, the last with it.
+    const after = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, answers: true });
     expect(after.force.map(x => x.record.kind)).toEqual([4, 6]);
-    expect(after.releases.map(r => r.output)).toEqual([l[14], l[14]! + 1n]);
+    expect(after.answers.map(a => [a.release?.output, a.release?.force])).toEqual([[l[14], false], [l[14]! + 1n, false], [s[14], true]]);
   });
 
   it("counts a release published under terms without silence, and refuses a second settlement at one count", async () => {
@@ -523,6 +525,131 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.submit("s1", f.service); await f.publish();
     expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
     expect([f.holder.act("s1")!.status, f.holder.act("s0")!.status]).toEqual(["final", "failed"]);
+  });
+
+  // C3.8: any wallet reads a demand's outcome from public evidence, each event from the index it was witnessed at.
+  it("reads an unanswered demand as the backer's dishonour past its deadline, kept through a later withdrawal", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 10n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove), id = demand.demand!;
+    await f.holder.submit("redeem", f.service); await f.publish();
+    const stranger = f.open("stranger"), filed = f.venue.witnessedIndex();
+    expect(await stranger.presentation(id, f.served(), f.signed)).toEqual({ demand: id, backing: f.backing, quantity: 10n, deadline,
+      witnessed: filed, ended: undefined, overdue: undefined, acceptances: [] });
+    // Past its deadline it is the backer's failure, from the next index on, to anybody holding the record.
+    f.venue.advance(deadline);
+    expect((await stranger.presentation(id, f.served(), f.signed)).overdue).toBeUndefined();
+    f.venue.advance(deadline + 3n);
+    expect((await stranger.presentation(id, f.served(), f.signed)).overdue).toEqual({ reading: "dishonour", from: deadline + 1n, through: deadline + 3n });
+    // The holder withdraws it later: ended from the index the withdrawal was witnessed at, the earlier indices kept.
+    await f.holder.withdraw("back", id, f.served(), f.signed);
+    await f.holder.submit("back", f.service); await f.publish();
+    const at = f.venue.witnessedIndex(), after = await f.backer.presentation(id, f.served(), f.signed);
+    expect([after.ended, after.overdue]).toEqual([{ by: "withdrawal", at }, { reading: "dishonour", from: deadline + 1n, through: at - 1n }]);
+    await expect(stranger.presentation(b(9), f.served(), f.signed)).rejects.toMatchObject({ code: "ABSENT" });
+  });
+
+  it("reads a timely published acceptance left unreleased as the holder's lapse, a settlement as settled, a withdrawal in time as no failure", async () => {
+    const f = await fixture([10n, 6n, 4n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 20n;
+    const [lapsed, settled, withdrawn] = [await f.holder.demand("lapsed", 6n, deadline, f.served(), f.signed, prove),
+      await f.holder.demand("settled", 10n, deadline, f.served(), f.signed, prove), await f.holder.demand("withdrawn", 4n, deadline, f.served(), f.signed, prove)];
+    for (const name of ["lapsed", "settled", "withdrawn"]) await f.holder.submit(name, f.service);
+    await f.publish(); await f.backer.sync(f.served(), f.signed);
+    const a1 = await f.backer.accept("a1", lapsed.demand!, deadline - 5n, f.served(), f.signed, sign);
+    const a2 = await f.backer.accept("a2", settled.demand!, deadline - 5n, f.served(), f.signed, sign);
+    await expect(f.backer.publishAcceptance("missing", f.venue)).rejects.toMatchObject({ code: "UNKNOWN" });
+    await expect(f.backer.publishAcceptance("a1", {} as never)).rejects.toMatchObject({ code: "INVALID" });
+    await f.backer.publishAcceptance("a1", f.venue);
+    const a1At = f.venue.witnessedIndex();
+    // A retry publishes the same bytes, which this venue witnesses once.
+    await f.backer.publishAcceptance("a1", f.venue);
+    expect(f.venue.witnessedIndex()).toBe(a1At);
+    await f.backer.publishAcceptance("a2", f.venue);
+    await f.holder.settle("s2", a2, f.served(), f.signed, prove); await f.holder.submit("s2", f.service);
+    await f.holder.withdraw("w3", withdrawn.demand!, f.served(), f.signed); await f.holder.submit("w3", f.service);
+    await f.publish();
+    const settledAt = f.venue.witnessedIndex();
+    f.venue.advance(deadline + 1n);
+    const lapse = await f.holder.presentation(lapsed.demand!, f.served(), f.signed);
+    expect(lapse.acceptances).toEqual([{ id: acceptanceId(a1), owner: a1.owner, deadline: a1.deadline, witnessed: a1At, timely: true, taken: false }]);
+    expect([lapse.ended, lapse.overdue]).toEqual([undefined, { reading: "lapse", from: deadline + 1n, through: deadline + 1n }]);
+    const done = await f.backer.presentation(settled.demand!, f.served(), f.signed);
+    expect([done.ended, done.overdue, done.acceptances.length]).toEqual([{ by: "settlement", at: settledAt }, undefined, 1]);
+    const back = await f.backer.presentation(withdrawn.demand!, f.served(), f.signed);
+    expect([back.ended, back.overdue]).toEqual([{ by: "withdrawal", at: settledAt }, undefined]);
+  });
+
+  it("counts no acceptance K did not sign, one due after the demand, one of another demand or backing, or one witnessed too late", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 20n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove), id = demand.demand!;
+    await f.holder.submit("redeem", f.service); await f.publish();
+    const publish = (acceptance: Acceptance, signer = issuerSecret, routing = f.backing) => f.venue.publishRecord(4, routing,
+      encodePublication({ domain, backing: routing, kind: 2, acceptance: { ...acceptance, signature: ed25519.sign(acceptanceBytes(acceptance), signer) } }));
+    const base: Acceptance = { domain, demand: id, owner: 5n, deadline: deadline - 3n };
+    await publish(base, b(77));
+    await publish({ ...base, owner: 6n, deadline: deadline + 1n });
+    await publish({ ...base, owner: 7n, demand: b(9) });
+    await publish({ ...base, owner: 8n }, issuerSecret, b(99));
+    // K's own acceptance witnessed with its deadline only the lag ahead: no release could be witnessed inside it (C3.4).
+    f.venue.advance(base.deadline - lag - 1n);
+    await publish({ ...base, owner: 9n });
+    f.venue.advance(deadline + 1n);
+    const read = await f.holder.presentation(id, f.served(), f.signed);
+    expect(read.acceptances.map(a => [a.owner, a.witnessed, a.timely])).toEqual([[9n, base.deadline - lag, false]]);
+    expect(read.overdue?.reading).toBe("dishonour");
+  });
+
+  it("reads a demand voided from the index a spend of its note was witnessed at, keeping the dishonour before it", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 10n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service); await f.publish();
+    // Past its deadline its lock no longer stands: the holder pays the note away, which voids the demand.
+    f.venue.advance(deadline + 2n);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["available"]);
+    await f.holder.prepare("pay", { request: f.backer.request("shop", f.backing, 10n), value: 10n }, f.served(), f.signed, prove);
+    await f.holder.submit("pay", f.service); await f.publish();
+    const at = f.venue.witnessedIndex(), read = await f.backer.presentation(demand.demand!, f.served(), f.signed);
+    expect([read.ended, read.overdue]).toEqual([{ by: "void", at }, { reading: "dishonour", from: deadline + 1n, through: at - 1n }]);
+  });
+
+  it("reads a gap release taken by another demand's settlement as released: the acceptance's lapse becomes the backer's dishonour", async () => {
+    const f = await gap([10n, 10n]);
+    const at = f.venue.witnessedIndex(), deadline = at + 40n;
+    const held = await f.holder.demand("held", 10n, deadline, f.served(), f.signed, prove);
+    await f.relay(f.holder, "held", at);
+    const otherAt = f.venue.witnessedIndex(), other = await f.holder.demand("other", 10n, deadline, f.served(), f.signed, prove);
+    await f.relay(f.holder, "other", otherAt);
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    const acceptance = await f.backer.accept("answer", held.demand!, deadline - 5n, f.served(), f.signed, sign);
+    await f.backer.publishAcceptance("answer", f.venue);
+    const release = decodeRecord((await f.holder.settle("settle", acceptance, f.served(), f.signed, prove)).record).publicInputs;
+    // Before the release is witnessed, a settlement of the other demand, under an acceptance K signed naming the same
+    // owner, creates the release's output (its owner and rho_out) first, with force.
+    const d = decodeRecord(other.record).publicInputs, id = other.demand!, taking: Acceptance = { domain, demand: id, owner: release[8]!, deadline: deadline - 5n };
+    const unsigned: Record = { domain, kind: 6, proof: b(6), capsules: [], authorization: new Uint8Array(136), publicInputs: [...d.slice(0, 7), 10n,
+      release[8]!, release[9]!, d[8]!, d[8]!, f.holder.act("other")!.inputs[0]!, 12345n, release[14]!, ...limbsOf(id)] };
+    const presenter = presenterSecret(f.holder.recoverySeed(), domain, d.slice(10, 12), d[14]!, d[15]!);
+    const takes: Record = { ...unsigned, authorization: encodeSettlementAuthorization(taking.deadline, ed25519.sign(acceptanceBytes(taking), issuerSecret),
+      ed25519.sign(releaseBytes(domain, id, acceptanceId(taking), statementHash(unsigned)), presenter)) };
+    await f.venue.publishRecord(4, f.backing, encodePublication({ domain, backing: f.backing, kind: 3, record: takes }));
+    const releaseAt = f.venue.witnessedIndex();
+    await f.relay(f.holder, "settle", releaseAt);
+    const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, answers: true });
+    expect(read.answers.filter(a => a.release !== undefined).map(a => [a.release!.output, a.release!.force, a.release!.check]))
+      .toEqual([[release[14], true, undefined], [release[14], false, "TAKEN"]]);
+    // The holder's timely acceptance reads as released: past the deadline the demand is the backer's failure, not a lapse.
+    f.venue.advance(deadline + 1n);
+    const reading = await f.holder.presentation(held.demand!, f.served(), f.signed);
+    expect(reading.acceptances.map(a => [a.timely, a.taken])).toEqual([[true, true]]);
+    expect([reading.ended, reading.overdue?.reading]).toEqual([undefined, "dishonour"]);
+    expect((await f.holder.presentation(id, f.served(), f.signed)).ended?.by).toBe("settlement");
   });
 });
 

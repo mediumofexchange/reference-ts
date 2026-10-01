@@ -45,6 +45,7 @@ import { KeptStateMismatch, ReplayStore, type Demand } from "./replay-store.js";
 import type { CanonicalCheckpoint, FrontierResult } from "./scope-reader.js";
 import { locked, tagOf } from "./recovery.js";
 import { applyForceEffects, openForceState, type ForceState } from "./state.js";
+import { readPresentation, type Presentation } from "./dishonour.js";
 import { declaredParallel } from "./verify-ahead.js";
 import { decodeRootTerms, rootTermsName } from "./terms.js";
 import { cellBytes, decodeWalletSnapshot, encodeWalletSnapshot, MAX_WALLET_BACKUP_BYTES, openWalletBackup, sealWalletBackup,
@@ -54,7 +55,7 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
   type ProofTask } from "./witness.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
-const PROFILE = "moe/wallet/v3/6", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/7", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
     "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE", message: string) { super(message); this.name = "V3WalletError"; }
@@ -93,7 +94,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS saved_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES saved_records(alias),
     record BLOB NOT NULL, receipt BLOB) STRICT;
   CREATE TABLE IF NOT EXISTS backer_acceptances (alias TEXT PRIMARY KEY, demand TEXT NOT NULL, deadline TEXT NOT NULL,
-    owner TEXT NOT NULL, signature BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
+    owner TEXT NOT NULL, signature BLOB NOT NULL, backing BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
   CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`;
 const DEFINITIONS = new Map(SCHEMA.split(";").map(s => s.replace(/\s+/g, " ").trim()).filter(s => s !== "")
   .map(s => { const sql = s.replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE "); return [sql.split(" ")[2]!, sql] as const; }));
@@ -108,7 +109,7 @@ const TABLES = [
   ["saved_inputs", ["nf", "alias"]],
   ["saved_outputs", ["cm", "alias", "value", "owner", "rho"]],
   ["saved_superseded", ["statement", "alias", "record", "receipt"]],
-  ["backer_acceptances", ["alias", "demand", "deadline", "owner", "signature"]],
+  ["backer_acceptances", ["alias", "demand", "deadline", "owner", "signature", "backing"]],
 ] as const;
 /** A restoration the constructor consumes synchronously: the seed, the state
  * rows, the envelope's digest, and the domain and venue it was opened under. */
@@ -227,7 +228,8 @@ interface Frontier {
   readonly observed: ReturnType<typeof heldView>;
   readonly canonical: CanonicalCheckpoint | undefined; readonly force: ForceState | undefined; readonly notes: OwnedNote[];
   readonly chain: FrontierResult["ranges"]["chain"]; readonly scopeChains: FrontierResult["scopeChains"]; readonly clock: FrontierResult["clock"];
-  readonly releases: FrontierResult["releases"];
+  /** The read's forced publications and, where it asked for them, the backing's witnessed answers. */
+  readonly result: Pick<FrontierResult, "canonical" | "force" | "answers" | "ranges">;
 }
 
 /** The spendable single-note or least-total pair covering `total`; ties by commitment. */
@@ -443,14 +445,14 @@ export class V3Wallet {
    * the view synchronously, inside the read's turn: the state it reads is the
    * kept file's, which a later read moves on. The caller's bytes are copied
    * before the first await. */
-  private async read<T>(packageBytes: Uint8Array, signed: SignedTerms, use: (view: Frontier) => T, releases = false): Promise<T> {
+  private async read<T>(packageBytes: Uint8Array, signed: SignedTerms, use: (view: Frontier) => T, answers = false): Promise<T> {
     const bytes = copyUnshared(packageBytes), terms = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
     const backing = rootTermsName(terms.terms);
     return this.inTurn(async () => {
       let view: Frontier;
       try {
         this.mutable();
-        view = await this.frontier(bytes, terms, backing, releases);
+        view = await this.frontier(bytes, terms, backing, answers);
       } catch (error) {
         // A replaced or exported handle says so, whatever its read met once another handle held the files.
         if (!(error instanceof V3WalletError)) this.mutable();
@@ -464,7 +466,7 @@ export class V3Wallet {
       return use(view);
     });
   }
-  private async frontier(bytes: Uint8Array, terms: SignedTerms, backing: Uint8Array, releases: boolean) {
+  private async frontier(bytes: Uint8Array, terms: SignedTerms, backing: Uint8Array, answers: boolean) {
     const at = this.options.venue.witnessedIndex();
     requireThat(isValue(at), "INVALID", "invalid witnessed index");
     const observed = heldView(this.options.venue, this.venueId, at), store = this.kept();
@@ -474,7 +476,7 @@ export class V3Wallet {
     const seen = store?.answersThrough();
     if (store !== undefined && seen !== undefined && at < seen) store.discardKept();
     // The scanner's keys live for this read only.
-    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(), releases,
+    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(), answers,
       ...(store === undefined ? {} : { store }) };
     for (let again = false; ; again = true) {
       try {
@@ -493,7 +495,7 @@ export class V3Wallet {
           notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));
         }
         return { terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
-          lag: result.ranges.lag, clock: result.clock, releases: result.releases };
+          lag: result.ranges.lag, clock: result.clock, result };
       } catch (error) {
         // §14: kept witnesses answer only at their namespaces' tips. A read below one (a venue view older than
         // an earlier read's) discards the kept state and replays; with nothing kept the failure stays visible.
@@ -564,12 +566,12 @@ export class V3Wallet {
     return [...found].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, demand]) => demand);
   }
   /** C3.5's disclosure count for `demand` in `segment`: the distinct outputs of its releases bound to that segment
-   * that the venue witnessed without force, each a strict signature of the demand's presenter key. Only that key
-   * signs a release, so another party's copies disclose no new output and add nothing. */
+   * that the venue witnessed without force (taken ones too), each a strict signature of the demand's presenter key.
+   * Only that key signs a release, so another party's copies disclose no new output and add nothing. */
   private disclosures(view: Frontier, demand: Uint8Array, presenter: Uint8Array, segment: Uint8Array): bigint {
     const outputs = new Set<bigint>();
-    for (const release of view.releases) {
-      if (same(release.demand, demand) && same(release.segment, segment) &&
+    for (const { acceptance, release } of view.result.answers) {
+      if (release !== undefined && !release.force && same(acceptance.demand, demand) && same(release.segment, segment) &&
           verifySignatureStrict(release.releaseSignature, release.releaseMessage, presenter)) outputs.add(release.output);
     }
     return BigInt(outputs.size);
@@ -1253,7 +1255,7 @@ export class V3Wallet {
     this.transaction(() => {
       if (this.db.prepare("SELECT 1 FROM backer_acceptances WHERE alias=?").get(name) !== undefined) return;
       taken();
-      this.db.prepare("INSERT INTO backer_acceptances VALUES(?,?,?,?,?)").run(name, key, deadline.toString(), owner.toString(), signature);
+      this.db.prepare("INSERT INTO backer_acceptances VALUES(?,?,?,?,?,?)").run(name, key, deadline.toString(), owner.toString(), signature, backing);
     });
     return saved()!;
   }
@@ -1427,6 +1429,36 @@ export class V3Wallet {
     const backing = copyUnshared(row.backing as Uint8Array);
     const bytes = encodePublication({ domain: new Uint8Array(this.domain), backing, kind, record: decodeRecord(row.record as Uint8Array) });
     await send.call(publisher, 4, backing, bytes);
+  }
+  /** C3.4: publish the backer's saved acceptance under `name` at the backing's venue (publication kind 2), routed to
+   * the demand's backing, as evidence that it answered; a retry republishes the same bytes. It answers for C3.8 only
+   * where its deadline is later than the index the venue witnesses it at by more than the lag, so a backer publishes
+   * as it accepts. The holder's release still decides settlement; an acceptance nobody published reads as no answer. */
+  async publishAcceptance(name: string, publisher: RecordPublisher): Promise<void> {
+    name = alias(name); this.mutable();
+    const row = this.db.prepare("SELECT * FROM backer_acceptances WHERE alias=?").get(name);
+    requireThat(row !== undefined, "UNKNOWN", "unknown acceptance");
+    const send = publisher?.publishRecord;
+    requireThat(typeof send === "function", "INVALID", "a venue publisher is required");
+    const backing = copyUnshared(row.backing as Uint8Array), acceptance = { domain: new Uint8Array(this.domain),
+      demand: hexToBytes(row.demand as string), owner: BigInt(row.owner as string), deadline: BigInt(row.deadline as string),
+      signature: copyUnshared(row.signature as Uint8Array) };
+    await send.call(publisher, 4, backing, encodePublication({ domain: new Uint8Array(this.domain), backing, kind: 2, acceptance }));
+  }
+
+  /** C3.8: demand `demand`'s outcome over the terms' backing at the venue's current witnessed index, read from public
+   * evidence alone (`dishonour.ts`): standing, ended (settled, withdrawn or voided) from the index witnessed, and the
+   * indices past its deadline it stood unended, as the backer's dishonour or the holder's lapse. Any party reads it:
+   * the holder, the backer or a stranger; it writes nothing and decides no saved act. `ABSENT` where the record holds
+   * no such demand of this backing. */
+  async presentation(demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms): Promise<Presentation> {
+    this.mutable();
+    const { obligor, own } = this.termsOf(signed), id = identifier(demand);
+    return this.read(packageBytes, own, view => {
+      const reading = readPresentation(view.result, view.backing, obligor, id);
+      requireThat(reading !== undefined, "ABSENT", "the demand is not in this backing's record");
+      return reading;
+    }, true);
   }
 
   close(): void {
