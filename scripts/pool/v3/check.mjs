@@ -639,6 +639,16 @@ try {
     await shared.close();
     await assert.rejects(shared.verify(kindOf.issue, inputs, valid.proof), /the proof verifier is closed/);
     checks.push('a closed shared verifier refuses instead of calling a destroyed instance');
+    for (const instances of [0, 65, 1.5]) await assert.rejects(proofVerifier(api, POOL_V3_CIRCUITS, programs, { instances }), RangeError);
+    const pool = await proofVerifier(api, POOL_V3_CIRCUITS, programs, { instances: 2 });
+    assert.equal(pool.parallel, 2);
+    // Concurrent calls spread over both instances; each retires on its own throws, and valid proofs between them still verify.
+    const mixed = Array.from({ length: 96 }, (_, i) => i % 4 === 0 ? valid.proof : malformed[i % 5][1]);
+    assert.deepEqual(await Promise.all(mixed.map(proof => pool.verify(kindOf.issue, inputs, proof))), mixed.map(proof => proof === valid.proof));
+    const closing = pool.close(), late = pool.verify(kindOf.issue, inputs, valid.proof);
+    await closing;
+    await assert.rejects(late, /the proof verifier is closed/);
+    checks.push('a verifier of two instances verifies concurrent calls on both, replaces each instance after its own throw, and refuses once closed');
   }
   const git=args=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:30_000}).trim();
   const report={candidate:'combined six successor relations', referenceBase:git(['rev-parse','HEAD']), referenceTreeClean:git(['status','--porcelain','--untracked-files=no'])==='', companionSpec:V3_SPECIFICATION,

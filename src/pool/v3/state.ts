@@ -38,6 +38,9 @@ export type StepMode = "admission" | "replay" | "adoption" | "force";
  * identities, where it declares them, name it in kept state (§14); an undeclared one is named per object. */
 export interface ProofCheck {
   verify(kind: number, publicInputs: bigint[], proof: Uint8Array): Promise<boolean> | boolean;
+  /** How many verifications it runs at once off the reader's thread. Where declared, a replay starts proofs ahead of the
+   * record it judges (verify-ahead.ts); otherwise it asks for each proof when the judgment reaches it. */
+  readonly parallel?: number | undefined;
   readonly identities?: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array; readonly kind?: number } } | undefined;
 }
 

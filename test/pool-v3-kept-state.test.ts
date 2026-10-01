@@ -73,8 +73,8 @@ function fixture() {
       5n, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof, authorization: new Uint8Array(64), capsules };
     return encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), signer) });
   }
-  async function issue(output: bigint) {
-    const bytes = issued(output), scope = new ScopeTree(header.entries).root();
+  async function issue(output: bigint, proof?: ReturnType<typeof b>) {
+    const bytes = issued(output, issuerSecret, proof), scope = new ScopeTree(header.entries).root();
     await applyRecord(segment.state, bytes, { domain, backing, segment: id, scope, terms: fields, verifier: accept, index: 2n, block: [] });
     segment.records.push(bytes);
   }
@@ -117,7 +117,24 @@ function fixture() {
     checkpoint({ ...segment, records: rewritten, evidence: chain(rewritten) }, 4n, 4n);
     await issue(106n); checkpoint(segment, 5n, 5n);
   }
-  return { venue, segment, items, checkpoint, issue, read, readReceipt, fetchedAfter, receipt, chain, first };
+  return { venue, segment, items, checkpoint, issued, issue, read, readReceipt, fetchedAfter, receipt, chain, first };
+}
+
+/** A verifier refusing proof 99 and throwing `broken` on proof 98, answering in turn, or, with `parallel`, later
+ * and off the caller's turn, as a pool of instances does; it counts calls and the most in flight at once. */
+function scripted(broken: Error, parallel?: number) {
+  const verifier = { checks: 0, inFlight: 0, most: 0, identities: configuration.circuits, ...(parallel === undefined ? {} : { parallel }),
+    verify(_kind: number, _inputs: bigint[], proof: Uint8Array): boolean | Promise<boolean> {
+      verifier.checks++;
+      const answer = (): boolean => { if (proof[0] === 98) throw broken; return proof[0] !== 99; };
+      if (parallel === undefined) return answer();
+      verifier.inFlight++; verifier.most = Math.max(verifier.most, verifier.inFlight);
+      return new Promise<boolean>((done, failed) => setImmediate(() => {
+        verifier.inFlight--;
+        try { done(answer()); } catch (error) { failed(error); }
+      }));
+    } };
+  return verifier;
 }
 
 /** A venue that lists the ranges a reader asks it for. */
@@ -516,6 +533,69 @@ describe("pool-v3 §14 kept classes across reads", () => {
     const verifier = counting();
     expect(await f.readReceipt(verifier, selected, paid, store, { evidence, items: [] })).toEqual(fresh);
     expect(verifier.checks).toBe(0);
+  });
+
+  it("verifies ahead on a verifier off the reader's thread and reads as one verifying each proof in turn (M5b.6)", async () => {
+    const f = fixture(), broken = new Error("verifier failed");
+    f.checkpoint(f.segment, 1n, 1n);
+    for (let i = 0n; i < 6n; i++) await f.issue(101n + i);
+    f.checkpoint(f.segment, 2n, 2n);
+    // A repeated statement carrying a refused proof, then a record whose verification throws: the repetition is
+    // checked before the proof, and the throw is never reached.
+    const repeated = [...f.segment.records, f.issued(101n, issuerSecret, b(99)), f.issued(120n, issuerSecret, b(98)), f.issued(121n)];
+    f.checkpoint({ ...f.segment, records: repeated, evidence: f.chain(repeated) }, 3n, 3n);
+    // A refused proof, then a throw never reached.
+    const refused = [...f.segment.records, f.issued(122n, issuerSecret, b(99)), f.issued(123n, issuerSecret, b(98))];
+    f.checkpoint({ ...f.segment, records: refused, evidence: f.chain(refused) }, 4n, 4n);
+    // A foreign signature, checked after its proof, then a throw never reached.
+    const signed = [...f.segment.records, f.issued(124n, b(9)), f.issued(125n, issuerSecret, b(98))];
+    f.checkpoint({ ...f.segment, records: signed, evidence: f.chain(signed) }, 5n, 5n);
+    for (let i = 0n; i < 4n; i++) await f.issue(110n + i);
+    f.checkpoint(f.segment, 6n, 6n);
+    const inTurn = scripted(broken), ahead = scripted(broken, 2);
+    const expected = await f.read(inTurn), read = await f.read(ahead);
+    expect(outcome(read)).toEqual(outcome(expected));
+    expect(read.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "valid", undefined], ["2", "valid", undefined],
+      ["3", "excluded", "REPEATED_STATEMENT"], ["4", "excluded", "PROOF"], ["5", "excluded", "SIGNATURE"], ["6", "valid", undefined]]);
+    // Every proof judged is verified once. Each refusal here comes before its replay has seen a proof verify, so a
+    // replay ahead started nothing it then dropped (verify-ahead.ts bounds what it drops by what it used).
+    expect(inTurn.checks).toBe(12);
+    expect(ahead.checks).toBe(inTurn.checks);
+    expect(ahead.most).toBeGreaterThan(1);
+    // A kept file read ahead keeps what a read in turn keeps.
+    const kept = files(), store = opened(kept.path, kept);
+    expect(outcome(await f.read(scripted(broken, 2), store))).toEqual(outcome(expected));
+
+    // Without a refusal, every proof is verified exactly once, and no more than the window is in flight.
+    const clean = fixture();
+    clean.checkpoint(clean.segment, 1n, 1n);
+    for (let i = 0n; i < 12n; i++) await clean.issue(101n + i);
+    clean.checkpoint(clean.segment, 2n, 2n);
+    const cleanInTurn = scripted(broken), cleanAhead = scripted(broken, 2);
+    expect(outcome(await clean.read(cleanAhead))).toEqual(outcome(await clean.read(cleanInTurn)));
+    expect([cleanAhead.checks, cleanInTurn.checks]).toEqual([12, 12]);
+    expect(cleanAhead.most).toBe(4);
+  });
+
+  it("surfaces a verifier's throw at the record whose proof threw, ahead or in turn (M5b.6)", async () => {
+    const f = fixture(), broken = new Error("verifier failed");
+    f.checkpoint(f.segment, 1n, 1n);
+    // The operator accepted every proof; the reader's verifier throws on the third record's.
+    for (const [output, proof] of [[101n], [102n], [103n, b(98)], [104n], [105n]] as const) await f.issue(output, proof);
+    f.checkpoint(f.segment, 2n, 2n);
+    const refusal = async (verifier: ProofCheck) => { try { await f.read(verifier); } catch (error) { return error as Error & { cause?: unknown }; } throw new Error("expected a throw"); };
+    const inTurn = scripted(broken), expected = await refusal(inTurn);
+    expect(expected.cause ?? expected).toBe(broken);
+    expect(inTurn.checks).toBe(3);
+    for (const parallel of [1, 3]) {
+      const ahead = scripted(broken, parallel), error = await refusal(ahead);
+      expect([error.name, error.message, error.cause]).toEqual([expected.name, expected.message, expected.cause]);
+      expect(ahead.checks).toBeLessThanOrEqual(5);
+    }
+    // A verifier that throws at the call, before answering, reads alike.
+    const atCall: ProofCheck = { parallel: 2, verify: (_kind, _inputs, proof) => { if (proof[0] === 98) throw broken; return Promise.resolve(true); } };
+    const error = await refusal(atCall);
+    expect([error.name, error.message, error.cause]).toEqual([expected.name, expected.message, expected.cause]);
   });
 
   it("refuses a kept store without a file or its own digest path", () => {

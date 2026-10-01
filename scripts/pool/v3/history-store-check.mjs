@@ -44,6 +44,8 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag };
 /** What one package in a reader's memory held before M5b: its byte budget and the statements that fit it. */
 const OLD_PACKAGE_BYTES = 1_048_576, OLD_STATEMENTS = 67;
+/** The fresh reader's verifier instances. */
+const READER_INSTANCES = 2;
 /** The history: one note to the holder, ISSUES to the payer, then PAYMENTS in rounds of ROUND per checkpoint. */
 const ISSUES = 36, PAYMENTS = 36, ROUND = 12, HISTORY = 1 + ISSUES + PAYMENTS;
 const programsOf = build => Object.fromEntries(RELATION_KINDS.map(([, name]) => [name, JSON.parse(readFileSync(join(build, `${name}.json`), "utf8"))]));
@@ -68,9 +70,11 @@ async function reader(build, directory) {
   const api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
   let runtime, evidence, store;
   try {
-    runtime = await proofVerifier(api, POOL_V3_CIRCUITS, programsOf(build));
+    // Two instances, declared, so the read verifies ahead of its replay (M5b.6).
+    runtime = await proofVerifier(api, POOL_V3_CIRCUITS, programsOf(build), { instances: READER_INSTANCES });
     let verified = 0;
-    const verifier = { identities: runtime.identities, verify: (kind, inputs, proof) => { verified++; return runtime.verify(kind, inputs, proof); } };
+    const verifier = { identities: runtime.identities, parallel: runtime.parallel,
+      verify: (kind, inputs, proof) => { verified++; return runtime.verify(kind, inputs, proof); } };
     const venue = FixtureVenue.from(input.venue), terms = codec.decodeRootTerms(input.signed.terms), backing = codec.rootTermsName(input.signed.terms);
     evidence = new EvidenceStore(join(directory, "evidence.db"));
     store = new ReplayStore(join(directory, "replay.db"), { digest: join(directory, "replay.db.sha256") });
@@ -82,7 +86,7 @@ async function reader(build, directory) {
     const began = performance.now();
     const result = await readFrontier(new Uint8Array(readFileSync(own)), input.signed, venue.witnessedIndex(),
       { configuration, verifier, venue, reference, evidence, store });
-    process.stdout.write(JSON.stringify({ summary: summary(result), verified, readMs: Math.round(performance.now() - began),
+    process.stdout.write(JSON.stringify({ summary: summary(result), verified, instances: runtime.parallel, readMs: Math.round(performance.now() - began),
       maxRssBytes: process.resourceUsage().maxRSS * 1024, heapUsedBytes: process.memoryUsage().heapUsed }));
   } finally { store?.close(); evidence?.close(); await runtime?.close(); await api.destroy(); }
 }

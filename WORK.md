@@ -3,28 +3,22 @@
 Updated: 2026-10-01
 
 ## Goal
-Slice 8 (adoption), M5b: every party's memory independent of history
-([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-*Acceptance (whole M5b):* memory flat on a ≥10⁵-statement stub run; kept verdicts equal full replay and corrupt kept
-state falls back; real proofs past the old ceiling (done, M5b.5c.2); first sync measured against 24 h; reports re-recorded.
-
-**Next: M5b.6, verification workers and first sync** (the decision's last milestone). Verify proofs in workers beside the replay, measure a first
-sync against the 24 h budget at the target scale, keep the whole process (verifier backends included) within 1 GiB, leave the first failing check and
-verifier-throw handling unchanged, re-record every report and retire `replay-store-probe.mjs`. Start with the cheapest decisive probe: verification time
-per proof (41 ms in CI, [M5b.5c.2](docs/POOL_DEPLOYMENT_PROBES.md#real-proofs-past-the-old-package-m5b5c2)) against replay time per statement (39–44 ms),
-to learn whether workers or Poseidon2 on Barretenberg decide the 24 h. Measure RSS, not heap: replay temp storage now spills to files (review-code 2026-09-30).
-*Stop:* M5b closed. Open beside it: a taking `rescope` takes its evidence as bytes in memory; a successor's journal serves its readers the predecessor's trails again.
+Slice 8 (adoption). M5b is closed: every party's memory is independent of history and a reader's first sync fits 24 h at
+the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+**Next: M6, Next 5(i)**: decide the host rule for a settlement whose published output opening (C3.5) a backer can issue first,
+so the acceptance reads as the holder's lapse (C3.8). Start from the rule text and the smallest alternatives (reuse, omission,
+a spec change); state acceptance and stop in WORK.md before building. Then pruning retained evidence no read used (decision limits).
 
 ## Status
-- Review-code 2026-09-30 (PR #61, main since e57fc31): a checkpoint is judged in its directory's first entry's segment ([decision](decisions/2026-09.md#2026-09-30--judge-a-checkpoint-in-the-segment-its-directorys-first-entry-names),
-  spec 298b6f5), receipts past an excluded opening, verifier kinds, keep-point lock, replay temp files, supply quota; reports re-recorded from CI (conformance now binds its sources); deferred as Next 5(o)–(s).
-- M5b.5c.2 (PR #60): [real proofs past the old package](docs/POOL_DEPLOYMENT_PROBES.md#real-proofs-past-the-old-package-m5b5c2):
-  73 statements through journal, wallet sync and an offline-operator recovery read from kept files
-  (`check:pool:v3-history`); owed kept-path, second-handle and read-crash tests added. M5b.5 is closed.
-- M5b.5c.1 (PR #59): the wallet on its own evidence and kept replay files with its notes' witnesses, view held by the
-  venue's clock ([10⁴ statements at flat heap](docs/POOL_DEPLOYMENT_PROBES.md#the-wallet-on-its-kept-files-m5b5c1)).
-- Earlier: M5b.5b (PRs #56, #58) the journal's kept venue answers and serving by stream; M5b.5a (PR #55) its storage and
-  `audit`; M5b.4 (PRs #52, #54, spec 8d48b25) kept classes, retained evidence; M5b.3 (PRs #50, #51) streamed evidence.
+- M5b.6 (branch `feat/m5b6-verify-ahead`, [decision](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)):
+  a reader verifies proofs ahead of its replay on a pool of verifier instances (`verify-ahead.ts`, `proofVerifier({ instances })`),
+  verdicts only for exactly the bytes judged, at most what it used dropped. [First sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6):
+  10⁵ statements at 52.7 ms each with real verification load, peak 543 MB; 10⁶ extrapolated to 15.5–16 h on this 2-core desktop
+  (20.5 h with the header check after it). One review plus read-back; `replay-store-probe.mjs` retired at `6c7d8f2`; the ten
+  current v3 reports re-recorded from CI run 36806514822 (PR #62).
+- Review-code 2026-09-30 (PR #61): checkpoints judged in their directory's first entry's segment (spec 298b6f5) and fixes; deferred Next 5(o)–(s).
+- Earlier M5b: M5b.5c (PRs #59, #60) the wallet on kept files and real proofs past the old package; M5b.5a–b (PRs #55, #56, #58) the
+  journal's storage, kept venue answers and streamed serving; M5b.4 (PRs #52, #54) kept classes; M5b.3 (PRs #50, #51) streamed evidence.
   [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets): 10⁶ statements over three years, ≤ 1 GiB, first sync ≤ 24 h.
 
 ## Evidence
@@ -37,12 +31,13 @@ to learn whether workers or Poseidon2 on Barretenberg decide the 24 h. Measure R
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. **M5b.6** (above); pruning retained evidence no read used is open (decision limits). Then M6 Next 5(i) (confirm a host rule), M4
+1. Slice 8, adoption. **M6** Next 5(i) (above); pruning retained evidence no read used (decision limits). Then M4
    certificates/kind-11 fitted to this retention, M7 one-transaction condition, M8 adoption (one manifest holding §11.1's parameter identities too, now
    `BN254_PARAMETERS`), every report re-recorded, live two-backing drill. Mainnet needs separate authority.
 2. Slice 9, installable commands on the testnet: holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
    directories, issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
-   before its drill. Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
+   before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
+   the verifier (M5b.6). Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements spending several backings from the wallet; single-backing openings over-reserve by |E|.
 4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail
    caller-object cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one is in flight
@@ -73,7 +68,8 @@ to learn whether workers or Poseidon2 on Barretenberg decide the 24 h. Measure R
    the journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed. `client.package()` peaks near
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result.
 6. Only when a gate needs them: cancellation, batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, Poseidon2 on
-   Barretenberg, sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-acceptance receipt handoff, store-check's request
+   Barretenberg (0.12 against 1.14 ms a node hash, the replay's largest cost; if load takes a first sync past 24 h), a 10⁶ first-sync run to
+   attribute the 10⁵ run's ~45 MB rise in process memory, sponsored holder funding, operator fee quotes, a text/QR request frame, C4.5 pending-acceptance receipt handoff, store-check's request
    through the frame, same-segment rescoping. Phone-first wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
 7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`. After 5(h), read every `local-check`
    group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`). To cut CI failures, run the harness's proof-free cases in vitest with stand-in proofs, and consider a real-proof job only for PRs marked ready.
@@ -95,6 +91,6 @@ to learn whether workers or Poseidon2 on Barretenberg decide the 24 h. Measure R
 - Non-blocking (2026-09-30, site push = live deployment): site `index.html` (70034cb) says "multi-backing wallets remain", but the wallet pays one
   backing in any scope (PR #42). Proposed end of that line: "…configuration adoption and statements spending several backings remain." Push to site main.
 
-Roughly **63% done / 37% remaining**, range **53–72%**, reassessed 2026-09-30 after M5b.5c.2 (journal, wallet and reader
-store, serve, sync and recover without bounds on history, shown with real proofs past the old package; first sync at
-scale, adoption, qualified storage and mainnet remain).
+Roughly **65% done / 35% remaining**, range **55–73%**, reassessed 2026-10-01 after M5b.6 closed M5b (every party stores,
+serves, syncs and recovers without bounds on history, and a first sync at the design point fits its budget on a 2-core desktop;
+adoption, installable commands, qualified storage and mainnet remain).
