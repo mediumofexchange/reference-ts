@@ -327,6 +327,9 @@ export class V3Wallet {
     requireThat(this.db.prepare("PRAGMA foreign_key_check").all().length === 0 && this.db.prepare(`SELECT 1 FROM receiver_fulfilled f
       LEFT JOIN receiver_requests r ON r.alias=f.alias AND r.cm=f.cm WHERE r.alias IS NULL`).get() === undefined,
       "INVALID", "backup state has unmatched references");
+    // A prepared record always reserves its inputs, and saving one re-checks every reservation: no wallet writes two.
+    requireThat(this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE a.status='prepared'
+      GROUP BY i.nf HAVING COUNT(*) > 1`).get() === undefined, "INVALID", "backup state reserves a note twice");
   }
   private active(): void {
     requireThat(!this.closed && !this.poisoned, "STORAGE", "wallet is closed or needs reopening");
@@ -576,9 +579,9 @@ export class V3Wallet {
     for (const row of rows) {
       const name = row.alias as string, record = decodeRecord(row.record as Uint8Array), p = record.publicInputs;
       const statement = statementHash(record), demand = row.demand as string | null;
-      if (record.kind === 2) {
+      if (row.kind === "2") {
         const status = this.paid(name, record, canonical, force);
-        if (status !== undefined) decided.set(name, status);
+        if (status !== undefined && status !== row.status) decided.set(name, status);
         continue;
       }
       const admitted = canonical.state.hasEvent(statement) || (record.kind >= 4 && force.isEffective(hex(statement)));

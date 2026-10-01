@@ -238,8 +238,9 @@ request is paid once. A direct fee stays with its original recipient even when
 another operator admits the reproof; paying the current operator instead is a
 new spend (C1.2.5). Inputs stay reserved until the payment is final or
 failed: a failed payment's other input is free again, as a failed act's notes
-are, and a payment that evidence later shows admitted (an operator reading
-behind the wallet) becomes final. Output reservations are permanent. Release
+are. Failure means an input was spent by another statement, which canonical
+history never undoes; should evidence ever show all four outputs, the payment
+would go final, as an act does. Output reservations are permanent. Release
 with other outputs (cancellation), same-segment tail repair (C2.10.9a) and
 release of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. Payments and acts are one kind of saved record
