@@ -272,6 +272,23 @@ evidence under the candidate configuration, historical after subsequent journal
 changes; persistence, replacement service,
 custody, configuration adoption and mainnet remain outside the acceptance.
 
+The live two-backing drill (M8b) is
+`node scripts/pool/v3/scope-store-check.mjs --testnet --authorized-testnet`: the
+local/synthetic scope drill under the adopted configuration on the own testnet
+node, through the shared `drill.mjs` and the same pre-broadcast guard, capped at
+twelve transactions (four openings, two replacements, six checkpoints). Live
+replacements add eight indices of inclusion slack to the lead floor. The
+2026-10-01 [live scope report](pool-v3-scope-store-testnet-verification.json)
+passed all four groups in 69 minutes with seven real proofs and twelve distinct
+transactions spending 0.01434984 tERG (0.0132 tERG fees), equal to the synthetic
+run's spend: one segment over two backings, B's takeover of x beside A's split
+y segment, the elective rejoin after the witnessed tail with a mixed spend, and a
+wallet payment in the rejoined scope. Fresh processes read each backing from the
+node at every group, and the retained public bundle
+(`scratch/pool-v3-scope-testnet-reader/`, inputs `x.bin`, `y.bin`) re-reads to
+its `readback.json`. The anchor is a trust input; persistence, custody and
+mainnet remain outside the acceptance.
+
 The explicit `node scripts/pool/v3/store-check.mjs --testnet` path uses the own
 v6.0.6 testnet node and throwaway tERG funding. It selects the distinct
 reference-testnet identity and verifies the pinned testnet header rules,
