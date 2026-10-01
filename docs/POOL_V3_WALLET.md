@@ -315,13 +315,14 @@ operator's return to be adopted before it can be burnt; an issue, a burn or a
 payment still refuses `SILENCE`. A publication outside an open gap has no
 force, and a release published so discloses its output.
 
-The disclosure count is read from the venue record. For `settle` alone, the
-frontier read lists every release (publication kind 3) of the backing
-witnessed without force, whether or not the terms declare silence, keeping its
-demand, segment, output, `rho_out` and release signature but not its proof;
-other reads do not ask the venue for publications they do not need. The count is the number of
-distinct outputs among those naming the demand and the segment and signed by
-the demand's presenter key. So a settlement after a release without force
+The disclosure count is read from the venue record. For `settle` and
+`presentation` alone, the frontier read lists every acceptance the venue
+witnessed for the backing (`answers`): alone (publication kind 2) or in a
+release (kind 3), whether or not the terms declare silence, keeping a
+release's segment, output, `rho_out`, signature and force verdict but not its
+proof; other reads do not ask the venue for publications they do not need. The
+count is the number of distinct outputs among the releases without force
+naming the demand and the segment and signed by the demand's presenter key. So a settlement after a release without force
 names an output nobody has seen, and any wallet of the seed, a restored one
 included, reads the same count from the same record. A copy, or a "release" with a signature that does not verify, adds
 nothing. An output disclosed only to an operator is not counted (C3.5).
@@ -352,8 +353,34 @@ outputs a payee was given (C1.2.5). An act's outputs are the request's (an
 issue's, which its intent binds under any alias), its own (a burn's change) or
 derived per segment (a settlement's), and its signatures are made again. The
 backer's acceptance stands, since it names the demand and the demand keeps its
-identity in the imported history. Not yet: the backer's acceptance published as
-evidence and a C3.8 dishonour reading (slice 9, M9c in [WORK.md](../WORK.md)).
+identity in the imported history.
+
+**Dishonour** (C3.8). `presentation(demand, …)` reads one demand's outcome over
+the terms' backing at the venue's index from public evidence alone, for the
+holder, the backer or anyone; it writes nothing and decides no saved act
+(`ABSENT` where the record holds no such demand of this backing). Each event
+counts from the index it was witnessed at: a statement in history at the
+earliest canonical checkpoint holding it, a publication with force at its own
+index. The reading names the index the demand was first witnessed at; its end,
+if any: its settlement, its withdrawal, or a void (one of its notes spent
+otherwise than by its own settlement), from the index witnessed; and the
+indices past its deadline at which it stood unended (`overdue`), read as the
+backer's dishonour or, where a timely acceptance stood unreleased, the
+holder's lapse. A later end does not erase those indices. The acceptances it
+lists are those the venue witnessed, alone or in a release, that K signed and
+that are due no later than the demand; one is timely where its deadline is
+later than its first witnessed index by more than the lag (C3.4), and one whose
+release was taken (below) reads as released. So the backer publishes each
+acceptance as it makes it (`publishAcceptance(alias, publisher)`, routed to the
+demand's backing; a retry is the same publication): an acceptance nobody
+published, and a settlement witnessed only after the deadline, leave the
+indices past it reading as dishonour. A gap release refused only because its
+output already exists as a settlement output of another demand is reported
+`TAKEN` (force judges new nullifiers and outputs after every other check):
+only K, naming one owner for two demands, can cause it, and it bears the
+dishonour. A settle the operator refuses leaves the acceptance unreleased in
+the record, the adopted limit. The reading is evidence about the record, not
+proof of payment outside it (C3.3a).
 
 ## Backup and restoration
 
@@ -474,8 +501,14 @@ a deadline inside C3.3's window refuses, and acts become final by force. A relea
 published after its acceptance deadline has no force, fails its act and counts, so the next settlement re-proves the
 same nullifiers into a new output; a forged release to another output is witnessed and not counted. A release published
 under terms without silence counts too, a second settlement at one count refuses, and only demands, withdrawals and
-releases are published. Not covered: a release of the demand in another segment, a gap across several backings, an
-ended term or a return, and a venue that witnesses an exact republication again.
+releases are published. Its C3.8 cases read, from any wallet: dishonour from the index after the deadline, kept
+through a later withdrawal; a timely published acceptance left unreleased as the holder's lapse; a settlement and a
+withdrawal in time with no failure; no count for an acceptance K did not sign, one due after the demand, one of another
+demand or backing, or one witnessed with only the lag left; a void from the checkpoint of a spend after the deadline;
+and a gap release taken by another demand's settlement under an acceptance naming the same owner (`TAKEN`), which
+releases the holder's acceptance and leaves the backer's dishonour. Not covered: a release of the demand in another
+segment, a gap across several backings, an ended term or a return, and a venue that witnesses an exact republication
+again.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
 payment, receipt, reproof, export and restore commit boundaries with synthetic evidence, and at a read's
 commits to its evidence file and its kept replay file (before either, the kept state stands; between the
@@ -500,7 +533,8 @@ That harness hands the request object across directly; the request frame and
 digest are oracle-tested. A human authentication channel is not qualified.
 `test/pool-v3-scope-wallet.test.ts` covers two backings in one scope: separate
 views and payments of each from one package, both refused once either term
-ends, an adopted and withdrawn demand read once at a split opening, reproof of each backing's pending
+ends, an adopted and withdrawn demand read once at a split opening, a demand of one backing refused under the
+other's terms (withdrawal, acceptance, reading), reproof of each backing's pending
 payment into its own segment after a split, a split package that does not
 establish the other backing, payment under imported roots after a rejoin, a
 same-operator reappointment ending the segment's term, and one silence clock

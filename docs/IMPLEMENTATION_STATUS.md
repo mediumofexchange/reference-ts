@@ -29,8 +29,10 @@ It also holds the redemption acts under service (issue, demand, accept, settle,
 withdraw, burn; [guide](POOL_V3_WALLET.md#redeeming-and-issuing)) and, in a gap with the operator offline, publishes
 demands, withdrawals and releases bound to the snapshot, with the disclosure count read from releases witnessed
 without force. A wallet restored from its seed finds its standing demands by their presenter keys and
-withdraws or settles them; an act whose segment ended fails and is made again. Stand-in proofs only so far
-(slice 9, M9a–M9b2).
+withdraws or settles them; an act whose segment ended fails and is made again. Any wallet reads a demand's
+C3.8 outcome per witnessed index (settled, withdrawn or voided, else past its deadline the backer's dishonour or
+the holder's lapse), and the backer publishes its acceptance; a gap release taken by another demand's settlement
+is refused `TAKEN` and releases its acceptance. Stand-in proofs only so far (slice 9, M9a–M9c1).
 Cancellation/release, multi-backing payment, continuous backup and physical
 qualification remain open. Every read keeps its replay state in node:sqlite
 (`replay-store.ts`, [storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
@@ -434,8 +436,8 @@ their source identities unchanged. The pin includes venue-ergo §2's clock
 on a heavier, shorter chain (`dce3ae1`, `298cc06`) and §8's one-transaction
 condition (`01f922c`), which the v3 guard checks against `PROOF_BYTES`, and
 pool-v3's adoption (`e7f7f24`), whose manifest the runtime holds.
-`740adaa` (pool-recovery C3.4, C3.5 and C3.8) is in it, but no v3 code reads
-it yet. Earlier revisions
+`740adaa` (pool-recovery C3.4, C3.5 and C3.8) is in it; the wallet's disclosure
+count and the C3.8 reading (`dishonour.ts`) read it. Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is frozen.
 `pool-recovery.md` specifies presentation, the non-service count, snapshot
