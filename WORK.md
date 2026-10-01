@@ -14,7 +14,7 @@ Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is p
   verifier target, sources, identities, `BN254_PARAMETERS` (now `src/pool/parameters.ts`, neutral core) and `PROOF_BYTES`; journal,
   readers, wallet and prover take no configuration; `scripts/pool/v3/manifest.mjs` replaced `candidate.mjs`/`candidate-manifest.json`;
   check.mjs asserts the derived identities frame the adopted bytes. Guard renamed (`ReferenceVenueError`), still refusing mainnet.
-  Every current v3 report is re-recorded from CI run PENDING_RUN.
+  Every current v3 report is re-recorded from CI run 36871087398.
 - Earlier slice 8: M7 one transaction (PR #66), area 28 (PR #65), M4/M6 (spec 5584732, 740adaa), M5b.6 [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
   against the [budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) (PR #62), M5b PRs #50–#61.
 
