@@ -35,7 +35,7 @@ The shielded pool is the active claim layer (Construction C1.2). Develop v3 in `
 one moded state machine and one reader over the neutral core and the shared primitives in
 `src/pool/`, guarded to recomputed local/synthetic or testnet reference identities. Pool-v2 is
 retired (Git history at `a020215`); do not restore its mechanisms without a decision. V3 is
-unadopted; remaining model/harness work is conditional evidence (see implementation status).
+adopted (pool-v3 §11.4, manifest in `v3/configuration.ts`); a byte, identity or verdict change is v4.
 
 The transparent path is frozen as a differential oracle and adversarial case library. Port cases as
 pool rules land, then retire covered material. Do not review or extend it otherwise, or port the

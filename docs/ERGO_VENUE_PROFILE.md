@@ -47,7 +47,7 @@ context cannot follow the mainnet. `moe/venue/ergo-testnet/reference`
 `ownErgoProfile` refuses every other context. Beside them,
 `moe/venue/local/reference` (`LOCAL_REFERENCE`, `src/record-venue.ts`) names
 a `FixtureVenue` by a 32-byte label and its lag, with no header rules. The
-pool-v3 candidate runs only on a venue whose identity its guard recomputes
+pool-v3 runtime runs only on a venue whose identity its guard recomputes
 from one of these preimages (`src/pool/v3/guard.ts`); venue-ergo's own
 context is refused there.
 

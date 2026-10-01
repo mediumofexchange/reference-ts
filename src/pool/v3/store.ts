@@ -42,10 +42,10 @@
 // part or one record at a time. A whole package is those parts served from
 // nothing, for a caller that holds one in memory.
 //
-// Candidate only: the configuration comes from the caller's manifest check
-// and the venue must be a reference venue (guard.ts). Time is the venue's
-// witnessed index. SQLite fences handles of this journal; it cannot fence
-// another database or a copied key.
+// The journal runs under the adopted configuration (pool-v3 §11.4) and only
+// on a reference venue (guard.ts). Time is the venue's witnessed index.
+// SQLite fences handles of this journal; it cannot fence another database or
+// a copied key.
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -61,7 +61,7 @@ import { ScopeTree } from "../scope.js";
 import { scopeSchedule } from "../schedule.js";
 import { decodeReceipt, decodeSnapshot, encodeReceipt, receiptBytes, receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt,
   type Snapshot } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration } from "./configuration.js";
+import { adoptedConfigurationBytes, adoptedDomain, requireConfigurationVerifier } from "./configuration.js";
 import { EvidenceStore, MAX_ITEM_BYTES, trailPart, wholePackage, type EvidenceBatch, type EvidencePart, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { decodeSegmentHeader, segmentBytes, segmentIdentity, type SegmentHeader } from "./headers.js";
@@ -198,8 +198,6 @@ interface View {
 
 /** What the journal needs besides its path. */
 export interface V3StoreOptions {
-  /** The candidate configuration from the caller's own manifest check (pool-v3 §11.1). */
-  readonly configuration: CandidateConfiguration;
   /** The operator's Ed25519 secret; copied, and erased on close. */
   readonly secret: Uint8Array;
   readonly venue: RecordVenue & RecordPublisher;
@@ -225,7 +223,6 @@ export interface ServedEvidence extends ServedPackage {
 
 export class V3OperatorJournal {
   private readonly db: DatabaseSync;
-  private readonly configuration: CandidateConfiguration;
   private readonly domain: Uint8Array;
   private readonly secret: Uint8Array;
   private readonly operator: Uint8Array;
@@ -252,13 +249,13 @@ export class V3OperatorJournal {
 
   constructor(path: string, options: V3StoreOptions) {
     requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"), "STORAGE", "a persistent filesystem path is required");
-    const { configuration, secret, venue, reference, verifier } = options;
-    // The guard first: the candidate runs only on a reference venue.
+    const { secret, venue, reference, verifier } = options;
+    // The guard first: the journal runs only on a reference venue.
     this.venueId = requireReferenceVenue(reference, venue);
     this.reference = structuredClone(reference);
-    this.configuration = decodeConfiguration(configurationBytes(configuration)); this.domain = configurationHash(this.configuration);
+    this.domain = adoptedDomain();
     // The circuit identities are copied once: what later reads name and check is what was checked here.
-    const identities = requireConfigurationVerifier(this.configuration, verifier.identities), verify = verifier.verify.bind(verifier);
+    const identities = requireConfigurationVerifier(verifier.identities), verify = verifier.verify.bind(verifier);
     const parallel = declaredParallel(verifier);
     this.venue = venue; this.lag = venue.lag();
     this.verifier = { verify, ...(identities === undefined ? {} : { identities }), ...(parallel === undefined ? {} : { parallel }) };
@@ -587,7 +584,7 @@ export class V3OperatorJournal {
    * owner reads and keeps nothing. */
   private readerOptions(store?: ReplayStore, evidence: EvidenceStore = this.evidence) {
     this.transaction(() => {});
-    return { configuration: this.configuration, verifier: this.verifier, venue: this.venue, reference: this.reference,
+    return { verifier: this.verifier, venue: this.venue, reference: this.reference,
       store: store ?? this.reads(), evidence };
   }
   /** One read through the public reader. A kept file another handle is writing leaves the operation BUSY. */
@@ -900,7 +897,7 @@ export class V3OperatorJournal {
       if (signed === undefined || !this.directoryOf(signed).some(entry => same(entry.name, backing))) continue;
       carried = true;
       const c = signed.commitment;
-      const selected = encodeEvidencePackage([{ kind: 1, payload: configurationBytes(this.configuration) }, { kind: 2, payload: encodeCommitment(c) }]);
+      const selected = encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 2, payload: encodeCommitment(c) }]);
       try {
         const result = await this.whileReading(() => readPackage(selected, { mode: "historical-fixture", domain: this.domain, venue: this.venueId,
           backing, operator: this.operator, sequence: c.sequence, root: c.root, judgingIndex: at }, this.readerOptions(audit)));
@@ -1314,7 +1311,7 @@ export class V3OperatorJournal {
       // The selection names `backing`, by default the scope's first; its directory must carry it.
       const name = named ?? directory[0]!.name;
       requireThat(directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
-      const own = encodeEvidencePackage([{ kind: 1, payload: configurationBytes(this.configuration) }, { kind: 2, payload: encodeCommitment(signed.commitment) }]);
+      const own = encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 2, payload: encodeCommitment(signed.commitment) }]);
       return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
         operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) },
         package: own, parts: this.parts(signed, after) };

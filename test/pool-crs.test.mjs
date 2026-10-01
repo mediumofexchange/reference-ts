@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ensureParameter, PARAMETER_FILES, readParameters } from '../scripts/pool/prepare-crs.mjs';
-import { BN254_PARAMETERS } from '../src/pool/proof-verifier.js';
+import { BN254_PARAMETERS } from '../src/pool/parameters.js';
 
 const good = Buffer.from([1, 2, 3, 4]);
 const parameter = { name: 'test.dat', source: 'test.dat', bytes: 4, range: true,

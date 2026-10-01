@@ -33,11 +33,11 @@
 //   moe/replacement/v1         E's rule naming a successor operator
 //   moe/revocation/v1          K withdrawing its own authority to issue
 //
-// The shielded pool's candidate construction (pool-v3, pool-spent) hashes and
+// The shielded pool's construction (pool-v3, pool-spent) hashes and
 // signs under its own family, none a prefix of another or of the tags above
 // (retired pool-v2's `moe/pool/v2/` family is no longer declared):
 //
-//   moe/pool/v3/config         the candidate configuration (§11.1)
+//   moe/pool/v3/config         the configuration (§11.1)
 //   moe/pool/v3/statement      a statement (§5); a record opens with its bytes
 //   moe/pool/v3/delivery       the delivery digest's preimage (pool-delivery C4.4)
 //   moe/pool/v3/acceptance     a backer's acceptance of a demand (§6)

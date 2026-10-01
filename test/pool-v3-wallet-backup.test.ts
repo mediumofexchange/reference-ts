@@ -7,7 +7,7 @@ import { EncodingError } from "../src/bytes.js";
 import * as contexts from "../src/contexts.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeRecord, encodeRecord, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -24,8 +24,7 @@ import { encodeReplacement, replacementMessage, type Replacement } from "../src/
 // Ports the frozen v2 offline-handoff cases (test/pool-wallet-backup.test.ts)
 // to the v3 wallet, plus C4.6 seed restoration. Stand-in proofs, as in the payer tests.
 const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret), successorKey = ed25519.getPublicKey(successorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -132,11 +131,11 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
     // This verifier declares no circuits, so each read here keeps its replay state in memory, as a wallet's does without them.
-    const reader = { configuration, venue, reference, verifier: readerVerifier };
+    const reader = { venue, reference, verifier: readerVerifier };
     const path = (name: string) => join(directory, `${name}.db`);
     const open = (name: string) => track(new V3Wallet(path(name), reader));
     const payer = open("payer"), receiver = open("receiver");
-    const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier, secret: operatorSecret });
+    const j = new V3OperatorJournal(join(directory, "journal.db"), { venue, reference, verifier, secret: operatorSecret });
     journals.push(j); await j.open("genesis", signed); await j.publish();
     for (const [i, value] of [10n, 6n, 4n].entries()) {
       await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, payer.request(`fund-${i}`, backing, value))), issuerSecret)));
@@ -164,7 +163,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
       venue.advance(effective);
     };
     const takeover = async () => {
-      const b2 = new V3OperatorJournal(join(directory, "successor.db"), { configuration, venue, reference, verifier, secret: successorSecret });
+      const b2 = new V3OperatorJournal(join(directory, "successor.db"), { venue, reference, verifier, secret: successorSecret });
       journals.push(b2); await b2.takeover("takeover", signed, (await j.package()).package); await b2.publish(); await b2.adopt();
       return b2;
     };
@@ -236,7 +235,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     expect((await receiver.fulfill("second", (await f.j.package()).package, f.signed)).request).toEqual(f.second);
   });
 
-  it("refuses wrong credentials, another wallet's venue or configuration, corruption, inconsistent state and occupied destinations", async () => {
+  it("refuses wrong credentials, another wallet's venue, corruption, inconsistent state and occupied destinations", async () => {
     const f = await fixture(), key = createWalletBackupKey(), backup = f.payer.exportBackup(key), digest = walletBackupDigest(backup);
     const invalid = expect.objectContaining({ code: "INVALID", message: "invalid wallet backup or recovery credentials" });
     let n = 0;
@@ -246,8 +245,9 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     throws(attempt(f.reader, backup, key, "0".repeat(64)), invalid);
     throws(attempt(f.reader, backup, key, digest.toUpperCase()), invalid);
     throws(attempt({ ...f.reader, venue: FixtureVenue.reference(b(13), lag), reference: { ...reference, label: b(13) } }, backup, key, digest), invalid);
-    const otherConfiguration = { ...configuration, circuits: { ...configuration.circuits, [RELATIONS[0]]: { bytecode: b(40), vk: b(99) } } };
-    throws(attempt({ ...f.reader, configuration: otherConfiguration }, backup, key, digest), invalid);
+    // The same state sealed under a domain other than the adopted configuration's.
+    const foreign = sealWalletBackup(openWalletBackup(backup, key, domain, f.venue.id, digest), key, b(9), f.venue.id);
+    throws(attempt(f.reader, foreign, key, walletBackupDigest(foreign)), invalid);
     const altered = backup.slice(); altered[altered.length >> 1]! ^= 1;
     throws(attempt(f.reader, altered, key, walletBackupDigest(altered)), invalid);
 

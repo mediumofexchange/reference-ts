@@ -1,5 +1,5 @@
 // Fresh local fixture process. Artifact path is harness-owned; pins are fixed
-// in the independently held candidate manifest,
+// in the runtime manifest of the adopted configuration (pool-v3 §11.4),
 // never read from the supplied record package. No witness or original journal.
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
@@ -12,7 +12,7 @@ import { recordReader, replayEvidencePackage } from "./local-replay.mjs";
 import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
 import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
 import { field } from "../fixtures.mjs";
-import { loadCandidateManifest, checkCandidateSources, candidateConfiguration, readCandidateKeys } from "./candidate.mjs";
+import { loadManifest, checkSources, readKeys } from "./manifest.mjs";
 import { v3Codec } from "./codec.mjs";
 
 let api;
@@ -22,9 +22,8 @@ try {
   const withErgo = process.argv[3] === "--ergo";
   const withErgoReference = withErgo || process.argv[3] === "--ergo-fixture";
   const codec = v3Codec;
-  const manifest = loadCandidateManifest(); checkCandidateSources(manifest);
-  const configuration = candidateConfiguration(manifest, codec);
-  const keys = readCandidateKeys(fileURLToPath(process.argv[2]), manifest);
+  const manifest = loadManifest(); checkSources(manifest);
+  const keys = readKeys(fileURLToPath(process.argv[2]), manifest);
   const chunks = [];
   let size = 0;
   for await (const chunk of process.stdin) {
@@ -43,7 +42,7 @@ try {
   const backend = new UltraHonkVerifierBackend(api);
   // The fixture venue record is this process's own range verifier (§13.2),
   // rebuilt from the fixture IPC beside the selection; the package cannot supply it.
-  const verifier = { configuration, reference: { context: LOCAL_REFERENCE, label: new Uint8Array(32).fill(12), lag: 2n },
+  const verifier = { reference: { context: LOCAL_REFERENCE, label: new Uint8Array(32).fill(12), lag: 2n },
     verify: (kind, publicInputs, proof) => backend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, { verifierTarget: "noir-recursive" }), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };

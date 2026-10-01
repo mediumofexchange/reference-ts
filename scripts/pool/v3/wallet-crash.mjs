@@ -13,10 +13,9 @@ import { deserialize, serialize } from 'node:v8';
 
 const { DatabaseSync } = await import('node:sqlite');
 const { ed25519 } = await import('@noble/curves/ed25519.js');
-const { hexToBytes } = await import('@noble/hashes/utils.js');
 const { NoteTree } = await import('../../../dist/pool/note-tree.js');
 const { prepareExactOutput } = await import('../../../dist/pool/v3/capsules.js');
-const { configurationHash, RELATIONS } = await import('../../../dist/pool/v3/configuration.js');
+const { adoptedConfiguration, adoptedDomain } = await import('../../../dist/pool/v3/configuration.js');
 const { encodeRecord } = await import('../../../dist/pool/v3/records.js');
 const { decodeReceipt } = await import('../../../dist/pool/v3/commitments.js');
 const { V3OperatorJournal } = await import('../../../dist/pool/v3/store.js');
@@ -28,9 +27,7 @@ const { FixtureVenue, LOCAL_REFERENCE } = await import('../../../dist/record-ven
 const { encodeCommitment, encodeReplacement, replacementMessage } = await import('../../../dist/venue-records.js');
 const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../..'));
 const script = fileURLToPath(import.meta.url), b = n => new Uint8Array(32).fill(n);
-const configuration = { helper: hexToBytes('44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8'),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) };
-const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
+const configuration = adoptedConfiguration(), domain = adoptedDomain(), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const reference = { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
 const verifier = { verify: (kind, _inputs, proof) => proof[0] === kind };
@@ -53,13 +50,13 @@ async function worker(directory, operation, phase, action) {
     const terms = encodeRootTerms({ obligor: issuer, operator, replacementRule: issuer, configuration: domain, venue: venue.id, interval: 20n,
       payout: { thing: 'crash fixture units', quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
-    const backing = rootTermsName(terms), wallet = new V3Wallet(path, { configuration, venue, reference, verifier: declared });
+    const backing = rootTermsName(terms), wallet = new V3Wallet(path, { venue, reference, verifier: declared });
     const fixture = { backing, signed, venue: venue.export() };
     if (operation === 'export' || operation === 'import') {
       fixture.request = wallet.request('invoice', backing, 7n);
       if (operation === 'import') { fixture.backup = wallet.exportBackup(backupKey); fixture.digest = walletBackupDigest(fixture.backup); }
     } else if (operation !== 'request') {
-      const journal = new V3OperatorJournal(`${path}.journal`, { configuration, venue, reference, verifier, secret: operatorSecret });
+      const journal = new V3OperatorJournal(`${path}.journal`, { venue, reference, verifier, secret: operatorSecret });
       try {
         await journal.open('genesis', signed); await journal.publish();
         const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
@@ -88,7 +85,7 @@ async function worker(directory, operation, phase, action) {
           await venue.publishRecord(2, backing, encodeReplacement(backing,
             { ...unsigned, signature: ed25519.sign(message, issuerSecret), successorSignature: ed25519.sign(message, successorSecret) }));
           venue.advance(effective);
-          const successor = new V3OperatorJournal(`${path}.successor`, { configuration, venue, reference, verifier, secret: successorSecret });
+          const successor = new V3OperatorJournal(`${path}.successor`, { venue, reference, verifier, secret: successorSecret });
           try {
             await successor.takeover('takeover', signed, fixture.package); await successor.publish(); await successor.adopt();
             fixture.package = (await successor.package()).package;
@@ -113,7 +110,7 @@ async function worker(directory, operation, phase, action) {
   // What this process's reads verify: kept state that stands is not verified again.
   let verified = 0;
   const counted = { identities: declared.identities, verify: (...args) => { verified++; return verifier.verify(...args); } };
-  const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue), reader = { configuration, venue, reference, verifier: counted };
+  const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue), reader = { venue, reference, verifier: counted };
   const wallet = new V3Wallet(path, reader);
   if (action === 'crash') {
     // Initialization has committed. Arm only the operation's own COMMIT; the

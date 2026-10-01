@@ -12,7 +12,7 @@ import { directoryRoot, encodeCommitment, encodeReplacement, replacementHash, re
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { decodeSnapshot, genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
-import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationBytes, configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { decodeFaultEvidence, encodeFaultEvidence } from "../src/pool/v3/fault-evidence.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
@@ -29,8 +29,7 @@ import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 const b = (n: number) => new Uint8Array(32).fill(n);
 const issuerSecret = b(3), originalSecret = b(4), nextSecret = b(5), ruleSecret = b(6);
 const issuer = ed25519.getPublicKey(issuerSecret), original = ed25519.getPublicKey(originalSecret), next = ed25519.getPublicKey(nextSecret);
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), label = b(2), lag = 2n;
 const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true };
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
@@ -43,7 +42,7 @@ function fixture() {
     payout: { thing: "frontier test", quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret) };
   const terms = encodeRootTerms(fields), backing = rootTermsName(terms);
   const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
-  const items: EvidenceItem[] = [], options = { configuration, verifier, reference, venue };
+  const items: EvidenceItem[] = [], options = { verifier, reference, venue };
   const add = (kind: number, payload: Uint8Array) => {
     if (!items.some(item => item.kind === kind && compareBytes(item.payload, payload) === 0)) items.push({ kind, payload });
   };
@@ -262,9 +261,9 @@ describe("single-backing complete frontier reader", () => {
   it("owns caller bytes and options before the first asynchronous venue descent", async () => {
     const f = fixture(), opening = f.checkpoint(f.segment(), 1n);
     const bytes = Buffer.from(pack(f.items)), signed = { terms: Buffer.from(f.signed.terms), signature: Buffer.from(f.signed.signature) };
-    const options = { ...f.options, configuration: structuredClone(configuration), reference: structuredClone(reference) };
+    const options = { ...f.options, reference: structuredClone(reference) };
     const pending = readFrontier(bytes, signed, 10n, options);
-    bytes.fill(0); signed.terms.fill(0); signed.signature.fill(0); options.configuration.helper.fill(0);
+    bytes.fill(0); signed.terms.fill(0); signed.signature.fill(0);
     options.reference.label.fill(0);
     expect((await pending).canonical!.commitment).toEqual(opening);
   });
@@ -272,10 +271,10 @@ describe("single-backing complete frontier reader", () => {
   it("owns evidence and terms before a synchronous venue getter can mutate caller inputs", async () => {
     const f = fixture(), opening = f.checkpoint(f.segment(), 1n), venueId = f.venue.id;
     const bytes = Buffer.from(pack(f.items)), signed = { terms: Buffer.from(f.signed.terms), signature: Buffer.from(f.signed.signature) };
-    const options = { ...f.options, configuration: structuredClone(configuration), reference: structuredClone(reference) };
+    const options = { ...f.options, reference: structuredClone(reference) };
     Object.defineProperty(f.venue, "id", { get() {
       bytes.fill(0); signed.terms.fill(0); signed.signature.fill(0);
-      options.configuration.helper.fill(0); options.reference.label.fill(0);
+      options.reference.label.fill(0);
       return venueId;
     } });
     expect((await readFrontier(bytes, signed, 10n, options)).canonical!.commitment).toEqual(opening);

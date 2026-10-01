@@ -16,7 +16,7 @@ import { directoryRoot, encodeCommitment, signCommitment, type Commitment } from
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { decodeSnapshot, encodeReceipt, genesisEvidenceHash, nextEvidenceHash, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
-import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationBytes, configurationHash, RELATIONS, adoptedConfiguration, type Configuration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
@@ -30,13 +30,12 @@ import { describeState } from "./pool-v3-state-description.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
 const issuerSecret = b(3), operatorSecret = b(4), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), label = b(2), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
   a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))));
 /** A verifier that names itself by circuit identities, as a ProofVerifier does, and counts its checks. */
-const counting = (identities: CandidateConfiguration["circuits"] = configuration.circuits) => {
+const counting = (identities: Configuration["circuits"] = configuration.circuits) => {
   const verifier = { checks: 0, identities,
     verify(_kind: number, _inputs: bigint[], proof: Uint8Array) { verifier.checks++; return proof[0] !== 99; } };
   return verifier;
@@ -79,7 +78,7 @@ function fixture() {
     segment.records.push(bytes);
   }
   interface ReadOptions { at?: bigint; witness?: WitnessPredicate; withoutTrails?: boolean; evidence?: EvidenceStore; items?: EvidenceItem[]; venue?: RecordVenue }
-  const own = (verifier: ProofCheck, store: ReplayStore | undefined, options: ReadOptions) => ({ configuration, verifier, reference, venue: options.venue ?? venue,
+  const own = (verifier: ProofCheck, store: ReplayStore | undefined, options: ReadOptions) => ({ verifier, reference, venue: options.venue ?? venue,
     ...(store === undefined ? {} : { store }), ...(options.witness === undefined ? {} : { witness: options.witness }),
     ...(options.evidence === undefined ? {} : { evidence: options.evidence }) });
   const read = (verifier: ProofCheck, store?: ReplayStore, options: ReadOptions = {}) =>
@@ -419,7 +418,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     s1.records.push(bytes);
     checkpoint(s1, 3n, 3n);
     const read = (store?: ReplayStore) => readFrontier(pack(items), x.signed, venue.witnessedIndex(),
-      { configuration, verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }) });
+      { verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }) });
     const kept = files(), store = opened(kept.path, kept), fresh = outcome(await read());
     expect(fresh.carrying.map(item => item.sequence)).toEqual(["1", "2", "3"]);
     expect(outcome(await read(store))).toEqual(fresh);

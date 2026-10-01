@@ -3,14 +3,13 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { deserialize, serialize } from 'node:v8';
 import { hexToBytes } from '@noble/hashes/utils.js';
-import { configurationHash, RELATIONS } from '../../../dist/pool/v3/configuration.js';
+import { adoptedConfiguration, adoptedDomain } from '../../../dist/pool/v3/configuration.js';
 import { encodeRootTerms, rootTermsName } from '../../../dist/pool/v3/terms.js';
 import { FixtureVenue, LOCAL_REFERENCE } from '../../../dist/record-venue.js';
 
 export const fill = n => new Uint8Array(32).fill(n);
-export const configuration = { helper: hexToBytes('44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8'),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: fill(40 + i), vk: fill(50 + i) }])) };
-export const domain = configurationHash(configuration);
+export const configuration = adoptedConfiguration();
+export const domain = adoptedDomain();
 export const issuer = hexToBytes('d9bf2148748a85c89da5aad8ee0b0fc2d105fd39d41a4c796536354f0ae2900c');
 export const operator = hexToBytes('5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84');
 export const reference = { context: LOCAL_REFERENCE, label: fill(12), lag: 2n };

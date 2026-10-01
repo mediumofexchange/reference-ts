@@ -1,5 +1,6 @@
-// Candidate §12 evidence and §13 record readers for any scope. Configuration,
-// verifier, selection and reference venue are independently held by the reader.
+// §12 evidence and §13 record readers for any scope, under the adopted
+// configuration (pool-v3 §11.4). The verifier, selection and reference venue
+// are independently held by the reader.
 // A package is copied into the reader's own evidence storage before any pass
 // reads it (pool-v3 §14), from memory or streamed.
 import { compareBytes, copyBytes, copyUnshared, EncodingError } from "../../bytes.js";
@@ -7,7 +8,7 @@ import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
-import { configurationBytes, configurationHash, decodeConfiguration, requireConfigurationVerifier, type CandidateConfiguration, type VerifierIdentities } from "./configuration.js";
+import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration, type VerifierIdentities } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
@@ -25,7 +26,6 @@ import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./term
 export type PackageSource = Uint8Array | AsyncIterable<Uint8Array>;
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 export interface PackageReader {
-  readonly configuration: CandidateConfiguration;
   readonly verifier: ProofCheck;
   readonly venue: RecordVenue;
   readonly reference: VenueReference;
@@ -57,7 +57,7 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
 
 /** The caller's verifier bound once, with a copy of the circuit identities it declares, which must be the
  * configuration's (§11.1) and name it in kept state (§14). */
-function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
+function ownVerifier(verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
   const parallel = declaredParallel(verifierIn), running = parallel === undefined ? {} : { parallel };
   const declared = verifierIn.identities;
   if (declared === undefined) return { verify: verify.bind(verifierIn), ...running };
@@ -70,7 +70,7 @@ function ownVerifier(configuration: CandidateConfiguration, verifierIn: ProofChe
     if (bytecode.length !== 32 || vk.length !== 32) throw new TypeError("invalid verifier identities");
     identities[name] = { bytecode, vk, ...(kind === undefined ? {} : { kind }) };
   }
-  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(configuration, identities), ...running };
+  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(identities), ...running };
 }
 
 /** Copy the package into the reader's evidence storage, then read only the copy and what the store retains.
@@ -120,25 +120,25 @@ async function keptOrAgain<T>(options: PackageReader, read: () => Promise<T>): P
 
 /** The reader's own inputs, checked before the package is read. */
 function ownPackageRead(selected: ReaderSelection, options: PackageReader) {
-  const { configuration: configurationIn, verifier: verifierIn, venue, reference: referenceIn } = options;
-  const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
+  const { verifier: verifierIn, venue, reference: referenceIn } = options;
+  const domain = adoptedDomain();
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(configuration, verifierIn, verify);
+  const verifier = ownVerifier(verifierIn, verify);
   const reference = structuredClone(referenceIn), expectedVenue = requireReferenceVenue(reference, venue);
   const selection = ownSelection(selected);
   requireReplay(same(selection.venue, expectedVenue), "VENUE_REFERENCE");
   requireReplay(same(selection.domain, domain), "CONFIGURATION");
-  return { configuration, domain, verifier, reference, selection };
+  return { domain, verifier, reference, selection };
 }
 
 function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRead>, options: PackageReader) {
-  const { configuration, domain, verifier, reference, selection } = owned, { venue } = options;
+  const { domain, verifier, reference, selection } = owned, { venue } = options;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
   // Directories, snapshots and trails may be retained from earlier packages; each lookup below needs its own.
   if ([1, 2].some(kind => batch.count(kind) === 0)) throw new EvidenceRefusal("unresolved-evidence");
-  requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
+  requireReplay(verifyConfiguration(payloads(1)[0]!), "CONFIGURATION");
   const commitment = decodeCommitment(payloads(2)[0]!);
   if (!verifyCommitment(commitment)) throw new EvidenceRefusal("unresolved-evidence");
   if (!same(commitment.operator, selection.operator) || commitment.sequence !== selection.sequence || !same(commitment.root, selection.root)) {
@@ -177,25 +177,25 @@ export async function readFrontier(source: PackageSource, signed: SignedTerms, j
 
 /** The reader's own inputs and the authenticated terms, checked before the package is read. */
 function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: PackageReader) {
-  const { configuration: configurationIn, verifier: verifierIn, reference: referenceIn } = options;
-  const configuration = decodeConfiguration(configurationBytes(configurationIn)), domain = configurationHash(configuration);
+  const { verifier: verifierIn, reference: referenceIn } = options;
+  const domain = adoptedDomain();
   const verify = verifierIn.verify;
   if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(configuration, verifierIn, verify);
+  const verifier = ownVerifier(verifierIn, verify);
   const reference = structuredClone(referenceIn);
   if (!isValue(judgingIndex)) throw new EncodingError("invalid judging index");
   const termsBytes = copyUnshared(signed.terms), signature = copyUnshared(signed.signature);
   requireReplay(verifyRootTermsSignature(termsBytes, signature), "TERMS_SIGNATURE");
   const terms = decodeRootTerms(termsBytes), backing = rootTermsName(termsBytes);
   requireReplay(same(terms.configuration, domain), "CONFIGURATION");
-  return { configuration, domain, verifier, reference, terms, backing };
+  return { domain, verifier, reference, terms, backing };
 }
 
 function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontierRead>, judgingIndex: bigint, options: PackageReader) {
-  const { configuration, domain, verifier, reference, terms, backing } = owned, { venue } = options;
+  const { domain, verifier, reference, terms, backing } = owned, { venue } = options;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
-  if (batch.count(1) !== 0) requireReplay(same(payloads(1)[0]!, configurationBytes(configuration)), "CONFIGURATION");
+  if (batch.count(1) !== 0) requireReplay(verifyConfiguration(payloads(1)[0]!), "CONFIGURATION");
   // Invoke the external adapter only after every caller-owned input is copied.
   const venueId = requireReferenceVenue(reference, venue);
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");

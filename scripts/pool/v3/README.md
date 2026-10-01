@@ -5,8 +5,8 @@ all six relations against one shared `notes.nr` and the existing pinned
 Poseidon2 helper. It implements the proof layouts in
 [pool-v3.md at d57ddb0](https://github.com/mediumofexchange/money-from-first-principles/blob/d57ddb0/pool-v3.md).
 
-V3 is an incomplete construction: no approved configuration hash, artifact
-identity or backing adoption is defined. Its candidate runtime in `src/pool/v3/`
+V3 is adopted with one configuration (pool-v3 §11.4), whose manifest the
+runtime holds in `src/pool/v3/configuration.ts`. The runtime in `src/pool/v3/`
 runs on reference venues only; these scripts are its conformance tooling and
 hold the only circuit sources (pool-v2's are retired to Git history).
 The compiler writes temporary projects only under ignored `scratch/` and
@@ -14,8 +14,8 @@ the check records observed source/bytecode/key hashes, checks and metrics in
 `scratch/pool-v3-results.json`. It reuses the existing parameter cache and
 runs Barretenberg with one worker thread. The sources hold final text: their
 comments cite pool-v3, pool-v2, pool-recovery, pool-delivery and pool-fees
-rules by section, so adoption changes no source byte. Their hashes are the
-manifest's candidate identities until pool-v3 adopts a configuration.
+rules by section. Their hashes are the manifest's source identities, and the
+check asserts that the identities it derives frame §11.4's configuration hash.
 
 `store-check.mjs` (also `npm run check:pool:v3-store`) runs the runtime's
 operator journal, prover and guard (`src/pool/v3/store.ts`, `prover.ts`,
@@ -28,7 +28,7 @@ the harness explicitly mines and syncs before the reader consumes them.
 The fresh reader gets served blocks and keeps its witnessed block pin in
 `ergo-pin.bin` beside its keys, outside the supplied package. Wrong pins and
 withheld sections refuse. This uses invented funding and no live node; the
-synthetic chain and candidate configuration establish no deployment or adoption.
+synthetic chain establishes no deployment.
 Both modes guard journal and reader entries against the caller's independently
 held reference identity preimage.
 
@@ -48,7 +48,7 @@ testnet transactions. It is never invoked by ordinary checks or CI. The same
 issue/payment/burn path waits for actual inclusion and depth through `ErgoVenue`;
 the testnet profile selects the legacy header rules and depth 2. A fresh seedless
 worker reads the node itself with its profile, endpoint, judging index, pin and
-candidate keys held outside the supplied package. Wrong pins and withheld
+keys held outside the supplied package. Wrong pins and withheld
 sections must remain unresolved. Successful runs retain
 `scratch/pool-v3-testnet-results.json` and a public reader bundle, replayed with
 `node scratch/pool-v3-testnet-reader/replay.mjs`. The bundle holds no wallet key,
@@ -59,12 +59,11 @@ records transaction acceptance at `acc1ab7`. Run
 without transactions; its [readback report](../../../docs/pool-v3-testnet-reader-verification.json)
 binds current sources and bundle hashes. Current work belongs in WORK.md.
 
-The local replay command additionally uses the independently held
-`candidate-manifest.json` and [pool-v3 §11 at 916bffb](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
-It checks all six candidate source/toolchain/bytecode/key identities, the fixed
-439-byte configuration and signed constant-root terms before local replay.
-The candidate domain is derived from the configuration; issuance keys come
-from the signed terms. The manifest cannot enable adoption. See the
+The local replay command additionally checks, against the runtime manifest
+(`manifest.mjs`, pool-v3 §§11.1, 11.4), all six source/toolchain/bytecode/key
+identities, the 439-byte adopted configuration a package carries and signed
+constant-root terms before local replay. The domain is the adopted
+configuration's hash; issuance keys come from the signed terms. See the
 [local replay evidence and limits](../../../docs/POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay).
 
 Fresh readers additionally decode the canonical §12 evidence package at
@@ -109,7 +108,7 @@ Their inherited adoption indices preserve publications still owed, while gap
 and publication-force reads stay strictly before the index.
 The scope classifier also handles two-backing split/rejoin histories, shared
 ancestry, per-backing adoption obligations and their exact publication union.
-Configuration adoption remains unsupported. Import lapse authenticates scope
+Import lapse authenticates scope
 and terms independently of event history; live validity and exclusion retain
 their complete evidence requirements. The local-only restoration scanner
 continues to refuse imports.
@@ -118,7 +117,7 @@ Kind-7 package items carry existing §9 compact fault openings. When a checkpoin
 is reached, the reader can authenticate its committed target proof without
 unrelated event preimages and retain a `PROOF` fact in `faultEvidence`, including
 on later refusal or lapse. Exact commitment, position and byte hashes identify
-the observation. Every scoped term must match the reader's candidate configuration
+the observation. Every scoped term must match the adopted configuration
 and venue. Only a supported proof verifier's strict rejection produces a fact;
 exceptions propagate. Facts never decide classification, state, clocks or receipt
 status. Missing complete history still prevents exclusion and import descent.

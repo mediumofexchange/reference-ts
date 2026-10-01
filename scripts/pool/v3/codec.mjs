@@ -4,6 +4,6 @@ import * as faultEvidence from "../../../dist/pool/v3/fault-evidence.js";
 import * as evidencePackage from "../../../dist/pool/v3/package.js";
 import * as recordRange from "../../../dist/record-range.js";
 import { evidenceCodecs } from "./evidence-reader.mjs";
-import { configurationCodecs } from "./candidate.mjs";
+import { configurationCodecs } from "./manifest.mjs";
 
 export const v3Codec = Object.freeze({ ...evidenceCodecs, ...configurationCodecs, ...faultEvidence, ...evidencePackage, ...recordRange });

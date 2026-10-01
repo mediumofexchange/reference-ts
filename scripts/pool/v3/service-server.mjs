@@ -10,7 +10,7 @@ import { V3OperatorJournal } from '../../../dist/pool/v3/store.js';
 import { rootTermsSignatureMessage } from '../../../dist/pool/v3/terms.js';
 import { authorizeIssue, issueTask, spendTask } from '../../../dist/pool/v3/witness.js';
 import { FixtureVenue } from '../../../dist/record-venue.js';
-import { ADMIN, WALLET, backing, configuration, domain, fill, load, operator, reference, save, terms, verifier } from './service-fixture.mjs';
+import { ADMIN, WALLET, backing, domain, fill, load, operator, reference, save, terms, verifier } from './service-fixture.mjs';
 
 const [directory, fault] = process.argv.slice(2);
 if (!directory || !process.send || !['none', 'drop-commit'].includes(fault)) throw new Error('invalid acceptance worker arguments');
@@ -21,7 +21,7 @@ const venue = restored ? FixtureVenue.from(load(ledgerFile)) : FixtureVenue.refe
 const restoredPublications = venue.export().records.length;
 const publish = venue.publishRecord.bind(venue);
 venue.publishRecord = async (...args) => { await publish(...args); save(ledgerFile, venue.export()); };
-const journal = new V3OperatorJournal(join(directory, 'journal.sqlite'), { configuration, venue, reference, verifier, secret: operatorSecret });
+const journal = new V3OperatorJournal(join(directory, 'journal.sqlite'), { venue, reference, verifier, secret: operatorSecret });
 if (!restored) {
   const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
   const header = { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] };

@@ -3,6 +3,7 @@ import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { decodeCommitment, verifyCommitment, type Commitment } from "../../venue-records.js";
 import { identifierOf } from "../field.js";
 import { decodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
+import { adoptedDomain } from "./configuration.js";
 import { EVIDENCE_QUOTA, wholePackage, type EvidenceStore } from "./evidence-store.js";
 import { referenceVenue, type VenueReference } from "./guard.js";
 import { decodeEvidencePackage, PackageLimitError } from "./package.js";
@@ -15,7 +16,7 @@ const same = (a: Uint8Array, b: Uint8Array) => compareBytes(a, b) === 0;
 function identifier(bytes: Uint8Array): Uint8Array {
   const own = copyUnshared(bytes); if (own.length !== 32) throw new EncodingError("expected a 32-byte service identity"); return own;
 }
-export interface ServiceIdentity { readonly domain: Uint8Array; readonly operator: Uint8Array; readonly reference: VenueReference }
+export interface ServiceIdentity { readonly operator: Uint8Array; readonly reference: VenueReference }
 export class V3ServiceClientError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); this.name = "V3ServiceClientError"; }
 }
@@ -45,8 +46,9 @@ function refusal(status: number, value: unknown): V3ServiceClientError {
 }
 
 /** Local operation credentials do not select protocol authority. The caller
- * independently holds the expected configuration domain, operator and reference
- * venue; finality still requires the existing reader and independent venue. */
+ * independently holds the expected operator and reference venue; the domain is the
+ * adopted configuration's (pool-v3 §11.4), never the caller's. Finality
+ * still requires the existing reader and independent venue. */
 export class V3ServiceClient {
   readonly #baseUrl: string;
   readonly #walletToken: string;
@@ -62,7 +64,7 @@ export class V3ServiceClient {
       throw new EncodingError("local URL and distinct 32-byte credentials required");
     }
     this.#baseUrl = url.href; this.#walletToken = walletToken; this.#adminToken = adminToken;
-    this.#domain = identifier(expected.domain); this.#operator = identifier(expected.operator);
+    this.#domain = adoptedDomain(); this.#operator = identifier(expected.operator);
     this.#venue = referenceVenue(structuredClone(expected.reference)).id;
   }
   get baseUrl(): string { return this.#baseUrl; }

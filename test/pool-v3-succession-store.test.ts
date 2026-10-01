@@ -7,7 +7,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
@@ -24,8 +24,7 @@ import { directoryRoot, encodeCommitment, encodeReplacement, encodeRevocation, r
 // Public-evidence succession through the runtime journal and independent reader.
 // Proof bytes are explicit stand-ins; real-key acceptance is a separate gate.
 const b = (n: number) => new Uint8Array(32).fill(n), supported = Number(process.versions.node.split(".")[0]) >= 24;
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), aSecret = b(16), bSecret = b(17), cSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), aKey = ed25519.getPublicKey(aSecret), bKey = ed25519.getPublicKey(bSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -58,7 +57,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     const tree = new NoteTree(); tree.append(funded.cm);
     const input = { note: funded, anchor: tree.root(), path: tree.path(0n) }, inputs = [input, { ...input, note: pad }];
     const create = (secret = aSecret, name = "a", beforeVerify = () => {}): Journal => {
-      const j = new V3OperatorJournal(join(directory, `${name}.db`), { configuration, secret, venue, reference,
+      const j = new V3OperatorJournal(join(directory, `${name}.db`), { secret, venue, reference,
         verifier: { verify: (...args) => { beforeVerify(); return verifier.verify(...args); } } });
       journals.push(j); return j;
     };
@@ -77,7 +76,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
       [10n, 0n, 0n, 0n].map((value, i) => prepareExactOutput(b(22), domain, b(offset + i), backing, value)))));
     const read = async (served: ServedPackage) => {
       const result = await readPackage(served.package,
-        { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" }, { configuration, verifier, venue, reference });
+        { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue, reference });
       if (result.state === undefined) throw new Error("unexpected receipt verdict");
       return result;
     };
@@ -250,7 +249,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     expect(shape((await f.a.serve(undefined, 2n)).parts).sort()).toEqual(["A3:whole:1", "B1:whole:1", "package:34"]);
     expect(await evidence.take(later.parts)).toBe(true);
     const result = await readPackage(later.package, { ...later.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" },
-      { configuration, verifier, venue: f.venue, reference, evidence });
+      { verifier, venue: f.venue, reference, evidence });
     expect([result.state?.issued, result.state?.hasNullifier(f.input.note.nf)]).toEqual([20n, true]);
     // A reader kept through the opening holds what it took: only the new checkpoint and the records after the opening.
     expect(shape((await f.a.serve(undefined, 3n)).parts)).toEqual(["package:34", "A3:0:1"]);

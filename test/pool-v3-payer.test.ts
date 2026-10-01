@@ -7,7 +7,7 @@ import { EncodingError } from "../src/bytes.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { prepareExactOutput, recoverCapsule } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, encodeReceipt, receiptBytes, type Receipt } from "../src/pool/v3/commitments.js";
-import { configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeRecord, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -21,8 +21,7 @@ import { encodeReplacement, replacementMessage, type Replacement } from "../src/
 // under the candidate keys. v2 cases ported: selection, padding, reservation,
 // exact and concurrent retry, proof failure, receipt checks and restart.
 const b = (n: number) => new Uint8Array(32).fill(n);
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret), successorKey = ed25519.getPublicKey(successorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -60,10 +59,10 @@ describe("v3 payer custody over restored holdings", () => {
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
     // This verifier declares no circuits, so each read replays in memory; the receiver, multi-backing and kept suites run on kept files.
-    const reader = { configuration, venue, reference, verifier: readerVerifier };
+    const reader = { venue, reference, verifier: readerVerifier };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
     const payer = open("payer"), receiver = open("receiver");
-    const j = new V3OperatorJournal(join(directory, "journal.db"), { configuration, venue, reference, verifier, secret: operatorSecret });
+    const j = new V3OperatorJournal(join(directory, "journal.db"), { venue, reference, verifier, secret: operatorSecret });
     journals.push(j); await j.open("genesis", signed); await j.publish();
     const funding = funds.map((value, i) => payer.request(`fund-${i}`, backing, value));
     for (const request of funding) await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, request)), issuerSecret)));
@@ -83,7 +82,7 @@ describe("v3 payer custody over restored holdings", () => {
       venue.advance(effective);
     };
     const takeover = async () => {
-      const b2 = new V3OperatorJournal(join(directory, "successor.db"), { configuration, venue, reference, verifier, secret: successorSecret });
+      const b2 = new V3OperatorJournal(join(directory, "successor.db"), { venue, reference, verifier, secret: successorSecret });
       journals.push(b2); await b2.takeover("takeover", signed, (await j.package()).package); await b2.publish(); await b2.adopt();
       return b2;
     };
@@ -397,7 +396,7 @@ describe("v3 payer custody over restored holdings", () => {
     const reproven = f.payer.payment("shop")!;
     expect(reproven).toMatchObject({ receipt: undefined, superseded: [{ record: payment.record, receipt: stale }] });
     // At an older index A is still canonical and admitting: that view cannot move the record back.
-    const lagging = new V3Wallet(join(f.directory, "payer.db"), { configuration, venue: FixtureVenue.from(early), reference, verifier });
+    const lagging = new V3Wallet(join(f.directory, "payer.db"), { venue: FixtureVenue.from(early), reference, verifier });
     wallets.push(lagging);
     await expect(lagging.reprove("shop", earlyPackage, f.signed, prove)).rejects.toMatchObject({ code: "CHANGED_VIEW" });
     expect(lagging.payment("shop")).toEqual(reproven);

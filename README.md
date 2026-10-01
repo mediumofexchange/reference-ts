@@ -11,11 +11,12 @@ increased obligations and for moving a holder's claims.
 ## Status
 
 The active development path is a **shielded pool**: private notes with public
-verification of issuance and conservation. The guarded v3 candidate runtime
-supports issue, payment, burn and single-backing recovery on local and synthetic
-reference venues, with historical live testnet acceptance. Its configuration
-is unadopted; succession and bounded venue/publisher process persistence run on
-reference venues. A [v3 wallet](docs/POOL_V3_WALLET.md) persists exact
+verification of issuance and conservation. The guarded v3 runtime, under
+pool-v3's adopted configuration, supports issue, payment, burn and
+single-backing recovery on local and synthetic reference venues, with
+historical live testnet acceptance; succession and bounded venue/publisher
+process persistence run on reference venues. The guard refuses mainnet until
+the runtime is released. A [v3 wallet](docs/POOL_V3_WALLET.md) persists exact
 requests and independently verified final fulfillment, and pays exact requests
 from holdings it restores from public evidence with reserved exact statements.
 A [v3 loopback service](docs/POOL_V3_SERVICE.md) transports journal operations
@@ -27,7 +28,7 @@ completed security audit or live deployment is claimed. The earlier pool-v2
 runtime is retired and remains in Git history.
 
 The runtime tracks specification revision
-[`01f922c3839c62b2e5a385eb30b7611047a139a4`](https://github.com/mediumofexchange/money-from-first-principles/tree/01f922c3839c62b2e5a385eb30b7611047a139a4).
+[`e7f7f246a5a57741b9ceeaaa9efef67a7b0bccad`](https://github.com/mediumofexchange/money-from-first-principles/tree/e7f7f246a5a57741b9ceeaaa9efef67a7b0bccad).
 See [implementation status](docs/IMPLEMENTATION_STATUS.md) for component
 evidence and the pins of individual rules, and [production requirements](docs/PRODUCTION_REQUIREMENTS.md)
 for the remaining acceptance criteria.
@@ -48,7 +49,7 @@ This checks documentation, types, tests, the built package and applicable
 process/crash scenarios. Real-proof checks run separately:
 
 ```sh
-npm run check:pool:v3    # six relations, real proofs and store acceptance; no adopted configuration
+npm run check:pool:v3    # six relations against the manifest, real proofs and store acceptance
 ```
 
 This is a developer verification command; the repository does not yet provide

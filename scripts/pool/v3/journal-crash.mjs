@@ -14,10 +14,9 @@ import { deserialize, serialize } from 'node:v8';
 
 const { DatabaseSync } = await import('node:sqlite');
 const { ed25519 } = await import('@noble/curves/ed25519.js');
-const { hexToBytes } = await import('@noble/hashes/utils.js');
 const { NoteTree } = await import('../../../dist/pool/note-tree.js');
 const { prepareExactOutput } = await import('../../../dist/pool/v3/capsules.js');
-const { configurationHash, RELATIONS } = await import('../../../dist/pool/v3/configuration.js');
+const { adoptedDomain } = await import('../../../dist/pool/v3/configuration.js');
 const { encodeRecord } = await import('../../../dist/pool/v3/records.js');
 const { V3OperatorJournal } = await import('../../../dist/pool/v3/store.js');
 const { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } = await import('../../../dist/pool/v3/terms.js');
@@ -26,9 +25,7 @@ const { FixtureVenue, LOCAL_REFERENCE } = await import('../../../dist/record-ven
 const { decodeCommitment, encodeCommitment } = await import('../../../dist/venue-records.js');
 const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../..'));
 const script = fileURLToPath(import.meta.url), b = n => new Uint8Array(32).fill(n);
-const configuration = { helper: hexToBytes('44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8'),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) };
-const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16);
+const domain = adoptedDomain(), issuerSecret = b(15), operatorSecret = b(16);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const reference = { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
 const verifier = { verify: (kind, _inputs, proof) => proof[0] === kind };
@@ -59,7 +56,7 @@ async function worker(directory, operation, phase, action) {
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
     // The opening crashes in a journal with no events yet; the others after it was published.
     if (operation !== 'open') {
-      const journal = new V3OperatorJournal(path, { configuration, venue, reference, verifier, secret: operatorSecret });
+      const journal = new V3OperatorJournal(path, { venue, reference, verifier, secret: operatorSecret });
       try {
         await journal.open('genesis', signed); await journal.publish();
         if (operation === 'commit') await journal.submit(statements(rootTermsName(terms))(venue.id).issue);
@@ -71,7 +68,7 @@ async function worker(directory, operation, phase, action) {
   const fixture = load(fixturePath), venuePath = `${path}.venue`;
   const venue = FixtureVenue.from(existsSync(venuePath) ? load(venuePath) : fixture.venue);
   const records = statements(rootTermsName(fixture.signed.terms))(venue.id);
-  const journal = new V3OperatorJournal(path, { configuration, venue, reference, verifier, secret: operatorSecret });
+  const journal = new V3OperatorJournal(path, { venue, reference, verifier, secret: operatorSecret });
   // A reopened journal waits the lag before it signs or admits again (C2.8.2).
   venue.advance(venue.witnessedIndex() + reference.lag); save(venuePath, venue.export());
   const act = () => operation === 'open' ? journal.open('genesis', fixture.signed)

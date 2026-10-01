@@ -1,5 +1,5 @@
-// Canonical record bytes for pool-v3 §§5–7 at 4a58fdc, candidate until
-// adoption. No adopted configuration, proof verifier, admission or replay.
+// Canonical record bytes for pool-v3 §§5–7. No configuration, proof verifier,
+// admission or replay.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { ByteReader, ByteWriter, compareBytes, EncodingError } from "../../bytes.js";
 import {

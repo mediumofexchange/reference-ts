@@ -19,7 +19,7 @@ const NEUTRAL = [
   "src/ergo-profile.ts", "src/ergo-headers.ts", "src/ergo-supplier.ts", "src/ergo-publisher.ts", "src/ergo-synthetic.ts",
   "src/ergo.ts", "src/ergo-store.ts",
   "src/pool/field.ts", "src/pool/poseidon2.ts", "src/pool/notes.ts", "src/pool/note-tree.ts",
-  "src/pool/scope.ts", "src/pool/schedule.ts", "src/pool/proof-verifier.ts",
+  "src/pool/scope.ts", "src/pool/schedule.ts", "src/pool/parameters.ts", "src/pool/proof-verifier.ts",
 ];
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // The v3 construction (plan decision 2): every module under src/pool/v3/,

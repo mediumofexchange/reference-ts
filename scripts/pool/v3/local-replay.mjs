@@ -12,7 +12,7 @@ import { ownedNotes, seedWitness } from "../../../dist/pool/v3/holdings.js";
 import { ReplayStore } from "../../../dist/pool/v3/replay-store.js";
 import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
 import { RANGE_LIMITS, replayTrail } from "../../../dist/pool/v3/reader.js";
-import { CandidateVenueError, referenceVenue } from "../../../dist/pool/v3/guard.js";
+import { ReferenceVenueError, referenceVenue } from "../../../dist/pool/v3/guard.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay } from "../../../dist/pool/v3/refusals.js";
 import { classifyScopes } from "../../../dist/pool/v3/scope-reader.js";
 import { LIMITS, readLocalEvidence } from "./evidence-reader.mjs";
@@ -27,7 +27,7 @@ const hex = bytes => Buffer.from(bytes).toString("hex");
 const sha256 = bytes => new Uint8Array(createHash("sha256").update(bytes).digest());
 export const PACKAGE_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 1024n });
 const flags = Object.freeze({ fullV3Replay: false, currentRangeAuthenticated: false,
-  candidateConfigurationChecked: false, signedTermsAuthenticated: false,
+  configurationChecked: false, signedTermsAuthenticated: false,
   termsAuthorityAuthenticated: false, completenessClaim: false, noMatchesMeansZeroBalance: false,
   unresolvedCoverage: true, spendable: false, rangeEvidence: "none" });
 const refused = (status, check = null) => ({ status, check, ...flags, audit: null, candidates: [] });
@@ -69,12 +69,12 @@ export const recordReader = (venue, evidenceKind) => ({ evidenceKind, id: venue.
   witnessedIndex: () => venue.witnessedIndex(), lag: () => venue.lag() });
 
 
-/** verifier.configuration is independently selected and its six keys checked
+/** The configuration is the runtime manifest's (pool-v3 §11.4), its six keys checked
  * by the harness. Issuer identity comes from signed scoped terms (§11).
  * With a fixture venue and verifier.record, §13 ranges fix the chain, the
  * checkpoint's record prefix and currency against that fixture only, and
  * every carrying checkpoint is classified from its own committed evidence.
- * No approved configuration or authenticated-chain finality verdict.
+ * Reference venues only.
  * State reads expose nothing until every terminal assertion passes. A single
  * receipt instead returns its conditional verdict at the deciding checkpoint
  * or boundary; an unavailable suffix retains already proven liability facts. */
@@ -103,8 +103,8 @@ export async function replayLocalPackage(input, verifier, codec) {
     const reference = structuredClone(verifier.reference);
     const expectedVenue = referenceVenue(reference);
     requireReplay(selection?.venue instanceof Uint8Array && same(selection.venue, expectedVenue.id), "VENUE_REFERENCE");
-    requireReplay(codec.verifyConfiguration(supplied?.configuration, verifier.configuration), "CONFIGURATION");
-    const domain = codec.configurationHash(codec.decodeConfiguration(supplied.configuration));
+    requireReplay(codec.verifyConfiguration(supplied?.configuration), "CONFIGURATION");
+    const domain = codec.adoptedDomain();
     requireReplay(selection?.domain instanceof Uint8Array && same(domain, selection.domain), "CONFIGURATION");
     const { snapshot, trail, header } = readLocalEvidence(selection, supplied, codec,
       { allowImports: venue !== undefined, allowScopes: venue !== undefined });
@@ -148,7 +148,7 @@ export async function replayLocalPackage(input, verifier, codec) {
       const result = await classifyScopes(context, record, { directory: root => directories.get(hex(root)),
         snapshot: digest => snapshots.find(bytes => same(sha256(bytes), digest)), trails: stored, chargeAnswer: amount => stored.chargeAnswer(amount) });
       if (result.receipt !== undefined) return { ...refused("receipt-status"), ...context.faults.result(), receipt: result.receipt, rangeEvidence,
-        candidateConfigurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
+        configurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
         currentRangeAuthenticated: selection.mode !== "historical-fixture" };
       ({ carrying, state, clock, ranges } = result);
     } else {
@@ -169,7 +169,7 @@ export async function replayLocalPackage(input, verifier, codec) {
     const historical = selection.mode === "historical-fixture";
     return { status: historical ? "historical-local-replay" : "selected-local-replay",
       ...context.faults.result(),
-      ...flags, candidateConfigurationChecked: true, signedTermsAuthenticated: true,
+      ...flags, configurationChecked: true, signedTermsAuthenticated: true,
       ...(ranges === null ? {} : { currentRangeAuthenticated: !historical, termsAuthorityAuthenticated: true, rangeEvidence }),
       audit: { records: position.toString(), issued: issued.toString(), burned: burned.toString(),
         outstanding: (issued - burned).toString(), noteRoot: state.noteRoot().toString(), spentRoot: hex(state.spentRoot()),
@@ -181,7 +181,7 @@ export async function replayLocalPackage(input, verifier, codec) {
           carrying, clock, ...(ranges.publications === undefined ? {} : { publications: ranges.publications }),
           ...(ranges.nonService === undefined ? {} : { nonService: ranges.nonService }) } }, candidates };
   } catch (error) {
-    if (error instanceof CandidateVenueError) return failure("invalid-local-replay", "VENUE_REFERENCE");
+    if (error instanceof ReferenceVenueError) return failure("invalid-local-replay", "VENUE_REFERENCE");
     if (error instanceof ReplayRefusal) return failure("invalid-local-replay", error.check);
     // A lapsed selection carries the clock record proving the lapse (C2b.4.1) beside the refusal.
     if (error instanceof EvidenceRefusal) return { ...failure(error.status), ...(error.clock === undefined ? {} : { clock: error.clock }) };

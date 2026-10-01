@@ -1,5 +1,5 @@
-// Byte conformance for pool-v3 §8 at 061f87e. No adopted configuration,
-// opening replay, key authentication, checkpoint classification or finality.
+// Byte conformance for pool-v3 §8 at 061f87e. No opening replay, key
+// authentication, checkpoint classification or finality.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { byteLength, ByteReader, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
 import { V3_SEGMENT_CONTEXT as CONTEXT } from "../../contexts.js";

@@ -8,7 +8,7 @@ import { directoryRoot, encodeCommitment, signCommitment, type Commitment } from
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
-import { configurationBytes, configurationHash, RELATIONS, type CandidateConfiguration } from "../src/pool/v3/configuration.js";
+import { configurationBytes, configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
@@ -25,8 +25,7 @@ import { encodeTrail } from "../src/pool/v3/trail.js";
 const b = (n: number) => new Uint8Array(32).fill(n);
 const issuerSecret = b(3), operatorSecret = b(4);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
-const configuration: CandidateConfiguration = { helper: hexToBytes("44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8"),
-  circuits: Object.fromEntries(RELATIONS.map((name, i) => [name, { bytecode: b(40 + i), vk: b(50 + i) }])) as CandidateConfiguration["circuits"] };
+const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), label = b(2), lag = 2n;
 const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true };
 const stateOf = <T extends { readonly receipt?: unknown }>(result: T): Exclude<T, { readonly receipt: object }> => {
@@ -100,7 +99,7 @@ async function twoBackings() {
     backing, operator, sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
   const read = (backing: Uint8Array, commitment: Commitment, extra: readonly EvidenceItem[] = []) => readPackage(pack([...items, ...extra,
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
-  selection(backing, commitment), { configuration, verifier, reference, venue });
+  selection(backing, commitment), { verifier, reference, venue });
   /** The operator's receipt for the current segment's latest record, given after sequence `after`. */
   function receipt(after: bigint): Uint8Array {
     const bytes = current.records.at(-1)!, digests = evidenceHashes(decodeRecord(bytes));
