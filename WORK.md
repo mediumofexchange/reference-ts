@@ -31,8 +31,8 @@ Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is p
    `--testnet --authorized-testnet` as `recovery-store-check.mjs` does (`testnet.mjs`, `scratch/ergo-testnet/wallet.json`): split,
    rejoin, a wallet payment in the rejoined scope, a fresh reader. Mainnet needs separate authority.
 2. Slice 9, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
-   holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
-   directories, issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
+   holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data directories,
+   issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
    and Next 8 before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
    the verifier (M5b.6). Wallet settlements derive `rho_out` per segment and disclosure counter (C3.5). A v3 dishonour reader (C3.8) for redeem: demand void by a spent tag, the holder's lapse, releases taken by another
    demand's settlement (keep each output's inserting demand); a settle refused under service reads as unreleased (C3.8's adopted limit; counting a
@@ -41,7 +41,8 @@ Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is p
 4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail
    caller-object cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one is in flight
    (`store.ts` `ready`). One setup module for the store-check family and one `receiptFields` for the two receipt checks; retire `header-verify` and `testnet-header-check` unless a mainnet slice needs them (`publisher-check` carries §8's live capacity run).
-   `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11 (unassigned since M4; reports bind the file).
+   `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11 (unassigned since M4; reports bind the file). `openV3Prover`
+   proves under any domain, and the exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain` (M8a review, minor).
 5. Review findings deferred: (a) `guard.ts` accepts a testnet-context profile anchored on a mainnet header until the next
    epoch boundary (<=127 blocks); fix by a difficulty bound. (b) `store.ts` `package()` serves a published commitment
    never held after the lag (C2.4.3). (c) `store.ts` `submit` may return an old-segment receipt for an adopted forced
@@ -92,9 +93,8 @@ Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is p
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- 2026-10-01, non-blocking: the site still calls the v3 runtime an "unadopted candidate". Branch `docs/v3-adopted` of
-  mediumofexchange.github.io (one sentence in `index.html`) says pool-v3 is adopted; merging it to main deploys the site, which needs
-  the maintainer: `git -C site merge --ff-only origin/docs/v3-adopted && git -C site push`. Nothing else waits on it.
+- 2026-10-01, non-blocking: the site still calls v3 an "unadopted candidate"; branch `docs/v3-adopted` (one sentence) fixes it. Merging deploys,
+  so it needs the maintainer: `git -C site merge --ff-only origin/docs/v3-adopted && git -C site push`. Nothing else waits on it.
 
 Roughly **65% done / 35% remaining**, range **56–72%**, reassessed 2026-10-01 at adoption (M8a): the configuration is fixed and the runtime
 holds it; the Ergo view's growth with venue age (Next 8), installable commands, qualified storage and mainnet remain.

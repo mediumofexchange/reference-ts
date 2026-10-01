@@ -85,6 +85,14 @@ describe("bounded v3 local service client", () => {
     }
   });
 
+  it("sends nothing for a statement under a domain other than the adopted configuration's", async () => {
+    let asked = false;
+    const url = await endpoint((request, response) => { asked = true; request.resume(); response.end(); });
+    const foreign = { ...record(), domain: b(9), publicInputs: [...limbsOf(b(9)), ...record().publicInputs.slice(2)] };
+    await expect(new V3ServiceClient(url, TOKEN, expected()).submit(encodeRecord(foreign))).rejects.toThrow("wrong submission domain or kind");
+    expect(asked).toBe(false);
+  });
+
   it("requires admin credentials and binds signed commit and publish replies to the expected operator", async () => {
     const commitment = signCommitment(secret, 2n, b(24));
     const url = await endpoint((request, response) => {
