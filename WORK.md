@@ -9,12 +9,12 @@ the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-repla
 building. M6 is decided (below); no v3 reader of C3.8's dishonour exists yet (Next 2).
 
 ## Status
-- M6 (branches `feat/m6-taken-release` here and in the specification, [decision](decisions/2026-10.md#2026-10-01--read-a-gap-release-taken-by-another-demands-settlement-as-released)):
+- M6 (spec 740adaa, PR #63, [decision](decisions/2026-10.md#2026-10-01--read-a-gap-release-taken-by-another-demands-settlement-as-released)):
   a gap release refused only because another demand's settlement already inserted its `cm_out` releases its acceptance for C3.8,
   so a backer front-running a waiting release with its own settlement gains no holder's lapse; a disclosed output sends the holder's re-proof
   to a fresh `rho_out`. Spec-only (pool-recovery C3.4/C3.5/C3.8/§8, pool-authority C2.10.8);
   `test/pool-v3-force.test.ts` shows the taking in force. Review blocked the first proposal (acceptance naming `rho_out` with a void:
-  anyone could pay the backer into the output and write its dishonour) and read back this one. Runtime pins unchanged.
+  anyone could pay the backer into the output and write its dishonour); read-backs fixed re-proof, residual and counter. Runtime pins unchanged.
 - M5b.6 (PR #62, [decision](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)):
   proofs verified ahead of the replay on a pool of verifier instances; [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
   10⁵ statements at 52.7 ms each, peak 543 MB, 10⁶ extrapolated to 15.5–16 h here. The ten current v3 reports are from CI run 36806514822.
