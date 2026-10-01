@@ -20,7 +20,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
-import { copyBytes, copyUnshared, EncodingError } from "../bytes.js";
+import { copyArray, copyBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { fieldToHex, isField } from "./field.js";
 
 /** The proof options every construction here is defined under. */
@@ -209,13 +209,17 @@ function ownTable(table: CircuitTable): CircuitTable {
 }
 
 /**
- * Whether `values` is an array of exactly `count` canonical field elements.
- * By index rather than `every`, which skips a sparse array's holes.
+ * An owned copy of exactly `count` canonical field elements, each read once
+ * by index (a sparse array's holes are no field), or undefined for anything
+ * else: the inputs judged are the inputs verified.
  */
-function allFields(values: unknown, count: number): values is readonly bigint[] {
-  if (!Array.isArray(values) || values.length !== count) return false;
-  for (let i = 0; i < count; i++) if (!isField(values[i])) return false;
-  return true;
+function ownFields(values: unknown, count: number): readonly bigint[] | undefined {
+  let own: unknown[];
+  try { own = copyArray(values as unknown[], value => value, count); } catch (error) {
+    if (error instanceof EncodingError) return undefined;
+    throw error;
+  }
+  return own.length === count && own.every(isField) ? own as bigint[] : undefined;
 }
 
 /**
@@ -289,16 +293,24 @@ export async function proofVerifier(
     lane.queue = run.catch(() => {});
     return run;
   };
-  const wellFormed = (proof: unknown): proof is Uint8Array =>
-    proof instanceof Uint8Array && proof.length > 0 && proof.length <= owned.maxProofBytes && proof.length % 32 === 0;
+  /** The proof's own unshared copy where its length is a positive multiple of 32 within the table's bound, judged on the copy. */
+  const ownProof = (proof: unknown): Uint8Array | undefined => {
+    let own: Uint8Array;
+    try { own = copyUnshared(proof as Uint8Array); } catch (error) {
+      if (error instanceof EncodingError) return undefined;
+      throw error;
+    }
+    return own.length > 0 && own.length <= owned.maxProofBytes && own.length % 32 === 0 ? own : undefined;
+  };
   return {
     identities: Object.freeze(identities),
     async verify(kind, publicInputs, proof) {
       // A destroyed instance never settles a call, so a closed verifier refuses instead.
       if (closed) throw new Error("the proof verifier is closed");
       const key = keys.get(kind);
-      if (key === undefined || !allFields(publicInputs, key.publicInputs) || !wellFormed(proof)) return false;
-      const input = { proof: copyBytes(proof), publicInputs: publicInputs.map(fieldToHex), verificationKey: key.vk };
+      const fields = key === undefined ? undefined : ownFields(publicInputs, key.publicInputs), bytes = ownProof(proof);
+      if (key === undefined || fields === undefined || bytes === undefined) return false;
+      const input = { proof: bytes, publicInputs: fields.map(fieldToHex), verificationKey: key.vk };
       const lane = lanes.reduce((best, next) => next.waiting < best.waiting ? next : best);
       return serially(lane, async () => {
         if (lane.closed) throw new Error("the proof verifier is closed");

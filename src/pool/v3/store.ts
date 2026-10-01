@@ -56,7 +56,7 @@ import { RangeLimitError, replacementChain, type ChainLink, type HeldCommitment,
   type ReplacementChain } from "../../record-range.js";
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
-import { decodeCommitment, directoryRoot, encodeCommitment, signCommitment, verifyCommitment, type Commitment, type SnapshotDigest } from "../../venue-records.js";
+import { decodeCommitment, encodeCommitment, signCommitment, verifyCommitment, type Commitment, type SnapshotDigest } from "../../venue-records.js";
 import { ScopeTree } from "../scope.js";
 import { scopeSchedule } from "../schedule.js";
 import { decodeReceipt, decodeSnapshot, encodeReceipt, receiptBytes, receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt,
@@ -722,8 +722,10 @@ export class V3OperatorJournal {
   /** Sign the commitment at `sequence` over `state`'s directory, and keep the directory and snapshots that serve it. */
   private sign(opened: Opened, state: SegmentState, sequence: bigint, at: bigint, observed: string | null): Signed {
     const { directory, snapshots } = this.checkpoint(opened, state);
-    const commitment = signCommitment(this.secret, sequence, directoryRoot(directory));
-    this.evidence.keep(3, encodeEvidenceDirectory(directory));
+    // One encoding of the directory: the root signed is the hash of the preimage kept.
+    const preimage = encodeEvidenceDirectory(directory);
+    const commitment = signCommitment(this.secret, sequence, sha256(preimage));
+    this.evidence.keep(3, preimage);
     for (const snapshot of snapshots) this.evidence.keep(4, snapshot);
     this.db.prepare("INSERT INTO journal_signed VALUES(?,?,?,?,?,?,0)").run(sequence, encodeCommitment(commitment), opened.segment,
       state.position, at.toString(), observed);

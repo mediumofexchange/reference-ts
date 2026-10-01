@@ -7,9 +7,10 @@
 // to it, so it is a local reference venue for tests and local operation, never
 // a source of chain evidence.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { ByteWriter, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { utf8Encoder } from "./contexts.js";
-import { copyRequest, encodeRangeAnswer, type RangeLimits, type RangeRequest, type RecordKind } from "./record-range.js";
+import { copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RangeLimits, type RangeRequest, type RecordKind } from "./record-range.js";
+import { VenueError } from "./venue-error.js";
 
 /** The local reference context: a reference-only venue, never a deployment
  * profile. Its identity names a label and a lag under this context, so which
@@ -18,10 +19,11 @@ export const LOCAL_REFERENCE = "moe/venue/local/reference";
 
 /** A local reference venue's identity: the context, a 32-byte label and the lag, each framed. */
 export function localVenueIdentity(label: Uint8Array, lag: bigint): Uint8Array {
-  if (!isKey(label) || !isIndex(lag)) throw new EncodingError("invalid local venue preimage");
+  const own = ownKey(label);
+  if (own === undefined || !isIndex(lag)) throw new EncodingError("invalid local venue preimage");
   const w = new ByteWriter();
   w.lengthPrefixed(utf8Encoder.encode(LOCAL_REFERENCE));
-  w.fixed(label, 32, "local venue label");
+  w.fixed(own, 32, "local venue label");
   w.u64(lag);
   return sha256(w.finish());
 }
@@ -67,17 +69,33 @@ interface Witnessed { readonly kind: RecordKind; readonly subject: Uint8Array; r
 
 const MAX_U64 = (1n << 64n) - 1n;
 const isIndex = (value: unknown): value is bigint => typeof value === "bigint" && value >= 0n && value <= MAX_U64;
-const isKey = (value: unknown): value is Uint8Array =>
-  value instanceof Uint8Array && value.length === 32 && !(value.buffer instanceof SharedArrayBuffer);
 const isKind = (value: unknown): value is RecordKind => value === 1 || value === 2 || value === 3 || value === 4;
+/** An owned copy of unshared bytes, judged on the copy; undefined for anything else. */
+function owned(value: unknown): Uint8Array | undefined {
+  try { return copyUnshared(value as Uint8Array); } catch (error) {
+    if (error instanceof EncodingError) return undefined;
+    throw error;
+  }
+}
+const ownKey = (value: unknown): Uint8Array | undefined => { const own = owned(value); return own?.length === 32 ? own : undefined; };
+/** A record a §13 frame carries, owned: a 32-byte subject, and bytes of exactly the kind's length for kinds 1–3 or
+ * within its bound for kind 4 (§13.1); undefined for any other. */
+function ownRecord(kind: unknown, subject: unknown, record: unknown): { kind: RecordKind; subject: Uint8Array; record: Uint8Array } | undefined {
+  const ownSubject = ownKey(subject), bytes = owned(record);
+  if (!isKind(kind) || ownSubject === undefined || bytes === undefined ||
+      (kind === 4 ? bytes.length > MAX_RANGE_RECORD_BYTES[4] : bytes.length !== MAX_RANGE_RECORD_BYTES[kind])) return undefined;
+  return { kind, subject: ownSubject, record: bytes };
+}
 
 /**
  * A local venue: its owner witnesses each record at an index at or below a
  * clock that only moves forward. Venue order within an index is insertion
  * order across every kind and subject; a kind-4 ordinal is that position,
  * comparable across answers, and kinds 1–3 carry zero (§13.1). Bytes are
- * copied in and out; nothing is decoded, filtered or judged here. Its owner's
- * misuse throws TypeError, never a refusal a reader could take for evidence.
+ * copied in and out; nothing is decoded or judged here, and only records a
+ * §13 frame carries are taken, so no stored record can make a later answer
+ * unencodable. Its owner's misuse throws TypeError, never a refusal a reader
+ * could take for evidence; `publishRecord` is `RecordPublisher`'s.
  */
 export class FixtureVenue implements RecordVenue, RecordPublisher {
   readonly #id: Uint8Array;
@@ -86,16 +104,18 @@ export class FixtureVenue implements RecordVenue, RecordPublisher {
   readonly #records: Witnessed[] = [];
 
   constructor(id: Uint8Array, witnessedIndex = 0n, lag = 0n) {
-    if (!isKey(id) || !isIndex(witnessedIndex) || !isIndex(lag)) throw new TypeError("invalid fixture venue");
-    this.#id = copyBytes(id);
+    const own = ownKey(id);
+    if (own === undefined || !isIndex(witnessedIndex) || !isIndex(lag)) throw new TypeError("invalid fixture venue");
+    this.#id = own;
     this.#witnessed = witnessedIndex;
     this.#lag = lag;
   }
 
   /** A venue of the local reference context (`LOCAL_REFERENCE`), its identity recomputed from its preimage. */
   static reference(label: Uint8Array, lag: bigint, witnessedIndex = 0n): FixtureVenue {
-    if (!isKey(label) || !isIndex(lag)) throw new TypeError("invalid fixture venue");
-    return new FixtureVenue(localVenueIdentity(label, lag), witnessedIndex, lag);
+    const own = ownKey(label);
+    if (own === undefined || !isIndex(lag)) throw new TypeError("invalid fixture venue");
+    return new FixtureVenue(localVenueIdentity(own, lag), witnessedIndex, lag);
   }
 
   get id(): Uint8Array {
@@ -116,27 +136,27 @@ export class FixtureVenue implements RecordVenue, RecordPublisher {
     this.#witnessed = to;
   }
 
-  /** Witness `record` of `kind`, filed under `subject`, at index `at`. */
+  /** Witness `record` of `kind`, filed under `subject`, at index `at`: only a record a §13 frame carries. */
   witness(kind: RecordKind, subject: Uint8Array, at: bigint, record: Uint8Array): void {
-    if (!isKind(kind) || !isKey(subject) || !isIndex(at) || at > this.#witnessed ||
-        !(record instanceof Uint8Array) || record.buffer instanceof SharedArrayBuffer) throw new TypeError("invalid fixture venue record");
-    const ordinal = kind === 4 ? BigInt(this.#records.filter(r => r.index === at).length) : 0n;
-    this.#records.push({ kind, subject: copyBytes(subject), index: at, ordinal, record: copyBytes(record) });
+    const own = ownRecord(kind, subject, record);
+    if (own === undefined || !isIndex(at) || at > this.#witnessed) throw new TypeError("invalid fixture venue record");
+    const ordinal = own.kind === 4 ? BigInt(this.#records.filter(r => r.index === at).length) : 0n;
+    this.#records.push({ ...own, index: at, ordinal });
   }
 
   /**
    * A local venue witnesses each published record at the next index, moving
    * its clock there. An exact record already witnessed under the same kind
-   * and subject is not witnessed again.
+   * and subject is not witnessed again. A record no §13 frame carries is the
+   * caller's error.
    */
   async publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
-    if (!isKind(kind) || !isKey(subject) || !(record instanceof Uint8Array) || record.buffer instanceof SharedArrayBuffer) {
-      throw new TypeError("invalid fixture venue record");
-    }
-    if (this.#records.some(r => r.kind === kind && compareBytes(r.subject, subject) === 0 && compareBytes(r.record, record) === 0)) return;
-    if (this.#witnessed === MAX_U64) throw new TypeError("a fixture venue's clock is exhausted");
+    const own = ownRecord(kind, subject, record);
+    if (own === undefined) throw new EncodingError("invalid fixture venue record");
+    if (this.#records.some(r => r.kind === own.kind && compareBytes(r.subject, own.subject) === 0 && compareBytes(r.record, own.record) === 0)) return;
+    if (this.#witnessed === MAX_U64) throw new VenueError("a fixture venue's clock is exhausted");
     this.advance(this.#witnessed + 1n);
-    this.witness(kind, subject, this.#witnessed, record);
+    this.witness(own.kind, own.subject, this.#witnessed, own.record);
   }
 
   range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined {
