@@ -332,6 +332,8 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const successor = await f.takeover(), served = (await successor.package()).package;
     expect((await f.holder.sync(served, f.signed)).demands.map(d => d.id)).toEqual([demand.demand]);
     const burn = await f.holder.burn("burn", 6n, served, f.signed, prove);
+    const restored = f.restore("restored", f.holder);
+    await restored.sync(served, f.signed); restored.close();
     // The same database read at a venue view from before the demand and the takeover: A's segment looks live there.
     const lagging = new V3Wallet(join(f.directory, "holder.db"), { venue: FixtureVenue.from(early), reference, verifier });
     wallets.push(lagging);
@@ -340,9 +342,13 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(lagging.act("burn")).toEqual(burn);
     for (const build of [() => lagging.burn("again", 10n, earlyPackage, f.signed, prove),
       () => lagging.demand("again", 10n, f.venue.witnessedIndex() + 40n, earlyPackage, f.signed, prove)]) {
-      await expect(build()).rejects.toMatchObject({ code: "CHANGED_VIEW", message: "the venue view is older than one this wallet's records were judged at" });
+      await expect(build()).rejects.toMatchObject({ code: "CHANGED_VIEW", message: "the venue view is older than one this wallet has read" });
     }
     expect(lagging.act("again")).toBeUndefined();
+    // A wallet from the seed that has only read the current view, with no saved record, builds nothing from the older one.
+    const behind = new V3Wallet(join(f.directory, "restored.db"), { venue: FixtureVenue.from(early), reference, verifier });
+    wallets.push(behind);
+    await expect(behind.burn("burn", 10n, earlyPackage, f.signed, prove)).rejects.toMatchObject({ code: "CHANGED_VIEW" });
   });
 
   it("reserves a demand's notes for its prepared settlement, which takes them over a payment prepared before the demand stood", async () => {

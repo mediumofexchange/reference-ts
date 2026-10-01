@@ -77,7 +77,7 @@ function identifier(value: Uint8Array): Uint8Array {
  * rebuilds it from, and the records a reproof superseded. */
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS wallet_identity (id INTEGER PRIMARY KEY CHECK(id=1),
-    profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL) STRICT;
+    profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL, seen TEXT NOT NULL) STRICT;
   CREATE TABLE IF NOT EXISTS receiver_requests (alias TEXT PRIMARY KEY, request_id BLOB NOT NULL UNIQUE,
     backing BLOB NOT NULL, value TEXT NOT NULL, cm TEXT NOT NULL UNIQUE) STRICT;
   CREATE TABLE IF NOT EXISTS receiver_fulfilled (alias TEXT PRIMARY KEY, cm TEXT NOT NULL UNIQUE,
@@ -297,7 +297,7 @@ export class V3Wallet {
       if (meta === undefined) {
         requireThat([...TABLES.map(([table]) => table), "wallet_custody"].every(table =>
           this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n === 0), "STORAGE", "wallet identity is missing");
-        this.db.prepare("INSERT INTO wallet_identity VALUES(1,?,?,?,?,0)").run(PROFILE, hex(this.domain), hex(this.venueId),
+        this.db.prepare("INSERT INTO wallet_identity VALUES(1,?,?,?,?,0,'0')").run(PROFILE, hex(this.domain), hex(this.venueId),
           restore?.seed ?? randomBytes(32));
         this.db.prepare("INSERT INTO wallet_custody VALUES(1,NULL,?)").run(restore?.digest ?? null);
         if (restore !== undefined) this.install(restore.tables);
@@ -461,6 +461,10 @@ export class V3Wallet {
       }
       // The read awaited: a handle replaced or exported meanwhile answers nothing from it.
       this.mutable();
+      // The newest index read, for `current`: a later view older than it builds nothing.
+      if (view.at > BigInt(this.db.prepare("SELECT seen FROM wallet_identity WHERE id=1").get()!.seen as string)) {
+        this.transaction(() => this.db.prepare("UPDATE wallet_identity SET seen=? WHERE id=1").run(view.at.toString()));
+      }
       return use(view);
     });
   }
@@ -687,14 +691,16 @@ export class V3Wallet {
     return this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE i.nf=?
       AND (a.status='prepared' OR (a.status='final' AND a.kind!='4'))`).get(nf.toString()) !== undefined;
   }
-  /** A new payment or act is built only from a view at least as recent as every view a saved record was built or
-   * decided at: an older one may show a note free that a standing demand or a saved record holds, and a dead
-   * segment live. Indices are u64 decimal text, compared by length, then lexically. */
+  /** A new payment or act is built only from a view at least as recent as every view this wallet read or a saved
+   * record (a restored backup's too) was built or decided at: an older one may show a note free that a standing
+   * demand or a saved record holds, and a dead segment live. Indices are u64 decimal text without leading zeros,
+   * compared by length, then lexically. */
   private current(at: bigint): void {
     const latest = (column: string) => this.db.prepare(`SELECT ${column} AS v FROM saved_records WHERE ${column} IS NOT NULL
       ORDER BY length(${column}) DESC, ${column} DESC LIMIT 1`).get()?.v as string | undefined;
-    requireThat([latest("judged"), latest("judging_index")].every(v => v === undefined || at >= BigInt(v)), "CHANGED_VIEW",
-      "the venue view is older than one this wallet's records were judged at");
+    const seen = this.db.prepare("SELECT seen FROM wallet_identity WHERE id=1").get()!.seen as string;
+    requireThat([seen, latest("judged"), latest("judging_index")].every(v => v === undefined || at >= BigInt(v)), "CHANGED_VIEW",
+      "the venue view is older than one this wallet has read");
   }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
