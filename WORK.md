@@ -3,25 +3,20 @@
 Updated: 2026-10-01
 
 ## Goal
-Slice 8 (adoption). Pool-v3 is adopted with one configuration (spec e7f7f24, §11.4: configHash `7ddbb7e8…a618`, the candidate's
-identities unchanged; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)).
-Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is pool-v4. Open: the Ergo view (Next 7), C3.8 reader (Next 1).
-Slice 8 is complete with M8b. **Next: slice 9** (Next 1): state its goal, acceptance and stop here before building.
+Slice 8 (adoption) is complete. Pool-v3 is adopted with one configuration (spec e7f7f24, §11.4: configHash `7ddbb7e8…a618`;
+[decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)).
+Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is pool-v4.
+**Next: slice 9, redemption in the wallet** (Next 1; [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
+state its goal, acceptance and stop here before building.
 
 ## Status
-- M8b live two-backing drill (2026-10-01): `scope-store-check.mjs --testnet --authorized-testnet` passed all four groups on the own
-  testnet node (split, takeover, elective rejoin, wallet payment in the rejoined scope; 7 real proofs, 12 transactions, 0.01434984 tERG,
-  69 min; [report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json),
-  bundle `scratch/pool-v3-scope-testnet-reader/` re-read). `scripts/pool/v3/drill.mjs` now owns proving, the local/synthetic/live venues,
-  waits and fresh readers for the recovery, succession and scope drills (their three copies removed; leaf-diff equivalent to main's
-  reports, synthetic reports gain `funding`); `testnet-budget.mjs` (was `recovery-testnet.mjs`) caps each live drill. Review applied:
-  live inclusion index checked against the replacement lead floor, live waits in steps of 8 indices, `--worker --testnet` only where offered.
-- M8a adoption (PR #67, spec e7f7f24, the runtime pin): `POOL_V3_MANIFEST` in `src/pool/v3/configuration.ts` holds every identity;
-  journal, readers, wallet and prover take no configuration; the guard (`ReferenceVenueError`) still refuses mainnet.
-- Earlier slice 8: M7 (PR #66), area 28 (PR #65), M4/M6, M5b.6 [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6), M5b PRs #50–#62.
+- M8b (PR #68): the live two-backing drill passed on the own testnet node ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json));
+  `scripts/pool/v3/drill.mjs` owns the recovery, succession and scope drills, `testnet-budget.mjs` caps each live drill.
+- M8a (PR #67, spec e7f7f24, the runtime pin): `POOL_V3_MANIFEST` in `src/pool/v3/configuration.ts` holds every identity; the guard
+  (`ReferenceVenueError`) still refuses mainnet. Earlier: M7 (PR #66), area 28 (PR #65), M4/M6, [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6), M5b PRs #50–#62.
 
 ## Evidence
-- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 7).
+- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json)/[Ergo](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json)/[Ergo](docs/pool-v3-succession-store-ergo-verification.json),
@@ -29,56 +24,62 @@ Slice 8 is complete with M8b. **Next: slice 9** (Next 1): state its goal, accept
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 9, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
-   holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data directories,
-   issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 4 (a)–(c), (e)
-   and Next 7 before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
-   the verifier (M5b.6). Wallet settlements derive `rho_out` per segment and disclosure counter (C3.5). A v3 dishonour reader (C3.8) for redeem: demand void by a spent tag, the holder's lapse, releases taken by another
-   demand's settlement (keep each output's inserting demand); a settle refused under service reads as unreleased (C3.8's adopted limit; counting a
-   release witnessed outside a gap would be pool-v4). Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
-2. Multi-backing leftovers: adding an original-term backing to a live scope; statements spending several backings from the wallet; single-backing openings over-reserve by |E|.
-3. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail
-   caller-object cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one is in flight
-   (`store.ts` `ready`). Move `store-check.mjs` and `history-store-check.mjs` onto `drill.mjs` (its live budget too) and one `receiptFields` for the two receipt checks; retire `header-verify` and `testnet-header-check` unless a mainnet slice needs them (`publisher-check` carries §8's live capacity run).
-   `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11 (unassigned since M4; reports bind the file). `openV3Prover`
-   proves under any domain, and the exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain` (M8a review, minor).
-4. Review findings deferred: (a) `guard.ts` accepts a testnet-context profile anchored on a mainnet header until the next
-   epoch boundary (<=127 blocks); fix by a difficulty bound. (b) `store.ts` `package()` serves a published commitment
-   never held after the lag (C2.4.3). (c) `store.ts` `submit` may return an old-segment receipt for an adopted forced
-   record (traced only). (e) ErgoVenue's side-branch quota never resets. (f) Wallet `prepare`/`reprove` read `signed.terms`
-   twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a transaction.
-   (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (k) A read under a silence
-   or non-service clause judges every held checkpoint again at each admission (persisting the walk's cursors would bound
-   it). (l) One index holding more objects under one subject than an answer's budget (4,096 entries, 1 MiB)
-   refuses every read of that subject and every journal command; size the one-index budget from the venue's block bound.
-   (m) Serving a trail walks back over every record served before its first byte (7.5 µs each, blocking); read a
-   segment forward by position. `sync` takes no deadline or abort signal; the stream's minimum rate is untested.
-   (n) A replay rewrites every kept witness of its segment at each record with outputs, so a wallet's cost per record
-   grows with the notes it ever held (an operator's fee wallet: with history); update a witness only when a sibling
-   subtree completes (at most 32 times), and drop spent notes' witnesses. (j) Verify-only parties could take identity-checked key bytes, needing no G1 file.
-   From review-code 2026-09-30: (o) `store.ts` `parts()` keeps one trail top per segment, so a taken predecessor segment whose snapshots lie on two
-   forks serves only the longer trail and the other checkpoint stays unresolved for readers; a fix needs an ancestor test without a walk per snapshot
-   (a fork-aware try cost N·L walks on an honest takeover). (p) `package-reader.ts` setup reads the selection through its own backing's entry before the
-   walk, so a malformed selection's refusal reason differs per backing; a lapsed row's clock record and `inspectRefused` follow the first-read backing.
-   (q) `scope-reader.ts` `forces` reuses kept publication verdicts without their snapshot dependencies: a kept replay store read with a smaller evidence
-   store answers where a fresh read is unresolved. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged before silence lapse (label, or an
-   answer where lapse is unresolved). (s) Journal: an older own segment's lost trail is skipped silently when serving; each wallet GET `/evidence` takes
-   the journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed. `client.package()` peaks near
-   3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result.
-5. Only when a gate needs them: cancellation, batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, Poseidon2 on
-   Barretenberg (0.12 against 1.14 ms a node hash, the replay's largest cost; if load takes a first sync past 24 h), a 10⁶ first-sync run to
-   attribute the 10⁵ run's ~45 MB rise in process memory, sponsored holder funding, operator fee quotes, a kind-4 fee by length (fee-per-byte nodes rank a long run at the default fee last
-   once a pool fills; C3 deadlines), a text/QR request frame, C4.5 pending-acceptance receipt handoff, store-check's request
-   through the frame, same-segment rescoping. Against hostile evidence growth (M4): a per-supply bound tied to what the venue newly
-   holds; serving a reader only the segments its backing's checkpoints name (the journal serves every segment its directories name). Phone-first wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
-6. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`. After 4(h), read every `local-check`
-   group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`). To cut CI failures, run the harness's proof-free cases in vitest with stand-in proofs, and consider a real-proof job only for PRs marked ready.
-7. Ergo view at the design point, its own slice (area 28 audit, synthetic chain): `ErgoVenue` holds ~2.3 KB of heap per block since the anchor (1.8 GB
-   at three years), each sync copies the whole best chain (`store.best()`, snapshot slice), a range from index zero walks every index, and a restart
-   re-syncs from the anchor (~4.5 h of header work at three years); `ErgoVenueJournal`'s one JSON checkpoint of every raw section passes V8's 512 MiB
-   string limit after ~10 weeks of mainnet. Rebuild on append-only per-index SQLite rows (headers, objects, raw sections for §13.2), a header window of
-   the difficulty lookback below the pin with cumulative scores (keeping the pin's burial headers), sparse sections and a (kind, subject) index: flat memory and sync work, restart without
-   re-verifying. Also protect a pass stopped by a failure, cap side/protected headers durably, and ask sections of more than one supplier at a time.
+1. Slice 9, redemption in the wallet (reference venues): no runtime operation issues, demands, accepts, settles, releases, withdraws or burns
+   (`witness.ts` tasks are driven by tests/scripts). Backer role: issue under signed terms, accept with C4.7's owner (distinct per demand, C3.4),
+   take and burn settled notes. Holder role: demand with a fresh presenter key, settle with C3.5's `rho_out` (segment, disclosure count read from
+   the record), release, withdraw; persisted and exactly retried as payments are. A v3 C3.8 reader: demand void by a spent tag, the holder's
+   lapse, releases taken by another demand's settlement (keep each output's inserting demand); a settle refused under service reads as unreleased
+   (C3.8's adopted limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet
+   operations in fresh processes, local and synthetic Ergo, under service and in a gap with the operator offline; crash/exact-retry drills at the
+   new commit boundaries; C3.4–C3.8 hostile cases. Close Next 4 (a)–(c), (e), (q). Adversarial review before merge.
+2. Profile visibility table (docs/spec, any time before slice 10's wallet text): pool-v3 on Ergo per party and per issuer/operator/witness
+   collusion, with traffic (service connections, publication timing, node queries) and small-pool inference (§C1.4 asks profiles for their own).
+3. Slice 10, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
+   require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration));
+   holder wallet (with the backer role), operator service and supply reader from a packed install (`bin`), fresh processes and data directories,
+   the full path of Next 1 and an offline-operator recovery past the old 67-statement ceiling, live. Size verifier instances against about 85 MB
+   each and destroy the key-deriving instance after building the verifier (M5b.6). Retire the pilot CLI, the harness's second package reader
+   (Next 7) and, against a case map, the transparent path. It needs no Ergo view rebuild (recent testnet anchor, persisted reference view).
+4. Review findings deferred; slice 9 takes (a)–(c), (e), (q), slice 11 (k)–(n), (s), the rest when their files are touched.
+   (a) `guard.ts` accepts a testnet-context profile anchored on a mainnet header until the next epoch boundary (<=127 blocks); fix by a
+   difficulty bound. (b) `store.ts` `package()` serves a published commitment never held after the lag (C2.4.3). (c) `store.ts` `submit` may
+   return an old-segment receipt for an adopted forced record (traced only). (e) ErgoVenue's side-branch quota never resets. (f) Wallet
+   `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
+   transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take
+   identity-checked key bytes, needing no G1 file. (k) A read under a silence or non-service clause judges every held checkpoint again at each
+   admission (persisting the walk's cursors would bound it). (l) One index holding more objects under one subject than an answer's budget
+   (4,096 entries, 1 MiB) refuses every read of that subject and every journal command; size the one-index budget from the venue's block bound.
+   (m) Serving a trail walks back over every record served before its first byte (7.5 µs each, blocking); read a segment forward by position.
+   `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) A replay rewrites every kept witness of its segment at
+   each record with outputs, so a wallet's cost per record grows with the notes it ever held; update a witness only when a sibling subtree
+   completes (at most 32 times), and drop spent notes' witnesses. (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
+   predecessor segment whose snapshots lie on two forks serves only the longer trail (a fix needs an ancestor test without a walk per snapshot).
+   (p) `package-reader.ts` reads the selection through its own backing's entry before the walk, so a malformed selection's refusal reason
+   differs per backing. (q) `scope-reader.ts` `forces` reuses kept publication verdicts without their snapshot dependencies: a kept replay store
+   read with a smaller evidence store answers where a fresh read is unresolved. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged
+   before silence lapse (label, or an answer where lapse is unresolved). (s) Journal: an older own segment's lost trail is skipped silently when serving; each wallet GET `/evidence` takes the
+   journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed; `client.package()` peaks near
+   3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
+   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`.
+5. Slice 11, the design point: measure operator admission at peak, reader first sync and wallet steady state through the commands against the
+   [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), with Next 4 (k)–(n), (s), and rebuild the Ergo view on
+   append-only SQLite rows (its limits and plan: the [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)'s
+   decision 4). Levers (Poseidon2 on Barretenberg at 0.12 against 1.14 ms a node hash, a 10⁶ first-sync run) only if a budget fails.
+6. Release assurance: reproducible builds of the package and its artifacts, installed-package interoperability, backup and restore drills
+   within the standing authority, and the independent review (Open questions).
+7. Harness as a second package reader (retires in slice 10): `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`.
+   After 4(h), read every `local-check` group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete
+   `{compact,scope}-runtime-check.mjs`; retire `verifyTrailEvidence`. Run the harness's proof-free cases in vitest with stand-in proofs; consider a real-proof job only for ready PRs.
+8. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging;
+   served-trail caller-object cache; drop the explicit `vite` dev pin at the next dependency change; test a second commit refused while one is in
+   flight (`store.ts` `ready`). Move `store-check.mjs`/`history-store-check.mjs` onto `drill.mjs` and one `receiptFields`; retire `header-verify`
+   and `testnet-header-check` unless a mainnet slice needs them. `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11.
+9. Only when a gate needs them: cancellation, batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, sponsored
+   holder funding, operator fee quotes, a kind-4 fee by length (fee-per-byte nodes rank a long run last once a pool fills; C3 deadlines), a
+   text/QR request frame, C4.5 pending-acceptance receipt handoff, same-segment rescoping; against hostile evidence growth (M4) a per-supply bound
+   tied to what the venue newly holds and serving a reader only the segments its checkpoints name. Past the smallest profile: statements
+   spending several backings, adding an original-term backing to a live scope, single-backing openings' |E| over-reserve; a phone-first wallet
+   (a venue range source proportional to the subject's records, a new venue identity, then a succinct relation).
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
@@ -86,13 +87,14 @@ Slice 8 is complete with M8b. **Next: slice 9** (Next 1): state its goal, accept
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public `pool-v3-testnet-reader/`, `pool-v3-recovery-testnet-reader/` and `pool-v3-scope-testnet-reader/`
   bundles, `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/` and `ergo-headers/` under scratch.
 - Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`
-  and `node-startup/`, `sync-preparation/` caches; do not allocate another.
-- Archive node `C:\Users\Bob\ergo-node` (outside this project): synced with its index, stopped 2026-09-29; nothing uses it. Delete
-  slice scratch after delivery; preserve legacy Temp/moeclean. Node management is authorized.
+  and `node-startup/`, `sync-preparation/` caches; do not allocate another. Archive node `C:\Users\Bob\ergo-node` (outside this project): synced,
+  stopped 2026-09-29, unused. Delete slice scratch after delivery; preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- None.
+- 2026-10-01, non-blocking: **independent security review.** Release assurance needs a reviewer outside the project (generated audits do not
+  count). Pool-v3's relations and rules are adopted and fixed (spec e7f7f24), so a review of `src/pool/circuits/`, pool-v3.md and pool-recovery.md
+  can start now, the runtime after slice 10. Needed: choose and engage a reviewer. Nothing is blocked until release assurance (Next 6).
 
-Roughly **66% done / 34% remaining**, range **57–72%**, reassessed 2026-10-01 after M8b: the adopted configuration runs live with two
-backings; the Ergo view's growth with venue age (Next 7), installable commands, qualified storage and mainnet remain.
+Roughly **60% done / 40% remaining**, range **50–70%**, reassessed 2026-10-01 (direction): the remainder lacked redemption's operations,
+the visibility table and release assurance; with them installable commands, the design point, qualified storage and mainnet remain.
