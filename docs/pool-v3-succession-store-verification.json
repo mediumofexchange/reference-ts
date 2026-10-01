@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1338
+      "elapsedMs": 1281
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3172
+      "elapsedMs": 3087
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3110
+      "elapsedMs": 3063
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1001
+      "elapsedMs": 982
     }
   ],
   "transactions": [],
@@ -49,7 +49,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "2261233c042322f55531c96b723172fc487a8f7f74afbb8e2e2dcacf6086ba3a",
-    "history": "e63709dbcb3360b1d0ad2cf656fad3a5847a48b907b5688f619582627a0b93d8",
+    "history": "416315785d74685caf6734bb4f636582ff2c3ec69b83100f12d7eab5dc06d765",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -107,7 +107,7 @@
       }
     ]
   },
-  "elapsedMs": 24921,
+  "elapsedMs": 24305,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "d5bf60db247c0a298a978a278c41b52e692b18af9f457e206d9fb54b19c5ef6f",
@@ -171,13 +171,16 @@
     "scripts/pool/v3/codec.mjs": "36df97bafb5622c822a7e26c802bb83b097c53611c11628e9c824ed8fd7985e7",
     "scripts/pool/v3/compact-runtime-check.mjs": "63faf616167b69a5d0dc1949efda9d15a5e735cc6ff9260edd5a63b9e8d0ed04",
     "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
+    "scripts/pool/v3/drill.mjs": "529ff3a0586e03a64841290fc9d21772c866e66823a59e1eb778280fd113015c",
     "scripts/pool/v3/ergo-check.mjs": "a618689f420efb3e72da1cd02b9839510f20bc05508ceda556dfcd64b3ff8e8c",
     "scripts/pool/v3/evidence-reader.mjs": "d36c7f99a1a4b6fff10f0217cbe0cbb0540561c3d9ab7c0ff221a99d470e0b09",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
     "scripts/pool/v3/local-replay.mjs": "20221c77fbb79c999d52faecca800c5ea27c3909923e5a48ad14fcdbb67a3a6b",
     "scripts/pool/v3/manifest.mjs": "725d3b164752fa58ab8e8eef319470e71c788cd59a71a75fe23ec69606249092",
     "scripts/pool/v3/provenance.mjs": "e8824027b1b145b76faf2adae7a2596bab49ab350bc1399b02db6062d7532aaa",
-    "scripts/pool/v3/succession-store-check.mjs": "88b70fae89db3864e65c99b3d3284b0865896ad96905901dca38310f4f1a32a8",
+    "scripts/pool/v3/public-artifacts.mjs": "47e2c6d61a404a8aa3c9b41e06de3a760d27b9400933201589f0043d30b5ad82",
+    "scripts/pool/v3/succession-store-check.mjs": "f31d28c9cf440bc9479c89edfbedb0f06acc8f024afe13d4cc6ee4a1973c808d",
+    "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
     "src/contexts.ts": "740bb1e22250d772ff15dad541c4eecfe26709a6d0b47ccda05b34b385b13d88",
     "src/ergo-headers.ts": "fc308579697076e7476617e1c5141710cdf7aa83953effbf92be45c74d0426dc",
