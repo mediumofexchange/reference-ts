@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-01` [Keep an Ergo index witnessed while the best chain keeps its block, and replace a publication only on a supplier's answer](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)
 - `2026-10-01` [Add no certificate encoding, keep §12 to the kinds a reader reads, and prune no retained evidence (M4)](decisions/2026-10.md#2026-10-01--add-no-certificate-encoding-keep-12-to-the-kinds-a-reader-reads-and-prune-no-retained-evidence-m4)
 - `2026-10-01` [Read a gap release taken by another demand's settlement as released](decisions/2026-10.md#2026-10-01--read-a-gap-release-taken-by-another-demands-settlement-as-released)
 - `2026-10-01` [Verify a trail's proofs ahead of its replay on a pool of verifier instances](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)
