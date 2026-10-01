@@ -106,7 +106,7 @@ describe("replay storage", () => {
     const base = reads.open(one, new Uint8Array(32).fill(7), undefined, genesis);
     reads.append(base, append([1n], [11n], () => false, { history: history(1) })); reads.append(base, append([2n], [12n], () => false, { history: history(2) }));
     const read = reads.open(two, new Uint8Array(32).fill(8), { segments: new Map([[name(1), { ns: base, upto: 1n }]]), totals: new Map() }, genesis);
-    reads.append(read, append([3n], [13n], () => false, { history: history(3), demand: { id: "d1", value: { backing: two, quantity: 1n, tags: [5n, 6n], presenter: one, deadline: 9n } } }));
+    reads.append(read, append([3n], [13n], () => false, { history: history(3), demand: { id: "d1", value: { backing: two, quantity: 1n, tags: [5n, 6n], presenter: one, instant: 4n, deadline: 9n } } }));
     reads.append(read, append([4n], [14n], () => false, { history: history(4), ended: "d1" }));
     reads.append(read, append([5n], [15n], () => false, { history: history(5) }));
     const frontier = { segments: new Map([[name(1), { ns: base, upto: 1n }], [name(2), { ns: read, upto: 2n }]]), totals: new Map([["aa".repeat(32), { issued: 7n, burned: 1n }]]) };

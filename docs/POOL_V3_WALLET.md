@@ -151,10 +151,17 @@ read the same complete canonical frontier as `fulfill`. The seed scans each outp
 that backing's history once, as its record is replayed (C4.6–7, `holdings.ts`): one AEAD trial per
 capsule and one owner derivation per lit settlement; a later read scans only
 new records and reads this seed's notes from their kept witnesses. Zero, spent and
-force-spent notes are not holdings; notes under a standing demand are `locked`,
-and inputs of a saved payment are `reserved`. The view covers one backing at
-one witnessed index; it is not a global balance, and restoring from the seed
-alone finds the same notes, including change.
+force-spent notes are not holdings; notes under a standing demand are `locked`
+until it ends or its deadline passes (C3.7), and inputs of a saved payment or
+burn, a prepared demand or a prepared settlement are `reserved`. The view also
+lists this seed's standing demands over its unspent notes (identity, quantity,
+instant, deadline and the holdings each names); a demand one of whose notes was
+spent is void and not listed. The view covers one backing at one witnessed
+index; it is not a global balance, and restoring from the seed alone finds the
+same notes, including change, and the same standing demands. A payment or act
+is built only from a view at least as recent as every view the wallet has synced
+or fulfilled at and every one a saved record was built or decided at (`CHANGED_VIEW`
+otherwise), and an older view fails no saved record.
 
 The canonical segment may scope several backings (C2.10.2). Its history, spent
 set and roots are shared, so one package serves each scoped backing, but each
@@ -244,9 +251,10 @@ would go final, as an act does. Output reservations are permanent. Release
 with other outputs (cancellation), same-segment tail repair (C2.10.9a) and
 release of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. Payments and acts are one kind of saved record
-under one alias namespace. The wallet profile is `moe/wallet/v3/5`; a database
-of an earlier profile (payments and acts saved apart, no saved acts, no output
-openings, or a package saved with each fulfillment) is refused.
+under one alias namespace. The wallet profile is `moe/wallet/v3/6`; a database
+of an earlier profile (withdrawals and settlements naming a demand by alias,
+payments and acts saved apart, no saved acts, no output openings, or a package
+saved with each fulfillment) is refused.
 
 ## Redeeming and issuing
 
@@ -271,12 +279,25 @@ gap, on the local venue).
   ahead of the horizon. Its presenter key comes from the seed and the notice
   (tags, instant, deadline), and a one-note demand's zero padding from the
   seed and the note's nullifier, so a retry or a rebuilt wallet names the same
-  demand. Its notes stay reserved until its withdrawal is final.
-  `settle` checks the acceptance against the obligor, the demand and the
+  demand. Its notes stay reserved while it is prepared; once it stands, its
+  own lock holds them until it ends (withdrawn or settled, by whichever copy)
+  or its deadline passes (C3.7).
+  `settle(alias, acceptance, …)` settles the demand the acceptance names; it
+  checks the acceptance against the obligor, the demand's deadline and the
   horizon, re-proves the demand's positions into one output to the
   acceptance's owner with `rho_out` derived from the seed, the input
   nullifiers, the segment and the disclosure count (C3.5), and signs the
-  release. `withdraw` signs the withdrawal for the canonical segment.
+  release. `withdraw(alias, demand, …)` signs the withdrawal of the demand
+  with that identity for the canonical segment. Both read the demand's notice
+  from the view, so they need it standing (admitted, or with force in a gap)
+  and recognize it as this seed's by its presenter key, which only this seed
+  derives (`UNKNOWN` otherwise); a demand a lost wallet made is settled or
+  withdrawn from the seed alone, and its settlement is the record the lost
+  wallet would have made at the same disclosure count. A prepared settlement
+  reserves the demand's notes. It takes them even where another saved record
+  reserves them (a payment a restored copy prepared before the demand stood):
+  while the demand stands its lock refuses that spend at the door, and the
+  settlement's admission fails it.
 
 **In a gap** (C2b.3.2) the holder redeems with the operator offline. Where
 the backing declares silence and the horizon is past the canonical
@@ -301,9 +322,8 @@ demand, segment, output, `rho_out` and release signature but not its proof;
 other reads do not ask the venue for publications they do not need. The count is the number of
 distinct outputs among those naming the demand and the segment and signed by
 the demand's presenter key. So a settlement after a release without force
-names an output nobody has seen, and any wallet holding the demand reads the
-same count from the same record (finding a demand again from the seed alone is
-M9b2). A copy, or a "release" with a signature that does not verify, adds
+names an output nobody has seen, and any wallet of the seed, a restored one
+included, reads the same count from the same record. A copy, or a "release" with a signature that does not verify, adds
 nothing. An output disclosed only to an operator is not counted (C3.5).
 Because `rho_out` reads no acceptance or owner, `settle` refuses (`CONFLICT`)
 while another settlement of the demand is prepared at the same count: one
@@ -323,10 +343,17 @@ spent otherwise, its demand ended otherwise, or a settlement's acceptance
 deadline has passed. A failed act's notes are free again; one that evidence
 later shows admitted (an operator reading behind the wallet) becomes final. A
 burn the operator refuses in a live segment stays reserved, as a refused
-payment's inputs do, until it fails. Not yet: demands found again after a seed restore,
-reproof of an act whose segment ended, the backer's acceptance published as
-evidence, and a C3.8 dishonour reading (slice 9, M9b2 and M9c in
-[WORK.md](../WORK.md)).
+payment's inputs do, until it fails.
+
+An act whose segment ended fails and is made again under a new alias; `reprove`
+is the payments' alone. C2.10.8 rebuilds a statement for a new segment with a
+new identity and fresh evidence anyway, and a payment's reproof exists to keep
+outputs a payee was given (C1.2.5). An act's outputs are the request's (an
+issue's, which its intent binds under any alias), its own (a burn's change) or
+derived per segment (a settlement's), and its signatures are made again. The
+backer's acceptance stands, since it names the demand and the demand keeps its
+identity in the imported history. Not yet: the backer's acceptance published as
+evidence and a C3.8 dishonour reading (slice 9, M9c in [WORK.md](../WORK.md)).
 
 ## Backup and restoration
 
@@ -337,7 +364,9 @@ are lost. `V3Wallet.restoreSeed(path, options, seed)` creates a new wallet at a
 new path from the backed-up seed. `sync` then finds the same positive unspent
 notes, including change, from complete public evidence. No request, alias,
 fulfillment or pending payment returns, because none is seed-recoverable (C4.2).
-New requests draw fresh random identifiers, so nothing is reused. A payment
+New requests draw fresh random identifiers, so nothing is reused. Standing demands
+are found again by their presenter keys (`sync`'s `demands`), so the restored
+wallet withdraws or settles them. A payment
 another copy prepared but never finished is unknown here: its inputs show as
 available until it settles or they are spent, and a new payment over them
 fails if the old one wins. A request the lost wallet issued, once paid,

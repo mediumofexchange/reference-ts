@@ -31,12 +31,14 @@ import type { HeldCommitment, RangeEntry } from "../../record-range.js";
 import { EvidenceRefusal } from "./refusals.js";
 
 export interface Totals { issued: bigint; burned: bigint }
-/** A standing kind-4 demand, by its statement identity. */
+/** A standing kind-4 demand, by its statement identity: its notice (C3.3), whose instant a wallet rebuilt from
+ * its seed reads to derive the presenter key again. */
 export interface Demand {
   readonly backing: Uint8Array;
   readonly quantity: bigint;
   readonly tags: readonly bigint[];
   readonly presenter: Uint8Array;
+  readonly instant: bigint;
   readonly deadline: bigint;
 }
 /** The namespace and position an imported segment's rows are read to. */
@@ -140,7 +142,7 @@ const SCHEMA = `
   CREATE INDEX output_order ON output(ns, leaf);
   CREATE TABLE anchor (root BLOB, ns INTEGER, position INTEGER NOT NULL, PRIMARY KEY(root, ns)) WITHOUT ROWID;
   CREATE TABLE demand (id TEXT, ns INTEGER, position INTEGER NOT NULL, backing BLOB NOT NULL, quantity TEXT NOT NULL,
-    tag0 BLOB NOT NULL, tag1 BLOB NOT NULL, presenter BLOB NOT NULL, deadline TEXT NOT NULL, PRIMARY KEY(id, ns)) WITHOUT ROWID;
+    tag0 BLOB NOT NULL, tag1 BLOB NOT NULL, presenter BLOB NOT NULL, instant TEXT NOT NULL, deadline TEXT NOT NULL, PRIMARY KEY(id, ns)) WITHOUT ROWID;
   CREATE TABLE demand_tag (tag BLOB, id TEXT, ns INTEGER, PRIMARY KEY(tag, id, ns)) WITHOUT ROWID;
   CREATE TABLE demand_end (id TEXT, ns INTEGER, position INTEGER NOT NULL, PRIMARY KEY(id, ns)) WITHOUT ROWID;
   CREATE TABLE total (ns INTEGER, backing BLOB, position INTEGER, issued TEXT NOT NULL, burned TEXT NOT NULL,
@@ -182,7 +184,7 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 /** Kept venue answers refer to no namespace, so collection keeps them. */
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -387,7 +389,7 @@ export class ReplayStore {
       insertNullifier: "INSERT INTO nullifier VALUES (?, ?, ?, ?)",
       insertOutput: "INSERT INTO output VALUES (?, ?, ?, ?, ?, ?)",
       insertAnchor: "INSERT OR IGNORE INTO anchor VALUES (?, ?, ?)",
-      insertDemand: "INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      insertDemand: "INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       insertDemandTag: "INSERT OR IGNORE INTO demand_tag VALUES (?, ?, ?)",
       insertDemandEnd: "INSERT INTO demand_end VALUES (?, ?, ?)",
       outputs: `SELECT x.* FROM output x WHERE ${v} ORDER BY x.ns, x.leaf`,
@@ -658,7 +660,7 @@ export class ReplayStore {
     const hash = createHash("sha256");
     const tables: [string, string[]][] = [["event", ["identity", "kind", "proof_hash", "signature_hash", "history", "evidence", "note_root", "spent_root"]],
       ["nullifier", ["nf", "tag"]], ["output", ["cm", "leaf", "settlement"]], ["anchor", ["root"]],
-      ["demand", ["id", "backing", "quantity", "tag0", "tag1", "presenter", "deadline"]], ["demand_end", ["id"]]];
+      ["demand", ["id", "backing", "quantity", "tag0", "tag1", "presenter", "instant", "deadline"]], ["demand_end", ["id"]]];
     for (const [table, columns] of tables) {
       hash.update(`${table}:`);
       const list = columns.map(column => `x.${column}`).join(", ");
@@ -680,7 +682,8 @@ export class ReplayStore {
 
   #demand(row: Record<string, unknown>): [string, Demand] {
     return [row["id"] as string, { backing: bytes(row["backing"]), quantity: BigInt(row["quantity"] as string),
-      tags: [field(row["tag0"]), field(row["tag1"])], presenter: bytes(row["presenter"]), deadline: BigInt(row["deadline"] as string) }];
+      tags: [field(row["tag0"]), field(row["tag1"])], presenter: bytes(row["presenter"]), instant: BigInt(row["instant"] as string),
+      deadline: BigInt(row["deadline"] as string) }];
   }
   demand(ns: number, p: bigint, id: string): Demand | undefined {
     const row = this.#q.demand!.get({ ns, p, key: id }) as Record<string, unknown> | undefined;
@@ -1158,7 +1161,7 @@ export class ReplayStore {
       if (record.demand !== undefined) {
         const { id, value } = record.demand;
         this.#q.insertDemand!.run(id, ns, position, value.backing, u64(value.quantity), fieldToBytes(value.tags[0]!), fieldToBytes(value.tags[1]!),
-          value.presenter, u64(value.deadline));
+          value.presenter, u64(value.instant), u64(value.deadline));
         for (const tag of value.tags) this.#q.insertDemandTag!.run(fieldToBytes(tag), id, ns);
       }
       if (record.ended !== undefined) this.#q.insertDemandEnd!.run(record.ended, ns, position);

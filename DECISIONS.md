@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-01` [Find a seed's standing demands by their presenter keys, hold them by their locks, and make an act of an ended segment again](decisions/2026-10.md#2026-10-01--find-a-seeds-standing-demands-by-their-presenter-keys-hold-them-by-their-locks-and-make-an-act-of-an-ended-segment-again)
 - `2026-10-01` [Build redemption into the wallet before packaging commands, and give the design point and release assurance slices of their own](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)
 - `2026-10-01` [Adopt pool-v3 with one configuration and hold its manifest in the runtime (M8a)](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)
 - `2026-10-01` [Check the one-transaction condition in the guard and fill Ergo boxes at their real output index](decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)
