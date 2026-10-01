@@ -404,8 +404,9 @@ split/rejoin with real proofs and fresh per-backing readers on local and synthet
 Ergo venues ([local](pool-v3-scope-store-verification.json),
 [synthetic Ergo](pool-v3-scope-store-ergo-verification.json)). Slice 7 M3 lets the wallet hold,
 pay and re-prove one backing in any scope; the same acceptance pays a wallet request in the
-rejoined scope. The live two-backing drill runs after configuration adoption
-([decision](../decisions/2026-09.md#2026-09-28--pay-one-backing-in-any-scope-and-run-the-live-two-backing-drill-after-adoption)).
+rejoined scope. After configuration adoption the same drill passed live on the own testnet
+node (M8b, [probes](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)); the recovery,
+succession and scope drills share `scripts/pool/v3/drill.mjs` for proving, venues and fresh readers.
 
 Slice 5 adds the [durable venue and journal-owned publisher](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher).
 Synthetic fresh-process crash checks reproduce ranges and exact publication retries;

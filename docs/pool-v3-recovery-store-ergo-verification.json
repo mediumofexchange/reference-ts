@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1289
+      "elapsedMs": 1285
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1011
+      "elapsedMs": 987
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2621
+      "elapsedMs": 2588
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2614
+      "elapsedMs": 2581
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2607
+      "elapsedMs": 2566
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1411
+      "elapsedMs": 1380
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2588
+      "elapsedMs": 2578
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2612
+      "elapsedMs": 2573
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2601
+      "elapsedMs": 2566
     }
   ],
   "transactions": [
@@ -114,13 +114,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "b1beb784e3ccbd175a5e994a708b31525ec392bf6f3c050309980fec1ab2e2c2",
+    "history": "48cb5cc42c273edeed23ad7b81e33cb8e09fd5b3f8881a272e4ef05ea98f5352",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "f1045922590cbdc87bdad39b01441e753337107923758eeaaea48eee047a644b"
+        "sha256": "9ded347dac2fbbc2f2d830dce7da94841ab64d1c795d43f09735766fdae32607"
       },
       {
         "index": "27",
@@ -130,12 +130,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "99fc13d3d45eee8aac5585a5bf1f7838c2fc5de5a334d04df7b55ce52d1c9edc"
+        "sha256": "3fa23ece58dc5cd771d7726ff24d7e86e77cdd6394195f08d7d439c6b5039073"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "ee920023fe448e03b3ad1a71e95ce29849a1c145b72c379b2885ea95711d34d4"
+        "sha256": "49eb8dd90b35546e276c076d41a08238709a85139c5c7b523b338cf8803d82e1"
       }
     ],
     "clock": {
@@ -156,7 +156,7 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 36022,
+  "elapsedMs": 35562,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "d5bf60db247c0a298a978a278c41b52e692b18af9f457e206d9fb54b19c5ef6f",
@@ -220,6 +220,7 @@
     "scripts/pool/v3/codec.mjs": "36df97bafb5622c822a7e26c802bb83b097c53611c11628e9c824ed8fd7985e7",
     "scripts/pool/v3/compact-runtime-check.mjs": "63faf616167b69a5d0dc1949efda9d15a5e735cc6ff9260edd5a63b9e8d0ed04",
     "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
+    "scripts/pool/v3/drill.mjs": "529ff3a0586e03a64841290fc9d21772c866e66823a59e1eb778280fd113015c",
     "scripts/pool/v3/ergo-check.mjs": "a618689f420efb3e72da1cd02b9839510f20bc05508ceda556dfcd64b3ff8e8c",
     "scripts/pool/v3/evidence-reader.mjs": "d36c7f99a1a4b6fff10f0217cbe0cbb0540561c3d9ab7c0ff221a99d470e0b09",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
@@ -227,8 +228,8 @@
     "scripts/pool/v3/manifest.mjs": "725d3b164752fa58ab8e8eef319470e71c788cd59a71a75fe23ec69606249092",
     "scripts/pool/v3/provenance.mjs": "e8824027b1b145b76faf2adae7a2596bab49ab350bc1399b02db6062d7532aaa",
     "scripts/pool/v3/public-artifacts.mjs": "47e2c6d61a404a8aa3c9b41e06de3a760d27b9400933201589f0043d30b5ad82",
-    "scripts/pool/v3/recovery-store-check.mjs": "e266ef10cecf5fd800c428dbd9c7f6eb9bf8a686b863234b97c4ba79780c78c1",
-    "scripts/pool/v3/recovery-testnet.mjs": "bd1ed52fff6ab8ac23c199b54264a827be41d79871f8b9b84b6d925aba22cfa6",
+    "scripts/pool/v3/recovery-store-check.mjs": "329ee6cd00c8a4114dc96171e3347a98b1fb469e9ef2ea6ca55068d110990435",
+    "scripts/pool/v3/testnet-budget.mjs": "1e889ddb208d115192eaef05fb052faac3187b161bc8f6386baf085fc807b079",
     "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
     "src/contexts.ts": "740bb1e22250d772ff15dad541c4eecfe26709a6d0b47ccda05b34b385b13d88",

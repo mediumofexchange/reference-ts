@@ -1,12 +1,12 @@
 {
   "status": "passed",
   "specification": "e7f7f24",
-  "evidence": "local-runtime-real-proofs",
+  "evidence": "live-testnet-runtime-real-proofs",
   "limits": [
     "the adopted configuration on reference venues only",
     "two backings, one operator per term",
     "one wallet payment, in the rejoined scope",
-    "no live broadcasts",
+    "live testnet only, own node v6.0.6, depth 2; the reader's already-final anchor is a trust input; no mainnet or production finality claim",
     "no persistence claim",
     "empty recovery blocks; forced recovery over a scope is oracle-proof only"
   ],
@@ -21,118 +21,208 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1277
+      "elapsedMs": 1862
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 989
+      "elapsedMs": 1411
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3071
+      "elapsedMs": 4467
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3052
+      "elapsedMs": 4266
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 983
+      "elapsedMs": 1415
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3052
+      "elapsedMs": 6937
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3054
+      "elapsedMs": 4621
     }
   ],
   "transactions": [],
+  "funding": {
+    "transactions": [
+      {
+        "id": "086c5223276ac3916ec8c9133f9d09de2fd648f9b0635fd87a8d37e2324ffecd",
+        "signedHash": "53a32b72f0b8a5dcf49454d1e6cadd0d8bb952cf015299e96cbc7fb230aaedbc",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "5b065dfb72d297db22b1840d270f7e44c5c3de736519c735e76e5d5e952ebb8a",
+        "signedHash": "02c5ed38a9494f6ee5cd63634a87b00d46d36f24ecc9973806cb7aba8b26b852",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "658daa84b390fede87e0b6cadea6d4de47e602a1983872823e6159e20083cc45",
+        "signedHash": "9eaf2c21b1482fa199969927f18062eeb125aa41e98eac33e4916d9afd4a9b1a",
+        "signedBytes": 569,
+        "spentNanoErg": "1224920",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "a57a69b594b62c326a1dc34bfbf71a6f0d5c1c7312fcbd0720e36914a6176097",
+        "signedHash": "addc799305f1ab8aa8160f8e3a8361de6cfb2101a0f9506a9e112140eb4d9ee1",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "4bfa2184feac304a6aef1f24652b5be34a9585864dae8838e632e9d884abe109",
+        "signedHash": "0fcd2e2d773566bab829dc7e824f659e8cb083972b3b51742abf995d42f4356d",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "0693db59e2fcbbb4f8f4328861115db65ec85106b55cfadb4e60981fe5ef3ef6",
+        "signedHash": "9af86f21195cb2a7c20f59b35bf3c118adf0629200e6efa6325b88c5ba368731",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "fd4b54e7e8bfc455671c2fba6c87b849ee36ed7064b4554fbd521099f939c556",
+        "signedHash": "d9df8d4ea7f7118ff469db9725a8edc301b065ffb2c359b5544a881a9edfb7ca",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "639c391a837e22c4a41c9c5109f566336c8d757e5f68fcff2c4bb5b530a06253",
+        "signedHash": "30ec89954683d1d48288dba9cb57a6b1ca089a0b25557e9b2d769210d9268f8d",
+        "signedBytes": 569,
+        "spentNanoErg": "1224920",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "2e62de1c7b830462914c10d63c76f4b603f04832429c85618deb5fb258f8f572",
+        "signedHash": "aaa4f92eb66c2157cf7c7b9f477566380148bd383090c5ad5ef96f57cded6f55",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "df64ee3dbc39960e0d681226f1da1911c8f1459f8dac1e8feff3c2191f47954c",
+        "signedHash": "736164bd929224c0912770aa06aaa0440861e933defb3c44dba4bfa0284bf53b",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "31d083f522fbfbe91e627b95d0ffa60f89f76abdcc11a047371506817e827a73",
+        "signedHash": "1a525278a276290417cbed972240f6f8f489a6d1cdabbdf3825f49a8a01de0f4",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      },
+      {
+        "id": "828fada605b266bd94a101019083cc38213c093702f6a2075767ee7aeb933152",
+        "signedHash": "9d0986503aabfe3854f071b9687803bf2f673806b07eda31b4a15f2a1efc947c",
+        "signedBytes": 472,
+        "spentNanoErg": "1190000",
+        "feeNanoErg": "1100000"
+      }
+    ],
+    "spentNanoErg": "14349840",
+    "feeNanoErg": "13200000"
+  },
   "maxPackageBytes": 115614,
   "final": {
     "x": {
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "5b16af115cc1fd35cd72bc9e17fc93a6b0e337223ca5d05aa254e53357b70ed9",
-      "history": "9b9e9fbc5e32816ec902ac730c77816152a117dab6b4d08419b2566be5bd4b2b",
+      "spentRoot": "785bed0a303e27f4692251f79690e56eacbd1264e8f4c432f2052923a08666cc",
+      "history": "dfe8096cde55928189e35f6c219643408c26cdb46f1bfa89269581ceda511788",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
-        "index": "26"
+        "index": "82"
       },
       "carrying": [
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "1",
-          "index": "1",
+          "index": "4",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "2",
-          "index": "2",
+          "index": "8",
           "class": "valid"
         },
         {
           "operator": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21",
           "sequence": "1",
-          "index": "11",
+          "index": "31",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "3",
-          "index": "12",
+          "index": "35",
           "class": "valid"
         },
         {
           "operator": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21",
           "sequence": "2",
-          "index": "13",
+          "index": "41",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "4",
-          "index": "14",
+          "index": "45",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "5",
-          "index": "23",
+          "index": "70",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "6",
-          "index": "24",
+          "index": "74",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "7",
-          "index": "25",
+          "index": "78",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "8",
-          "index": "26",
+          "index": "82",
           "class": "valid"
         }
       ]
@@ -141,78 +231,110 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "5b16af115cc1fd35cd72bc9e17fc93a6b0e337223ca5d05aa254e53357b70ed9",
-      "history": "9b9e9fbc5e32816ec902ac730c77816152a117dab6b4d08419b2566be5bd4b2b",
+      "spentRoot": "785bed0a303e27f4692251f79690e56eacbd1264e8f4c432f2052923a08666cc",
+      "history": "dfe8096cde55928189e35f6c219643408c26cdb46f1bfa89269581ceda511788",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
-        "index": "26"
+        "index": "82"
       },
       "carrying": [
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "1",
-          "index": "1",
+          "index": "4",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "2",
-          "index": "2",
+          "index": "8",
           "class": "valid"
         },
         {
           "operator": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21",
           "sequence": "1",
-          "index": "11",
+          "index": "31",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "3",
-          "index": "12",
+          "index": "35",
           "class": "valid"
         },
         {
           "operator": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21",
           "sequence": "2",
-          "index": "13",
+          "index": "41",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "4",
-          "index": "14",
+          "index": "45",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "5",
-          "index": "23",
+          "index": "70",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "6",
-          "index": "24",
+          "index": "74",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "7",
-          "index": "25",
+          "index": "78",
           "class": "valid"
         },
         {
           "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
           "sequence": "8",
-          "index": "26",
+          "index": "82",
           "class": "valid"
         }
       ]
     }
   },
-  "elapsedMs": 35371,
+  "reader": {
+    "directory": "scratch/pool-v3-scope-testnet-reader",
+    "inputs": [
+      "x.bin",
+      "y.bin"
+    ]
+  },
+  "live": {
+    "schema": "moe-v3-testnet-reader-1",
+    "endpoint": "http://127.0.0.1:9052",
+    "context": "moe/venue/ergo-testnet/reference",
+    "depth": "2",
+    "anchor": "c20575d503ba816ce83c29ee918cd37710cb88ad407714b3462fcb556ee063e7",
+    "anchorHeight": "574970",
+    "judgingIndex": "82",
+    "witnessedBlock": "253692368620d7b583c29358e0dcff36f0ba520ad55603a72b7722dc2971fd7a",
+    "tipHeight": "575055",
+    "submittedTransactions": [
+      "086c5223276ac3916ec8c9133f9d09de2fd648f9b0635fd87a8d37e2324ffecd",
+      "5b065dfb72d297db22b1840d270f7e44c5c3de736519c735e76e5d5e952ebb8a",
+      "658daa84b390fede87e0b6cadea6d4de47e602a1983872823e6159e20083cc45",
+      "a57a69b594b62c326a1dc34bfbf71a6f0d5c1c7312fcbd0720e36914a6176097",
+      "4bfa2184feac304a6aef1f24652b5be34a9585864dae8838e632e9d884abe109",
+      "0693db59e2fcbbb4f8f4328861115db65ec85106b55cfadb4e60981fe5ef3ef6",
+      "fd4b54e7e8bfc455671c2fba6c87b849ee36ed7064b4554fbd521099f939c556",
+      "639c391a837e22c4a41c9c5109f566336c8d757e5f68fcff2c4bb5b530a06253",
+      "2e62de1c7b830462914c10d63c76f4b603f04832429c85618deb5fb258f8f572",
+      "df64ee3dbc39960e0d681226f1da1911c8f1459f8dac1e8feff3c2191f47954c",
+      "31d083f522fbfbe91e627b95d0ffa60f89f76abdcc11a047371506817e827a73",
+      "828fada605b266bd94a101019083cc38213c093702f6a2075767ee7aeb933152"
+    ]
+  },
+  "elapsedMs": 4169403,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "d5bf60db247c0a298a978a278c41b52e692b18af9f457e206d9fb54b19c5ef6f",
@@ -279,7 +401,7 @@
     "scripts/pool/v3/codec.mjs": "36df97bafb5622c822a7e26c802bb83b097c53611c11628e9c824ed8fd7985e7",
     "scripts/pool/v3/compact-runtime-check.mjs": "63faf616167b69a5d0dc1949efda9d15a5e735cc6ff9260edd5a63b9e8d0ed04",
     "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
-    "scripts/pool/v3/drill.mjs": "529ff3a0586e03a64841290fc9d21772c866e66823a59e1eb778280fd113015c",
+    "scripts/pool/v3/drill.mjs": "6de6bd30b16ec046efd658bdfe6e2936f313590b9fb09311a50ead4076b8c4b2",
     "scripts/pool/v3/ergo-check.mjs": "a618689f420efb3e72da1cd02b9839510f20bc05508ceda556dfcd64b3ff8e8c",
     "scripts/pool/v3/evidence-reader.mjs": "d36c7f99a1a4b6fff10f0217cbe0cbb0540561c3d9ab7c0ff221a99d470e0b09",
     "scripts/pool/v3/fault-evidence.mjs": "502b2cc1a9455e5eca71b794700be621fd7eaf8f3d70f55008c3a361a047c29c",
@@ -287,7 +409,7 @@
     "scripts/pool/v3/manifest.mjs": "725d3b164752fa58ab8e8eef319470e71c788cd59a71a75fe23ec69606249092",
     "scripts/pool/v3/provenance.mjs": "e8824027b1b145b76faf2adae7a2596bab49ab350bc1399b02db6062d7532aaa",
     "scripts/pool/v3/public-artifacts.mjs": "47e2c6d61a404a8aa3c9b41e06de3a760d27b9400933201589f0043d30b5ad82",
-    "scripts/pool/v3/scope-store-check.mjs": "5f918fed9efa06d64c41b11cf0f142af90d6491d64c8037b2cc60423915251b1",
+    "scripts/pool/v3/scope-store-check.mjs": "4495bf0072f48a1af02fc91103d5f974ab7f28d9f216c102e70cb2bee0da1f92",
     "scripts/pool/v3/testnet-budget.mjs": "1e889ddb208d115192eaef05fb052faac3187b161bc8f6386baf085fc807b079",
     "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
