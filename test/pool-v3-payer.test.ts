@@ -224,7 +224,7 @@ describe("v3 payer custody over restored holdings", () => {
     const results = await Promise.allSettled([g.payer.prepare("one", g.order, g.served, g.signed, gated),
       g.payer.prepare("two", { request: other, value: 2n }, g.served, g.signed, gated)]);
     expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
-    expect(results.find(r => r.status === "rejected")).toMatchObject({ reason: { code: "CONFLICT", message: "an input is reserved by another payment" } });
+    expect(results.find(r => r.status === "rejected")).toMatchObject({ reason: { code: "CONFLICT", message: "an input is reserved by another payment or act" } });
     // A third order, read after that save, finds no note free to select.
     await expect(g.payer.prepare("three", { request: g.receiver.request("third", g.backing, 2n), value: 2n }, g.served, g.signed, prove))
       .rejects.toMatchObject({ code: "FUNDS" });

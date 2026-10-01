@@ -21,13 +21,15 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { bytesToHex as hex } from "@noble/hashes/utils.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
+import { verifySignatureStrict } from "../../keys.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
-import { identifierOf, isValue } from "../field.js";
-import { commitmentOf } from "../notes.js";
-import { prepareExactOutput, type PreparedOutput } from "./capsules.js";
+import { identifierOf, isField, isValue } from "../field.js";
+import { commitmentOf, ownerOf } from "../notes.js";
+import { deriveSettlementOwnerSecret, prepareExactOutput, type PreparedOutput } from "./capsules.js";
 import { decodeReceipt, encodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
 import { adoptedDomain, requireConfigurationVerifier } from "./configuration.js";
 import { requireReferenceVenue } from "./guard.js";
@@ -36,20 +38,23 @@ import type { SegmentHeader } from "./headers.js";
 import { ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { readFrontier, type PackageReader } from "./package-reader.js";
 import type { SignedTerms } from "./reader.js";
-import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record } from "./records.js";
+import { acceptanceBytes, acceptanceId, decodeRecord, encodeRecord, evidenceHashes, statementBytes, statementHash, type Record,
+  type SignedAcceptance } from "./records.js";
+import { paddingRequestId, presenterSecret, settlementRho } from "./redemption.js";
 import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import type { CanonicalCheckpoint, FrontierResult } from "./scope-reader.js";
 import { locked, tagOf } from "./recovery.js";
 import { applyForceEffects, openForceState, type ForceState } from "./state.js";
 import { declaredParallel } from "./verify-ahead.js";
-import { rootTermsName } from "./terms.js";
+import { decodeRootTerms, rootTermsName } from "./terms.js";
 import { cellBytes, decodeWalletSnapshot, encodeWalletSnapshot, MAX_WALLET_BACKUP_BYTES, openWalletBackup, sealWalletBackup,
   WALLET_BACKUP_OVERHEAD, walletBackupDigest, type WalletCell, type WalletSnapshot } from "./wallet-backup.js";
 import { copyPaymentRequest, type PaymentRequest } from "./wallet-request.js";
-import { spendTask, type NoteInput, type OutputNote, type ProofTask } from "./witness.js";
+import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spendTask, withdrawalRecord, type NoteInput, type OutputNote,
+  type ProofTask } from "./witness.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
-const PROFILE = "moe/wallet/v3/3", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/4", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
     "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE", message: string) { super(message); this.name = "V3WalletError"; }
@@ -84,6 +89,13 @@ const SCHEMA = `
     value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
   CREATE TABLE IF NOT EXISTS payer_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES payer_payments(alias),
     record BLOB NOT NULL, receipt BLOB) STRICT;
+  CREATE TABLE IF NOT EXISTS wallet_acts (alias TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('1','3','4','5','6')), intent TEXT NOT NULL,
+    statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL, backing BLOB NOT NULL, operator BLOB NOT NULL, demand TEXT,
+    status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
+    judged TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS wallet_act_inputs (nf TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES wallet_acts(alias)) STRICT;
+  CREATE TABLE IF NOT EXISTS backer_acceptances (alias TEXT PRIMARY KEY, demand TEXT NOT NULL, deadline TEXT NOT NULL,
+    owner TEXT NOT NULL, signature BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
   CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`;
 const DEFINITIONS = new Map(SCHEMA.split(";").map(s => s.replace(/\s+/g, " ").trim()).filter(s => s !== "")
   .map(s => { const sql = s.replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE "); return [sql.split(" ")[2]!, sql] as const; }));
@@ -98,6 +110,10 @@ const TABLES = [
   ["payer_inputs", ["nf", "alias"]],
   ["payer_outputs", ["cm", "alias", "value", "owner", "rho"]],
   ["payer_superseded", ["statement", "alias", "record", "receipt"]],
+  ["wallet_acts", ["alias", "kind", "intent", "statement", "record", "backing", "operator", "demand", "status", "receipt", "checkpoint",
+    "judging_index", "judged"]],
+  ["wallet_act_inputs", ["nf", "alias"]],
+  ["backer_acceptances", ["alias", "demand", "deadline", "owner", "signature"]],
 ] as const;
 /** A restoration the constructor consumes synchronously: the seed, the state
  * rows, the envelope's digest, and the domain and venue it was opened under. */
@@ -165,6 +181,25 @@ export interface WalletView {
   readonly holdings: readonly Holding[];
 }
 
+/** K's strict Ed25519 signature over exact bytes, from a signer the backer holds. K's secret never enters the
+ * wallet; every signature is checked against the terms' obligor before it is used or saved. */
+export type BackerSigner = (message: Uint8Array) => Promise<Uint8Array> | Uint8Array;
+/** A saved redemption act (pool-recovery C3, pool-v3 §3): an issue or burn, or a demand, its withdrawal or settlement. */
+export interface Act {
+  readonly kind: 1 | 3 | 4 | 5 | 6;
+  /** The exact canonical record every submission retry sends. */
+  readonly record: Uint8Array;
+  readonly statement: Uint8Array;
+  /** The demand's identity, for a demand, its withdrawal and its settlement. */
+  readonly demand: Uint8Array | undefined;
+  /** The positive inputs' nullifiers it reserves: a burn's, and a demand's, which its settlement spends. */
+  readonly inputs: readonly bigint[];
+  /** prepared: not yet in canonical history; final: its effect is; failed: it can no longer take effect as saved. */
+  readonly status: "prepared" | "final" | "failed";
+  readonly receipt: Receipt | undefined;
+  readonly final: { readonly checkpoint: Commitment; readonly judgingIndex: bigint } | undefined;
+}
+
 /** The venue as one read sees it: its clock held at `at`. The read is acted on only while the venue's
  * identity, lag and witnessed index are still those (`check`, called synchronously before every write or
  * proof). An answer through a witnessed index is final (pool-v3 §13.1–13.2), so a clock that has not moved
@@ -204,6 +239,18 @@ function select(notes: readonly OwnedNote[], total: bigint): OwnedNote[] {
   }
   requireThat(best !== undefined, "FUNDS", "no available one- or two-note selection covers the payment");
   return best;
+}
+/** C3.3: a demand names whole notes, so one note of exactly `total` or a pair summing to it; ties by commitment.
+ * A holder presenting part of a note, or more than two, first pays itself the exact amount. */
+function exact(notes: readonly OwnedNote[], total: bigint): OwnedNote[] {
+  const sorted = [...notes].sort((a, b) => a.cm < b.cm ? -1 : a.cm > b.cm ? 1 : 0);
+  const single = sorted.find(n => n.opening.value === total);
+  if (single !== undefined) return [single];
+  for (let i = 0; i < sorted.length; i++) {
+    const other = sorted.find((n, j) => j > i && sorted[i]!.opening.value + n.opening.value === total);
+    if (other !== undefined) return [sorted[i]!, other];
+  }
+  throw new V3WalletError("FUNDS", "no available note or pair of notes is exactly the quantity; pay yourself that amount first");
 }
 
 export class V3Wallet {
@@ -473,35 +520,84 @@ export class V3Wallet {
     const inputs = this.db.prepare("SELECT nf FROM payer_inputs WHERE alias=?").all(name);
     return inputs.some(r => force.hasNullifier(BigInt(r.nf as string))) ? "failed" as const : undefined;
   }
-  private resolve(updates: readonly { alias: string; status: "final" | "failed" }[], checkpoint: Uint8Array | undefined, at: bigint): void {
-    if (updates.length !== 0) this.transaction(() => {
-      const update = this.db.prepare("UPDATE payer_payments SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND status='prepared'");
-      for (const { alias: name, status } of updates) update.run(status, status === "final" ? checkpoint! : null,
-        status === "final" ? at.toString() : null, name);
+  private resolve(updates: readonly { alias: string; status: "final" | "failed" }[], checkpoint: Uint8Array | undefined, at: bigint,
+    acts: readonly { alias: string; status: "final" | "failed" }[] = []): void {
+    if (updates.length !== 0 || acts.length !== 0) this.transaction(() => {
+      for (const [table, rows] of [["payer_payments", updates], ["wallet_acts", acts]] as const) {
+        const update = this.db.prepare(`UPDATE ${table} SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND status='prepared'`);
+        for (const { alias: name, status } of rows) update.run(status, status === "final" ? checkpoint! : null,
+          status === "final" ? at.toString() : null, name);
+      }
     });
   }
-  /** The prover's record must be exactly the task and verify under the wallet's own verifier. */
-  private async proven(task: ProofTask, prove: LocalProver): Promise<Uint8Array> {
+  /** Each prepared act of `backing` the evidence now decides. final: an issue's, burn's or settlement's output is
+   * in canonical history (each is fresh or C3.5-derived, so no other statement creates it), or a demand, withdrawal
+   * or settlement is effective there or with force; failed: a reserved input was spent otherwise, a withdrawal's
+   * demand was settled, or a settlement's demand no longer stands unsettled. Demands are judged after the acts
+   * that end them. */
+  private actResolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState): { alias: string; status: "final" | "failed" }[] {
+    const rows = this.db.prepare("SELECT alias,kind,record,demand FROM wallet_acts WHERE status='prepared' AND backing=? ORDER BY kind='4'").all(backing);
+    const decided = new Map<string, "final" | "failed">(), spent = (name: string) => this.db.prepare("SELECT nf FROM wallet_act_inputs WHERE alias=?")
+      .all(name).some(r => force.hasNullifier(BigInt(r.nf as string)));
+    const ended = (demand: string, kind: "5" | "6") => this.db.prepare("SELECT alias,status FROM wallet_acts WHERE demand=? AND kind=?").all(demand, kind)
+      .some(r => r.status === "final" || decided.get(r.alias as string) === "final");
+    for (const row of rows) {
+      const name = row.alias as string, record = decodeRecord(row.record as Uint8Array), p = record.publicInputs;
+      const effective = force.isEffective(hex(statementHash(record))), demand = row.demand as string | null;
+      let status: "final" | "failed" | undefined;
+      switch (row.kind) {
+        case "1": status = canonical.state.hasOutput(p[8]!) ? "final" : undefined; break;
+        case "3": status = canonical.state.hasOutput(p[12]!) ? "final" : spent(name) ? "failed" : undefined; break;
+        case "6": status = effective || canonical.state.hasOutput(p[14]!) ? "final" : force.demand(demand!) === undefined ? "failed" : undefined; break;
+        case "5": status = effective ? "final" : ended(demand!, "6") ? "failed" : undefined; break;
+        case "4": status = effective || ended(demand!, "5") || ended(demand!, "6") ? "final" : spent(name) ? "failed" : undefined; break;
+      }
+      if (status !== undefined) decided.set(name, status);
+    }
+    return [...decided].map(([name, status]) => ({ alias: name, status }));
+  }
+  /** The prover's record must be exactly the task, unauthorized, and its proof verify under the wallet's own
+   * verifier. Only the proof is taken from it: the record returned is the wallet's own, and an issue or a
+   * settlement is encoded once its authorization is added. */
+  private async proven(task: ProofTask, prove: LocalProver): Promise<Record> {
     // The evidence read awaited: an export or another handle may have taken over meanwhile.
     this.mutable();
     const proven = await prove(task);
-    let bytes: Uint8Array;
-    try { bytes = encodeRecord(proven); } catch (error) {
+    let proof: Uint8Array;
+    try {
+      // Each prover field is read once.
+      const { kind, domain, publicInputs, authorization, capsules } = proven;
+      proof = copyUnshared(proven.proof);
+      const inputs = [...publicInputs], outputs = [...capsules].map(c => copyUnshared(c));
+      requireThat(kind === task.kind && same(copyUnshared(domain), this.domain) && copyUnshared(authorization).length === 0 &&
+        inputs.length === task.publicInputs.length && inputs.every((v, i) => v === task.publicInputs[i]) &&
+        outputs.length === task.capsules.length && outputs.every((c, i) => same(c, task.capsules[i]!)),
+        "INVALID", "prover returned another statement");
+    } catch (error) {
+      if (error instanceof V3WalletError) throw error;
+      throw new V3WalletError("INVALID", "prover returned a malformed record");
+    }
+    requireThat(await this.options.verifier.verify(task.kind, [...task.publicInputs], new Uint8Array(proof)) === true, "INVALID", "proof does not verify");
+    return { domain: new Uint8Array(this.domain), kind: task.kind, publicInputs: [...task.publicInputs], proof,
+      authorization: new Uint8Array(), capsules: task.capsules.map(c => new Uint8Array(c)) };
+  }
+  /** A record's canonical bytes; a proof of no admissible length is the prover's malformed record. */
+  private encoded(record: Record): Uint8Array {
+    try { return encodeRecord(record); } catch (error) {
       if (error instanceof EncodingError) throw new V3WalletError("INVALID", "prover returned a malformed record");
       throw error;
     }
-    const record = decodeRecord(bytes);
-    requireThat(record.kind === 2 && same(record.domain, this.domain) && record.authorization.length === 0 &&
-      record.publicInputs.length === task.publicInputs.length && record.publicInputs.every((v, i) => v === task.publicInputs[i]) &&
-      record.capsules.length === task.capsules.length && record.capsules.every((c, i) => same(c, task.capsules[i]!)),
-      "INVALID", "prover returned another statement");
-    requireThat(await this.options.verifier.verify(2, [...record.publicInputs], new Uint8Array(record.proof)) === true, "INVALID", "proof does not verify");
-    return bytes;
+  }
+  /** A nullifier a saved payment reserves, or a saved act that can still take effect: a burn, or a demand not
+   * withdrawn (its settlement spends it). */
+  private reserved(nf: bigint): boolean {
+    return this.db.prepare(`SELECT 1 FROM payer_inputs WHERE nf=:nf UNION ALL SELECT 1 FROM wallet_act_inputs i
+      JOIN wallet_acts a ON a.alias=i.alias WHERE i.nf=:nf AND a.status!='failed' AND NOT EXISTS (SELECT 1 FROM wallet_acts w
+      WHERE w.kind='5' AND w.demand=a.demand AND w.status='final')`).get({ nf: nf.toString() }) !== undefined;
   }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
-    const reserved = this.db.prepare("SELECT 1 FROM payer_inputs WHERE nf=?");
     return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
-      status: reserved.get(note.nf.toString()) !== undefined ? "reserved" as const :
+      status: this.reserved(note.nf) ? "reserved" as const :
         force !== undefined && locked(force, tagOf(note.nf), at) ? "locked" as const : "available" as const }));
   }
 
@@ -728,8 +824,9 @@ export class V3Wallet {
           if (status !== undefined) updates.push({ alias: row.alias as string, status });
         }
       }
+      const acts = canonical !== undefined && force !== undefined ? this.actResolutions(backing, canonical, force) : [];
       observed.check();
-      this.resolve(updates, canonical === undefined ? undefined : encodeCommitment(canonical.commitment), at);
+      this.resolve(updates, canonical === undefined ? undefined : encodeCommitment(canonical.commitment), at, acts);
       return { backing, judgingIndex: at, checkpoint: canonical?.commitment, holdings: this.holdingsOf(notes, force, at) };
     });
   }
@@ -795,14 +892,14 @@ export class V3Wallet {
     });
     if (planned === undefined) return this.payment(name)!;
     const { header, selected, inputs, zero, outputs, at } = planned;
-    const bytes = await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove);
+    const bytes = this.encoded(await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove));
     const statement = hex(statementHash(decodeRecord(bytes))), reserved = selected.map(note => note.nf.toString());
     this.transaction(() => {
       // A concurrent exact call may have saved first: adopt its record, never this proof.
       const winner = sameOrder();
       if (winner !== undefined) { requireThat(winner, "CONFLICT", "alias names another payment order"); return; }
-      const input = this.db.prepare("SELECT 1 FROM payer_inputs WHERE nf=?");
-      requireThat(reserved.every(nf => input.get(nf) === undefined), "CONFLICT", "an input is reserved by another payment");
+      requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
+      requireThat(this.db.prepare("SELECT 1 FROM wallet_acts WHERE alias=?").get(name) === undefined, "CONFLICT", "alias names a saved act");
       requireThat(outputs.every(out => taken.get(out.cm.toString()) === undefined), "CONFLICT", "an output belongs to another payment");
       this.db.prepare("INSERT INTO payer_payments VALUES(?,?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?,?)").run(name, statement, bytes,
         backing, header.operator, payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null, fee?.value.toString() ?? null,
@@ -874,7 +971,7 @@ export class V3Wallet {
     });
     if (!("header" in planned)) return planned;
     const { header, inputs, outputs, at } = planned;
-    const bytes = await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove);
+    const bytes = this.encoded(await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove));
     const statement = hex(statementHash(decodeRecord(bytes)));
     this.transaction(() => {
       // A concurrent reproof or resolution may have replaced the record first: keep it.
@@ -888,15 +985,271 @@ export class V3Wallet {
     return this.payment(name)!;
   }
 
-  /** Submit the saved exact record; keep the first operator receipt that signs
-   * its statement in the record's own segment. A receipt is pending operator
-   * liability (C2.10.9), not finality; `sync` decides that from evidence. */
-  async submit(name: string, service: { submit(record: Uint8Array): Promise<Receipt> }): Promise<Receipt> {
+  /** The saved act under this local alias, with its current local status. */
+  act(name: string): Act | undefined {
+    name = alias(name); this.active();
+    const row = this.db.prepare("SELECT * FROM wallet_acts WHERE alias=?").get(name);
+    if (row === undefined) return undefined;
+    const record = decodeRecord(row.record as Uint8Array);
+    return { kind: Number(row.kind) as Act["kind"], record: copyUnshared(row.record as Uint8Array), statement: statementHash(record),
+      demand: row.demand === null ? undefined : hexToBytes(row.demand as string),
+      inputs: this.db.prepare("SELECT nf FROM wallet_act_inputs WHERE alias=?").all(name).map(r => BigInt(r.nf as string))
+        .sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
+      status: row.status as Act["status"], receipt: row.receipt === null ? undefined : decodeReceipt(row.receipt as Uint8Array),
+      final: row.checkpoint === null ? undefined :
+        { checkpoint: decodeCommitment(row.checkpoint as Uint8Array), judgingIndex: BigInt(row.judging_index as string) } };
+  }
+  /** The saved act under `name` if it is this exact intent; another intent, or a payment, under it refuses. */
+  private savedAct(name: string, kind: Act["kind"], intent: string): Act | undefined {
+    requireThat(this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=?").get(name) === undefined, "CONFLICT", "alias names a payment");
+    const row = this.db.prepare("SELECT kind,intent FROM wallet_acts WHERE alias=?").get(name);
+    if (row === undefined) return undefined;
+    requireThat(row.kind === String(kind) && row.intent === intent, "CONFLICT", "alias names another act");
+    return this.act(name);
+  }
+  /** Save a proven or signed act once: a concurrent exact call that saved first wins, and its record is kept. */
+  private saveAct(name: string, kind: Act["kind"], intent: string, bytes: Uint8Array, backing: Uint8Array, operator: Uint8Array,
+    demand: string | undefined, inputs: readonly bigint[], at: bigint): Act {
+    const statement = hex(statementHash(decodeRecord(bytes)));
+    this.transaction(() => {
+      if (this.savedAct(name, kind, intent) !== undefined) return;
+      requireThat(inputs.every(nf => !this.reserved(nf)), "CONFLICT", "an input is reserved by another payment or act");
+      requireThat(this.db.prepare("SELECT 1 FROM wallet_acts WHERE statement=?").get(statement) === undefined, "CONFLICT",
+        "another alias saved this statement");
+      this.db.prepare("INSERT INTO wallet_acts VALUES(?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?)").run(name, String(kind), intent,
+        statement, bytes, backing, operator, demand ?? null, at.toString());
+      for (const nf of inputs) this.db.prepare("INSERT INTO wallet_act_inputs VALUES(?,?)").run(nf.toString(), name);
+    });
+    return this.act(name)!;
+  }
+  /** The backer's signature over `message`, checked strictly against the obligor before anything uses it. */
+  private async backerSignature(sign: BackerSigner, message: Uint8Array, obligor: Uint8Array): Promise<Uint8Array> {
+    const answer = await sign(new Uint8Array(message));
+    this.mutable();
+    const signature = answer instanceof Uint8Array ? copyUnshared(answer) : new Uint8Array();
+    requireThat(verifySignatureStrict(signature, message, obligor), "INVALID", "the signer is not the backing's obligor");
+    return signature;
+  }
+  /** The terms' backing and obligor, each caller field read once. */
+  private termsOf(signed: SignedTerms): { readonly backing: Uint8Array; readonly obligor: Uint8Array } {
+    const terms = copyUnshared(signed.terms);
+    return { backing: rootTermsName(terms), obligor: decodeRootTerms(terms).obligor };
+  }
+  /** A saved demand of this wallet, and its notice's positions. */
+  private ownDemand(name: string, backing: Uint8Array) {
+    const saved = this.act(name);
+    requireThat(saved !== undefined && saved.kind === 4, "UNKNOWN", "unknown demand");
+    const row = this.db.prepare("SELECT backing FROM wallet_acts WHERE alias=?").get(name)!;
+    requireThat(same(row.backing as Uint8Array, backing), "INVALID", "terms do not name the demand's backing");
+    const p = decodeRecord(saved.record).publicInputs;
+    return { saved, id: saved.demand!, tags: p.slice(10, 12), quantity: p[7]!, instant: p[14]!, deadline: p[15]! };
+  }
+
+  /** pool-v3 §3.1: issue the exact request's value to its output, authorized by K through `sign` (§5). The
+   * record is saved before it is returned; an exact alias retry returns it without evidence, proving or signing. */
+  async issue(name: string, request: PaymentRequest, value: bigint, packageBytes: Uint8Array, signed: SignedTerms,
+    prove: LocalProver, sign: BackerSigner): Promise<Act> {
     name = alias(name); this.mutable();
-    const saved = this.payment(name);
-    requireThat(saved !== undefined, "UNKNOWN", "unknown payment");
-    if (saved.receipt !== undefined) return saved.receipt;
-    const row = this.db.prepare("SELECT operator FROM payer_payments WHERE alias=?").get(name)!;
+    const { backing, obligor } = this.termsOf(signed);
+    const output = copyPaymentRequest(request, { domain: this.domain, backing, value });
+    const intent = JSON.stringify([hex(backing), output.cm.toString(), value.toString()]);
+    const existing = this.savedAct(name, 1, intent);
+    if (existing !== undefined) return existing;
+    requireThat(typeof prove === "function" && typeof sign === "function", "INVALID", "a local prover and a backer signer are required");
+    const planned = await this.read(packageBytes, signed, view => {
+      if (this.savedAct(name, 1, intent) !== undefined) return undefined;
+      requireThat(view.canonical !== undefined && !view.canonical.state.hasOutput(output.cm), "CONFLICT", "request is already paid");
+      const header = this.admissible(view);
+      view.observed.check();
+      return { header, at: view.at };
+    });
+    if (planned === undefined) return this.act(name)!;
+    const proven = await this.proven(issueTask({ domain: this.domain, header: planned.header }, output), prove);
+    const authorization = await this.backerSignature(sign, statementBytes(proven), obligor);
+    return this.saveAct(name, 1, intent, this.encoded({ ...proven, authorization }), backing, planned.header.operator, undefined, [],
+      planned.at);
+  }
+
+  /** C3.3: demand `quantity` of the terms' backing from this seed's whole notes (one of exactly that value, or a
+   * pair summing to it), with the instant at the read's witnessed index and the holder's own deadline, strictly
+   * ahead of the operator's horizon. The presenter key and any zero padding are derived from the seed and the
+   * notice, so a retry or a rebuilt wallet names the same demand. The notes stay reserved until it is withdrawn. */
+  async demand(name: string, quantity: bigint, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
+    prove: LocalProver): Promise<Act> {
+    name = alias(name); this.mutable();
+    const { backing } = this.termsOf(signed);
+    requireThat(isValue(quantity) && quantity > 0n && isValue(deadline), "INVALID", "invalid demand");
+    const intent = JSON.stringify([hex(backing), quantity.toString(), deadline.toString()]);
+    const existing = this.savedAct(name, 4, intent);
+    if (existing !== undefined) return existing;
+    requireThat(typeof prove === "function", "INVALID", "a local prover is required");
+    const planned = await this.read(packageBytes, signed, view => {
+      if (this.savedAct(name, 4, intent) !== undefined) return undefined;
+      const { force, notes, at, lag, observed } = view;
+      const header = this.admissible(view);
+      requireThat(deadline > at + lag, "INVALID", "the deadline is not strictly ahead of the operator's horizon");
+      const holdings = this.holdingsOf(notes, force, at);
+      const selected = exact(notes.filter((_, i) => holdings[i]!.status === "available"), quantity);
+      observed.check();
+      const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
+      if (inputs.length === 1) {
+        inputs.push({ ...inputs[0]!, note: prepareExactOutput(this.seed, this.domain, paddingRequestId(this.seed, this.domain,
+          selected[0]!.nf), backing, 0n) });
+      }
+      return { header, inputs, nfs: selected.map(note => note.nf), at };
+    });
+    if (planned === undefined) return this.act(name)!;
+    const { header, inputs, nfs, at } = planned;
+    const tags = inputs.map(i => i.note.opening.value === 0n ? 0n : tagOf(i.note.nf));
+    const presenter = ed25519.getPublicKey(presenterSecret(this.seed, this.domain, tags, at, deadline));
+    const bytes = this.encoded(await this.proven(demandTask({ domain: this.domain, header }, inputs,
+      { backing, quantity, presenter, instant: at, deadline }), prove));
+    return this.saveAct(name, 4, intent, bytes, backing, header.operator, hex(statementHash(decodeRecord(bytes))), nfs, at);
+  }
+
+  /** C3.4: the backer's acceptance of a demand standing over its backing, with C4.7's owner derived from this
+   * seed, the demand and the acceptance deadline (so distinct demands never share an owner), signed by K through
+   * `sign`. The deadline is at or before the demand's and later than the horizon, or no release could be witnessed
+   * inside it. Saved before it is returned; an exact alias retry returns it without evidence or signing. The
+   * backer's settled note is found by `sync` from the seed once a settlement with this acceptance takes effect. */
+  async accept(name: string, demand: Uint8Array, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
+    sign: BackerSigner): Promise<SignedAcceptance> {
+    name = alias(name); this.mutable();
+    const { backing, obligor } = this.termsOf(signed), id = identifier(demand), key = hex(id);
+    requireThat(isValue(deadline), "INVALID", "invalid acceptance deadline");
+    const saved = (): SignedAcceptance | undefined => {
+      const row = this.db.prepare("SELECT * FROM backer_acceptances WHERE alias=?").get(name);
+      if (row === undefined) return undefined;
+      requireThat(row.demand === key && row.deadline === deadline.toString(), "CONFLICT", "alias names another acceptance");
+      return { domain: new Uint8Array(this.domain), demand: new Uint8Array(id), owner: BigInt(row.owner as string), deadline,
+        signature: copyUnshared(row.signature as Uint8Array) };
+    };
+    const existing = saved();
+    if (existing !== undefined) return existing;
+    requireThat(typeof sign === "function", "INVALID", "a backer signer is required");
+    const owner = ownerOf(deriveSettlementOwnerSecret(this.seed, this.domain, id, deadline).value);
+    requireThat(owner !== 0n, "STORAGE", "the derived owner is zero");
+    await this.read(packageBytes, signed, ({ force, at, lag, observed }) => {
+      const standing = force?.demand(key);
+      requireThat(standing !== undefined && same(standing.backing, backing), "ABSENT", "the demand does not stand in canonical history");
+      requireThat(deadline <= standing.deadline, "INVALID", "an acceptance deadline is at or before the demand's");
+      requireThat(deadline > at + lag, "INVALID", "the acceptance deadline is not later than the horizon");
+      observed.check();
+    });
+    const acceptance = { domain: new Uint8Array(this.domain), demand: new Uint8Array(id), owner, deadline };
+    const signature = await this.backerSignature(sign, acceptanceBytes(acceptance), obligor);
+    this.transaction(() => {
+      if (this.db.prepare("SELECT 1 FROM backer_acceptances WHERE alias=?").get(name) !== undefined) return;
+      this.db.prepare("INSERT INTO backer_acceptances VALUES(?,?,?,?,?)").run(name, key, deadline.toString(), owner.toString(), signature);
+    });
+    return saved()!;
+  }
+
+  /** C3.5–C3.6: settle a saved demand of this wallet against the backer's acceptance: the demand's own notes in its
+   * positions into one output of its quantity to the acceptance's owner, with `rho_out` derived from the seed, the
+   * input nullifiers, the canonical segment and the disclosure count, and the release signed by the presenter.
+   * The acceptance must verify under the terms' obligor and stand at the horizon. Saved before it is returned.
+   * The disclosure count is zero: this wallet publishes no release at the venue yet (slice 9, M9b). */
+  async settle(name: string, demandName: string, acceptance: SignedAcceptance, packageBytes: Uint8Array, signed: SignedTerms,
+    prove: LocalProver): Promise<Act> {
+    name = alias(name); demandName = alias(demandName); this.mutable();
+    const { backing, obligor } = this.termsOf(signed), demand = this.ownDemand(demandName, backing);
+    const own = { domain: copyUnshared(acceptance.domain), demand: copyUnshared(acceptance.demand), owner: acceptance.owner,
+      deadline: acceptance.deadline, signature: copyUnshared(acceptance.signature) };
+    requireThat(same(own.domain, this.domain) && same(own.demand, demand.id) && isField(own.owner) && own.owner !== 0n &&
+      isValue(own.deadline) && own.deadline <= demand.deadline && verifySignatureStrict(own.signature, acceptanceBytes(own), obligor),
+      "INVALID", "the acceptance does not answer this demand under the backing's obligor");
+    const intent = JSON.stringify([demandName, hex(acceptanceId(own))]);
+    const existing = this.savedAct(name, 6, intent);
+    if (existing !== undefined) return existing;
+    requireThat(typeof prove === "function", "INVALID", "a local prover is required");
+    const key = hex(demand.id);
+    const planned = await this.read(packageBytes, signed, view => {
+      if (this.savedAct(name, 6, intent) !== undefined) return undefined;
+      const { canonical, force, notes, at, lag, observed } = view;
+      requireThat(force?.demand(key) !== undefined, "ABSENT", "the demand does not stand in canonical history");
+      requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
+      const header = this.admissible(view);
+      const real = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(note => tagOf(note.nf) === tag));
+      requireThat(real.every(note => note !== undefined), "ABSENT", "a demanded note is not unspent in canonical history");
+      const placed = real.map(note => ({ note: note!, anchor: note!.anchor, path: note!.path }));
+      const inputs: NoteInput[] = demand.tags.map(tag => tag !== 0n ? placed.find(i => tagOf(i.note.nf) === tag)! :
+        { ...placed[0]!, note: prepareExactOutput(this.seed, this.domain, paddingRequestId(this.seed, this.domain, placed[0]!.note.nf),
+          backing, 0n) });
+      const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, 0n);
+      const opening = { backing, value: demand.quantity, owner: own.owner, rho }, cm = commitmentOf(this.domain, opening);
+      requireThat(!canonical!.state.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
+      observed.check();
+      return { header, inputs, output: { opening, cm }, at };
+    });
+    if (planned === undefined) return this.act(name)!;
+    const { header, inputs, output, at } = planned;
+    const proven = await this.proven(settleTask({ domain: this.domain, header }, inputs, output, demand.id), prove);
+    const presenter = presenterSecret(this.seed, this.domain, demand.tags, demand.instant, demand.deadline);
+    let bytes: Uint8Array;
+    try { bytes = encodeRecord(authorizeSettlement(proven, own, presenter)); } catch (error) {
+      if (error instanceof EncodingError) throw new V3WalletError("INVALID", "prover returned a malformed record");
+      throw error;
+    } finally { presenter.fill(0); }
+    return this.saveAct(name, 6, intent, bytes, backing, header.operator, key, [], at);
+  }
+
+  /** C3.6: withdraw a saved demand of this wallet that stands in canonical history, signed by its presenter for the
+   * canonical segment. Once the withdrawal is final the demand's notes are available again; C3.1 advises paying
+   * them to a fresh note before presenting them again. */
+  async withdraw(name: string, demandName: string, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
+    name = alias(name); demandName = alias(demandName); this.mutable();
+    const { backing } = this.termsOf(signed), demand = this.ownDemand(demandName, backing);
+    const intent = JSON.stringify([demandName]), key = hex(demand.id);
+    const existing = this.savedAct(name, 5, intent);
+    if (existing !== undefined) return existing;
+    const planned = await this.read(packageBytes, signed, view => {
+      if (this.savedAct(name, 5, intent) !== undefined) return undefined;
+      requireThat(view.force?.demand(key) !== undefined, "ABSENT", "the demand does not stand in canonical history");
+      const header = this.admissible(view);
+      view.observed.check();
+      return { header, at: view.at };
+    });
+    if (planned === undefined) return this.act(name)!;
+    const presenter = presenterSecret(this.seed, this.domain, demand.tags, demand.instant, demand.deadline);
+    try {
+      const bytes = encodeRecord(withdrawalRecord({ domain: this.domain, header: planned.header }, demand.id, presenter));
+      return this.saveAct(name, 5, intent, bytes, backing, planned.header.operator, key, [], planned.at);
+    } finally { presenter.fill(0); }
+  }
+
+  /** pool-v3 §3.3: burn `quantity` from this seed's available notes (the smallest covering note or pair), the rest
+   * returned as one fresh change output. The backer burns the notes settlements paid it where its terms say so. */
+  async burn(name: string, quantity: bigint, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Act> {
+    name = alias(name); this.mutable();
+    const { backing } = this.termsOf(signed);
+    requireThat(isValue(quantity) && quantity > 0n, "INVALID", "invalid burn quantity");
+    const intent = JSON.stringify([hex(backing), quantity.toString()]);
+    const existing = this.savedAct(name, 3, intent);
+    if (existing !== undefined) return existing;
+    requireThat(typeof prove === "function", "INVALID", "a local prover is required");
+    const planned = await this.read(packageBytes, signed, view => {
+      if (this.savedAct(name, 3, intent) !== undefined) return undefined;
+      const { force, notes, at, observed } = view;
+      const header = this.admissible(view);
+      const holdings = this.holdingsOf(notes, force, at);
+      const selected = select(notes.filter((_, i) => holdings[i]!.status === "available"), quantity);
+      observed.check();
+      const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
+      if (inputs.length === 1) inputs.push({ ...inputs[0]!, note: this.fresh(backing, 0n) });
+      const change = this.fresh(backing, selected.reduce((n, note) => n + note.opening.value, 0n) - quantity);
+      return { header, inputs, change, nfs: selected.map(note => note.nf), at };
+    });
+    if (planned === undefined) return this.act(name)!;
+    const { header, inputs, change, nfs, at } = planned;
+    const bytes = this.encoded(await this.proven(burnTask({ domain: this.domain, header }, quantity, inputs, change), prove));
+    return this.saveAct(name, 3, intent, bytes, backing, header.operator, undefined, nfs, at);
+  }
+
+  /** The operator's receipt for a saved record: it must sign this exact statement, proof and authorization. */
+  private async receiptOf(name: string, table: "payer_payments" | "wallet_acts", saved: { readonly record: Uint8Array; readonly statement: Uint8Array },
+    service: { submit(record: Uint8Array): Promise<Receipt> }): Promise<Receipt> {
+    const row = this.db.prepare(`SELECT operator FROM ${table} WHERE alias=?`).get(name)!;
     const record = decodeRecord(saved.record), p = record.publicInputs;
     const answer = await service.submit(new Uint8Array(saved.record));
     let receipt: Receipt;
@@ -910,6 +1263,24 @@ export class V3Wallet {
       operator: row.operator as Uint8Array }, receipt) && same(receipt.statementHash, saved.statement) &&
       same(receipt.proofHash, digests.proofHash) && same(receipt.signatureHash, digests.signatureHash),
       "INVALID", "receipt does not authenticate the saved record");
+    return receipt;
+  }
+  /** Submit a saved payment's or act's exact record (one alias namespace); keep the first operator receipt that
+   * signs its statement in the record's own segment. A receipt is pending operator liability (C2.10.9), not
+   * finality; `sync` decides that from evidence. */
+  async submit(name: string, service: { submit(record: Uint8Array): Promise<Receipt> }): Promise<Receipt> {
+    name = alias(name); this.mutable();
+    const act = this.act(name);
+    if (act !== undefined) {
+      if (act.receipt !== undefined) return act.receipt;
+      const receipt = await this.receiptOf(name, "wallet_acts", act, service);
+      this.transaction(() => { this.db.prepare("UPDATE wallet_acts SET receipt=? WHERE alias=? AND receipt IS NULL").run(encodeReceipt(receipt), name); });
+      return this.act(name)!.receipt!;
+    }
+    const saved = this.payment(name);
+    requireThat(saved !== undefined, "UNKNOWN", "unknown payment or act");
+    if (saved.receipt !== undefined) return saved.receipt;
+    const receipt = await this.receiptOf(name, "payer_payments", saved, service);
     const current = this.transaction(() => {
       const statement = hex(saved.statement), bytes = encodeReceipt(receipt);
       if (this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=? AND statement=?").get(name, statement) !== undefined) {
