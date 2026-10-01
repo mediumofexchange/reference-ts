@@ -342,7 +342,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(lagging.act("burn")).toEqual(burn);
     for (const build of [() => lagging.burn("again", 10n, earlyPackage, f.signed, prove),
       () => lagging.demand("again", 10n, f.venue.witnessedIndex() + 40n, earlyPackage, f.signed, prove)]) {
-      await expect(build()).rejects.toMatchObject({ code: "CHANGED_VIEW", message: "the venue view is older than one this wallet has read" });
+      await expect(build()).rejects.toMatchObject({ code: "CHANGED_VIEW", message: "the venue view is older than one this wallet has judged at" });
     }
     expect(lagging.act("again")).toBeUndefined();
     // A wallet from the seed that has only read the current view, with no saved record, builds nothing from the older one.

@@ -461,10 +461,6 @@ export class V3Wallet {
       }
       // The read awaited: a handle replaced or exported meanwhile answers nothing from it.
       this.mutable();
-      // The newest index read, for `current`: a later view older than it builds nothing.
-      if (view.at > BigInt(this.db.prepare("SELECT seen FROM wallet_identity WHERE id=1").get()!.seen as string)) {
-        this.transaction(() => this.db.prepare("UPDATE wallet_identity SET seen=? WHERE id=1").run(view.at.toString()));
-      }
       return use(view);
     });
   }
@@ -596,12 +592,19 @@ export class V3Wallet {
   }
   /** A prepared record goes final or failed; a failed one that evidence later shows admitted goes final. */
   private resolve(rows: readonly { alias: string; status: "final" | "failed" }[], checkpoint: Uint8Array, at: bigint): void {
-    if (rows.length !== 0) this.transaction(() => {
+    if (rows.length !== 0 || at > this.seen()) this.transaction(() => {
       const update = this.db.prepare(`UPDATE saved_records SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND (status='prepared'
         OR (status='failed' AND ?1='final'))`);
       for (const { alias: name, status } of rows) update.run(status, status === "final" ? checkpoint : null,
         status === "final" ? at.toString() : null, name);
+      this.saw(at);
     });
+  }
+  /** The newest witnessed index this wallet decided from (`resolve`) or saved at, for `current`. */
+  private seen(): bigint { return BigInt(this.db.prepare("SELECT seen FROM wallet_identity WHERE id=1").get()!.seen as string); }
+  /** Inside a write transaction: record `at` as seen if it is newer, in the same commit as the write. */
+  private saw(at: bigint): void {
+    if (at > this.seen()) this.db.prepare("UPDATE wallet_identity SET seen=? WHERE id=1").run(at.toString());
   }
   /** Each saved record of `backing` not yet final that the evidence now decides. A payment by its outputs (`paid`):
    * it moves with its segment by reproof, so a dead segment does not fail it. An act is final once its statement
@@ -691,16 +694,15 @@ export class V3Wallet {
     return this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE i.nf=?
       AND (a.status='prepared' OR (a.status='final' AND a.kind!='4'))`).get(nf.toString()) !== undefined;
   }
-  /** A new payment or act is built only from a view at least as recent as every view this wallet read or a saved
-   * record (a restored backup's too) was built or decided at: an older one may show a note free that a standing
+  /** A new payment or act is built only from a view at least as recent as every view this wallet synced or
+   * fulfilled at (`seen`) or a saved record (a restored backup's too) was built or decided at: an older one may show a note free that a standing
    * demand or a saved record holds, and a dead segment live. Indices are u64 decimal text without leading zeros,
    * compared by length, then lexically. */
   private current(at: bigint): void {
     const latest = (column: string) => this.db.prepare(`SELECT ${column} AS v FROM saved_records WHERE ${column} IS NOT NULL
       ORDER BY length(${column}) DESC, ${column} DESC LIMIT 1`).get()?.v as string | undefined;
-    const seen = this.db.prepare("SELECT seen FROM wallet_identity WHERE id=1").get()!.seen as string;
-    requireThat([seen, latest("judged"), latest("judging_index")].every(v => v === undefined || at >= BigInt(v)), "CHANGED_VIEW",
-      "the venue view is older than one this wallet has read");
+    requireThat([this.seen().toString(), latest("judged"), latest("judging_index")].every(v => v === undefined || at >= BigInt(v)), "CHANGED_VIEW",
+      "the venue view is older than one this wallet has judged at");
   }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
@@ -894,6 +896,7 @@ export class V3Wallet {
           "CONFLICT", "request or payment already fulfilled");
         this.db.prepare("INSERT INTO receiver_fulfilled VALUES(?,?,?,?,?,?)").run(name, note.cm.toString(), checkpoint,
           at.toString(), terms.terms, terms.signature);
+        this.saw(at);
       });
     });
     return this.fulfillment(name)!;

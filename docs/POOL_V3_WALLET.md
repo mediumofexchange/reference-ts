@@ -159,8 +159,8 @@ instant, deadline and the holdings each names); a demand one of whose notes was
 spent is void and not listed. The view covers one backing at one witnessed
 index; it is not a global balance, and restoring from the seed alone finds the
 same notes, including change, and the same standing demands. A payment or act
-is built only from a view at least as recent as every view the wallet has read
-and every one a saved record was built or decided at (`CHANGED_VIEW`
+is built only from a view at least as recent as every view the wallet has synced
+or fulfilled at and every one a saved record was built or decided at (`CHANGED_VIEW`
 otherwise), and an older view fails no saved record.
 
 The canonical segment may scope several backings (C2.10.2). Its history, spent
