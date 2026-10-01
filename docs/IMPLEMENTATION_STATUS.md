@@ -269,8 +269,8 @@ using real signatures. Authentication alone supplies no checkpoint verdict.
 `src/pool/v3/headers.ts` implements [v3 segment headers](https://github.com/mediumofexchange/money-from-first-principles/blob/061f87e/pool-v3.md#8-segment-headers)
 with canonical scope/opening references and bounded strict decoding. Its
 signed-directory and hostile-byte tests establish header conformance. The reader
-checks single-backing opening evidence and recovery adoption; complete certificate
-formats and configuration adoption remain open. Reference-venue succession is
+checks single-backing opening evidence and recovery adoption; configuration
+adoption remains open (no certificate format is added, M4). Reference-venue succession is
 covered by the slice-4 runtime below.
 `src/pool/v3/fault-evidence.ts` adds the [portable fault-evidence record](https://github.com/mediumofexchange/money-from-first-principles/blob/322bcae/pool-v3.md#9-fault-evidence-records):
 exact raw target bytes and an evidence suffix, checked against an externally
@@ -425,7 +425,10 @@ The runtime follows specification revision
 (`V3_SPECIFICATION` in `scripts/pool/v3/provenance.mjs`), which names both
 documents' text for Ergo reports. The circuit sources cite rules by document
 and section, not revision, so a later revision that keeps those rules leaves
-their source identities unchanged. Earlier revisions
+their source identities unchanged. Later revisions change no rule the
+runtime reads: `740adaa` (pool-recovery C3.4, C3.5 and C3.8, which no v3 code
+reads yet) and `5584732` (pool-v3 §12's kinds and §12.1's certificate rule,
+which the runtime's `READ_KINDS` already meets). Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is frozen.
 `pool-recovery.md` specifies presentation, the non-service count, snapshot
