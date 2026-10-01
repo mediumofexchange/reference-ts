@@ -12,8 +12,12 @@ Payments and acts are one saved record (PR #71, merged bbfd091; `saved_records`,
 **M9b1 done** (PR #70, merged 16d6180): in a gap (horizon past the canonical checkpoint by more than the silence duration)
 `demand`/`withdraw`/`settle` bind to the snapshot and `publish` puts them at the venue; acts go final by force; the disclosure count is
 distinct outputs of presenter-signed unforced releases of the demand in the segment (frontier `releases`, settle reads only); reviewed, CI
-green. **Next: M9b2** demands found again after a seed restore (standing demands over this seed's tags with the derived presenter); reproof
-of an act whose segment ended, through `reprove` over the saved record (save the act's output openings; no second path). **M9c** the C3.8 reader (void,
+green. **Active: M9b2** (branch `claude/peaceful-tesla-zgcppb`) demands found again from the seed. Acceptance: a wallet restored from the seed
+alone lists in `sync` this seed's standing demands (replay state keeps each demand's instant, so the derived presenter key recognizes them)
+and withdraws or settles one by its identity, under service and in a gap, after an operator succession too, with the same `rho_out` the lost
+wallet would derive; another seed's demand refuses; unit suite, `check:scripts`, review. Choice: an act whose segment ended fails and is made
+again under a new alias, and `reprove` stays the payments' (C1.2.5 binds a payment's outputs to its payee; an act's are the request's under any
+alias or its own); covered by a succession test. Stop: no C3.8 reader, real-proof or crash drills (M9c, M9d). **M9c** the C3.8 reader (void,
 lapse, taken release, dishonour), acceptance published (C3.4), Next 4 (a)–(c), (e), (q). **M9d** real-proof and crash drills, review.
 
 ## Status
