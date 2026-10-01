@@ -128,14 +128,24 @@ describe("a venue's identity is the profile's", () => {
   });
 
   it("refuses an anchor context that does not end at the profile's anchor", () => {
-    expect(() => new ErgoVenue(PROFILE, chain.context.slice(0, -1))).toThrow(VenueError);
-    expect(() => new ErgoVenue({ ...PROFILE, anchor: new Uint8Array(32).fill(1) }, chain.context)).toThrow(VenueError);
+    const unauthenticated = new VenueError("the anchor context does not authenticate the profile's anchor");
+    expect(() => new ErgoVenue(PROFILE, chain.context.slice(0, -1))).toThrow(unauthenticated);
+    expect(() => new ErgoVenue({ ...PROFILE, anchor: new Uint8Array(32).fill(1) }, chain.context)).toThrow(unauthenticated);
   });
 
   it("takes the anchor context from any supplier, authenticated by linkage alone", async () => {
     const context = await ergoAnchorContext(serving(branch(1)), PROFILE.anchor, ANCHOR_HEIGHT);
     expect(context.map(hex)).toEqual(chain.context.map(hex));
-    await expect(ergoAnchorContext(serving(branch(1)), new Uint8Array(32).fill(2), ANCHOR_HEIGHT)).rejects.toThrow(VenueError);
+    const unsupplied = new VenueError("the supplier did not supply the anchor's context");
+    await expect(ergoAnchorContext(serving(branch(1)), new Uint8Array(32).fill(2), ANCHOR_HEIGHT)).rejects.toThrow(unsupplied);
+    // A supplier that fails, or answers what is not a list of headers, supplied nothing.
+    const failing = serving(branch(1)), nonsense = serving(branch(1));
+    failing.headers = async () => { throw new Error("offline"); };
+    nonsense.headers = async () => 7 as never;
+    for (const supplier of [failing, nonsense]) await expect(ergoAnchorContext(supplier, PROFILE.anchor, ANCHOR_HEIGHT)).rejects.toThrow(unsupplied);
+    for (const timeout of [0, 1.5, 2 ** 31]) {
+      await expect(ergoAnchorContext(serving(branch(1)), PROFILE.anchor, ANCHOR_HEIGHT, timeout)).rejects.toThrow(new TypeError("invalid anchor context timeout"));
+    }
   });
 
   it("the lag is the depth plus one, answered unsynced", () => {
@@ -144,11 +154,11 @@ describe("a venue's identity is the profile's", () => {
 
   it("the clock is nothing an unsynced view can answer, nor one whose chain has not reached the depth", async () => {
     const v = venue();
-    expect(() => v.witnessedIndex()).toThrow(VenueError);
+    expect(() => v.witnessedIndex()).toThrow(new VenueError("this view has no settled snapshot"));
     const short = branch(3);
     const report = await v.sync([serving(short)]);
     expect(report.witnessedIndex).toBeUndefined();
-    expect(() => v.witnessedIndex()).toThrow(VenueError);
+    expect(() => v.witnessedIndex()).toThrow(new VenueError("this view has no settled snapshot"));
     await v.sync([serving([...short, ...branch(1, {}, short.at(-1)!)])]);
     expect(v.witnessedIndex()).toBe(0n);
   });
@@ -282,7 +292,7 @@ describe("readers see only a complete Ergo snapshot", () => {
         const reads = [() => v.witnessedIndex(), () => v.range(request, WIDE)];
         try {
           // Mid-sync, reads answer from the previous snapshot, or refuse where there is none.
-          if (initial) for (const read of reads) expect(read).toThrow(VenueError);
+          if (initial) for (const read of reads) expect(read).toThrow(new VenueError("this view has no settled snapshot"));
           else {
             expect(v.witnessedIndex()).toBe(8n);
             expect(held(v, KEYS.operator)).toEqual([{ index: 2n, commitment: first }]);
@@ -294,7 +304,7 @@ describe("readers see only a complete Ergo snapshot", () => {
         const report = await pending;
         expect(report.suppliers[0]!.stopped !== undefined || report.unresolvedIndex !== undefined).toBe(fail);
         if (fail && initial) {
-          for (const read of reads) expect(read).toThrow(VenueError);
+          for (const read of reads) expect(read).toThrow(new VenueError("this view has no settled snapshot"));
         } else {
           expect(v.witnessedIndex()).toBe(fail ? 8n : 22n);
           expect(sequences(v, KEYS.operator)).toEqual(fail ? [[2n, 1n]] : [[2n, 1n], [15n, 2n]]);
@@ -315,7 +325,7 @@ describe("readers see only a complete Ergo snapshot", () => {
     supplier.before = async call => { if (call === "tip") { entered.resolve(); await resume.promise; } };
     const pending = v.sync([supplier]);
     await entered.promise;
-    await expect(v.sync([serving(old)])).rejects.toThrow(VenueError);
+    await expect(v.sync([serving(old)])).rejects.toThrow(new VenueError("a sync is already in progress"));
     resume.resolve();
     await pending;
     expect(v.witnessedIndex()).toBe(8n);
@@ -513,6 +523,52 @@ describe("no supplier is trusted", () => {
     expect([stopped.unresolvedIndex, stopped.unresolvedReason]).toEqual([2n, "retained budget"]);
     expect(full.witnessedIndex()).toBe(1n);
   });
+
+  it("reads a section answer by its own length, never its iterator", async () => {
+    const blocks = branch(6), junk = serving(blocks, "junk");
+    let yielded = 0;
+    // An empty list whose iterator yields ten thousand transactions: none is read, and the section is not this one.
+    junk.section = async () => Object.assign([], { *[Symbol.iterator]() { for (; yielded < 10_000; yielded++) yield transaction([plainOutput]); } });
+    const v = venue();
+    await v.sync([junk, serving(blocks, "honest")]);
+    expect(yielded).toBe(0);
+    expect(v.witnessedIndex()).toBe(2n);
+  });
+
+  it("asks first the supplier that supplied the last section, so one serving junk costs nothing while it supplies", async () => {
+    const blocks = branch(8), junk = serving(blocks, "junk"), honest = serving(blocks, "honest");
+    let asked = 0;
+    junk.section = async () => { asked++; return [transaction([plainOutput])]; };
+    const v = venue();
+    await v.sync([junk, honest]);
+    expect(asked).toBe(1); // passed over for the rest of that sync
+    junk.tip = honest.tip = branch(3, {}, blocks.at(-1)!).at(-1)!;
+    await v.sync([junk, honest]);
+    expect(asked).toBe(1); // the honest supplier supplied the last section: it is asked first
+    expect(v.witnessedIndex()).toBe(7n);
+  });
+
+  it("fails closed when its own sync throws, rather than answer from a state no sync completed", async () => {
+    const blocks = branch(8), v = venue();
+    await v.sync([serving(blocks.slice(0, 6))]);
+    expect(v.witnessedIndex()).toBe(2n);
+    // An unexpected failure of the view's own after it read a section past its clock.
+    let reads = 0;
+    const own = v as unknown as { hold: (index: bigint, objects: unknown) => void };
+    const hold = own.hold.bind(v);
+    own.hold = (index, objects) => { if (reads++ > 0) throw new RangeError("out of memory"); hold(index, objects); };
+    await expect(v.sync([serving(blocks)])).rejects.toThrow(RangeError);
+    const failed = new VenueError("Ergo sync failed; open a new view");
+    expect(() => v.witnessedIndex()).toThrow(failed);
+    await expect(v.sync([serving(blocks)])).rejects.toThrow(failed);
+  });
+
+  it("takes a reader policy of its own budgets only, each a positive count the runtime can honour", () => {
+    for (const policy of [{ headerPerSupplier: 5 }, { supplierTimeoutMs: 2 ** 31 }, { retainedBytes: 0 }, { sectionBytesPerSync: 1.5 }]) {
+      expect(() => venue(policy as Partial<ErgoReaderPolicy>)).toThrow(new TypeError("invalid Ergo reader policy"));
+    }
+    expect(venue({ supplierTimeoutMs: 2 ** 31 - 1 }).lag()).toBe(DEPTH + 1n);
+  });
 });
 
 describe("its answers are §13's", () => {
@@ -595,7 +651,7 @@ describe("held records on this venue", () => {
 
   it("keeps unavailable reads VenueError, and a failed refresh keeps the snapshot", async () => {
     const v = venue(), request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 0n, toIndex: 0n };
-    expect(() => v.range(request, WIDE)).toThrow(VenueError);
+    expect(() => v.range(request, WIDE)).toThrow(new VenueError("this view has no settled snapshot"));
     const blocks = branch(8);
     await v.sync([serving(blocks)]);
     const before = v.range(request, WIDE);

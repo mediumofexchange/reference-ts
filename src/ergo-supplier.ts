@@ -284,6 +284,41 @@ export function supplyBlock(text: string): {
   return { headerId: block.get("headerId") as string, statements, supplied: statements.map(supplyTransaction) };
 }
 
+/** What a node request asks of `fetch`: a GET, or a POST of a JSON string. */
+export interface NodeRequestInit {
+  readonly signal: AbortSignal;
+  readonly method?: "GET" | "POST";
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+}
+
+/** One node answer's body as text, or undefined where the node answers 404.
+ * At most `maxBytes` of body are read, whatever length the node declares: a
+ * node is untrusted and may stream without end, so a longer body is
+ * cancelled and throws. Every node request here goes through this. */
+export async function nodeText(fetcher: (url: string, init: NodeRequestInit) => Promise<Response>, url: string, path: string,
+  init: NodeRequestInit, maxBytes: number): Promise<string | undefined> {
+  const response = await fetcher(url, init);
+  // A body left unread is cancelled, so the connection is not held open until the request's timeout.
+  const discard = async (): Promise<void> => { await response.body?.cancel().catch(() => {}); };
+  if (response.status === 404) { await discard(); return undefined; }
+  if (!response.ok) { await discard(); throw new Error(`${path}: HTTP ${response.status}`); }
+  const declared = Number(response.headers.get("content-length") ?? "0");
+  if (declared > maxBytes) { await discard(); throw new Error(`${path}: response over ${maxBytes} bytes`); }
+  const reader = response.body?.getReader();
+  if (reader === undefined) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > maxBytes) { await reader.cancel(); throw new Error(`${path}: response over ${maxBytes} bytes`); }
+    chunks.push(value);
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(concat(chunks));
+}
+
 export interface ErgoNodeSupplierOptions {
   /** A label for reports; defaults to the base URL. */
   readonly name?: string;
@@ -311,25 +346,8 @@ export function ergoNodeSupplier(baseUrl: string, options: ErgoNodeSupplierOptio
   const batch = options.batch ?? DEFAULT_BATCH;
   if (batch < 1n) throw new RangeError("a header batch is positive");
   /** The body as text, or undefined where the node answers 404. */
-  const get = async (path: string): Promise<string | undefined> => {
-    const response = await fetcher(`${base}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
-    if (response.status === 404) return undefined;
-    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
-    const declared = Number(response.headers.get("content-length") ?? "0");
-    if (declared > maxBytes) throw new Error(`${path}: response over ${maxBytes} bytes`);
-    const reader = response.body?.getReader();
-    if (reader === undefined) return "";
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > maxBytes) { await reader.cancel(); throw new Error(`${path}: response over ${maxBytes} bytes`); }
-      chunks.push(value);
-    }
-    return new TextDecoder("utf-8", { fatal: true }).decode(concat(chunks));
-  };
+  const get = (path: string): Promise<string | undefined> =>
+    nodeText(fetcher, `${base}${path}`, path, { signal: AbortSignal.timeout(timeoutMs) }, maxBytes);
   return Object.freeze({
     name: options.name ?? base,
     async tipHeight(): Promise<bigint> {

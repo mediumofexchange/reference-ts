@@ -295,12 +295,26 @@ until the journal is reopened.
   headers with their work, while failing, or claiming a tip never served,
   costs nothing and is withholding. A withheld or root-failing section
   stops the clock before its block: the view is stale, as every earlier
-  snapshot was, never empty. A supplier that misses one section is not
-  asked again in that sync. `sectionBytesPerSync` (256 MiB) ends a sync's
+  snapshot was, never empty. The clock never moves back: a heavier chain
+  that keeps the block it stands on leaves it there however short that
+  chain is (venue-ergo §2), and a durable view reopens there, only where a
+  header it kept buries that block at the depth. While the best chain is
+  shorter than the clock's depth, `publishRecord` refuses (`VenueError`), and
+  the publisher asks the same in its turn and before each transaction it
+  sends, so no record signed at or below the clock is included inside its
+  lag. A
+  failure of the view's own during a sync leaves it failed. A supplier
+  that misses one section is not asked again in that sync, and the one that
+  supplied the last section is asked first. A section answer is read by
+  index over its own length, at most 2^20 transactions and 64 MiB.
+  `sectionBytesPerSync` (256 MiB) ends a sync's
   section reading once that many bytes were received, matching or not;
   `retainedBytes` (256 MiB, each object's record, subject and a fixed
   overhead) stops the clock where it would be exceeded, reported as
-  `unresolvedReason: "retained budget"`, until the budget is raised.
+  `unresolvedReason: "retained budget"`, until the budget is raised. Shaped
+  objects at the locations fill it at the network's box minimum, about
+  97 ERG for the default at 360 nanoERG a byte. A policy key the view does
+  not know, or a timeout above 2^31 − 1 ms, is the caller's `TypeError`.
 - **Failure**: if the best chain leaves the block the clock stands on, the
   reorganization passed the depth (§13.2): every read and later sync
   refuses with `VenueError`, and the reader needs a new view.
@@ -342,23 +356,43 @@ until the journal is reopened.
   and one a supplier offers is skipped where any supplier answers that it
   lacks it; a supplier that lies costs a publication, never funds (Ergo
   balances values exactly), and one that denies every box stops publication
-  visibly. **One transaction per record:** it is built once and remembered
+  visibly. Suppliers are asked at once, a box is denied at the first such
+  answer and a supplier's unsettled ancestry is walked only where it answers
+  that it lacks the transaction: the prefix it holds is found by bisection
+  and the rest sent oldest first until a deadline of two timeouts, so a slow
+  or lying supplier costs a call a few timeouts and each attempt keeps what
+  it sent. A record is not replaced while a transaction it had before has no
+  supplier saying it lacks it. A node answers that it lacks
+  a transaction only where its mempool answered and its index has read every
+  block the node holds (`/blockchain/indexedHeight`), since a mined
+  transaction leaves the mempool before the index reads its block. Every
+  node body is read through a 4 MiB bound as it streams. **One transaction per record:** it is built once and remembered
   before it is first sent; a retry after a lost answer, an outage or a drop
   sends the same bytes, after any unsettled transaction whose change it
-  spends, so no second, non-conflicting transaction for the record exists.
-  A transaction a supplier holds (mempool or blocks) or whose record box it
-  shows counts as sent, so a landed one whose record box was swept is not
-  mistaken for one whose inputs vanished. One that can never land (no
-  supplier holds it, every one refuses it and one answers that an input is
-  gone: an invented box, a dropped parent) is dropped with its change and
-  rebuilt spending every input still shown, and one refused for anything
-  else is rebuilt on the same inputs at the caller's new height, so the old
-  and new conflict wherever they can. Later publications spend the publisher's own change,
-  landed or not, before any index shows it, and calls are serialized. The
-  view settles its publisher after each sync, in the publisher's queue: a
-  publication is forgotten once the snapshot holds its record, and its
-  inputs once a supplier shows that it landed; a record the view already
-  holds is not sent. The view's `publishRecord` throws
+  spends. A transaction a supplier holds (mempool or blocks) or whose record
+  box it shows counts as sent, so a landed one whose record box was swept is
+  not mistaken for one whose inputs vanished. It is replaced only after a
+  supplier answers that it lacks it, never while none answers, and not while
+  a supplier holds a transaction the record had before: one that can never
+  land (an input one supplier answers is gone: an invented box, a dropped
+  parent) is dropped with its change and rebuilt spending every input still
+  shown, and one refused for anything else is rebuilt on the same inputs at
+  the caller's new height. A replacement never spends a replaced
+  transaction's change, and a record has at most eight transactions (one
+  refused at the eighth is kept until a view holds the record however it got
+  there; no command abandons one yet). A rebuild that would
+  be the same transaction is not made. So a lost answer, an outage or a drop
+  never yields a second, non-conflicting transaction; a supplier that denies
+  a live transaction's input and does not show it can, at a fee, and readers
+  take the record once. Later
+  publications spend the publisher's own change, landed or not, before any
+  index shows it, and calls are serialized. The view settles its publisher
+  after each sync, in the publisher's queue and asking no supplier: a
+  publication is forgotten once the snapshot holds its record, its inputs
+  are released (whatever spends them next conflicts with it), and its change
+  stays the publisher's own until a build finds it gone. The view looks up
+  held records by their first index rather than scanning its history; a
+  record it already holds is not sent. The view's `publishRecord` throws
   its refusals at once and resolves on acceptance, which is not holding;
   the v3 journal awaits it inside its existing lag window. Without a persistence
   adapter a restart loses the queue; the durable v3 path is described below.
@@ -386,8 +420,9 @@ pin. Per-supplier side quotas remain object-local and reset with a new process.
 To connect the publisher, restore/sync the venue, open `V3OperatorJournal`, create
 `ErgoPublisher` with `persistence: journal.publisherPersistence()`, then call the
 venue's one-time `attachPublisher(publisher)`. The operator journal fences and
-atomically saves the publisher's pending transactions, reservations and owned
-change before broadcast. Reopen uses exact signed bytes, validates their saved
+atomically saves the publisher's pending transactions, the ids of those they
+replaced, and owned change before broadcast (saved state layout 2; layout 1 is
+refused). Reopen uses exact signed bytes, validates their saved
 proofs against the reconstructed request/inputs/policy, and guards each retry
 against a stale owner. Reuse the same funding key and policy. No secret enters
 either checkpoint. The adapter belongs to one publisher instance.

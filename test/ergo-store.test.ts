@@ -7,8 +7,10 @@ import { ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
 import { encodeCommitment, signCommitment } from "../src/commitment.js";
 import { ergoProfileIdentity } from "../src/ergo-profile.js";
 import { decodeRangeAnswer, heldCommitments } from "../src/record-range.js";
-import { BranchSupplier, Chain, recordOutput, transaction, type Block } from "./ergo-chain.js";
+import { BranchSupplier, Chain, MempoolNode, plainBox, recordOutput, transaction, WorkedChain, type Block } from "./ergo-chain.js";
 import type { ErgoVenueJournal as Journal } from "../src/ergo-store.js";
+import { ErgoPublisher, verifyErgoProof } from "../src/ergo-publisher.js";
+import { VenueError } from "../src/venue-error.js";
 
 let ErgoVenueJournal: typeof import("../src/ergo-store.js").ErgoVenueJournal;
 beforeAll(async () => { ({ ErgoVenueJournal } = await import("../src/ergo-store.js")); });
@@ -40,6 +42,36 @@ function answer(venue: ErgoVenue, subject = first.operator, kind: 1 | 4 = 1, toI
 }
 
 describe("durable independently replayed Ergo view", () => {
+  it("keeps its clock when a heavier but shorter chain keeps the block it stands on, live and on reopening, and publishes once it regrows (venue-ergo §2)", async () => {
+    // The anchor two below an epoch's end: index 0 is the trunk, and each branch's first block ends the epoch.
+    const worked = new WorkedChain(4n, 900_094n), trunk = worked.mine(worked.anchor);
+    const edgeA = worked.mine(trunk, trunk.header.timestamp + 1_000_000_000n), edgeB = worked.mine(trunk);
+    const a = worked.extend(edgeA, 3), b = worked.extend(edgeB, 2);
+    // A far-future timestamp at A's edge halves its next epoch's difficulty: B outscores A (4 + 2·4 > 4 + 3·2) a block shorter.
+    expect([a[0]!.difficulty, b[0]!.difficulty]).toEqual([2n, 4n]);
+    const profile = worked.profile(4n), path = file();
+    const mempool = new MempoolNode("mempool", verifyErgoProof), publisher = new ErgoPublisher({ secretKey: new Uint8Array(32).fill(9), suppliers: [mempool] });
+    mempool.fund(plainBox(publisher.tree, 10_000_000n, worked.anchor.height));
+    const durable = () => { const journal = new ErgoVenueJournal(path, ergoProfileIdentity(profile)); journals.push(journal); return journal; };
+    const journal = durable(), view = new ErgoVenue(profile, worked.context, {}, publisher, journal);
+    expect((await view.sync([worked.supplier("A", a.at(-1)!)])).witnessedIndex).toBe(0n);
+    const report = await view.sync([worked.supplier("B", b.at(-1)!)]);
+    // The chain alone no longer makes index 0 final, but the block the clock stands on is on it: the clock stays.
+    expect([report.witnessedIndex, report.chainWitnessedIndex, report.tipHeight]).toEqual([0n, undefined, b.at(-1)!.height]);
+    expect(bytesToHex(report.witnessedHeaderId!)).toBe(bytesToHex(trunk.id));
+    // B's next block would fall inside the lag of the clock a record is signed at: nothing goes out until B regrows.
+    const record = encodeCommitment(first);
+    await expect(view.publishRecord(1, first.operator, record)).rejects.toThrow(new VenueError("the best chain is shorter than the clock's depth; publish once it grows"));
+    expect(mempool.submitted).toEqual([]);
+    journal.close();
+    const reopened = new ErgoVenue(profile, worked.context, {}, undefined, durable());
+    expect(reopened.witnessedIndex()).toBe(0n);
+    reopened.attachPublisher(publisher);
+    await reopened.sync([worked.supplier("B", worked.mine(b.at(-1)!))]);
+    await reopened.publishRecord(1, first.operator, record);
+    expect(mempool.submitted).toHaveLength(1);
+  });
+
   it("reopens offline with byte-identical ranges, empty answers and non-held twins, then continues only new sections", async () => {
     const path = file(), blocks = records(), old = opened(path);
     await old.venue.sync([supplier(blocks)]);
@@ -169,19 +201,27 @@ describe("durable independently replayed Ergo view", () => {
   });
 
   it("refuses root-changing omissions, corrupt bytes, missing history and a foreign identity on restore", async () => {
-    for (const change of ["digest", "section", "header", "pin", "protection"] as const) {
-      const path = file(), old = opened(path); await old.venue.sync([supplier(records())]); old.journal.close();
+    for (const change of ["digest", "section", "header", "pin", "protection", "unburied"] as const) {
+      const path = file(), old = opened(path), blocks = records(); await old.venue.sync([supplier(blocks)]); old.journal.close();
       const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path);
       const stored = JSON.parse(db.prepare("SELECT payload FROM ergo_checkpoint").get()!.payload as string);
       if (change === "section") stored.sections[3].views = [];
       if (change === "header") stored.headers.splice(1, 1);
       if (change === "pin") stored.pin = "00".repeat(32);
       if (change === "protection") stored.protectedHeaders = ["00".repeat(32)];
+      // Genuine sections through the tip and the clock on it: no kept header buries that block at the depth.
+      if (change === "unburied") {
+        for (const block of blocks.slice(stored.sections.length)) {
+          stored.sections.push({ header: bytesToHex(block.id), views: block.section.map(t => ({ unsigned: bytesToHex(t.unsigned), witnessId: bytesToHex(t.witnessId) })) });
+        }
+        stored.witnessed = String(stored.sections.length - 1); stored.pin = bytesToHex(blocks.at(-1)!.id);
+      }
       const payload = JSON.stringify(stored), digest = bytesToHex(sha256(new TextEncoder().encode(payload)));
       db.prepare("UPDATE ergo_checkpoint SET payload=?,digest=?").run(payload, change === "digest" ? "00".repeat(32) : digest); db.close();
-      expect(() => opened(path)).toThrow(/stored Ergo/);
+      // A payload that is not the one committed is no checkpoint; one that is, but does not reproduce its view, is refused for that.
+      expect(() => opened(path)).toThrow(change === "digest" ? "invalid stored Ergo checkpoint" : "stored Ergo evidence does not reproduce its witnessed view");
     }
     const path = file(), old = opened(path); old.journal.close();
-    expect(() => new ErgoVenueJournal(path, new Uint8Array(32).fill(9))).toThrow(/stored Ergo/);
+    expect(() => new ErgoVenueJournal(path, new Uint8Array(32).fill(9))).toThrow("invalid stored Ergo checkpoint");
   });
 });

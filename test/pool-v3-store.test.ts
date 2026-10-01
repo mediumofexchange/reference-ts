@@ -124,7 +124,9 @@ describe("a local venue's publishing side", () => {
     await venue.publishRecord(3, issuer, record);
     expect(venue.witnessedIndex()).toBe(5n);
     expect(venue.export().records.map(r => r.index)).toEqual([5n]);
-    await expect(venue.publishRecord(3, b(1).subarray(1), record)).rejects.toThrow(TypeError);
+    // A malformed record is the caller's error (RecordPublisher).
+    await expect(venue.publishRecord(3, b(1).subarray(1), record)).rejects.toThrow("invalid fixture venue record");
+    await expect(venue.publishRecord(3, b(1).subarray(1), record)).rejects.not.toThrow(TypeError);
   });
 });
 

@@ -12,7 +12,7 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
+import { ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError } from "./bytes.js";
 import { COMMITMENT_CONTEXT, DIRECTORY_MAGIC, REPLACEMENT_CONTEXT, REVOCATION_CONTEXT } from "./contexts.js";
 import { verifySignatureStrict } from "./keys.js";
 
@@ -48,18 +48,24 @@ export interface SnapshotDigest {
  * availability or continuity.
  */
 export function directoryRoot(directory: readonly SnapshotDigest[]): Uint8Array {
+  // Each entry is read once into a copy, and the count written is the count copied.
+  let previous: Uint8Array | undefined;
+  const entries = copyArray(directory, (entry: SnapshotDigest): SnapshotDigest => {
+    if (entry === null || typeof entry !== "object") throw new EncodingError("invalid directory entry");
+    const own = { name: copyBytes(entry.name), digest: copyBytes(entry.digest) };
+    if (previous !== undefined && compareBytes(previous, own.name) >= 0) {
+      throw new EncodingError("directory names must be strictly increasing");
+    }
+    previous = own.name;
+    return own;
+  }, 0xffff_ffff);
   const w = new ByteWriter();
   w.context(DIRECTORY_MAGIC);
   w.u8(1);
-  w.u32(directory.length);
-  let previous: Uint8Array | undefined;
-  for (const entry of directory) {
+  w.u32(entries.length);
+  for (const entry of entries) {
     w.key32(entry.name, "backing name");
     w.key32(entry.digest, "snapshot digest");
-    if (previous !== undefined && compareBytes(previous, entry.name) >= 0) {
-      throw new EncodingError("directory names must be strictly increasing");
-    }
-    previous = entry.name;
   }
   return sha256(w.finish());
 }
@@ -144,16 +150,22 @@ export function verifyCommitment(commitment: Commitment): boolean {
  */
 export function isEquivocation(a: Commitment, b: Commitment): boolean {
   try {
+    // Each commitment read once into a copy, so the fields compared are the fields verified.
+    const first = ownCommitment(a), second = ownCommitment(b);
     return (
-      compareBytes(a.operator, b.operator) === 0 &&
-      a.sequence === b.sequence &&
-      compareBytes(a.root, b.root) !== 0 &&
-      verifyCommitment(a) &&
-      verifyCommitment(b)
+      compareBytes(first.operator, second.operator) === 0 &&
+      first.sequence === second.sequence &&
+      compareBytes(first.root, second.root) !== 0 &&
+      verifyCommitment(first) &&
+      verifyCommitment(second)
     );
   } catch {
     return false;
   }
+}
+function ownCommitment(commitment: Commitment): Commitment {
+  const { sequence, root, operator, signature } = commitment;
+  return { sequence, root: copyBytes(root), operator: copyBytes(operator), signature: copyBytes(signature) };
 }
 
 // --- Kind 2: replacements (C2.5) ---------------------------------------------

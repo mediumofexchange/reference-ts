@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1289
+      "elapsedMs": 788
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3122
+      "elapsedMs": 1708
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3087
+      "elapsedMs": 1718
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 994
+      "elapsedMs": 576
     }
   ],
   "transactions": [],
@@ -49,7 +49,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "2261233c042322f55531c96b723172fc487a8f7f74afbb8e2e2dcacf6086ba3a",
-    "history": "37907a7a67f4c320451465d4921a69a29c92e74b0a6c986cc53c2720529a3100",
+    "history": "7263b07345e3de01c2cc6e7240636b95c302de7ca52bd91fc9b2fc9a043090e5",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -107,22 +107,22 @@
       }
     ]
   },
-  "elapsedMs": 24498,
+  "elapsedMs": 14935,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "09d2961ae68c6a7ebec5636d2011769d01800922756e1ed36686497f35af2a69",
     "dist/ergo-headers.js": "788c2461e4b268c8c571f5b71b71b84e1fea445e931fcb825ed426262da4aba8",
     "dist/ergo-profile.js": "6accb1f4e0307f6570e8ebfdccb656fcb3a9dd10ecaae4d3ab1d7fe80e77c36c",
-    "dist/ergo-publisher.js": "5f75bc82d9064444c28c01bfe1d3cdce80f84c5be3cc466536f8e9648a88471b",
-    "dist/ergo-supplier.js": "793f4c0c527918e8b3391a2286a3f19447bcfeb7fd0cde05353efe53a94644dd",
+    "dist/ergo-publisher.js": "f019a54c1db749f03471fc2bcf079c884cf411d5ed36f6adbae37863457af19b",
+    "dist/ergo-supplier.js": "19f5ec645000c756d3332477c2cba3c431fe3bcda617f8afde40ccf40de2f661",
     "dist/ergo-synthetic.js": "1994ef09fb8cec90d861ebfd0b163a09283c73ad12ed2a9372e02810a0216533",
-    "dist/ergo.js": "516055c86b16bf9970c3c8810488ec3e72b703a971720c453b2a57e7db03f60e",
+    "dist/ergo.js": "668957539251a3bf4a2797e08799b97070c95393bd5ced153e71f04ff78371ea",
     "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
     "dist/pool/field.js": "8348d48159c397cb49bcb03ced9e606103d689d7892072b27b9a05b50e9f2bb8",
     "dist/pool/note-tree.js": "48fa3cfdcc8183f5aaa86889c9a066a775afc6ff79148d294933d26a1fbf40d1",
     "dist/pool/notes.js": "eb63d7562dea56fa98ab5313b8049524d51f8e733b26a09e25e666a967bbeb31",
     "dist/pool/poseidon2.js": "4731ae2cec4ef774eb93ffb10b8a8d152e95b6d1f127e7546002481a6c7bf2d4",
-    "dist/pool/proof-verifier.js": "2f3663e1b8b990646dbd9e2910c195e3f25daa49de1f79991b37053f910aa5fc",
+    "dist/pool/proof-verifier.js": "b6ec23687018bbbbfba4b981f40a04eecef0b002195c5f0da8df00515947970b",
     "dist/pool/schedule.js": "47136b811c6f4cb3aea5edb82bfe7f051a76583c943bfc0a892714ca6718c967",
     "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
     "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
@@ -148,15 +148,15 @@
     "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
     "dist/pool/v3/scope-reader.js": "c28ee33b7a6715517671bfd8c687e1c981caa3f33948a0ef489b2f6fb16d9920",
     "dist/pool/v3/state.js": "770f846cf562909a9c8ea1a26d7243bb94e4f42025d701afed34d8b6752f874e",
-    "dist/pool/v3/store.js": "2d092e923ed59dcdc5d4af7c8cb972a22839438be807ff0e95cecf7c24a2555d",
+    "dist/pool/v3/store.js": "8c8896cac064e1e2e4a46a2620f0a0fe88979a0ecb656a8bc551d66f1fff6f3c",
     "dist/pool/v3/terms.js": "97c37f5dcc46aa1362eb44b6f5473ca188dcac91959f6bebadb504ae348d78a3",
     "dist/pool/v3/trail.js": "f3705bc9636e2c497b85a226a8bc5ac88f08a3c5d03eefb2566ee1ebc9b1dae1",
     "dist/pool/v3/verify-ahead.js": "1961932d87bcd868dc625044d8700192b9fd67a1edc72a5cc96e92105f98c5e7",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
     "dist/record-range.js": "d7e1c2f8cb58256abbbce621e32f152c021e55a7eb0471dbbd906a07c6c23a8c",
-    "dist/record-venue.js": "5d66c88d298800211a159d4db8f3b2fcd4adcf28131e976817e070e6d16fb916",
+    "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
-    "dist/venue-records.js": "9a5ef5790e349c69c108d8a2894ae231f87e3e32030de4cfcfb622e637429b8f",
+    "dist/venue-records.js": "c4f6a71db791baab7db23888229c9165ed6c9d0d22d8c9f068d2f1affb4c965e",
     "package-lock.json": "8203171d98e330e29b091437c947e425fa7b8de9aafa0088a90aae2544f60c9a",
     "scripts/pool/fixtures.mjs": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
     "scripts/pool/prepare-crs.mjs": "a19e538feab20a58847c03f1f0bf42ec1182799cf8518e545d5336f5357a63ef",
@@ -182,18 +182,18 @@
     "src/contexts.ts": "555dcc03061a6c451ffd6dc63f2486ad920014186e4ec01d164ec7282b27764b",
     "src/ergo-headers.ts": "fc308579697076e7476617e1c5141710cdf7aa83953effbf92be45c74d0426dc",
     "src/ergo-profile.ts": "12ee44043a1dce07e8c86984b061b87cb79fa3193365b162d97db7632c21d631",
-    "src/ergo-publisher.ts": "4ce8cc1f8c3086e1a8a6b04dae3d2f439d1ff3fa1adc782cd624369bcf593b64",
+    "src/ergo-publisher.ts": "37c0cf1b15980a58f87194db1ff84173bc2d1b97520ca5182a0c986e08f07d16",
     "src/ergo-store.ts": "2a48f58b3117bf83be17023c9d149c4cf10e40dd860061188e60b1d2702cb1b6",
-    "src/ergo-supplier.ts": "b9bb52129f4e2fcfdb936682294476ba11e2fa55e27c5775f4000914cdae73f7",
+    "src/ergo-supplier.ts": "5e08585611930e0aa134763b92c4141926289a6b4c551567f348df6005853d1b",
     "src/ergo-synthetic.ts": "46548045ce2cf328dde12a04982cc23ddf3ac849e53b901c43ba15c8f4437b2e",
-    "src/ergo.ts": "1705d004b463a4a9d41890af17168394500954e7fccebdc8aa2e53b4bd201473",
+    "src/ergo.ts": "3c5847f23a02cc1ee5fb03a53da124417eff2b94f015012ba3d15c2243e8d2b4",
     "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
     "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
     "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
     "src/pool/note-tree.ts": "05087d8637faa1db300b8b98af7002eff3a6eb40b8e48900c7c90ee5a51a8fbb",
     "src/pool/notes.ts": "df1ced5d5384fa5de5b8071071ecc1f057ddaca4cc38ad252984b326a7e2e3a7",
     "src/pool/poseidon2.ts": "eadd2f03b20e64e76077494fc4769fc4626796723f5d2ec77d8479e18dfaab6c",
-    "src/pool/proof-verifier.ts": "207acddff4cb1f4177f712b0806ccabf94186c26e608e60794f9cda163882b5a",
+    "src/pool/proof-verifier.ts": "82913e7cb52ba6c049d3dbcb9922b7196b90fdcf84853ba85bacdd69e5707be6",
     "src/pool/schedule.ts": "4c4936504b7e1445548df649bbbc1a120196ff155a7954a138ffab29b578834a",
     "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
     "src/pool/v3/authorization-evidence.ts": "3abf5ba67308ba03752183f7e2065d7e0b1990ad1dbec21930d03960289a492e",
@@ -219,14 +219,14 @@
     "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
     "src/pool/v3/scope-reader.ts": "9d2aca3d3157b04ac4afe813bda2d7b8e7134dd9c4d1f1dac3b8a6214ce2ca19",
     "src/pool/v3/state.ts": "bd2fb74c5788d00cc60ceb7c51a9acd5205312cb194e98f4e93321ac65ccdc3f",
-    "src/pool/v3/store.ts": "f543838086c3afc87f5150cf899a973f7cb2fc00dd923043498c78b1539b0f22",
+    "src/pool/v3/store.ts": "818d36df2c04fd543099e7dfd7d530080a3f64099dec4c8f846e794099f0d4a2",
     "src/pool/v3/terms.ts": "ddc7c00a5e1349a187aa548f01cc2e8e975516df45987e94cbeb69d57ce0a484",
     "src/pool/v3/trail.ts": "b9bea043061fa0c474097a38f1034453a723eb1ad79a14e3eb5a14d11f47130d",
     "src/pool/v3/verify-ahead.ts": "9f7acb825b19c2c2ad28f7871a242302d1fcc1cd97d20dc74f4ab4027c044430",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
     "src/record-range.ts": "0658a6592bba3883c5f9c7fd368cdee07f9fe8049ab5ee041af40df78577a840",
-    "src/record-venue.ts": "19cc7913cd90de844d4b9e6b977ef452d0f682dbb7e8947843341908ff771233",
+    "src/record-venue.ts": "fefd8000b4eece2966c95147283df7f70631f00f63cb82487e51ea15103a606f",
     "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
-    "src/venue-records.ts": "72c93b2d55255c500918620a3e19ef70e1fe7dda587242222fccdb9171171abe"
+    "src/venue-records.ts": "ce98c25655612077396eeba5938c506a94fb6e162e2538fa2afe0f6ae4b1afde"
   }
 }
