@@ -6,8 +6,17 @@ Updated: 2026-10-01
 Slice 8 (adoption) is complete. Pool-v3 is adopted with one configuration (spec e7f7f24, §11.4: configHash `7ddbb7e8…a618`;
 [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a)).
 Fixed by its name: a byte, identity or verdict change (C3.8's residual too) is pool-v4.
-**Next: slice 9, redemption in the wallet** (Next 1; [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
-state its goal, acceptance and stop here before building.
+**Active: slice 9, redemption in the wallet** (Next 1; [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)).
+Goal: `V3Wallet` owns both redemption roles, so no runtime act of the path is driven by tests or scripts. Acceptance and stop: Next 1's
+(real-proof path in fresh processes, local and synthetic Ergo, service and gap, crash/exact-retry drills, C3.4–C3.8 hostile cases,
+adversarial review, merge). Milestones: **M9a** (branch `feat/m9a-redemption-wallet`, in progress) the wallet's operations under service on
+the local venue with stand-in proofs: `issue` (K signs through a caller signer checked against the terms' obligor; K's secret never enters
+the wallet), `demand` (exact whole notes, presenter key and zero padding derived from the seed, instant = read index), `accept` (C4.7 owner,
+distinct per demand), `settle` (C3.5 `rho_out` from the seed, input nullifiers, segment and disclosure count; release signed), `withdraw`,
+`burn`; persisted acts with exact alias retry, one `submit` and resolution in `sync`; wallet profile `moe/wallet/v3/4`.
+**M9b** gap: publish demand/settle/withdraw at the venue with the operator offline; the disclosure count read from witnessed releases
+without force; demands found again after a seed restore. **M9c** the C3.8 reader (void, lapse, taken release, dishonour) and Next 4
+(a)–(c), (e), (q). **M9d** real-proof drills in fresh processes, local and synthetic Ergo, crash drills, review, merge.
 
 ## Status
 - M8b (PR #68): the live two-backing drill passed on the own testnet node ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json));
