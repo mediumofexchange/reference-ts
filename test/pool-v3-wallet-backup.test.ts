@@ -32,8 +32,8 @@ const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uin
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);
-const TABLES = ["receiver_requests", "receiver_fulfilled", "payer_payments", "payer_inputs", "payer_outputs", "payer_superseded"];
-const COLUMNS = [5, 6, 15, 2, 5, 4, 13, 2, 5];
+const TABLES = ["receiver_requests", "receiver_fulfilled", "saved_records", "saved_inputs", "saved_outputs", "saved_superseded", "backer_acceptances"];
+const COLUMNS = [5, 6, 14, 2, 5, 4, 5];
 /** The specific refusal, not merely a throw. */
 function throws(action: () => unknown, shape: unknown): void {
   let thrown: unknown;
@@ -263,7 +263,14 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     refused(sealed(new TextEncoder().encode("[[],[],[],[],[],[],[],[],[]]")), /invalid wallet snapshot/);
     refused(variant(() => {}, "moe/wallet/v3/3"), /another profile/);
     refused(variant(t => { t[3]!.push(["1", "nobody"]); }), /does not fit|unmatched references/);
-    refused(variant(t => { t[7]!.push(["1", "nobody"]); }), /does not fit|unmatched references/);
+    refused(variant(t => { t[4]!.push(["1", "nobody", "1", "1", "1"]); }), /does not fit|unmatched references/);
+    refused(variant(t => { t[5]!.push(["00", "nobody", b(1), null]); }), /does not fit|unmatched references/);
+    refused(variant(t => { t[2]![0]![1] = "7"; }), /does not fit/);
+    refused(variant(t => {
+      // The prepared payment's twin under another alias, reserving the same note.
+      const pending = t[2]!.find(row => row[9] === "prepared")!, held = t[3]!.find(row => row[1] === pending[0])!;
+      t[2]!.push(["twin", ...pending.slice(1, 3), "ab".repeat(32), ...pending.slice(4)]); t[3]!.push([held[0], "twin"]);
+    }), /reserves a note twice/);
     refused(variant(t => { t[1]!.push(["stranger", "123", b(1), "0", b(3), b(4)]); }), /unmatched references/);
     refused(variant(t => { t[0]![0]![3] = new Uint8Array([1]) as never; }), /does not fit/);
     refused(variant(t => { t[2]![0]![9] = "cancelled"; }), /does not fit/);
@@ -293,7 +300,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     const f = await fixture(); f.payer.close();
     const db = new DatabaseSync(f.path("payer"));
     if (kind === "table") db.exec("CREATE TABLE extension (value TEXT)");
-    if (kind === "column") db.exec("ALTER TABLE payer_inputs ADD COLUMN extension TEXT");
+    if (kind === "column") db.exec("ALTER TABLE saved_inputs ADD COLUMN extension TEXT");
     if (kind === "oversize") db.prepare("UPDATE receiver_requests SET cm=? WHERE alias='fund-0'").run("1".repeat(MAX_WALLET_BACKUP_BYTES));
     db.close();
     const wallet = f.open("payer");

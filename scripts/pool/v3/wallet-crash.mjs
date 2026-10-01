@@ -133,7 +133,7 @@ async function worker(directory, operation, phase, action) {
       }
       // The candidate record is public bytes; before COMMIT it must not survive.
       if (operation === 'payment' || operation === 'reproof') {
-        save(`${path}.candidate`, this.prepare('SELECT record FROM payer_payments WHERE alias=?').get('shop').record);
+        save(`${path}.candidate`, this.prepare('SELECT record FROM saved_records WHERE alias=?').get('shop').record);
       }
       // The encrypted export commits with the source's freeze; before COMMIT neither survives.
       if (operation === 'export') save(`${path}.candidate`, this.prepare('SELECT export FROM wallet_custody WHERE id=1').get().export);
@@ -246,13 +246,13 @@ if (process.argv[2] === '--worker') {
         if (operation === 'import') {
           assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE name='wallet_identity'").get().n, phase === 'before' ? 0 : 1);
         }
-        const tables = { request: ['receiver_requests'], fulfillment: ['receiver_fulfilled'], payment: ['payer_payments', 'payer_inputs'],
-          receipt: [], reproof: ['payer_superseded'], export: [], import: [] };
+        const tables = { request: ['receiver_requests'], fulfillment: ['receiver_fulfilled'], payment: ['saved_records', 'saved_inputs'],
+          receipt: [], reproof: ['saved_superseded'], export: [], import: [] };
         for (const table of tables[operation]) {
           assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, phase === 'before' ? 0 : 1);
         }
         if (operation === 'receipt') {
-          assert.equal(db.prepare('SELECT receipt IS NOT NULL AS saved FROM payer_payments').get().saved, phase === 'before' ? 0 : 1);
+          assert.equal(db.prepare('SELECT receipt IS NOT NULL AS saved FROM saved_records').get().saved, phase === 'before' ? 0 : 1);
         }
         if (operation === 'fulfillment' && phase === 'after') {
           const row = db.prepare('SELECT * FROM receiver_fulfilled').get();

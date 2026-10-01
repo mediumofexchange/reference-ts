@@ -54,7 +54,7 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
   type ProofTask } from "./witness.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
-const PROFILE = "moe/wallet/v3/4", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/5", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
     "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE", message: string) { super(message); this.name = "V3WalletError"; }
@@ -72,7 +72,9 @@ function identifier(value: Uint8Array): Uint8Array {
 }
 /** The whole schema: created from here and, at export, compared with the
  * stored definitions (whitespace aside), so a database of any other shape
- * refuses before its source freezes. */
+ * refuses before its source freezes. Every record the wallet builds, a payment (kind 2) or an act, is one saved
+ * record under one alias namespace, with the notes it reserves, the output openings and zero input a reproof
+ * rebuilds it from, and the records a reproof superseded. */
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS wallet_identity (id INTEGER PRIMARY KEY CHECK(id=1),
     profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL) STRICT;
@@ -80,21 +82,16 @@ const SCHEMA = `
     backing BLOB NOT NULL, value TEXT NOT NULL, cm TEXT NOT NULL UNIQUE) STRICT;
   CREATE TABLE IF NOT EXISTS receiver_fulfilled (alias TEXT PRIMARY KEY, cm TEXT NOT NULL UNIQUE,
     checkpoint BLOB NOT NULL, judging_index TEXT NOT NULL, terms BLOB NOT NULL, signature BLOB NOT NULL) STRICT;
-  CREATE TABLE IF NOT EXISTS payer_payments (alias TEXT PRIMARY KEY, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL,
-    backing BLOB NOT NULL, operator BLOB NOT NULL, payee TEXT NOT NULL, value TEXT NOT NULL, fee TEXT, fee_value TEXT,
-    status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
-    zero BLOB, judged TEXT NOT NULL) STRICT;
-  CREATE TABLE IF NOT EXISTS payer_inputs (nf TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias)) STRICT;
-  CREATE TABLE IF NOT EXISTS payer_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES payer_payments(alias),
-    value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
-  CREATE TABLE IF NOT EXISTS payer_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES payer_payments(alias),
-    record BLOB NOT NULL, receipt BLOB) STRICT;
-  CREATE TABLE IF NOT EXISTS wallet_acts (alias TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('1','3','4','5','6')), intent TEXT NOT NULL,
-    statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL, backing BLOB NOT NULL, operator BLOB NOT NULL, demand TEXT,
-    status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB, judging_index TEXT,
-    judged TEXT NOT NULL) STRICT;
-  CREATE TABLE IF NOT EXISTS wallet_act_inputs (nf TEXT NOT NULL, alias TEXT NOT NULL REFERENCES wallet_acts(alias),
+  CREATE TABLE IF NOT EXISTS saved_records (alias TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('1','2','3','4','5','6')),
+    intent TEXT NOT NULL, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL, backing BLOB NOT NULL, operator BLOB NOT NULL,
+    demand TEXT, zero BLOB, status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB,
+    judging_index TEXT, judged TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS saved_inputs (nf TEXT NOT NULL, alias TEXT NOT NULL REFERENCES saved_records(alias),
     PRIMARY KEY(nf, alias)) STRICT;
+  CREATE TABLE IF NOT EXISTS saved_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES saved_records(alias),
+    value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS saved_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES saved_records(alias),
+    record BLOB NOT NULL, receipt BLOB) STRICT;
   CREATE TABLE IF NOT EXISTS backer_acceptances (alias TEXT PRIMARY KEY, demand TEXT NOT NULL, deadline TEXT NOT NULL,
     owner TEXT NOT NULL, signature BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
   CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`;
@@ -106,14 +103,11 @@ const DEFINITIONS = new Map(SCHEMA.split(";").map(s => s.replace(/\s+/g, " ").tr
 const TABLES = [
   ["receiver_requests", ["alias", "request_id", "backing", "value", "cm"]],
   ["receiver_fulfilled", ["alias", "cm", "checkpoint", "judging_index", "terms", "signature"]],
-  ["payer_payments", ["alias", "statement", "record", "backing", "operator", "payee", "value", "fee", "fee_value",
-    "status", "receipt", "checkpoint", "judging_index", "zero", "judged"]],
-  ["payer_inputs", ["nf", "alias"]],
-  ["payer_outputs", ["cm", "alias", "value", "owner", "rho"]],
-  ["payer_superseded", ["statement", "alias", "record", "receipt"]],
-  ["wallet_acts", ["alias", "kind", "intent", "statement", "record", "backing", "operator", "demand", "status", "receipt", "checkpoint",
-    "judging_index", "judged"]],
-  ["wallet_act_inputs", ["nf", "alias"]],
+  ["saved_records", ["alias", "kind", "intent", "statement", "record", "backing", "operator", "demand", "zero", "status", "receipt",
+    "checkpoint", "judging_index", "judged"]],
+  ["saved_inputs", ["nf", "alias"]],
+  ["saved_outputs", ["cm", "alias", "value", "owner", "rho"]],
+  ["saved_superseded", ["statement", "alias", "record", "receipt"]],
   ["backer_acceptances", ["alias", "demand", "deadline", "owner", "signature"]],
 ] as const;
 /** A restoration the constructor consumes synchronously: the seed, the state
@@ -163,7 +157,7 @@ export interface Payment {
   readonly payee: bigint;
   readonly value: bigint;
   readonly fee: { readonly cm: bigint; readonly value: bigint } | undefined;
-  /** The positive inputs' nullifiers this payment reserves permanently. */
+  /** The positive inputs' nullifiers this payment reserves until it is final or failed. */
   readonly inputs: readonly bigint[];
   /** prepared: not in canonical history; final: its statement is; failed: an input was spent otherwise. */
   readonly status: "prepared" | "final" | "failed";
@@ -333,6 +327,9 @@ export class V3Wallet {
     requireThat(this.db.prepare("PRAGMA foreign_key_check").all().length === 0 && this.db.prepare(`SELECT 1 FROM receiver_fulfilled f
       LEFT JOIN receiver_requests r ON r.alias=f.alias AND r.cm=f.cm WHERE r.alias IS NULL`).get() === undefined,
       "INVALID", "backup state has unmatched references");
+    // A prepared record always reserves its inputs, and saving one re-checks every reservation: no wallet writes two.
+    requireThat(this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE a.status='prepared'
+      GROUP BY i.nf HAVING COUNT(*) > 1`).get() === undefined, "INVALID", "backup state reserves a note twice");
   }
   private active(): void {
     requireThat(!this.closed && !this.poisoned, "STORAGE", "wallet is closed or needs reopening");
@@ -540,53 +537,57 @@ export class V3Wallet {
   /** A settlement of `demand` this wallet holds prepared with `rho`: `rho_out` reads no acceptance or owner, so a
    * second one at the same count would disclose with the first, from which K computes it for any owner (C3.5). */
   private pendingSettlement(demand: string, rho: bigint): boolean {
-    return this.db.prepare("SELECT record FROM wallet_acts WHERE kind='6' AND demand=? AND status='prepared'").all(demand)
+    return this.db.prepare("SELECT record FROM saved_records WHERE kind='6' AND demand=? AND status='prepared'").all(demand)
       .some(row => decodeRecord(row.record as Uint8Array).publicInputs[9] === rho);
   }
-  /** final: all four outputs are in canonical history, imports included (own
-   * change/zero outputs are fresh, so no other statement creates them); failed:
-   * a reserved input was spent otherwise. Statement identities are not imported
-   * into a successor segment, so they cannot decide this. */
-  private resolution(name: string, record: Record, canonical: { state: { hasOutput(cm: bigint): boolean } }, force: ForceState) {
+  /** A payment's fate. final: all four outputs are in canonical history, imports included (own change/zero outputs
+   * are fresh, and a reproof spends the same nullifiers into the same commitments, so only this payment creates
+   * them in whichever segment admitted it); failed: a reserved input was spent otherwise. */
+  private paid(name: string, record: Record, canonical: CanonicalCheckpoint, force: ForceState) {
     if (record.publicInputs.slice(9, 13).every(cm => canonical.state.hasOutput(cm))) return "final" as const;
-    const inputs = this.db.prepare("SELECT nf FROM payer_inputs WHERE alias=?").all(name);
-    return inputs.some(r => force.hasNullifier(BigInt(r.nf as string))) ? "failed" as const : undefined;
+    return this.spent(name, force) ? "failed" as const : undefined;
   }
-  private resolve(updates: readonly { alias: string; status: "final" | "failed" }[], checkpoint: Uint8Array | undefined, at: bigint,
-    acts: readonly { alias: string; status: "final" | "failed" }[] = []): void {
-    if (updates.length !== 0 || acts.length !== 0) this.transaction(() => {
-      for (const [table, rows] of [["payer_payments", updates], ["wallet_acts", acts]] as const) {
-        const update = this.db.prepare(`UPDATE ${table} SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND (status='prepared'
-          OR (status='failed' AND ?1='final' AND '${table}'='wallet_acts'))`);
-        for (const { alias: name, status } of rows) update.run(status, status === "final" ? checkpoint! : null,
-          status === "final" ? at.toString() : null, name);
-      }
+  private spent(name: string, force: ForceState): boolean {
+    return this.db.prepare("SELECT nf FROM saved_inputs WHERE alias=?").all(name).some(r => force.hasNullifier(BigInt(r.nf as string)));
+  }
+  /** A prepared record goes final or failed; a failed one that evidence later shows admitted goes final. */
+  private resolve(rows: readonly { alias: string; status: "final" | "failed" }[], checkpoint: Uint8Array, at: bigint): void {
+    if (rows.length !== 0) this.transaction(() => {
+      const update = this.db.prepare(`UPDATE saved_records SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND (status='prepared'
+        OR (status='failed' AND ?1='final'))`);
+      for (const { alias: name, status } of rows) update.run(status, status === "final" ? checkpoint : null,
+        status === "final" ? at.toString() : null, name);
     });
   }
-  /** Each prepared act of `backing` the evidence now decides. final: its statement is in canonical history, imports
-   * included, or (a demand, withdrawal or settlement) has force at the venue. An output alone never decides: a
-   * settlement's or an issue's output is public before admission, so another statement can create it first (C3.8).
-   * failed: it can no longer take effect as saved: its segment is no longer the canonical one (a dead segment never
-   * becomes canonical again; a new alias acts in the live one), a demand's instant has left C3.3's window at every
-   * horizon from this read on, an issue's or settlement's output exists from another statement (a settlement's
-   * also from one with force), a reserved input was spent otherwise, a withdrawal's demand was settled, or a
-   * settlement's demand no longer stands or its acceptance deadline has passed (no door admits it after). Demands are
-   * judged after the acts that end them. A failed act that the evidence later shows admitted becomes final. */
-  private actResolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint):
+  /** Each saved record of `backing` not yet final that the evidence now decides. A payment by its outputs (`paid`):
+   * it moves with its segment by reproof, so a dead segment does not fail it. An act is final once its statement
+   * is in canonical history, imports included, or (a demand, withdrawal or settlement) has force at the venue. An
+   * output alone never decides an act: a settlement's or an issue's output is public before admission, so another
+   * statement can create it first (C3.8). An act fails once it can no longer take effect as saved: its segment is no
+   * longer the canonical one (a dead segment never becomes canonical again; a new alias acts in the live one), a
+   * demand's instant has left C3.3's window at every horizon from this read on, an issue's or settlement's output
+   * exists from another statement (a settlement's also from one with force), a reserved input was spent otherwise,
+   * a withdrawal's demand was settled, or a settlement's demand no longer stands or its acceptance deadline has
+   * passed (no door admits it after). Demands are judged after the acts that end them. A failure read from one view
+   * is local accounting: an operator reading behind this wallet may still admit the record, which then goes final. */
+  private resolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint):
     { alias: string; status: "final" | "failed" }[] {
-    const rows = this.db.prepare("SELECT alias,kind,record,demand,status FROM wallet_acts WHERE status!='final' AND backing=? ORDER BY kind='4'").all(backing);
-    const decided = new Map<string, "final" | "failed">(), spent = (name: string) => this.db.prepare("SELECT nf FROM wallet_act_inputs WHERE alias=?")
-      .all(name).some(r => force.hasNullifier(BigInt(r.nf as string)));
-    const ended = (demand: string, kind: "5" | "6") => this.db.prepare("SELECT alias,status FROM wallet_acts WHERE demand=? AND kind=?").all(demand, kind)
+    const rows = this.db.prepare("SELECT alias,kind,record,demand,status FROM saved_records WHERE status!='final' AND backing=? ORDER BY kind='4'").all(backing);
+    const decided = new Map<string, "final" | "failed">(), spent = (name: string) => this.spent(name, force);
+    const ended = (demand: string, kind: "5" | "6") => this.db.prepare("SELECT alias,status FROM saved_records WHERE demand=? AND kind=?").all(demand, kind)
       .some(r => r.status === "final" || decided.get(r.alias as string) === "final");
     for (const row of rows) {
       const name = row.alias as string, record = decodeRecord(row.record as Uint8Array), p = record.publicInputs;
       const statement = statementHash(record), demand = row.demand as string | null;
+      if (row.kind === "2") {
+        const status = this.paid(name, record, canonical, force);
+        if (status !== undefined && status !== row.status) decided.set(name, status);
+        continue;
+      }
       const admitted = canonical.state.hasEvent(statement) || (record.kind >= 4 && force.isEffective(hex(statement)));
       const dead = !same(identifierOf(p[2]!, p[3]!), canonical.segment);
       let status: "final" | "failed" | undefined;
       if (admitted) status = "final";
-      // A failure read from one view is local accounting: an operator reading behind this wallet may still admit it.
       else if (row.status === "failed") continue;
       else if (record.kind === 4) {
         // A relayed publication is witnessed at an index w ≥ at, so C3.3's window (w − 2·lag ≤ instant) is closed
@@ -636,12 +637,11 @@ export class V3Wallet {
       throw error;
     }
   }
-  /** A nullifier a saved payment reserves, or a saved act that can still take effect: a burn, or a demand not
-   * withdrawn (its settlement spends it). */
+  /** A nullifier a saved record reserves while it can still take effect: a payment or a burn not failed, or a
+   * demand neither failed nor withdrawn (its settlement spends it). */
   private reserved(nf: bigint): boolean {
-    return this.db.prepare(`SELECT 1 FROM payer_inputs WHERE nf=:nf UNION ALL SELECT 1 FROM wallet_act_inputs i
-      JOIN wallet_acts a ON a.alias=i.alias WHERE i.nf=:nf AND a.status!='failed' AND NOT EXISTS (SELECT 1 FROM wallet_acts w
-      WHERE w.kind='5' AND w.demand=a.demand AND w.status='final')`).get({ nf: nf.toString() }) !== undefined;
+    return this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE i.nf=? AND a.status!='failed'
+      AND NOT EXISTS (SELECT 1 FROM saved_records w WHERE w.kind='5' AND w.demand=a.demand AND w.status='final')`).get(nf.toString()) !== undefined;
   }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
@@ -843,45 +843,44 @@ export class V3Wallet {
   /** The saved payment under this local alias, with its current local status. */
   payment(name: string): Payment | undefined {
     name = alias(name); this.active();
-    const row = this.db.prepare("SELECT * FROM payer_payments WHERE alias=?").get(name);
+    const row = this.db.prepare("SELECT * FROM saved_records WHERE alias=? AND kind='2'").get(name);
     if (row === undefined) return undefined;
-    const inputs = this.db.prepare("SELECT nf FROM payer_inputs WHERE alias=?").all(name).map(r => BigInt(r.nf as string))
-      .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
-    const fee = row.fee === null ? undefined : { cm: BigInt(row.fee as string), value: BigInt(row.fee_value as string) };
-    return { record: copyUnshared(row.record as Uint8Array), statement: statementHash(decodeRecord(row.record as Uint8Array)),
-      payee: BigInt(row.payee as string), value: BigInt(row.value as string), fee, inputs,
-      status: row.status as Payment["status"],
-      receipt: row.receipt === null ? undefined : decodeReceipt(row.receipt as Uint8Array),
-      final: row.checkpoint === null ? undefined :
-        { checkpoint: decodeCommitment(row.checkpoint as Uint8Array), judgingIndex: BigInt(row.judging_index as string) },
-      superseded: this.db.prepare("SELECT record,receipt FROM payer_superseded WHERE alias=? ORDER BY rowid").all(name).map(old =>
+    const [, payee, value, fee, feeValue] = JSON.parse(row.intent as string) as [string, string, string, string | null, string | null];
+    const saved = this.saved(name, row);
+    return { record: saved.record, statement: saved.statement, payee: BigInt(payee), value: BigInt(value),
+      fee: fee === null ? undefined : { cm: BigInt(fee), value: BigInt(feeValue!) }, inputs: saved.inputs, status: saved.status,
+      receipt: saved.receipt, final: saved.final,
+      superseded: this.db.prepare("SELECT record,receipt FROM saved_superseded WHERE alias=? ORDER BY rowid").all(name).map(old =>
         ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : decodeReceipt(old.receipt as Uint8Array) })) };
+  }
+  /** The fields a payment and an act share, read from a saved record's row. */
+  private saved(name: string, row: { readonly [column: string]: unknown }) {
+    const record = copyUnshared(row.record as Uint8Array);
+    return { record, statement: statementHash(decodeRecord(record)),
+      inputs: this.db.prepare("SELECT nf FROM saved_inputs WHERE alias=?").all(name).map(r => BigInt(r.nf as string))
+        .sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
+      status: row.status as "prepared" | "final" | "failed", receipt: row.receipt === null ? undefined : decodeReceipt(row.receipt as Uint8Array),
+      final: row.checkpoint === null ? undefined :
+        { checkpoint: decodeCommitment(row.checkpoint as Uint8Array), judgingIndex: BigInt(row.judging_index as string) } };
   }
 
   /** This backing's holdings through the complete canonical frontier at the
-   * venue's current index; resolves saved payments final or failed from that
-   * evidence. A payment still prepared after its segment stopped being
-   * canonical needs `reprove`. */
+   * venue's current index; resolves saved payments and acts final or failed
+   * from that evidence. A payment still prepared after its segment stopped
+   * being canonical needs `reprove`. */
   async sync(packageBytes: Uint8Array, signed: SignedTerms): Promise<WalletView> {
     this.mutable();
     return this.read(packageBytes, signed, ({ backing, at, lag, observed, canonical, force, notes }) => {
-      const updates: { alias: string; status: "final" | "failed" }[] = [];
-      if (canonical !== undefined && force !== undefined) {
-        for (const row of this.db.prepare("SELECT alias,record FROM payer_payments WHERE status='prepared' AND backing=?").all(backing)) {
-          const status = this.resolution(row.alias as string, decodeRecord(row.record as Uint8Array), canonical, force);
-          if (status !== undefined) updates.push({ alias: row.alias as string, status });
-        }
-      }
-      const acts = canonical !== undefined && force !== undefined ? this.actResolutions(backing, canonical, force, at, lag) : [];
+      const decided = canonical !== undefined && force !== undefined ? this.resolutions(backing, canonical, force, at, lag) : [];
       observed.check();
-      this.resolve(updates, canonical === undefined ? undefined : encodeCommitment(canonical.commitment), at, acts);
+      if (canonical !== undefined) this.resolve(decided, encodeCommitment(canonical.commitment), at);
       return { backing, judgingIndex: at, checkpoint: canonical?.commitment, holdings: this.holdingsOf(notes, force, at) };
     });
   }
 
   /** pool-fees C1.2.3–5: pay one exact request, and optionally one exact fee
    * request, from this seed's holdings in the canonical segment. The record is
-   * saved with permanent input/output reservations before it is returned; an
+   * saved with its input and output reservations before it is returned; an
    * exact alias retry returns the saved record without evidence or proving,
    * and the same alias with another order refuses (C1.2.5).
    * Selection is advisory: the operator and later replay judge spentness. */
@@ -897,11 +896,13 @@ export class V3Wallet {
       request: copyPaymentRequest(feeRequestIn!, { domain: this.domain, backing, value: feeValue! }) };
     const total = value + (fee?.value ?? 0n);
     requireThat(isValue(total) && (fee === undefined || fee.request.cm !== payee.cm), "INVALID", "invalid payment order");
-    const intent = [hex(backing), payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null, fee?.value.toString() ?? null];
+    const intent = JSON.stringify([hex(backing), payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null,
+      fee?.value.toString() ?? null]);
     const sameOrder = (): boolean | undefined => {
-      const row = this.db.prepare("SELECT backing,payee,value,fee,fee_value FROM payer_payments WHERE alias=?").get(name);
+      const row = this.db.prepare("SELECT kind,intent FROM saved_records WHERE alias=?").get(name);
       if (row === undefined) return undefined;
-      return [hex(row.backing as Uint8Array), row.payee, row.value, row.fee, row.fee_value].every((field, i) => field === intent[i]);
+      requireThat(row.kind === "2", "CONFLICT", "alias names a saved act");
+      return row.intent === intent;
     };
     const existing = sameOrder();
     if (existing !== undefined) {
@@ -910,7 +911,7 @@ export class V3Wallet {
     }
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const theirs = [payee.cm, ...(fee === undefined ? [] : [fee.request.cm])];
-    const taken = this.db.prepare("SELECT 1 FROM payer_outputs WHERE cm=?");
+    const taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE cm=?");
     requireThat(theirs.every(cm => taken.get(cm.toString()) === undefined), "CONFLICT", "request is already in a saved payment");
 
     const planned = await this.read(packageBytes, signed, view => {
@@ -947,14 +948,12 @@ export class V3Wallet {
       const winner = sameOrder();
       if (winner !== undefined) { requireThat(winner, "CONFLICT", "alias names another payment order"); return; }
       requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
-      requireThat(this.db.prepare("SELECT 1 FROM wallet_acts WHERE alias=?").get(name) === undefined, "CONFLICT", "alias names a saved act");
       requireThat(outputs.every(out => taken.get(out.cm.toString()) === undefined), "CONFLICT", "an output belongs to another payment");
-      this.db.prepare("INSERT INTO payer_payments VALUES(?,?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?,?)").run(name, statement, bytes,
-        backing, header.operator, payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null, fee?.value.toString() ?? null,
-        zero?.requestId ?? null, at.toString());
-      for (const nf of reserved) this.db.prepare("INSERT INTO payer_inputs VALUES(?,?)").run(nf, name);
+      this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,?,'prepared',NULL,NULL,NULL,?)").run(name, intent, statement,
+        bytes, backing, header.operator, zero?.requestId ?? null, at.toString());
+      for (const nf of reserved) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(nf, name);
       // Every opening is kept so a reproof can rebuild the same outputs (C1.2.5).
-      for (const { cm, opening } of outputs) this.db.prepare("INSERT INTO payer_outputs VALUES(?,?,?,?,?)")
+      for (const { cm, opening } of outputs) this.db.prepare("INSERT INTO saved_outputs VALUES(?,?,?,?,?)")
         .run(cm.toString(), name, opening.value.toString(), opening.owner.toString(), opening.rho.toString());
     });
     return this.payment(name)!;
@@ -977,7 +976,7 @@ export class V3Wallet {
     const saved = this.payment(name);
     requireThat(saved !== undefined, "UNKNOWN", "unknown payment");
     if (saved.status !== "prepared") return saved;
-    const row = this.db.prepare("SELECT backing,zero,judged FROM payer_payments WHERE alias=?").get(name)!;
+    const row = this.db.prepare("SELECT backing,zero,judged FROM saved_records WHERE alias=?").get(name)!;
     const backing = copyUnshared(row.backing as Uint8Array);
     requireThat(same(rootTermsName(copyUnshared(signed.terms)), backing), "INVALID", "terms do not name the payment's backing");
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
@@ -986,7 +985,7 @@ export class V3Wallet {
       const { canonical, force, notes, at, observed } = view;
       requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
       requireThat(at >= BigInt(row.judged as string), "CHANGED_VIEW", "the venue view is older than the saved record's");
-      const status = this.resolution(name, old, canonical, force);
+      const status = this.paid(name, old, canonical, force);
       if (status !== undefined) {
         observed.check();
         this.resolve([{ alias: name, status }], encodeCommitment(canonical.commitment), at);
@@ -1007,7 +1006,7 @@ export class V3Wallet {
         requireThat(input !== undefined, "STORAGE", "saved inputs do not reproduce the record");
         return input;
       });
-      const opening = this.db.prepare("SELECT value,owner,rho FROM payer_outputs WHERE cm=? AND alias=?");
+      const opening = this.db.prepare("SELECT value,owner,rho FROM saved_outputs WHERE cm=? AND alias=?");
       const outputs: OutputNote[] = p.slice(9, 13).map((cm, i) => {
         const out = opening.get(cm.toString(), name);
         requireThat(out !== undefined, "STORAGE", "saved outputs do not reproduce the record");
@@ -1023,11 +1022,11 @@ export class V3Wallet {
     const statement = hex(statementHash(decodeRecord(bytes)));
     this.transaction(() => {
       // A concurrent reproof or resolution may have replaced the record first: keep it.
-      const current = this.db.prepare("SELECT receipt FROM payer_payments WHERE alias=? AND statement=? AND status='prepared'")
+      const current = this.db.prepare("SELECT receipt FROM saved_records WHERE alias=? AND statement=? AND status='prepared'")
         .get(name, hex(saved.statement));
       if (current === undefined) return;
-      this.db.prepare("INSERT INTO payer_superseded VALUES(?,?,?,?)").run(hex(saved.statement), name, saved.record, current.receipt as Uint8Array | null);
-      this.db.prepare("UPDATE payer_payments SET statement=?, record=?, operator=?, receipt=NULL, judged=? WHERE alias=?")
+      this.db.prepare("INSERT INTO saved_superseded VALUES(?,?,?,?)").run(hex(saved.statement), name, saved.record, current.receipt as Uint8Array | null);
+      this.db.prepare("UPDATE saved_records SET statement=?, record=?, operator=?, receipt=NULL, judged=? WHERE alias=?")
         .run(statement, bytes, header.operator, at.toString(), name);
     });
     return this.payment(name)!;
@@ -1036,22 +1035,18 @@ export class V3Wallet {
   /** The saved act under this local alias, with its current local status. */
   act(name: string): Act | undefined {
     name = alias(name); this.active();
-    const row = this.db.prepare("SELECT * FROM wallet_acts WHERE alias=?").get(name);
+    const row = this.db.prepare("SELECT * FROM saved_records WHERE alias=? AND kind!='2'").get(name);
     if (row === undefined) return undefined;
-    const record = decodeRecord(row.record as Uint8Array);
-    return { kind: Number(row.kind) as Act["kind"], record: copyUnshared(row.record as Uint8Array), statement: statementHash(record),
-      demand: row.demand === null ? undefined : hexToBytes(row.demand as string),
-      inputs: this.db.prepare("SELECT nf FROM wallet_act_inputs WHERE alias=?").all(name).map(r => BigInt(r.nf as string))
-        .sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
-      status: row.status as Act["status"], receipt: row.receipt === null ? undefined : decodeReceipt(row.receipt as Uint8Array),
-      final: row.checkpoint === null ? undefined :
-        { checkpoint: decodeCommitment(row.checkpoint as Uint8Array), judgingIndex: BigInt(row.judging_index as string) } };
+    const saved = this.saved(name, row);
+    return { kind: Number(row.kind) as Act["kind"], record: saved.record, statement: saved.statement,
+      demand: row.demand === null ? undefined : hexToBytes(row.demand as string), inputs: saved.inputs, status: saved.status,
+      receipt: saved.receipt, final: saved.final };
   }
   /** The saved act under `name` if it is this exact intent; another intent, or a payment, under it refuses. */
   private savedAct(name: string, kind: Act["kind"], intent: string): Act | undefined {
-    requireThat(this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=?").get(name) === undefined, "CONFLICT", "alias names a payment");
-    const row = this.db.prepare("SELECT kind,intent FROM wallet_acts WHERE alias=?").get(name);
+    const row = this.db.prepare("SELECT kind,intent FROM saved_records WHERE alias=?").get(name);
     if (row === undefined) return undefined;
+    requireThat(row.kind !== "2", "CONFLICT", "alias names a payment");
     requireThat(row.kind === String(kind) && row.intent === intent, "CONFLICT", "alias names another act");
     return this.act(name);
   }
@@ -1062,13 +1057,13 @@ export class V3Wallet {
     this.transaction(() => {
       if (this.savedAct(name, kind, intent) !== undefined) return;
       requireThat(inputs.every(nf => !this.reserved(nf)), "CONFLICT", "an input is reserved by another payment or act");
-      requireThat(this.db.prepare("SELECT 1 FROM wallet_acts WHERE statement=?").get(statement) === undefined, "CONFLICT",
+      requireThat(this.db.prepare("SELECT 1 FROM saved_records WHERE statement=?").get(statement) === undefined, "CONFLICT",
         "another alias saved this statement");
       requireThat(kind !== 6 || !this.pendingSettlement(demand!, record.publicInputs[9]!), "CONFLICT",
         "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it");
-      this.db.prepare("INSERT INTO wallet_acts VALUES(?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?)").run(name, String(kind), intent,
+      this.db.prepare("INSERT INTO saved_records VALUES(?,?,?,?,?,?,?,?,NULL,'prepared',NULL,NULL,NULL,?)").run(name, String(kind), intent,
         statement, bytes, backing, operator, demand ?? null, at.toString());
-      for (const nf of inputs) this.db.prepare("INSERT INTO wallet_act_inputs VALUES(?,?)").run(nf.toString(), name);
+      for (const nf of inputs) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(nf.toString(), name);
     });
     return this.act(name)!;
   }
@@ -1089,7 +1084,7 @@ export class V3Wallet {
   private ownDemand(name: string, backing: Uint8Array) {
     const saved = this.act(name);
     requireThat(saved !== undefined && saved.kind === 4, "UNKNOWN", "unknown demand");
-    const row = this.db.prepare("SELECT backing FROM wallet_acts WHERE alias=?").get(name)!;
+    const row = this.db.prepare("SELECT backing FROM saved_records WHERE alias=?").get(name)!;
     requireThat(same(row.backing as Uint8Array, backing), "INVALID", "terms do not name the demand's backing");
     const p = decodeRecord(saved.record).publicInputs;
     return { saved, id: saved.demand!, tags: p.slice(10, 12), quantity: p[7]!, presenter: identifierOf(p[12]!, p[13]!), instant: p[14]!,
@@ -1310,9 +1305,8 @@ export class V3Wallet {
   }
 
   /** The operator's receipt for a saved record: it must sign this exact statement, proof and authorization. */
-  private async receiptOf(name: string, table: "payer_payments" | "wallet_acts", saved: { readonly record: Uint8Array; readonly statement: Uint8Array },
+  private async receiptOf(saved: { readonly record: Uint8Array; readonly statement: Uint8Array }, operator: Uint8Array,
     service: { submit(record: Uint8Array): Promise<Receipt> }): Promise<Receipt> {
-    const row = this.db.prepare(`SELECT operator FROM ${table} WHERE alias=?`).get(name)!;
     const record = decodeRecord(saved.record), p = record.publicInputs;
     const answer = await service.submit(new Uint8Array(saved.record));
     let receipt: Receipt;
@@ -1323,7 +1317,7 @@ export class V3Wallet {
     // Only this record's exact proof and authorization can be the admitted event (C2.10.9a).
     const digests = evidenceHashes(record);
     requireThat(verifyReceipt({ domain: this.domain, segment: identifierOf(p[2]!, p[3]!), scopeRoot: p[4]!,
-      operator: row.operator as Uint8Array }, receipt) && same(receipt.statementHash, saved.statement) &&
+      operator }, receipt) && same(receipt.statementHash, saved.statement) &&
       same(receipt.proofHash, digests.proofHash) && same(receipt.signatureHash, digests.signatureHash),
       "INVALID", "receipt does not authenticate the saved record");
     return receipt;
@@ -1333,30 +1327,24 @@ export class V3Wallet {
    * finality; `sync` decides that from evidence. */
   async submit(name: string, service: { submit(record: Uint8Array): Promise<Receipt> }): Promise<Receipt> {
     name = alias(name); this.mutable();
-    const act = this.act(name);
-    if (act !== undefined) {
-      if (act.receipt !== undefined) return act.receipt;
-      const receipt = await this.receiptOf(name, "wallet_acts", act, service);
-      this.transaction(() => { this.db.prepare("UPDATE wallet_acts SET receipt=? WHERE alias=? AND receipt IS NULL").run(encodeReceipt(receipt), name); });
-      return this.act(name)!.receipt!;
-    }
-    const saved = this.payment(name);
-    requireThat(saved !== undefined, "UNKNOWN", "unknown payment or act");
+    const row = this.db.prepare("SELECT * FROM saved_records WHERE alias=?").get(name);
+    requireThat(row !== undefined, "UNKNOWN", "unknown payment or act");
+    const saved = this.saved(name, row);
     if (saved.receipt !== undefined) return saved.receipt;
-    const receipt = await this.receiptOf(name, "payer_payments", saved, service);
+    const receipt = await this.receiptOf(saved, row.operator as Uint8Array, service);
     const current = this.transaction(() => {
       const statement = hex(saved.statement), bytes = encodeReceipt(receipt);
-      if (this.db.prepare("SELECT 1 FROM payer_payments WHERE alias=? AND statement=?").get(name, statement) !== undefined) {
-        this.db.prepare("UPDATE payer_payments SET receipt=? WHERE alias=? AND receipt IS NULL").run(bytes, name);
+      if (this.db.prepare("SELECT 1 FROM saved_records WHERE alias=? AND statement=?").get(name, statement) !== undefined) {
+        this.db.prepare("UPDATE saved_records SET receipt=? WHERE alias=? AND receipt IS NULL").run(bytes, name);
         return true;
       }
       // A reproof during submission replaced the record: the receipt stays with the
       // superseded record as evidence of that operator's acceptance (C2.10.9).
-      this.db.prepare("UPDATE payer_superseded SET receipt=? WHERE alias=? AND statement=? AND receipt IS NULL").run(bytes, name, statement);
+      this.db.prepare("UPDATE saved_superseded SET receipt=? WHERE alias=? AND statement=? AND receipt IS NULL").run(bytes, name, statement);
       return false;
     });
     requireThat(current, "CONFLICT", "the payment was re-proven during submission");
-    return this.payment(name)!.receipt!;
+    return this.saved(name, this.db.prepare("SELECT * FROM saved_records WHERE alias=?").get(name)!).receipt!;
   }
   /** C2b.3.2: publish a saved demand, withdrawal or settlement (its release, carrying the acceptance) at the backing's
    * venue, routed to the act's backing, exactly as saved: a retry republishes the same bytes, which are the same
@@ -1365,7 +1353,7 @@ export class V3Wallet {
    * counts towards the next settlement's disclosure count. Venue refusals surface as the publisher's `VenueError`. */
   async publish(name: string, publisher: RecordPublisher): Promise<void> {
     name = alias(name); this.mutable();
-    const row = this.db.prepare("SELECT kind,record,backing FROM wallet_acts WHERE alias=?").get(name);
+    const row = this.db.prepare("SELECT kind,record,backing FROM saved_records WHERE alias=? AND kind!='2'").get(name);
     requireThat(row !== undefined, "UNKNOWN", "unknown act");
     const kind = ({ "4": 1, "6": 3, "5": 4 } as const)[row.kind as string];
     requireThat(kind !== undefined, "INVALID", "only a demand, a withdrawal or a release is published");

@@ -236,14 +236,17 @@ resends the same record. Both records spend the same nullifiers into the same
 commitments, so at most one can enter canonical history and the payee's exact
 request is paid once. A direct fee stays with its original recipient even when
 another operator admits the reproof; paying the current operator instead is a
-new spend (C1.2.5). Reservations are permanent: a failed payment's other
-input stays reserved although it is unspent, so a copy that breaks the
-one-active-copy rule can strand it until the seed is restored into a new
-wallet. Release with other outputs (cancellation), same-segment tail repair
-(C2.10.9a) and release of never-admitted inputs are not implemented. Multi-backing payments and
-cross-backing fees are refused. The wallet profile is `moe/wallet/v3/4`; a
-database of an earlier profile (no saved acts, no output openings, or a package
-saved with each fulfillment) is refused.
+new spend (C1.2.5). Inputs stay reserved until the payment is final or
+failed: a failed payment's other input is free again, as a failed act's notes
+are. Failure means an input was spent by another statement, which canonical
+history never undoes; should evidence ever show all four outputs, the payment
+would go final, as an act does. Output reservations are permanent. Release
+with other outputs (cancellation), same-segment tail repair (C2.10.9a) and
+release of never-admitted inputs are not implemented. Multi-backing payments and
+cross-backing fees are refused. Payments and acts are one kind of saved record
+under one alias namespace. The wallet profile is `moe/wallet/v3/5`; a database
+of an earlier profile (payments and acts saved apart, no saved acts, no output
+openings, or a package saved with each fulfillment) is refused.
 
 ## Redeeming and issuing
 
@@ -320,7 +323,7 @@ spent otherwise, its demand ended otherwise, or a settlement's acceptance
 deadline has passed. A failed act's notes are free again; one that evidence
 later shows admitted (an operator reading behind the wallet) becomes final. A
 burn the operator refuses in a live segment stays reserved, as a refused
-payment's inputs do. Not yet: demands found again after a seed restore,
+payment's inputs do, until it fails. Not yet: demands found again after a seed restore,
 reproof of an act whose segment ended, the backer's acceptance published as
 evidence, and a C3.8 dishonour reading (slice 9, M9b2 and M9c in
 [WORK.md](../WORK.md)).
