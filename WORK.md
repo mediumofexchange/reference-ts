@@ -3,30 +3,25 @@
 Updated: 2026-10-01
 
 ## Goal
-Slice 8 (adoption). M5b is closed: every party's memory is independent of history and a reader's first sync fits 24 h at
-the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-M6 and M4 are decided (below). **Next: M7**, venue-ergo §8's one-transaction condition checked against the configuration:
-state its goal, acceptance and stop here before building. No v3 reader of C3.8's dishonour exists yet (Next 2).
+Slice 8 (adoption). M5b is closed for the pool's own state: every party's replay and evidence memory is independent of history and a
+reader's first sync fits 24 h at the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are decided. **Next: M7**, venue-ergo §8's one-transaction
+condition checked against the configuration: state its goal, acceptance and stop here before building. No v3 reader of C3.8's dishonour exists yet (Next 2).
 
 ## Status
-- M4 (spec 5584732, [decision](decisions/2026-10.md#2026-10-01--add-no-certificate-encoding-keep-12-to-the-kinds-a-reader-reads-and-prune-no-retained-evidence-m4)):
-  no certificate encoding (a verdict's certificate is its §12.1 closure plus the reader's own venue reads; §9.1 the one compact
-  replacement); §12 kinds 5, 8, 9, 11 unassigned (a header with its terms travels as a count-zero trail; venue evidence only through
-  the reader's verifier). The runtime's `READ_KINDS` already matched; no code or report changed, runtime pin kept. Use-based pruning
-  of retained evidence is not built (it breaks incremental supply and later backings' reads); the wallet guide gives the
-  replace-not-remove remedy. Review: one blocker (§13.2 still named kind 11) and four material findings, all fixed.
-- M6 (spec 740adaa, PR #63, [decision](decisions/2026-10.md#2026-10-01--read-a-gap-release-taken-by-another-demands-settlement-as-released)):
-  a gap release refused only because another demand's settlement inserted its `cm_out` releases its acceptance (C3.8); a disclosed
-  output sends the re-proof to a fresh `rho_out`. Spec-only; `test/pool-v3-force.test.ts` shows the taking in force.
-- M5b.6 (PR #62, [decision](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)):
-  proofs verified ahead of the replay on a pool of verifier instances; [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
-  10⁵ statements at 52.7 ms each, peak 543 MB, 10⁶ extrapolated to 15.5–16 h here. The ten current v3 reports are from CI run 36806514822.
-- Review-code 2026-09-30 (PR #61, spec 298b6f5; deferred Next 5(o)–(s)). Earlier M5b: PRs #50–#60 (streamed evidence, kept classes,
-  journal storage and serving, wallet kept files). [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets): 10⁶ statements, ≤ 1 GiB, first sync ≤ 24 h.
+- Audit area 28, venue core and Ergo view/publisher (PR #65, spec b964ee3, [decision](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)):
+  an index stays witnessed while the best chain keeps its block (a durable view now reopens on a heavier, shorter chain); a publication is
+  replaced only on a supplier's answer, never beside one it replaced that a supplier holds, at most 8 per record; settling asks no supplier;
+  a slow or lying supplier costs a timeout or two; node bodies bounded; held records indexed; read-once intake (FixtureVenue, venue records,
+  proof verifier). Ledger: `C:\Users\Bob\moe-autorun\state\audit-ledger.md`.
+- M4 (spec 5584732): no certificate encoding, §12 kinds 5, 8, 9, 11 unassigned, retained evidence replaced, never pruned by use. M6 (spec
+  740adaa, PR #63): a gap release taken by another demand's settlement releases its acceptance (C3.8). Decisions in [2026-10](decisions/2026-10.md).
+- M5b.6 (PR #62): proofs verified ahead on a verifier pool; [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
+  10⁵ statements at 52.7 ms each, peak 543 MB, 10⁶ extrapolated to 15.5–16 h here. [Budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
+  10⁶ statements, ≤ 1 GiB, first sync ≤ 24 h. Earlier: review-code PR #61 (Next 5(o)–(s)), M5b PRs #50–#60.
 
 ## Evidence
-- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [persistence](decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox)
-  (full checkpoints still rewrite retained history; raw sections stay in memory).
+- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 8).
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json)/[Ergo](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json)/[Ergo](docs/pool-v3-succession-store-ergo-verification.json),
@@ -34,11 +29,12 @@ state its goal, acceptance and stop here before building. No v3 reader of C3.8's
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. M7 one-transaction condition, then M8 adoption (one manifest holding §11.1's parameter identities too, now
+1. Slice 8, adoption. M7 one-transaction condition (the publisher's kind-4 pieces reserve a 3-byte output index: 3,980 bytes, not
+   §8's 3,981, so 95,544 bytes take 25 outputs; its fee is flat whatever the size), then M8 adoption (one manifest holding §11.1's parameter identities too, now
    `BN254_PARAMETERS`), every report re-recorded, live two-backing drill. Mainnet needs separate authority.
 2. Slice 9, installable commands on the testnet: holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
    directories, issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
-   before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
+   and Next 8 before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
    the verifier (M5b.6). Wallet settlements derive `rho_out` per segment and disclosure counter (C3.5). A v3 dishonour reader (C3.8) for redeem: demand void by a spent tag, the holder's lapse, releases taken by another
    demand's settlement (keep each output's inserting demand); residual: a settle refused under service reads as unreleased (a release witnessed
    at the venue outside a gap could count, as the backer can relay it, but needs a judging state; decide first). Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
@@ -77,6 +73,12 @@ state its goal, acceptance and stop here before building. No v3 reader of C3.8's
    holds; serving a reader only the segments its backing's checkpoints name (the journal serves every segment its directories name). Phone-first wallet: first a venue range source proportional to the subject's records (a new venue identity), then a succinct relation.
 7. Harness as a second package reader: `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`. After 5(h), read every `local-check`
    group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete `{compact,scope}-runtime-check.mjs` once both pass on every group; retire `verifyTrailEvidence` (stricter than `served()`). To cut CI failures, run the harness's proof-free cases in vitest with stand-in proofs, and consider a real-proof job only for PRs marked ready.
+8. Ergo view at the design point, its own slice (area 28 audit, synthetic chain): `ErgoVenue` holds ~2.3 KB of heap per block since the anchor (1.8 GB
+   at three years), each sync copies the whole best chain (`store.best()`, snapshot slice), a range from index zero walks every index, and a restart
+   re-syncs from the anchor (~4.5 h of header work at three years); `ErgoVenueJournal`'s one JSON checkpoint of every raw section passes V8's 512 MiB
+   string limit after ~10 weeks of mainnet. Rebuild on append-only per-index SQLite rows (headers, objects, raw sections for §13.2), a header window of
+   the difficulty lookback below the pin with cumulative scores, sparse sections and a (kind, subject) index: flat memory and sync work, restart without
+   re-verifying. Also protect a pass stopped by a failure, cap side/protected headers durably, and ask sections of more than one supplier at a time.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
@@ -91,10 +93,8 @@ state its goal, acceptance and stop here before building. No v3 reader of C3.8's
   recovery need separate provisioning authority. Configuration/mainnet remain disabled.
 
 ## Open questions
-- Non-blocking: server timeout then eventual journal completion has source review only; physical custody is a separate boundary.
-- Non-blocking (2026-09-30, site push = live deployment): site `index.html` (70034cb) says "multi-backing wallets remain", but the wallet pays one
-  backing in any scope (PR #42). Proposed end of that line: "…configuration adoption and statements spending several backings remain." Push to site main.
+None.
 
-Roughly **65% done / 35% remaining**, range **55–73%**, reassessed 2026-10-01 after M5b.6 closed M5b (every party stores,
-serves, syncs and recovers without bounds on history, and a first sync at the design point fits its budget on a 2-core desktop;
-adoption, installable commands, qualified storage and mainnet remain).
+Roughly **63% done / 37% remaining**, range **54–71%**, reassessed 2026-10-01 after the area 28 audit found the Ergo view's memory, sync
+work and restart grow with venue age (Next 8, a slice of its own); the pool's own state stores, serves, syncs and recovers without bounds on
+history, and adoption, installable commands, qualified storage and mainnet remain.
