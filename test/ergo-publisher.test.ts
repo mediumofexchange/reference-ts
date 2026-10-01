@@ -708,6 +708,58 @@ describe("replacement, settlement and supplier cost", () => {
     expect(performance.now() - started).toBeLessThan(15 * T);
   });
 
+  it("keeps what each attempt sent, so a slow supplier that lost its mempool gets a long unsettled chain back", async () => {
+    const T = 200, n = node(), funding = plainBox(TREE, 10_000_000_000n, HEIGHT - 5n);
+    n.fund(funding);
+    let delay = 0;
+    const slowly = <V>(call: () => Promise<V>): Promise<V> => new Promise((resolve, reject) => setTimeout(() => call().then(resolve, reject), delay));
+    const slow: ErgoPublishingSupplier = { name: "slow", unspentBoxes: t => slowly(() => n.unspentBoxes(t)), hasBox: id => slowly(() => n.hasBox(id)),
+      hasTransaction: id => slowly(() => n.hasTransaction(id)), submit: (bytes, id) => slowly(() => n.submit(bytes, id)) };
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [slow], timeoutMs: T });
+    for (let i = 1; i <= 30; i++) await p.publish(request(new Uint8Array(136).fill(i)));
+    // The node restarts: its mempool is gone. Each answer now takes 20 ms, so one walk's deadline sends only part of the chain.
+    n.pool.splice(0); n.boxes.clear(); n.fund(funding);
+    delay = 20;
+    let attempts = 0;
+    for (; attempts < 8 && n.pool.length < 30; attempts++) await p.publish(request(new Uint8Array(136).fill(30))).catch(() => {});
+    expect(n.pool).toHaveLength(30);
+    expect(attempts).toBeGreaterThan(1);
+  });
+
+  it("asks the caller's readiness in its turn, so a publication queued while the caller became unready sends nothing", async () => {
+    const n = funded([10_000_000n]);
+    let entered!: () => void, open!: () => void, ready = true;
+    const submitting = new Promise<void>(resolve => { entered = resolve; }), opened = new Promise<void>(resolve => { open = resolve; });
+    const held: ErgoPublishingSupplier = { name: "held", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: async (signed, id) => { entered(); await opened; return n.submit(signed, id); } };
+    const p = publisher([held]), check = (): void => { if (!ready) throw new VenueError("the chain is short"); };
+    const first = p.publish(request(), check), second = p.publish(request(new Uint8Array(136).fill(2)), check);
+    await submitting;
+    ready = false;
+    open();
+    await first;
+    await expect(second).rejects.toThrow(new VenueError("the chain is short"));
+    expect(n.submitted).toHaveLength(1);
+  });
+
+  it("builds no replacement while no supplier answers whether a transaction the record had before is held", async () => {
+    const n = funded([10_000_000n]);
+    n.refuse = () => true;
+    const asked: string[] = [], hasTransaction = n.hasTransaction.bind(n);
+    let silent: string | undefined;
+    n.hasTransaction = async id => { asked.push(hex(id)); if (hex(id) === silent) throw new Error("no answer"); return hasTransaction(id); };
+    const p = publisher([n]);
+    await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
+    const first = n.submitted[0]!;
+    await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n))).rejects.toThrow(/kept and sent again/); // replaced on its inputs
+    // The replacement's input is now gone, and the first transaction's fate is unknown: nothing more is built.
+    silent = first;
+    n.boxes.clear(); n.fund(plainBox(TREE, 10_000_000n, HEIGHT - 5n));
+    await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n))).rejects.toThrow(/kept and sent again/);
+    expect(new Set(n.submitted).size).toBe(2);
+    expect(asked).toContain(first);
+  });
+
   it("keeps a refused transaction whose rebuild at the caller's height would be the same transaction", async () => {
     const state: { text?: string } = {};
     const persistence: ErgoPublisherPersistence = { load: () => state.text, save: text => { state.text = text; }, guard: () => {} };
@@ -923,6 +975,11 @@ describe("a node as a publishing supplier", () => {
     expect(await answering({ ...current, [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${id}", "inclusionHeight" : 5 }` }).hasTransaction(idBytes)).toBe(true);
     expect(await answering({ ...current, [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${"cd".repeat(32)}" }` }).hasTransaction(idBytes)).toBe(false);
     expect(await answering(current).hasTransaction(idBytes)).toBe(false);
+    // The index's height is read after the mempool and before the index: a block that took the transaction out of the
+    // mempool is then one the index has read.
+    const ordered = recording(url => { const route = { ...current }[url.slice("http://node".length)]; return route === undefined ? new Response("", { status: 404 }) : new Response(route); });
+    expect(await ergoNodePublisher("http://node", { fetch: ordered.fetch }).hasTransaction(idBytes)).toBe(false);
+    expect(ordered.calls.map(call => call.url.slice("http://node".length))).toEqual([`/transactions/unconfirmed/byTransactionId/${id}`, "/blockchain/indexedHeight", `/blockchain/transaction/byId/${id}`]);
     // A mined transaction leaves the mempool before the index reads its block: an index behind the node's blocks, or
     // one that does not say how far it has read, has not said the node lacks it.
     await expect(answering({ "/blockchain/indexedHeight": `{ "indexedHeight" : 6, "fullHeight" : 7 }` }).hasTransaction(idBytes))

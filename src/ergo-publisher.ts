@@ -442,6 +442,8 @@ export class ErgoPublisher {
   /** Change this publisher created and has not spent, landed or not, until a build finds it gone. */
   readonly #created = new Map<string, CreatedBox>();
   #queue: Promise<unknown> = Promise.resolve();
+  /** The running publication's readiness check, asked before each transaction is sent. */
+  #ready: (() => void) | undefined;
 
   constructor(options: ErgoPublisherOptions) {
     this.#key = new ErgoKey(options.secretKey);
@@ -604,10 +606,23 @@ export class ErgoPublisher {
    * of a transaction it replaced. Where none is shown, the old one could land
    * only if its inputs came back, and the record would then be witnessed
    * twice, which readers take as once.
+   *
+   * `ready`, where given, is asked in the publisher's turn before anything is
+   * built and again before each transaction is sent, and throws where nothing
+   * may be sent now; the view's says whether its chain is long enough.
    */
-  async publish(request: ErgoRecordRequest): Promise<ErgoPublication> {
+  async publish(request: ErgoRecordRequest, ready?: () => void): Promise<ErgoPublication> {
     const owned = ownRequest(request);
-    return this.#serialized(() => this.#publish(owned));
+    if (ready !== undefined && typeof ready !== "function") throw new EncodingError("invalid Ergo publication readiness");
+    return this.#serialized(async () => {
+      this.#ready = ready;
+      try {
+        ready?.();
+        return await this.#publish(owned);
+      } finally {
+        this.#ready = undefined;
+      }
+    });
   }
 
   /**
@@ -657,8 +672,11 @@ export class ErgoPublisher {
       if (sent === "accepted") return copyPublication(pending.publication);
       // Where no supplier answers, the transaction may have landed or be pooled where none can say so: it is kept.
       if (sent === "unanswered") kept();
-      // A supplier lacks it. A transaction the record had before, which one shows, is the record's.
-      if (await this.#holdsAny(pending.replaced)) return copyPublication(pending.publication);
+      // A supplier lacks it. A transaction the record had before, which one shows, is the record's; while some
+      // such transaction no supplier answers it lacks, the record may be in flight there, and nothing is built.
+      const earlier = await this.#replacedHeld(pending.replaced);
+      if (earlier === "held") return copyPublication(pending.publication);
+      if (earlier === "unknown") kept();
       if (pending.replaced.length + 1 >= MAX_ATTEMPTS) kept();
       const old = pending, change = old.publication.change;
       const replaced = [...old.replaced, Object.freeze({ id: old.publication.id, ...(change === undefined ? {} : { change: change.id }) })];
@@ -728,35 +746,61 @@ export class ErgoPublisher {
   async #send(pending: Pending): Promise<Sent> {
     // Each supplier's walk has one deadline: a supplier that answers slowly cannot cost a timeout per ancestor.
     const until = performance.now() + WALK_TIMEOUTS * this.#timeoutMs;
-    const outcomes = await Promise.all(this.#suppliers.map(supplier => this.#sendTo(supplier, pending, new Set(), until)));
+    const outcomes = await Promise.all(this.#suppliers.map(supplier => this.#sendTo(supplier, pending, until)));
     return outcomes.includes("accepted") ? "accepted" : outcomes.includes("lacked") ? "lacked" : "unanswered";
   }
 
   /** Send to `supplier` after the unsettled publications whose change it spends and that supplier lacks. A
    * supplier holding a transaction holds its parents, so its ancestry is walked only where it answers that it
-   * lacks the child; one that does not answer is sent the transaction alone, so it cannot stall a walk. A
-   * parent it does not take ends the walk: the publication asked for is still sent (the parent may have landed
-   * where this supplier cannot say so), but no descendant between them. */
-  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, visited: Set<string>, until: number, asked = true): Promise<Sent> {
-    visited.add(pending.key);
+   * lacks the transaction; one that does not answer is sent the transaction alone, so it cannot stall a walk.
+   * The ancestry is known here: the ones the supplier holds are a prefix of it, oldest first, found by bisection,
+   * and the rest are sent oldest first until the walk's deadline, so each attempt keeps what it sent and the next
+   * goes on from there. A parent it does not take ends the walk: the publication asked for is still sent, with a
+   * timeout of its own (the parent may have landed where this supplier cannot say so). */
+  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, until: number): Promise<Sent> {
     const shown = await this.#shown(supplier, pending, until);
     if (shown === "accepted") return shown;
-    if (shown === "lacked") for (const input of pending.publication.inputs) {
-      const parent = this.#byChange.get(bytesToHex(input));
-      if (parent !== undefined && !visited.has(parent.key) && await this.#sendTo(supplier, parent, visited, until, false) !== "accepted") {
-        if (!asked) return shown;
-        break;
+    if (shown === "lacked") {
+      const ancestry = this.#ancestry(pending);
+      let low = 0, high = ancestry.length;
+      while (low < high) {
+        const middle = (low + high) >> 1, held = await this.#shown(supplier, ancestry[middle]!, until);
+        if (held === "accepted") low = middle + 1;
+        else if (held === "lacked") high = middle;
+        else { low = ancestry.length; break; }
       }
+      for (let i = low; i < ancestry.length; i++) if (!await this.#submit(supplier, ancestry[i]!, until)) break;
     }
-    // The publication asked for is sent whatever its walk cost; a parent only within the walk's deadline.
-    let guardError: unknown;
+    return await this.#submit(supplier, pending) ? "accepted" : shown;
+  }
+
+  /** The unsettled publications whose change `pending` spends, and theirs, parents before children. */
+  #ancestry(pending: Pending): Pending[] {
+    const order: Pending[] = [], seen = new Set<string>([pending.key]);
+    const visit = (child: Pending): void => {
+      for (const input of child.publication.inputs) {
+        const parent = this.#byChange.get(bytesToHex(input));
+        if (parent === undefined || seen.has(parent.key)) continue;
+        seen.add(parent.key);
+        visit(parent);
+        order.push(parent);
+      }
+    };
+    visit(pending);
+    return order;
+  }
+
+  /** Whether `supplier` took the publication, by `until`; the owner is fenced and the caller's readiness checked
+   * immediately before it is sent. */
+  async #submit(supplier: ErgoPublishingSupplier, pending: Pending, until?: number): Promise<boolean> {
+    let refusal: unknown;
     const answer = await this.#call(() => {
-      try { this.#guard(); } catch (error) { guardError = error; throw error; }
+      try { this.#guard(); this.#ready?.(); } catch (error) { refusal = error; throw error; }
       return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id));
-    }, asked ? undefined : until);
-    if (guardError !== undefined) throw guardError;
+    }, until);
+    if (refusal !== undefined) throw refusal;
     this.#guard();
-    return answer.ok ? "accepted" : shown;
+    return answer.ok;
   }
 
   /** Whether `supplier` shows the record box or holds the transaction (it is pending or it landed there, and
@@ -820,9 +864,13 @@ export class ErgoPublisher {
     return this.#some(this.#suppliers.map(supplier => () => supplier.hasBox(copyBytes(boxId))), false);
   }
 
-  /** Whether some supplier holds a transaction the record had before. */
-  #holdsAny(replaced: readonly Replaced[]): Promise<boolean> {
-    return this.#some(replaced.flatMap(earlier => this.#suppliers.map(supplier => () => supplier.hasTransaction(copyBytes(earlier.id)))), true);
+  /** Whether some supplier holds a transaction the record had before ("held"), or every one of them some supplier
+   * answers it lacks ("unheld"), or neither ("unknown"); every supplier is asked about every one at once. */
+  async #replacedHeld(replaced: readonly Replaced[]): Promise<"held" | "unheld" | "unknown"> {
+    const answers = await Promise.all(replaced.map(earlier =>
+      Promise.all(this.#suppliers.map(supplier => this.#call(() => supplier.hasTransaction(copyBytes(earlier.id)))))));
+    if (answers.some(each => each.some(answer => answer.ok && answer.value === true))) return "held";
+    return answers.every(each => each.some(answer => answer.ok && answer.value === false)) ? "unheld" : "unknown";
   }
 
   /** Whether any of `calls`, all made at once, answers `wanted`; settled by the first such answer, or once every call has. */

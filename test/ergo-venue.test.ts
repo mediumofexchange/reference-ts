@@ -143,6 +143,9 @@ describe("a venue's identity is the profile's", () => {
     failing.headers = async () => { throw new Error("offline"); };
     nonsense.headers = async () => 7 as never;
     for (const supplier of [failing, nonsense]) await expect(ergoAnchorContext(supplier, PROFILE.anchor, ANCHOR_HEIGHT)).rejects.toThrow(unsupplied);
+    for (const timeout of [0, 1.5, 2 ** 31]) {
+      await expect(ergoAnchorContext(serving(branch(1)), PROFILE.anchor, ANCHOR_HEIGHT, timeout)).rejects.toThrow(new TypeError("invalid anchor context timeout"));
+    }
   });
 
   it("the lag is the depth plus one, answered unsynced", () => {

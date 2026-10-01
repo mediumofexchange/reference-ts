@@ -327,11 +327,12 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   async sync(suppliers: readonly ErgoSupplier[]): Promise<ErgoSyncReport> {
     if (this.failure !== undefined) throw new VenueError(this.failure);
     if (this.syncing) throw new VenueError("a sync is already in progress");
+    // The caller's list is read once, before the sync starts, so a list that is not one is the caller's error alone;
+    // each supplier's name once, for its report.
+    const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
     this.syncing = true;
     try {
       this.journal?.assertOwner();
-      // The caller's list is read once; each supplier's name once, for its report.
-      const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
       const passes: { supplier: ErgoSupplier; pass: HeaderPass }[] = [];
       for (const source of sources) passes.push({ supplier: source.supplier, pass: await this.syncHeaders(source.supplier, source.name) });
       // Protection keeps a stopped pass's headers through a durable view's pruning; a memory view prunes nothing.
@@ -555,6 +556,13 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * transaction; the record counts once a later sync reads it. Kinds 1–3 are
    * carried without judging their signatures or contents (venue-ergo §6).
    * Kind 4 is one adjacent same-subject output run in that same transaction.
+   *
+   * The lag bounds inclusion against this view's clock: a caller hands only
+   * records signed at or below it. While a heavier, shorter chain that keeps
+   * the clock's block is the best (venue-ergo §2), its next block could fall
+   * inside that lag, so nothing is built or sent, in the publisher's turn and
+   * before each transaction, until the chain is again as long as the clock's
+   * depth; the publisher keeps what it built for later.
    */
   async publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
     if (kind !== 1 && kind !== 2 && kind !== 3 && kind !== 4) throw new EncodingError("invalid Ergo record kind");
@@ -564,16 +572,18 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     }
     const ownSubject = copyUnshared(subject), ownRecord = copyUnshared(record);
     if (this.publisher === undefined) throw new VenueError("this view has no publisher; publishing is the operator's wallet");
-    const snapshot = this.requireSnapshot(), tip = this.store.tip();
-    // A heavier, shorter chain that keeps the clock's block could include a record inside the lag of the clock it was
-    // signed at (venue-ergo §2): nothing is sent until the chain is again as long as the clock's depth.
-    if (tip.height < tip.anchorHeight + 1n + snapshot.witnessed + this.profile.depth) {
-      throw new VenueError("the best chain is shorter than the clock's depth; publish once it grows");
-    }
-    const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: tip.height, chunked: kind === 4 };
+    this.requireSnapshot();
+    const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: this.store.tip().height, chunked: kind === 4 };
     // Held already, as when a sync settled it after the caller last read: nothing to send.
     if (this.holds(request)) return;
-    await this.publisher.publish(request);
+    const ready = (): void => {
+      const clock = this.requireSnapshot().witnessed, tip = this.store.tip();
+      if (tip.height < tip.anchorHeight + 1n + clock + this.profile.depth) {
+        throw new VenueError("the best chain is shorter than the clock's depth; publish once it grows");
+      }
+    };
+    ready();
+    await this.publisher.publish(request, ready);
   }
 
   /** Whether the snapshot holds this exact record at its location under its subject. */

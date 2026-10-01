@@ -299,8 +299,10 @@ until the journal is reopened.
   that keeps the block it stands on leaves it there however short that
   chain is (venue-ergo §2), and a durable view reopens there, only where a
   header it kept buries that block at the depth. While the best chain is
-  shorter than the clock's depth, `publishRecord` refuses (`VenueError`), so
-  no record is included inside the lag of the clock it was signed at. A
+  shorter than the clock's depth, `publishRecord` refuses (`VenueError`), and
+  the publisher asks the same in its turn and before each transaction it
+  sends, so no record signed at or below the clock is included inside its
+  lag. A
   failure of the view's own during a sync leaves it failed. A supplier
   that misses one section is not asked again in that sync, and the one that
   supplied the last section is asked first. A section answer is read by
@@ -356,8 +358,11 @@ until the journal is reopened.
   balances values exactly), and one that denies every box stops publication
   visibly. Suppliers are asked at once, a box is denied at the first such
   answer and a supplier's unsettled ancestry is walked only where it answers
-  that it lacks the transaction, until a deadline of two timeouts, so a slow
-  or lying supplier costs a call a few timeouts. A node answers that it lacks
+  that it lacks the transaction: the prefix it holds is found by bisection
+  and the rest sent oldest first until a deadline of two timeouts, so a slow
+  or lying supplier costs a call a few timeouts and each attempt keeps what
+  it sent. A record is not replaced while a transaction it had before has no
+  supplier saying it lacks it. A node answers that it lacks
   a transaction only where its mempool answered and its index has read every
   block the node holds (`/blockchain/indexedHeight`), since a mined
   transaction leaves the mempool before the index reads its block. Every

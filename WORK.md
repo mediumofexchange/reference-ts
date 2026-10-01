@@ -9,7 +9,7 @@ The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are 
 condition checked against the configuration: state its goal, acceptance and stop here before building. No v3 reader of C3.8's dishonour exists yet (Next 2).
 
 ## Status
-- Audit area 28, venue core and Ergo view/publisher (PR #65, spec dce3ae1, [decision](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)):
+- Audit area 28, venue core and Ergo view/publisher (PR #65, spec dce3ae1 + 298cc06, [decision](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)):
   an index stays witnessed while the best chain keeps its block (a durable view now reopens on a heavier, shorter chain); a publication is
   replaced only on a supplier's answer, never beside one it replaced that a supplier holds, at most 8 per record; settling asks no supplier;
   a slow or lying supplier costs a few timeouts; node bodies bounded; held records indexed; read-once intake (FixtureVenue, venue records,
