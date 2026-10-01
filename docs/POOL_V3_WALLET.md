@@ -152,12 +152,16 @@ that backing's history once, as its record is replayed (C4.6–7, `holdings.ts`)
 capsule and one owner derivation per lit settlement; a later read scans only
 new records and reads this seed's notes from their kept witnesses. Zero, spent and
 force-spent notes are not holdings; notes under a standing demand are `locked`
-until it ends or its deadline passes (C3.7), and inputs of a saved payment, burn
-or prepared demand are `reserved`. The view also lists this seed's standing
-demands (identity, quantity, instant, deadline and the holdings each names). The
-view covers one backing at one witnessed index; it is not a global balance, and
-restoring from the seed alone finds the same notes, including change, and the
-same standing demands.
+until it ends or its deadline passes (C3.7), and inputs of a saved payment or
+burn, a prepared demand or a prepared settlement are `reserved`. The view also
+lists this seed's standing demands over its unspent notes (identity, quantity,
+instant, deadline and the holdings each names); a demand one of whose notes was
+spent is void and not listed. The view covers one backing at one witnessed
+index; it is not a global balance, and restoring from the seed alone finds the
+same notes, including change, and the same standing demands. A payment or act
+is built only from a view at least as recent as every view a saved record was
+built or decided at (`CHANGED_VIEW` otherwise), and an older view fails no
+saved record.
 
 The canonical segment may scope several backings (C2.10.2). Its history, spent
 set and roots are shared, so one package serves each scoped backing, but each
@@ -289,7 +293,11 @@ gap, on the local venue).
   and recognize it as this seed's by its presenter key, which only this seed
   derives (`UNKNOWN` otherwise); a demand a lost wallet made is settled or
   withdrawn from the seed alone, and its settlement is the record the lost
-  wallet would have made at the same disclosure count.
+  wallet would have made at the same disclosure count. A prepared settlement
+  reserves the demand's notes. It takes them even where another saved record
+  reserves them (a payment a restored copy prepared before the demand stood):
+  while the demand stands its lock refuses that spend at the door, and the
+  settlement's admission fails it.
 
 **In a gap** (C2b.3.2) the holder redeems with the operator offline. Where
 the backing declares silence and the horizon is past the canonical

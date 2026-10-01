@@ -321,6 +321,58 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect((await f.backer.sync(final, f.signed)).holdings.map(h => [h.value, h.status])).toEqual([[10n, "available"]]);
   });
 
+  it("builds nothing from a view older than its records and fails nothing from one", async () => {
+    const f = await fixture([10n, 6n]);
+    await f.holder.sync(f.served(), f.signed);
+    const early = f.venue.export(), earlyPackage = f.served();
+    const demand = await f.holder.demand("redeem", 10n, f.venue.witnessedIndex() + 40n, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed);
+    await f.replace();
+    const successor = await f.takeover(), served = (await successor.package()).package;
+    expect((await f.holder.sync(served, f.signed)).demands.map(d => d.id)).toEqual([demand.demand]);
+    const burn = await f.holder.burn("burn", 6n, served, f.signed, prove);
+    // The same database read at a venue view from before the demand and the takeover: A's segment looks live there.
+    const lagging = new V3Wallet(join(f.directory, "holder.db"), { venue: FixtureVenue.from(early), reference, verifier });
+    wallets.push(lagging);
+    const old = await lagging.sync(earlyPackage, f.signed);
+    expect(old.holdings.map(h => [h.value, h.status]).sort()).toEqual([[10n, "available"], [6n, "reserved"]].sort());
+    expect(lagging.act("burn")).toEqual(burn);
+    for (const build of [() => lagging.burn("again", 10n, earlyPackage, f.signed, prove),
+      () => lagging.demand("again", 10n, f.venue.witnessedIndex() + 40n, earlyPackage, f.signed, prove)]) {
+      await expect(build()).rejects.toMatchObject({ code: "CHANGED_VIEW", message: "the venue view is older than one this wallet's records were judged at" });
+    }
+    expect(lagging.act("again")).toBeUndefined();
+  });
+
+  it("reserves a demand's notes for its prepared settlement, which takes them over a payment prepared before the demand stood", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 40n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service);
+    // A copy from the seed reads the note free before the demand is checkpointed, and pays it.
+    const restored = f.restore("restored", f.holder);
+    expect((await restored.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["available"]);
+    const payment = await restored.prepare("pay", { request: f.backer.request("shop", f.backing, 10n), value: 10n }, f.served(), f.signed, prove);
+    await f.publish();
+    const view = await restored.sync(f.served(), f.signed);
+    expect([view.holdings.map(h => h.status), view.demands.map(d => d.id)]).toEqual([["reserved"], [demand.demand]]);
+    await expect(restored.submit("pay", f.service)).rejects.toMatchObject({ check: "LOCKED" });
+    await f.backer.sync(f.served(), f.signed);
+    const acceptance = await f.backer.accept("answer", demand.demand!, deadline - 5n, f.served(), f.signed, sign);
+    const other = await f.backer.accept("other", demand.demand!, deadline - 6n, f.served(), f.signed, sign);
+    const settled = await restored.settle("settle", acceptance, f.served(), f.signed, prove);
+    expect(settled.inputs).toEqual(payment.inputs);
+    await expect(restored.settle("settle", other, f.served(), f.signed, prove)).rejects
+      .toMatchObject({ code: "CONFLICT", message: "alias names another act" });
+    // The prepared settlement reserves the note: nothing else is built over it.
+    await expect(restored.burn("burn", 10n, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "FUNDS" });
+    await restored.submit("settle", f.service); await f.publish();
+    expect((await restored.sync(f.served(), f.signed)).holdings).toEqual([]);
+    expect([restored.act("settle")!.status, restored.payment("pay")!.status]).toEqual(["final", "failed"]);
+  });
+
   /** A fixture whose operator goes offline after funding: the venue clock is moved to the first index whose horizon
    * is in the gap, and `relay` publishes an act so the venue witnesses it at its read index plus the lag. */
   async function gap(funds: readonly bigint[]) {
