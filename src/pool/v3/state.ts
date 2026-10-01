@@ -105,6 +105,8 @@ export class StateHandle implements StateView {
   hasSpentTag(tag: bigint): boolean { return this.store.hasSpentTag(this.ns, this.position, tag); }
   isEffective(id: string): boolean { return this.store.isEffective(this.ns, this.position, id); }
   hasStatement(identity: Uint8Array): boolean { return this.store.hasStatement(this.ns, this.position, identity); }
+  /** A statement of any kind in the visible history, imports included. */
+  hasEvent(identity: Uint8Array): boolean { return this.store.hasEvent(this.ns, this.position, identity); }
   /** An issuance of `backing` (hex) among this segment's own records after position `after`. */
   hasIssuanceAfter(after: bigint, backing: string): boolean { return this.store.hasIssuance(this.ns, this.position, after, backing); }
   demand(id: string): Demand | undefined { return this.store.demand(this.ns, this.position, id); }

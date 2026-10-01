@@ -525,33 +525,47 @@ export class V3Wallet {
     acts: readonly { alias: string; status: "final" | "failed" }[] = []): void {
     if (updates.length !== 0 || acts.length !== 0) this.transaction(() => {
       for (const [table, rows] of [["payer_payments", updates], ["wallet_acts", acts]] as const) {
-        const update = this.db.prepare(`UPDATE ${table} SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND status='prepared'`);
+        const update = this.db.prepare(`UPDATE ${table} SET status=?, checkpoint=?, judging_index=? WHERE alias=? AND (status='prepared'
+          OR (status='failed' AND ?1='final' AND '${table}'='wallet_acts'))`);
         for (const { alias: name, status } of rows) update.run(status, status === "final" ? checkpoint! : null,
           status === "final" ? at.toString() : null, name);
       }
     });
   }
-  /** Each prepared act of `backing` the evidence now decides. final: an issue's, burn's or settlement's output is
-   * in canonical history (each is fresh or C3.5-derived, so no other statement creates it), or a demand, withdrawal
-   * or settlement is effective there or with force; failed: a reserved input was spent otherwise, a withdrawal's
-   * demand was settled, or a settlement's demand no longer stands unsettled. Demands are judged after the acts
-   * that end them. */
-  private actResolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState): { alias: string; status: "final" | "failed" }[] {
-    const rows = this.db.prepare("SELECT alias,kind,record,demand FROM wallet_acts WHERE status='prepared' AND backing=? ORDER BY kind='4'").all(backing);
+  /** Each prepared act of `backing` the evidence now decides. final: its statement is in canonical history, imports
+   * included, or (a demand, withdrawal or settlement) has force at the venue. An output alone never decides: a
+   * settlement's or an issue's output is public before admission, so another statement can create it first (C3.8).
+   * failed: it can no longer take effect as saved: its segment is no longer the canonical one (a dead segment never
+   * becomes canonical again; a new alias acts in the live one), a demand's instant has left C3.3's window at every
+   * horizon from this read on, an issue's or settlement's output exists from another statement, a reserved input
+   * was spent otherwise, a withdrawal's demand was settled, or a settlement's demand no longer stands. Demands are
+   * judged after the acts that end them. A failed act that the evidence later shows admitted becomes final. */
+  private actResolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint):
+    { alias: string; status: "final" | "failed" }[] {
+    const rows = this.db.prepare("SELECT alias,kind,record,demand,status FROM wallet_acts WHERE status!='final' AND backing=? ORDER BY kind='4'").all(backing);
     const decided = new Map<string, "final" | "failed">(), spent = (name: string) => this.db.prepare("SELECT nf FROM wallet_act_inputs WHERE alias=?")
       .all(name).some(r => force.hasNullifier(BigInt(r.nf as string)));
     const ended = (demand: string, kind: "5" | "6") => this.db.prepare("SELECT alias,status FROM wallet_acts WHERE demand=? AND kind=?").all(demand, kind)
       .some(r => r.status === "final" || decided.get(r.alias as string) === "final");
     for (const row of rows) {
       const name = row.alias as string, record = decodeRecord(row.record as Uint8Array), p = record.publicInputs;
-      const effective = force.isEffective(hex(statementHash(record))), demand = row.demand as string | null;
+      const statement = statementHash(record), demand = row.demand as string | null;
+      const admitted = canonical.state.hasEvent(statement) || (record.kind >= 4 && force.isEffective(hex(statement)));
+      const dead = !same(identifierOf(p[2]!, p[3]!), canonical.segment);
       let status: "final" | "failed" | undefined;
-      switch (row.kind) {
-        case "1": status = canonical.state.hasOutput(p[8]!) ? "final" : undefined; break;
-        case "3": status = canonical.state.hasOutput(p[12]!) ? "final" : spent(name) ? "failed" : undefined; break;
-        case "6": status = effective || canonical.state.hasOutput(p[14]!) ? "final" : force.demand(demand!) === undefined ? "failed" : undefined; break;
-        case "5": status = effective ? "final" : ended(demand!, "6") ? "failed" : undefined; break;
-        case "4": status = effective || ended(demand!, "5") || ended(demand!, "6") ? "final" : spent(name) ? "failed" : undefined; break;
+      if (admitted) status = "final";
+      // A failure read from one view is local accounting: an operator reading behind this wallet may still admit it.
+      else if (row.status === "failed") continue;
+      else if (record.kind === 4) {
+        // An operator's horizon is at least at + lag, and a later publication's index at least at, so the window
+        // (C3.3: horizon − 2·lag ≤ instant) is closed for good once at > instant + lag.
+        status = ended(demand!, "5") || ended(demand!, "6") ? "final" : dead || at > p[14]! + lag || spent(name) ? "failed" : undefined;
+      } else if (dead) status = "failed";
+      else switch (record.kind) {
+        case 1: status = canonical.state.hasOutput(p[8]!) ? "failed" : undefined; break;
+        case 3: status = spent(name) ? "failed" : undefined; break;
+        case 5: status = ended(demand!, "6") ? "failed" : undefined; break;
+        case 6: status = force.demand(demand!) === undefined || canonical.state.hasOutput(p[14]!) ? "failed" : undefined; break;
       }
       if (status !== undefined) decided.set(name, status);
     }
@@ -817,7 +831,7 @@ export class V3Wallet {
    * canonical needs `reprove`. */
   async sync(packageBytes: Uint8Array, signed: SignedTerms): Promise<WalletView> {
     this.mutable();
-    return this.read(packageBytes, signed, ({ backing, at, observed, canonical, force, notes }) => {
+    return this.read(packageBytes, signed, ({ backing, at, lag, observed, canonical, force, notes }) => {
       const updates: { alias: string; status: "final" | "failed" }[] = [];
       if (canonical !== undefined && force !== undefined) {
         for (const row of this.db.prepare("SELECT alias,record FROM payer_payments WHERE status='prepared' AND backing=?").all(backing)) {
@@ -825,7 +839,7 @@ export class V3Wallet {
           if (status !== undefined) updates.push({ alias: row.alias as string, status });
         }
       }
-      const acts = canonical !== undefined && force !== undefined ? this.actResolutions(backing, canonical, force) : [];
+      const acts = canonical !== undefined && force !== undefined ? this.actResolutions(backing, canonical, force, at, lag) : [];
       observed.check();
       this.resolve(updates, canonical === undefined ? undefined : encodeCommitment(canonical.commitment), at, acts);
       return { backing, judgingIndex: at, checkpoint: canonical?.commitment, holdings: this.holdingsOf(notes, force, at) };
@@ -1031,10 +1045,10 @@ export class V3Wallet {
     requireThat(verifySignatureStrict(signature, message, obligor), "INVALID", "the signer is not the backing's obligor");
     return signature;
   }
-  /** The terms' backing and obligor, each caller field read once. */
-  private termsOf(signed: SignedTerms): { readonly backing: Uint8Array; readonly obligor: Uint8Array } {
-    const terms = copyUnshared(signed.terms);
-    return { backing: rootTermsName(terms), obligor: decodeRootTerms(terms).obligor };
+  /** The caller's terms copied once, with their backing and obligor: every later step reads the copy. */
+  private termsOf(signed: SignedTerms): { readonly backing: Uint8Array; readonly obligor: Uint8Array; readonly own: SignedTerms } {
+    const own = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
+    return { backing: rootTermsName(own.terms), obligor: decodeRootTerms(own.terms).obligor, own };
   }
   /** A saved demand of this wallet, and its notice's positions. */
   private ownDemand(name: string, backing: Uint8Array) {
@@ -1051,13 +1065,13 @@ export class V3Wallet {
   async issue(name: string, request: PaymentRequest, value: bigint, packageBytes: Uint8Array, signed: SignedTerms,
     prove: LocalProver, sign: BackerSigner): Promise<Act> {
     name = alias(name); this.mutable();
-    const { backing, obligor } = this.termsOf(signed);
+    const { backing, obligor, own } = this.termsOf(signed);
     const output = copyPaymentRequest(request, { domain: this.domain, backing, value });
     const intent = JSON.stringify([hex(backing), output.cm.toString(), value.toString()]);
     const existing = this.savedAct(name, 1, intent);
     if (existing !== undefined) return existing;
     requireThat(typeof prove === "function" && typeof sign === "function", "INVALID", "a local prover and a backer signer are required");
-    const planned = await this.read(packageBytes, signed, view => {
+    const planned = await this.read(packageBytes, own, view => {
       if (this.savedAct(name, 1, intent) !== undefined) return undefined;
       requireThat(view.canonical !== undefined && !view.canonical.state.hasOutput(output.cm), "CONFLICT", "request is already paid");
       const header = this.admissible(view);
@@ -1078,13 +1092,13 @@ export class V3Wallet {
   async demand(name: string, quantity: bigint, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
     prove: LocalProver): Promise<Act> {
     name = alias(name); this.mutable();
-    const { backing } = this.termsOf(signed);
+    const { backing, own } = this.termsOf(signed);
     requireThat(isValue(quantity) && quantity > 0n && isValue(deadline), "INVALID", "invalid demand");
     const intent = JSON.stringify([hex(backing), quantity.toString(), deadline.toString()]);
     const existing = this.savedAct(name, 4, intent);
     if (existing !== undefined) return existing;
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
-    const planned = await this.read(packageBytes, signed, view => {
+    const planned = await this.read(packageBytes, own, view => {
       if (this.savedAct(name, 4, intent) !== undefined) return undefined;
       const { force, notes, at, lag, observed } = view;
       const header = this.admissible(view);
@@ -1116,7 +1130,7 @@ export class V3Wallet {
   async accept(name: string, demand: Uint8Array, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
     sign: BackerSigner): Promise<SignedAcceptance> {
     name = alias(name); this.mutable();
-    const { backing, obligor } = this.termsOf(signed), id = identifier(demand), key = hex(id);
+    const { backing, obligor, own } = this.termsOf(signed), id = identifier(demand), key = hex(id);
     requireThat(isValue(deadline), "INVALID", "invalid acceptance deadline");
     const saved = (): SignedAcceptance | undefined => {
       const row = this.db.prepare("SELECT * FROM backer_acceptances WHERE alias=?").get(name);
@@ -1133,7 +1147,7 @@ export class V3Wallet {
     requireThat(typeof sign === "function", "INVALID", "a backer signer is required");
     const owner = ownerOf(deriveSettlementOwnerSecret(this.seed, this.domain, id, deadline).value);
     requireThat(owner !== 0n, "STORAGE", "the derived owner is zero");
-    await this.read(packageBytes, signed, ({ force, at, lag, observed }) => {
+    await this.read(packageBytes, own, ({ force, at, lag, observed }) => {
       const standing = force?.demand(key);
       requireThat(standing !== undefined && same(standing.backing, backing), "ABSENT", "the demand does not stand in canonical history");
       requireThat(deadline <= standing.deadline, "INVALID", "an acceptance deadline is at or before the demand's");
@@ -1158,7 +1172,7 @@ export class V3Wallet {
   async settle(name: string, demandName: string, acceptance: SignedAcceptance, packageBytes: Uint8Array, signed: SignedTerms,
     prove: LocalProver): Promise<Act> {
     name = alias(name); demandName = alias(demandName); this.mutable();
-    const { backing, obligor } = this.termsOf(signed), demand = this.ownDemand(demandName, backing);
+    const { backing, obligor, own: terms } = this.termsOf(signed), demand = this.ownDemand(demandName, backing);
     const own = { domain: copyUnshared(acceptance.domain), demand: copyUnshared(acceptance.demand), owner: acceptance.owner,
       deadline: acceptance.deadline, signature: copyUnshared(acceptance.signature) };
     requireThat(same(own.domain, this.domain) && same(own.demand, demand.id) && isField(own.owner) && own.owner !== 0n &&
@@ -1169,7 +1183,7 @@ export class V3Wallet {
     if (existing !== undefined) return existing;
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const key = hex(demand.id);
-    const planned = await this.read(packageBytes, signed, view => {
+    const planned = await this.read(packageBytes, terms, view => {
       if (this.savedAct(name, 6, intent) !== undefined) return undefined;
       const { canonical, force, notes, at, lag, observed } = view;
       requireThat(force?.demand(key) !== undefined, "ABSENT", "the demand does not stand in canonical history");
@@ -1204,11 +1218,11 @@ export class V3Wallet {
    * them to a fresh note before presenting them again. */
   async withdraw(name: string, demandName: string, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
     name = alias(name); demandName = alias(demandName); this.mutable();
-    const { backing } = this.termsOf(signed), demand = this.ownDemand(demandName, backing);
+    const { backing, own } = this.termsOf(signed), demand = this.ownDemand(demandName, backing);
     const intent = JSON.stringify([demandName]), key = hex(demand.id);
     const existing = this.savedAct(name, 5, intent);
     if (existing !== undefined) return existing;
-    const planned = await this.read(packageBytes, signed, view => {
+    const planned = await this.read(packageBytes, own, view => {
       if (this.savedAct(name, 5, intent) !== undefined) return undefined;
       requireThat(view.force?.demand(key) !== undefined, "ABSENT", "the demand does not stand in canonical history");
       const header = this.admissible(view);
@@ -1227,13 +1241,13 @@ export class V3Wallet {
    * returned as one fresh change output. The backer burns the notes settlements paid it where its terms say so. */
   async burn(name: string, quantity: bigint, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Act> {
     name = alias(name); this.mutable();
-    const { backing } = this.termsOf(signed);
+    const { backing, own } = this.termsOf(signed);
     requireThat(isValue(quantity) && quantity > 0n, "INVALID", "invalid burn quantity");
     const intent = JSON.stringify([hex(backing), quantity.toString()]);
     const existing = this.savedAct(name, 3, intent);
     if (existing !== undefined) return existing;
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
-    const planned = await this.read(packageBytes, signed, view => {
+    const planned = await this.read(packageBytes, own, view => {
       if (this.savedAct(name, 3, intent) !== undefined) return undefined;
       const { force, notes, at, observed } = view;
       const header = this.admissible(view);

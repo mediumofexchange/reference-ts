@@ -162,6 +162,32 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect((await f.holder.sync(f.served(), f.signed)).holdings.filter(h => h.status === "reserved").length).toBe(2);
   });
 
+  it("fails a demand whose instant left the window unadmitted and frees its notes; never decides by output alone", async () => {
+    const f = await fixture([10n, 3n]);
+    await f.holder.sync(f.served(), f.signed);
+    const at = f.venue.witnessedIndex();
+    await f.holder.demand("late", 10n, at + 30n, f.served(), f.signed, prove);
+    f.venue.advance(at + 2n * lag + 1n);
+    await expect(f.holder.submit("late", f.service)).rejects.toMatchObject({ check: "DEADLINE" });
+    await f.publish();
+    const view = await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("late")!.status).toBe("failed");
+    expect(view.holdings.map(h => h.status)).toEqual(["available", "available"]);
+    // The freed note is demanded again under a new alias and admitted.
+    await f.holder.demand("again", 10n, f.venue.witnessedIndex() + 30n, f.served(), f.signed, prove);
+    await f.holder.submit("again", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("again")!.status).toBe("final");
+    // An issue whose request a payment paid first is failed, not final, though its output exists.
+    const request = f.holder.request("shared", f.backing, 3n);
+    await f.backer.issue("late-issue", request, 3n, f.served(), f.signed, prove, sign);
+    await f.holder.prepare("paid-first", { request, value: 3n }, f.served(), f.signed, prove);
+    await f.holder.submit("paid-first", f.service); await f.publish();
+    await expect(f.backer.submit("late-issue", f.service)).rejects.toMatchObject({ code: "REFUSED" });
+    await f.backer.sync(f.served(), f.signed);
+    expect(f.backer.act("late-issue")!.status).toBe("failed");
+  });
+
   it("keeps acts across an offline backup and refuses a payment alias for an act", async () => {
     const f = await fixture();
     await f.holder.sync(f.served(), f.signed);

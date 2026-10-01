@@ -274,9 +274,18 @@ alias holding another act or a payment, sent by `submit` and resolved by
   nullifiers, the segment and the disclosure count (C3.5), and signs the
   release. `withdraw` signs the withdrawal for the canonical segment.
 
-Resolution: an issue, burn or settlement is final once its output is in
-canonical history; a demand, withdrawal or settlement once its statement is
-effective there. Not yet: publication in a gap, the disclosure count read from
+Resolution: an act is final once its statement is in canonical history,
+imports included, or (a demand, withdrawal or settlement) has force at the
+venue; an output alone never decides, since a settlement's or issue's output
+is public before admission and another statement can create it first (C3.8).
+An act fails when it can no longer take effect as saved: its segment is no
+longer canonical, a demand's instant has left C3.3's window for good
+(witnessed index past instant + lag), its output exists from another
+statement, a reserved input was spent otherwise, or its demand ended
+otherwise. A failed act's notes are free again; one that evidence later shows
+admitted (an operator reading behind the wallet) becomes final. A burn the
+operator refuses in a live segment stays reserved, as a refused payment's
+inputs do. Not yet: publication in a gap, the disclosure count read from
 witnessed releases (it is zero, since this wallet publishes none), demands
 found again after a seed restore, reproof of an act whose segment ended, and a
 C3.8 dishonour reading (slice 9, M9b and M9c in [WORK.md](../WORK.md)).
