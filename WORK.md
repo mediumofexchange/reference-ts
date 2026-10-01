@@ -6,19 +6,12 @@ Updated: 2026-10-01
 Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
 a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 **Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
-`V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PR #69) saved
-issue/accept/burn and demand/settle/withdraw under service, one saved record (PR #71); **M9b1** (PR #70) gap acts bound to the snapshot,
-`publish`, disclosure count from unforced releases; **M9b2** (PR #72, merged d2fd9e3): replay keeps a demand's instant, so the seed's presenter key finds
-its standing demands (`sync` `demands`); `withdraw(alias, id)`/`settle(alias, acceptance)` read the notice from the view; a standing demand's
-notes are held by its lock, a prepared settlement reserves them; no build from a view older than the wallet's (`CHANGED_VIEW`); an act whose
-segment ended fails and is made again ([decision](decisions/2026-10.md#2026-10-01--find-a-seeds-standing-demands-by-their-presenter-keys-hold-them-by-their-locks-and-make-an-act-of-an-ended-segment-again)); reviewed.
-**In progress: M9c1** (branch `claude/m9c-dishonour-reader`): the C3.8 reading in the wallet. Acceptance, stand-in proofs on the local venue
-(`test/pool-v3-dishonour.test.ts`): a wallet reads a demand's outcome from public evidence at its index — standing, settled, withdrawn or voided
-from the index witnessed, else past its deadline the backer's dishonour or the holder's lapse, with the indices it stood so (latched); the backer
-publishes its acceptance (C3.4); a gap release refused only for an output another demand's settlement inserted reads `TAKEN` and releases its
-acceptance; mis-signed, mis-routed or late acceptances count nothing; a scoped backing's demand refused as another's. Unit suite,
-`check:scripts`, docs; fresh adversarial review. Stop: Next 4 (a)–(c), (e), (q) are **M9c2**; **M9d** real-proof and crash drills
-(seed-restored demands among them), review.
+`V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PRs #69, #71)
+acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2** (PR #72) seed-found demands, locks, `CHANGED_VIEW`, acts of an ended
+segment made again. **M9c1** (branch `claude/m9c-dishonour-reader`, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
+`presentation` reads C3.8 per witnessed index (ends prospective, dishonour or lapse past the deadline), `publishAcceptance`, force reports `TAKEN`;
+tests in `pool-v3-redemption`, `-force`, `-scope-wallet`; unit suite 1991/1991. Owed before merge: fresh adversarial review, `check:scripts`, CI.
+Next: **M9c2** Next 4 (a)–(c), (e), (q); **M9d** real-proof and crash drills (seed-restored demands among them), review.
 
 ## Status
 - Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)); M8a (PR #67) manifest, mainnet guard; M7, M4–M6, M5b.
@@ -32,8 +25,7 @@ acceptance; mis-signed, mis-routed or late acceptances count nothing; a scoped b
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 9 (Goal above): C3.8 reader keeps each output's inserting demand; a settle refused under service reads as unreleased (adopted
-   limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet operations in
+1. Slice 9 (Goal above): a settle refused under service reads as unreleased (adopted limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet operations in
    fresh processes, local and synthetic Ergo, under service and in a gap with the operator offline; crash/exact-retry drills; C3.4–C3.8 hostile cases.
 2. Profile visibility table (docs/spec, any time before slice 10's wallet text): pool-v3 on Ergo per party and per issuer/operator/witness
    collusion, with traffic (service connections, publication timing, node queries) and small-pool inference (§C1.4 asks profiles for their own).
@@ -63,7 +55,7 @@ acceptance; mis-signed, mis-routed or late acceptances count nothing; a scoped b
    before silence lapse (label, or an answer where lapse is unresolved). (s) Journal: an older own segment's lost trail is skipped silently when serving; each wallet GET `/evidence` takes the
    journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed; `client.package()` peaks near
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
-   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle read decodes every unforced release of the backing (M9b1); count inside the read if slice 11 shows it.
+   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
 5. Slice 11, the design point: measure operator admission at peak, reader first sync and wallet steady state through the commands against the
    [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), with Next 4 (k)–(n), (s), and rebuild the Ergo view on
    append-only SQLite rows (its limits and plan: the [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)'s
