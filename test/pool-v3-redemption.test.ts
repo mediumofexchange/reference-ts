@@ -5,7 +5,8 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { identifierOf } from "../src/pool/field.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, adoptedConfiguration } from "../src/pool/v3/configuration.js";
-import { acceptanceBytes, decodeRecord, settlementAuthorization, statementHash, type Record } from "../src/pool/v3/records.js";
+import { readFrontier } from "../src/pool/v3/package-reader.js";
+import { acceptanceBytes, decodeRecord, encodePublication, settlementAuthorization, statementHash, type Record } from "../src/pool/v3/records.js";
 import { presenterSecret, settlementRho } from "../src/pool/v3/redemption.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -43,13 +44,15 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     }
   });
 
-  /** The backer issues `funds` to the holder through its own wallet; each act is submitted and committed. */
-  async function fixture(funds: readonly bigint[] = [10n]) {
+  /** The backer issues `funds` to the holder through its own wallet; each act is submitted and committed. With
+   * `silence`, the terms declare that no-commitment duration, so an offline operator opens a gap (C2b.6.1). */
+  async function fixture(funds: readonly bigint[] = [10n], silence?: bigint) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-redemption-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
     const terms = encodeRootTerms({ obligor: issuer, operator, replacementRule: issuer, configuration: domain, venue: venue.id,
-      interval: 20n, payout: { thing: "redemption units", quantumExponent: 0, perUnit: 1n } });
+      interval: 20n, payout: { thing: "redemption units", quantumExponent: 0, perUnit: 1n },
+      ...(silence === undefined ? {} : { silence: { noCommitmentDuration: silence, challengeWindow: 5n } }) });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const reader = { venue, reference, verifier };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
@@ -205,6 +208,102 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(restored.act("redeem")).toEqual(demand);
     await restored.submit("redeem", f.service); await f.publish();
     expect((await restored.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["reserved"]);
+  });
+
+  /** A fixture whose operator goes offline after funding: the venue clock is moved to the first index whose horizon
+   * is in the gap, and `relay` publishes an act so the venue witnesses it at its read index plus the lag. */
+  async function gap(funds: readonly bigint[]) {
+    const f = await fixture(funds, SILENCE), checkpoint = f.venue.witnessedIndex();
+    await f.holder.sync(f.served(), f.signed);
+    f.venue.advance(checkpoint + SILENCE - lag + 1n);
+    const relay = async (wallet: Wallet, name: string, at: bigint) => { f.venue.advance(at + lag - 1n); await wallet.publish(name, f.venue); };
+    return { ...f, checkpoint, relay };
+  }
+  const SILENCE = 6n;
+
+  it("demands, settles and withdraws at the venue in a gap; publications with force make the acts final", async () => {
+    const f = await gap([10n, 4n, 6n]);
+    const at = f.venue.witnessedIndex();
+    // Service is closed: an issue and a payment refuse as the journal would, before any proof.
+    await expect(f.backer.issue("late", f.holder.request("late", f.backing, 1n), 1n, f.served(), f.signed, prove, sign))
+      .rejects.toMatchObject({ code: "SILENCE" });
+    await expect(f.holder.prepare("pay", { request: f.holder.request("self", f.backing, 4n), value: 4n }, f.served(), f.signed, prove))
+      .rejects.toMatchObject({ code: "SILENCE" });
+    // A gap demand's deadline must lie past every index C3.3's window lets its publication be witnessed at.
+    await expect(f.holder.demand("short", 10n, at + 2n * lag, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "INVALID" });
+    const demand = await f.holder.demand("redeem", 10n, at + 30n, f.served(), f.signed, prove);
+    const p = decodeRecord(demand.record).publicInputs, segment = identifierOf(p[2]!, p[3]!);
+    await expect(f.holder.publish("missing", f.venue)).rejects.toMatchObject({ code: "UNKNOWN" });
+    await expect(f.holder.publish("redeem", {} as never)).rejects.toMatchObject({ code: "INVALID" });
+    await f.relay(f.holder, "redeem", at);
+    // An exact republication is the same publication.
+    await f.holder.publish("redeem", f.venue);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => [h.value, h.status]).sort())
+      .toEqual([[10n, "reserved"], [4n, "available"], [6n, "available"]].sort());
+    expect(f.holder.act("redeem")!.status).toBe("final");
+
+    // The backer answers the forced demand; the holder's release is bound to the snapshot's segment and has force.
+    await f.backer.sync(f.served(), f.signed);
+    const acceptance = await f.backer.accept("answer", demand.demand!, at + 25n, f.served(), f.signed, sign);
+    const settleAt = f.venue.witnessedIndex(), settled = await f.holder.settle("settle", "redeem", acceptance, f.served(), f.signed, prove);
+    const s = decodeRecord(settled.record).publicInputs;
+    expect(identifierOf(s[2]!, s[3]!)).toEqual(segment);
+    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 0n));
+    await f.relay(f.holder, "settle", settleAt);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.value).sort()).toEqual([4n, 6n]);
+    expect(f.holder.act("settle")!.status).toBe("final");
+    // A burn needs service: the settled note waits for the operator's return to be adopted.
+    await expect(f.backer.burn("retire", 10n, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "SILENCE" });
+
+    // A pair demanded and withdrawn in the gap is available again.
+    const pairAt = f.venue.witnessedIndex();
+    await f.holder.demand("pair", 10n, pairAt + 30n, f.served(), f.signed, prove);
+    await f.relay(f.holder, "pair", pairAt);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["reserved", "reserved"]);
+    const backAt = f.venue.witnessedIndex();
+    await f.holder.withdraw("back", "pair", f.served(), f.signed);
+    await f.relay(f.holder, "back", backAt);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["available", "available"]);
+    expect([f.holder.act("pair")!.status, f.holder.act("back")!.status]).toEqual(["final", "final"]);
+  });
+
+  it("counts releases witnessed without force, so the next settlement names an output nobody has seen", async () => {
+    const f = await gap([10n]);
+    const at = f.venue.witnessedIndex();
+    const demand = await f.holder.demand("redeem", 10n, at + 40n, f.served(), f.signed, prove);
+    await f.relay(f.holder, "redeem", at);
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    const now = f.venue.witnessedIndex(), early = await f.backer.accept("early", demand.demand!, now + lag + 1n, f.served(), f.signed, sign);
+    const late = await f.holder.settle("late", "redeem", early, f.served(), f.signed, prove);
+    // Published after its acceptance deadline, the release has no force but discloses its output.
+    f.venue.advance(early.deadline);
+    await f.holder.publish("late", f.venue);
+    await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("late")!.status).toBe("failed");
+    const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier });
+    expect(read.releases.map(r => statementHash(r.record))).toEqual([late.statement]);
+    expect(read.force.map(x => x.record.kind)).toEqual([4]);
+    // Another party's settlement of this demand to another output, with a release no presenter signed, is
+    // witnessed without force too and is not counted.
+    const copy = decodeRecord(late.record), auth = copy.authorization.slice(), inputs = [...copy.publicInputs];
+    auth.fill(7, 72); inputs[14] = inputs[14]! + 1n;
+    await f.venue.publishRecord(4, f.backing, encodePublication({ domain, backing: f.backing, kind: 3,
+      record: { ...copy, publicInputs: inputs, authorization: auth } }));
+
+    await f.backer.sync(f.served(), f.signed);
+    const later = await f.backer.accept("later", demand.demand!, f.venue.witnessedIndex() + 20n, f.served(), f.signed, sign);
+    const settleAt = f.venue.witnessedIndex(), again = await f.holder.settle("again", "redeem", later, f.served(), f.signed, prove);
+    const s = decodeRecord(again.record).publicInputs, l = decodeRecord(late.record).publicInputs, segment = identifierOf(s[2]!, s[3]!);
+    expect(s.slice(12, 14)).toEqual(l.slice(12, 14));
+    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 1n));
+    expect(s[14]).not.toBe(l[14]);
+    await f.relay(f.holder, "again", settleAt);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
+    expect(f.holder.act("again")!.status).toBe("final");
+    // The reader lists releases without force only: the forged one and the late one, not the one with force.
+    const after = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier });
+    expect(after.force.map(x => x.record.kind)).toEqual([4, 6]);
+    expect(after.releases.map(r => r.record.publicInputs[14])).toEqual([l[14], l[14]! + 1n]);
   });
 });
 

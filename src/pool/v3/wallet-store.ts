@@ -25,7 +25,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { verifySignatureStrict } from "../../keys.js";
-import type { RecordVenue } from "../../record-venue.js";
+import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
 import { identifierOf, isField, isValue } from "../field.js";
 import { commitmentOf, ownerOf } from "../notes.js";
@@ -38,8 +38,8 @@ import type { SegmentHeader } from "./headers.js";
 import { ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { readFrontier, type PackageReader } from "./package-reader.js";
 import type { SignedTerms } from "./reader.js";
-import { acceptanceBytes, acceptanceId, decodeRecord, encodeRecord, evidenceHashes, statementBytes, statementHash, type Record,
-  type SignedAcceptance } from "./records.js";
+import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeRecord, evidenceHashes, settlementAuthorization,
+  statementBytes, statementHash, type Record, type SignedAcceptance } from "./records.js";
 import { paddingRequestId, presenterSecret, settlementRho } from "./redemption.js";
 import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import type { CanonicalCheckpoint, FrontierResult } from "./scope-reader.js";
@@ -223,6 +223,7 @@ interface Frontier {
   readonly observed: ReturnType<typeof heldView>;
   readonly canonical: CanonicalCheckpoint | undefined; readonly force: ForceState | undefined; readonly notes: OwnedNote[];
   readonly chain: FrontierResult["ranges"]["chain"]; readonly scopeChains: FrontierResult["scopeChains"]; readonly clock: FrontierResult["clock"];
+  readonly releases: FrontierResult["releases"];
 }
 
 /** The spendable single-note or least-total pair covering `total`; ties by commitment. */
@@ -484,7 +485,7 @@ export class V3Wallet {
           notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));
         }
         return { terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
-          lag: result.ranges.lag, clock: result.clock };
+          lag: result.ranges.lag, clock: result.clock, releases: result.releases };
       } catch (error) {
         // §14: kept witnesses answer only at their namespaces' tips. A read below one (a venue view older than
         // an earlier read's) discards the kept state and replays; with nothing kept the failure stays visible.
@@ -512,6 +513,36 @@ export class V3Wallet {
       at + lag - canonical.index <= BigInt(clock.duration)), "SILENCE", "the canonical segment's silence clock closes admission");
     return header;
   }
+  /** Where a new demand, withdrawal or release takes effect: under service while the operator could admit it
+   * (`admissible`), or at the venue in a gap (C2b.3.2). The gap route is taken where the backing declares silence
+   * and its horizon (index plus lag) is past the canonical checkpoint by more than the duration: no checkpoint
+   * witnessed later than this read, the gap is then open at every index the act could first be witnessed at, so
+   * the act is bound to the snapshot (the canonical checkpoint) and its holder publishes it (`publish`). The
+   * operator's term and the scope's other clocks do not decide force there; the backing's own gap does. */
+  private route(view: Frontier): { readonly header: SegmentHeader; readonly gap: boolean } {
+    const { canonical, clock, at, lag } = view;
+    if (canonical !== undefined && clock !== null && clock !== undefined && at + lag - canonical.index > BigInt(clock.duration)) {
+      return { header: canonical.header, gap: true };
+    }
+    return { header: this.admissible(view), gap: false };
+  }
+  /** C3.5's disclosure count for `demand` in `segment`: the distinct outputs of its releases bound to that segment
+   * that the venue witnessed without force, each a strict signature of the demand's presenter key. Only that key
+   * signs a release, so another party's copies disclose no new output and add nothing. */
+  private disclosures(view: Frontier, demand: Uint8Array, presenter: Uint8Array, segment: Uint8Array): bigint {
+    const outputs = new Set<bigint>();
+    for (const { record } of view.releases) {
+      const p = record.publicInputs;
+      if (!same(identifierOf(p[15]!, p[16]!), demand) || !same(identifierOf(p[2]!, p[3]!), segment)) continue;
+      let release;
+      try { release = settlementAuthorization(record); } catch (error) {
+        if (error instanceof EncodingError) continue;
+        throw error;
+      }
+      if (verifySignatureStrict(release.releaseSignature, release.releaseMessage, presenter)) outputs.add(p[14]!);
+    }
+    return BigInt(outputs.size);
+  }
   /** final: all four outputs are in canonical history, imports included (own
    * change/zero outputs are fresh, so no other statement creates them); failed:
    * a reserved input was spent otherwise. Statement identities are not imported
@@ -537,8 +568,9 @@ export class V3Wallet {
    * settlement's or an issue's output is public before admission, so another statement can create it first (C3.8).
    * failed: it can no longer take effect as saved: its segment is no longer the canonical one (a dead segment never
    * becomes canonical again; a new alias acts in the live one), a demand's instant has left C3.3's window at every
-   * horizon from this read on, an issue's or settlement's output exists from another statement, a reserved input
-   * was spent otherwise, a withdrawal's demand was settled, or a settlement's demand no longer stands. Demands are
+   * horizon from this read on, an issue's or settlement's output exists from another statement (a settlement's
+   * also from one with force), a reserved input was spent otherwise, a withdrawal's demand was settled, or a
+   * settlement's demand no longer stands or its acceptance deadline has passed (no door admits it after). Demands are
    * judged after the acts that end them. A failed act that the evidence later shows admitted becomes final. */
   private actResolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint):
     { alias: string; status: "final" | "failed" }[] {
@@ -565,7 +597,8 @@ export class V3Wallet {
         case 1: status = canonical.state.hasOutput(p[8]!) ? "failed" : undefined; break;
         case 3: status = spent(name) ? "failed" : undefined; break;
         case 5: status = ended(demand!, "6") ? "failed" : undefined; break;
-        case 6: status = force.demand(demand!) === undefined || canonical.state.hasOutput(p[14]!) ? "failed" : undefined; break;
+        case 6: status = force.demand(demand!) === undefined || force.hasOutput(p[14]!) ||
+          at > settlementAuthorization(record).acceptance.deadline ? "failed" : undefined; break;
       }
       if (status !== undefined) decided.set(name, status);
     }
@@ -1057,7 +1090,8 @@ export class V3Wallet {
     const row = this.db.prepare("SELECT backing FROM wallet_acts WHERE alias=?").get(name)!;
     requireThat(same(row.backing as Uint8Array, backing), "INVALID", "terms do not name the demand's backing");
     const p = decodeRecord(saved.record).publicInputs;
-    return { saved, id: saved.demand!, tags: p.slice(10, 12), quantity: p[7]!, instant: p[14]!, deadline: p[15]! };
+    return { saved, id: saved.demand!, tags: p.slice(10, 12), quantity: p[7]!, presenter: identifierOf(p[12]!, p[13]!), instant: p[14]!,
+      deadline: p[15]! };
   }
 
   /** pool-v3 §3.1: issue the exact request's value to its output, authorized by K through `sign` (§5). The
@@ -1087,8 +1121,10 @@ export class V3Wallet {
 
   /** C3.3: demand `quantity` of the terms' backing from this seed's whole notes (one of exactly that value, or a
    * pair summing to it), with the instant at the read's witnessed index and the holder's own deadline, strictly
-   * ahead of the operator's horizon. The presenter key and any zero padding are derived from the seed and the
-   * notice, so a retry or a rebuilt wallet names the same demand. The notes stay reserved until it is withdrawn. */
+   * ahead of the operator's horizon; in a gap (`route`), strictly after the last index C3.3's window lets its
+   * publication be witnessed at (index plus twice the lag), so it can have force anywhere in that window. The
+   * presenter key and any zero padding are derived from the seed and the notice, so a retry or a rebuilt wallet
+   * names the same demand. The notes stay reserved until it is withdrawn. */
   async demand(name: string, quantity: bigint, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
     prove: LocalProver): Promise<Act> {
     name = alias(name); this.mutable();
@@ -1101,8 +1137,9 @@ export class V3Wallet {
     const planned = await this.read(packageBytes, own, view => {
       if (this.savedAct(name, 4, intent) !== undefined) return undefined;
       const { force, notes, at, lag, observed } = view;
-      const header = this.admissible(view);
+      const { header, gap } = this.route(view);
       requireThat(deadline > at + lag, "INVALID", "the deadline is not strictly ahead of the operator's horizon");
+      requireThat(!gap || deadline > at + 2n * lag, "INVALID", "the deadline is not after every index C3.3's window allows");
       const holdings = this.holdingsOf(notes, force, at);
       const selected = exact(notes.filter((_, i) => holdings[i]!.status === "available"), quantity);
       observed.check();
@@ -1167,8 +1204,10 @@ export class V3Wallet {
   /** C3.5–C3.6: settle a saved demand of this wallet against the backer's acceptance: the demand's own notes in its
    * positions into one output of its quantity to the acceptance's owner, with `rho_out` derived from the seed, the
    * input nullifiers, the canonical segment and the disclosure count, and the release signed by the presenter.
-   * The acceptance must verify under the terms' obligor and stand at the horizon. Saved before it is returned.
-   * The disclosure count is zero: this wallet publishes no release at the venue yet (slice 9, M9b). */
+   * The acceptance must verify under the terms' obligor and stand at the horizon. The disclosure count is read
+   * from the venue record (`disclosures`), so a release witnessed without force is followed by a settlement of
+   * a new output, and a wallet rebuilt from its seed re-proves the same one. In a gap (`route`) the settlement is
+   * bound to the snapshot and its release is published (`publish`). Saved before it is returned. */
   async settle(name: string, demandName: string, acceptance: SignedAcceptance, packageBytes: Uint8Array, signed: SignedTerms,
     prove: LocalProver): Promise<Act> {
     name = alias(name); demandName = alias(demandName); this.mutable();
@@ -1188,16 +1227,17 @@ export class V3Wallet {
       const { canonical, force, notes, at, lag, observed } = view;
       requireThat(force?.demand(key) !== undefined, "ABSENT", "the demand does not stand in canonical history");
       requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
-      const header = this.admissible(view);
+      const { header } = this.route(view);
       const real = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(note => tagOf(note.nf) === tag));
       requireThat(real.every(note => note !== undefined), "ABSENT", "a demanded note is not unspent in canonical history");
       const placed = real.map(note => ({ note: note!, anchor: note!.anchor, path: note!.path }));
       const inputs: NoteInput[] = demand.tags.map(tag => tag !== 0n ? placed.find(i => tagOf(i.note.nf) === tag)! :
         { ...placed[0]!, note: prepareExactOutput(this.seed, this.domain, paddingRequestId(this.seed, this.domain, placed[0]!.note.nf),
           backing, 0n) });
-      const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, 0n);
+      const count = this.disclosures(view, demand.id, demand.presenter, canonical!.segment);
+      const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, count);
       const opening = { backing, value: demand.quantity, owner: own.owner, rho }, cm = commitmentOf(this.domain, opening);
-      requireThat(!canonical!.state.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
+      requireThat(!force!.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
       observed.check();
       return { header, inputs, output: { opening, cm }, at };
     });
@@ -1213,9 +1253,10 @@ export class V3Wallet {
     return this.saveAct(name, 6, intent, bytes, backing, header.operator, key, [], at);
   }
 
-  /** C3.6: withdraw a saved demand of this wallet that stands in canonical history, signed by its presenter for the
-   * canonical segment. Once the withdrawal is final the demand's notes are available again; C3.1 advises paying
-   * them to a fresh note before presenting them again. */
+  /** C3.6: withdraw a saved demand of this wallet that stands in canonical history (or with force in a gap),
+   * signed by its presenter for the canonical segment; in a gap (`route`) the withdrawal is published (`publish`).
+   * Once the withdrawal is final the demand's notes are available again; C3.1 advises paying them to a fresh note
+   * before presenting them again. */
   async withdraw(name: string, demandName: string, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
     name = alias(name); demandName = alias(demandName); this.mutable();
     const { backing, own } = this.termsOf(signed), demand = this.ownDemand(demandName, backing);
@@ -1225,7 +1266,7 @@ export class V3Wallet {
     const planned = await this.read(packageBytes, own, view => {
       if (this.savedAct(name, 5, intent) !== undefined) return undefined;
       requireThat(view.force?.demand(key) !== undefined, "ABSENT", "the demand does not stand in canonical history");
-      const header = this.admissible(view);
+      const { header } = this.route(view);
       view.observed.check();
       return { header, at: view.at };
     });
@@ -1313,6 +1354,23 @@ export class V3Wallet {
     });
     requireThat(current, "CONFLICT", "the payment was re-proven during submission");
     return this.payment(name)!.receipt!;
+  }
+  /** C2b.3.2: publish a saved demand, withdrawal or settlement (its release, carrying the acceptance) at the backing's
+   * venue, routed to the act's backing, exactly as saved: a retry republishes the same bytes, which are the same
+   * publication. The venue decides nothing; `sync` reads the act final once the publication has force. One
+   * published outside an open gap has no force, and a release witnessed without force discloses its output and
+   * counts towards the next settlement's disclosure count. Venue refusals surface as the publisher's `VenueError`. */
+  async publish(name: string, publisher: RecordPublisher): Promise<void> {
+    name = alias(name); this.mutable();
+    const row = this.db.prepare("SELECT kind,record,backing FROM wallet_acts WHERE alias=?").get(name);
+    requireThat(row !== undefined, "UNKNOWN", "unknown act");
+    const kind = ({ "4": 1, "6": 3, "5": 4 } as const)[row.kind as string];
+    requireThat(kind !== undefined, "INVALID", "only a demand, a withdrawal or a release is published");
+    const send = publisher?.publishRecord;
+    requireThat(typeof send === "function", "INVALID", "a venue publisher is required");
+    const backing = copyUnshared(row.backing as Uint8Array);
+    const bytes = encodePublication({ domain: new Uint8Array(this.domain), backing, kind, record: decodeRecord(row.record as Uint8Array) });
+    await send.call(publisher, 4, backing, bytes);
   }
 
   close(): void {

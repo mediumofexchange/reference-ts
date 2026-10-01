@@ -48,6 +48,8 @@ export interface CanonicalCheckpoint {
   readonly state: ReplayResult;
 }
 export interface ForcedPublication { readonly index: bigint; readonly record: Record; readonly bytes: Uint8Array }
+/** A release (publication kind 3) the venue witnessed without force, at its venue position. */
+export interface UnforcedRelease { readonly index: bigint; readonly ordinal: bigint; readonly record: Record }
 export interface PublicationVerdict { readonly index: string; readonly ordinal: string; force: boolean; check?: string }
 export interface ImportCarryingVerdict extends CarryingVerdict { readonly operator: string }
 /** A complete backing descent without an asserted selected checkpoint. */
@@ -64,6 +66,9 @@ export interface FrontierResult {
    * canonical segment scopes, keyed by hex name. One ended term ends the
    * segment for all of them (C2.10.9). */
   readonly scopeChains: ReadonlyMap<string, RecordView["chain"]>;
+  /** The selected backing's releases witnessed through the judging index without force, routed to it and
+   * decoded, in venue order: what a holder's disclosure count (C3.5) reads. Nothing here checks a release. */
+  readonly releases: readonly UnforcedRelease[];
 }
 export const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
 
@@ -404,7 +409,23 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
     const around = await walk.around(canonical, terms, view);
     const scopeChains = new Map<string, RecordView["chain"]>();
     for (const [name, scoped] of canonical?.scopedTerms ?? []) scopeChains.set(name, (await walk.viewFor(hexToBytes(name), scoped)).chain);
-    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains,
+    // Every publication of the backing the classification gave no force. A backing declaring no silence has no
+    // gap, so no release of it can have force or is worth publishing, and its publications are not read for this.
+    const name = hex(selection.backing), forced = new Set(around.publications.filter(p => p.force && p.backing === name)
+      .map(p => `${p.index}:${p.ordinal}`));
+    const releases: UnforcedRelease[] = [];
+    for (const entry of terms.silence === undefined ? [] : view.publications()) {
+      if (forced.has(`${entry.index}:${entry.ordinal}`)) continue;
+      let publication;
+      try { publication = decodePublication(entry.record); } catch (error) {
+        if (error instanceof EncodingError) continue;
+        throw error;
+      }
+      if (publication.kind === 3 && same(publication.domain, selection.domain) && same(publication.backing, selection.backing)) {
+        releases.push({ index: entry.index, ordinal: entry.ordinal, record: publication.record });
+      }
+    }
+    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains, releases,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
         chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
   } catch (error) {
