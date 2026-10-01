@@ -2,6 +2,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { limbsOf } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../src/pool/note-tree.js";
+import { commitmentOf } from "../src/pool/notes.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodeRecord, encodeSettlementAuthorization, releaseBytes,
   statementHash, withdrawalBytes, type Record } from "../src/pool/v3/records.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
@@ -29,10 +30,10 @@ function withdrawal(d: Uint8Array, signer = presenterSecret): Uint8Array {
     proof: new Uint8Array(), authorization: new Uint8Array(64), capsules: [] };
   return encodeRecord({ ...record, authorization: ed25519.sign(withdrawalBytes(record), signer) });
 }
-function settle(d: Uint8Array, deadline = 12n, nf = 101n, output = 301n, signer = presenterSecret, quantity = 5n): Uint8Array {
+function settle(d: Uint8Array, deadline = 12n, nf = 101n, output = 301n, signer = presenterSecret, quantity = 5n, padding = 102n): Uint8Array {
   const id = statementHash(decodeRecord(d));
   const record: Record = { domain, kind: 6, publicInputs: [...prefix, ...limbsOf(backing), quantity, 88n, 99n,
-    EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, nf, 102n, output, ...limbsOf(id)], proof: b(8), authorization: new Uint8Array(136), capsules: [] };
+    EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, nf, padding, output, ...limbsOf(id)], proof: b(8), authorization: new Uint8Array(136), capsules: [] };
   const acceptance = { domain, demand: id, owner: 88n, deadline };
   return encodeRecord({ ...record, authorization: encodeSettlementAuthorization(deadline,
     ed25519.sign(acceptanceBytes(acceptance), issuerSecret),
@@ -111,6 +112,28 @@ describe("publication force over the snapshot forest", () => {
     expect(overlay(state)).toEqual(before);
     await applyForceRecord(state, withdrawal(d), context({ index: 20n }));
     expect(state.added.size).toBe(0); expect(state.nullifiers.size).toBe(0);
+  });
+
+  it("takes a release's output only by a settlement of another demand naming the same owner (C3.8)", async () => {
+    // K files a demand over its own snapshot note (nullifier 201) and, under its own acceptance naming the
+    // holder's owner 88, settles it to the holder's published rho 99 ahead of the holder's release.
+    const state = openForceState(fresh()), held = demand(), own = demand(7n, 12n, EMPTY_NOTE_ROOT, 201n);
+    const output = commitmentOf(domain, { backing, value: 5n, owner: 88n, rho: 99n });
+    await applyForceRecord(state, held, context()); await applyForceRecord(state, own, context());
+    const taking = settle(own, 12n, 201n, output, presenterSecret, 5n, 202n);
+    await applyForceRecord(state, taking, context({ index: 11n }));
+    const release = settle(held, 12n, 101n, output);
+    await refuses(state, release, "OUTPUT", context({ index: 12n }));
+    // Every other condition holds: without the taking settlement the same release has force.
+    const untaken = openForceState(fresh()); await applyForceRecord(untaken, held, context());
+    await applyForceRecord(untaken, release, context({ index: 12n }));
+    expect(untaken.hasOutput(output)).toBe(true);
+    // What C3.8 reads: the earlier settlement is of another demand, and equal outputs name one owner,
+    // so K's signature named the holder's owner for both demands.
+    const [first, second] = [decodeRecord(taking), decodeRecord(release)];
+    expect(first.publicInputs.slice(15)).not.toEqual(second.publicInputs.slice(15));
+    expect([first.publicInputs[8], first.publicInputs[14]]).toEqual([second.publicInputs[8], second.publicInputs[14]]);
+    expect(state.demand(Buffer.from(statementHash(decodeRecord(held))).toString("hex"))).toBeDefined();
   });
 
   it("uses inclusive instant/settlement boundaries and a strict demand deadline", async () => {
