@@ -5,17 +5,19 @@ Updated: 2026-10-01
 ## Goal
 Slice 8 (adoption). M5b is closed: every party's memory is independent of history and a reader's first sync fits 24 h at
 the design point ([storage decision](decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-**Next: M6, Next 5(i)**: decide the host rule for a settlement whose published output opening (C3.5) a backer can issue first,
-so the acceptance reads as the holder's lapse (C3.8). Start from the rule text and the smallest alternatives (reuse, omission,
-a spec change); state acceptance and stop in WORK.md before building. Then pruning retained evidence no read used (decision limits).
+**Next: pruning retained evidence no read used** (decision limits): state its goal, acceptance and stop here before
+building. M6 is decided (below); no v3 reader of C3.8's dishonour exists yet (Next 2).
 
 ## Status
-- M5b.6 (branch `feat/m5b6-verify-ahead`, [decision](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)):
-  a reader verifies proofs ahead of its replay on a pool of verifier instances (`verify-ahead.ts`, `proofVerifier({ instances })`),
-  verdicts only for exactly the bytes judged, at most what it used dropped. [First sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6):
-  10⁵ statements at 52.7 ms each with real verification load, peak 543 MB; 10⁶ extrapolated to 15.5–16 h on this 2-core desktop
-  (20.5 h with the header check after it). One review plus read-back; `replay-store-probe.mjs` retired at `6c7d8f2`; the ten
-  current v3 reports re-recorded from CI run 36806514822 (PR #62).
+- M6 (branches `feat/m6-taken-release` here and in the specification, [decision](decisions/2026-10.md#2026-10-01--read-a-gap-release-taken-by-another-demands-settlement-as-released)):
+  a gap release refused only because another demand's settlement already inserted its `cm_out` releases its acceptance for C3.8,
+  so a backer front-running a waiting release with its own settlement gains no holder's lapse; a disclosed output sends the holder's re-proof
+  to a fresh `rho_out`. Spec-only (pool-recovery C3.4/C3.5/C3.8/§8, pool-authority C2.10.8);
+  `test/pool-v3-force.test.ts` shows the taking in force. Review blocked the first proposal (acceptance naming `rho_out` with a void:
+  anyone could pay the backer into the output and write its dishonour) and read back this one. Runtime pins unchanged.
+- M5b.6 (PR #62, [decision](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)):
+  proofs verified ahead of the replay on a pool of verifier instances; [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
+  10⁵ statements at 52.7 ms each, peak 543 MB, 10⁶ extrapolated to 15.5–16 h here. The ten current v3 reports are from CI run 36806514822.
 - Review-code 2026-09-30 (PR #61): checkpoints judged in their directory's first entry's segment (spec 298b6f5) and fixes; deferred Next 5(o)–(s).
 - Earlier M5b: M5b.5c (PRs #59, #60) the wallet on kept files and real proofs past the old package; M5b.5a–b (PRs #55, #56, #58) the
   journal's storage, kept venue answers and streamed serving; M5b.4 (PRs #52, #54) kept classes; M5b.3 (PRs #50, #51) streamed evidence.
@@ -31,13 +33,15 @@ a spec change); state acceptance and stop in WORK.md before building. Then pruni
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 8, adoption. **M6** Next 5(i) (above); pruning retained evidence no read used (decision limits). Then M4
+1. Slice 8, adoption. Pruning retained evidence no read used (decision limits). Then M4
    certificates/kind-11 fitted to this retention, M7 one-transaction condition, M8 adoption (one manifest holding §11.1's parameter identities too, now
    `BN254_PARAMETERS`), every report re-recorded, live two-backing drill. Mainnet needs separate authority.
 2. Slice 9, installable commands on the testnet: holder wallet, operator service and supply reader from a packed install (`bin`), fresh processes and data
    directories, issue → pay → receive → fulfill → redeem and an offline-operator recovery past the old 67-statement ceiling. Close Next 5 (a)–(c), (e)
    before its drill. Size verifier instances against about 85 MB each and destroy the key-deriving instance after building
-   the verifier (M5b.6). Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
+   the verifier (M5b.6). Wallet settlements derive `rho_out` per segment and disclosure counter (C3.5). A v3 dishonour reader (C3.8) for redeem: demand void by a spent tag, the holder's lapse, releases taken by another
+   demand's settlement (keep each output's inserting demand); residual: a settle refused under service reads as unreleased (a release witnessed
+   at the venue outside a gap could count, as the backer can relay it, but needs a judging state; decide first). Retire the pilot CLI and, against a case map, the transparent path in or right after it. Require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)).
 3. Multi-backing leftovers: adding an original-term backing to a live scope; statements spending several backings from the wallet; single-backing openings over-reserve by |E|.
 4. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging; served-trail
    caller-object cache; drop the explicit `vite` dev pin at the next dependency change. Untested on v3: a second commit refused while one is in flight
@@ -56,8 +60,6 @@ a spec change); state acceptance and stop in WORK.md before building. Then pruni
    (n) A replay rewrites every kept witness of its segment at each record with outputs, so a wallet's cost per record
    grows with the notes it ever held (an operator's fee wallet: with history); update a witness only when a sibling
    subtree completes (at most 32 times), and drop spent notes' witnesses. (j) Verify-only parties could take identity-checked key bytes, needing no G1 file.
-   (i) (M6) A settlement publishes its output opening (C3.5), so a backer seeing it before witnessing can issue the same `cm_out` first; it is refused
-   `OUTPUT` and the acceptance may read as the holder's lapse (C3.8). A retry needs a fresh `rho_out` and release; the wallet builds no settlements yet.
    From review-code 2026-09-30: (o) `store.ts` `parts()` keeps one trail top per segment, so a taken predecessor segment whose snapshots lie on two
    forks serves only the longer trail and the other checkpoint stays unresolved for readers; a fix needs an ancestor test without a walk per snapshot
    (a fork-aware try cost N·L walks on an honest takeover). (p) `package-reader.ts` setup reads the selection through its own backing's entry before the

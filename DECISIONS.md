@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-01` [Read a gap release taken by another demand's settlement as released](decisions/2026-10.md#2026-10-01--read-a-gap-release-taken-by-another-demands-settlement-as-released)
 - `2026-10-01` [Verify a trail's proofs ahead of its replay on a pool of verifier instances](decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)
 - `2026-09-30` [Judge a checkpoint in the segment its directory's first entry names](decisions/2026-09.md#2026-09-30--judge-a-checkpoint-in-the-segment-its-directorys-first-entry-names)
 - `2026-09-30` [Bound evidence storage by its rows and bind reader verifiers to the configuration](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration)
