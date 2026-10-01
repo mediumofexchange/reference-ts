@@ -13,6 +13,7 @@ import { asFields, assertions, bypass, failedOpcode, FRAME, inputRanges, names, 
 import { EncodingError } from '../../../dist/bytes.js';
 import { BN254_PARAMETERS, proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
 import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
+import { PROOF_BYTES } from '../../../dist/pool/v3/configuration.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from './provenance.mjs';
 import { PARAMETER_DIRECTORY, readParameters } from '../prepare-crs.mjs';
@@ -144,7 +145,7 @@ try {
       assert.equal(await verifier.verifyProof({ ...proof, verificationKey: circuits[kind].vk }, options), true, label);
       assert.deepEqual(proof.publicInputs.map(field), publicInputsOf(kind, v));
       assert.equal(proof.publicInputs.length, counts[kind]);
-      assert(proof.proof.length > 0 && proof.proof.length <= 131072 && proof.proof.length % 32 === 0);
+      assert.equal(proof.proof.length, PROOF_BYTES, label + ': the configuration\'s proof length');
       metrics.push({ kind, label, executeMs: executed-start, proveMs: proved-executed, verifyMs: performance.now()-proved, proofBytes: proof.proof.length, publicInputs: proof.publicInputs.length });
       checks.push(label); return proof;
     }
@@ -611,7 +612,15 @@ try {
     }
     checks.push('the shared verifier derives the six identities from this build and verifies each relation\'s proof under its kind on its own instances, which hold only [1]_1 and [x]_2');
     const valid = proofs.issue, inputs = valid.publicInputs.map(BigInt), vk = circuits.issue.vk;
-    const word = (i, value) => { const p = new Uint8Array(valid.proof); p.set(Buffer.from(value.toString(16).padStart(64, '0'), 'hex'), i * 32); return p; };
+    // The backend fixes the proof length, and so the configuration's longest publication (venue-ergo §8):
+    // a valid proof with a word added or removed verifies under neither the backend nor the shared verifier.
+    for (const [label, bytes] of [['a word appended', Buffer.concat([valid.proof, new Uint8Array(32)])],
+      ['its last word repeated', Buffer.concat([valid.proof, valid.proof.subarray(-32)])], ['its last word removed', valid.proof.subarray(0, -32)]]) {
+      assert.equal(await verifier.verifyProof({ proof: new Uint8Array(bytes), publicInputs: valid.publicInputs, verificationKey: vk }, options), false, label);
+      assert.equal(await shared.verify(kindOf.issue, inputs, new Uint8Array(bytes)), false, label);
+    }
+    checks.push(`every relation proves in ${PROOF_BYTES} bytes, and a valid proof with a word appended, its last word repeated or removed verifies under neither the backend nor the shared verifier`);
+    const word =(i, value) => { const p = new Uint8Array(valid.proof); p.set(Buffer.from(value.toString(16).padStart(64, '0'), 'hex'), i * 32); return p; };
     const malformed = [
       ['an element past its modulus', word(0, (1n << 256n) - 1n), 'Non-canonical proof element: value >= field modulus'],
       ['a low coordinate limb out of range', word(8, FIELD - 1n), 'Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))'],

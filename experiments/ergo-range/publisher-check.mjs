@@ -3,14 +3,15 @@
 // file under scratch/. It is run explicitly, never by `check` or CI, because it submits transactions.
 //
 // Checks:
-// - a commitment, a replacement and a revocation record, each really signed by its own key, are published as three
-//   transactions chained in the mempool (each spends the previous one's change), built and signed by the runtime
-//   alone (@noble/curves; no Ergo library);
+// - a commitment, a replacement and a revocation record, each really signed by its own key, and a kind-4 run of the
+//   location's capacity (venue-ergo §8: the longest record one transaction carries at any height and option, beside
+//   the configuration's longest publication), are published as four transactions chained in the mempool (each spends
+//   the previous one's change), built and signed by the runtime alone (@noble/curves; no Ergo library);
 // - before each submission the node checks the transaction (/transactions/checkBytes) and refuses the same bytes
 //   with one byte of the first proof changed;
 // - publishing a record again returns the transaction already sent and submits nothing;
 // - once each transaction is `--depth` blocks deep, its block's section, fetched from the node and accepted only
-//   where it reproduces the header's transaction root, carries exactly the three records at their kinds, subjects
+//   where it reproduces the header's transaction root, carries exactly the four records at their kinds, subjects
 //   and ordinals under the profile's attribution;
 // - the replacement's first submission reaches the node and its answer is lost: the publication fails, and the retry
 //   finds the record box and returns that same transaction without sending another.
@@ -28,9 +29,11 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { parseErgoHeader } from "../../dist/ergo-headers.js";
 import { ErgoVenue, ergoAnchorContext } from "../../dist/ergo.js";
-import { attributeSection, ergoOrdinal, ergoProfileIdentity, ERGO_TESTNET_REFERENCE, ownErgoProfile } from "../../dist/ergo-profile.js";
+import { attributeSection, collBytes, ergoOrdinal, ergoProfileIdentity, ERGO_TESTNET_REFERENCE, frameTransaction, ownErgoProfile } from "../../dist/ergo-profile.js";
 import { decodeRangeAnswer } from "../../dist/record-range.js";
-import { DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ErgoPublisher, ergoNodePublisher, payToPublicKeyTree } from "../../dist/ergo-publisher.js";
+import { DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ErgoPublisher, ergoNodePublisher, ergoRunCapacity, payToPublicKeyTree } from "../../dist/ergo-publisher.js";
+import { PROOF_BYTES } from "../../dist/pool/v3/configuration.js";
+import { publicationBound } from "../../dist/pool/v3/records.js";
 import { ergoNodeSupplier } from "../../dist/ergo-supplier.js";
 import { encodeCommitment, encodeReplacement, encodeRevocation, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation } from "../../dist/venue-records.js";
 import { sourceClosure, sourceHashes } from "../../scripts/pool/v3/provenance.mjs";
@@ -90,12 +93,18 @@ const unsigned = { role: ROLE_OPERATOR, successor: ed25519.getPublicKey(successo
 const message = replacementMessage(backingName, unsigned);
 const replacement = { ...unsigned, signature: ed25519.sign(message, backerSecret), successorSignature: ed25519.sign(message, successorSecret) };
 const revocation = signRevocation(backerSecret);
+// venue-ergo §8: a kind-4 run of the location's capacity, the longest record one transaction carries at any
+// height and option, against the configuration's longest publication.
+const capacity = ergoRunCapacity(profile.scripts[4]), longest = publicationBound(PROOF_BYTES);
+assert(capacity >= longest, "the kind-4 location carries the configuration's longest publication");
+const seed = derived("run/bytes"), run = Uint8Array.from({ length: capacity }, (_, i) => seed[i % 32] ^ (i >> 5) & 0xff);
 const records = [
   { kind: 1, name: "commitment", subject: commitment.operator, record: encodeCommitment(commitment) },
   { kind: 2, name: "replacement", subject: backingName, record: encodeReplacement(backingName, replacement) },
   { kind: 3, name: "revocation", subject: revocation.obligor, record: encodeRevocation(revocation) },
+  { kind: 4, name: "capacity run", subject: derived("run"), record: run },
 ];
-assert.deepEqual(records.map(r => r.record.length), [136, 233, 96]);
+assert.deepEqual(records.map(r => r.record.length), [136, 233, 96, capacity]);
 
 // The node, checked before every submission: the true bytes pass, one changed proof byte fails.
 const nodePublisher = ergoNodePublisher(nodeUrl, { name: "own testnet node" });
@@ -121,7 +130,7 @@ const publisher = new ErgoPublisher({ secretKey, suppliers: [counting] });
 const publications = [];
 let lostResponse;
 for (const r of records) {
-  const request = { location: profile.scripts[r.kind], subject: r.subject, record: r.record, height: startHeight };
+  const request = { location: profile.scripts[r.kind], subject: r.subject, record: r.record, height: startHeight, ...(r.kind === 4 ? { chunked: true } : {}) };
   if (r.kind === 2) {
     loseNext = true;
     const refused = await publisher.publish(request).then(() => null, error => String(error.message));
@@ -143,7 +152,11 @@ assert(checks.every(c => c.corruptedStatus === 400 && c.trueStatus === 200), "th
 // Publishing again returns the same transaction and submits nothing.
 const again = await publisher.publish({ location: profile.scripts[1], subject: records[0].subject, record: records[0].record, height: startHeight });
 assert.equal(hex(again.id), hex(publications[0].publication.id));
-assert.equal(submitted.length, 3, "a repeated publication submits nothing");
+assert.equal(submitted.length, records.length, "a repeated publication submits nothing");
+// The run: full boxes of the node's 4,096 bytes and one shorter, in a transaction within the relay limit.
+const runPublication = publications.find(p => p.kind === 4).publication;
+const runPieces = frameTransaction(runPublication.unsigned).slice(0, -2).map(output => collBytes(output.registers.R5).length);
+assert(runPublication.signed.length <= 98_304, "the capacity run is one transaction the node relays");
 // The node's answer to the same bytes a second time, recorded as it is.
 const duplicate = await node("POST", "/transactions/bytes", hex(publications[0].publication.signed));
 
@@ -197,9 +210,12 @@ for (const height of [...new Set(inclusion.values())].sort((a, b) => (a < b ? -1
 }
 
 report = {
-  status: "Live testnet run of the runtime publisher: three records signed by their own keys, published as chained transactions " +
-    "built and signed without an Ergo library, checked by the node (a changed proof byte refused), not resubmitted when published " +
-    "again or after a lost answer, and read back from each including block under the profile's attribution with exact bytes.",
+  status: "Live testnet run of the runtime publisher: three records signed by their own keys and a kind-4 run of the location's " +
+    "one-transaction capacity, published as chained transactions built and signed without an Ergo library, checked by the node (a " +
+    "changed proof byte refused), not resubmitted when published again or after a lost answer, and read back from each including " +
+    "block under the profile's attribution with exact bytes.",
+  capacity: { location: hex(profile.scripts[4]), runCapacityBytes: capacity, longestPublicationBytes: longest, proofBytes: PROOF_BYTES,
+    pieceBytes: runPieces, signedBytes: runPublication.signed.length, relayLimitBytes: 98_304 },
   node: { url: nodeUrl, name: info.name, appVersion: info.appVersion, network: info.network, startHeight: startHeight.toString(),
     minValuePerByte: minValuePerByte.toString() },
   fee: DEFAULT_ERGO_FEE.toString(),

@@ -2,7 +2,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import { limbsOf } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../src/pool/note-tree.js";
-import { deliveryHash, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { deliveryHash, encodeRecord, publicationBound, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { readRecordView, RANGE_LIMITS, type ReaderSelection } from "../src/pool/v3/reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
@@ -13,7 +13,11 @@ import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentRep
 import type { RootTerms } from "../src/pool/v3/terms.js";
 import { RangeLimitError } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../src/record-venue.js";
-import { CandidateVenueError, type VenueReference } from "../src/pool/v3/guard.js";
+import { CandidateVenueError, referenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
+import { PROOF_BYTES } from "../src/pool/v3/configuration.js";
+import { ergoRunCapacity } from "../src/ergo-publisher.js";
+import { ERGO_SYNTHETIC_REFERENCE } from "../src/ergo-profile.js";
+import { SYNTHETIC_SCRIPTS } from "../src/ergo-synthetic.js";
 import { VenueError } from "../src/venue-error.js";
 import { encodeCommitment, encodeRevocation, signCommitment, signRevocation } from "../src/venue-records.js";
 
@@ -277,6 +281,26 @@ describe("the reader's venue", () => {
     const later = await readRecordView(at(8n), terms, noEvidence(), refusing, reference, failing);
     expect(() => [...later.held(operator)]).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
     expect(failing.keptAnswer(1, operator)?.through).toBe(4n);
+  });
+
+  it("refuses an Ergo reference whose kind-4 location cannot carry the configuration's longest publication in one transaction", () => {
+    const longest = publicationBound(PROOF_BYTES);
+    expect(longest).toBe(15_498);
+    const profile = (location: Uint8Array): VenueReference => ({ context: ERGO_SYNTHETIC_REFERENCE,
+      profile: { reference: ERGO_SYNTHETIC_REFERENCE, anchor: b(1), depth: 2n, scripts: { ...SYNTHETIC_SCRIPTS, 4: location } } });
+    // A sized tree: its header, its body's length as a VLQ, the body.
+    const sized = (body: number) => Uint8Array.of(0x08, 0x80 | (body & 0x7f), body >> 7, ...new Uint8Array(body));
+    expect(referenceVenue(profile(SYNTHETIC_SCRIPTS[4])).lag).toBe(3n);
+    // The longest such body that still carries it, by bisection (capacity falls as the tree grows).
+    let carried = 128, beyond = 4_000;
+    while (beyond - carried > 1) {
+      const middle = (carried + beyond) >> 1;
+      if (ergoRunCapacity(sized(middle)) >= longest) carried = middle; else beyond = middle;
+    }
+    expect(referenceVenue(profile(sized(carried))).lag).toBe(3n);
+    expect(() => referenceVenue(profile(sized(carried + 1)))).toThrow(
+      new CandidateVenueError("the venue's kind-4 location cannot carry the configuration's longest publication in one transaction"));
+    expect(carried).toBeGreaterThan(3_000);
   });
 
   it("requires the independently held reference preimage before asking for evidence", async () => {

@@ -243,10 +243,18 @@ const PUBLICATION_STATEMENT = { 1: 4, 3: 6, 4: 5, 5: 7 } as const;
 function requirePublicationKind(value: unknown): asserts value is Publication["kind"] {
   if (value !== 1 && value !== 2 && value !== 3 && value !== 4 && value !== 5) throw new EncodingError("unknown publication kind");
 }
-function bodyBound(kind: Publication["kind"]): number {
+function bodyBound(kind: Publication["kind"], proofBytes = MAX_PROOF): number {
   if (kind === 2) return 190;
   const k = PUBLICATION_STATEMENT[kind];
-  return 58 + 32 * COUNTS[k] + 12 + (k === 5 ? 0 : MAX_PROOF) + AUTH_LENGTHS[k] + 89 * CAPSULE_COUNTS[k];
+  return 58 + 32 * COUNTS[k] + 12 + (k === 5 ? 0 : proofBytes) + AUTH_LENGTHS[k] + 89 * CAPSULE_COUNTS[k];
+}
+/** The longest publication of any kind whose proofs are at most `proofBytes`: at §5's bound the frame's ceiling
+ * (§13.1's 131,914 bytes), at a configuration's proof length the longest it publishes (venue-ergo §8). */
+export function publicationBound(proofBytes: number): number {
+  if (!Number.isSafeInteger(proofBytes) || proofBytes <= 0 || proofBytes > MAX_PROOF || proofBytes % 32 !== 0) {
+    throw new EncodingError("wrong proof length");
+  }
+  return PUBLICATION.length + 32 + 32 + 1 + 4 + Math.max(...([1, 2, 3, 4, 5] as const).map(kind => bodyBound(kind, proofBytes)));
 }
 function requireRouting(p: Publication): void {
   requireObject(p); requirePublicationKind(p.kind);
