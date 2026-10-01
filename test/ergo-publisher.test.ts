@@ -9,7 +9,7 @@ import { encodeCommitment, signCommitment, type Commitment } from "../src/commit
 import { ErgoVenue } from "../src/ergo.js";
 import { attributeBlock, collBytes, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
 import {
-  DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, ergoRunCapacity, payToPublicKeyTree, readPlainBox, verifyErgoProof,
+  DEFAULT_ERGO_FEE, DEFAULT_MIN_VALUE_PER_BYTE, ergoNodePublisher, ErgoPublisher, ergoRunCapacity, ergoRunCarries, payToPublicKeyTree, readPlainBox, verifyErgoProof,
   type ErgoPublishingSupplier, type ErgoPublisherPersistence, type NodeRequestInit,
 } from "../src/ergo-publisher.js";
 import { VenueError } from "../src/venue-error.js";
@@ -133,6 +133,8 @@ describe("durable publisher exact retry", () => {
       (s: any) => { s.pending[0].publication.recordBox.bytes = "00".repeat(32); },
       (s: any) => { s.spent = []; },
       (s: any) => { s.created[0].bytes.bytes = "00"; },
+      // A layout before kind-4 pieces filled their boxes at a one-byte index.
+      (s: any) => { s.version = 2; },
     ]) {
       const damaged = JSON.parse(saved); mutate(damaged); state.text = JSON.stringify(damaged);
       expect(() => new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence })).toThrow(/saved publisher|saved publication/);
@@ -277,6 +279,9 @@ describe("kind-4 publications are one adjacent output run", () => {
 
   it("carries a record of the location's capacity in one transaction at any height and option, and refuses one byte more before remembering or submitting", async () => {
     const capacity = ergoRunCapacity(SCRIPTS[4]);
+    expect(capacity).toBe(95_910);
+    expect([ergoRunCarries(SCRIPTS[4], capacity), ergoRunCarries(SCRIPTS[4], capacity + 1)]).toEqual([true, false]);
+    for (const length of [-1, 1.5, MAX_RANGE_RECORD_BYTES[4] + 1]) expect(() => ergoRunCarries(SCRIPTS[4], length)).toThrow(VenueError);
     // Every option at its longest encoding: a fee whose VLQ is ten bytes, the highest per-byte minimum, the
     // highest height; the change is then shorter than the largest the capacity allows for.
     const fee = 1n << 63n, height = 0xffff_ffffn, options = { fee, minValuePerByte: 1_000_000n };
@@ -298,7 +303,7 @@ describe("kind-4 publications are one adjacent output run", () => {
     const sized = (length: number) => Uint8Array.of(0x08, 0x88, 0x1b, ...new Uint8Array(length));
     expect(ergoRunCapacity(sized(3_464))).toBeLessThan(capacity);
     // A tree of 4,016 bytes leaves no room in a box for even an empty piece.
-    expect(ergoRunCapacity(Uint8Array.of(0x08, 0xad, 0x1f, ...new Uint8Array(4_013)))).toBe(0);
+    expect(ergoRunCapacity(Uint8Array.of(0x08, 0xad, 0x1f, ...new Uint8Array(4_013)))).toBe(-1);
     expect(() => ergoRunCapacity(new Uint8Array(new SharedArrayBuffer(4)))).toThrow(VenueError);
   });
 

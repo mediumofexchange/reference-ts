@@ -325,29 +325,34 @@ function inputRoom(request: ErgoRecordRequest, tree: Uint8Array, fee: bigint, pe
 }
 
 /**
- * venue-ergo §8 at a kind-4 location: the longest record this publisher carries in one transaction as an
- * adjacent run, with one input, change and the fee, at any height and with any fee and per-byte minimum it
- * accepts. A record no longer than this always fits one transaction the pinned node relays, given one
- * funding box that covers it; a configuration is publishable at the location only where its largest
- * publication is no longer. Zero where no record fits.
+ * venue-ergo §8 at a kind-4 location: whether this publisher carries a record of `length` bytes in one
+ * transaction as an adjacent run, with one input, change and the fee, at every height and with every fee
+ * and per-byte minimum it accepts. Such a record always fits one transaction the pinned node relays, given
+ * one funding box that covers it; a configuration is publishable at the location only where its longest
+ * publication is carried. It holds for every shorter record too.
  */
+export function ergoRunCarries(location: Uint8Array, length: number): boolean {
+  if (!isRealBytes(location) || !Number.isSafeInteger(length) || length < 0 || length > MAX_RANGE_RECORD_BYTES[4]) {
+    throw new VenueError("a run is an ErgoTree's bytes and a record length within the kind-4 bound");
+  }
+  try {
+    const request = { location, subject: new Uint8Array(32), record: new Uint8Array(length), chunked: true, height: MAX_U32 };
+    return inputRoom(request, concat(P2PK_PREFIX, new Uint8Array(33)), MAX_U64, MAX_PER_BYTE) > 0;
+  } catch (error) {
+    if (error instanceof VenueError) return false;
+    throw error;
+  }
+}
+
+/** The longest record `ergoRunCarries` holds for at `location` (95,910 bytes at a pay-to-public-key
+ * location), or -1 where it holds for none. Under a lower fee, per-byte minimum or height the publisher
+ * builds somewhat longer records; this is the length it carries under every option. */
 export function ergoRunCapacity(location: Uint8Array): number {
-  if (!isRealBytes(location)) throw new VenueError("a location is an ErgoTree's bytes");
-  const tree = concat(P2PK_PREFIX, new Uint8Array(33));
-  const fits = (length: number): boolean => {
-    try {
-      const request = { location, subject: new Uint8Array(32), record: new Uint8Array(length), chunked: true, height: MAX_U32 };
-      return inputRoom(request, tree, MAX_U64, MAX_PER_BYTE) > 0;
-    } catch (error) {
-      if (error instanceof VenueError) return false;
-      throw error;
-    }
-  };
-  if (!fits(0)) return 0;
+  if (!ergoRunCarries(location, 0)) return -1;
   let low = 0, high = MAX_RANGE_RECORD_BYTES[4];
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
-    if (fits(middle)) low = middle;
+    if (ergoRunCarries(location, middle)) low = middle;
     else high = middle - 1;
   }
   return low;
@@ -457,7 +462,8 @@ interface PublisherState {
   readonly created: readonly CreatedBox[];
 }
 /** The saved state's layout; a state of another layout is refused, never read as this one. */
-const STATE_VERSION = 2;
+// 3: kind-4 pieces fill their boxes at a one-byte output index (venue-ergo §8), so a version-2 run rebuilds otherwise.
+const STATE_VERSION = 3;
 const stateText = (state: PublisherState): string => JSON.stringify(state, (_key, value: unknown) =>
   typeof value === "bigint" ? { integer: value.toString() } : isRealBytes(value) ? { bytes: bytesToHex(value) } : value);
 function copyPublication(p: ErgoPublication): ErgoPublication {
