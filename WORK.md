@@ -13,7 +13,7 @@ condition checked against the configuration: state its goal, acceptance and stop
   an index stays witnessed while the best chain keeps its block (a durable view now reopens on a heavier, shorter chain); a publication is
   replaced only on a supplier's answer, never beside one it replaced that a supplier holds, at most 8 per record; settling asks no supplier;
   a slow or lying supplier costs a few timeouts; node bodies bounded; held records indexed; read-once intake (FixtureVenue, venue records,
-  proof verifier). Ledger: `C:\Users\Bob\moe-autorun\state\audit-ledger.md`.
+  proof verifier). The ten current v3 reports are from CI run 36835000109 (checks unchanged but one new verifier case).
 - M4 (spec 5584732): no certificate encoding, §12 kinds 5, 8, 9, 11 unassigned, retained evidence replaced, never pruned by use. M6 (spec
   740adaa, PR #63): a gap release taken by another demand's settlement releases its acceptance (C3.8). Decisions in [2026-10](decisions/2026-10.md).
 - M5b.6 (PR #62): proofs verified ahead on a verifier pool; [first sync](docs/POOL_DEPLOYMENT_PROBES.md#verification-ahead-and-the-first-sync-m5b6)
