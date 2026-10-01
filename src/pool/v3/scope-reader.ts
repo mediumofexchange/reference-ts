@@ -17,7 +17,7 @@ import { linkInForce, RangeLimitError, type HeldCommitment, type RangeEntry } fr
 import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import type { Commitment } from "../../venue-records.js";
-import { VALUE_BOUND } from "../field.js";
+import { identifierOf, VALUE_BOUND } from "../field.js";
 import { ScopeTree } from "../scope.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, type Snapshot } from "./commitments.js";
 import { decodeSegmentHeader, segmentBytes, type SegmentHeader } from "./headers.js";
@@ -27,7 +27,7 @@ import type { WalkEvidence } from "./evidence-store.js";
 import { keptContext, keptStateHolds, lastValidOf, readRecordView, replayTrail, ReplayResult, type CarryingVerdict, type FaultObserver,
   type ReaderSelection, type RecordView, type ReplayContext, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
-import { decodePublication, decodeRecord, encodeRecord, type Record } from "./records.js";
+import { decodePublication, decodeRecord, encodeRecord, settlementAuthorization, type Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import { KeptStateMismatch, type ImportEntry, type ReplayStore, type WalkBase, type WalkForce, type WalkVerdict } from "./replay-store.js";
@@ -48,8 +48,13 @@ export interface CanonicalCheckpoint {
   readonly state: ReplayResult;
 }
 export interface ForcedPublication { readonly index: bigint; readonly record: Record; readonly bytes: Uint8Array }
-/** A release (publication kind 3) the venue witnessed without force, at its venue position. */
-export interface UnforcedRelease { readonly index: bigint; readonly ordinal: bigint; readonly record: Record }
+/** A release (publication kind 3) the venue witnessed without force, at its venue position: the demand and segment
+ * its settlement names, the output it discloses with its `rho_out`, and the presenter's signature with the exact
+ * message it must sign (C3.6). The proof is not kept. */
+export interface UnforcedRelease {
+  readonly index: bigint; readonly ordinal: bigint; readonly demand: Uint8Array; readonly segment: Uint8Array;
+  readonly output: bigint; readonly rho: bigint; readonly releaseMessage: Uint8Array; readonly releaseSignature: Uint8Array;
+}
 export interface PublicationVerdict { readonly index: string; readonly ordinal: string; force: boolean; check?: string }
 export interface ImportCarryingVerdict extends CarryingVerdict { readonly operator: string }
 /** A complete backing descent without an asserted selected checkpoint. */
@@ -67,7 +72,7 @@ export interface FrontierResult {
    * segment for all of them (C2.10.9). */
   readonly scopeChains: ReadonlyMap<string, RecordView["chain"]>;
   /** The selected backing's releases witnessed through the judging index without force, routed to it and
-   * decoded, in venue order: what a holder's disclosure count (C3.5) reads. Nothing here checks a release. */
+   * summarized without proofs, in venue order: what a holder's disclosure count (C3.5) reads. Nothing here checks a release. */
   readonly releases: readonly UnforcedRelease[];
 }
 export const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
@@ -409,21 +414,25 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
     const around = await walk.around(canonical, terms, view);
     const scopeChains = new Map<string, RecordView["chain"]>();
     for (const [name, scoped] of canonical?.scopedTerms ?? []) scopeChains.set(name, (await walk.viewFor(hexToBytes(name), scoped)).chain);
-    // Every publication of the backing the classification gave no force. A backing declaring no silence has no
-    // gap, so no release of it can have force or is worth publishing, and its publications are not read for this.
+    // Every release of the backing the classification gave no force; where it declares no silence nothing is
+    // classified and none has force, but a release published there still discloses its output (C3.5).
     const name = hex(selection.backing), forced = new Set(around.publications.filter(p => p.force && p.backing === name)
       .map(p => `${p.index}:${p.ordinal}`));
     const releases: UnforcedRelease[] = [];
-    for (const entry of terms.silence === undefined ? [] : view.publications()) {
+    for (const entry of view.publications()) {
       if (forced.has(`${entry.index}:${entry.ordinal}`)) continue;
-      let publication;
-      try { publication = decodePublication(entry.record); } catch (error) {
+      let publication, release;
+      try {
+        publication = decodePublication(entry.record);
+        if (publication.kind !== 3 || !same(publication.domain, selection.domain) || !same(publication.backing, selection.backing)) continue;
+        release = settlementAuthorization(publication.record);
+      } catch (error) {
         if (error instanceof EncodingError) continue;
         throw error;
       }
-      if (publication.kind === 3 && same(publication.domain, selection.domain) && same(publication.backing, selection.backing)) {
-        releases.push({ index: entry.index, ordinal: entry.ordinal, record: publication.record });
-      }
+      const p = publication.record.publicInputs;
+      releases.push({ index: entry.index, ordinal: entry.ordinal, demand: identifierOf(p[15]!, p[16]!), segment: identifierOf(p[2]!, p[3]!),
+        output: p[14]!, rho: p[9]!, releaseMessage: release.releaseMessage, releaseSignature: release.releaseSignature });
     }
     return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains, releases,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,

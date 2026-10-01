@@ -236,7 +236,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await expect(f.holder.publish("missing", f.venue)).rejects.toMatchObject({ code: "UNKNOWN" });
     await expect(f.holder.publish("redeem", {} as never)).rejects.toMatchObject({ code: "INVALID" });
     await f.relay(f.holder, "redeem", at);
-    // An exact republication is the same publication.
+    // A retry sends the same bytes; this venue witnesses an exact record once.
     await f.holder.publish("redeem", f.venue);
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => [h.value, h.status]).sort())
       .toEqual([[10n, "reserved"], [4n, "available"], [6n, "available"]].sort());
@@ -281,7 +281,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.sync(f.served(), f.signed);
     expect(f.holder.act("late")!.status).toBe("failed");
     const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier });
-    expect(read.releases.map(r => statementHash(r.record))).toEqual([late.statement]);
+    expect(read.releases.map(r => r.output)).toEqual([decodeRecord(late.record).publicInputs[14]]);
     expect(read.force.map(x => x.record.kind)).toEqual([4]);
     // Another party's settlement of this demand to another output, with a release no presenter signed, is
     // witnessed without force too and is not counted.
@@ -303,7 +303,35 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // The reader lists releases without force only: the forged one and the late one, not the one with force.
     const after = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier });
     expect(after.force.map(x => x.record.kind)).toEqual([4, 6]);
-    expect(after.releases.map(r => r.record.publicInputs[14])).toEqual([l[14], l[14]! + 1n]);
+    expect(after.releases.map(r => r.output)).toEqual([l[14], l[14]! + 1n]);
+  });
+
+  it("counts a release published under terms without silence, and refuses a second settlement at one count", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 30n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    const first = await f.backer.accept("first", demand.demand!, deadline - 2n, f.served(), f.signed, sign);
+    const second = await f.backer.accept("second", demand.demand!, deadline - 1n, f.served(), f.signed, sign);
+    const s0 = await f.holder.settle("s0", "redeem", first, f.served(), f.signed, prove);
+    // rho_out reads no acceptance: a second settlement at the same count would disclose with the first.
+    await expect(f.holder.settle("s0b", "redeem", second, f.served(), f.signed, prove))
+      .rejects.toMatchObject({ code: "CONFLICT", message: "another settlement of this demand is prepared at this disclosure count" });
+    // Only an act a venue record carries is published.
+    await expect(f.backer.publish("issue-0", f.venue)).rejects.toMatchObject({ code: "INVALID",
+      message: "only a demand, a withdrawal or a release is published" });
+    // No gap can open here, so the release has no force; it still discloses its output and counts.
+    await f.holder.publish("s0", f.venue);
+    const s1 = await f.holder.settle("s1", "redeem", second, f.served(), f.signed, prove);
+    const p0 = decodeRecord(s0.record).publicInputs, p1 = decodeRecord(s1.record).publicInputs, segment = identifierOf(p1[2]!, p1[3]!);
+    expect(identifierOf(p0[2]!, p0[3]!)).toEqual(segment);
+    expect(p1[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, p1.slice(12, 14), segment, 1n));
+    expect(p1[9]).not.toBe(p0[9]);
+    await f.holder.submit("s1", f.service); await f.publish();
+    expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
+    expect([f.holder.act("s1")!.status, f.holder.act("s0")!.status]).toEqual(["final", "failed"]);
   });
 });
 

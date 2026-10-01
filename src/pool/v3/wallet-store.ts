@@ -531,17 +531,17 @@ export class V3Wallet {
    * signs a release, so another party's copies disclose no new output and add nothing. */
   private disclosures(view: Frontier, demand: Uint8Array, presenter: Uint8Array, segment: Uint8Array): bigint {
     const outputs = new Set<bigint>();
-    for (const { record } of view.releases) {
-      const p = record.publicInputs;
-      if (!same(identifierOf(p[15]!, p[16]!), demand) || !same(identifierOf(p[2]!, p[3]!), segment)) continue;
-      let release;
-      try { release = settlementAuthorization(record); } catch (error) {
-        if (error instanceof EncodingError) continue;
-        throw error;
-      }
-      if (verifySignatureStrict(release.releaseSignature, release.releaseMessage, presenter)) outputs.add(p[14]!);
+    for (const release of view.releases) {
+      if (same(release.demand, demand) && same(release.segment, segment) &&
+          verifySignatureStrict(release.releaseSignature, release.releaseMessage, presenter)) outputs.add(release.output);
     }
     return BigInt(outputs.size);
+  }
+  /** A settlement of `demand` this wallet holds prepared with `rho`: `rho_out` reads no acceptance or owner, so a
+   * second one at the same count would disclose with the first, from which K computes it for any owner (C3.5). */
+  private pendingSettlement(demand: string, rho: bigint): boolean {
+    return this.db.prepare("SELECT record FROM wallet_acts WHERE kind='6' AND demand=? AND status='prepared'").all(demand)
+      .some(row => decodeRecord(row.record as Uint8Array).publicInputs[9] === rho);
   }
   /** final: all four outputs are in canonical history, imports included (own
    * change/zero outputs are fresh, so no other statement creates them); failed:
@@ -1058,12 +1058,14 @@ export class V3Wallet {
   /** Save a proven or signed act once: a concurrent exact call that saved first wins, and its record is kept. */
   private saveAct(name: string, kind: Act["kind"], intent: string, bytes: Uint8Array, backing: Uint8Array, operator: Uint8Array,
     demand: string | undefined, inputs: readonly bigint[], at: bigint): Act {
-    const statement = hex(statementHash(decodeRecord(bytes)));
+    const record = decodeRecord(bytes), statement = hex(statementHash(record));
     this.transaction(() => {
       if (this.savedAct(name, kind, intent) !== undefined) return;
       requireThat(inputs.every(nf => !this.reserved(nf)), "CONFLICT", "an input is reserved by another payment or act");
       requireThat(this.db.prepare("SELECT 1 FROM wallet_acts WHERE statement=?").get(statement) === undefined, "CONFLICT",
         "another alias saved this statement");
+      requireThat(kind !== 6 || !this.pendingSettlement(demand!, record.publicInputs[9]!), "CONFLICT",
+        "another settlement of this demand is prepared at this disclosure count");
       this.db.prepare("INSERT INTO wallet_acts VALUES(?,?,?,?,?,?,?,?,'prepared',NULL,NULL,NULL,?)").run(name, String(kind), intent,
         statement, bytes, backing, operator, demand ?? null, at.toString());
       for (const nf of inputs) this.db.prepare("INSERT INTO wallet_act_inputs VALUES(?,?)").run(nf.toString(), name);
@@ -1238,6 +1240,7 @@ export class V3Wallet {
       const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, count);
       const opening = { backing, value: demand.quantity, owner: own.owner, rho }, cm = commitmentOf(this.domain, opening);
       requireThat(!force!.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
+      requireThat(!this.pendingSettlement(key, rho), "CONFLICT", "another settlement of this demand is prepared at this disclosure count");
       observed.check();
       return { header, inputs, output: { opening, cm }, at };
     });

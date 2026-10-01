@@ -12,7 +12,7 @@ statement in `sync`, profile `moe/wallet/v3/4`, stand-in proofs under service ([
 **M9b1** (branch `claude/peaceful-tesla-b5svw8`): in a gap (horizon past the canonical checkpoint by more than the silence duration)
 `demand`/`withdraw`/`settle` bind to the snapshot and `publish` puts them at the venue; acts go final by force; the disclosure count is
 the distinct outputs of presenter-signed releases of the demand in the segment witnessed without force (frontier `releases`). Acceptance:
-gap cases of `test/pool-v3-redemption.test.ts`, operator offline; review before merge. **M9b2** demands found again after a seed restore
+gap cases of `test/pool-v3-redemption.test.ts`, operator offline; review resolved, PR #70. **M9b2** demands found again after a seed restore
 (standing demands over this seed's tags with the derived presenter); reproof of an act whose segment ended. **M9c** the C3.8 reader (void,
 lapse, taken release, dishonour), the backer's acceptance published (C3.4), Next 4 (a)–(c), (e), (q). **M9d** real-proof drills in fresh
 processes, local and synthetic Ergo, act crash drills (`wallet-crash.mjs`), review.
@@ -60,7 +60,7 @@ processes, local and synthetic Ergo, act crash drills (`wallet-crash.mjs`), revi
    before silence lapse (label, or an answer where lapse is unresolved). (s) Journal: an older own segment's lost trail is skipped silently when serving; each wallet GET `/evidence` takes the
    journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed; `client.package()` peaks near
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
-   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`.
+   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) Each frontier read decodes every unforced release of the backing (M9b1); count inside the read if slice 11 shows it.
 5. Slice 11, the design point: measure operator admission at peak, reader first sync and wallet steady state through the commands against the
    [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), with Next 4 (k)–(n), (s), and rebuild the Ergo view on
    append-only SQLite rows (its limits and plan: the [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)'s

@@ -291,14 +291,20 @@ operator's return to be adopted before it can be burnt; an issue, a burn or a
 payment still refuses `SILENCE`. A publication outside an open gap has no
 force, and a release published so discloses its output.
 
-The disclosure count is read from the venue record. The reader lists every
-release (publication kind 3) of the backing witnessed without force; the
-count is the number of distinct outputs among those naming the demand and the
-segment and signed by the demand's presenter key. So a settlement after a
-release without force names an output nobody has seen, and a wallet rebuilt
-from its seed counts the same releases. A copy, or a "release" with a
-signature that does not verify, adds nothing. An output disclosed only to an
-operator is not counted (C3.5).
+The disclosure count is read from the venue record. The frontier reader lists
+every release (publication kind 3) of the backing witnessed without force,
+whether or not the terms declare silence, keeping its demand, segment, output,
+`rho_out` and release signature but not its proof. The count is the number of
+distinct outputs among those naming the demand and the segment and signed by
+the demand's presenter key. So a settlement after a release without force
+names an output nobody has seen, and any wallet holding the demand reads the
+same count from the same record (finding a demand again from the seed alone is
+M9b2). A copy, or a "release" with a signature that does not verify, adds
+nothing. An output disclosed only to an operator is not counted (C3.5).
+Because `rho_out` reads no acceptance or owner, `settle` refuses (`CONFLICT`)
+while another settlement of the demand is prepared at the same count: one
+published release would otherwise let K compute the other's output for any
+owner. Publish or resolve the prepared one first.
 
 Resolution: an act is final once its statement is in canonical history,
 imports included, or (a demand, withdrawal or settlement) has force at the
@@ -431,9 +437,12 @@ stand-in proofs: exact retries and alias conflicts, the seed's presenter and `rh
 release by a final withdrawal, a re-demand of freed notes, non-exact quantities, horizon deadlines, foreign
 signers, forged or altered acceptances, settlement after withdrawal, and acts across an offline backup. In a gap
 with the operator offline it demands, settles and withdraws by publication: issue, payment and burn refuse `SILENCE`,
-a deadline inside C3.3's window refuses, exact republication is harmless, and acts become final by force. A release
+a deadline inside C3.3's window refuses, and acts become final by force. A release
 published after its acceptance deadline has no force, fails its act and counts, so the next settlement re-proves the
-same nullifiers into a new output; a forged release to another output is witnessed and not counted.
+same nullifiers into a new output; a forged release to another output is witnessed and not counted. A release published
+under terms without silence counts too, a second settlement at one count refuses, and only demands, withdrawals and
+releases are published. Not covered: a release of the demand in another segment, a gap across several backings, an
+ended term or a return, and a venue that witnesses an exact republication again.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
 payment, receipt, reproof, export and restore commit boundaries with synthetic evidence, and at a read's
 commits to its evidence file and its kept replay file (before either, the kept state stands; between the
