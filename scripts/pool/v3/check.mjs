@@ -636,10 +636,12 @@ try {
     // A proof and its inputs are read once, into copies, and the copies are judged.
     const understated = Object.defineProperty(new Uint8Array(POOL_V3_CIRCUITS.maxProofBytes + 32), 'length', { value: valid.proof.length });
     assert.equal(await shared.verify(kindOf.issue, inputs, understated), false);
+    const overstated = Object.defineProperty(new Uint8Array(valid.proof), 'length', { value: POOL_V3_CIRCUITS.maxProofBytes + 32 });
+    assert.equal(await shared.verify(kindOf.issue, inputs, overstated), true);
     let reads = 0;
     const flipping = new Proxy(inputs, { get: (target, key, receiver) => key === '0' && reads++ > 0 ? FIELD : Reflect.get(target, key, receiver) });
     assert.equal(await shared.verify(kindOf.issue, flipping, valid.proof), true);
-    checks.push('the shared verifier judges its own copies: a proof whose length understates its bytes answers false, and inputs read twice verify as first read');
+    checks.push('the shared verifier judges its own copies: a proof whose length understates its bytes answers false, one whose length overstates them verifies, and inputs read twice verify as first read');
     for (let i = 0; i < 96; i++) assert.equal(await shared.verify(kindOf.issue, inputs, malformed[3][1]), false);
     assert.equal(await shared.verify(kindOf.issue, inputs, valid.proof), true);
     checks.push('the shared verifier never reuses an instance that threw: a valid proof verifies after 96 malformed ones');

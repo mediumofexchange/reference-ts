@@ -111,6 +111,8 @@ export const DEFAULT_ERGO_READER_POLICY: ErgoReaderPolicy = Object.freeze({
 const OBJECT_OVERHEAD = 64;
 /** The longest timer the runtime keeps: a longer one fires at once. */
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+/** The anchor's 1,025 headers come once per venue, possibly over several of a supplier's requests. */
+const ANCHOR_CONTEXT_TIMEOUT_MS = 5 * 60_000;
 /** The most transactions and bytes one section answer is read for, far above any block the network admits. */
 const MAX_SECTION_TRANSACTIONS = 1 << 20, MAX_SECTION_BYTES = 64 * 1024 * 1024;
 
@@ -157,9 +159,11 @@ interface HeaderPass {
  * it, from one supplier. The header store authenticates them by linkage to
  * the anchor id alone, so any supplier will do.
  */
-export async function ergoAnchorContext(supplier: ErgoSupplier, anchorId: Uint8Array, anchorHeight: bigint): Promise<Uint8Array[]> {
+export async function ergoAnchorContext(supplier: ErgoSupplier, anchorId: Uint8Array, anchorHeight: bigint,
+  timeoutMs = ANCHOR_CONTEXT_TIMEOUT_MS): Promise<Uint8Array[]> {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMEOUT_MS) throw new TypeError("invalid anchor context timeout");
   const from = anchorHeight - BigInt(ANCHOR_CONTEXT);
-  const answer = await supplied(() => supplier.headers(from, anchorHeight), DEFAULT_ERGO_READER_POLICY.supplierTimeoutMs);
+  const answer = await supplied(() => supplier.headers(from, anchorHeight), timeoutMs);
   const context = answer.ok ? ownHeaders(answer.value, ANCHOR_CONTEXT + 1) : undefined;
   const last = context?.length === ANCHOR_CONTEXT + 1 && context.every(bytes => bytes !== undefined) ? parseErgoHeader(context[ANCHOR_CONTEXT]!) : undefined;
   if (last === undefined || compareBytes(last.id, anchorId) !== 0) throw new VenueError("the supplier did not supply the anchor's context");
@@ -266,10 +270,19 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     } else {
       if (saved.witnessed !== BigInt(saved.sections.length) - 1n || saved.pin === undefined || compareBytes(parent, saved.pin) !== 0) invalid();
       // What a sync checks of its published clock: the best chain keeps its block, however short a heavier chain
-      // has since made it (venue-ergo §2).
+      // has since made it, and some kept chain buried that block at the depth (venue-ergo §2). Pruning keeps every
+      // descendant of the clock's block, and headers are stored parents first.
       if (saved.failure === undefined) {
         const final = best.headers[Number(saved.witnessed)];
         if (final === undefined || compareBytes(final.id, saved.pin!) !== 0) invalid();
+        const above = new Set([bytesToHex(saved.pin!)]);
+        let deepest = final!.height;
+        for (const header of headers.values()) {
+          if (!above.has(bytesToHex(header!.parentId))) continue;
+          above.add(bytesToHex(header!.id));
+          if (header!.height > deepest) deepest = header!.height;
+        }
+        if (deepest < final!.height + this.profile.depth) invalid();
       }
       this.snapshot = Object.freeze({ witnessed: saved.witnessed, witnessedHeaderId: copyBytes(saved.pin!), sections: Object.freeze([...this.sections]) });
     }
@@ -308,7 +321,8 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * the previous one.
    *
    * Rejects with VenueError on a reorganization past the depth (the venue's
-   * failure, after which every read refuses) and on a concurrent sync.
+   * failure, after which every read refuses) and on a concurrent sync. Any
+   * other rejection is the view's own failure, after which it refuses too.
    */
   async sync(suppliers: readonly ErgoSupplier[]): Promise<ErgoSyncReport> {
     if (this.failure !== undefined) throw new VenueError(this.failure);
@@ -410,7 +424,11 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         sectionsRead, unresolvedIndex: unresolved, ...(reason === undefined ? {} : { unresolvedReason: reason }),
       });
     } catch (error) {
-      if (this.journal !== undefined && this.failure === undefined) this.failure = "durable Ergo sync failed; reopen the journal";
+      // Suppliers' failures are answers, so whatever reaches here is the view's own: it may have read sections past
+      // its clock, and it fails closed rather than answer from a state no sync completed.
+      if (this.failure === undefined) {
+        this.failure = this.journal !== undefined ? "durable Ergo sync failed; reopen the journal" : "Ergo sync failed; open a new view";
+      }
       throw error;
     } finally {
       this.syncing = false;
@@ -546,8 +564,13 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     }
     const ownSubject = copyUnshared(subject), ownRecord = copyUnshared(record);
     if (this.publisher === undefined) throw new VenueError("this view has no publisher; publishing is the operator's wallet");
-    this.requireSnapshot();
-    const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: this.store.tip().height, chunked: kind === 4 };
+    const snapshot = this.requireSnapshot(), tip = this.store.tip();
+    // A heavier, shorter chain that keeps the clock's block could include a record inside the lag of the clock it was
+    // signed at (venue-ergo §2): nothing is sent until the chain is again as long as the clock's depth.
+    if (tip.height < tip.anchorHeight + 1n + snapshot.witnessed + this.profile.depth) {
+      throw new VenueError("the best chain is shorter than the clock's depth; publish once it grows");
+    }
+    const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: tip.height, chunked: kind === 4 };
     // Held already, as when a sync settled it after the caller last read: nothing to send.
     if (this.holds(request)) return;
     await this.publisher.publish(request);

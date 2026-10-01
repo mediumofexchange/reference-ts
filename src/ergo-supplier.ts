@@ -299,10 +299,12 @@ export interface NodeRequestInit {
 export async function nodeText(fetcher: (url: string, init: NodeRequestInit) => Promise<Response>, url: string, path: string,
   init: NodeRequestInit, maxBytes: number): Promise<string | undefined> {
   const response = await fetcher(url, init);
-  if (response.status === 404) return undefined;
-  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+  // A body left unread is cancelled, so the connection is not held open until the request's timeout.
+  const discard = async (): Promise<void> => { await response.body?.cancel().catch(() => {}); };
+  if (response.status === 404) { await discard(); return undefined; }
+  if (!response.ok) { await discard(); throw new Error(`${path}: HTTP ${response.status}`); }
   const declared = Number(response.headers.get("content-length") ?? "0");
-  if (declared > maxBytes) throw new Error(`${path}: response over ${maxBytes} bytes`);
+  if (declared > maxBytes) { await discard(); throw new Error(`${path}: response over ${maxBytes} bytes`); }
   const reader = response.body?.getReader();
   if (reader === undefined) return "";
   const chunks: Uint8Array[] = [];

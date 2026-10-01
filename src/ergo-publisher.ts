@@ -50,9 +50,16 @@
 //
 // **Suppliers cost bounded time.** Every supplier is asked at once, a box is
 // denied as soon as one answers that it lacks it, and a supplier's unsettled
-// ancestry is walked only where it answers that it lacks the transaction, so
-// a slow or lying supplier costs a call a few of its timeouts, not one per box
-// it invents or per ancestor.
+// ancestry is walked only where it answers that it lacks the transaction, and
+// only until one deadline, so a slow or lying supplier costs a call a few of
+// its timeouts, not one per box it invents or per ancestor. A node answers
+// that it lacks a transaction only where its mempool answered and its index
+// has read every block it holds (`ergoNodePublisher`): a mined transaction
+// leaves the mempool before the index reads its block.
+//
+// A record that reaches its eighth transaction with that one refused is kept
+// as it is, with its inputs, until a view holds the record however it got
+// there; no command abandons it yet.
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
@@ -95,6 +102,10 @@ const PENDING_LIMIT = 1024;
 const MAX_ATTEMPTS = 8;
 /** Offered boxes whose denial is asked at once while selecting. */
 const CHECK_BATCH = 16;
+/** Timeouts one supplier's walk of unsettled ancestry may take in all, beside sending the publication asked for. */
+const WALK_TIMEOUTS = 2;
+/** The longest timer the runtime keeps: a longer one fires at once. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 const hash = (bytes: Uint8Array): Uint8Array => blake2b(bytes, { dkLen: 32 });
 const vlq = (n: bigint): Uint8Array => {
@@ -442,7 +453,7 @@ export class ErgoPublisher {
     this.#timeoutMs = options.timeoutMs ?? 60_000;
     this.#persistence = options.persistence;
     if (typeof this.#fee !== "bigint" || typeof this.#perByte !== "bigint" || this.#perByte < 1n || this.#perByte > 1_000_000n ||
-        this.#fee > MAX_U64 || !Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs <= 0) throw new VenueError("invalid Ergo publisher options");
+        this.#fee > MAX_U64 || !Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs <= 0 || this.#timeoutMs > MAX_TIMEOUT_MS) throw new VenueError("invalid Ergo publisher options");
     // The fee box is a box too: it must reach the minimum at any height.
     if (this.#fee < minimumValue({ tree: FEE_TREE, registers: [] }, 0xffff_ffffn, 2, this.#perByte)) {
       throw new VenueError("the fee is below its box's minimum value");
@@ -655,9 +666,10 @@ export class ErgoPublisher {
       if (gone.length > 0) {
         this.#forget(old, gone);
         pending = await this.#build(key, request, live, new Set(gone.map(box => bytesToHex(box.id))), replaced);
-      } else if (request.height !== old.request.height) {
-        // Refused for something other than its inputs, such as a height the chain went back below:
-        // the same inputs at the caller's height, so the old and the new conflict.
+      } else if (old.inputs.reduce((high, box) => (box.creationHeight > high ? box.creationHeight : high), request.height) !== old.request.height) {
+        // Refused for something other than its inputs, such as a height the chain went back below: the same inputs
+        // at the caller's height, raised to the inputs' as a build raises it, so the old and the new conflict.
+        // Where that height is the old one, the rebuild would be the same transaction: it is kept.
         this.#forget(old, []);
         pending = await this.#build(key, request, old.inputs, new Set(), replaced);
       } else {
@@ -714,7 +726,9 @@ export class ErgoPublisher {
   /** Send a publication to every supplier at once, each unless it shows it. A supplier's claim spares only that
    * supplier: another that missed the transaction is still sent it. */
   async #send(pending: Pending): Promise<Sent> {
-    const outcomes = await Promise.all(this.#suppliers.map(supplier => this.#sendTo(supplier, pending, new Set())));
+    // Each supplier's walk has one deadline: a supplier that answers slowly cannot cost a timeout per ancestor.
+    const until = performance.now() + WALK_TIMEOUTS * this.#timeoutMs;
+    const outcomes = await Promise.all(this.#suppliers.map(supplier => this.#sendTo(supplier, pending, new Set(), until)));
     return outcomes.includes("accepted") ? "accepted" : outcomes.includes("lacked") ? "lacked" : "unanswered";
   }
 
@@ -723,34 +737,35 @@ export class ErgoPublisher {
    * lacks the child; one that does not answer is sent the transaction alone, so it cannot stall a walk. A
    * parent it does not take ends the walk: the publication asked for is still sent (the parent may have landed
    * where this supplier cannot say so), but no descendant between them. */
-  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, visited: Set<string>, asked = true): Promise<Sent> {
+  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, visited: Set<string>, until: number, asked = true): Promise<Sent> {
     visited.add(pending.key);
-    const shown = await this.#shown(supplier, pending);
+    const shown = await this.#shown(supplier, pending, until);
     if (shown === "accepted") return shown;
     if (shown === "lacked") for (const input of pending.publication.inputs) {
       const parent = this.#byChange.get(bytesToHex(input));
-      if (parent !== undefined && !visited.has(parent.key) && await this.#sendTo(supplier, parent, visited, false) !== "accepted") {
+      if (parent !== undefined && !visited.has(parent.key) && await this.#sendTo(supplier, parent, visited, until, false) !== "accepted") {
         if (!asked) return shown;
         break;
       }
     }
+    // The publication asked for is sent whatever its walk cost; a parent only within the walk's deadline.
     let guardError: unknown;
     const answer = await this.#call(() => {
       try { this.#guard(); } catch (error) { guardError = error; throw error; }
       return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id));
-    });
+    }, asked ? undefined : until);
     if (guardError !== undefined) throw guardError;
     this.#guard();
     return answer.ok ? "accepted" : shown;
   }
 
   /** Whether `supplier` shows the record box or holds the transaction (it is pending or it landed there, and
-   * its inputs, spent by it, are not gone), answers that it lacks the transaction, or neither. A record box
-   * it does not show says nothing: whoever holds the location may have spent it. */
-  async #shown(supplier: ErgoPublishingSupplier, pending: Pending): Promise<Sent> {
-    const box = await this.#call(() => supplier.hasBox(copyBytes(pending.publication.recordBox)));
+   * its inputs, spent by it, are not gone), answers that it lacks the transaction, or neither, by `until`. A
+   * record box it does not show says nothing: whoever holds the location may have spent it. */
+  async #shown(supplier: ErgoPublishingSupplier, pending: Pending, until: number): Promise<Sent> {
+    const box = await this.#call(() => supplier.hasBox(copyBytes(pending.publication.recordBox)), until);
     if (box.ok && box.value === true) return "accepted";
-    const held = await this.#call(() => supplier.hasTransaction(copyBytes(pending.publication.id)));
+    const held = await this.#call(() => supplier.hasTransaction(copyBytes(pending.publication.id)), until);
     if (held.ok && held.value === true) return "accepted";
     return held.ok && held.value === false ? "lacked" : "unanswered";
   }
@@ -834,9 +849,12 @@ export class ErgoPublisher {
     }
   }
 
-  async #call<T>(call: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> {
+  /** A supplier call's answer, or none where it fails or has not settled within the timeout, or by `until`. */
+  async #call<T>(call: () => Promise<T>, until?: number): Promise<{ ok: true; value: T } | { ok: false }> {
+    const limit = until === undefined ? this.#timeoutMs : Math.min(this.#timeoutMs, until - performance.now());
+    if (limit <= 0) return { ok: false };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timed out")), this.#timeoutMs); });
+    const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timed out")), limit); });
     try {
       return { ok: true, value: await Promise.race([Promise.resolve().then(call), late]) };
     } catch {
@@ -913,18 +931,19 @@ export function ergoNodePublisher(baseUrl: string, options: ErgoNodePublisherOpt
     },
     async hasTransaction(txId: Uint8Array): Promise<boolean> {
       const id = bytesToHex(txId);
-      // Each place is asked on its own: a mempool that fails to answer does not keep the index from being read.
-      let answered = false, failure: unknown;
-      for (const path of [`/transactions/unconfirmed/byTransactionId/${id}`, `/blockchain/transaction/byId/${id}`]) {
-        try {
-          const transaction = await call(path);
-          answered = true;
-          if (transaction instanceof Map && transaction.get("id") === id) return true;
-        } catch (error) {
-          failure = error;
-        }
-      }
-      if (!answered) throw failure;
+      const holds = (transaction: NodeJson | undefined): boolean => transaction instanceof Map && transaction.get("id") === id;
+      // A mempool that fails to answer does not keep the index from showing the transaction, but then the node has
+      // not said it lacks it.
+      let pooled: boolean | undefined;
+      try { pooled = holds(await call(`/transactions/unconfirmed/byTransactionId/${id}`)); } catch { pooled = undefined; }
+      if (pooled === true) return true;
+      // A mined transaction leaves the mempool before the index reads its block, so the index's "not found" counts
+      // only once it has read every block the node held after the mempool was asked (`/blockchain/indexedHeight`).
+      const heights = await call("/blockchain/indexedHeight");
+      const indexed = heights instanceof Map ? heights.get("indexedHeight") : undefined, full = heights instanceof Map ? heights.get("fullHeight") : undefined;
+      if (holds(await call(`/blockchain/transaction/byId/${id}`))) return true;
+      if (pooled === undefined) throw new Error("the node's mempool did not answer");
+      if (typeof indexed !== "bigint" || typeof full !== "bigint" || indexed < full) throw new Error("the node's index has not read its blocks");
       return false;
     },
     async hasBox(boxId: Uint8Array): Promise<boolean> {

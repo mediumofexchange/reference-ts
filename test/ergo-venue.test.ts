@@ -545,6 +545,21 @@ describe("no supplier is trusted", () => {
     expect(v.witnessedIndex()).toBe(7n);
   });
 
+  it("fails closed when its own sync throws, rather than answer from a state no sync completed", async () => {
+    const blocks = branch(8), v = venue();
+    await v.sync([serving(blocks.slice(0, 6))]);
+    expect(v.witnessedIndex()).toBe(2n);
+    // An unexpected failure of the view's own after it read a section past its clock.
+    let reads = 0;
+    const own = v as unknown as { hold: (index: bigint, objects: unknown) => void };
+    const hold = own.hold.bind(v);
+    own.hold = (index, objects) => { if (reads++ > 0) throw new RangeError("out of memory"); hold(index, objects); };
+    await expect(v.sync([serving(blocks)])).rejects.toThrow(RangeError);
+    const failed = new VenueError("Ergo sync failed; open a new view");
+    expect(() => v.witnessedIndex()).toThrow(failed);
+    await expect(v.sync([serving(blocks)])).rejects.toThrow(failed);
+  });
+
   it("takes a reader policy of its own budgets only, each a positive count the runtime can honour", () => {
     for (const policy of [{ headerPerSupplier: 5 }, { supplierTimeoutMs: 2 ** 31 }, { retainedBytes: 0 }, { sectionBytesPerSync: 1.5 }]) {
       expect(() => venue(policy as Partial<ErgoReaderPolicy>)).toThrow(new TypeError("invalid Ergo reader policy"));

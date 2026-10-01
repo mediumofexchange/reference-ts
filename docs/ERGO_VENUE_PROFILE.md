@@ -297,7 +297,11 @@ until the journal is reopened.
   stops the clock before its block: the view is stale, as every earlier
   snapshot was, never empty. The clock never moves back: a heavier chain
   that keeps the block it stands on leaves it there however short that
-  chain is (venue-ergo §2), and a durable view reopens there. A supplier
+  chain is (venue-ergo §2), and a durable view reopens there, only where a
+  header it kept buries that block at the depth. While the best chain is
+  shorter than the clock's depth, `publishRecord` refuses (`VenueError`), so
+  no record is included inside the lag of the clock it was signed at. A
+  failure of the view's own during a sync leaves it failed. A supplier
   that misses one section is not asked again in that sync, and the one that
   supplied the last section is asked first. A section answer is read by
   index over its own length, at most 2^20 transactions and 64 MiB.
@@ -352,9 +356,12 @@ until the journal is reopened.
   balances values exactly), and one that denies every box stops publication
   visibly. Suppliers are asked at once, a box is denied at the first such
   answer and a supplier's unsettled ancestry is walked only where it answers
-  that it lacks the transaction, so a slow or lying supplier costs a call a
-  timeout or two. Every node body is read through a 4 MiB bound as it
-  streams. **One transaction per record:** it is built once and remembered
+  that it lacks the transaction, until a deadline of two timeouts, so a slow
+  or lying supplier costs a call a few timeouts. A node answers that it lacks
+  a transaction only where its mempool answered and its index has read every
+  block the node holds (`/blockchain/indexedHeight`), since a mined
+  transaction leaves the mempool before the index reads its block. Every
+  node body is read through a 4 MiB bound as it streams. **One transaction per record:** it is built once and remembered
   before it is first sent; a retry after a lost answer, an outage or a drop
   sends the same bytes, after any unsettled transaction whose change it
   spends. A transaction a supplier holds (mempool or blocks) or whose record
@@ -366,10 +373,13 @@ until the journal is reopened.
   parent) is dropped with its change and rebuilt spending every input still
   shown, and one refused for anything else is rebuilt on the same inputs at
   the caller's new height. A replacement never spends a replaced
-  transaction's change, and a record has at most eight transactions. So a
-  lost answer, an outage or a drop never yields a second, non-conflicting
-  transaction; a supplier that denies a live transaction's input and does
-  not show it can, at a fee, and readers take the record once. Later
+  transaction's change, and a record has at most eight transactions (one
+  refused at the eighth is kept until a view holds the record however it got
+  there; no command abandons one yet). A rebuild that would
+  be the same transaction is not made. So a lost answer, an outage or a drop
+  never yields a second, non-conflicting transaction; a supplier that denies
+  a live transaction's input and does not show it can, at a fee, and readers
+  take the record once. Later
   publications spend the publisher's own change, landed or not, before any
   index shows it, and calls are serialized. The view settles its publisher
   after each sync, in the publisher's queue and asking no supplier: a

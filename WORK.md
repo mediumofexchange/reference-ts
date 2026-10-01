@@ -9,10 +9,10 @@ The Ergo view is not yet (Next 8, measured by the area 28 audit). M6 and M4 are 
 condition checked against the configuration: state its goal, acceptance and stop here before building. No v3 reader of C3.8's dishonour exists yet (Next 2).
 
 ## Status
-- Audit area 28, venue core and Ergo view/publisher (PR #65, spec b964ee3, [decision](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)):
+- Audit area 28, venue core and Ergo view/publisher (PR #65, spec dce3ae1, [decision](decisions/2026-10.md#2026-10-01--keep-an-ergo-index-witnessed-while-the-best-chain-keeps-its-block-and-replace-a-publication-only-on-a-suppliers-answer)):
   an index stays witnessed while the best chain keeps its block (a durable view now reopens on a heavier, shorter chain); a publication is
   replaced only on a supplier's answer, never beside one it replaced that a supplier holds, at most 8 per record; settling asks no supplier;
-  a slow or lying supplier costs a timeout or two; node bodies bounded; held records indexed; read-once intake (FixtureVenue, venue records,
+  a slow or lying supplier costs a few timeouts; node bodies bounded; held records indexed; read-once intake (FixtureVenue, venue records,
   proof verifier). Ledger: `C:\Users\Bob\moe-autorun\state\audit-ledger.md`.
 - M4 (spec 5584732): no certificate encoding, §12 kinds 5, 8, 9, 11 unassigned, retained evidence replaced, never pruned by use. M6 (spec
   740adaa, PR #63): a gap release taken by another demand's settlement releases its acceptance (C3.8). Decisions in [2026-10](decisions/2026-10.md).
@@ -77,7 +77,7 @@ condition checked against the configuration: state its goal, acceptance and stop
    at three years), each sync copies the whole best chain (`store.best()`, snapshot slice), a range from index zero walks every index, and a restart
    re-syncs from the anchor (~4.5 h of header work at three years); `ErgoVenueJournal`'s one JSON checkpoint of every raw section passes V8's 512 MiB
    string limit after ~10 weeks of mainnet. Rebuild on append-only per-index SQLite rows (headers, objects, raw sections for §13.2), a header window of
-   the difficulty lookback below the pin with cumulative scores, sparse sections and a (kind, subject) index: flat memory and sync work, restart without
+   the difficulty lookback below the pin with cumulative scores (keeping the pin's burial headers), sparse sections and a (kind, subject) index: flat memory and sync work, restart without
    re-verifying. Also protect a pass stopped by a failure, cap side/protected headers durably, and ask sections of more than one supplier at a time.
 
 ## Retained boundaries and local state

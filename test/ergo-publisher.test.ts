@@ -667,15 +667,15 @@ describe("replacement, settlement and supplier cost", () => {
     expect((await p.publish(request(new Uint8Array(136).fill(21)))).inputs).toEqual([published[19]!.change!.id]);
   });
 
-  it("costs a supplier that invents boxes and never answers about them a timeout or two, not one per box", async () => {
+  it("costs a supplier that invents boxes and never answers about them a few timeouts, not one per box", async () => {
     const n = funded([10_000_000n]), funding = [...n.boxes.keys()];
     const invented = Array.from({ length: 200 }, (_, i) => plainBox(TREE, 1_000_000_000n + BigInt(i), HEIGHT - 1n));
     const liar: ErgoPublishingSupplier = { name: "liar", unspentBoxes: async () => invented, hasBox: never, hasTransaction: never, submit: never };
     const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [liar, n], timeoutMs: 100 });
     const started = performance.now();
     const publication = await p.publish(request());
-    // Two hundred boxes the honest node denies at once; its own funding waits once for the liar; sending waits once more.
-    expect(performance.now() - started).toBeLessThan(3_000);
+    // Two hundred boxes the honest node denies at once; its own funding waits once for the liar; sending waits three more.
+    expect(performance.now() - started).toBeLessThan(1_200);
     expect(publication.inputs.map(hex)).toEqual(funding);
   });
 
@@ -689,6 +689,38 @@ describe("replacement, settlement and supplier cost", () => {
     slow = true; asked = 0;
     await p.publish(request(new Uint8Array(136).fill(31)));
     expect(asked).toBe(1);
+  });
+
+  it("ends a slow supplier's walk of unsettled ancestry at one deadline, however many ancestors it lacks", async () => {
+    const T = 50, n = funded([10_000_000_000n]), funding = [...n.boxes.keys()][0]!;
+    let slow = false;
+    const late = (): Promise<boolean> => new Promise(resolve => setTimeout(() => resolve(false), T - 10));
+    // It answers that it lacks each transaction just inside the timeout, and never about boxes.
+    const lagging: ErgoPublishingSupplier = { name: "lagging", unspentBoxes: async () => [],
+      hasBox: id => (slow ? never() : Promise.resolve(hex(id) === funding)), hasTransaction: () => (slow ? late() : Promise.resolve(false)),
+      submit: () => (slow ? never() : Promise.resolve()) };
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n, lagging], timeoutMs: T });
+    for (let i = 1; i <= 30; i++) await p.publish(request(new Uint8Array(136).fill(i)));
+    slow = true;
+    const started = performance.now();
+    await p.publish(request(new Uint8Array(136).fill(31)));
+    // Two timeouts of walk and one to send the publication asked for, not two per ancestor.
+    expect(performance.now() - started).toBeLessThan(15 * T);
+  });
+
+  it("keeps a refused transaction whose rebuild at the caller's height would be the same transaction", async () => {
+    const state: { text?: string } = {};
+    const persistence: ErgoPublisherPersistence = { load: () => state.text, save: text => { state.text = text; }, guard: () => {} };
+    const n = node();
+    n.fund(plainBox(TREE, 10_000_000n, HEIGHT + 5n));
+    n.refuse = () => true;
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
+    await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 5n))).rejects.toThrow(/kept and sent again/);
+    // A lower height is raised to its input's, the old one: no replacement, and none of the record's eight is spent.
+    for (let i = 0; i < 3; i++) await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 3n))).rejects.toThrow(/kept and sent again/);
+    expect(JSON.parse(state.text!).pending[0].replaced).toEqual([]);
+    expect(new Set(n.submitted).size).toBe(1);
+    expect(() => new ErgoPublisher({ secretKey: SECRET, suppliers: [n], timeoutMs: 2 ** 31 })).toThrow(new VenueError("invalid Ergo publisher options"));
   });
 
   it("takes no box that would carry a transaction's inputs past one box's value", async () => {
@@ -886,16 +918,26 @@ describe("a node as a publishing supplier", () => {
       const route = routes[url.slice("http://node".length)];
       return route === undefined ? new Response("", { status: 404 }) : new Response(route);
     }).fetch });
-    const idBytes = Buffer.from(id, "hex");
+    const idBytes = Buffer.from(id, "hex"), current = { "/blockchain/indexedHeight": `{ "indexedHeight" : 7, "fullHeight" : 7 }` };
     expect(await answering({ [`/transactions/unconfirmed/byTransactionId/${id}`]: `{ "id" : "${id}" }` }).hasTransaction(idBytes)).toBe(true);
-    expect(await answering({ [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${id}", "inclusionHeight" : 5 }` }).hasTransaction(idBytes)).toBe(true);
-    expect(await answering({ [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${"cd".repeat(32)}" }` }).hasTransaction(idBytes)).toBe(false);
-    expect(await answering({}).hasTransaction(idBytes)).toBe(false);
-    // A mempool that errors does not keep the index from being read; both failing is no answer.
+    expect(await answering({ ...current, [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${id}", "inclusionHeight" : 5 }` }).hasTransaction(idBytes)).toBe(true);
+    expect(await answering({ ...current, [`/blockchain/transaction/byId/${id}`]: `{ "id" : "${"cd".repeat(32)}" }` }).hasTransaction(idBytes)).toBe(false);
+    expect(await answering(current).hasTransaction(idBytes)).toBe(false);
+    // A mined transaction leaves the mempool before the index reads its block: an index behind the node's blocks, or
+    // one that does not say how far it has read, has not said the node lacks it.
+    await expect(answering({ "/blockchain/indexedHeight": `{ "indexedHeight" : 6, "fullHeight" : 7 }` }).hasTransaction(idBytes))
+      .rejects.toThrow("the node's index has not read its blocks");
+    await expect(answering({}).hasTransaction(idBytes)).rejects.toThrow("the node's index has not read its blocks");
+    // A mempool that errors does not keep the index from showing it, but then nothing says the node lacks it.
     const failingMempool = (index: number) => ergoNodePublisher("http://node", { fetch: recording(url =>
-      url.includes("/unconfirmed/") ? new Response("", { status: 500 }) : new Response(`{ "id" : "${id}" }`, { status: index })).fetch });
+      url.includes("/unconfirmed/") ? new Response("", { status: 500 }) : url.endsWith("/indexedHeight")
+        ? new Response(current["/blockchain/indexedHeight"], { status: index }) : new Response(`{ "id" : "${id}" }`, { status: index })).fetch });
     expect(await failingMempool(200).hasTransaction(idBytes)).toBe(true);
-    await expect(failingMempool(503).hasTransaction(idBytes)).rejects.toThrow(/500|503/);
+    await expect(failingMempool(503).hasTransaction(idBytes)).rejects.toThrow(/503/);
+    const missing = ergoNodePublisher("http://node", { fetch: recording(url =>
+      url.includes("/unconfirmed/") ? new Response("", { status: 500 }) : url.endsWith("/indexedHeight")
+        ? new Response(current["/blockchain/indexedHeight"]) : new Response("", { status: 404 })).fetch });
+    await expect(missing.hasTransaction(idBytes)).rejects.toThrow("the node's mempool did not answer");
   });
 
   it("reads at most 4 MiB of a node's answer, whatever length it declares", async () => {
