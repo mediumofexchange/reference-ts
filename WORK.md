@@ -8,7 +8,7 @@ a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 **Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
 `V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PR #69) saved
 issue/accept/burn and demand/settle/withdraw under service, one saved record (PR #71); **M9b1** (PR #70) gap acts bound to the snapshot,
-`publish`, disclosure count from unforced releases; **M9b2** (PR #72): replay keeps a demand's instant, so the seed's presenter key finds
+`publish`, disclosure count from unforced releases; **M9b2** (PR #72, merged d2fd9e3): replay keeps a demand's instant, so the seed's presenter key finds
 its standing demands (`sync` `demands`); `withdraw(alias, id)`/`settle(alias, acceptance)` read the notice from the view; a standing demand's
 notes are held by its lock, a prepared settlement reserves them; no build from a view older than the wallet's (`CHANGED_VIEW`); an act whose
 segment ended fails and is made again ([decision](decisions/2026-10.md#2026-10-01--find-a-seeds-standing-demands-by-their-presenter-keys-hold-them-by-their-locks-and-make-an-act-of-an-ended-segment-again)); reviewed. **Next:** **M9c** the C3.8 reader (void, lapse, taken release, dishonour), acceptance
