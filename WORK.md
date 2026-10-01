@@ -8,7 +8,7 @@ a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 **Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
 `V3Wallet` owns both redemption roles; acceptance and stop: Next 1. **M9a done** (PR #69): saved `issue`/`accept`/`burn` (K via `BackerSigner`),
 `demand`/`settle`/`withdraw` (seed-derived presenter, padding, `rho_out`), `submit`, `sync` resolution, stand-in proofs ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)).
-Payments and acts are one saved record (`saved_records`, kind 2 a payment; profile `moe/wallet/v3/5`); a failed payment frees its other input.
+Payments and acts are one saved record (PR #71; `saved_records`, kind 2 a payment; profile `moe/wallet/v3/5`); a failed payment frees its other input.
 **M9b1 done** (PR #70, merged 16d6180): in a gap (horizon past the canonical checkpoint by more than the silence duration)
 `demand`/`withdraw`/`settle` bind to the snapshot and `publish` puts them at the venue; acts go final by force; the disclosure count is
 distinct outputs of presenter-signed unforced releases of the demand in the segment (frontier `releases`, settle reads only); reviewed, CI
