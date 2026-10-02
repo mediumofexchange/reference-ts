@@ -1,6 +1,7 @@
 // C4.2/5 and pool-fees C1.2.5 process-restart acceptance (request, fulfillment,
-// payment, receipt, reproof, offline export and restore, and a read's commits to its evidence and
-// kept replay files) with a synthetic venue and proof oracle.
+// payment, receipt, reproof, offline export and restore, a read's commits to its evidence and
+// kept replay files, and the redemption acts of C3.3-6 and pool-v3 §3.3: demand, acceptance,
+// settlement, withdrawal and burn) with a synthetic venue and proof oracle.
 // Abrupt process exits exercise SQLite transaction boundaries, not power loss,
 // physical custody, rollback resistance, real proofs or live venue operation.
 import assert from 'node:assert/strict';
@@ -42,6 +43,22 @@ const record = task => ({ domain, kind: task.kind, publicInputs: task.publicInpu
 const prove = async task => record(task);
 const backupKey = b(83); // public fixture key, never funds
 const order = fixture => ({ request: fixture.payee, value: 7n });
+const sign = message => ed25519.sign(message, issuerSecret);
+// Each redemption act under its alias, made from the fixture's evidence, and its exact retry with no evidence,
+// prover or signer, which must return the saved act. `publish` writes nothing, so it has no commit to interrupt;
+// it encodes the saved record, so an act that survives a crash republishes the same bytes.
+const ACTS = Object.freeze({
+  demand: { alias: 'redeem', make: (w, f) => w.demand('redeem', 10n, f.deadline, f.package, f.signed, prove),
+    retry: (w, f) => w.demand('redeem', 10n, f.deadline, new Uint8Array(), f.signed, undefined) },
+  accept: { alias: 'answer', make: (w, f) => w.accept('answer', f.demand, f.deadline - 5n, f.package, f.signed, sign),
+    retry: (w, f) => w.accept('answer', f.demand, f.deadline - 5n, new Uint8Array(), f.signed, undefined) },
+  settle: { alias: 'settle', make: (w, f) => w.settle('settle', f.acceptance, f.package, f.signed, prove),
+    retry: (w, f) => w.settle('settle', f.acceptance, new Uint8Array(), f.signed, undefined) },
+  withdraw: { alias: 'back', make: (w, f) => w.withdraw('back', f.demand, f.package, f.signed),
+    retry: (w, f) => w.withdraw('back', f.demand, new Uint8Array(), f.signed) },
+  burn: { alias: 'retire', make: (w, f) => w.burn('retire', 3n, f.package, f.signed, prove),
+    retry: (w, f) => w.burn('retire', 3n, new Uint8Array(), f.signed, undefined) },
+});
 
 async function worker(directory, operation, phase, action) {
   const path = join(directory, `${operation}-${phase}.sqlite`), fixturePath = `${path}.fixture`;
@@ -68,6 +85,16 @@ async function worker(directory, operation, phase, action) {
           const input = { note: funded, anchor: tree.root(), path: tree.path(0n) };
           await journal.submit(encodeRecord(record(spendTask(context, [input, { ...input, note: pad }],
             [out(33, 1n), fixture.request, out(34, 2n), out(35, 0n)]))));
+        } else if (operation === 'accept') {
+          // Another wallet's demand stands in canonical history; this wallet is the backer that answers it.
+          const holder = new V3Wallet(`${path}.holder`, { venue, reference, verifier: declared });
+          try {
+            await journal.submit(encodeRecord(authorizeIssue(record(issueTask(context, holder.request('fund', backing, 10n))), issuerSecret)));
+            await journal.commit('funded'); await journal.publish();
+            fixture.deadline = venue.witnessedIndex() + 30n;
+            const demand = await holder.demand('redeem', 10n, fixture.deadline, (await journal.package()).package, signed, prove);
+            await journal.submit(demand.record); fixture.demand = demand.demand;
+          } finally { holder.close(); }
         } else {
           // The wallet pays from its own issued note; the payee's request is public bytes only.
           await journal.submit(encodeRecord(authorizeIssue(record(issueTask(context, wallet.request('fund', backing, 10n))), issuerSecret)));
@@ -75,6 +102,20 @@ async function worker(directory, operation, phase, action) {
         }
         fixture.checkpoint = await journal.commit('payment'); await journal.publish();
         fixture.package = (await journal.package()).package;
+        if (operation === 'demand' || operation === 'burn') fixture.deadline = venue.witnessedIndex() + 30n;
+        if (operation === 'settle' || operation === 'withdraw') {
+          // This wallet's demand of its whole note stands; the backer's wallet answers it for the settlement.
+          fixture.deadline = venue.witnessedIndex() + 30n;
+          const demand = await wallet.demand('redeem', 10n, fixture.deadline, fixture.package, signed, prove);
+          await journal.submit(demand.record); fixture.demand = demand.demand;
+          fixture.checkpoint = await journal.commit('demand'); await journal.publish();
+          fixture.package = (await journal.package()).package;
+          if (operation === 'settle') {
+            const backer = new V3Wallet(`${path}.backer`, { venue, reference, verifier: declared });
+            try { fixture.acceptance = await backer.accept('answer', demand.demand, fixture.deadline - 5n, fixture.package, signed, sign); }
+            finally { backer.close(); }
+          }
+        }
         if (operation === 'reproof') {
           // The payment is saved in A's segment; B takes over from A's package, which lacks it.
           fixture.prepared = (await wallet.prepare('shop', order(fixture), fixture.package, signed, prove)).record;
@@ -135,6 +176,8 @@ async function worker(directory, operation, phase, action) {
       if (operation === 'payment' || operation === 'reproof') {
         save(`${path}.candidate`, this.prepare('SELECT record FROM saved_records WHERE alias=?').get('shop').record);
       }
+      if (operation === 'accept') save(`${path}.candidate`, this.prepare('SELECT signature FROM backer_acceptances WHERE alias=?').get('answer').signature);
+      else if (operation in ACTS) save(`${path}.candidate`, this.prepare('SELECT record FROM saved_records WHERE alias=?').get(ACTS[operation].alias).record);
       // The encrypted export commits with the source's freeze; before COMMIT neither survives.
       if (operation === 'export') save(`${path}.candidate`, this.prepare('SELECT export FROM wallet_custody WHERE id=1').get().export);
       if (phase !== 'after' && phase !== 'digest') process.exit(71);
@@ -149,12 +192,26 @@ async function worker(directory, operation, phase, action) {
     // The restore's one COMMIT installs identity, state and provenance together in its staging file.
     else if (operation === 'import') V3Wallet.restoreBackup(`${path}.restored`, reader, fixture.backup, backupKey, fixture.digest);
     else if (operation === 'read') await wallet.sync(fixture.package, fixture.signed);
+    else if (operation in ACTS) await ACTS[operation].make(wallet, fixture);
     else await wallet.fulfill('invoice', fixture.package, fixture.signed);
     assert.fail('operation did not reach its crash boundary');
   }
   try {
     if (operation === 'request') save(`${path}.${action}`, wallet.request('invoice', fixture.backing, 7n));
-    else if (operation === 'read') {
+    else if (operation in ACTS) {
+      // An uncommitted act left nothing under its alias and is made again from evidence; a committed one is
+      // returned as saved by an exact retry that needs no evidence, prover or signer.
+      const act = ACTS[operation], uncommitted = action === 'restore' && phase === 'before';
+      if (operation === 'accept') {
+        const retried = act.retry(wallet, fixture);
+        if (uncommitted) await assert.rejects(retried, { code: 'INVALID', message: 'a backer signer is required' });
+        save(`${path}.${action}`, uncommitted ? await act.make(wallet, fixture) : await retried);
+      } else {
+        assert.equal(wallet.act(act.alias) === undefined, uncommitted);
+        save(`${path}.${action}`, uncommitted ? await act.make(wallet, fixture) : await act.retry(wallet, fixture));
+        assert.deepEqual(await act.retry(wallet, fixture), wallet.act(act.alias));
+      }
+    } else if (operation === 'read') {
       const view = await wallet.sync(fixture.package, fixture.signed);
       save(`${path}.${action}`, { checkpoint: view.checkpoint, holdings: view.holdings.map(h => [h.value, h.status]).sort(([a], [c]) => Number(a - c)), verified });
     } else if (operation === 'export') {
@@ -230,7 +287,7 @@ if (process.argv[2] === '--worker') {
     }
   };
   try {
-    for (const operation of ['request', 'fulfillment', 'payment', 'receipt', 'reproof', 'export', 'import']) for (const phase of ['before', 'after']) {
+    for (const operation of ['request', 'fulfillment', 'payment', 'receipt', 'reproof', 'export', 'import', ...Object.keys(ACTS)]) for (const phase of ['before', 'after']) {
       const path = join(directory, `${operation}-${phase}.sqlite`);
       await run(operation, phase, 'setup'); await run(operation, phase, 'crash');
       const staged = operation === 'import' ? readdirSync(directory).filter(name => name.startsWith(`${operation}-${phase}.sqlite.restored.restore-`) && !/-(wal|shm)$/.test(name)) : [];
@@ -248,11 +305,19 @@ if (process.argv[2] === '--worker') {
         }
         const tables = { request: ['receiver_requests'], fulfillment: ['receiver_fulfilled'], payment: ['saved_records', 'saved_inputs'],
           receipt: [], reproof: ['saved_superseded'], export: [], import: [] };
-        for (const table of tables[operation]) {
+        for (const table of tables[operation] ?? []) {
           assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, phase === 'before' ? 0 : 1);
         }
         if (operation === 'receipt') {
           assert.equal(db.prepare('SELECT receipt IS NOT NULL AS saved FROM saved_records').get().saved, phase === 'before' ? 0 : 1);
+        }
+        if (operation === 'accept') {
+          assert.equal(db.prepare('SELECT COUNT(*) AS n FROM backer_acceptances').get().n, phase === 'before' ? 0 : 1);
+        } else if (operation in ACTS) {
+          // The act's record and the nullifiers it reserves commit together, or neither does.
+          const { alias } = ACTS[operation], inputs = operation === 'withdraw' ? 0 : 1;
+          assert.equal(db.prepare('SELECT COUNT(*) AS n FROM saved_records WHERE alias=?').get(alias).n, phase === 'before' ? 0 : 1);
+          assert.equal(db.prepare('SELECT COUNT(*) AS n FROM saved_inputs WHERE alias=?').get(alias).n, phase === 'before' ? 0 : inputs);
         }
         if (operation === 'fulfillment' && phase === 'after') {
           const row = db.prepare('SELECT * FROM receiver_fulfilled').get();
@@ -278,6 +343,15 @@ if (process.argv[2] === '--worker') {
       } else if (operation === 'export') {
         if (phase === 'after') assert.deepEqual(restored, load(`${path}.candidate`));
         else assert.notDeepEqual(restored, load(`${path}.candidate`), 'uncommitted export must not be reused');
+      } else if (operation === 'accept') {
+        // The owner derives from the seed, the demand and the deadline, and K signs deterministically: the same answer.
+        assert.deepEqual(restored.signature, load(`${path}.candidate`)); assert.deepEqual(restored.demand, fixture.demand);
+      } else if (operation in ACTS) {
+        assert.equal(restored.status, 'prepared'); assert.equal(restored.kind, { demand: 4, settle: 6, withdraw: 5, burn: 3 }[operation]);
+        // A demand, settlement or withdrawal derives everything from the seed and the view, so one made again after an
+        // uncommitted crash is the same record (a rebuilt wallet names the same act); a burn's change output is fresh.
+        if (phase === 'after' || operation !== 'burn') assert.deepEqual(restored.record, load(`${path}.candidate`));
+        else assert.notDeepEqual(restored.record, load(`${path}.candidate`), 'uncommitted burn must not be reused');
       } else if (operation === 'receipt') assert.deepEqual(restored, decodeReceipt(fixture.receipt));
       else if (operation === 'import') assert.deepEqual(restored, fixture.request);
       else assert.deepEqual(restored, { request: fixture.request, checkpoint: fixture.checkpoint,
@@ -300,7 +374,7 @@ if (process.argv[2] === '--worker') {
       assert.deepEqual(load(`${path}.retry`), { ...restored, verified: 0 }, 'a later process reads the kept state and verifies nothing');
       console.log(`PASS v3 wallet read/${phase}: abrupt exit at the ${phase === 'evidence' ? 'evidence' : 'replay'} file's COMMIT, same view after restart.`);
     }
-    console.log('V3 wallet crash check passed: seventeen abrupt exits; synthetic process evidence only.');
+    console.log('V3 wallet crash check passed: twenty-seven abrupt exits; synthetic process evidence only.');
   } finally {
     const target = realpathSync(directory);
     assert.ok(dirname(target) === scratch && target.startsWith(scratch + sep) && target.startsWith(join(scratch, 'v3-wallet-crash-')),
