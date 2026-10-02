@@ -780,8 +780,9 @@ describe("replacement, settlement and supplier cost", () => {
     const wrap = (name: string, wait: boolean): ErgoPublishingSupplier => ({ name, unspentBoxes: t => n.unspentBoxes(t),
       hasBox: id => n.hasBox(id), hasTransaction: async id => { if (wait) await slow; return n.hasTransaction(id); },
       submit: async (signed, id) => { sent.push(name); return n.submit(signed, id); } });
-    // Ready in the publisher's turn, then short of the clock's depth at the first send.
-    const check = (): void => { if (++calls > 1) throw new VenueError("the chain is short"); };
+    // Ready in the publisher's turn, short of the clock's depth at the first send, and ready again by the slow walk's:
+    // only the send's shared refusal keeps that walk from sending.
+    const check = (): void => { if (++calls === 2) throw new VenueError("the chain is short"); };
     const published = publisher([wrap("fast", false), wrap("slow", true)]).publish(request(), check);
     let settled = false;
     void published.catch(() => {}).finally(() => { settled = true; });

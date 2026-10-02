@@ -200,7 +200,10 @@ function syncParent(path: string): void {
     if (["EISDIR", "EPERM", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) return;
     throw error;
   }
-  try { fsyncSync(fd); } finally { closeSync(fd); }
+  try { fsyncSync(fd); } catch (error) {
+    // Some file systems cannot sync a directory; they order the link or rename themselves.
+    if ((error as NodeJS.ErrnoException).code !== "EINVAL") throw error;
+  } finally { closeSync(fd); }
 }
 
 /** Write a new file whole or not at all: a synced temporary file linked into place, which refuses an existing one.
