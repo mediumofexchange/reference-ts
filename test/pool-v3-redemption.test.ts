@@ -491,7 +491,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // A seed-restored copy finds both ended demands in the record by their tags.
     expect(await presented(f.restore("restored", f.holder))).toEqual(await presented());
     expect(await presented()).toEqual([[2n, "available", []], [4n, "available", [A]], [5n, "available", []], [6n, "available", [A, B].sort()]]);
-    // 11 is only A's 6 beside the unpresented 5: refused, as are A's and B's notes together for 10 + 0.
+    // 11 is only A's 6 beside the unpresented 5: refused. (10 from A's 4 and 6 would be taken: B already repeats A's tag.)
     await expect(f.holder.demand("c", 11n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove))
       .rejects.toMatchObject({ code: "FUNDS", message: expect.stringContaining("freshen") });
     // 7 is two unpresented notes, preferred over anything presented.
@@ -518,6 +518,53 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.prepare("pay", { request, value: 9n }, f.served(), f.signed, prove);
     await f.holder.submit("pay", f.service); await f.publish(); await f.holder.sync(f.served(), f.signed);
     expect(f.holder.payment("pay")!.status).toBe("final");
+  });
+
+  it("never presents the notes of two unlinked earlier demands together, and freshens one demand's alone", async () => {
+    const f = await fixture([6n, 4n]);
+    await f.holder.sync(f.served(), f.signed);
+    const a = await f.holder.demand("a", 6n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
+    const b4 = await f.holder.demand("b", 4n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
+    for (const name of ["a", "b"]) await f.holder.submit(name, f.service);
+    await f.publish();
+    await f.holder.withdraw("a-back", a.demand!, f.served(), f.signed); await f.holder.submit("a-back", f.service);
+    await f.holder.withdraw("b-back", b4.demand!, f.served(), f.signed); await f.holder.submit("b-back", f.service);
+    await f.publish(); await f.holder.sync(f.served(), f.signed);
+    await expect(f.holder.demand("c", 10n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove))
+      .rejects.toMatchObject({ code: "FUNDS" });
+    const fresh = await f.holder.freshen("fresh", a.demand!, f.served(), f.signed, prove);
+    expect([fresh.value, fresh.inputs.length]).toEqual([6n, 1]);
+  });
+
+  it("refuses at save a payment or demand whose note another demand presented while it was proved", async () => {
+    // A prover held open until the race has run: another demand presents the note, stands and is withdrawn, so no
+    // reservation holds the note any more when the first call saves.
+    const held = () => {
+      let release!: () => void, entered!: () => void;
+      const gate = new Promise<void>(r => { release = r; }), started = new Promise<void>(r => { entered = r; });
+      const slow: LocalProver = async task => { entered(); await gate; return record(task); };
+      return { slow, started, release };
+    };
+    const race = async (f: Awaited<ReturnType<typeof fixture>>, quantity: bigint) => {
+      const d = await f.holder.demand("d", quantity, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
+      await f.holder.submit("d", f.service); await f.publish(); await f.holder.sync(f.served(), f.signed);
+      await f.holder.withdraw("d-back", d.demand!, f.served(), f.signed); await f.holder.submit("d-back", f.service); await f.publish();
+      await f.holder.sync(f.served(), f.signed);
+    };
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const pay = held();
+    const paying = f.holder.prepare("pay", { request: f.backer.request("shop", f.backing, 10n), value: 10n }, f.served(), f.signed, pay.slow);
+    await pay.started; await race(f, 10n); pay.release();
+    await expect(paying).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("presented") });
+    expect(f.holder.payment("pay")).toBeUndefined();
+
+    const g = await fixture([6n, 4n]);
+    await g.holder.sync(g.served(), g.signed);
+    const late = held();
+    const demanding = g.holder.demand("late", 10n, g.venue.witnessedIndex() + 30n, g.served(), g.signed, late.slow);
+    await late.started; await race(g, 6n); late.release();
+    await expect(demanding).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("presented") });
   });
 
   it("counts releases witnessed without force, so the next settlement names an output nobody has seen", async () => {

@@ -122,9 +122,9 @@ that set without touching the cryptography (§C1.5), and in a small pool it can 
   nullifier and so its tag (C3.1): a payment made from it tells everyone, and its payee in particular, that its
   payer presented that quantity at that instant; a second demand over it carries the same tag, and a burn of it
   links that lit burn to the demand. §C1.5 asks the wallet to spend such a note to a fresh one before any reuse:
-  the reference wallet refuses a presented note to payments and burns and spends it only through `freshen`, a
+  the reference wallet refuses a presented note to payments and burns; it spends one through `freshen`, a
   payment of one demand's notes to one fresh note, which shows the payment came from that demand's notes and
-  links no two demands. A new demand may present again the notes of one earlier demand (never two together, nor
+  links no two demands, or through the settlement of a demand presenting it again. A new demand may present again the notes of one earlier demand (never two together, nor
   beside unpresented notes), which links it to that demand and keeps snapshot redemption (C2b.3.2) open where a
   fresh spend is refused; the wallet says which demands it repeats.
 - **Anchors.** An input's anchor bounds its age; a note imported from a predecessor segment anchors at that

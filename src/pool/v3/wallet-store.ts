@@ -256,7 +256,7 @@ function select(notes: readonly OwnedNote[], total: bigint): OwnedNote[] {
     j--;
   }
   requireThat(best !== undefined, "FUNDS",
-    "no available unpresented one- or two-note selection covers it; a presented note moves only by freshen");
+    "no available unpresented one- or two-note selection covers it; presented notes move by freshen where admission is open");
   return best;
 }
 /** C3.3: a demand names whole notes, so one note of exactly `total` or a pair summing to it; ties by commitment.
@@ -287,7 +287,7 @@ function demandSelection(notes: readonly OwnedNote[], presented: readonly (reado
     }
   }
   throw new V3WalletError("FUNDS", "no unpresented note or pair, nor one earlier demand's notes, is exactly the quantity; " +
-    "pay yourself that amount first, or freshen an earlier demand's notes");
+    "pay yourself that amount first, or freshen an earlier demand's notes, where admission is open");
 }
 
 export class V3Wallet {
@@ -372,6 +372,22 @@ export class V3Wallet {
     // reservation: no wallet writes two outside settlements (`saveAct`).
     requireThat(this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE a.status='prepared'
       AND a.kind!='6' GROUP BY i.nf HAVING COUNT(*) > 1`).get() === undefined, "INVALID", "backup state reserves a note twice");
+    // Shapes `act` and `payment` read: a demand's repeats are demand identities; a freshen has one positive output.
+    for (const row of this.db.prepare("SELECT alias,kind,intent,repeats FROM saved_records WHERE repeats IS NOT NULL OR kind='2'").all()) {
+      let ok: boolean;
+      try {
+        if (row.kind === "4") {
+          const ids = JSON.parse(row.repeats as string) as unknown;
+          ok = Array.isArray(ids) && ids.length > 0 && ids.every(id => typeof id === "string" && /^[0-9a-f]{64}$/.test(id));
+        } else {
+          const intent = JSON.parse(row.intent as string) as unknown[];
+          ok = !Array.isArray(intent) || intent[1] !== "freshen" || (intent.length === 3 && typeof intent[2] === "string" &&
+            /^[0-9a-f]{64}$/.test(intent[2]) && this.db.prepare("SELECT COUNT(*) AS n FROM saved_outputs WHERE alias=? AND value!='0'")
+              .get(row.alias as string)!.n === 1);
+        }
+      } catch { ok = false; }
+      requireThat(ok, "INVALID", "backup state has a malformed saved record");
+    }
   }
   private active(): void {
     requireThat(!this.closed && !this.poisoned, "STORAGE", "wallet is closed or needs reopening");
@@ -736,12 +752,23 @@ export class V3Wallet {
    * included. A seed-restored wallet misses a demand refused at the door, published without force, or admitted
    * only into a segment the canonical one did not import (the wallet guide says so). */
   private presentedBy(note: OwnedNote, force: ForceState | undefined): string[] {
-    const ids = new Set(this.db.prepare(`SELECT a.demand FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias
-      WHERE i.nf=? AND a.kind='4'`).all(note.nf.toString()).map(row => row.demand as string));
+    const ids = new Set(this.savedPresenters(note.nf));
     for (const [id, demand] of force?.presentedWithTag(tagOf(note.nf)) ?? []) {
       if (!ids.has(id) && same(demand.backing, note.opening.backing) && this.presents(demand)) ids.add(id);
     }
     return [...ids].sort();
+  }
+  /** The demands saved here whose inputs name `nf`, whatever their status. */
+  private savedPresenters(nf: bigint): string[] {
+    return this.db.prepare(`SELECT a.demand FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE i.nf=? AND a.kind='4'`)
+      .all(nf.toString()).map(row => row.demand as string);
+  }
+  /** Inside a save's transaction: a demand saved while this call proved may have presented a note the read found
+   * unpresented, and once that demand is final or failed no reservation holds the note. A payment or burn takes no
+   * such note; a demand takes one only where every demand presenting it is among those it repeats. */
+  private requireUnpresented(nfs: readonly bigint[], repeats: readonly string[] = []): void {
+    requireThat(nfs.every(nf => this.savedPresenters(nf).every(id => repeats.includes(id))), "CONFLICT",
+      "another demand presented an input while this one was proved");
   }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
@@ -1063,7 +1090,8 @@ export class V3Wallet {
   /** Prove a planned spend and save it under `name` with its reservations; a concurrent exact call that saved
    * first wins (`sameOrder`), and its record is kept, never this proof. */
   private async savePayment(name: string, intent: string, sameOrder: () => boolean | undefined,
-    planned: ReturnType<V3Wallet["spendPlan"]> & { readonly header: SegmentHeader; readonly at: bigint }, prove: LocalProver): Promise<Payment> {
+    planned: ReturnType<V3Wallet["spendPlan"]> & { readonly header: SegmentHeader; readonly at: bigint }, prove: LocalProver,
+    freshen = false): Promise<Payment> {
     const { header, selected, inputs, zero, outputs, at } = planned, backing = selected[0]!.opening.backing;
     const bytes = this.encoded(await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove));
     const statement = hex(statementHash(decodeRecord(bytes))), reserved = selected.map(note => note.nf.toString());
@@ -1072,6 +1100,8 @@ export class V3Wallet {
       const winner = sameOrder();
       if (winner !== undefined) { requireThat(winner, "CONFLICT", "alias names another payment order"); return; }
       requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
+      // A freshen spends presented notes by design: another demand presenting one shares a tag already linked.
+      if (!freshen) this.requireUnpresented(selected.map(note => note.nf));
       requireThat(outputs.every(out => taken.get(out.cm.toString()) === undefined), "CONFLICT", "an output belongs to another payment");
       this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,?,'prepared',NULL,NULL,NULL,?,NULL)").run(name, intent, statement,
         bytes, backing, header.operator, zero?.requestId ?? null, at.toString());
@@ -1124,7 +1154,7 @@ export class V3Wallet {
       return { header, ...this.spendPlan(backing, selected, [this.fresh(backing, selected.reduce((n, note) => n + note.opening.value, 0n))]), at };
     });
     if (planned === undefined) return this.payment(name)!;
-    return this.savePayment(name, intent, sameOrder, planned, prove);
+    return this.savePayment(name, intent, sameOrder, planned, prove, true);
   }
 
   /** pool-fees C1.2.5 and C4.4: once a prepared payment's segment is no longer
@@ -1228,6 +1258,7 @@ export class V3Wallet {
       // A settlement takes its demand's notes whatever else reserves them: while the demand stands its lock refuses any
       // other spend of them at the door (C3.7), and the settlement's admission fails every other record that spends one.
       requireThat(kind === 6 || inputs.every(nf => !this.reserved(nf)), "CONFLICT", "an input is reserved by another payment or act");
+      if (kind === 3 || kind === 4) this.requireUnpresented(inputs, repeats);
       requireThat(this.db.prepare("SELECT 1 FROM saved_records WHERE statement=?").get(statement) === undefined, "CONFLICT",
         "another alias saved this statement");
       requireThat(kind !== 6 || !this.pendingSettlement(demand!, record.publicInputs[9]!), "CONFLICT",
