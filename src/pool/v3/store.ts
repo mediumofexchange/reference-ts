@@ -706,14 +706,17 @@ export class V3OperatorJournal {
   // --- Inside a command's transaction: each writes rows that commit with the command's log row. ---
 
   /** Apply one judged record to the admission state, keep its bytes in the segment's served trail and sign its
-   * receipt. A statement keeps the first receipt it was given. */
+   * receipt. `submit` answers a statement it holds a receipt for, so only adoption finds a row: one a discarded
+   * tail was given (C2b.4.1), never a live admission, since force refuses a recovery statement already effective
+   * (REPEATED_STATEMENT). The adopted statement's receipt replaces it (C2b.4.2, §7.2); the tail's stays in the
+   * command log. */
   private admit(engine: Engine, judged: Judged, replay: SegmentReplay): Uint8Array {
     const opened = engine.opened!, state = engine.state!;
     const tip = { segment: opened.segment, position: state.position, evidence: state.evidence };
     applyJudged(state, judged, replay);
     this.evidence.append(tip, judged.bytes);
     const receipt = this.receipt(opened, state, judged.record, engine.last!.commitment.sequence);
-    this.db.prepare("INSERT OR IGNORE INTO journal_receipt VALUES(?,?)").run(judged.identity, receipt);
+    this.db.prepare("INSERT INTO journal_receipt VALUES(?,?) ON CONFLICT(statement) DO UPDATE SET receipt=excluded.receipt").run(judged.identity, receipt);
     return receipt;
   }
   /** Sign the commitment at `sequence` over `state`'s directory, and keep the directory and snapshots that serve it. */
@@ -1285,7 +1288,7 @@ export class V3OperatorJournal {
   }
 
   /**
-   * The evidence for the latest commitment published or held on the venue, by parts (§14 incremental
+   * The evidence for the latest commitment held on the venue or published and still in flight (C2.4.3–4), by parts (§14 incremental
    * retrieval): the read's own §12 package (the configuration and that commitment), and every other object
    * of every checkpoint signed through it that a reader served through sequence `after` does not hold yet
    * (`parts`). Records admitted after the selection are not served, nor is a commitment still in the outbox.
@@ -1299,7 +1302,11 @@ export class V3OperatorJournal {
     requireThat(typeof after === "bigint" && after >= 0n && after < U64, "REFUSED", "the served sequence is not a u64", "SEQUENCE");
     return this.run(async engine => {
       const view = this.view(engine);
+      // A published commitment the venue has not shown is served while it is in flight (C2.4.4); once the lag
+      // from its signing has passed without it, the operator can no longer assume it (C2.4.3), and the latest
+      // held one is served instead.
       let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
+      if (selected !== undefined && view.now >= decimal(selected.at) + view.lag) selected = undefined;
       for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
         if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
         if (this.ownHeld(held) === undefined) continue;
