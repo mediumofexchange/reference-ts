@@ -45,7 +45,7 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { arrayLength, byteLength, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
-import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, type ErgoHeaderStore } from "./ergo-headers.js";
+import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, INITIAL_DIFFICULTY, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
   attributeSection, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
@@ -212,14 +212,21 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     this.venueId = ergoProfileIdentity(this.profile);
     const store = ergoHeaderStore(this.profile.anchor, anchorContext, this.profile.reference === ERGO_TESTNET_REFERENCE ? "testnet" : "mainnet");
     if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
-    // Each context selects its header rules. venue-ergo's and the synthetic reference context read the mainnet
-    // rules, the synthetic one only above an anchor of difficulty 1: no mainnet header has it, and a header id
-    // commits to its ancestry, so a profile naming that context can never follow the mainnet.
-    if (this.profile.reference === ERGO_SYNTHETIC_REFERENCE) {
+    // Each context selects its header rules, and a header id names no network, so each reference context also
+    // bounds its anchor's difficulty; a header id commits to its ancestry, so a profile naming either context can
+    // never follow the mainnet. The synthetic context reads the mainnet rules only above an anchor of difficulty 1,
+    // which no mainnet header has. The testnet context reads only above an anchor below mainnet's initial
+    // difficulty: the testnet's rules keep a parent's difficulty within an epoch, so a mainnet anchor would
+    // otherwise be followed up to its next epoch boundary (at most 127 headers, each with the mainnet's work).
+    if (this.profile.reference !== undefined) {
       const last: unknown = anchorContext[anchorContext.length - 1];
       const anchor = last instanceof Uint8Array ? parseErgoHeader(copyBytes(last)) : undefined;
-      if (anchor === undefined || compareBytes(anchor.id, this.profile.anchor) !== 0 || decodeCompactBits(anchor.nBits) !== 1n) {
+      const difficulty = anchor !== undefined && compareBytes(anchor.id, this.profile.anchor) === 0 ? decodeCompactBits(anchor.nBits) : undefined;
+      if (this.profile.reference === ERGO_SYNTHETIC_REFERENCE && difficulty !== 1n) {
         throw new VenueError("the synthetic reference context reads only a chain whose anchor has difficulty 1");
+      }
+      if (this.profile.reference === ERGO_TESTNET_REFERENCE && (difficulty === undefined || difficulty >= INITIAL_DIFFICULTY)) {
+        throw new VenueError("the testnet reference context reads only a chain whose anchor is below mainnet's initial difficulty");
       }
     }
     this.store = store;
