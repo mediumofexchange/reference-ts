@@ -315,11 +315,12 @@ describe("Ergo venue-profile candidate", () => {
     const revocations = answer(blocks, 3, obligor);
     expect(revocations.entries.map(e => e.index)).toEqual([6n, 6n]);
     expect(range.revocationIndex(revocations)).toBe(6n);
-    expect(range.firstWitnessed(revocations)).toHaveLength(1);
     expect(range.revocationIndex(answer(blocks, 3, obligor, 0n, 5n))).toBeUndefined();
 
-    const merged = range.mergeVenueOrder([answer(blocks, 4, backing), answer(blocks, 4, backingY)]);
-    expect(merged.map(e => [e.index, e.ordinal.toString(16), e.record.length, Buffer.from(e.subject).equals(backingY)]))
+    // Two backings' publications at one block compare in the venue's order by (index, ordinal).
+    const merged = [answer(blocks, 4, backing), answer(blocks, 4, backingY)].flatMap((kind4, y) => kind4.entries.map(e => ({ ...e, y: y === 1 })))
+      .sort((p, q) => (p.index < q.index ? -1 : p.index > q.index ? 1 : p.ordinal < q.ordinal ? -1 : p.ordinal > q.ordinal ? 1 : 0));
+    expect(merged.map(e => [e.index, e.ordinal.toString(16), e.record.length, e.y]))
       .toEqual([[4n, "100000000", 40, false], [5n, "100000000", 120, false], [5n, "100000004", 40, true]]);
 
     const empty = answer(blocks, 1, other, 0n, 5n);

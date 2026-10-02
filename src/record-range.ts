@@ -2,6 +2,7 @@
 // reader's independently selected venue-evidence verifier and its replay.
 // A decoded answer is that verifier's output, never supplied evidence, and it
 // establishes no directory, trail, classification, force or verdict.
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { V3_RANGE_CONTEXT as CONTEXT } from "./contexts.js";
 import {
@@ -159,7 +160,7 @@ export function decodeRangeAnswer(bytesIn: Uint8Array, expectedIn: RangeRequest,
   if (!isKind(kind)) throw new EncodingError("unsupported range record kind");
   const carried: RangeRequest = { venue: input.subarray(17, 49), kind, subject: input.subarray(50, 82),
     fromIndex: view.getBigUint64(82, false), toIndex: view.getBigUint64(90, false) };
-  if (carried.fromIndex > carried.toIndex || !sameRequest(carried, expected)) throw new EncodingError("answer to another request");
+  if (!sameRequest(carried, expected)) throw new EncodingError("answer to another request");
   const count = view.getUint32(98, false);
   budget(BigInt(input.length), BigInt(count), bound);
   if (BigInt(ENTRY_BYTES) * BigInt(count) > BigInt(input.length - FIXED_BYTES)) throw new EncodingError("impossible range entry count");
@@ -250,17 +251,6 @@ export function heldCommitments(answer: RangeAnswer, prior?: HeldPrior): HeldCom
   return Object.freeze({ held: Object.freeze(held), next: Object.freeze({ fromIndex: request.toIndex + 1n, highest }) });
 }
 
-/** Identical bytes at two positions are one object, witnessed at the first
- * (kinds 3 and 4, §13.1). Returns owned copies in answer order. */
-export function firstWitnessed(answer: RangeAnswer): readonly RangeEntry[] {
-  const seen: RangeEntry[] = [];
-  for (const entry of validEntries(answer).entries) {
-    if (seen.some(earlier => compareBytes(earlier.record, entry.record) === 0)) continue;
-    seen.push(Object.freeze({ index: entry.index, ordinal: entry.ordinal, record: copyBytes(entry.record) }));
-  }
-  return Object.freeze(seen);
-}
-
 /** C2b.1 on this venue: the first entry that decodes, names the subject and
  * verifies. Undefined over [0, t] means not revoked at t; over a shorter range
  * it establishes that for the range only. */
@@ -301,33 +291,6 @@ export function admittedReplacements(answer: RangeAnswer, ruleKey: Uint8Array | 
   return Object.freeze(admitted);
 }
 
-export interface OrderedEntry extends RangeEntry { readonly subject: Uint8Array }
-/** The venue's order across several backings' publication answers for one
- * venue and range, by index then ordinal (§13.1; C2b.4.2's adopted block).
- * Only kind 4 carries that order; two objects at one (index, ordinal) are the
- * verifier's contradiction. */
-export function mergeVenueOrder(input: readonly RangeAnswer[]): readonly OrderedEntry[] {
-  if (!Array.isArray(input)) throw new EncodingError("no range answers to merge");
-  const answers = copyArray(input, answer => requireKind(answer, PUBLICATION_RANGE));
-  if (answers.length === 0) throw new EncodingError("no range answers to merge");
-  const first = answers[0]!.request;
-  const merged: OrderedEntry[] = [];
-  for (const { request: r, entries } of answers) {
-    if (compareBytes(r.venue, first.venue) !== 0 || r.fromIndex !== first.fromIndex || r.toIndex !== first.toIndex) {
-      throw new EncodingError("range answers of different venues or ranges cannot be merged");
-    }
-    for (const entry of entries) merged.push({ ...entry, subject: r.subject });
-  }
-  merged.sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : a.ordinal < b.ordinal ? -1 : a.ordinal > b.ordinal ? 1 : 0));
-  for (let i = 1; i < merged.length; i++) {
-    if (merged[i]!.index === merged[i - 1]!.index && merged[i]!.ordinal === merged[i - 1]!.ordinal) {
-      throw new EncodingError("two objects at one venue position");
-    }
-  }
-  return Object.freeze(merged.map(entry => Object.freeze({ index: entry.index, ordinal: entry.ordinal,
-    record: copyBytes(entry.record), subject: copyBytes(entry.subject) })));
-}
-
 export interface ChainLink { readonly operator: Uint8Array; readonly from: bigint; readonly link: Uint8Array }
 export interface ReplacementChain { readonly chain: readonly ChainLink[]; readonly pending?: ChainLink }
 export interface ChainContext {
@@ -339,7 +302,7 @@ export interface ChainContext {
   /** The index the chain is read at; a link effective later is pending. */
   readonly now: bigint;
 }
-/** C2.5's walk over the admitted records of one answer (§13.3), the rules of
+/** C2.5's walk over admitted records (§13.3), the rules of
  * `src/replacement.ts`'s walk read from range entries: a record whose
  * effective index is below its witnessing plus twice the lag plus one is no
  * replacement (C2.5.3); a candidate names the current link and is strictly
@@ -347,8 +310,10 @@ export interface ChainContext {
  * (C2.5.4); candidates are read by witnessed index, one per index by the
  * lesser identity, and a later one supersedes the standing candidate only
  * where witnessed strictly before its effective index (C2.5.5). A link whose
- * effective index is past `now` is pending, not in force. Records after
- * `now` are not in the answer, so the chain is the chain at `now`. */
+ * effective index is past `now` is pending, not in force. One identity
+ * counts at its first entry and records witnessed after `now` are not read,
+ * so over records `admittedReplacements` returned, the chain is the chain at
+ * `now` whichever answers they came from. */
 export function replacementChain(admittedIn: readonly AdmittedReplacement[], context: ChainContext): ReplacementChain {
   if (context === null || typeof context !== "object" || !Array.isArray(admittedIn)) throw new EncodingError("invalid chain context");
   const { lag, now } = context, backing = bytes(context.backing, 32), original = bytes(context.original, 32);
@@ -363,7 +328,15 @@ export function replacementChain(admittedIn: readonly AdmittedReplacement[], con
     return { index, identity: bytes(identity, 32),
       replacement: { predecessor: bytes(predecessor, 32), successor: bytes(successor, 32), effective } };
   });
-  const floored = admitted.filter(a => a.replacement.effective >= a.index + 2n * lag + 1n);
+  // One identity is one record, witnessed at its first entry (§13.3), however
+  // the caller gathered the admitted records: a later copy supersedes nothing.
+  const first = new Map<string, (typeof admitted)[number]>();
+  for (const a of admitted) {
+    if (a.index > now) continue;
+    const key = bytesToHex(a.identity), earlier = first.get(key);
+    if (earlier === undefined || a.index < earlier.index) first.set(key, a);
+  }
+  const floored = [...first.values()].filter(a => a.replacement.effective >= a.index + 2n * lag + 1n);
   const chain: ChainLink[] = [Object.freeze({ operator: copyBytes(original), from: 0n, link: copyBytes(backing) })];
   const seen: Uint8Array[] = [backing];
   let link = backing;

@@ -322,10 +322,12 @@ same replay engine.
 `src/record-range.ts` implements [§13 record-range answers](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence):
 the request/answer frame with kind bounds and budgets, held commitments per
 C2.3.3 by ascending sequence within an index with lesser-bytes ties and
-reader-established priors, replacement identities, first-entry revocations
-the cross-backing venue order for publications, and C2.5's walk over admitted
-replacements (lead floor from the venue's lag, supersession, revocation and
-the lesser identity at one index), checked against the runtime walk.
+reader-established priors, replacement identities, first-entry revocations,
+and C2.5's walk over admitted replacements (one identity at its first entry,
+lead floor from the venue's lag, supersession, revocation and the lesser
+identity at one index), checked against the transparent path's walk. The
+reader orders several backings' publications by `venueOrder` in
+`src/pool/v3/scope-reader.ts`.
 The reader (`src/pool/v3/reader.ts`) reads them through a `RecordVenue`
 (`src/record-venue.ts`): `FixtureVenue` in the harness by default and
 `ErgoVenue` under `--ergo`. The local replay integrates these answers with the
