@@ -513,6 +513,15 @@ and a gap release taken by another demand's settlement under an acceptance namin
 releases the holder's acceptance and leaves the backer's dishonour. Not covered: a release of the demand in another
 segment, a gap across several backings, an ended term or a return, and a venue that witnesses an exact republication
 again.
+`redemption-store-check.mjs` (in `check:pool:v3`; `npm run check:pool:v3-redemption` alone) runs the same path with real
+proofs, each wallet operation in a fresh process that opens its database, proves with its own prover and syncs its kept
+evidence from the operator's HTTP service: issue, payment and fulfillment, a demand, the backer's published acceptance,
+the settlement (read settled by a third wallet, C3.8) and a burn, each act but the burn retried exactly in another
+process with no evidence, prover or signer. With the operator offline past silence, an issue and a burn refuse
+`SILENCE`, and the holder demands and settles by publication and reads both final by force; a holder-only reader in a
+fresh process confirms supply and force ([local](pool-v3-redemption-store-verification.json),
+[synthetic Ergo](pool-v3-redemption-store-ergo-verification.json)). Abrupt exits inside redemption acts, seed-restored
+demands and the hostile C3.4–C3.8 cases with real proofs are not covered yet (M9d2).
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
 payment, receipt, reproof, export and restore commit boundaries with synthetic evidence, and at a read's
 commits to its evidence file and its kept replay file (before either, the kept state stands; between the

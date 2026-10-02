@@ -9,28 +9,32 @@ a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 `V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PRs #69, #71)
 acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2** (PR #72) seed-found demands, locks, `CHANGED_VIEW`, acts of an ended
 segment made again. **M9c1** (PR #73, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
-`presentation` reads C3.8 per witnessed index, `publishAcceptance`, force reports `TAKEN`. **M9c2** (PR #74, merged 4673719, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)):
-review findings (q) kept force dependency explicit (was unreachable), (a) testnet anchor below mainnet's initial difficulty, (e) side-branch
-quota forgiven as the chain advances, (b) `package()` serves a published commitment only in flight, (c) adoption replaces a lapsed tail's
-receipt; one fail-before test each, unit suite 1998/1998, `check:scripts`, fresh review (two minor on (a), taken as text).
-**Next: M9d** real-proof and crash drills (seed-restored demands, a C3.8 reading among them), review; needs CI or the local machine for proofs.
+`presentation` reads C3.8 per witnessed index, `publishAcceptance`, force reports `TAKEN`. **M9c2** (PR #74, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)):
+review findings (a)–(c), (e), (q). **M9d1** (branch `claude/peaceful-tesla-behrng`): `prepare-crs.mjs` falls back to Aztec Ignition's
+transcript00 (S3, limbs reordered, same hashes), so cloud runs prove; `redemption-store-check.mjs` (in `check:pool:v3`): real-proof issue →
+pay → fulfill → demand → published acceptance → settle → burn, each wallet act a fresh process over the operator's HTTP service, acts
+retried exactly without sync, evidence, prover or signer, a third wallet's C3.8 reading; offline past silence, issue and burn refuse
+`SILENCE`, demand and settle publish with force; a fresh reader confirms supply. Local (2.2 min) and synthetic Ergo pass here.
+**Next: M9d2** abrupt exits inside redemption acts (extend `wallet-crash.mjs`: demand, accept, settle, burn, publish), seed-restored demands
+settled and withdrawn by real proofs, and C3.4–C3.8 hostile cases with real proofs (late release without force, forged release, `TAKEN`);
+then a fresh review of the integrated M9d (tooling and drills; no runtime change in M9d1).
 
 ## Status
 - Audit area 11 (PR #75, merged b101869, [decision](decisions/2026-10.md#2026-10-02--count-a-replacement-identity-at-its-first-entry-in-the-walk-itself-and-drop-the-range-helpers-the-runtime-does-not-use-audit-area-11)): the replacement walk counts an identity at its
   first entry itself; unused range helpers dropped. Reports binding `record-range.ts`/`ergo-check.mjs` are stale until re-recorded.
-- Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)); M8a (PR #67) manifest, mainnet guard; M7, M4–M6, M5b.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json)/[Ergo](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json)/[Ergo](docs/pool-v3-succession-store-ergo-verification.json),
-  [scope](docs/pool-v3-scope-store-verification.json)/[Ergo](docs/pool-v3-scope-store-ergo-verification.json), [history](docs/pool-v3-history-store-verification.json). Historical: live recovery [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
+  [scope](docs/pool-v3-scope-store-verification.json)/[Ergo](docs/pool-v3-scope-store-ergo-verification.json), [history](docs/pool-v3-history-store-verification.json),
+  [redemption](docs/pool-v3-redemption-store-verification.json)/[Ergo](docs/pool-v3-redemption-store-ergo-verification.json). Historical: live recovery [a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json),
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 9 (Goal above): a settle refused under service reads as unreleased (adopted limit; more is pool-v4). Acceptance: real-proof issue → pay → receive → fulfill → demand → accept → settle → burn through wallet operations in
-   fresh processes, local and synthetic Ergo, under service and in a gap with the operator offline; crash/exact-retry drills; C3.4–C3.8 hostile cases.
+1. Slice 9 (Goal above): a settle refused under service reads as unreleased (adopted limit; more is pool-v4). Acceptance: the real-proof wallet path
+   (M9d1, done) plus crash drills inside redemption acts, seed-restored demands and C3.4–C3.8 hostile cases with real proofs (M9d2).
 2. Profile visibility table (docs/spec, any time before slice 10's wallet text): pool-v3 on Ergo per party and per issuer/operator/witness
    collusion, with traffic (service connections, publication timing, node queries) and small-pool inference (§C1.4 asks profiles for their own).
 3. Slice 10, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
@@ -89,8 +93,6 @@ receipt; one fail-before test each, unit suite 1998/1998, `check:scripts`, fresh
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking (2026-10-01): cloud runs get HTTP 403 from both CRS hosts (`prepare-crs.mjs`), so real-proof checks run only in CI or locally;
-  M9d's drills need the local machine or a network policy allowing `crs.aztec-cdn.foundation`/`crs.aztec-labs.com`.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
   mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 

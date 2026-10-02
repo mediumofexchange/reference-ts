@@ -54,21 +54,27 @@ export async function drillWorker(argv, answer, { testnet = false } = {}) {
   try {
     const backend = new UltraHonkVerifierBackend(api), verifier = { verify: (kind, publicInputs, proof) =>
       backend.verifyProof({ proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind) }, PROOF_OPTIONS) };
-    const pin = () => new Uint8Array(readFileSync(join(directory, "ergo-pin.bin")));
-    let venue, reference = referenceFor(mode);
-    if (mode === "testnet") {
-      const testnet = await import("./testnet.mjs"), selected = testnet.readTestnetSelection(join(directory, "testnet-reader.json"));
-      assert.equal(input.selection.judgingIndex, selected.judgingIndex);
-      venue = await testnet.testnetVenue(selected, pin());
-      assert(venue !== undefined, "independent testnet pin unavailable");
-      reference = { context: selected.profile.reference, profile: selected.profile };
-    } else if (mode === "ergo") {
-      venue = new ErgoVenue(ERGO_PROFILE, ERGO_CHAIN.context);
-      const synced = await venue.sync([new BranchSupplier("holder-only", input.venue.tip, ERGO_CHAIN)]);
-      assert.equal(hex(synced.witnessedHeaderId), hex(pin()));
-    } else venue = FixtureVenue.from(input.venue);
-    process.stdout.write(JSON.stringify(await answer(input, { verifier, venue, reference })));
+    process.stdout.write(JSON.stringify(await answer(input, { verifier, ...await workerVenue(directory, mode, input) })));
   } finally { await api.destroy(); }
+}
+
+/** A fresh process's own view of the drill's venue: the fixture's exported ledger, the synthetic chain synced
+ * from its tip and checked against the pin the drill wrote, or (live) the reader's own selection and pin. */
+export async function workerVenue(directory, mode, input) {
+  const pin = () => new Uint8Array(readFileSync(join(directory, "ergo-pin.bin")));
+  let venue, reference = referenceFor(mode);
+  if (mode === "testnet") {
+    const testnet = await import("./testnet.mjs"), selected = testnet.readTestnetSelection(join(directory, "testnet-reader.json"));
+    assert.equal(input.selection.judgingIndex, selected.judgingIndex);
+    venue = await testnet.testnetVenue(selected, pin());
+    assert(venue !== undefined, "independent testnet pin unavailable");
+    reference = { context: selected.profile.reference, profile: selected.profile };
+  } else if (mode === "ergo") {
+    venue = new ErgoVenue(ERGO_PROFILE, ERGO_CHAIN.context);
+    const synced = await venue.sync([new BranchSupplier("holder-only", input.venue.tip, ERGO_CHAIN)]);
+    assert.equal(hex(synced.witnessedHeaderId), hex(pin()));
+  } else venue = FixtureVenue.from(input.venue);
+  return { venue, reference };
 }
 
 /**
