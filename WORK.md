@@ -21,8 +21,8 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
   `openV3Prover(api)` takes no artifacts; `check:pool:v3-programs` requires the sources to compile to the file exactly. Readers, journal
   and wallet require a `DeclaredVerifier` naming the configuration's six circuits; the undeclared per-object name and in-memory fallback are gone.
   Evidence: unit suite, `check:scripts`, local real-proof `check:pool:v3 -- --ergo`, CI green on Ubuntu and Windows; one fresh review, no blocker.
-  Reports binding the prover or verifiers drift until slice 10's drill re-records them. **Next: M10b**, the command-surface decision.
-- Audit area 11 (PR #75): reports binding `record-range.ts`/`ergo-check.mjs` are stale until re-recorded.
+  **Next: M10b**, the command-surface decision. Every current report below drifts (`check:evidence` at 09c8459: M10a's prover and
+  verifiers, area 11's `record-range.ts`/`ergo-check.mjs`) until slice 10's drill re-records them.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
