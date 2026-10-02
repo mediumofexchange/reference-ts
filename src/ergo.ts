@@ -49,7 +49,7 @@ import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, IN
 import {
   attributeSection, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
-import type { ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
+import type { ErgoPublication, ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import type { ErgoCheckpoint, ErgoVenueJournal } from "./ergo-store.js";
 import {
@@ -597,6 +597,12 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * depth; the publisher keeps what it built for later.
    */
   async publishRecord(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<void> {
+    await this.publish(kind, subject, record);
+  }
+
+  /** `publishRecord`, answering the transaction a supplier accepted, or undefined where this view already holds the
+   * record and nothing was sent. */
+  async publish(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<ErgoPublication | undefined> {
     if (kind !== 1 && kind !== 2 && kind !== 3 && kind !== 4) throw new EncodingError("invalid Ergo record kind");
     const length = byteLength(record);
     if (byteLength(subject) !== 32 || (kind === 4 ? length > MAX_RANGE_RECORD_BYTES[4] : length !== MAX_RANGE_RECORD_BYTES[kind])) {
@@ -607,7 +613,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     this.requireSnapshot();
     const request = { location: this.profile.scripts[kind], subject: ownSubject, record: ownRecord, height: this.store.tip().height, chunked: kind === 4 };
     // Held already, as when a sync settled it after the caller last read: nothing to send.
-    if (this.holds(request)) return;
+    if (this.holds(request)) return undefined;
     const ready = (): void => {
       const clock = this.requireSnapshot().witnessed, tip = this.store.tip();
       if (tip.height < tip.anchorHeight + 1n + clock + this.profile.depth) {
@@ -615,15 +621,20 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       }
     };
     ready();
-    await this.publisher.publish(request, ready);
+    return this.publisher.publish(request, ready);
+  }
+
+  /** The first index this view witnessed the exact record at, under its kind and subject, or undefined where its
+   * witnessed index holds none. */
+  witnessedAt(kind: RecordKind, subject: Uint8Array, record: Uint8Array): bigint | undefined {
+    const snapshot = this.requireSnapshot(), first = this.firstIndex.get(objectKey(kind, copyUnshared(subject), copyUnshared(record)));
+    return first !== undefined && first <= snapshot.witnessed ? first : undefined;
   }
 
   /** Whether the snapshot holds this exact record at its location under its subject. */
   private holds(request: ErgoRecordRequest): boolean {
-    const snapshot = this.requireSnapshot();
     const kind = ([1, 2, 3, 4] as const).find(k => compareBytes(this.profile.scripts[k], request.location) === 0);
-    const first = kind === undefined ? undefined : this.firstIndex.get(objectKey(kind, request.subject, request.record));
-    return first !== undefined && first <= snapshot.witnessed;
+    return kind !== undefined && this.witnessedAt(kind, request.subject, request.record) !== undefined;
   }
 }
 

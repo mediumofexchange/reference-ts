@@ -5,7 +5,13 @@
 // directory serve holds refuses BUSY, and after serve stops past the terms' silence the operator returns and adopts.
 // Hostile cases: a shared directory, another role's directory, terms under another name, forged or without --synthetic,
 // an interrupted venue create, a publication past the spend budget, SQLite's temporary files kept in the directory.
-// Statements, the commit-on-admission rule and each command's peak RSS come in M10c2 with the wallet commands.
+// M10c2b1: the wallet (holder and backer) and relay commands. A backer's wallet creates terms naming a second
+// operator directory on the same venue; through fresh processes the backer issues to a holder's exact request, the
+// holder pays a shop, serve commits on admission, and the shop fulfills (a rerun exits 4). The shop demands, the
+// backer accepts and a relay publishes the acceptance, the shop settles and the backer burns, read final by sync and
+// the reader's supply. A withdrawn demand's notes are refused to a payment and freshened; restore-seed and a
+// handoff restore the holdings; with the operator offline past silence a demand and its settlement are published
+// through the relay and read final by force. Every process's peak RSS is recorded.
 //
 // Usage: node scripts/pool/v3/command-drill.mjs  (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
@@ -20,7 +26,7 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../..
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
 
-const root = resolve(import.meta.dirname, "../../.."), MOE = join(root, "dist/cli/moe.js");
+const root = resolve(import.meta.dirname, "../../.."), MOE = join(root, "dist/cli/moe.js"), RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const obligorSecret = new Uint8Array(32).fill(41), obligor = ed25519.getPublicKey(obligorSecret);
 const SILENCE = 16n, DEPTH = "2";
@@ -47,9 +53,12 @@ const mine = count => call("/synthetic/mine", { count });
 /** One `moe` process: its exit code, stdout's JSON and stderr. With `mining: "waiting"`, each wait it logs mines one
  * block, so the chain moves with the command's retries rather than the wall clock (a slow runner would otherwise see
  * more indices pass between two tries than a schedule's window). */
-function moe(args, { mining } = {}) {
+function moe(args, { mining, input } = {}) {
   return new Promise((done, failed) => {
-    const began = performance.now(), child = spawn(process.execPath, [MOE, ...args], { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const rss = join(scratch, `rss-${processes.length}-${process.hrtime.bigint()}.json`);
+    const began = performance.now(), child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, ...args],
+      { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...process.env, MOE_DRILL_RSS: rss } });
+    if (input !== undefined) child.stdin.end(input);
     const out = [], err = [];
     child.stdout.on("data", chunk => out.push(chunk));
     child.stderr.on("data", chunk => {
@@ -62,7 +71,9 @@ function moe(args, { mining } = {}) {
     child.on("error", failed);
     child.on("close", status => {
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
-      processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began) });
+      let maxRssKb = null;
+      try { maxRssKb = JSON.parse(readFileSync(rss, "utf8")).maxRssKb; rmSync(rss); } catch { /* a process that died before its exit handler */ }
+      processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began), maxRssKb });
       let json;
       try { json = stdout.trim() === "" ? undefined : JSON.parse(stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
       let refusal;
@@ -87,8 +98,9 @@ const refused = async (args, code) => {
 
 /** `moe operator serve` in the background: resolves with its first line once listening, and a stop. */
 function serve(directory) {
-  const child = spawn(process.execPath, [MOE, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", "100"],
-    { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  const rss = join(scratch, `rss-serve-${process.hrtime.bigint()}.json`), began = performance.now();
+  const child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", "100"],
+    { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MOE_DRILL_RSS: rss } });
   let stdout = "", stderr = "";
   child.stderr.on("data", chunk => { stderr += chunk; });
   const exited = new Promise(done => child.on("close", status => done(status)));
@@ -101,6 +113,9 @@ function serve(directory) {
     // the operating system releases its directory lock either way.
     child.kill("SIGTERM"); const status = await exited;
     if (process.platform !== "win32") assert.equal(status, 0, stderr);
+    let maxRssKb = null;
+    try { maxRssKb = JSON.parse(readFileSync(rss, "utf8")).maxRssKb; rmSync(rss); } catch { /* ended outright (Windows) */ }
+    processes.push({ command: "operator serve (running)", status, elapsedMs: Math.round(performance.now() - began), maxRssKb });
   } };
 }
 
@@ -153,10 +168,10 @@ try {
   const reader = ["--dir", RD];
   /** Serve publishes on its own poll after it commits: mine past the depth and read until `until` holds, a few
    * rounds at most, so the drill does not race serve's publication on a slow runner. */
-  const supplyUntil = async (until, rounds = 8) => {
+  const supplyUntil = async (until, rounds = 8, which = backing) => {
     for (let round = 0; ; round++) {
       await mine(Number(DEPTH) + 2); await new Promise(done => setTimeout(done, 400));
-      const read = await ok(["reader", "supply", ...reader, backing]);
+      const read = await ok(["reader", "supply", ...reader, which]);
       if (read.checkpoint !== undefined && until(read)) return read;
       assert(round < rounds, `the reader's supply did not reach the expected checkpoint: ${JSON.stringify(read.checkpoint)}`);
     }
@@ -213,6 +228,217 @@ try {
     const after = await supplyUntil(read => BigInt(read.checkpoint.sequence) >= BigInt(returned.commitment.sequence));
     assert.equal(after.supply, "0");
     await again.stop();
+  });
+
+  // The wallet and relay commands (M10c2b): a backer's terms on the operator's venue, holders' wallets, a relay.
+  const OW = join(scratch, "operator-wallets"), BK = join(scratch, "backer"), HD = join(scratch, "holder"), SH = join(scratch, "shop"), RL = join(scratch, "relay");
+  const wallet = (verb, directory, ...rest) => ["wallet", ...verb.split(" "), "--dir", directory, ...rest];
+  let backing2, serving;
+  /** Mine and rerun `args` until it exits 0 and `until` holds of its output, a few rounds at most. */
+  const settled = async (args, until, rounds = 12) => {
+    for (let round = 0; ; round++) {
+      await mine(Number(DEPTH) + 2); await new Promise(done => setTimeout(done, 400));
+      const result = await moe(args);
+      if (result.status === 0 && until(result.json)) return result.json;
+      assert(round < rounds, `moe ${args.join(" ")} did not settle: ${result.stdout}${result.stderr}`);
+    }
+  };
+  /** Mine, sync and read the saved record under `alias` until it is final: sync resolves saved records. */
+  const finalOf = async (directory, alias, rounds = 12) => {
+    for (let round = 0; ; round++) {
+      await mine(Number(DEPTH) + 2); await new Promise(done => setTimeout(done, 400));
+      await ok(wallet("sync", directory, backing2));
+      const saved = await ok(wallet("status", directory, alias));
+      if (saved.status === "final") return saved;
+      assert(round < rounds, `${alias} did not become final: ${JSON.stringify(saved)}`);
+    }
+  };
+  /** A submission, retried while serve waits out its reopening lag (C2.8.2) and refuses SCHEDULE. */
+  const submit = async (directory, alias) => {
+    for (let round = 0; ; round++) {
+      const result = await moe(wallet("submit", directory, alias, backing2));
+      if (result.status === 0) return result.json;
+      assert(round < 12 && result.refusal?.code === "SCHEDULE", `moe wallet submit ${alias}: ${result.stderr}`);
+      await mine(1); await new Promise(done => setTimeout(done, 300));
+    }
+  };
+  const holdings = view => view.holdings.map(h => [h.value, h.status, h.presented.length]).sort();
+  /** A request from `directory`, its frame in a file and its digest. */
+  const request = async (directory, alias, value) => {
+    const out = join(scratch, `${alias}.request`), made = await ok(wallet("request", directory, alias, backing2, String(value), "--out", out));
+    return { made, args: ["--request", out, "--digest", made.digest] };
+  };
+
+  await check("a backer's wallet creates terms naming the operator; the operator opens them; holders keep them", async () => {
+    // A journal holds one genesis segment: the backer's backing has an operator directory of its own on the same venue.
+    const operator = await ok(["operator", "init", "--dir", OW, "--venue", join(OP, "venue.json"), ...common, "--budget", "50000000"]);
+    await call("/synthetic/fund", { tree: operator.fundingTree, value: "1000000000" });
+    const init = await ok(wallet("init", BK, "--backer", "--venue", join(OP, "venue.json"), ...common));
+    assert.match(init.backer, /^[0-9a-f]{64}$/);
+    await refused(wallet("terms create", HD), "ABSENT");
+    const created = await ok(wallet("terms create", BK, "--operator", operator.operator, "--thing", "drill units", "--per-unit", "1", "--interval", "80",
+      "--silence", String(SILENCE), "--challenge", "5"));
+    backing2 = created.backing;
+    await ok(["operator", "open", "--dir", OW, "--id", "genesis", backing2, "--terms", created.terms, "--signature", created.signature, "--synthetic"]);
+    for (const directory of [HD, SH]) {
+      await ok(wallet("init", directory, "--venue", join(OP, "venue.json"), ...common));
+      await refused(wallet("issue", directory, "x", backing2), "ABSENT");
+      const added = await ok(wallet("terms add", directory, backing2, "--terms", created.terms, "--signature", created.signature, "--synthetic"));
+      assert.equal(added.obligor, init.backer);
+    }
+    // A holder's wallet holds no K: the backer's commands refuse it.
+    await refused(wallet("burn", HD, "x", backing2, "1"), "ROLE");
+    const relay = await ok(["relay", "init", "--dir", RL, "--venue", join(OP, "venue.json"), ...common, "--budget", "50000000"]);
+    await call("/synthetic/fund", { tree: relay.fundingTree, value: "1000000000" });
+    await mine(Number(DEPTH) + 2);
+  });
+
+  await check("issue, payment and fulfillment through wallet commands; serve commits on admission; fulfill is never replayed", async () => {
+    serving = serve(OW);
+    await serving.listening;
+    for (const directory of [BK, HD, SH]) await ok(wallet("service add", directory, backing2, join(OW, "service.json")));
+    const fund = await request(HD, "fund", 10);
+    assert.equal(fund.made.notes.length, 3, "the first request explains");
+    const issued = await ok(wallet("issue", BK, "issue-1", backing2, ...fund.args, "--value", "10"));
+    assert.deepEqual([issued.status, issued.kind], ["pending", "issue"]);
+    const submitted = await submit(BK, "issue-1");
+    assert.equal(submitted.status, "pending");
+    // An exact rerun is the library's retry: the saved record, without evidence or a new proof.
+    const again = await ok(wallet("issue", BK, "issue-1", backing2, ...fund.args, "--value", "10"));
+    assert.deepEqual([again.statement, again.evidence], [issued.statement, "saved"]);
+    await finalOf(BK, "issue-1");
+    const funded = await ok(wallet("sync", HD, backing2));
+    assert.deepEqual(holdings(funded), [["10", "available", 0]]);
+    assert.equal(funded.evidence, "served");
+    const invoice = await request(SH, "invoice", 3);
+    const paid = await ok(wallet("pay", HD, "pay-1", backing2, ...invoice.args, "--value", "3"));
+    assert.deepEqual([paid.status, paid.kind, paid.value], ["pending", "payment", "3"]);
+    assert.notEqual(paid.receipt, null);
+    assert.equal(paid.notes, undefined, "explained once, at the wallet's first request");
+    // The payer agrees to the request's exact value; the alias names one order.
+    await refused(wallet("pay", HD, "pay-1", backing2, ...invoice.args, "--value", "2"), "INVALID");
+    await refused(wallet("pay", HD, "pay-1", backing2, ...(await request(SH, "invoice-b", 3)).args, "--value", "3"), "CONFLICT");
+    await refused(wallet("pay", HD, "pay-2", backing2, invoice.args[0], invoice.args[1], "--digest", "00".repeat(32), "--value", "3"), "REQUEST");
+    const fulfilled = await settled(wallet("fulfill", SH, "invoice", backing2), () => true);
+    assert.deepEqual([fulfilled.status, fulfilled.value], ["final", "3"]);
+    const replay = await moe(wallet("fulfill", SH, "invoice", backing2));
+    assert.equal(replay.status, 4, replay.stderr);
+    const { status: _status, evidence: _evidence, ...saved } = fulfilled;
+    assert.deepEqual(JSON.parse(replay.stdout), { status: "replay", ...saved });
+    assert.deepEqual(await ok(wallet("fulfillment", SH, "invoice")), { status: "final", ...saved });
+    assert.deepEqual(holdings(await ok(wallet("sync", HD, backing2))), [["7", "available", 0]]);
+    assert.equal((await ok(wallet("status", HD, "pay-1"))).status, "final");
+  });
+
+  let demanded;
+  await check("demand, the backer's acceptance relayed, settlement and burn through wallet commands, final by sync and the reader", async () => {
+    const shown = await ok(wallet("demand", SH, "redeem", backing2, "3", "--deadline", "+60"));
+    assert.deepEqual([shown.status, shown.kind, shown.repeats], ["pending", "demand", []]);
+    assert.match(shown.notes[0], /tags become public/);
+    demanded = shown;
+    // Outside a gap a publication has no force and discloses what it names: refused.
+    await refused(wallet("publish", SH, "redeem", backing2, "--out", join(scratch, "early.json")), "GAP");
+    await submit(SH, "redeem");
+    await finalOf(SH, "redeem");
+    const locked = await ok(wallet("sync", SH, backing2));
+    assert.deepEqual(holdings(locked), [["3", "locked", 1]]);
+    assert.deepEqual(locked.demands.map(d => d.id), [shown.demand]);
+    const acceptance = join(scratch, "answer.acceptance"), relayed = join(scratch, "answer.json");
+    const accepted = await ok(wallet("accept", BK, "answer", backing2, shown.demand, "--deadline", String(BigInt(shown.deadline) - 10n), "--out", acceptance));
+    assert.equal(accepted.demand, shown.demand);
+    await ok(wallet("publish-acceptance", BK, "answer", backing2, "--out", relayed));
+    // The relay checks the file against its own venue and publishes it with its funding key, keyed by the record.
+    const sent = await ok(["relay", "publish", "--dir", RL, relayed]);
+    assert.equal(sent.status, "pending"); assert.match(sent.transaction, /^[0-9a-f]{64}$/);
+    const witnessed = await settled(["relay", "publish", "--dir", RL, relayed], out => out.status === "final");
+    assert.equal(witnessed.record, sent.record);
+    const settlement = await ok(wallet("settle", SH, "settle-1", backing2, "--acceptance", acceptance));
+    assert.deepEqual([settlement.kind, settlement.demand], ["settlement", shown.demand]);
+    await submit(SH, "settle-1");
+    await finalOf(SH, "settle-1");
+    assert.deepEqual((await ok(wallet("sync", SH, backing2))).holdings, []);
+    const reading = await ok(wallet("presentation", HD, backing2, shown.demand));
+    assert.deepEqual([reading.status, reading.ended.by, reading.acceptances.length], ["final", "settlement", 1]);
+    // The settlement paid K's own owner: the backer's wallet finds the note from its seed and burns it.
+    assert.deepEqual(holdings(await ok(wallet("sync", BK, backing2))), [["3", "available", 0]]);
+    await ok(wallet("burn", BK, "retire", backing2, "3"));
+    await submit(BK, "retire");
+    await finalOf(BK, "retire");
+    await ok(["reader", "terms", "add", ...reader, backing2, "--terms", join(BK, "terms", backing2), "--signature", join(BK, "terms", `${backing2}.sig`), "--synthetic"]);
+    await ok(["reader", "service", "add", ...reader, backing2, join(OW, "service.json")]);
+    const read = await supplyUntil(read => read.burned === "3", 8, backing2);
+    assert.deepEqual([read.issued, read.burned, read.supply], ["10", "3", "7"]);
+  });
+
+  let withdrawn;
+  await check("a withdrawn demand's notes are presented: payment refuses them, freshen moves them to one fresh note", async () => {
+    const shown = await ok(wallet("demand", HD, "d2", backing2, "7", "--deadline", "+60"));
+    await submit(HD, "d2");
+    await finalOf(HD, "d2");
+    withdrawn = shown.demand;
+    await ok(wallet("withdraw", HD, "w2", backing2, withdrawn));
+    await submit(HD, "w2");
+    await finalOf(HD, "w2");
+    assert.deepEqual(holdings(await ok(wallet("sync", HD, backing2))), [["7", "available", 1]]);
+    const invoice = await request(SH, "invoice-2", 2);
+    await refused(wallet("pay", HD, "pay-2", backing2, ...invoice.args, "--value", "2"), "FUNDS");
+    const fresh = await ok(wallet("freshen", HD, "fresh-2", backing2, withdrawn));
+    assert.deepEqual([fresh.kind, fresh.freshens, fresh.value], ["freshen", withdrawn, "7"]);
+    await finalOf(HD, "fresh-2");
+    assert.deepEqual(holdings(await ok(wallet("sync", HD, backing2))), [["7", "available", 0]]);
+  });
+
+  const H2 = join(scratch, "holder-seed"), H3 = join(scratch, "holder-handoff");
+  await check("restore-seed finds the holdings from the seed alone; a handoff freezes its source and restores once", async () => {
+    const { seed } = await ok(wallet("seed", HD, "--show"));
+    assert.match(seed, /^[0-9a-f]{64}$/);
+    assert.equal((await moe(wallet("seed", HD))).status, 2, "seed needs --show");
+    await ok(["wallet", "restore-seed", "--dir", H2, "--venue", join(OP, "venue.json"), ...common], { input: `${seed}\n` });
+    await ok(wallet("terms add", H2, backing2, "--terms", join(BK, "terms", backing2), "--signature", join(BK, "terms", `${backing2}.sig`), "--synthetic"));
+    await ok(wallet("service add", H2, backing2, join(OW, "service.json")));
+    assert.deepEqual(holdings(await ok(wallet("sync", H2, backing2))), [["7", "available", 0]]);
+    const key = join(scratch, "handoff.key"), out = join(scratch, "handoff.bin");
+    await refused(wallet("handoff", HD, "--key", join(HD, "inside.key"), "--out", out), "PATH");
+    const frozen = await ok(wallet("handoff", HD, "--key", key, "--out", out));
+    assert.deepEqual(await ok(wallet("handoff", HD, "--key", key, "--out", out)), frozen, "a rerun reuses the key and prints the same handoff");
+    await refused(wallet("sync", HD, backing2), "FENCED");
+    const restoreArgs = ["wallet", "restore", "--dir", H3, "--venue", join(OP, "venue.json"), ...common, "--key", key, "--backup", out, "--digest", frozen.digest];
+    await ok(restoreArgs);
+    assert.deepEqual((await ok(restoreArgs)).status, "restored");
+    // The handoff carries the wallet database; the public terms and service file are kept again.
+    await ok(wallet("terms add", H3, backing2, "--terms", join(BK, "terms", backing2), "--signature", join(BK, "terms", `${backing2}.sig`), "--synthetic"));
+    await ok(wallet("service add", H3, backing2, join(OW, "service.json")));
+    assert.deepEqual(holdings(await ok(wallet("sync", H3, backing2))), [["7", "available", 0]]);
+    assert.deepEqual((await ok(wallet("status", H3, "fresh-2"))).status, "final", "the handoff carries the saved records");
+  });
+
+  await check("with the operator offline past silence, a demand and its settlement are published through the relay and read final by force", async () => {
+    // Each party keeps the package of its last sync; serve signs nothing while the chain does not move.
+    for (const directory of [H3, BK]) await ok(wallet("sync", directory, backing2));
+    await serving.stop();
+    await mine(Number(SILENCE) + 4);
+    const shown = await ok(wallet("demand", H3, "gap", backing2, "7", "--deadline", "+60"));
+    assert.equal(shown.evidence, "kept");
+    const file = join(scratch, "gap.json");
+    const written = await ok(wallet("publish", H3, "gap", backing2, "--out", file));
+    assert.equal(written.status, "written");
+    await ok(["relay", "publish", "--dir", RL, file]);
+    await settled(["relay", "publish", "--dir", RL, file], out => out.status === "final");
+    const locked = await settled(wallet("sync", H3, backing2), view => view.holdings[0]?.status === "locked");
+    assert.equal(locked.gap, true);
+    assert.equal((await ok(wallet("status", H3, "gap"))).status, "final");
+    const acceptance = join(scratch, "gap.acceptance");
+    await ok(wallet("accept", BK, "gap-answer", backing2, shown.demand, "--deadline", String(BigInt(shown.deadline) - 10n), "--out", acceptance));
+    await ok(wallet("settle", H3, "gap-settle", backing2, "--acceptance", acceptance));
+    const release = join(scratch, "gap-settle.json");
+    await ok(wallet("publish", H3, "gap-settle", backing2, "--out", release));
+    await ok(["relay", "publish", "--dir", RL, release]);
+    await settled(wallet("sync", H3, backing2), view => view.holdings.length === 0);
+    assert.equal((await ok(wallet("status", H3, "gap-settle"))).status, "final");
+    // A relay refuses a file for another venue.
+    const other = JSON.parse(readFileSync(release, "utf8")); other.venue = "00".repeat(32);
+    const forged = join(scratch, "other-venue.json"); writeFileSync(forged, JSON.stringify(other));
+    await refused(["relay", "publish", "--dir", RL, forged], "VENUE");
   });
 
   await check("an interrupted venue create anchors again over a stale context; a publication past the spend budget refuses BUDGET", async () => {

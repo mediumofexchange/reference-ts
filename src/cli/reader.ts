@@ -8,26 +8,28 @@
 // nothing kept between processes, so every proof is verified again.
 import { mkdirSync } from "node:fs";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { readPresentation } from "../pool/v3/dishonour.js";
+import { readPresentation, type Presentation } from "../pool/v3/dishonour.js";
 import { EvidenceStore } from "../pool/v3/evidence-store.js";
 import { readFrontier } from "../pool/v3/package-reader.js";
 import { V3ServiceClient } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import { CommandError, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print, readJson, readRequired,
-  required, writeReplace, type Arguments, type Directory, type Role } from "./common.js";
+  required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { openVerifier, verifierCount } from "./backend.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { keepContext, openView, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
 /** `init` shared by every role: parameters (copied from `--parameters` or fetched), then the venue when given. */
-export async function initRole(argv: readonly string[], role: Role, options: { readonly venue: "required" | "optional"; readonly budget?: boolean;
-  readonly fill?: (directory: Directory, args: Arguments) => Promise<object> }): Promise<void> {
-  const args = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", ...(options.budget ? { budget: "value" } : {}) }, 0);
+export async function initRole(argv: readonly string[], role: Role, options: { readonly venue: "required" | "optional" | ((args: Arguments) => "required" | "optional");
+  readonly budget?: boolean; readonly flags?: FlagSpec; readonly fill?: (directory: Directory, args: Arguments) => Promise<object> }): Promise<void> {
+  const args = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", ...(options.budget ? { budget: "value" } : {}),
+    ...options.flags }, 0);
+  const venueRule = typeof options.venue === "function" ? options.venue(args) : options.venue;
   const nodes = flags(args, "node");
   if (nodes.length === 0) throw new UsageError("--node is required (one or more of this directory's own node endpoints)");
   for (const node of nodes) if (!/^https?:\/\/[^\s]+$/.test(node)) throw new CommandError("INVALID", `${node} is not a node URL`);
   const venueFile = flag(args, "venue"), parameters = flag(args, "parameters");
-  if (venueFile === undefined && options.venue === "required") throw new UsageError("--venue is required");
+  if (venueFile === undefined && venueRule === "required") throw new UsageError("--venue is required");
   const budget = options.budget ? integer(required(args, "budget"), "--budget", 0n, (1n << 63n) - 1n) : undefined;
   // The venue file is read before the directory exists, so a bad one leaves nothing behind.
   const venue = venueFile === undefined ? undefined : parseVenue(readJson(venueFile, "the venue file"));
@@ -93,14 +95,17 @@ export function serviceCommand(argv: readonly string[], role: Role): void {
 /** The client for the service of the operator the terms name; its expected identity comes from the terms and the
  * venue, never from the service file. */
 export function serviceClient(directory: Directory, kept: KeptTerms, view: View): V3ServiceClient {
-  const service = parseService(readJson(directory.file(`services/${hex(kept.terms.operator)}.json`), "the operator's service file"));
+  const service = parseService(readJson(directory.file(`services/${hex(kept.terms.operator)}.json`), "service file for the terms' operator (service add)"));
   return new V3ServiceClient(service.url, service.walletToken, { operator: kept.terms.operator, reference: view.file.reference });
 }
+
+/** Whether a service call failed because the service did not answer (nothing listening, a dropped connection). */
+export const unanswered = (error: unknown): boolean => error instanceof TypeError && error.message === "fetch failed";
 
 /** The service's package over what `evidence` retains; a service that does not answer is unavailable evidence. */
 async function served(client: V3ServiceClient, backing: Uint8Array, evidence: EvidenceStore): Promise<Uint8Array> {
   try { return (await client.sync(backing, evidence)).package; } catch (error) {
-    if (error instanceof TypeError && error.message === "fetch failed") throw new CommandError("UNAVAILABLE", "the operator's service did not answer");
+    if (unanswered(error)) throw new CommandError("UNAVAILABLE", "the operator's service did not answer");
     throw error;
   }
 }
@@ -140,6 +145,11 @@ export async function supplyCommand(argv: readonly string[], role: Role): Promis
     faults: (read.faultEvidence ?? []).length });
 }
 
+/** A demand's reading under C3.8 at its judging index: final once ended or overdue, pending while it stands. */
+export function presentationOf(reading: Presentation, at: bigint) {
+  return { status: reading.ended !== undefined || reading.overdue !== undefined ? "final" : "pending", judgingIndex: at, ...reading };
+}
+
 export async function presentationCommand(argv: readonly string[], role: Role): Promise<void> {
   const args = parseArguments(argv, READ_FLAGS, 2);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
@@ -147,7 +157,7 @@ export async function presentationCommand(argv: readonly string[], role: Role): 
   const { at, read, sync } = await frontier(directory, args, kept, true);
   const reading = readPresentation(read, kept.backing, kept.terms.obligor, demand);
   if (reading === undefined) throw new CommandError("ABSENT", "the demand is not in this backing's record");
-  print({ status: reading.ended !== undefined || reading.overdue !== undefined ? "final" : "pending", judgingIndex: at, sync, ...reading });
+  print({ ...presentationOf(reading, at), sync });
 }
 
 export async function reader(argv: readonly string[]): Promise<void> {

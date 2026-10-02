@@ -189,6 +189,9 @@ export interface WalletView {
   readonly backing: Uint8Array;
   readonly judgingIndex: bigint;
   readonly checkpoint: Commitment | undefined;
+  /** Whether the backing's gap is open at this read (C2b.3.2): a demand, withdrawal or release made now takes effect
+   * by publication at the venue (`publish`), and no payment is admitted. */
+  readonly gap: boolean;
   readonly holdings: readonly Holding[];
   /** This seed's demands standing in that view, saved here or not: one a lost wallet made is found from the seed. */
   readonly demands: readonly StandingDemand[];
@@ -240,6 +243,12 @@ interface Frontier {
   readonly chain: FrontierResult["ranges"]["chain"]; readonly scopeChains: FrontierResult["scopeChains"]; readonly clock: FrontierResult["clock"];
   /** The read's forced publications and, where it asked for them, the backing's witnessed answers. */
   readonly result: Pick<FrontierResult, "canonical" | "force" | "answers" | "ranges">;
+}
+
+/** Whether the read's horizon (index plus lag) is past the canonical checkpoint by more than the backing's declared
+ * silence duration: the gap is then open at every index an act made now could first be witnessed at (C2b.3.2). */
+function gapOpen({ canonical, clock, at, lag }: Frontier): boolean {
+  return canonical !== undefined && clock !== null && clock !== undefined && at + lag - canonical.index > BigInt(clock.duration);
 }
 
 /** The spendable single-note or least-total pair covering `total`; ties by commitment. */
@@ -571,10 +580,7 @@ export class V3Wallet {
    * the act is bound to the snapshot (the canonical checkpoint) and its holder publishes it (`publish`). The
    * operator's term and the scope's other clocks do not decide force there; the backing's own gap does. */
   private route(view: Frontier): { readonly header: SegmentHeader; readonly gap: boolean } {
-    const { canonical, clock, at, lag } = view;
-    if (canonical !== undefined && clock !== null && clock !== undefined && at + lag - canonical.index > BigInt(clock.duration)) {
-      return { header: canonical.header, gap: true };
-    }
+    if (gapOpen(view)) return { header: view.canonical!.header, gap: true };
     return { header: this.admissible(view), gap: false };
   }
   /** Whether this seed presents `demand`: its presenter key is the seed's derivation over its own notice (C3.3).
@@ -1011,7 +1017,7 @@ export class V3Wallet {
       const decided = canonical !== undefined && force !== undefined ? this.resolutions(backing, canonical, force, at, lag) : [];
       observed.check();
       if (canonical !== undefined) this.resolve(decided, encodeCommitment(canonical.commitment), at);
-      return { backing, judgingIndex: at, checkpoint: canonical?.commitment, holdings: this.holdingsOf(notes, force, at),
+      return { backing, judgingIndex: at, checkpoint: canonical?.commitment, gap: gapOpen(view), holdings: this.holdingsOf(notes, force, at),
         demands: this.demandsOf(view) };
     });
   }

@@ -26,6 +26,11 @@ export class CommandError extends Error {
   constructor(readonly code: string, message: string, readonly check?: string) { super(message); this.name = "CommandError"; }
 }
 
+/** A command that is never replayed, rerun: its saved result is printed and the process exits 4 (`fulfill`). */
+export class Replayed extends Error {
+  constructor(readonly value: object) { super("replayed"); this.name = "Replayed"; }
+}
+
 /** A command's arguments: positionals in order, and each `--flag value` (or bare `--flag`) by name. */
 export interface Arguments {
   readonly positional: readonly string[];
@@ -219,6 +224,13 @@ export function writeExclusive(path: string, data: string | Uint8Array): void {
     }
   } finally { rmSync(temporary, { force: true }); }
   syncParent(path);
+}
+
+/** Write a new file, or accept one already holding exactly `data` (a rerun's output); other bytes there conflict. */
+export function writeSame(path: string, data: string | Uint8Array): void {
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data, held = readOptional(path);
+  if (held === undefined) { writeExclusive(path, bytes); return; }
+  if (held.length !== bytes.length || held.some((byte, i) => byte !== bytes[i])) throw new CommandError("EXISTS", `${path} already exists and holds other bytes`);
 }
 
 /** Replace a file atomically (a synced temporary file renamed over it). */
