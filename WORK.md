@@ -19,12 +19,11 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
 - **M10a done** (PR #79, [decision](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)):
   shipped relations with a manifest-checked loader; readers, journal and wallet require a verifier naming the configuration's circuits.
 - **M10b done** ([decision](decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b)):
-  one `moe` bin over role directories (wallet, operator, reader, relay) with a per-directory process lock, umask 077, keys in owner-only
-  files, admin token never handed out, Ergo venues only (a test-only synthetic node serving the node REST paths), funding only in
-  operator/relay directories, `serve` checkpointing on witnessed indices, presented notes refused to pay/burn and spent by `freshen`, and
-  per-command rerun and exit-code rules; one fresh review (1 blocker, 11 material, all taken) and its read-back.
+  one `moe` bin over role directories (wallet, operator, reader, relay): per-directory lock, umask 077, owner-only key files, Ergo venues
+  only (a test-only synthetic node), funding apart from the wallet, `freshen` for presented notes, rerun/exit-code rules; reviewed, read back.
 - **M10c1 done** (PRs #83, #84; [decision](decisions/2026-10.md#2026-10-02--read-through-each-directorys-own-view-gate-venue-creation-on-the-nodes-network-and-queue-serves-journal-calls-with-the-services-slice-10-m10c1)):
   `moe` bin (`src/cli/`), parameters in the package, `venue create`, `reader` and `operator` commands; `command-drill.mjs` in `check:pool:v3`.
+  Code review of slices 9–10 ([decision](decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)): publisher readiness race, failed-settlement publish, serve keep-alive/UNREPLAYED fixed.
   **Next: M10c2** (Next 3). Every current report drifts (`check:evidence` at 09c8459) until the packed drill re-records.
 
 ## Evidence
@@ -42,7 +41,8 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
    `freshen` (re-demand allowed), the relay command (the funding duty stays open) and the explanations, all in M10c2. Open past slice 10:
    a network transport and syncs that do not identify the holder or tie an address to the backing it spends (its own unit and review).
 3. M10c2 (M10b decision): wallet/backer and relay commands on `src/cli/`, `freshen`, statements through `serve` (commit-on-admission untested),
-   peak RSS, packed drill (no `@noir-lang` in a reader); synthetic index lag knob; testnet context has no difficulty floor (M10d).
+   peak RSS, packed drill (no `@noir-lang` in a reader); synthetic index lag knob; testnet context has no difficulty floor (M10d);
+   bb.js `generateProof` logs to stdout: keep it off the wallet commands' one-object stdout; read the budget's boxes before readiness (review).
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take
@@ -75,7 +75,7 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
    served-trail caller-object cache; drop the explicit `vite` dev pin at the next dependency change; test a second commit refused while one is in
    flight (`store.ts` `ready`). Move `store-check.mjs`/`history-store-check.mjs` onto `drill.mjs` and one `receiptFields`; retire `header-verify`
    and `testnet-header-check` unless a mainnet slice needs them. `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11.
-9. Only when a gate needs them: cancellation, batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, sponsored
+9. Only when a gate needs them: cancellation (also closes C3.5's late-witnessed release; pool-v4 could bind the acceptance in `rho_out`), batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, sponsored
    holder funding, operator fee quotes, a kind-4 fee by length (fee-per-byte nodes rank a long run last once a pool fills; C3 deadlines), a
    text/QR request frame, C4.5 pending-acceptance receipt handoff, same-segment rescoping; against hostile evidence growth (M4) a per-supply bound
    tied to what the venue newly holds and serving a reader only the segments its checkpoints name. Past the smallest profile: statements

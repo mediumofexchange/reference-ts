@@ -334,7 +334,7 @@ owner. Publish or resolve the prepared one first. For the same reason
 at any later index, and a later settlement at the same count names its output.
 A release sent in time but witnessed only after a later settlement at its count
 was built still discloses that settlement's output; C3.5's count reads only
-witnessed releases (WORK.md Open questions).
+witnessed releases ([review decision](../decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)).
 
 Resolution: an act is final once its statement is in canonical history,
 imports included, or (a demand, withdrawal or settlement) has force at the
