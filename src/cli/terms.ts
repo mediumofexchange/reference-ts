@@ -40,9 +40,9 @@ export function authenticate(bytes: Uint8Array, signature: Uint8Array, backing: 
 export function keepTerms(directory: Directory, kept: KeptTerms): void {
   mkdirSync(directory.file("terms"), { recursive: true, mode: 0o700 });
   const path = directory.file(`terms/${hex(kept.backing)}`), held = readOptional(path), sig = readOptional(`${path}.sig`);
-  if (held !== undefined && sig !== undefined) {
-    if (!same(held, kept.signed.terms) || !same(sig, kept.signed.signature)) throw new CommandError("CONFLICT", "other terms are kept under this name");
-    return;
+  // Each file already there, from an earlier run or an interrupted one, must be these bytes.
+  if ((held !== undefined && !same(held, kept.signed.terms)) || (sig !== undefined && !same(sig, kept.signed.signature))) {
+    throw new CommandError("CONFLICT", "other terms are kept under this name");
   }
   if (sig === undefined) writeExclusive(`${path}.sig`, kept.signed.signature);
   if (held === undefined) writeExclusive(path, kept.signed.terms);
