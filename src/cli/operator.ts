@@ -208,7 +208,11 @@ async function serve(argv: readonly string[]): Promise<void> {
     const s = await journal.status(), signed = s.signed;
     if (signed === undefined) return;
     // The latest signed commitment, a pending return's opening included, is published until the venue holds it.
-    if (!signed.held) { await budgeted(op, () => journal.publish()); return; }
+    if (!signed.held) {
+      const published = await budgeted(op, () => journal.publish());
+      if (!signed.published) log({ event: "published", at: s.now, commitment: commitmentOf(published) });
+      return;
+    }
     if (s.pendingReturn) {
       if (!pendingNoted) log({ event: "return held", message: "stop serve and run moe operator adopt" });
       pendingNoted = true;
@@ -220,6 +224,7 @@ async function serve(argv: readonly string[]): Promise<void> {
     const commitment = await journal.commit(`serve:${s.now}`);
     log({ event: "committed", at: s.now, admitted: signed.admitted, commitment: commitmentOf(commitment) });
     await budgeted(op, () => journal.publish());
+    log({ event: "published", at: s.now, commitment: commitmentOf(commitment) });
   };
   try {
     while (!stopping) {

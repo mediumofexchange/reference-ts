@@ -136,6 +136,16 @@ try {
   });
 
   const reader = ["--dir", RD];
+  /** Serve publishes on its own poll after it commits: mine past the depth and read until `until` holds, a few
+   * rounds at most, so the drill does not race serve's publication on a slow runner. */
+  const supplyUntil = async (until, rounds = 8) => {
+    for (let round = 0; ; round++) {
+      await mine(Number(DEPTH) + 2); await new Promise(done => setTimeout(done, 400));
+      const read = await ok(["reader", "supply", ...reader, backing]);
+      if (read.checkpoint !== undefined && until(read)) return read;
+      assert(round < rounds, `the reader's supply did not reach the expected checkpoint: ${JSON.stringify(read.checkpoint)}`);
+    }
+  };
   await check("reader init with the operator's venue file, terms add with --synthetic, terms show", async () => {
     const init = await ok(["reader", "init", ...reader, "--venue", join(OP, "venue.json"), ...common]);
     assert.equal(init.venue, venue);
@@ -159,9 +169,7 @@ try {
     assert.deepEqual([first.status, first.supply, first.issued, first.burned, first.checkpoint.sequence], ["final", "0", "0", "0", "1"]);
     // No statement is admitted: serve commits again at half the silence duration after the canonical checkpoint.
     await mineUntil(async () => /"event":"committed"/.test(served.log()));
-    await mine(Number(DEPTH) + 2); await new Promise(done => setTimeout(done, 400));
-    const later = await ok(["reader", "supply", ...reader, backing]);
-    assert(BigInt(later.checkpoint.sequence) > 1n, "a later checkpoint is canonical");
+    const later = await supplyUntil(read => BigInt(read.checkpoint.sequence) > 1n);
     // The whole package as any transport could carry it, read back below with the service stopped.
     const service = JSON.parse(readFileSync(join(OP, "service.json"), "utf8")), { reference } = parseVenue(JSON.parse(readFileSync(join(OP, "venue.json"), "utf8")));
     const whole = await new V3ServiceClient(service.url, service.walletToken, { operator: Buffer.from(operatorKey, "hex"), reference }).package(Buffer.from(backing, "hex"));
@@ -187,10 +195,8 @@ try {
     const again = serve(OP);
     await again.listening;
     await ok(["reader", "service", "add", ...reader, backing, join(OP, "service.json")]);
-    await mine(Number(DEPTH) + 2); await new Promise(done => setTimeout(done, 400));
-    const after = await ok(["reader", "supply", ...reader, backing]);
+    const after = await supplyUntil(read => BigInt(read.checkpoint.sequence) >= BigInt(returned.commitment.sequence));
     assert.equal(after.supply, "0");
-    assert(BigInt(after.checkpoint.sequence) >= BigInt(returned.commitment.sequence));
     await again.stop();
   });
 
