@@ -8,7 +8,7 @@ import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
-import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration, type VerifierIdentities } from "./configuration.js";
+import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration } from "./configuration.js";
 import { faultObserver, type FaultResult } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
@@ -18,7 +18,7 @@ import { checkpointScope } from "./scope-evidence.js";
 import { classifyScopeFrontier, classifyScopes, type FrontierContext, type FrontierResult, type ImportContext,
   type ScopeResult } from "./scope-reader.js";
 import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
-import type { ProofCheck, WitnessPredicate } from "./state.js";
+import type { DeclaredVerifier, WitnessPredicate } from "./state.js";
 import { declaredParallel } from "./verify-ahead.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
@@ -26,7 +26,7 @@ import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./term
 export type PackageSource = Uint8Array | AsyncIterable<Uint8Array>;
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 export interface PackageReader {
-  readonly verifier: ProofCheck;
+  readonly verifier: DeclaredVerifier;
   readonly venue: RecordVenue;
   readonly reference: VenueReference;
   /** The party's replay storage; a private in-memory store by default, kept alive by the result. */
@@ -61,20 +61,9 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
 
 /** The caller's verifier bound once, with a copy of the circuit identities it declares, which must be the
  * configuration's (§11.1) and name it in kept state (§14). */
-function ownVerifier(verifierIn: ProofCheck, verify: ProofCheck["verify"]): ProofCheck {
-  const parallel = declaredParallel(verifierIn), running = parallel === undefined ? {} : { parallel };
-  const declared = verifierIn.identities;
-  if (declared === undefined) return { verify: verify.bind(verifierIn), ...running };
-  if (declared === null || typeof declared !== "object") throw new TypeError("invalid verifier identities");
-  const identities: { [name: string]: VerifierIdentities[string] } = {};
-  for (const name of Object.keys(declared)) {
-    const entry = declared[name];
-    if (entry === null || typeof entry !== "object") throw new TypeError("invalid verifier identities");
-    const { kind } = entry, bytecode = copyBytes(entry.bytecode), vk = copyBytes(entry.vk);
-    if (bytecode.length !== 32 || vk.length !== 32) throw new TypeError("invalid verifier identities");
-    identities[name] = { bytecode, vk, ...(kind === undefined ? {} : { kind }) };
-  }
-  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(identities), ...running };
+function ownVerifier(verifierIn: DeclaredVerifier, verify: DeclaredVerifier["verify"]): DeclaredVerifier {
+  const parallel = declaredParallel(verifierIn);
+  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(verifierIn.identities), ...(parallel === undefined ? {} : { parallel }) };
 }
 
 /** Copy the package into the reader's evidence storage, then read only the copy and what the store retains.

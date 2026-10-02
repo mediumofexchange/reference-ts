@@ -17,6 +17,13 @@ comments cite pool-v3, pool-v2, pool-recovery, pool-delivery and pool-fees
 rules by section. Their hashes are the manifest's source identities, and the
 check asserts that the identities it derives frame §11.4's configuration hash.
 
+The package ships the compiled relations in `src/pool/v3/programs.json`
+(compiler version, ABI and bytecode; no debug fields, which hold the compiling
+machine's paths), and the runtime proves and verifies only those
+(`programs.ts`, `verifier.ts`). `programs.mjs` (`npm run check:pool:v3-programs`)
+compiles the sources again and requires that file to match exactly, the ABI
+included; `--write` regenerates it.
+
 `store-check.mjs` (also `npm run check:pool:v3-store`) runs the runtime's
 operator journal, prover and guard (`src/pool/v3/store.ts`, `prover.ts`,
 `guard.ts`) with real proofs on the local reference venue and records

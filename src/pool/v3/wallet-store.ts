@@ -129,8 +129,7 @@ function ownOptions(options: PackageReader) {
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
   const verify = verifier.verify.bind(verifier);
   const identities = requireConfigurationVerifier(verifier.identities), parallel = declaredParallel(verifier);
-  const reader: PackageReader = { verifier: { verify, ...(identities === undefined ? {} : { identities }),
-    ...(parallel === undefined ? {} : { parallel }) },
+  const reader: PackageReader = { verifier: { verify, identities, ...(parallel === undefined ? {} : { parallel }) },
     venue, reference: ownReference };
   return { domain: adoptedDomain(), venueId, reader };
 }
@@ -411,11 +410,8 @@ export class V3Wallet {
       throw new V3WalletError("STORAGE", "the wallet's evidence file cannot be read; remove it to sync again");
     }
   }
-  /** The kept state of the wallet's reads (§14 kept classes): a file where the verifier declares its circuits,
-   * which name kept state; otherwise each read keeps its own in memory. */
-  private kept(): ReplayStore | undefined {
-    const declared = this.options.verifier.identities;
-    if (declared === undefined || Object.keys(declared).length === 0) return undefined;
+  /** The kept state of the wallet's reads (§14 kept classes), named by the verifier's circuits. */
+  private kept(): ReplayStore {
     try { return this.replays ??= new ReplayStore(`${this.path}.replay`, { digest: `${this.path}.replay.sha256` }); } catch (error) {
       if (error instanceof Error && /in use/.test(error.message)) throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
       throw error;
@@ -473,11 +469,10 @@ export class V3Wallet {
     // Kept answers stand only while the venue's finality rule does (§13.2). A venue whose clock is behind what
     // the kept state was read through is not the view that state was read from: nothing kept is used, and
     // the venue is asked for everything. (One replaced at the same clock is believed, as any venue's answers are.)
-    const seen = store?.answersThrough();
-    if (store !== undefined && seen !== undefined && at < seen) store.discardKept();
+    const seen = store.answersThrough();
+    if (seen !== undefined && at < seen) store.discardKept();
     // The scanner's keys live for this read only.
-    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(), answers,
-      ...(store === undefined ? {} : { store }) };
+    const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(), answers, store };
     for (let again = false; ; again = true) {
       try {
         const result = await readFrontier(bytes, terms, at, options);

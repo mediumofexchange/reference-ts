@@ -112,7 +112,7 @@ try {
     supplier.mempool.fund(plainBox(publisher.tree, 100_000_000n, ERGO_CHAIN.anchor.height));
     await mineAndSync();
   }
-  const verifier = { reference, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
+  const verifier = { reference, identities: prover.verifier.identities, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
     record: data => withTestnet ? testnet.testnetRecord(live.selection(), live.pin)
       : withErgo ? ergoRecord(data, { pin }) : recordReader(FixtureVenue.from(data), evidenceKind) };
   // The range-replay harness needs a venue-presence marker. Testnet's marker
@@ -366,7 +366,7 @@ try {
   await test("a reopened journal reads its rows to the same package and replies, and its audit proves them again", async () => {
     journal.close();
     // Reopening verifies no proof: under a verifier that accepts none the journal still loads, and only its audit refuses.
-    journal = new V3OperatorJournal(journalPath, { ...options, verifier: { verify: () => false } });
+    journal = new V3OperatorJournal(journalPath, { ...options, verifier: { identities: prover.verifier.identities, verify: () => false } });
     assert.deepEqual((await journal.package(backing)).package, finalPackage.package);
     await refusal(journal.audit(), "STORAGE", "PROOF");
     journal.close();

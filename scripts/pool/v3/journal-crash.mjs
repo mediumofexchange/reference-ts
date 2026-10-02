@@ -16,7 +16,7 @@ const { DatabaseSync } = await import('node:sqlite');
 const { ed25519 } = await import('@noble/curves/ed25519.js');
 const { NoteTree } = await import('../../../dist/pool/note-tree.js');
 const { prepareExactOutput } = await import('../../../dist/pool/v3/capsules.js');
-const { adoptedDomain } = await import('../../../dist/pool/v3/configuration.js');
+const { adoptedConfiguration, adoptedDomain } = await import('../../../dist/pool/v3/configuration.js');
 const { encodeRecord } = await import('../../../dist/pool/v3/records.js');
 const { V3OperatorJournal } = await import('../../../dist/pool/v3/store.js');
 const { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } = await import('../../../dist/pool/v3/terms.js');
@@ -28,7 +28,7 @@ const script = fileURLToPath(import.meta.url), b = n => new Uint8Array(32).fill(
 const domain = adoptedDomain(), issuerSecret = b(15), operatorSecret = b(16);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const reference = { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
-const verifier = { verify: (kind, _inputs, proof) => proof[0] === kind };
+const verifier = { identities: adoptedConfiguration().circuits, verify: (kind, _inputs, proof) => proof[0] === kind };
 const save = (file, value) => writeFileSync(file, serialize(value));
 const load = file => deserialize(readFileSync(file));
 const record = task => ({ domain, kind: task.kind, publicInputs: task.publicInputs,

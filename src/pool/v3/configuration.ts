@@ -101,17 +101,16 @@ export function configurationHash(value: Configuration): Uint8Array {
 }
 
 /**
- * §11.1: a verifier that names its circuits must name exactly this configuration's six relations, each by its
- * bytecode and key identity, relations a trail never uses included; otherwise every proof would be judged under
- * another key. A kind the verifier names for a relation must be that relation's, or identities that match by
- * name could route a proof to another relation's key. A caller's setup error, so a TypeError, never an evidence
- * verdict. A verifier that names none (a test double) has nothing to compare, and a kept store refuses it.
- * Returns the copy the caller keeps, each field read once.
+ * §11.1: a reader's, journal's or wallet's verifier must name exactly this configuration's six relations, each by
+ * its bytecode and key identity, relations a trail never uses included; otherwise every proof would be judged under
+ * another key, and kept state (§14) could not name the verifier across processes. A kind the verifier names for a
+ * relation must be that relation's, or identities that match by name could route a proof to another relation's
+ * key. A verifier naming none is refused like a wrong one: a caller's setup error, so a TypeError, never an
+ * evidence verdict. Returns the copy the caller keeps, each field read once.
  */
-export function requireConfigurationVerifier(identities: VerifierIdentities | undefined): VerifierIdentities | undefined {
-  if (identities === undefined) return undefined;
+export function requireConfigurationVerifier(identities: VerifierIdentities | undefined): VerifierIdentities {
   const refuse = (): never => { throw new TypeError("the verifier's circuit identities are not the configuration's"); };
-  if (identities === null || typeof identities !== "object" || Object.keys(identities).length !== RELATIONS.length) refuse();
+  if (identities === null || typeof identities !== "object" || Object.keys(identities).length !== RELATIONS.length) return refuse();
   const owned: { [name: string]: VerifierIdentities[string] } = {}, configuration = decodeConfiguration(ADOPTED);
   for (const name of RELATIONS) {
     const own: unknown = identities[name], expected = configuration.circuits[name];

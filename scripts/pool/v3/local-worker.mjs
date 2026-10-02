@@ -12,7 +12,7 @@ import { recordReader, replayEvidencePackage } from "./local-replay.mjs";
 import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
 import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
 import { field } from "../fixtures.mjs";
-import { loadManifest, checkSources, readKeys } from "./manifest.mjs";
+import { loadManifest, checkSources, readKeys, adoptedConfiguration } from "./manifest.mjs";
 import { v3Codec } from "./codec.mjs";
 
 let api;
@@ -42,7 +42,8 @@ try {
   const backend = new UltraHonkVerifierBackend(api);
   // The fixture venue record is this process's own range verifier (§13.2),
   // rebuilt from the fixture IPC beside the selection; the package cannot supply it.
-  const verifier = { reference: { context: LOCAL_REFERENCE, label: new Uint8Array(32).fill(12), lag: 2n },
+  // Its keys are the manifest's (readKeys), so it declares the configuration's identities.
+  const verifier = { reference: { context: LOCAL_REFERENCE, label: new Uint8Array(32).fill(12), lag: 2n }, identities: adoptedConfiguration().circuits,
     verify: (kind, publicInputs, proof) => backend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, { verifierTarget: "noir-recursive" }), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };

@@ -89,7 +89,6 @@ export function verifyAhead(verifier: ProofCheck, records: Iterable<Uint8Array>,
       const entry = started.splice(0, at + 1)[at]!;
       return entry.verdict.then(seen) as Promise<boolean>;
     },
-    identities: verifier.identities,
     parallel,
   };
   function* ordered(): Generator<Uint8Array> {

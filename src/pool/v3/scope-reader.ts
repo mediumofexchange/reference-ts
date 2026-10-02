@@ -19,6 +19,7 @@ import { VenueError } from "../../venue-error.js";
 import type { Commitment } from "../../venue-records.js";
 import { identifierOf, VALUE_BOUND } from "../field.js";
 import { ScopeTree } from "../scope.js";
+import { requireConfigurationVerifier } from "./configuration.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, type Snapshot } from "./commitments.js";
 import { decodeSegmentHeader, segmentBytes, type SegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
@@ -479,12 +480,11 @@ type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
  * checkpoint is classified once, into the walk's rows; close() drops them. */
 function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvidence) {
   const { selection, store } = context, faults = context.faults ?? NO_FAULTS;
-  // A kept store keeps state across processes, so what names its context must be declared, not per object:
-  // the verifier's circuits and, where the read witnesses outputs, the predicate's identity. Witnesses stay
-  // only at a namespace's tip; a path read below it discards the kept state (replay-store.ts `witness`).
-  if (store.kept && (context.verifier.identities === undefined || Object.keys(context.verifier.identities).length === 0)) {
-    throw new TypeError("a kept store needs a verifier with circuit identities");
-  }
+  // The verifier's circuits name every replay and kept class (§14), so they must be the configuration's. A kept
+  // store keeps state across processes, so where the read witnesses outputs, the predicate's identity must be
+  // declared too, not named per object. Witnesses stay only at a namespace's tip; a path read below it discards
+  // the kept state (replay-store.ts `witness`).
+  requireConfigurationVerifier(context.verifier.identities);
   if (store.kept && context.witness !== undefined && !(context.witness.identity instanceof Uint8Array)) {
     throw new TypeError("a kept store needs a witness predicate that declares its identity");
   }
