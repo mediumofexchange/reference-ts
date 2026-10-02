@@ -16,10 +16,12 @@ Earlier: slice 9 (redemption in the wallet, PRs #69–#77) and the [visibility m
 pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, identity or verdict change is pool-v4.
 
 ## Status
-- **M10a** (branch `claude/m10a-artifacts`, [decision](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)):
+- **M10a done** (PR #79, [decision](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)):
   `src/pool/v3/programs.json` ships the six relations; `adoptedPrograms`/`openV3Verifier` check them against the manifest and
   `openV3Prover(api)` takes no artifacts; `check:pool:v3-programs` requires the sources to compile to the file exactly. Readers, journal
   and wallet require a `DeclaredVerifier` naming the configuration's six circuits; the undeclared per-object name and in-memory fallback are gone.
+  Evidence: unit suite, `check:scripts`, local real-proof `check:pool:v3 -- --ergo`, CI green on Ubuntu and Windows; one fresh review, no blocker.
+  Reports binding the prover or verifiers drift until slice 10's drill re-records them. **Next: M10b**, the command-surface decision.
 - Audit area 11 (PR #75): reports binding `record-range.ts`/`ergo-check.mjs` are stale until re-recorded.
 
 ## Evidence
