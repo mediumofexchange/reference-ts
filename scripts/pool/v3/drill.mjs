@@ -100,7 +100,7 @@ export async function openDrill(mode, { name, script, budget }) {
     const programs = Object.fromEntries(RELATION_KINDS.map(([, circuit]) => [circuit, JSON.parse(readFileSync(join(build, `${circuit}.json`), "utf8"))]));
     for (const [kind, circuit] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[circuit].bytecode, api).getVerificationKey(PROOF_OPTIONS));
     readKeys(build, manifest);
-    prover = await openV3Prover(api, programs);
+    prover = await openV3Prover(api);
 
     const testnet = mode === "testnet" ? await import("./testnet.mjs") : undefined;
     live = testnet === undefined ? undefined : await testnet.openTestnet({ authorizeSubmission: budget.authorizeSubmission });

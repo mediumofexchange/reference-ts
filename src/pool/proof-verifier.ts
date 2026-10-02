@@ -9,7 +9,7 @@
 // names each circuit's identity for the caller to pin against its
 // configuration, and verifies a kind against that kind's key and nothing else;
 // it never accepts a verification key supplied with a statement.
-// `v3/prover.ts` binds pool-v3's table.
+// `v3/verifier.ts` binds pool-v3's table to the package's shipped relations.
 //
 // Every backend instance is started here from proving parameters whose hashes
 // match `BN254_PARAMETERS` (`parameters.ts`, pool-v3 §4's check before loading);
