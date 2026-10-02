@@ -706,14 +706,17 @@ export class V3OperatorJournal {
   // --- Inside a command's transaction: each writes rows that commit with the command's log row. ---
 
   /** Apply one judged record to the admission state, keep its bytes in the segment's served trail and sign its
-   * receipt. A statement keeps the first receipt it was given. */
+   * receipt. `submit` answers a statement it holds a receipt for, so only adoption finds a row: one a discarded
+   * tail was given (C2b.4.1), never a live admission, since force refuses a recovery statement already effective
+   * (REPEATED_STATEMENT). The adopted statement's receipt replaces it (C2b.4.2, §7.2); the tail's stays in the
+   * command log. */
   private admit(engine: Engine, judged: Judged, replay: SegmentReplay): Uint8Array {
     const opened = engine.opened!, state = engine.state!;
     const tip = { segment: opened.segment, position: state.position, evidence: state.evidence };
     applyJudged(state, judged, replay);
     this.evidence.append(tip, judged.bytes);
     const receipt = this.receipt(opened, state, judged.record, engine.last!.commitment.sequence);
-    this.db.prepare("INSERT OR IGNORE INTO journal_receipt VALUES(?,?)").run(judged.identity, receipt);
+    this.db.prepare("INSERT INTO journal_receipt VALUES(?,?) ON CONFLICT(statement) DO UPDATE SET receipt=excluded.receipt").run(judged.identity, receipt);
     return receipt;
   }
   /** Sign the commitment at `sequence` over `state`'s directory, and keep the directory and snapshots that serve it. */
