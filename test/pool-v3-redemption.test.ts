@@ -612,15 +612,17 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.submit("withdrawn", f.service); await f.publish();
     await f.holder.sync(f.served(), f.signed);
     // A demand and a withdrawal are admitted in time, but the operator holds its checkpoint past both deadlines.
-    const deadline = f.venue.witnessedIndex() + lag + 1n, late = await f.holder.demand("late", 10n, deadline, f.served(), f.signed, prove);
+    const deadline = at + 20n, late = await f.holder.demand("late", 10n, deadline, f.served(), f.signed, prove);
     await f.holder.submit("late", f.service);
     await f.holder.withdraw("back", withdrawn.demand!, f.served(), f.signed); await f.holder.submit("back", f.service);
-    f.venue.advance(at + 20n);
+    // The checkpoint is witnessed exactly at the late demand's deadline.
+    f.venue.advance(deadline - 1n);
     await f.publish();
     const back = f.venue.witnessedIndex();
-    // The late demand reaches the record past its deadline: no term K could meet, so no dishonour (C3.3).
+    f.venue.advance(deadline + 5n);
+    // The late demand reaches the record at its deadline: no term K could meet, so no dishonour (C3.3).
     const read = await f.backer.presentation(late.demand!, f.served(), f.signed);
-    expect([read.witnessed > deadline, read.inTerm, read.overdue]).toEqual([true, false, undefined]);
+    expect([read.witnessed, read.inTerm, read.overdue]).toEqual([deadline, false, undefined]);
     // The withdrawal counts from the checkpoint that witnessed it: the indices before it read as they stood.
     const w = await f.backer.presentation(withdrawn.demand!, f.served(), f.signed);
     expect([w.inTerm, w.ended, w.overdue]).toEqual([true, { by: "withdrawal", at: back }, { reading: "dishonour", from: at + 11n, through: back - 1n }]);

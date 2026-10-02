@@ -254,6 +254,10 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
       acceptance: { ...acceptance, signature: ed25519.sign(acceptanceBytes(acceptance), issuerY) } }));
     expect(await f.payer.presentation(id, await f.served(f.a), f.y.signed)).toMatchObject({ backing: f.y.name, quantity: 20n, deadline,
       ended: undefined, acceptances: [] });
+    // The same acceptance routed to y counts.
+    await f.venue.publishRecord(4, f.y.name, encodePublication({ domain, backing: f.y.name, kind: 2,
+      acceptance: { ...acceptance, signature: ed25519.sign(acceptanceBytes(acceptance), issuerY) } }));
+    expect((await f.payer.presentation(id, await f.served(f.a), f.y.signed)).acceptances.map(a => a.owner)).toEqual([5n]);
     expect(await f.payer.withdraw("wy", id, served, f.y.signed)).toMatchObject({ kind: 5, demand: id });
   });
 
