@@ -8,12 +8,13 @@ import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
+import { adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { classifyScopes } from "../src/pool/v3/scope-reader.js";
 import { deliveryHash, encodePublication, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
-import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
+import { applyRecord, openSegmentState, type DeclaredVerifier, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { encodeTrail } from "../src/pool/v3/trail.js";
 import { requestTask } from "../src/pool/v3/witness.js";
@@ -24,7 +25,7 @@ const issuerSecret = b(3), operatorSecret = b(4), issuer = ed25519.getPublicKey(
 const terms: RootTerms = { configuration: domain, venue: venueId, obligor: issuer, operator, interval: 10n,
   payout: { thing: "budget test", quantumExponent: 0, perUnit: 1n }, nonService: { duration: 2n, count: 1n, window: 10n } };
 const encodedTerms = encodeRootTerms(terms), signed = { terms: encodedTerms, signature: ed25519.sign(rootTermsSignatureMessage(encodedTerms), issuerSecret) };
-const backing = rootTermsName(encodedTerms), verifier = { verify: () => true };
+const backing = rootTermsName(encodedTerms), verifier = { verify: () => true, identities: adoptedConfiguration().circuits };
 const operatorStore = new ReplayStore();
 interface Segment { header: SegmentHeader; id: Uint8Array; state: SegmentState; records: Uint8Array[] }
 function segment(sequence: bigint, predecessor?: Commitment, imported?: SegmentState): Segment {
@@ -49,7 +50,7 @@ async function spend(target: Segment, nfs: readonly [bigint, bigint], anchor: bi
   await applyRecord(target.state, bytes, { domain, backing, segment: target.id, scope, terms, verifier, index: 2n, block: [] });
   target.records.push(bytes);
 }
-function fixture(proofVerifier: ProofCheck = verifier) {
+function fixture(proofVerifier: DeclaredVerifier = verifier) {
   const venue = FixtureVenue.reference(label, lag, 200n), directories = new Map<string, readonly SnapshotDigest[]>();
   const snapshots: Uint8Array[] = [], trails: Uint8Array[] = [];
   const snapshotIds = new Set<string>(), trailIds = new Set<string>();
@@ -83,7 +84,7 @@ describe("the single-backing reader walk", () => {
     const f = fixture({ verify: (kind, _inputs, proof) => {
       if (kind !== 7) return true;
       requestChecks++; return proof[0] === 7;
-    } }), original = segment(1n);
+    }, identities: adoptedConfiguration().circuits }), original = segment(1n);
     f.checkpoint(original, 1n);
     const note = prepareExactOutput(b(21), domain, b(22), backing, 5n);
     await issue(original, note); const selected = f.checkpoint(original, 2n);

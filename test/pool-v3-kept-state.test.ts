@@ -24,7 +24,7 @@ import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } fro
 import { decodeRecord, deliveryHash, encodePublication, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { withdrawalRecord } from "../src/pool/v3/witness.js";
 import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
-import { applyRecord, openSegmentState, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
+import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
@@ -79,14 +79,14 @@ function fixture() {
     segment.records.push(bytes);
   }
   interface ReadOptions { at?: bigint; witness?: WitnessPredicate; withoutTrails?: boolean; evidence?: EvidenceStore; items?: EvidenceItem[]; venue?: RecordVenue }
-  const own = (verifier: ProofCheck, store: ReplayStore | undefined, options: ReadOptions) => ({ verifier, reference, venue: options.venue ?? venue,
+  const own = (verifier: DeclaredVerifier, store: ReplayStore | undefined, options: ReadOptions) => ({ verifier, reference, venue: options.venue ?? venue,
     ...(store === undefined ? {} : { store }), ...(options.witness === undefined ? {} : { witness: options.witness }),
     ...(options.evidence === undefined ? {} : { evidence: options.evidence }) });
-  const read = (verifier: ProofCheck, store?: ReplayStore, options: ReadOptions = {}) =>
+  const read = (verifier: DeclaredVerifier, store?: ReplayStore, options: ReadOptions = {}) =>
     readFrontier(pack(options.items ?? (options.withoutTrails === true ? items.filter(item => item.kind !== 6) : items)), signed,
       options.at ?? venue.witnessedIndex(), own(verifier, store, options));
   /** A read of the held commitment `selected` with a receipt, as a holder presents it. */
-  const readReceipt = (verifier: ProofCheck, selected: Commitment, receipt: Uint8Array, store?: ReplayStore, options: ReadOptions = {}) =>
+  const readReceipt = (verifier: DeclaredVerifier, selected: Commitment, receipt: Uint8Array, store?: ReplayStore, options: ReadOptions = {}) =>
     readPackage(pack([...(options.items ?? items), { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(selected) },
       { kind: 10, payload: receipt }]), { mode: "historical-fixture", domain, venue: venue.id, backing, operator, sequence: selected.sequence,
       root: selected.root, judgingIndex: options.at ?? venue.witnessedIndex() }, own(verifier, store, options));
@@ -279,8 +279,8 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(outcome(again)).toEqual(outcome(await f.read(counting())));
     expect(same.checks).toBe(0);
     expect(namespaceCount(kept.path)).toBe(1);
-    // A verifier that declares no circuit identities could never be reused across processes.
-    await expect(f.read({ verify: () => true }, store)).rejects.toThrow("a kept store needs");
+    // A verifier that declares no circuit identities is refused as well: there is no undeclared verifier to name in kept state.
+    await expect(f.read({ verify: () => true } as unknown as DeclaredVerifier, store)).rejects.toThrow(new TypeError("the verifier's circuit identities are not the configuration's"));
     await expect(f.read({ verify: () => true, identities: {} }, store)).rejects.toThrow("the verifier's circuit identities are not the configuration's");
     store.close();
   });
@@ -637,7 +637,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     // The operator accepted every proof; the reader's verifier throws on the third record's.
     for (const [output, proof] of [[101n], [102n], [103n, b(98)], [104n], [105n]] as const) await f.issue(output, proof);
     f.checkpoint(f.segment, 2n, 2n);
-    const refusal = async (verifier: ProofCheck) => { try { await f.read(verifier); } catch (error) { return error as Error & { cause?: unknown }; } throw new Error("expected a throw"); };
+    const refusal = async (verifier: DeclaredVerifier) => { try { await f.read(verifier); } catch (error) { return error as Error & { cause?: unknown }; } throw new Error("expected a throw"); };
     const inTurn = scripted(broken), expected = await refusal(inTurn);
     expect(expected.cause ?? expected).toBe(broken);
     expect(inTurn.checks).toBe(3);
@@ -647,7 +647,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
       expect(ahead.checks).toBeLessThanOrEqual(5);
     }
     // A verifier that throws at the call, before answering, reads alike.
-    const atCall: ProofCheck = { parallel: 2, verify: (_kind, _inputs, proof) => { if (proof[0] === 98) throw broken; return Promise.resolve(true); } };
+    const atCall: DeclaredVerifier = { parallel: 2, identities: configuration.circuits, verify: (_kind, _inputs, proof) => { if (proof[0] === 98) throw broken; return Promise.resolve(true); } };
     const error = await refusal(atCall);
     expect([error.name, error.message, error.cause]).toEqual([expected.name, expected.message, expected.cause]);
   });

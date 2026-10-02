@@ -28,7 +28,7 @@ const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret), successorKey = ed25519.getPublicKey(successorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);
@@ -122,7 +122,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
 
   /** A payer with a final payment and a submitted pending one; a receiver with a
    * fulfilled request and an unpaid one. */
-  async function fixture(readerVerifier: { verify: (...args: Parameters<typeof verifier.verify>) => boolean | Promise<boolean> } = verifier) {
+  async function fixture(readerVerifier: { verify: (...args: Parameters<typeof verifier.verify>) => boolean | Promise<boolean>; identities: typeof verifier.identities } = verifier) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-wallet-backup-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
@@ -130,7 +130,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
       interval: 20n, payout: { thing: "backup units", quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    // This verifier declares no circuits, so each read here keeps its replay state in memory, as a wallet's does without them.
+    // The verifier declares the configuration's circuits, so each read keeps its replay state in the wallet's own files.
     const reader = { venue, reference, verifier: readerVerifier };
     const path = (name: string) => join(directory, `${name}.db`);
     const open = (name: string) => track(new V3Wallet(path(name), reader));
@@ -167,8 +167,13 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
       journals.push(b2); await b2.takeover("takeover", signed, (await j.package()).package); await b2.publish(); await b2.adopt();
       return b2;
     };
+    /** A further issue the journal serves and publishes: evidence no wallet has yet read, so a reader must judge its proof. */
+    const issueMore = async (name: string, value: bigint) => {
+      await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, payer.request(name, backing, value))), issuerSecret)));
+      return publish();
+    };
     return { directory, venue, signed, backing, reader, path, open, payer, receiver, j, publish, service, served, invoice, second,
-      unpaid, receipt, replace, takeover };
+      unpaid, receipt, replace, takeover, issueMore };
   }
   /** Every state row in storage order: what a handoff must carry exactly. */
   function rows(file: string) {
@@ -335,7 +340,7 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
       const held = gate;
       if (held !== undefined) { gate = undefined; entered(); await held; }
       return verifier.verify(...args);
-    } });
+    }, identities: configuration.circuits });
     await f.publish();
     const served = (await f.j.package()).package;
     gate = new Promise(r => { release = r; });
@@ -357,11 +362,13 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
       const held = gate;
       if (held !== undefined) { gate = undefined; entered(); await held; }
       return verifier.verify(...args);
-    } });
+    }, identities: configuration.circuits });
     const other = f.receiver.request("late", f.backing, 2n);
+    // The wallet keeps what it has judged, so the read that spans the freeze must meet a proof it has not: a further issue.
+    const fresh = await f.issueMore("fund-late", 5n);
     let proved = false;
     gate = new Promise(r => { release = r; });
-    const preparing = f.payer.prepare("late", { request: other, value: 2n }, f.served, f.signed, async task => { proved = true; return prove(task); });
+    const preparing = f.payer.prepare("late", { request: other, value: 2n }, fresh, f.signed, async task => { proved = true; return prove(task); });
     await started;
     const key = createWalletBackupKey(), backup = f.payer.exportBackup(key);
     release();
