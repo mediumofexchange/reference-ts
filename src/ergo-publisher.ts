@@ -475,6 +475,9 @@ const recordKey = (r: ErgoRecordRequest): string =>
   bytesToHex(concat(vlq(BigInt(r.location.length)), r.location, r.subject, vlq(BigInt(r.record.length)), r.record));
 /** What sending a transaction to suppliers came to: one accepted or shows it, one answered that it lacks it, or none answered. */
 type Sent = "accepted" | "lacked" | "unanswered";
+/** One send's walks, one per supplier: their shared deadline, and the first refusal of the owner fence or the
+ * caller's readiness, after which no walk sends anything more (venue-ergo §2's wait binds every transaction). */
+type Walk = { readonly until: number; refusal?: { readonly error: unknown } };
 
 /**
  * An operator's wallet for venue records: one funding key, one record per
@@ -801,12 +804,19 @@ export class ErgoPublisher {
   }
 
   /** Send a publication to every supplier at once, each unless it shows it. A supplier's claim spares only that
-   * supplier: another that missed the transaction is still sent it. */
+   * supplier: another that missed the transaction is still sent it. The send ends only once every walk has, so
+   * none sends after a refusal ends the publication's turn. */
   async #send(pending: Pending): Promise<Sent> {
     // Each supplier's walk has one deadline: a supplier that answers slowly cannot cost a timeout per ancestor.
-    const until = performance.now() + WALK_TIMEOUTS * this.#timeoutMs;
-    const outcomes = await Promise.all(this.#suppliers.map(supplier => this.#sendTo(supplier, pending, until)));
-    return outcomes.includes("accepted") ? "accepted" : outcomes.includes("lacked") ? "lacked" : "unanswered";
+    const walk: Walk = { until: performance.now() + WALK_TIMEOUTS * this.#timeoutMs };
+    const outcomes = await Promise.allSettled(this.#suppliers.map(supplier => this.#sendTo(supplier, pending, walk)));
+    if (walk.refusal !== undefined) throw walk.refusal.error;
+    const sent: Sent[] = [];
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") throw outcome.reason;
+      sent.push(outcome.value);
+    }
+    return sent.includes("accepted") ? "accepted" : sent.includes("lacked") ? "lacked" : "unanswered";
   }
 
   /** Send to `supplier` after the unsettled publications whose change it spends and that supplier lacks. A
@@ -816,7 +826,8 @@ export class ErgoPublisher {
    * and the rest are sent oldest first until the walk's deadline, so each attempt keeps what it sent and the next
    * goes on from there. A parent it does not take ends the walk: the publication asked for is still sent, with a
    * timeout of its own (the parent may have landed where this supplier cannot say so). */
-  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, until: number): Promise<Sent> {
+  async #sendTo(supplier: ErgoPublishingSupplier, pending: Pending, walk: Walk): Promise<Sent> {
+    const { until } = walk;
     const shown = await this.#shown(supplier, pending, until);
     if (shown === "accepted") return shown;
     if (shown === "lacked") {
@@ -828,9 +839,9 @@ export class ErgoPublisher {
         else if (held === "lacked") high = middle;
         else { low = ancestry.length; break; }
       }
-      for (let i = low; i < ancestry.length; i++) if (!await this.#submit(supplier, ancestry[i]!, until)) break;
+      for (let i = low; i < ancestry.length; i++) if (!await this.#submit(supplier, ancestry[i]!, walk, until)) break;
     }
-    return await this.#submit(supplier, pending) ? "accepted" : shown;
+    return await this.#submit(supplier, pending, walk) ? "accepted" : shown;
   }
 
   /** The unsettled publications whose change `pending` spends, and theirs, parents before children. */
@@ -850,11 +861,14 @@ export class ErgoPublisher {
   }
 
   /** Whether `supplier` took the publication, by `until`; the owner is fenced and the caller's readiness checked
-   * immediately before it is sent. */
-  async #submit(supplier: ErgoPublishingSupplier, pending: Pending, until?: number): Promise<boolean> {
+   * immediately before it is sent, and nothing is sent once another walk of the send was refused. */
+  async #submit(supplier: ErgoPublishingSupplier, pending: Pending, walk: Walk, until?: number): Promise<boolean> {
     let refusal: unknown;
     const answer = await this.#call(() => {
-      try { this.#guard(); this.#ready?.(); } catch (error) { refusal = error; throw error; }
+      try {
+        if (walk.refusal !== undefined) throw walk.refusal.error;
+        this.#guard(); this.#ready?.();
+      } catch (error) { refusal = error; walk.refusal ??= { error }; throw error; }
       return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id));
     }, until);
     if (refusal !== undefined) throw refusal;

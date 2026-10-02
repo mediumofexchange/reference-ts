@@ -773,6 +773,27 @@ describe("replacement, settlement and supplier cost", () => {
     expect(n.submitted).toHaveLength(1);
   });
 
+  it("sends nothing from a slower supplier's walk once another walk of the send found the caller unready (venue-ergo §2)", async () => {
+    const n = funded([10_000_000n]), sent: string[] = [];
+    let release!: () => void, calls = 0;
+    const slow = new Promise<void>(resolve => { release = resolve; });
+    const wrap = (name: string, wait: boolean): ErgoPublishingSupplier => ({ name, unspentBoxes: t => n.unspentBoxes(t),
+      hasBox: id => n.hasBox(id), hasTransaction: async id => { if (wait) await slow; return n.hasTransaction(id); },
+      submit: async (signed, id) => { sent.push(name); return n.submit(signed, id); } });
+    // Ready in the publisher's turn, then short of the clock's depth at the first send.
+    const check = (): void => { if (++calls > 1) throw new VenueError("the chain is short"); };
+    const published = publisher([wrap("fast", false), wrap("slow", true)]).publish(request(), check);
+    let settled = false;
+    void published.catch(() => {}).finally(() => { settled = true; });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    // The fast walk was refused; the publication's turn lasts until the slow walk ends too.
+    expect(settled).toBe(false);
+    release();
+    await expect(published).rejects.toThrow(new VenueError("the chain is short"));
+    expect(sent).toEqual([]);
+    expect(n.submitted).toHaveLength(0);
+  });
+
   it("builds no replacement while no supplier answers whether a transaction the record had before is held", async () => {
     const n = funded([10_000_000n]);
     n.refuse = () => true;
