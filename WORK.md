@@ -22,10 +22,10 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
 - **M10c1 done** (PRs #83, #84; [decision](decisions/2026-10.md#2026-10-02--read-through-each-directorys-own-view-gate-venue-creation-on-the-nodes-network-and-queue-serves-journal-calls-with-the-services-slice-10-m10c1)):
   `moe` bin (`src/cli/`), parameters in the package, `venue create`, `reader` and `operator` commands; `command-drill.mjs` in `check:pool:v3`.
   Code review of slices 9–10 ([decision](decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)): publisher readiness race, failed-settlement publish, serve keep-alive/UNREPLAYED fixed.
-  **M10c2a** (branch `claude/m10c2a-freshen`): M10b item 9 in the wallet library. Acceptance: presented notes (saved demand
-  inputs, record demands of the seed by tag, ended or forced) refused to `prepare`/`burn`; `demand` re-presents one earlier demand's
-  notes only (`repeats`); `freshen` spends one demand's notes to a fresh note; unit tests; one deep review. Stop: merged.
-  **Next: M10c2b** (Next 3). Every current report drifts (`check:evidence` at 09c8459) until the packed drill re-records.
+- **M10c2a done** (PR on `claude/m10c2a-freshen`; [decision](decisions/2026-10.md#2026-10-02--read-a-note-as-presented-from-saved-demands-and-the-records-tags-save-which-demands-a-re-demand-repeats-and-freshen-into-one-note-slice-10-m10c2a)):
+  presented notes refused to `prepare`/`burn`, re-demand of one earlier demand's notes (`Act.repeats`), `freshen`, `Holding.presented`;
+  profile `moe/wallet/v3/8`; reviewed and read back. The real-proof freshen runs in M10c2b's drill.
+  **Next: M10c2b** (Next 3): wallet and relay commands over the library as it stands. Every current report drifts (`check:evidence` at 09c8459) until the packed drill re-records.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).

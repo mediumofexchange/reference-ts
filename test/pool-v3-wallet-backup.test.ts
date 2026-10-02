@@ -283,6 +283,12 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     // Repeats belong to demands only; a freshen intent names one demand and has one positive output.
     refused(variant(t => { t[2]![0]![14] = "[]"; }), /does not fit/);
     refused(variant(t => { const row = t[2]!.find(r => r[1] === "2")!; row[2] = JSON.stringify(["00", "freshen", "zz"]); }), /malformed saved record/);
+    refused(variant(t => { const row = t[2]!.find(r => r[1] === "2")!; row[1] = "4"; row[14] = '["zz"]'; }), /malformed saved record/);
+    refused(variant(t => {
+      // A freshen whose saved outputs are not exactly one positive note.
+      const row = t[2]!.find(r => r[1] === "2")!; row[2] = JSON.stringify(["00", "freshen", "ab".repeat(32)]);
+      t[4] = t[4]!.filter(out => out[1] !== row[0] || out[2] === "0");
+    }), /malformed saved record/);
 
     // Destinations must be new: files, the source, memory and leftover sidecars refuse.
     const occupied = f.path("occupied"); writeFileSync(occupied, "keep");
