@@ -8,7 +8,7 @@ a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 **Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
 `V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PRs #69, #71)
 acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2** (PR #72) seed-found demands, locks, `CHANGED_VIEW`, acts of an ended
-segment made again. **M9c1** (PR #73, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
+segment made again. **M9c1** (PR #73, merged 1c2da66, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
 `presentation` reads C3.8 per witnessed index (ends prospective; past the deadline dishonour or lapse; none for a demand witnessed at or past
 its deadline), `publishAcceptance`, force reports `TAKEN`; reviewed (major fixed, read back); unit suite 1993/1993, `check:scripts`, stand-in proofs.
 **Next: M9c2**, Next 4 (a)–(c), (e), (q) (start with (q), a correctness finding in the reader just touched); then **M9d** real-proof and
