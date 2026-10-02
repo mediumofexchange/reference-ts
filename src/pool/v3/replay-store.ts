@@ -184,7 +184,7 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 /** Kept venue answers refer to no namespace, so collection keeps them. */
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -377,6 +377,9 @@ export class ReplayStore {
       demandsWithTag: `SELECT x.* FROM demand_tag t JOIN demand x ON x.id = t.id AND x.ns = t.ns WHERE t.tag = :key AND ${v}
         AND NOT EXISTS (SELECT 1 FROM demand_end y WHERE y.id = x.id AND ${visible("y")})`,
       demands: `SELECT x.* FROM demand x WHERE ${v} AND NOT EXISTS (SELECT 1 FROM demand_end y WHERE y.id = x.id AND ${visible("y")}) ORDER BY x.ns, x.position`,
+      presented: `SELECT x.* FROM demand x WHERE x.id = :key AND ${v}`,
+      demandEnd: `SELECT x.ns, x.position FROM demand_end x WHERE x.id = :key AND ${v}`,
+      tagSpends: `SELECT x.ns, x.position FROM nullifier x WHERE x.tag = :key AND ${v} ORDER BY x.ns, x.position`,
       totals: "SELECT backing, issued, burned FROM total t WHERE ns = ? AND position = (SELECT max(position) FROM total u WHERE u.ns = t.ns AND u.backing = t.backing AND u.position <= ?)",
       total: "SELECT issued, burned FROM total WHERE ns = ? AND backing = ? AND position <= ? ORDER BY position DESC LIMIT 1",
       insertTotal: "INSERT OR REPLACE INTO total VALUES (?, ?, ?, ?, ?)",
@@ -694,6 +697,21 @@ export class ReplayStore {
   }
   demands(ns: number, p: bigint): [string, Demand][] {
     return this.#q.demands!.all({ ns, p }).map(row => this.#demand(row as Record<string, unknown>));
+  }
+  /** A demand visible from (ns, p) whether or not it ended, with the event that stood it up and the one that ended it. */
+  presented(ns: number, p: bigint, id: string): { readonly demand: Demand; readonly event: StoredEvent; readonly end: StoredEvent | undefined } | undefined {
+    const row = this.#q.presented!.get({ ns, p, key: id }) as Record<string, unknown> | undefined;
+    if (row === undefined) return undefined;
+    const end = this.#q.demandEnd!.get({ ns, p, key: id }) as { ns: bigint; position: bigint } | undefined;
+    return { demand: this.#demand(row)[1], event: this.event(Number(row["ns"] as bigint), BigInt(row["position"] as bigint))!,
+      end: end === undefined ? undefined : this.event(Number(end.ns), BigInt(end.position))! };
+  }
+  /** The visible events that spent a nullifier of tag `tag`, in namespace and position order. */
+  tagSpends(ns: number, p: bigint, tag: bigint): StoredEvent[] {
+    return this.#q.tagSpends!.all({ ns, p, key: fieldToBytes(tag) }).map(row => {
+      const { ns: at, position } = row as { ns: bigint; position: bigint };
+      return this.event(Number(at), BigInt(position))!;
+    });
   }
 
   total(ns: number, p: bigint, backing: string): Totals {

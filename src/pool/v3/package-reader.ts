@@ -38,9 +38,10 @@ export interface PackageReader {
   /** Outputs to keep incremental witnesses for (a wallet's own), so their paths can be read from the result. */
   readonly witness?: WitnessPredicate | undefined;
 }
-/** A frontier read's options: `releases` also lists the backing's releases witnessed without force, read from the
- * venue's publications (a holder settling reads its disclosure count from them, C3.5); other reads leave it unset. */
-export interface FrontierReader extends PackageReader { readonly releases?: boolean | undefined }
+/** A frontier read's options: `answers` also lists the acceptances and releases the venue witnessed for the backing
+ * (a holder settling reads its disclosure count from them, C3.5, and C3.8's reading its outcome); other reads leave
+ * it unset. */
+export interface FrontierReader extends PackageReader { readonly answers?: boolean | undefined }
 
 /** Own selection bytes and primitive fields before any asynchronous proof check. */
 export function ownSelection(input: ReaderSelection): ReaderSelection {
@@ -205,6 +206,6 @@ function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontier
   const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
   const faults = faultObserver(payloads(7), selection, verifier);
   const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, verifier, reference, faults,
-    releases: options.releases === true };
+    answers: options.answers === true };
   return { context, faults, venue };
 }

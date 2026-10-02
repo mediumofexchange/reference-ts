@@ -27,7 +27,7 @@ import type { WalkEvidence } from "./evidence-store.js";
 import { keptContext, keptStateHolds, lastValidOf, readRecordView, replayTrail, ReplayResult, type CarryingVerdict, type FaultObserver,
   type ReaderSelection, type RecordView, type ReplayContext, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
-import { decodePublication, decodeRecord, encodeRecord, settlementAuthorization, type Record } from "./records.js";
+import { decodePublication, decodeRecord, encodeRecord, settlementAuthorization, type Record, type SignedAcceptance } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import { KeptStateMismatch, type ImportEntry, type ReplayStore, type WalkBase, type WalkForce, type WalkVerdict } from "./replay-store.js";
@@ -48,20 +48,30 @@ export interface CanonicalCheckpoint {
   readonly state: ReplayResult;
 }
 export interface ForcedPublication { readonly index: bigint; readonly record: Record; readonly bytes: Uint8Array }
-/** A release (publication kind 3) the venue witnessed without force, at its venue position: the demand and segment
- * its settlement names, the output it discloses with its `rho_out`, and the presenter's signature with the exact
- * message it must sign (C3.6). The proof is not kept. */
-export interface UnforcedRelease {
-  readonly index: bigint; readonly ordinal: bigint; readonly demand: Uint8Array; readonly segment: Uint8Array;
-  readonly output: bigint; readonly rho: bigint; readonly releaseMessage: Uint8Array; readonly releaseSignature: Uint8Array;
+/** A release (publication kind 3) as an answer carries it: the segment its settlement names, the output it discloses
+ * with its `rho_out`, the presenter's signature with the exact message it must sign (C3.6), and its force verdict
+ * (none where no gap could open: the backing declares no silence). The proof is not kept. */
+export interface WitnessedRelease {
+  readonly segment: Uint8Array; readonly output: bigint; readonly rho: bigint;
+  readonly releaseMessage: Uint8Array; readonly releaseSignature: Uint8Array;
+  /** Whether it had force; otherwise the check that refused it, `TAKEN` for a release taken by another demand's settlement (C3.8). */
+  readonly force: boolean; readonly check: string | undefined;
+}
+/** An acceptance the venue witnessed routed to the backing, at its venue position: published on its own (publication
+ * kind 2) or carried by a release (kind 3) with the release. Decoded only: nothing here verifies a signature or
+ * resolves the demand it names, which C3.8's reader holds beside it (C2b.3.2). */
+export interface WitnessedAnswer {
+  readonly index: bigint; readonly ordinal: bigint;
+  readonly acceptance: SignedAcceptance;
+  readonly release: WitnessedRelease | undefined;
 }
 export interface PublicationVerdict { readonly index: string; readonly ordinal: string; force: boolean; check?: string }
 export interface ImportCarryingVerdict extends CarryingVerdict { readonly operator: string }
 /** A complete backing descent without an asserted selected checkpoint. */
 export interface FrontierContext extends Omit<ImportContext, "selection" | "header" | "receiptBytes" | "receiptWalk"> {
   readonly selection: Pick<ReaderSelection, "mode" | "domain" | "venue" | "backing" | "judgingIndex">;
-  /** List the backing's unforced releases (`FrontierResult.releases`); otherwise none is read for them. */
-  readonly releases?: boolean;
+  /** List the backing's witnessed acceptances and releases (`FrontierResult.answers`); otherwise none is read for them. */
+  readonly answers?: boolean;
 }
 export interface FrontierResult {
   readonly canonical: CanonicalCheckpoint | undefined;
@@ -73,10 +83,10 @@ export interface FrontierResult {
    * canonical segment scopes, keyed by hex name. One ended term ends the
    * segment for all of them (C2.10.9). */
   readonly scopeChains: ReadonlyMap<string, RecordView["chain"]>;
-  /** Where the read asks for them (`FrontierContext.releases`), the selected backing's releases witnessed through the
-   * judging index without force, routed to it and summarized without proofs, in venue order: what a holder's
-   * disclosure count (C3.5) reads; otherwise empty. Nothing here checks a release. */
-  readonly releases: readonly UnforcedRelease[];
+  /** Where the read asks for them (`FrontierContext.answers`), every acceptance the venue witnessed through the
+   * judging index routed to the selected backing, alone or in a release, in venue order: what a holder's disclosure
+   * count (C3.5) and C3.8's reading (dishonour.ts) read; otherwise empty. */
+  readonly answers: readonly WitnessedAnswer[];
 }
 export const NO_FAULTS: FaultObserver = { inspect: async () => {}, intrinsicFailure: () => undefined };
 
@@ -417,27 +427,29 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
     const around = await walk.around(canonical, terms, view);
     const scopeChains = new Map<string, RecordView["chain"]>();
     for (const [name, scoped] of canonical?.scopedTerms ?? []) scopeChains.set(name, (await walk.viewFor(hexToBytes(name), scoped)).chain);
-    // Every release of the backing the classification gave no force; where it declares no silence nothing is
-    // classified and none has force, but a release published there still discloses its output (C3.5).
-    const name = hex(selection.backing), forced = new Set(around.publications.filter(p => p.force && p.backing === name)
-      .map(p => `${p.index}:${p.ordinal}`));
-    const releases: UnforcedRelease[] = [];
-    for (const entry of context.releases === true ? view.publications() : []) {
-      if (forced.has(`${entry.index}:${entry.ordinal}`)) continue;
-      let publication, release;
+    // Every acceptance and release of the backing with the classification's verdict on a release; where the backing
+    // declares no silence nothing is classified and none has force, but a release published there still discloses
+    // its output (C3.5) and witnesses its acceptance.
+    const name = hex(selection.backing), verdicts = new Map(around.publications.filter(p => p.backing === name)
+      .map(p => [`${p.index}:${p.ordinal}`, p]));
+    const answers: WitnessedAnswer[] = [];
+    for (const entry of context.answers === true ? view.publications() : []) {
+      let publication;
       try {
         publication = decodePublication(entry.record);
-        if (publication.kind !== 3 || !same(publication.domain, selection.domain) || !same(publication.backing, selection.backing)) continue;
-        release = settlementAuthorization(publication.record);
+        if (!same(publication.domain, selection.domain) || !same(publication.backing, selection.backing)) continue;
+        if (publication.kind === 2) { answers.push({ index: entry.index, ordinal: entry.ordinal, acceptance: publication.acceptance, release: undefined }); continue; }
+        if (publication.kind !== 3) continue;
+        const { acceptance, releaseMessage, releaseSignature } = settlementAuthorization(publication.record), p = publication.record.publicInputs;
+        const verdict = verdicts.get(`${entry.index}:${entry.ordinal}`);
+        answers.push({ index: entry.index, ordinal: entry.ordinal, acceptance, release: { segment: identifierOf(p[2]!, p[3]!), output: p[14]!,
+          rho: p[9]!, releaseMessage, releaseSignature, force: verdict?.force === true, check: verdict?.check } });
       } catch (error) {
         if (error instanceof EncodingError) continue;
         throw error;
       }
-      const p = publication.record.publicInputs;
-      releases.push({ index: entry.index, ordinal: entry.ordinal, demand: identifierOf(p[15]!, p[16]!), segment: identifierOf(p[2]!, p[3]!),
-        output: p[14]!, rho: p[9]!, releaseMessage: release.releaseMessage, releaseSignature: release.releaseSignature });
     }
-    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains, releases,
+    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains, answers,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
         chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
   } catch (error) {

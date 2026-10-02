@@ -66,7 +66,7 @@ describe("publication force over the snapshot forest", () => {
     expect([source.position, source.leaves, source.demands().length, source.nullifiers().length, source.totals().size]).toEqual([0n, 0n, 0, 0, 0]);
     expect(source.history).toEqual(sourceHistory); expect(source.evidence).toEqual(sourceEvidence);
     await refuses(state, demand(10n, 18n, 301n, 201n), "ANCHOR", context({ index: 12n }));
-    await refuses(state, settle(d), "SPENT", context({ index: 12n }));
+    await refuses(state, settle(d), "REPEATED_STATEMENT", context({ index: 12n }));
   });
 
   it("judges force at a snapshot's position of a segment that has since moved on", async () => {
@@ -81,7 +81,7 @@ describe("publication force over the snapshot forest", () => {
     const atSnapshot = openForceState(snapshot);
     await applyForceRecord(atSnapshot, settle(d), context({ index: 12n }));
     expect([...atSnapshot.nullifiers]).toEqual([101n, 102n]);
-    await refuses(openForceState(segmentState.at(2n)), settle(d), "SPENT", context({ index: 12n }));
+    await refuses(openForceState(segmentState.at(2n)), settle(d), "REPEATED_STATEMENT", context({ index: 12n }));
   });
 
   it("names guard failures in force order and keeps every rejected state unchanged", async () => {
@@ -102,10 +102,13 @@ describe("publication force over the snapshot forest", () => {
     // A slot the demand tagged 0 carrying value, signed by both parties: the tag check passes
     // it, so only the demand's quantity keeps the settlement to the named claims (C3.5, invariant 27).
     await refuses(state, settle(d, 12n, 101n, 301n, presenterSecret, 6n), "QUANTITY");
+    // New nullifiers and outputs are judged last, as in replay: a release failing them and another check names the other.
     const spent = openForceState(state); spent.nullifiers.add(101n);
-    await refuses(spent, settle(d, 12n, 101n, 301n, b(6)), "SPENT");
+    await refuses(spent, settle(d, 12n, 101n, 301n, b(6)), "SIGNATURE");
+    await refuses(spent, settle(d), "SPENT");
     const output = openForceState(state); output.outputs.add(301n);
-    await refuses(output, settle(d, 12n, 101n, 301n, b(6)), "OUTPUT");
+    await refuses(output, settle(d, 12n, 101n, 301n, b(6)), "SIGNATURE");
+    await refuses(output, settle(d), "OUTPUT");
     await refuses(state, alter(settle(d), 10, 123n), "ANCHOR");
     const broken = new Error("verifier failure"), before = overlay(state);
     await expect(applyForceRecord(state, demand(6n), context({ verifier: { verify: () => { throw broken; } } }))).rejects.toBe(broken);
@@ -123,7 +126,21 @@ describe("publication force over the snapshot forest", () => {
     const taking = settle(own, 12n, 201n, output, presenterSecret, 5n, 202n);
     await applyForceRecord(state, taking, context({ index: 11n }));
     const release = settle(held, 12n, 101n, output);
-    await refuses(state, release, "OUTPUT", context({ index: 12n }));
+    await refuses(state, release, "TAKEN", context({ index: 12n }));
+    // Taken only where every other condition holds: a release past its acceptance's deadline names that.
+    await refuses(state, release, "DEADLINE", context({ index: 13n }));
+    // The same where the taking settlement is in the snapshot's history rather than forced since its adoption.
+    const history = fresh();
+    await applyRecord(history, own, replay()); await applyRecord(history, taking, replay({ index: 11n }));
+    const snapshot = openForceState(history); await applyForceRecord(snapshot, held, context());
+    expect(snapshot.settledFor(output)).toBe(Buffer.from(statementHash(decodeRecord(own))).toString("hex"));
+    await refuses(snapshot, release, "TAKEN", context({ index: 12n }));
+    // A taken release whose nullifier is also spent names SPENT: taken means every other condition held.
+    const both = openForceState(state); both.nullifiers.add(101n);
+    await refuses(both, release, "SPENT", context({ index: 12n }));
+    // An output a non-settlement created takes no release.
+    const spentTo = openForceState(fresh()); await applyForceRecord(spentTo, held, context()); spentTo.outputs.add(output);
+    await refuses(spentTo, release, "OUTPUT", context({ index: 12n }));
     // Every other condition holds: without the taking settlement the same release has force.
     const untaken = openForceState(fresh()); await applyForceRecord(untaken, held, context());
     await applyForceRecord(untaken, release, context({ index: 12n }));
