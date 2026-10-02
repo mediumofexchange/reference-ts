@@ -25,7 +25,7 @@ import type { SegmentHeader } from "./headers.js";
 import { ReplayRefusal, EvidenceRefusal, requireReplay } from "./refusals.js";
 import { KeptStateMismatch, type ReplayStore } from "./replay-store.js";
 import {
-  applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type ProofCheck, type SegmentReplay, type WitnessPredicate,
+  applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type DeclaredVerifier, type SegmentReplay, type WitnessPredicate,
 } from "./state.js";
 import type { StoredTrail, WalkEvidence } from "./evidence-store.js";
 import { verifyAhead } from "./verify-ahead.js";
@@ -242,7 +242,7 @@ export interface ReplayContext {
   readonly terms: RootTerms;
   readonly scopedTerms?: ReadonlyMap<string, RootTerms | undefined> | undefined;
   readonly header: SegmentHeader;
-  readonly verifier: ProofCheck;
+  readonly verifier: DeclaredVerifier;
   readonly witness?: WitnessPredicate | undefined;
 }
 /** A replayed checkpoint's state at its position, as a later replay resumes or imports it. */
@@ -358,7 +358,7 @@ function replayRules(): Uint8Array {
 }
 // Named when the module loads, so a later rebuild cannot give old code the new name.
 replayRules();
-/** Objects the reader cannot name by content are named once per process, never equal to another process's. */
+/** A witness predicate the reader cannot name by content is named once per process, never equal to another process's. */
 const PROCESS = randomBytes(32);
 const unnamed = new WeakMap<object, Uint8Array>();
 let objects = 0n;
@@ -366,11 +366,10 @@ function processName(object: object): Uint8Array {
   if (!unnamed.has(object)) unnamed.set(object, sha256(identityFrame(["unnamed", PROCESS, ++objects])));
   return unnamed.get(object)!;
 }
-/** The selected verifier's name (§14 replay inputs): its circuits' bytecode and key identities where it
- * declares them (a ProofVerifier derives them from the artifacts it loaded), else a name of this object alone. */
-export function verifierName(verifier: ProofCheck): Uint8Array {
+/** The selected verifier's name (§14 replay inputs): its circuits' bytecode and key identities (a ProofVerifier
+ * derives them from the relations it loaded). */
+export function verifierName(verifier: DeclaredVerifier): Uint8Array {
   const identities = verifier.identities;
-  if (identities === undefined) return processName(verifier);
   const parts: (Uint8Array | string)[] = ["verifier"];
   for (const name of Object.keys(identities).sort()) parts.push(name, identities[name]!.bytecode, identities[name]!.vk);
   return sha256(identityFrame(parts));
@@ -380,7 +379,7 @@ export function witnessName(witness: WitnessPredicate): Uint8Array {
   return witness.identity instanceof Uint8Array ? sha256(identityFrame(["witness", witness.identity])) : processName(witness);
 }
 /** The context kept classes are reused under (§14): the rules, configuration, venue identity (which fixes its lag), verifier and witness predicate. */
-export function keptContext(parts: { readonly domain: Uint8Array; readonly venue: Uint8Array; readonly verifier: ProofCheck;
+export function keptContext(parts: { readonly domain: Uint8Array; readonly venue: Uint8Array; readonly verifier: DeclaredVerifier;
   readonly witness?: WitnessPredicate | undefined }): Uint8Array {
   return sha256(identityFrame(["v3-kept-context", replayRules(), parts.domain, parts.venue, verifierName(parts.verifier),
     parts.witness === undefined ? undefined : witnessName(parts.witness)]));

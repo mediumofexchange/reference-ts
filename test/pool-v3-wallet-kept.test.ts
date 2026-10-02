@@ -29,7 +29,7 @@ const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 /** A stand-in proof of a real proof's size, so the evidence passes the old one-megabyte package. */
 const PROOF_BYTES = 14_720;
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,

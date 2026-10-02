@@ -26,7 +26,7 @@ const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), presenterSecret = b(17);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 
@@ -87,6 +87,11 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     const refusal = new TypeError("the verifier's circuit identities are not the configuration's");
     expect(() => new V3Wallet(join(directory, "wallet.db"), { venue, reference, verifier: other })).toThrow(refusal);
     expect(() => new V3OperatorJournal(join(directory, "journal.db"), { venue, reference, verifier: other, secret: operatorSecret }))
+      .toThrow(refusal);
+    // A verifier that declares no circuits is refused as well: neither keeps its read state under an unnamed verifier.
+    const { identities: _undeclared, ...bare } = verifier;
+    expect(() => new V3Wallet(join(directory, "wallet.db"), { venue, reference, verifier: bare as unknown as PackageReader["verifier"] })).toThrow(refusal);
+    expect(() => new V3OperatorJournal(join(directory, "journal.db"), { venue, reference, verifier: bare as unknown as PackageReader["verifier"], secret: operatorSecret }))
       .toThrow(refusal);
     const named = { ...verifier, identities: own };
     wallets.push(new V3Wallet(join(directory, "wallet.db"), { venue, reference, verifier: named }));
@@ -187,7 +192,7 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
 
   it("refuses a venue whose clock moved during proof callbacks, and asks no range twice", async () => {
     let mutate = () => {};
-    const f = await fixture({ readerVerifier: { verify: (...args) => { mutate(); return verifier.verify(...args); } } });
+    const f = await fixture({ readerVerifier: { verify: (...args) => { mutate(); return verifier.verify(...args); }, identities: configuration.circuits } });
     // A record witnessed while a read verifies moves the venue's clock (§13.1: an answer through a witnessed index is final).
     let changed = false;
     mutate = () => {
@@ -206,7 +211,7 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
 
   it("fences an old handle and an in-flight fulfillment after reopening", async () => {
     let replace = () => {};
-    const f = await fixture({ readerVerifier: { verify: (...args) => { replace(); return verifier.verify(...args); } } });
+    const f = await fixture({ readerVerifier: { verify: (...args) => { replace(); return verifier.verify(...args); }, identities: configuration.circuits } });
     let next: Wallet | undefined;
     replace = () => { next ??= f.reopen({ ...f.reader, verifier }); };
     await expect(f.wallet.fulfill("invoice", f.served.package, f.signed)).rejects.toMatchObject({ code: "FENCED" });

@@ -21,7 +21,7 @@ import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
-import { applyRecord, openSegmentState, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
+import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
 import { describeState } from "./pool-v3-state-description.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
@@ -31,7 +31,7 @@ const issuerSecret = b(3), originalSecret = b(4), nextSecret = b(5), ruleSecret 
 const issuer = ed25519.getPublicKey(issuerSecret), original = ed25519.getPublicKey(originalSecret), next = ed25519.getPublicKey(nextSecret);
 const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), label = b(2), lag = 2n;
-const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true };
+const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true, identities: configuration.circuits };
 const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items].sort((a, z) =>
   a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))));
 interface Segment { header: SegmentHeader; id: Uint8Array; state: SegmentState; records: Uint8Array[]; secret: Uint8Array; evidence?: Uint8Array }
@@ -111,7 +111,7 @@ async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTai
     suffix: [evidenceHashes(records[2]!)] }, 1024n);
   const selected = validTail ? f.checkpoint(tail, 4n) : predecessor;
   const compactItems = f.items.filter(item => item.kind !== 6 || compareBytes(item.payload, fullTrail) !== 0);
-  const proofVerifier: ProofCheck = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0 };
+  const proofVerifier: DeclaredVerifier = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0, identities: configuration.circuits };
   const options = { ...f.options, verifier: proofVerifier };
   const readCompact = (items = compactItems, faults = [fault], custom = proofVerifier, kept: { store?: ReplayStore; evidence?: EvidenceStore } = {}) =>
     readFrontier(pack([...items, ...faults.map(payload => ({ kind: 7, payload }))]), f.signed, 10n, { ...options, verifier: custom, ...kept });
@@ -245,7 +245,7 @@ describe("single-backing complete frontier reader", () => {
 
   it("refuses a verifier that names circuits other than the configuration's before reading (§11.1)", async () => {
     const f = fixture(), opening = f.checkpoint(f.segment(), 1n), own = configuration.circuits;
-    const named = (identities: ProofCheck["identities"]): ProofCheck => ({ verify: () => true, identities });
+    const named = (identities: DeclaredVerifier["identities"]): DeclaredVerifier => ({ verify: () => true, identities });
     expect((await readFrontier(pack(f.items), f.signed, 10n, { ...f.options, verifier: named(own) })).canonical!.commitment).toEqual(opening);
     const { request: _request, ...fewer } = own;
     for (const identities of [{ ...own, spend: { ...own.spend, vk: b(99) } }, { ...own, issue: { ...own.issue, bytecode: b(99) } }, fewer,
@@ -256,6 +256,11 @@ describe("single-backing complete frontier reader", () => {
       }
     }
     expect((await readPackage(f.selectedPackage(opening), f.selection(opening), { ...f.options, verifier: named(own) })).canonical!.commitment).toEqual(opening);
+    // A verifier that declares no circuits is refused as well: no read takes a verifier it cannot compare.
+    const undeclared = { ...f.options, verifier: { verify: () => true } as unknown as DeclaredVerifier };
+    for (const read of [readFrontier(pack(f.items), f.signed, 10n, undeclared), readPackage(f.selectedPackage(opening), f.selection(opening), undeclared)]) {
+      await expect(read).rejects.toThrow(new TypeError("the verifier's circuit identities are not the configuration's"));
+    }
   });
 
   it("owns caller bytes and options before the first asynchronous venue descent", async () => {
@@ -326,7 +331,7 @@ describe("single-backing compact fault packages", () => {
     const store = new ReplayStore(join(dir, "replay.sqlite"), { digest: join(dir, "replay.sha256") }), evidence = new EvidenceStore(join(dir, "evidence.sqlite"));
     try {
       // A kept store names its verifier by circuit identities.
-      const identified: ProofCheck = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0, identities: configuration.circuits };
+      const identified: DeclaredVerifier = { verify: (_kind, _inputs, proof) => compareBytes(proof, b(99)) !== 0, identities: configuration.circuits };
       const fresh = await f.readCompact(), comparable = (read: typeof fresh) => ({ canonical: canonicalEvidence(read.canonical), carrying: read.carrying,
         force: read.force, clock: read.clock, faults: read.faultEvidence });
       expect(comparable(await f.readCompact(f.compactItems, [f.fault], identified, { store, evidence }))).toEqual(comparable(fresh));
@@ -376,12 +381,12 @@ describe("single-backing compact fault packages", () => {
   it("requires strict false from the proof verifier and exposes verifier exceptions", async () => {
     const f = await compactFixture();
     for (const outcome of [true, undefined, null, 0]) {
-      const custom = { verify: (_kind: number, _inputs: bigint[], proof: Uint8Array) => compareBytes(proof, b(99)) === 0 ? outcome : true };
-      await expect(f.readCompact(f.compactItems, [f.fault], custom as ProofCheck))
+      const custom = { verify: (_kind: number, _inputs: bigint[], proof: Uint8Array) => compareBytes(proof, b(99)) === 0 ? outcome : true, identities: configuration.circuits };
+      await expect(f.readCompact(f.compactItems, [f.fault], custom as unknown as DeclaredVerifier))
         .rejects.toMatchObject({ status: "unresolved-evidence" });
     }
     for (const cause of [new Error("verifier failed"), new EncodingError("verifier encoding failed")]) {
-      const custom: ProofCheck = { verify(_kind, _inputs, proof) { if (compareBytes(proof, b(99)) === 0) throw cause; return true; } };
+      const custom: DeclaredVerifier = { verify(_kind, _inputs, proof) { if (compareBytes(proof, b(99)) === 0) throw cause; return true; }, identities: configuration.circuits };
       await expect(f.readCompact(f.compactItems, [f.fault], custom)).rejects.toMatchObject({ cause });
     }
   });
@@ -392,7 +397,7 @@ describe("single-backing compact fault packages", () => {
     const excessiveItems = Array.from({ length: 33 }, (_, i) => encodeFaultEvidence({ ...value, previous: b(i) }, 1024n));
     const excessiveSuffix = encodeFaultEvidence({ ...value, length: value.position + 1025n,
       suffix: Array.from({ length: 1025 }, () => value.suffix[0]!) }, 1025n);
-    const custom: ProofCheck = { verify() { throw new Error("resource refusal must precede proof verification"); } };
+    const custom: DeclaredVerifier = { verify() { throw new Error("resource refusal must precede proof verification"); }, identities: configuration.circuits };
     for (const faults of [excessiveItems, [excessiveSuffix]]) {
       await expect(f.readCompact(f.compactItems, faults, custom)).rejects.toMatchObject({ status: "resource-refusal" });
       await expect(f.readSelected(f.compactItems, faults)).rejects.toMatchObject({ status: "resource-refusal" });
@@ -403,7 +408,7 @@ describe("single-backing compact fault packages", () => {
     const f = await compactFixture(), expected = await f.readCompact();
     const bytes = Buffer.from(pack([...f.compactItems, { kind: 7, payload: f.fault }]));
     const pending = readFrontier(bytes, f.f.signed, 10n, { ...f.f.options,
-      verifier: { async verify(_kind, _inputs, proof) { await Promise.resolve(); return compareBytes(proof, b(99)) !== 0; } } });
+      verifier: { async verify(_kind, _inputs, proof) { await Promise.resolve(); return compareBytes(proof, b(99)) !== 0; }, identities: configuration.circuits } });
     bytes.fill(0);
     const actual = await pending;
     expect({ ...actual, canonical: canonicalEvidence(actual.canonical) })

@@ -79,7 +79,8 @@ try {
   // fixture's own witnessed records (pool-v3 §13.2), never from the package.
   const reference = withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE }
     : { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
-  const verifier = { reference, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
+  // Its keys are the manifest's (readKeys), so it declares the configuration's identities.
+  const verifier = { reference, identities: configuration.circuits, verify: (kind, publicInputs, proof) => verifierBackend.verifyProof({
     proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind),
   }, options), record: data => recordReader(FixtureVenue.from(data), "fixture-verifier") };
   // Under --ergo every fixture names the synthetic chain's venue identity, so any group can be replayed through ErgoVenue.

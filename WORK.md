@@ -3,22 +3,26 @@
 Updated: 2026-10-02
 
 ## Goal
-**Visibility matrix done** ([Who sees what](docs/POOL_V3_VISIBILITY.md), branch `claude/visibility-table`): what each record shows,
-each party alone and each issuer/operator/witness coalition, traffic and small-pool inference for pool-v3 on Ergo, from the
-adopted bytes and the reference code; documentation only, no rule found wrong. A fresh review found three material claims
-(the operator joins a sync's backing to the spend it submits; a presented note is reused by `demand` and `burn` too; a
-request's tag links) and eleven minor ones, all fixed. The wallet duties it finds are Next 2. **Next: slice 10 (Next 3)**,
-with Next 2 in its wallet.
-
-**Slice 9 done: redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own),
-PRs #69–#74, #76, #77): `V3Wallet` owns both redemption roles under service and in a gap ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)),
-with C3.8's reading, crash exits at each act's commit and a real-proof drill through wallet processes; a settle refused under service
-reads as unreleased (adopted limit). Slice 8 done: pool-v3 adopted, one configuration (spec e7f7f24, §11.4); a byte, identity or
-verdict change (C3.8's residual too) is pool-v4.
+**Slice 10: installable commands on the testnet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 3).
+Acceptance: from a packed install (`npm pack` tarball in a fresh directory), `bin` commands for the holder wallet (with the backer
+role), the operator service and the supply reader, in fresh processes on separate data directories, complete issue → pay → receive →
+fulfill → demand → accept → settle → burn and an offline-operator recovery past the old 67-statement ceiling, on the local and synthetic
+Ergo venues and then live on the testnet; the pilot CLI, the harness's second package reader (Next 7) and, against a case map, the
+transparent path retire. Milestones: **M10a** shipped relations and required verifier identities (below); **M10b** the command surface
+(commands, data directories, key custody and backup, configuration, venue clients, verifier sizing, Next 2's privacy duties), decided and
+reviewed before code; **M10c** the commands and a packed-install drill on the local and synthetic Ergo venues; **M10d** the live testnet
+drill (needs the local machine: Open questions); **M10e** the retirements. Stop boundary: all five delivered.
+Earlier: slice 9 (redemption in the wallet, PRs #69–#77) and the [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78) are done;
+pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, identity or verdict change is pool-v4.
 
 ## Status
-- Audit area 11 (PR #75, merged b101869, [decision](decisions/2026-10.md#2026-10-02--count-a-replacement-identity-at-its-first-entry-in-the-walk-itself-and-drop-the-range-helpers-the-runtime-does-not-use-audit-area-11)): the replacement walk counts an identity at its
-  first entry itself; unused range helpers dropped. Reports binding `record-range.ts`/`ergo-check.mjs` are stale until re-recorded.
+- **M10a done** (PR #79, [decision](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)):
+  `src/pool/v3/programs.json` ships the six relations; `adoptedPrograms`/`openV3Verifier` check them against the manifest and
+  `openV3Prover(api)` takes no artifacts; `check:pool:v3-programs` requires the sources to compile to the file exactly. Readers, journal
+  and wallet require a `DeclaredVerifier` naming the configuration's six circuits; the undeclared per-object name and in-memory fallback are gone.
+  Evidence: unit suite, `check:scripts`, local real-proof `check:pool:v3 -- --ergo`, CI green on Ubuntu and Windows; one fresh review, no blocker.
+  Reports binding the prover or verifiers drift until slice 10's drill re-records them. **Next: M10b**, the command-surface decision.
+- Audit area 11 (PR #75): reports binding `record-range.ts`/`ergo-check.mjs` are stale until re-recorded.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
@@ -36,12 +40,9 @@ verdict change (C3.8's residual too) is pool-v4.
    and `burn` select it today); keep gap-publication funding apart from identified coins (a key per demand, or a relay); a
    transport and service credential that do not identify the holder, and syncs that do not tie an address to the backing it
    spends (replica, every scoped backing, or unlinkable transport); the user-facing explanations.
-3. Slice 10, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
-   require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration));
-   holder wallet (with the backer role), operator service and supply reader from a packed install (`bin`), fresh processes and data directories,
-   the full path of Next 1 and an offline-operator recovery past the old 67-statement ceiling, live. Size verifier instances against about 85 MB
-   each and destroy the key-deriving instance after building the verifier (M5b.6). Retire the pilot CLI, the harness's second package reader
-   (Next 7) and, against a case map, the transparent path. It needs no Ergo view rebuild (recent testnet anchor, persisted reference view).
+3. Slice 10 (Goal). For M10b: size verifier instances against about 85 MB each and destroy the key-deriving instance after building the
+   verifier (M5b.6); whether commands accept only verifiers `openV3Verifier` built (a declaration is the caller's claim, and every
+   accepted verifier names kept state alike: M10a review); no Ergo view rebuild is needed (recent testnet anchor, persisted reference view).
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take

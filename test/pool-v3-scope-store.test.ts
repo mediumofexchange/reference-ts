@@ -29,7 +29,7 @@ const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), aSecret = b(16), bSecret = b(17), ruleSecret = b(19);
 const issuerX = b(14), issuerY = b(15), aKey = ed25519.getPublicKey(aSecret), bKey = ed25519.getPublicKey(bSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: new Uint8Array(32).fill(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const same = (a: Uint8Array, z: Uint8Array) => compareBytes(a, z) === 0;

@@ -88,9 +88,9 @@ files, so it costs what is new, not the history
   replay state and venue answers of the wallet's reads, and an incremental
   witness for each positive output of this seed. A later read verifies and
   scans only records it has not replayed, asks the venue only for indices past
-  the last read's, and takes its notes' paths from the kept witnesses. It is
-  kept where the verifier declares its circuits, which name kept state;
-  otherwise each read replays in memory.
+  the last read's, and takes its notes' paths from the kept witnesses. The
+  verifier's circuit identities, which the wallet requires to be the adopted
+  configuration's, name the kept state.
 
 Neither file holds a secret or is part of a backup. Losing one costs a first
 sync or a full read and nothing else. A kept replay file that fails its digest,
@@ -473,8 +473,8 @@ one-megabyte package over HTTP, a second sync that fetches, verifies and asks
 the venue only for what is new, a seed-restored wallet's equal view, a restart,
 and the fallbacks for a damaged replay file, a venue view older than the kept
 witnesses, a venue behind the kept answers and lost or unreadable evidence.
-The receiver and multi-backing suites run on the kept path; the payer and
-backup suites run without declared circuits, in memory.
+Every suite runs on the kept path: a wallet refuses a verifier that does not
+name the configuration's circuits.
 `test/pool-v3-payer.test.ts` ports the v2 payment cases: single/pair selection
 and three-note refusal, agreed terms, repeated or already paid requests, prover
 failure and substituted statements, concurrent retry, forged and lost receipts,

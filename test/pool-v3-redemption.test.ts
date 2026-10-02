@@ -23,7 +23,8 @@ const domain = configurationHash(adoptedConfiguration());
 const issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret), successorKey = ed25519.getPublicKey(successorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const configuration = adoptedConfiguration();
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);

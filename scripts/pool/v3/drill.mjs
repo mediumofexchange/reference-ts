@@ -19,7 +19,7 @@ import { openV3Prover } from "../../../dist/pool/v3/prover.js";
 import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { field } from "../fixtures.mjs";
-import { RELATION_KINDS, loadManifest, checkSources, adoptedDomain, readKeys } from "./manifest.mjs";
+import { RELATION_KINDS, loadManifest, checkSources, adoptedConfiguration, adoptedDomain, readKeys } from "./manifest.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { ERGO_CHAIN, ERGO_PROFILE } from "./ergo-check.mjs";
 import { publicArtifactFiles } from "./public-artifacts.mjs";
@@ -52,7 +52,8 @@ export async function drillWorker(argv, answer, { testnet = false } = {}) {
   assert.deepEqual(Object.keys(input).sort(), mode === "testnet" ? ["package", "selection"] : ["package", "selection", "venue"]);
   const api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
   try {
-    const backend = new UltraHonkVerifierBackend(api), verifier = { verify: (kind, publicInputs, proof) =>
+    // Its keys are the manifest's (readKeys), so it declares the configuration's identities.
+    const backend = new UltraHonkVerifierBackend(api), verifier = { identities: adoptedConfiguration().circuits, verify: (kind, publicInputs, proof) =>
       backend.verifyProof({ proof, publicInputs: publicInputs.map(field), verificationKey: keys.get(kind) }, PROOF_OPTIONS) };
     process.stdout.write(JSON.stringify(await answer(input, { verifier, ...await workerVenue(directory, mode, input) })));
   } finally { await api.destroy(); }
@@ -100,7 +101,7 @@ export async function openDrill(mode, { name, script, budget }) {
     const programs = Object.fromEntries(RELATION_KINDS.map(([, circuit]) => [circuit, JSON.parse(readFileSync(join(build, `${circuit}.json`), "utf8"))]));
     for (const [kind, circuit] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[circuit].bytecode, api).getVerificationKey(PROOF_OPTIONS));
     readKeys(build, manifest);
-    prover = await openV3Prover(api, programs);
+    prover = await openV3Prover(api);
 
     const testnet = mode === "testnet" ? await import("./testnet.mjs") : undefined;
     live = testnet === undefined ? undefined : await testnet.openTestnet({ authorizeSubmission: budget.authorizeSubmission });

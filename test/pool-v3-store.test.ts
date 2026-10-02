@@ -150,7 +150,7 @@ describe("the v3 operator journal", () => {
     return join(directory, "journal.db");
   }
   /** A verifier that accepts exactly the stand-in proofs whose first byte is the kind. */
-  const verifier = { verify: (kind: number, _inputs: bigint[], proof: Uint8Array) => proof[0] === kind };
+  const verifier = { verify: (kind: number, _inputs: bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
   function journal(file: string, venue: RecordVenue & RecordPublisher, secret = operatorSecret): Journal {
     const j = new V3OperatorJournal(file, { secret, venue, reference, verifier }); journals.push(j); return j;
   }
@@ -374,7 +374,7 @@ describe("the v3 operator journal", () => {
     const venue = FixtureVenue.reference(label, lag);
     let duringProof = () => {};
     const j = new V3OperatorJournal(path(), { secret: operatorSecret, venue, reference,
-      verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
+      verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); }, identities: configuration.circuits } });
     journals.push(j);
     const own = await j.open("genesis", signed); await j.publish();
     // A witnessed index is final (§13.2), so a record witnessed during the proof check moves the venue's clock:
@@ -393,7 +393,7 @@ describe("the v3 operator journal", () => {
     const venue = FixtureVenue.reference(label, lag);
     let duringProof = () => {};
     const j = new V3OperatorJournal(path(), { secret: operatorSecret, venue, reference,
-      verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); } } });
+      verifier: { verify: (...args) => { duringProof(); return verifier.verify(...args); }, identities: configuration.circuits } });
     journals.push(j);
     await j.open("genesis", signed); await j.publish();
     // Nothing was witnessed: the clock alone moved while the proof was checked.
@@ -593,7 +593,7 @@ describe("the v3 operator journal", () => {
   it("fences an older handle and reopens from its rows without verifying a proof", async () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     let verified = 0;
-    const counting = { verify: (...args: Parameters<typeof verifier.verify>) => { verified++; return verifier.verify(...args); } };
+    const counting = { identities: configuration.circuits, verify: (...args: Parameters<typeof verifier.verify>) => { verified++; return verifier.verify(...args); } };
     const open = (): Journal => { const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: counting }); journals.push(j); return j; };
     const j = open();
     await j.open("genesis", signed); await j.publish();
@@ -611,7 +611,7 @@ describe("the v3 operator journal", () => {
     // Only the audit verifies again, reading the served evidence from its seed; it does not pass over a proof that fails.
     await second.audit();
     expect(verified).toBe(4);
-    const rejecting = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: { verify: () => false } });
+    const rejecting = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: { verify: () => false, identities: configuration.circuits } });
     expect((await rejecting.package()).package).toEqual(served.package);
     expect(await refusal(rejecting.audit())).toEqual(["STORAGE", "PROOF"]);
     rejecting.close();
@@ -701,7 +701,7 @@ describe("the v3 operator journal", () => {
   it("holds no transaction on its database while it reads its own history", async () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     let during = () => {};
-    const hooked = { verify: (...args: Parameters<typeof verifier.verify>) => { during(); return verifier.verify(...args); } };
+    const hooked = { identities: configuration.circuits, verify: (...args: Parameters<typeof verifier.verify>) => { during(); return verifier.verify(...args); } };
     const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };

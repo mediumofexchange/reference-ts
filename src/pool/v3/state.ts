@@ -26,6 +26,7 @@ import { decodeRecord, evidenceHashes, statementBytes, statementHash, type Evide
 import { checkRecovery, effectOf, recoveryEffect, tagOf, type Demand, type RecoveryView } from "./recovery.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals } from "./replay-store.js";
+import type { VerifierIdentities } from "./configuration.js";
 import type { RootTerms } from "./terms.js";
 
 export type { Totals } from "./replay-store.js";
@@ -34,14 +35,17 @@ const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0
 
 export type StepMode = "admission" | "replay" | "adoption" | "force";
 
-/** The reader's proof verifier: true only for a proof of `kind` over exactly these public inputs. Its circuits'
- * identities, where it declares them, name it in kept state (§14); an undeclared one is named per object. */
+/** A transition's proof verifier: true only for a proof of `kind` over exactly these public inputs. */
 export interface ProofCheck {
   verify(kind: number, publicInputs: bigint[], proof: Uint8Array): Promise<boolean> | boolean;
   /** How many verifications it runs at once off the reader's thread. Where declared, a replay starts proofs ahead of the
    * record it judges (verify-ahead.ts); otherwise it asks for each proof when the judgment reaches it. */
   readonly parallel?: number | undefined;
-  readonly identities?: { readonly [name: string]: { readonly bytecode: Uint8Array; readonly vk: Uint8Array; readonly kind?: number } } | undefined;
+}
+/** A reader's, journal's or wallet's verifier: it names its circuits, which must be the configuration's six (§11.1,
+ * `requireConfigurationVerifier`), and that name is the verifier's in replay identities and kept state (§14). */
+export interface DeclaredVerifier extends ProofCheck {
+  readonly identities: VerifierIdentities;
 }
 
 /** What the guards read of a state: note membership and recovery state. */

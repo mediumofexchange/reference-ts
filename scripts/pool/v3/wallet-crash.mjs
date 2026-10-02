@@ -31,9 +31,8 @@ const script = fileURLToPath(import.meta.url), b = n => new Uint8Array(32).fill(
 const configuration = adoptedConfiguration(), domain = adoptedDomain(), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const reference = { context: LOCAL_REFERENCE, label: b(12), lag: 2n };
-const verifier = { verify: (kind, _inputs, proof) => proof[0] === kind };
-// The wallet's verifier declares its circuits, so its reads keep their state in a file beside its database.
-const declared = { ...verifier, identities: configuration.circuits };
+// The verifier declares its circuits, which name the wallet's kept read state in a file beside its database.
+const verifier = { identities: configuration.circuits, verify: (kind, _inputs, proof) => proof[0] === kind };
 const save = (file, value) => writeFileSync(file, serialize(value));
 const load = file => deserialize(readFileSync(file));
 const publicRequest = out => ({ domain, opening: out.opening, cm: out.cm, capsule: out.capsule });
@@ -67,7 +66,7 @@ async function worker(directory, operation, phase, action) {
     const terms = encodeRootTerms({ obligor: issuer, operator, replacementRule: issuer, configuration: domain, venue: venue.id, interval: 20n,
       payout: { thing: 'crash fixture units', quantumExponent: 0, perUnit: 1n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
-    const backing = rootTermsName(terms), wallet = new V3Wallet(path, { venue, reference, verifier: declared });
+    const backing = rootTermsName(terms), wallet = new V3Wallet(path, { venue, reference, verifier });
     const fixture = { backing, signed, venue: venue.export() };
     if (operation === 'export' || operation === 'import') {
       fixture.request = wallet.request('invoice', backing, 7n);
@@ -87,7 +86,7 @@ async function worker(directory, operation, phase, action) {
             [out(33, 1n), fixture.request, out(34, 2n), out(35, 0n)]))));
         } else if (operation === 'accept') {
           // Another wallet's demand stands in canonical history; this wallet is the backer that answers it.
-          const holder = new V3Wallet(`${path}.holder`, { venue, reference, verifier: declared });
+          const holder = new V3Wallet(`${path}.holder`, { venue, reference, verifier });
           try {
             await journal.submit(encodeRecord(authorizeIssue(record(issueTask(context, holder.request('fund', backing, 10n))), issuerSecret)));
             await journal.commit('funded'); await journal.publish();
@@ -111,7 +110,7 @@ async function worker(directory, operation, phase, action) {
           fixture.checkpoint = await journal.commit('demand'); await journal.publish();
           fixture.package = (await journal.package()).package;
           if (operation === 'settle') {
-            const backer = new V3Wallet(`${path}.backer`, { venue, reference, verifier: declared });
+            const backer = new V3Wallet(`${path}.backer`, { venue, reference, verifier });
             try { fixture.acceptance = await backer.accept('answer', demand.demand, fixture.deadline - 5n, fixture.package, signed, sign); }
             finally { backer.close(); }
           }
@@ -150,7 +149,7 @@ async function worker(directory, operation, phase, action) {
   }
   // What this process's reads verify: kept state that stands is not verified again.
   let verified = 0;
-  const counted = { identities: declared.identities, verify: (...args) => { verified++; return verifier.verify(...args); } };
+  const counted = { identities: verifier.identities, verify: (...args) => { verified++; return verifier.verify(...args); } };
   const fixture = load(fixturePath), venue = FixtureVenue.from(fixture.venue), reader = { venue, reference, verifier: counted };
   const wallet = new V3Wallet(path, reader);
   if (action === 'crash') {

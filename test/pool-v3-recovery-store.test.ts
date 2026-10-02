@@ -29,7 +29,7 @@ const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), presenterSecret = b(17);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: new Uint8Array(32).fill(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 
@@ -44,7 +44,7 @@ describe("v3 recovery journal and independent package reader", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
-  async function fixture(beforeVerify = () => {}) {
+  async function fixture() {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-recovery-journal-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
@@ -57,7 +57,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const tree = new NoteTree(); tree.append(funded.cm);
     const input = { note: funded, anchor: tree.root(), path: tree.path(0n) }, inputs = [input, { ...input, note: pad }];
     const j = new V3OperatorJournal(join(directory, "journal.db"), { secret: operatorSecret, venue, reference,
-      verifier: { verify: (...args) => { beforeVerify(); return verifier.verify(...args); } } }); journals.push(j);
+      verifier }); journals.push(j);
     await j.open("genesis", signed); await j.publish();
     await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, funded)), issuerSecret)));
     await j.commit("issued"); await j.publish();
@@ -137,23 +137,25 @@ describe("v3 recovery journal and independent package reader", () => {
     expect((await g.j.package()).selection.sequence).toBe(opening.sequence);
   });
 
-  it("checks for a conflict appearing during adoption verification before signing any receipt", async () => {
-    let duringProof = () => {};
-    const f = await fixture(() => duringProof()); f.venue.advance(7n);
+  it("checks for a conflict appearing during the adoption read before signing any receipt", async () => {
+    let duringRead = () => {};
+    const f = await fixture(); f.venue.advance(7n);
     await f.venue.publishRecord(4, f.backing, f.publication(1, f.demand(6n)));
     await f.j.return("return"); await f.j.publish();
     const saved = await f.j.package(), twin = encodeCommitment(signCommitment(operatorSecret, 1n, b(255)));
-    // A witnessed index is final (§13.2): a record witnessed during verification moves the venue's clock, and
-    // the adoption judged by the earlier view signs nothing.
-    duringProof = () => {
-      duringProof = () => {};
+    // A witnessed index is final (§13.2): a record witnessed during the read moves the venue's clock, and
+    // the adoption judged by the earlier view signs nothing. Kept state holds every proof already judged, so the
+    // adoption verifies none and the change lands at its first venue range instead.
+    duringRead = () => {
+      duringRead = () => {};
       f.venue.advance(f.venue.witnessedIndex() + 1n); f.venue.witness(1, operator, f.venue.witnessedIndex(), twin);
     };
+    const range = f.venue.range.bind(f.venue), ranges = vi.spyOn(f.venue, "range").mockImplementation((...args) => { duringRead(); return range(...args); });
     const sign = vi.spyOn(ed25519, "sign");
     try {
-      await expect(f.j.adopt()).rejects.toMatchObject({ code: "STALE" });
+      await expect(f.j.adopt()).rejects.toMatchObject({ code: "STALE", message: "the venue changed during the journal operation" });
       expect(sign).not.toHaveBeenCalled();
-    } finally { sign.mockRestore(); }
+    } finally { sign.mockRestore(); ranges.mockRestore(); }
     // Failed adoption must not persist receipts or make exact retry succeed.
     await expect(f.j.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await f.j.package()).toEqual(saved);

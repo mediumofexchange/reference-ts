@@ -28,7 +28,7 @@ const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), aSecret = b(16), bSecret = b(17), cSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), aKey = ed25519.getPublicKey(aSecret), bKey = ed25519.getPublicKey(bSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: new Uint8Array(32).fill(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 
@@ -58,7 +58,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     const input = { note: funded, anchor: tree.root(), path: tree.path(0n) }, inputs = [input, { ...input, note: pad }];
     const create = (secret = aSecret, name = "a", beforeVerify = () => {}): Journal => {
       const j = new V3OperatorJournal(join(directory, `${name}.db`), { secret, venue, reference,
-        verifier: { verify: (...args) => { beforeVerify(); return verifier.verify(...args); } } });
+        verifier: { verify: (...args) => { beforeVerify(); return verifier.verify(...args); }, identities: configuration.circuits } });
       journals.push(j); return j;
     };
     const replace = async (secret = bSecret, predecessor = backing, effective = venue.witnessedIndex() + 2n * lag + 2n,
@@ -200,25 +200,25 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     await expect(f.successor.commit("after-force")).rejects.toMatchObject({ code: "STALE" });
   });
 
-  it("refuses an incumbent takeover and signs no adoption receipt when the successor's term ends during verification", async () => {
+  it("refuses an incumbent takeover and signs no adoption receipt when the successor's term ends during the adoption read", async () => {
     const f = await fundedFixture(true);
     await expect(f.a.takeover("same-term", f.signed, f.held.package)).rejects.toMatchObject({ code: "STALE" });
     const next = await f.replace(); f.venue.advance(next.effective);
     const demand = record(demandTask(f.context, f.inputs,
       { backing: f.backing, quantity: 10n, presenter: ed25519.getPublicKey(cSecret), instant: next.effective - lag, deadline: 30n }));
     await f.venue.publishRecord(4, f.backing, encodePublication({ domain, backing: f.backing, kind: 1, record: demand }));
-    let duringProof = () => {};
-    const successor = f.create(bSecret, "b", () => duringProof());
+    const successor = f.create(bSecret, "b");
     await successor.takeover("takeover", f.signed, f.held.package); await successor.publish();
     expect((await f.read(await successor.package())).force.map(event => event.bytes)).toEqual([encodeRecord(demand)]);
     const third = await f.replace(cSecret, next.link);
-    duringProof = () => f.venue.advance(third.effective);
+    // Kept state holds every proof already judged, so the adoption verifies none: the term ends at its first venue range.
+    const range = f.venue.range.bind(f.venue), ranges = vi.spyOn(f.venue, "range").mockImplementation((...args) => { f.venue.advance(third.effective); return range(...args); });
     const sign = vi.spyOn(ed25519, "sign");
     try {
-      await expect(successor.adopt()).rejects.toMatchObject({ code: "STALE" });
+      await expect(successor.adopt()).rejects.toMatchObject({ code: "STALE", message: "the venue changed during the journal operation" });
       expect(f.venue.witnessedIndex()).toBe(third.effective);
       expect(sign).not.toHaveBeenCalled();
-    } finally { sign.mockRestore(); }
+    } finally { sign.mockRestore(); ranges.mockRestore(); }
     await expect(successor.adopt()).rejects.toMatchObject({ code: "STALE" });
   });
 

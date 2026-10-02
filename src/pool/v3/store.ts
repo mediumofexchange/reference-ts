@@ -74,7 +74,7 @@ import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, 
   type ScopeResult } from "./scope-reader.js";
 import { ReplayStore } from "./replay-store.js";
 import { declaredParallel } from "./verify-ahead.js";
-import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type Judged, type ProofCheck, type SegmentReplay,
+import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
 
@@ -204,7 +204,7 @@ export interface V3StoreOptions {
   /** The venue identity's preimage the caller holds; the guard recomputes it. */
   readonly reference: VenueReference;
   /** Verifies proofs under the configuration's keys. */
-  readonly verifier: ProofCheck;
+  readonly verifier: DeclaredVerifier;
 }
 /** A served §12 package with the selection it names; a reader makes its own selection and judges at its own index. */
 export interface ServedPackage {
@@ -229,15 +229,15 @@ export class V3OperatorJournal {
   private readonly venue: RecordVenue & RecordPublisher;
   private readonly venueId: Uint8Array;
   private readonly lag: bigint;
-  private readonly verifier: ProofCheck;
+  private readonly verifier: DeclaredVerifier;
   private readonly reference: VenueReference;
   private readonly owner: bigint;
   private readonly resumedAt: bigint | undefined;
   private readonly path: string;
   /** The admission state and the imported prefixes it reads, in this database. */
   private readonly replays: ReplayStore;
-  /** The kept state of the journal's own reads, opened at the first read: a file beside the database where the
-   * verifier declares its circuits (§14 names kept state by them), else memory dropped after each operation. */
+  /** The kept state of the journal's own reads, opened at the first read: a file beside the database,
+   * named by the verifier's circuits (§14). */
   private reading: ReplayStore | undefined;
   /** The evidence the journal serves and reads: its own records, heads, directories and snapshots, and what a takeover took. */
   private readonly evidence: EvidenceStore;
@@ -258,7 +258,7 @@ export class V3OperatorJournal {
     const identities = requireConfigurationVerifier(verifier.identities), verify = verifier.verify.bind(verifier);
     const parallel = declaredParallel(verifier);
     this.venue = venue; this.lag = venue.lag();
-    this.verifier = { verify, ...(identities === undefined ? {} : { identities }), ...(parallel === undefined ? {} : { parallel }) };
+    this.verifier = { verify, identities, ...(parallel === undefined ? {} : { parallel }) };
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
     this.observedIndex = 0n; this.path = path;
     const now = this.clock();
@@ -400,15 +400,12 @@ export class V3OperatorJournal {
     }
     finally {
       this.busy = false;
-      // Reads kept only in memory are dropped between operations; their venue answers stay.
-      if (this.reading !== undefined && !this.reading.kept) this.reading.collect([]);
     }
   }
   /** The store the journal's own reads keep their classes and replays in. */
   private reads(): ReplayStore {
     if (this.reading === undefined) {
-      const declared = this.verifier.identities !== undefined && Object.keys(this.verifier.identities).length > 0;
-      try { this.reading = declared ? new ReplayStore(`${this.path}.reads`, { digest: `${this.path}.reads.sha256` }) : new ReplayStore(); } catch (error) {
+      try { this.reading = new ReplayStore(`${this.path}.reads`, { digest: `${this.path}.reads.sha256` }); } catch (error) {
         if (error instanceof Error && /in use/.test(error.message)) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
         throw error;
       }

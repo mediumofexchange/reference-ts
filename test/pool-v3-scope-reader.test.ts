@@ -27,7 +27,7 @@ const issuerSecret = b(3), operatorSecret = b(4);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), label = b(2), lag = 2n;
-const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true };
+const reference = { context: LOCAL_REFERENCE, label, lag } as const, verifier = { verify: () => true, identities: configuration.circuits };
 const stateOf = <T extends { readonly receipt?: unknown }>(result: T): Exclude<T, { readonly receipt: object }> => {
   if (result.receipt !== undefined) throw new Error("a receipt verdict");
   return result as Exclude<T, { readonly receipt: object }>;

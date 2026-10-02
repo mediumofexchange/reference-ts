@@ -17,7 +17,7 @@ export const venueId = FixtureVenue.reference(reference.label, reference.lag).id
 export const terms = encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue: venueId, interval: 20n,
   payout: { thing: 'service fixture units', quantumExponent: 0, perUnit: 1n } });
 export const backing = rootTermsName(terms);
-export const verifier = { verify: (kind, _inputs, proof) => proof[0] === kind };
+export const verifier = { identities: configuration.circuits, verify: (kind, _inputs, proof) => proof[0] === kind };
 export const WALLET = '11'.repeat(32), ADMIN = '22'.repeat(32);
 export const save = (path, value) => writeFileSync(path, serialize(value));
 export const load = path => deserialize(readFileSync(path));

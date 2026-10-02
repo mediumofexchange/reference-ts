@@ -24,7 +24,8 @@ import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
 import { ownedNotes, seedWitness } from "../../../dist/pool/v3/holdings.js";
 import { decodeEvidencePackage } from "../../../dist/pool/v3/package.js";
 import { readFrontier } from "../../../dist/pool/v3/package-reader.js";
-import { openV3Prover, POOL_V3_CIRCUITS } from "../../../dist/pool/v3/prover.js";
+import { openV3Prover } from "../../../dist/pool/v3/prover.js";
+import { openV3Verifier } from "../../../dist/pool/v3/verifier.js";
 import { decodeRecord, encodePublication, encodeRecord, statementHash } from "../../../dist/pool/v3/records.js";
 import { ReplayStore } from "../../../dist/pool/v3/replay-store.js";
 import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
@@ -33,7 +34,7 @@ import { V3OperatorJournal } from "../../../dist/pool/v3/store.js";
 import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, issueTask, settleTask,
   withdrawalRecord } from "../../../dist/pool/v3/witness.js";
-import { PROOF_OPTIONS, proofVerifier, startBackend } from "../../../dist/pool/proof-verifier.js";
+import { PROOF_OPTIONS, startBackend } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { RELATION_KINDS, loadManifest, checkSources, adoptedDomain, readKeys } from "./manifest.mjs";
 import { v3Codec as codec } from "./codec.mjs";
@@ -57,7 +58,7 @@ const summary = result => {
 };
 
 /** A fresh seedless process: its own evidence and kept replay files in `directory`, the runtime verifier over
- * keys it derives from artifacts it checks against the manifest, and the terms and venue it is handed beside
+ * keys it derives from the package's shipped relations, and the terms and venue it is handed beside
  * (never from the service). With a service it syncs first; without one it reads what its files hold. */
 async function reader(build, directory) {
   const manifest = loadManifest(); checkSources(manifest);
@@ -71,7 +72,7 @@ async function reader(build, directory) {
   let runtime, evidence, store;
   try {
     // Two instances, declared, so the read verifies ahead of its replay (M5b.6).
-    runtime = await proofVerifier(api, POOL_V3_CIRCUITS, programsOf(build), { instances: READER_INSTANCES });
+    runtime = await openV3Verifier(api, { instances: READER_INSTANCES });
     let verified = 0;
     const verifier = { identities: runtime.identities, parallel: runtime.parallel,
       verify: (kind, inputs, proof) => { verified++; return runtime.verify(kind, inputs, proof); } };
@@ -114,7 +115,7 @@ async function acceptance() {
     const programs = programsOf(build);
     for (const [kind, name] of RELATION_KINDS) writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
     readKeys(build, manifest);
-    prover = await openV3Prover(api, programs);
+    prover = await openV3Prover(api);
     const prove = async task => {
       const began = performance.now(), record = await prover.prove(task), ms = Math.round(performance.now() - began);
       const entry = proofs.get(task.kind) ?? { kind: task.kind, count: 0, bytes: record.proof.length, totalMs: 0, maxMs: 0 };

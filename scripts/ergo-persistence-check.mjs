@@ -37,6 +37,7 @@ const { ergoProfileIdentity } = await import("../dist/ergo-profile.js");
 const { Chain, BranchSupplier, plainBox, recordOutput, transaction } = await import("../dist/ergo-synthetic.js");
 const { encodeCommitment, signCommitment } = await import("../dist/commitment.js");
 const { V3OperatorJournal } = await import("../dist/pool/v3/store.js");
+const { adoptedConfiguration } = await import("../dist/pool/v3/configuration.js");
 const { payToPublicKeyTree } = await import("../dist/ergo-publisher.js");
 const { secp256k1 } = await import("@noble/curves/secp256k1.js");
 const { blake2b } = await import("@noble/hashes/blake2b.js");
@@ -65,7 +66,7 @@ if (action === "initialize") {
   await venue.sync([serving(more.at(-1))]); throw new Error("crash boundary not reached");
 } else if (action.startsWith("publication-")) {
   const owner = new V3OperatorJournal(join(directory, "operator.sqlite"), { secret: b(81), venue,
-    reference: { context: profile.reference, profile }, verifier: { verify: async () => false } });
+    reference: { context: profile.reference, profile }, verifier: { identities: adoptedConfiguration().circuits, verify: async () => false } });
   const funding = b(82), tree = payToPublicKeyTree(secp256k1.getPublicKey(funding, true));
   const box = plainBox(tree, 10000000n, chain.anchor.height), boxId = blake2b(box, { dkLen: 32 });
   let submitted = false;

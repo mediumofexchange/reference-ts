@@ -3,37 +3,29 @@
 // `@noir-lang/noir_js` and proofs made with `@aztec/bb.js` under UltraHonk's
 // zero-knowledge target, both optional peer dependencies like the verifier.
 //
-// The caller supplies the six compiled artifacts; the prover derives each
-// circuit's bytecode and key identity itself and refuses unless all six equal
-// the adopted configuration's (pool-v3 §11.4). It proves a task built by `witness.ts`,
-// requires the proof's public inputs to equal the task's exactly, and checks
-// the proof with the verifier over the same keys, routed by kind (§4), before
-// returning the record. Nothing here admits, signs a receipt or chooses a
-// venue; issue and recovery signing helpers live in witness.ts.
+// The prover executes the package's six shipped relations (`programs.ts`),
+// whose bytecode identities the loader checks and whose keys the verifier
+// derives and checks against the adopted configuration (pool-v3 §11.4). It
+// proves a task built by `witness.ts`, requires the proof's public inputs to
+// equal the task's exactly, and checks the proof with the verifier over the
+// same keys, routed by kind (§4), before returning the record. Nothing here
+// admits, signs a receipt or chooses a venue; issue and recovery signing
+// helpers live in witness.ts.
 import type { Barretenberg } from "@aztec/bb.js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
-import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { copyBytes, EncodingError } from "../../bytes.js";
 import { identifierOf } from "../field.js";
-import { PROOF_OPTIONS, proofVerifier, type BackendOptions, type CircuitTable, type ProofVerifier } from "../proof-verifier.js";
-import { adoptedConfiguration, RELATION_KINDS, RELATIONS, type Relation } from "./configuration.js";
+import { PROOF_OPTIONS, type VerifierOptions, type ProofVerifier } from "../proof-verifier.js";
+import { RELATION_KINDS, RELATIONS } from "./configuration.js";
 import type { Record } from "./records.js";
+import { adoptedPrograms } from "./programs.js";
+import { openV3Verifier } from "./verifier.js";
 import type { ProofTask } from "./witness.js";
 
-/** pool-v3's six relations: kind, artifact and public-input count (§3), proofs to §5's bound. */
-export const POOL_V3_CIRCUITS: CircuitTable = Object.freeze({
-  circuits: Object.freeze(([["issue", 11], ["spend", 15], ["burn", 15], ["demand", 16], ["settle", 17], ["request", 7]] as const)
-    .map(([name, publicInputs]) => Object.freeze({ kind: RELATION_KINDS[name], name, publicInputs }))),
-  maxProofBytes: 131072,
-});
-const NAMES = new Map<number, Relation>(POOL_V3_CIRCUITS.circuits.map(c => [c.kind, c.name as Relation]));
-
-/** The compiler's artifact for one circuit with the ABI noir_js executes it by. */
-export type NoirProgram = CompiledCircuit & { readonly noir_version: string };
-
-/** A prover whose artifacts or keys differ from the configuration, or whose proof does not carry the task's inputs. */
+/** A proof that does not carry the task's inputs, or does not verify. */
 export class ProverError extends Error {
-  constructor(readonly code: "IDENTITY" | "PUBLIC_INPUTS" | "UNVERIFIED", message: string) {
+  constructor(readonly code: "PUBLIC_INPUTS" | "UNVERIFIED", message: string) {
     super(message); this.name = "ProverError";
   }
 }
@@ -49,34 +41,18 @@ export interface V3Prover {
 
 /**
  * Build the prover over the caller's backend instance, which `startBackend`
- * must have started from checked parameters: derive the six keys, refuse
- * unless every identity is the adopted configuration's, and keep the programs.
- * Proving runs on the caller's instance; verification on the verifier's own.
+ * must have started from checked parameters: load the shipped relations,
+ * derive the six keys, and refuse (`ProgramError`) unless every identity is
+ * the adopted configuration's. Proving runs on the caller's instance;
+ * verification on the verifier's own.
  */
-export async function openV3Prover(api: Barretenberg, programs: Readonly<{ [name in Relation]: NoirProgram }>,
-  options: BackendOptions = {}): Promise<V3Prover> {
-  const own = new Map<Relation, NoirProgram>(), configuration = adoptedConfiguration();
-  for (const name of RELATIONS) {
-    const program = programs[name];
-    if (program === null || typeof program !== "object") throw new ProverError("IDENTITY", `${name} artifact is missing`);
-    own.set(name, Object.freeze({ ...program }));
-  }
-  const verifier = await proofVerifier(api, POOL_V3_CIRCUITS, Object.fromEntries(own), options);
-  try {
-    for (const name of RELATIONS) {
-      const derived = verifier.identities[name], expected = configuration.circuits[name];
-      if (derived === undefined || compareBytes(derived.bytecode, expected.bytecode) !== 0 || compareBytes(derived.vk, expected.vk) !== 0) {
-        throw new ProverError("IDENTITY", `${name} artifact or key is not the configuration's`);
-      }
-    }
-  } catch (error) {
-    await verifier.close();
-    throw error;
-  }
+export async function openV3Prover(api: Barretenberg, options: VerifierOptions = {}): Promise<V3Prover> {
+  const programs = adoptedPrograms(), verifier = await openV3Verifier(api, options);
   const circuits = new Map<number, { readonly noir: Noir; readonly backend: UltraHonkBackend }>();
-  for (const [kind, name] of NAMES) {
-    const program = own.get(name)!;
-    circuits.set(kind, { noir: new Noir(program), backend: new UltraHonkBackend(program.bytecode, api) });
+  for (const name of RELATIONS) {
+    // Witness generation reads the ABI and bytecode; the debug fields only enrich an execution failure's message.
+    const program = programs[name] as unknown as CompiledCircuit;
+    circuits.set(RELATION_KINDS[name], { noir: new Noir(program), backend: new UltraHonkBackend(program.bytecode, api) });
   }
   return {
     verifier,

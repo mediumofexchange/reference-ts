@@ -13,7 +13,7 @@ import { fixtures, field, FIELD, U64_MAX } from '../fixtures.mjs';
 import { asFields, assertions, bypass, failedOpcode, FRAME, inputRanges, names, refusal, withoutRange } from '../constraints.mjs';
 import { EncodingError } from '../../../dist/bytes.js';
 import { proofVerifier, startBackend } from '../../../dist/pool/proof-verifier.js';
-import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/prover.js';
+import { POOL_V3_CIRCUITS } from '../../../dist/pool/v3/programs.js';
 import { adoptedConfigurationBytes, adoptedDomain, configurationBytes, POOL_V3_MANIFEST, PROOF_BYTES, RELATIONS } from '../../../dist/pool/v3/configuration.js';
 import { deliveryHash } from '../../../dist/pool/v3/records.js';
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from './provenance.mjs';

@@ -32,7 +32,6 @@ import { startBackend } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY, readParameters } from "../prepare-crs.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { drillMode, drillWorker, openDrill, workerVenue } from "./drill.mjs";
-import { RELATION_KINDS } from "./manifest.mjs";
 
 const b = n => new Uint8Array(32).fill(n);
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -50,7 +49,7 @@ const summary = result => ({ supply: String(result.state.issued - result.state.b
 
 /**
  * One wallet process: `--wallet <build> [--ergo]`, its steps on stdin. It holds its role's database, its own prover
- * and verifier over the build's programs, and its own view of the venue; under service it syncs its kept evidence
+ * and verifier over the package's shipped relations, and its own view of the venue; under service it syncs its kept evidence
  * from the operator's service before its steps, in a gap it reads with the package its last sync kept. `retry`
  * gives it no sync, evidence, prover or signer: an exact retry must need none. Each step's refusal is reported, not thrown.
  */
@@ -60,8 +59,7 @@ async function walletWorker(argv) {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const input = deserialize(Buffer.concat(chunks));
   const api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
-  const programs = Object.fromEntries(RELATION_KINDS.map(([, circuit]) => [circuit, JSON.parse(readFileSync(join(directory, `${circuit}.json`), "utf8"))]));
-  const prover = await openV3Prover(api, programs);
+  const prover = await openV3Prover(api);
   let wallet;
   try {
     const { venue, reference } = await workerVenue(directory, mode, input);

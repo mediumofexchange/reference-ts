@@ -81,6 +81,18 @@ assert.equal(core.ErgoVenue, undefined);
   assert.equal(core.V3OperatorJournal, undefined);
   assert.equal(typeof createPilotServer, 'function');
 }
+{
+  // The installed package carries the six compiled relations and checks them against its manifest, with no
+  // proving backend installed (pool-v3 §11.4).
+  const { adoptedPrograms } = await import('@mediumofexchange/reference/pool/v3/programs');
+  const { POOL_V3_MANIFEST } = await import('@mediumofexchange/reference/pool/v3/configuration');
+  const { createHash } = await import('node:crypto');
+  const programs = adoptedPrograms();
+  assert.deepEqual(Object.keys(programs), Object.keys(POOL_V3_MANIFEST.circuits));
+  for (const [name, program] of Object.entries(programs)) {
+    assert.equal(createHash('sha256').update(Buffer.from(program.bytecode, 'base64')).digest('hex'), POOL_V3_MANIFEST.circuits[name].bytecode);
+  }
+}
 console.log('Built tarball consumer: imports, canonical round trip and signature passed');
 `);
   process.stdout.write(run([join(consumer, 'check.mjs')], consumer));

@@ -27,7 +27,8 @@ import { decodeReceipt, encodeReceipt } from "../../../dist/pool/v3/commitments.
 import { createV3Service } from "../../../dist/pool/v3/service-http.js";
 import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
 import { ReferenceVenueError } from "../../../dist/pool/v3/guard.js";
-import { openV3Prover, ProverError } from "../../../dist/pool/v3/prover.js";
+import { openV3Prover } from "../../../dist/pool/v3/prover.js";
+import { adoptedPrograms } from "../../../dist/pool/v3/programs.js";
 import { V3OperatorJournal, V3StoreError } from "../../../dist/pool/v3/store.js";
 import { authorizeIssue, burnTask, issueTask, spendTask } from "../../../dist/pool/v3/witness.js";
 import { encodeRecord } from "../../../dist/pool/v3/records.js";
@@ -82,7 +83,7 @@ try {
     writeFileSync(join(build, `${kind}.vk`), await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS));
   }
   readKeys(build, manifest);
-  const prover = await openV3Prover(api, programs);
+  const prover = await openV3Prover(api);
   async function prove(task, label) {
     const start = performance.now(), record = await prover.prove(task);
     metrics.push({ label, kind: task.kind, proofBytes: record.proof.length, elapsedMs: Math.round(performance.now() - start) });
@@ -111,7 +112,7 @@ try {
     supplier.mempool.fund(plainBox(publisher.tree, 100_000_000n, ERGO_CHAIN.anchor.height));
     await mineAndSync();
   }
-  const verifier = { reference, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
+  const verifier = { reference, identities: prover.verifier.identities, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
     record: data => withTestnet ? testnet.testnetRecord(live.selection(), live.pin)
       : withErgo ? ergoRecord(data, { pin }) : recordReader(FixtureVenue.from(data), evidenceKind) };
   // The range-replay harness needs a venue-presence marker. Testnet's marker
@@ -189,15 +190,16 @@ try {
 
   const records = {}, receipts = {};
   let spent;
-  await test("the prover refuses artifacts whose identities are not the adopted configuration's", async () => {
-    // Burn's artifact in spend's place: both take 15 public inputs, so only the derived identities differ.
-    const error = await openV3Prover(api, { ...programs, spend: programs.burn }).then(() => undefined, e => e);
-    assert(error instanceof ProverError); assert.equal(error.code, "IDENTITY");
+  await test("the prover proves the package's shipped relations, which are this build's", () => {
+    const shipped = adoptedPrograms();
+    for (const [, name] of RELATION_KINDS) {
+      assert.deepEqual({ ...shipped[name] }, { noir_version: programs[name].noir_version, abi: programs[name].abi, bytecode: programs[name].bytecode });
+    }
   });
   await test("the prover refuses a backend instance startBackend did not start (pool-v3 §4)", async () => {
     const unchecked = await Barretenberg.new({ backend: BackendType.WasmWorker, threads: 1, skipSrsInit: true });
     try {
-      await assert.rejects(openV3Prover(unchecked, programs),
+      await assert.rejects(openV3Prover(unchecked),
         { name: "ParameterError", code: "UNCHECKED", message: "the backend instance was not started from checked parameters" });
     } finally { await unchecked.destroy(); }
   });
@@ -364,13 +366,13 @@ try {
   await test("a reopened journal reads its rows to the same package and replies, and its audit proves them again", async () => {
     journal.close();
     // Reopening verifies no proof: under a verifier that accepts none the journal still loads, and only its audit refuses.
-    journal = new V3OperatorJournal(journalPath, { ...options, verifier: { verify: () => false } });
+    journal = new V3OperatorJournal(journalPath, { ...options, verifier: { identities: prover.verifier.identities, verify: () => false } });
     assert.deepEqual((await journal.package(backing)).package, finalPackage.package);
     await refusal(journal.audit(), "STORAGE", "PROOF");
     journal.close();
     const reopenApi = await startBackend(parameters);
     try {
-      const again = await openV3Prover(reopenApi, programs);
+      const again = await openV3Prover(reopenApi);
       try {
         journal = new V3OperatorJournal(journalPath, { ...options, verifier: again.verifier });
         await serve();

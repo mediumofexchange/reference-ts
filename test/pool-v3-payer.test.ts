@@ -25,7 +25,7 @@ const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), issuerSecret = b(15), operatorSecret = b(16), successorSecret = b(18);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret), successorKey = ed25519.getPublicKey(successorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind };
+const verifier = { verify: (kind: number, _inputs: readonly bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
 const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicInputs: task.publicInputs,
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);
@@ -49,7 +49,7 @@ describe("v3 payer custody over restored holdings", () => {
   });
 
   /** The payer wallet holds two issued notes of `funds`; a receiver and an operator fee recipient request payment. */
-  async function fixture(funds: readonly bigint[] = [10n, 6n], readerVerifier: typeof verifier | { verify: (...args: Parameters<typeof verifier.verify>) => Promise<boolean> } = verifier,
+  async function fixture(funds: readonly bigint[] = [10n, 6n], readerVerifier: typeof verifier | { verify: (...args: Parameters<typeof verifier.verify>) => Promise<boolean>; identities: typeof verifier.identities } = verifier,
     clauses: { silence?: { noCommitmentDuration: bigint; challengeWindow: bigint } } = {}) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-payer-test-")); directories.push(directory);
@@ -58,7 +58,7 @@ describe("v3 payer custody over restored holdings", () => {
       interval: 20n, payout: { thing: "payer units", quantumExponent: 0, perUnit: 1n }, ...clauses });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
-    // This verifier declares no circuits, so each read replays in memory; the receiver, multi-backing and kept suites run on kept files.
+    // The verifier declares the configuration's circuits, so each read keeps its replay state in the wallet's own files.
     const reader = { venue, reference, verifier: readerVerifier };
     const open = (name: string) => { const wallet = new V3Wallet(join(directory, `${name}.db`), reader); wallets.push(wallet); return wallet; };
     const payer = open("payer"), receiver = open("receiver");
