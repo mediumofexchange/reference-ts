@@ -173,6 +173,7 @@ export async function initDirectory(dir: string, config: Config, fill: (director
   prepare(path);
   try { mkdirSync(path, { mode: 0o700 }); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists; init creates a new directory`);
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CommandError("ABSENT", `the parent of ${path} does not exist`);
     throw error;
   }
   requirePrivate(path);

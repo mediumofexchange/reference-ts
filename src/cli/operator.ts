@@ -68,6 +68,13 @@ async function openOperator(directory: Directory, args: Arguments): Promise<Oper
   }
 }
 
+/** `act` on the operator's journal; where it failed after the spend budget refused a broadcast, the budget's
+ * refusal (`BUDGET`) is what the command reports. */
+async function budgeted<T>(op: Operator, act: () => Promise<T>): Promise<T> {
+  op.budget.take();
+  try { return await act(); } catch (error) { throw op.budget.take() ?? error; }
+}
+
 const pause = (ms: number) => new Promise(done => setTimeout(done, ms));
 const POLL = { dir: "value", verifiers: "value", "poll-ms": "value" } as const;
 const pollMs = (args: Arguments): number => Number(integer(flag(args, "poll-ms") ?? "5000", "--poll-ms", 10n, 600_000n));
@@ -121,7 +128,7 @@ async function open(argv: readonly string[]): Promise<void> {
   keepTerms(directory, kept);
   const op = await openOperator(directory, args);
   try {
-    const signed = await op.journal.open(id, kept.signed), published = await op.journal.publish();
+    const signed = await op.journal.open(id, kept.signed), published = await budgeted(op, () => op.journal.publish());
     print({ status: "pending", backing: kept.backing, commitment: commitmentOf(signed), published: commitmentOf(published) });
   } finally { await op.close(); }
 }
@@ -176,7 +183,13 @@ async function serve(argv: readonly string[]): Promise<void> {
   } });
   const walletToken = readToken(directory, "wallet.token");
   const server: Server = createV3Service(queued, { walletToken, adminToken: readToken(directory, "admin.token") });
-  await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(port, "127.0.0.1", () => done()); });
+  try {
+    await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(port, "127.0.0.1", () => done()); });
+  } catch (error) {
+    await op.close();
+    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CommandError("UNAVAILABLE", `port ${port} is in use`);
+    throw error;
+  }
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   writeReplace(directory.file("service.json"), `${JSON.stringify({ url, walletToken }, null, 2)}\n`);
   let stopping = false, wake: (() => void) | undefined;
@@ -184,21 +197,28 @@ async function serve(argv: readonly string[]): Promise<void> {
   process.once("SIGTERM", stop); process.once("SIGINT", stop);
   print({ status: "serving", url, operator: op.operator, interval, silence: silence ?? null });
   const tick = async (): Promise<void> => {
-    await op.view.sync();
+    const synced = await op.view.sync(), stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined);
+    if (synced.unresolvedIndex !== undefined || stalled.length > 0) {
+      log({ event: "sync", witnessedIndex: synced.witnessedIndex, unresolvedIndex: synced.unresolvedIndex, reason: synced.unresolvedReason,
+        stopped: stalled.map(supplier => ({ name: supplier.name, stopped: supplier.stopped })) });
+    }
     const s = await journal.status(), signed = s.signed;
-    if (signed === undefined || s.pendingReturn) return;
-    if (!signed.held) { await journal.publish(); return; }
+    if (signed === undefined) return;
+    // The latest signed commitment, a pending return's opening included, is published until the venue holds it.
+    if (!signed.held) { await budgeted(op, () => journal.publish()); return; }
+    if (s.pendingReturn) return;
     const admitted = signed.admitted > 0n && s.now >= signed.at + interval;
     const keepAlive = silence !== undefined && s.heldIndex !== undefined && s.now >= s.heldIndex + silence / 2n;
     if (!admitted && !keepAlive) return;
     const commitment = await journal.commit(`serve:${s.now}`);
     log({ event: "committed", at: s.now, admitted: signed.admitted, commitment: commitmentOf(commitment) });
-    await journal.publish();
+    await budgeted(op, () => journal.publish());
   };
   try {
     while (!stopping) {
       try { await queue(tick); } catch (error) {
-        if (!(error instanceof V3StoreError) || ["STORAGE", "FENCED", "CONFLICT"].includes(error.code)) throw error;
+        const budget = error instanceof CommandError && error.code === "BUDGET";
+        if (!budget && (!(error instanceof V3StoreError) || ["STORAGE", "FENCED", "CONFLICT"].includes(error.code))) throw error;
         log({ event: "refused", code: error.code, message: error.message });
       }
       if (!stopping) await new Promise<void>(done => { wake = done; setTimeout(done, ms); });
@@ -219,7 +239,7 @@ async function returnCommand(argv: readonly string[]): Promise<void> {
   const op = await openOperator(directory, args);
   try {
     const signed = await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE"], () => op.journal.return(id));
-    const published = await op.journal.publish();
+    const published = await budgeted(op, () => op.journal.publish());
     print({ status: "pending", commitment: commitmentOf(signed), published: commitmentOf(published) });
   } finally { await op.close(); }
 }

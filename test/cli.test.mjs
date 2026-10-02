@@ -36,10 +36,11 @@ describe('moe venue files', () => {
   });
   it('refuses a mainnet or unknown context, an extra field, two kinds at one location and a short anchor height', () => {
     expect(() => parseVenue({ ...file(), context: 'moe/venue/ergo/v3' })).toThrow('mainnet stays disabled');
-    expect(() => parseVenue({ ...file(), extra: 1 })).toThrow(CommandError);
+    const code = value => { try { parseVenue(value); } catch (error) { expect(error).toBeInstanceOf(CommandError); return error.code; } return undefined; };
+    expect(code({ ...file(), context: 'moe/venue/ergo/v3' })).toBe('VENUE');
     const locations = file().locations; locations[1] = locations[0];
-    expect(() => parseVenue({ ...file(), locations })).toThrow(CommandError);
-    expect(() => parseVenue({ ...file(), anchorHeight: '1024' })).toThrow(CommandError);
-    expect(() => parseVenue({ ...file(), depth: '-1' })).toThrow(CommandError);
+    for (const bad of [{ ...file(), extra: 1 }, { ...file(), locations }, { ...file(), anchorHeight: '1024' }, { ...file(), depth: '-1' }]) {
+      expect(code(bad)).toBe('INVALID');
+    }
   });
 });

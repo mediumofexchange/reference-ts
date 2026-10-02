@@ -25,7 +25,7 @@ import { ergoNodeSupplier, parseNodeJson, type ErgoSupplier } from "../ergo-supp
 import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
-import { CommandError, readJson, readOptional, readSecret, writeExclusive, type Directory } from "./common.js";
+import { CommandError, readJson, readOptional, readSecret, writeExclusive, writeReplace, type Directory } from "./common.js";
 
 const KINDS: readonly RecordKind[] = [1, 2, 3, 4];
 const NODE_TIMEOUT_MS = 30_000;
@@ -107,12 +107,16 @@ async function fetchContext(directory: Directory, anchor: Uint8Array, anchorHeig
   throw new CommandError("UNAVAILABLE", "no node endpoint supplied the anchor's context");
 }
 
-/** Keep the anchor's context and check that the view takes it (the anchor's difficulty bound included). */
+/** Keep the anchor's context and check that the view takes it (the anchor's difficulty bound included). A kept
+ * context that does not authenticate this anchor (an interrupted `venue create` that anchored elsewhere) is
+ * fetched again and replaced. */
 export async function keepContext(directory: Directory, venue: VenueFile): Promise<void> {
-  if (readOptional(directory.file("anchor.json")) !== undefined) return;
+  if (readOptional(directory.file("anchor.json")) !== undefined) {
+    try { new ErgoVenue(venue.profile, readContext(directory)); return; } catch { /* fetched again below */ }
+  }
   const context = await fetchContext(directory, venue.profile.anchor, venue.anchorHeight);
   new ErgoVenue(venue.profile, context);
-  writeExclusive(directory.file("anchor.json"), `${JSON.stringify(context.map(bytesToHex))}\n`);
+  writeReplace(directory.file("anchor.json"), `${JSON.stringify(context.map(bytesToHex))}\n`);
 }
 function readContext(directory: Directory): Uint8Array[] {
   const value = readJson(directory.file("anchor.json"), "anchor.json");
@@ -213,6 +217,9 @@ export const fundingTree = (secret: Uint8Array): Uint8Array => payToPublicKeyTre
 export class SpendBudget {
   private readonly db: DatabaseSync;
   private readonly limit: bigint;
+  /** The last refusal, kept for the command: the publisher reads any supplier failure as "not taken", and the
+   * journal reports that as UNAVAILABLE, which would hide the budget behind a node outage. */
+  private refused: CommandError | undefined;
   constructor(directory: Directory, readonly tree: Uint8Array) {
     const limit = directory.config.spendBudgetNanoErg;
     if (limit === undefined) throw new CommandError("INVALID", "a funding directory's config.json carries spendBudgetNanoErg");
@@ -223,7 +230,15 @@ export class SpendBudget {
   }
   /** What has been reserved so far, in nanoErg. */
   spent(): bigint { return (this.db.prepare("SELECT COALESCE(SUM(cost),0) AS n FROM spend").get()?.n as bigint) ?? 0n; }
+  /** The refusal since the last call, if any, cleared. */
+  take(): CommandError | undefined { const refused = this.refused; this.refused = undefined; return refused; }
   async authorize(signed: Uint8Array, id: Uint8Array, boxes: readonly Uint8Array[]): Promise<void> {
+    try { await this.judge(signed, id, boxes); } catch (error) {
+      if (error instanceof CommandError) this.refused = error;
+      throw error;
+    }
+  }
+  private async judge(signed: Uint8Array, id: Uint8Array, boxes: readonly Uint8Array[]): Promise<void> {
     const key = bytesToHex(id), digest = bytesToHex(sha256(signed));
     const prior = this.db.prepare("SELECT signed FROM spend WHERE id=?").get(key);
     if (prior !== undefined) {

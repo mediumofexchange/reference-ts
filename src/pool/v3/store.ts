@@ -1206,8 +1206,9 @@ export class V3OperatorJournal {
   /** Where the journal stands, for a caller that schedules checkpoints and publication on the witnessed index
    * (`moe operator serve`): the venue's clock; the latest signed commitment, the index it was signed at, whether
    * its publication was recorded and whether the venue holds exactly it; the statements admitted past it; the
-   * index at which the venue witnessed this key's latest commitment; and whether a return awaits adoption. Reads
-   * rows and the venue's view only; signs and publishes nothing. */
+   * index at which the venue witnessed this key's latest commitment; and whether a return awaits adoption. Signs
+   * and publishes nothing and changes no signed state or revision; like every command it records what it has
+   * read of the venue (its observed index and held answers) under the owner fence. */
   async status(): Promise<JournalStatus> {
     return this.run(async engine => {
       const view = this.view(engine), last = engine.last;

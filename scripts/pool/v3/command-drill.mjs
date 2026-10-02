@@ -3,16 +3,19 @@
 // under terms a fixture obligor signs, and serves; a reader keeps the terms and the service file and reads the
 // supply at its own view's witnessed index. Serve checkpoints on the witnessed index, a second command on a
 // directory serve holds refuses BUSY, and after serve stops past the terms' silence the operator returns and adopts.
-// Hostile cases: a shared directory, another role's directory, terms under another name or without --synthetic,
-// SQLite's temporary files kept in the directory. Statements come in M10c2 with the wallet commands.
+// Hostile cases: a shared directory, another role's directory, terms under another name, forged or without --synthetic,
+// an interrupted venue create, a publication past the spend budget, SQLite's temporary files kept in the directory.
+// Statements, the commit-on-admission rule and each command's peak RSS come in M10c2 with the wallet commands.
 //
 // Usage: node scripts/pool/v3/command-drill.mjs  (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { parseVenue } from "../../../dist/cli/venue.js";
 import { adoptedDomain } from "../../../dist/pool/v3/configuration.js";
+import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../../../dist/pool/v3/terms.js";
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
@@ -21,6 +24,14 @@ const root = resolve(import.meta.dirname, "../../.."), MOE = join(root, "dist/cl
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const obligorSecret = new Uint8Array(32).fill(41), obligor = ed25519.getPublicKey(obligorSecret);
 const SILENCE = 16n, DEPTH = "2";
+/** Root terms naming `operator` on `venue`, signed by the fixture obligor, as files. */
+function signTerms(name, operator, venue) {
+  const terms = encodeRootTerms({ obligor, operator: Buffer.from(operator, "hex"), configuration: adoptedDomain(), venue: Buffer.from(venue, "hex"),
+    interval: 80n, payout: { thing: "drill units", quantumExponent: 0, perUnit: 1n }, silence: { noCommitmentDuration: SILENCE, challengeWindow: 5n } });
+  const files = { terms: join(scratch, `${name}.bin`), signature: join(scratch, `${name}.sig`), backing: hex(rootTermsName(terms)) };
+  writeFileSync(files.terms, terms); writeFileSync(files.signature, ed25519.sign(rootTermsSignatureMessage(terms), obligorSecret));
+  return files;
+}
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "command-drill-")));
 const checks = [], processes = [];
@@ -113,11 +124,7 @@ try {
   });
 
   await check("operator open under terms a fixture obligor signed, published and witnessed", async () => {
-    const terms = encodeRootTerms({ obligor, operator: Buffer.from(operatorKey, "hex"), configuration: adoptedDomain(), venue: Buffer.from(venue, "hex"),
-      interval: 80n, payout: { thing: "drill units", quantumExponent: 0, perUnit: 1n }, silence: { noCommitmentDuration: SILENCE, challengeWindow: 5n } });
-    backing = hex(rootTermsName(terms));
-    termsFile = join(scratch, "terms.bin"); signatureFile = join(scratch, "terms.sig");
-    writeFileSync(termsFile, terms); writeFileSync(signatureFile, ed25519.sign(rootTermsSignatureMessage(terms), obligorSecret));
+    ({ backing, terms: termsFile, signature: signatureFile } = signTerms("terms", operatorKey, venue));
     const files = ["--terms", termsFile, "--signature", signatureFile];
     await refused(["operator", "open", "--dir", OP, "--id", "genesis", backing, ...files], "SYNTHETIC");
     await refused(["operator", "open", "--dir", OP, "--id", "genesis", hex(new Uint8Array(32).fill(9)), ...files, "--synthetic"], "NAME");
@@ -141,8 +148,8 @@ try {
     assert.deepEqual(await ok(["reader", "terms", "show", ...reader, backing]), added);
   });
 
-  const served = serve(OP);
-  let first;
+  const served = serve(OP), packageFile = join(scratch, "package.bin");
+  let first, viaService;
   await check("operator serve listens, publishes and keeps the checkpoint alive at half silence; a second command refuses BUSY", async () => {
     const listening = await served.listening;
     assert.equal(listening.status, "serving"); assert.equal(listening.silence, String(SILENCE));
@@ -155,8 +162,20 @@ try {
     await mine(Number(DEPTH) + 2); await new Promise(done => setTimeout(done, 400));
     const later = await ok(["reader", "supply", ...reader, backing]);
     assert(BigInt(later.checkpoint.sequence) > 1n, "a later checkpoint is canonical");
+    // The whole package as any transport could carry it, read back below with the service stopped.
+    const service = JSON.parse(readFileSync(join(OP, "service.json"), "utf8")), { reference } = parseVenue(JSON.parse(readFileSync(join(OP, "venue.json"), "utf8")));
+    const whole = await new V3ServiceClient(service.url, service.walletToken, { operator: Buffer.from(operatorKey, "hex"), reference }).package(Buffer.from(backing, "hex"));
+    writeFileSync(packageFile, whole.package);
+    await refused(["reader", "presentation", ...reader, backing, hex(new Uint8Array(32).fill(7))], "ABSENT");
+    viaService = await ok(["reader", "supply", ...reader, backing]);
   });
   await served.stop();
+
+  await check("with the service stopped, a reader reads the package file on one verifier instance", async () => {
+    const offline = await ok(["reader", "supply", ...reader, backing, "--package", packageFile, "--verifiers", "1"]);
+    assert.deepEqual({ ...offline, sync: undefined }, { ...viaService, sync: undefined });
+    assert.equal((await moe(["reader", "supply", ...reader, backing, "--verifiers", "7"])).status, 2);
+  });
 
   await check("past the terms' silence the operator returns and adopts, then serves again", async () => {
     await mine(Number(SILENCE) + 4);
@@ -173,6 +192,23 @@ try {
     assert.equal(after.supply, "0");
     assert(BigInt(after.checkpoint.sequence) >= BigInt(returned.commitment.sequence));
     await again.stop();
+  });
+
+  await check("an interrupted venue create anchors again over a stale context; a publication past the spend budget refuses BUDGET", async () => {
+    const OP2 = join(scratch, "operator-2");
+    const init = await ok(["operator", "init", "--dir", OP2, ...common, "--budget", "1000"]);
+    await call("/synthetic/fund", { tree: init.fundingTree, value: "1000000000" });
+    // A context an earlier, interrupted run kept for another anchor.
+    copyFileSync(join(OP, "anchor.json"), join(OP2, "anchor.json"));
+    await mine(3);
+    const created = await ok(["operator", "venue", "create", "--dir", OP2, "--synthetic", "--depth", DEPTH]);
+    assert.notEqual(created.venue, venue);
+    assert.notDeepEqual(readFileSync(join(OP2, "anchor.json")), readFileSync(join(OP, "anchor.json")));
+    await mine(Number(DEPTH) + 1);
+    const signed = signTerms("terms-2", init.operator, created.venue);
+    const over = await refused(["operator", "open", "--dir", OP2, "--id", "genesis", signed.backing, "--terms", signed.terms, "--signature", signed.signature,
+      "--synthetic"], "BUDGET");
+    assert.match(over.message, /spend budget of 1000 nanoErg/);
   });
 
   await check("hostile directories: shared modes, another role, an interrupted init, an existing directory", async () => {

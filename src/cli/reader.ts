@@ -24,6 +24,7 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
   readonly fill?: (directory: Directory, args: Arguments) => Promise<object> }): Promise<void> {
   const args = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", ...(options.budget ? { budget: "value" } : {}) }, 0);
   const nodes = flags(args, "node");
+  if (nodes.length === 0) throw new UsageError("--node is required (one or more of this directory's own node endpoints)");
   for (const node of nodes) if (!/^https?:\/\/[^\s]+$/.test(node)) throw new CommandError("INVALID", `${node} is not a node URL`);
   const venueFile = flag(args, "venue"), parameters = flag(args, "parameters");
   if (venueFile === undefined && options.venue === "required") throw new UsageError("--venue is required");
@@ -32,8 +33,13 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
   const venue = venueFile === undefined ? undefined : parseVenue(readJson(venueFile, "the venue file"));
   let shown: object = {};
   const directory = await initDirectory(required(args, "dir"), { role, nodes, ...(budget === undefined ? {} : { spendBudgetNanoErg: budget.toString() }) }, async opened => {
-    if (parameters !== undefined) await copyParameters(parameters, opened.path);
-    else await prepareParameters(opened.path, { log: line => process.stderr.write(`${line}\n`) });
+    try {
+      if (parameters !== undefined) await copyParameters(parameters, opened.path);
+      else await prepareParameters(opened.path, { log: line => process.stderr.write(`${line}\n`) });
+    } catch (error) {
+      if (error instanceof Error && /^No verified /.test(error.message)) throw new CommandError("PARAMETERS", error.message);
+      throw error;
+    }
     if (venue !== undefined) {
       const text = venueText(venue.profile, venue.anchorHeight);
       writeReplace(opened.file("venue.json"), text);
@@ -104,7 +110,7 @@ async function served(client: V3ServiceClient, backing: Uint8Array, evidence: Ev
 async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, answers: boolean) {
   const view = openView(directory);
   try {
-    const at = (await view.sync()).witnessedIndex;
+    const synced = await view.sync(), at = synced.witnessedIndex;
     if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
     const verifier = await openVerifier(directory, verifierCount(args));
     const evidence = new EvidenceStore(directory.file("evidence.db"));
@@ -112,7 +118,9 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
       const file = flag(args, "package");
       const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);
       const read = await readFrontier(source, kept.signed, at, { verifier, venue: view.venue, reference: view.file.reference, evidence, answers });
-      return { at, read };
+      // A read is final at its judging index; where the view could not read further, the output says so.
+      const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
+      return { at, read, sync: { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled } };
     } finally { evidence.close(); await verifier.close(); }
   } finally { view.close(); }
 }
@@ -123,8 +131,8 @@ export async function supplyCommand(argv: readonly string[], role: Role): Promis
   const args = parseArguments(argv, READ_FLAGS, 1);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue);
-  const { at, read } = await frontier(directory, args, kept, false), canonical = read.canonical;
-  print({ status: canonical === undefined ? "unavailable" : "final", backing: kept.backing, judgingIndex: at,
+  const { at, read, sync } = await frontier(directory, args, kept, false), canonical = read.canonical;
+  print({ status: canonical === undefined ? "unavailable" : "final", backing: kept.backing, judgingIndex: at, sync,
     ...(canonical === undefined ? {} : { issued: canonical.state.issued, burned: canonical.state.burned,
       supply: canonical.state.issued - canonical.state.burned, position: canonical.state.position,
       checkpoint: { operator: canonical.commitment.operator, sequence: canonical.commitment.sequence, root: canonical.commitment.root, index: canonical.index } }),
@@ -136,10 +144,10 @@ export async function presentationCommand(argv: readonly string[], role: Role): 
   const args = parseArguments(argv, READ_FLAGS, 2);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), demand = hex32(args.positional[1]!, "the demand");
-  const { at, read } = await frontier(directory, args, kept, true);
+  const { at, read, sync } = await frontier(directory, args, kept, true);
   const reading = readPresentation(read, kept.backing, kept.terms.obligor, demand);
   if (reading === undefined) throw new CommandError("ABSENT", "the demand is not in this backing's record");
-  print({ status: reading.ended !== undefined || reading.overdue !== undefined ? "final" : "pending", judgingIndex: at, ...reading });
+  print({ status: reading.ended !== undefined || reading.overdue !== undefined ? "final" : "pending", judgingIndex: at, sync, ...reading });
 }
 
 export async function reader(argv: readonly string[]): Promise<void> {
