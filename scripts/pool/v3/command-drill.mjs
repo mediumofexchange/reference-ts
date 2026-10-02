@@ -44,16 +44,23 @@ const call = async (path, body) => {
 };
 const mine = count => call("/synthetic/mine", { count });
 
-/** One `moe` process: its exit code, stdout's JSON and stderr. While it runs, `mining` mines a block per interval. */
+/** One `moe` process: its exit code, stdout's JSON and stderr. With `mining: "waiting"`, each wait it logs mines one
+ * block, so the chain moves with the command's retries rather than the wall clock (a slow runner would otherwise see
+ * more indices pass between two tries than a schedule's window). */
 function moe(args, { mining } = {}) {
   return new Promise((done, failed) => {
     const began = performance.now(), child = spawn(process.execPath, [MOE, ...args], { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     const out = [], err = [];
-    child.stdout.on("data", chunk => out.push(chunk)); child.stderr.on("data", chunk => err.push(chunk));
-    const timer = mining === undefined ? undefined : setInterval(() => { mine(1).catch(() => {}); }, mining);
+    child.stdout.on("data", chunk => out.push(chunk));
+    child.stderr.on("data", chunk => {
+      err.push(chunk);
+      if (mining !== "waiting") return;
+      const seen = Buffer.concat(err).toString().split("\n").filter(line => line.includes('"event":"waiting"')).length;
+      for (; waits < seen; waits++) mine(1).catch(() => {});
+    });
+    let waits = 0;
     child.on("error", failed);
     child.on("close", status => {
-      clearInterval(timer);
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
       processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began) });
       let json;
@@ -112,7 +119,7 @@ try {
   await mine(Number(DEPTH) + 2);
 
   let operatorKey, fundingTree, venue, backing, termsFile, signatureFile;
-  await check("operator init, funding, synthetic venue create (rerun prints the same file)", async () => {
+  await check("operator init, funding, synthetic venue create (rerun prints the same file, refuses other flags)", async () => {
     const init = await ok(["operator", "init", "--dir", OP, ...common, "--budget", "50000000"]);
     assert.equal(init.status, "created");
     operatorKey = init.operator; fundingTree = init.fundingTree;
@@ -123,6 +130,9 @@ try {
     assert.equal(created.status, "created");
     const again = await ok(["operator", "venue", "create", "--dir", OP, "--synthetic", "--depth", DEPTH]);
     assert.deepEqual([again.status, again.venue], ["existing", created.venue]);
+    // A rerun asking for another context or depth than the file's is refused, not answered "existing".
+    await refused(["operator", "venue", "create", "--dir", OP, "--depth", DEPTH], "VENUE");
+    await refused(["operator", "venue", "create", "--dir", OP, "--synthetic", "--depth", String(Number(DEPTH) + 1)], "VENUE");
     venue = created.venue;
     await mine(Number(DEPTH) + 1);
     if (process.platform !== "win32") for (const file of readdirSync(OP)) assert.equal(statSync(join(OP, file)).mode & 0o077, 0, `${file} is owner-only`);
@@ -165,14 +175,14 @@ try {
 
   const served = serve(OP), packageFile = join(scratch, "package.bin");
   let first, viaService;
-  await check("operator serve listens, publishes and keeps the checkpoint alive at half silence; a second command refuses BUSY", async () => {
+  await check("operator serve listens, publishes and keeps the checkpoint alive within silence less the lag; a second command refuses BUSY", async () => {
     const listening = await served.listening;
     assert.equal(listening.status, "serving"); assert.equal(listening.silence, String(SILENCE));
     await refused(["operator", "open", "--dir", OP, "--id", "genesis", backing, "--terms", termsFile, "--signature", signatureFile, "--synthetic"], "BUSY");
     await ok(["reader", "service", "add", ...reader, backing, join(OP, "service.json")]);
     first = await ok(["reader", "supply", ...reader, backing]);
     assert.deepEqual([first.status, first.supply, first.issued, first.burned, first.checkpoint.sequence], ["final", "0", "0", "0", "1"]);
-    // No statement is admitted: serve commits again at half the silence duration after the canonical checkpoint.
+    // No statement is admitted: serve commits again at half the silence less the lag after the canonical checkpoint.
     await mineUntil(async () => /"event":"committed"/.test(served.log()));
     const later = await supplyUntil(read => BigInt(read.checkpoint.sequence) > 1n);
     // The whole package as any transport could carry it, read back below with the service stopped.
@@ -192,9 +202,9 @@ try {
 
   await check("past the terms' silence the operator returns and adopts, then serves again", async () => {
     await mine(Number(SILENCE) + 4);
-    const returned = await ok(["operator", "return", "--dir", OP, "--id", "return-1", "--poll-ms", "100"], { mining: 300 });
+    const returned = await ok(["operator", "return", "--dir", OP, "--id", "return-1", "--poll-ms", "100"], { mining: "waiting" });
     assert.equal(returned.status, "pending");
-    const adopted = await ok(["operator", "adopt", "--dir", OP, "--poll-ms", "100"], { mining: 300 });
+    const adopted = await ok(["operator", "adopt", "--dir", OP, "--poll-ms", "100"], { mining: "waiting" });
     assert.deepEqual([adopted.status, adopted.receipts], ["final", []]);
     await refused(["reader", "supply", ...reader, backing], "UNAVAILABLE");
     const again = serve(OP);

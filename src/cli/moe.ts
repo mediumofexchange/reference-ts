@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // `moe`: one executable over role directories (slice 10 M10b). Each
 // invocation is one process that does one operation and exits, except
-// `moe operator serve`. A command prints one JSON object on stdout. A refusal
+// `moe operator serve`. A command prints one JSON object on stdout (`serve`
+// one once listening and one once stopped, its events on stderr). A refusal
 // prints `{ code, check, message }` on stderr and exits 1; a usage error
 // exits 2; anything else exits 3 with its stack alone, as unexpected failures
 // stay visible. Role modules load on demand, so a reader process loads no
