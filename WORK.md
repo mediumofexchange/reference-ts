@@ -3,13 +3,12 @@
 Updated: 2026-10-02
 
 ## Goal
-**Next 2: the pool-v3-on-Ergo visibility and collusion matrix** (release gate "Defined profile"; production requirements'
-Trust and visibility). Acceptance: one reference document states, from the adopted bytes and the reference wallet, service,
-reader and publisher as they are, what each record shows the public, what each party learns alone and under each collusion
-of issuer, operator and witness, what traffic discloses (service connections, evidence syncs, request exchange, venue reads
-and publications, payout channel) and what small pools let an observer infer; every claim cites its rule or code; a fresh
-reviewer finds no claim the sources contradict; wallet gaps it finds are listed in Next. Stop: documentation only, no
-runtime change, no specification change unless a rule is found wrong (then C0a).
+**Visibility matrix done** ([Who sees what](docs/POOL_V3_VISIBILITY.md), branch `claude/visibility-table`): what each record shows,
+each party alone and each issuer/operator/witness coalition, traffic and small-pool inference for pool-v3 on Ergo, from the
+adopted bytes and the reference code; documentation only, no rule found wrong. A fresh review found three material claims
+(the operator joins a sync's backing to the spend it submits; a presented note is reused by `demand` and `burn` too; a
+request's tag links) and eleven minor ones, all fixed. The wallet duties it finds are Next 2. **Next: slice 10 (Next 3)**,
+with Next 2 in its wallet.
 
 **Slice 9 done: redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own),
 PRs #69–#74, #76, #77): `V3Wallet` owns both redemption roles under service and in a gap ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)),
@@ -33,9 +32,10 @@ verdict change (C3.8's residual too) is pool-v4.
 ## Next
 1. Slice 9 done (Goal); the numbering below is kept for its references.
 2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds, for slice 10's wallet:
-   spend a presented note (withdrawn, expired or failed demand) to a fresh one before a payment uses it (§C1.5, C3.1; `prepare`
-   selects it today); keep gap-publication funding apart from identified coins (a key per demand, or a relay); a transport and a
-   service credential that do not identify the holder; the user-facing explanations.
+   spend a presented note (withdrawn, expired or failed demand) to a fresh one before any reuse (§C1.5, C3.1; `prepare`, `demand`
+   and `burn` select it today); keep gap-publication funding apart from identified coins (a key per demand, or a relay); a
+   transport and service credential that do not identify the holder, and syncs that do not tie an address to the backing it
+   spends (replica, every scoped backing, or unlinkable transport); the user-facing explanations.
 3. Slice 10, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
    require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration));
    holder wallet (with the backer role), operator service and supply reader from a packed install (`bin`), fresh processes and data directories,
