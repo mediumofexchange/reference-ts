@@ -19,9 +19,8 @@ Specification links are at `e7f7f24`; "the wallet", "the service", "the reader" 
 Histories are served by operators and replicas; the venue carries commitments, replacements, revocations and
 publications (pool-v3 §13.1). Every admitted statement's prefix names the configuration, the segment and the
 scope root (pool-v3 §2, `P`), so it names the operator's segment and the backings its scope carries, which the
-signed directory lists. Proofs
-are 14,656 bytes for every relation and authorizations and capsule counts are fixed per kind (pool-v3 §5), so a
-record's size tells only its kind, which it states anyway.
+signed directory lists. Proofs are 14,656 bytes for every relation and authorizations and capsule counts are
+fixed per kind (pool-v3 §5), so a record's size tells only its kind, which it states anyway.
 
 | Record | Public | What that discloses |
 |---|---|---|
@@ -51,7 +50,7 @@ is the largest metadata leak in the profile (see [traffic](#what-traffic-disclos
 | Payer | the payee's requested opening (backing, value, owner, `rho`) and commitment, from the request frame (pool-delivery C4.1) | the payee's spend secret, hence the note's nullifier and tag, so it cannot tell when or whether the payee spends it; the payee's other holdings |
 | Payee | the backing, quantity and opening of its own output, and so which public statement paid it: that statement's anchors, nullifiers, other commitments and timing | which notes the payer spent, the other outputs' openings (change, padding, a fee), the payer's history |
 | Issuer (**K**) at issuance | the recipient's requested opening and capsule, quantity and time; the recipient's identity only if the request channel or a separate arrangement discloses it | the note's nullifier and tag (it lacks the secret), so not when or by whom the note is spent or presented; later holders |
-| Issuer (**K**) at redemption | the demand's quantity and tags, at settlement the notes' nullifiers, the anchors; its own owner and output; whatever the payout channel discloses | how the notes travelled; whether two demands are one holder's (presenter keys are fresh per demand, derived by the wallet from the seed and the notice) |
+| Issuer (**K**) at redemption | the demand's quantity and tags, at settlement the notes' nullifiers, the anchors; its own owner and output; whatever the payout channel discloses | how the notes travelled; whether two demands over different notes are one holder's (presenter keys are fresh per demand, derived by the wallet from the seed and the notice) |
 | Operator (sequencer) | every record above as it is submitted, before the public, with its arrival time and the submitting connection; each evidence sync's backing and the sequence it resumes from; the order and batching of its own checkpoints | the opening of any output it did not request, which note a spend consumed, a spend's backing within its scope; a holder's identity except through connection metadata |
 | Operator receiving a direct fee | in addition, its fee output's backing, value and opening and so the statement it was paid in; in a same-backing payment that reveals the payment's backing (pool-fees C1.2.7) | the payment amount, the payer's inputs, the other outputs' openings. Sponsored service (no fee output) avoids this |
 | Witness (Ergo miners and nodes) | the venue records above as transactions, each with its funding inputs; the network address a transaction is first broadcast from, to the node that receives it; for a node the publisher asks for boxes, the funding key (`/blockchain/box/unspent/byErgoTree`) | the histories' statements, which are not at the venue, beyond what a gap publication carries; who reads the record (below) |
@@ -105,7 +104,7 @@ bytes and at least one honest Ignition participant; privacy rests on the prover'
 
 The cryptography hides an input among every leaf of the note tree its anchor names, spent or not, of every backing
 the scope carries: each issue, burn and settlement adds one leaf and each spend four. The inference below narrows
-that set without touching the cryptography (§C1.5), and in a small pool it narrows it to one.
+that set without touching the cryptography (§C1.5), and in a small pool it can narrow it to one.
 
 - **The lit boundary.** Issues, burns, demands and settlements show backing and quantity. Where few events
   happen, an issue of `q` and a later demand or burn of `q` pair by amount and order, and the spends between them
