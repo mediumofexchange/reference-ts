@@ -89,7 +89,12 @@ function serve(directory) {
     child.stdout.on("data", chunk => { stdout += chunk; if (stdout.includes("\n")) done(JSON.parse(stdout.split("\n")[0])); });
     exited.then(status => failed(new Error(`serve exited ${status}: ${stderr}`)));
   });
-  return { listening, log: () => stderr, async stop() { child.kill("SIGTERM"); const status = await exited; assert.equal(status, 0, stderr); } };
+  return { listening, log: () => stderr, async stop() {
+    // POSIX delivers SIGTERM to serve's handler, which drains and exits 0; Windows ends the process outright, and
+    // the operating system releases its directory lock either way.
+    child.kill("SIGTERM"); const status = await exited;
+    if (process.platform !== "win32") assert.equal(status, 0, stderr);
+  } };
 }
 
 /** Mine one block at a time until `until()` holds, at most `count` blocks. */
