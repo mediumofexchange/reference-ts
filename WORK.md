@@ -16,6 +16,8 @@ receipt; one fail-before test each, unit suite 1998/1998, `check:scripts`, fresh
 **Next: M9d** real-proof and crash drills (seed-restored demands, a C3.8 reading among them), review; needs CI or the local machine for proofs.
 
 ## Status
+- Audit area 11 (PR #75, [decision](decisions/2026-10.md#2026-10-02--count-a-replacement-identity-at-its-first-entry-in-the-walk-itself-and-drop-the-range-helpers-the-runtime-does-not-use-audit-area-11)): the replacement walk counts an identity at its
+  first entry itself; unused range helpers dropped. Reports binding `record-range.ts`/`ergo-check.mjs` are stale until re-recorded.
 - Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)); M8a (PR #67) manifest, mainnet guard; M7, M4–M6, M5b.
 
 ## Evidence
@@ -54,6 +56,7 @@ receipt; one fail-before test each, unit suite 1998/1998, `check:scripts`, fresh
    journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed; `client.package()` peaks near
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
    exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
+   (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
 5. Slice 11, the design point: measure operator admission at peak, reader first sync and wallet steady state through the commands against the
    [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), with Next 4 (k)–(n), (s), and rebuild the Ergo view on
    append-only SQLite rows (its limits and plan: the [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)'s
