@@ -378,6 +378,7 @@ export class ReplayStore {
         AND NOT EXISTS (SELECT 1 FROM demand_end y WHERE y.id = x.id AND ${visible("y")})`,
       demands: `SELECT x.* FROM demand x WHERE ${v} AND NOT EXISTS (SELECT 1 FROM demand_end y WHERE y.id = x.id AND ${visible("y")}) ORDER BY x.ns, x.position`,
       presented: `SELECT x.* FROM demand x WHERE x.id = :key AND ${v}`,
+      presentedWithTag: `SELECT x.* FROM demand_tag t JOIN demand x ON x.id = t.id AND x.ns = t.ns WHERE t.tag = :key AND ${v}`,
       demandEnd: `SELECT x.ns, x.position FROM demand_end x WHERE x.id = :key AND ${v}`,
       tagSpends: `SELECT x.ns, x.position FROM nullifier x WHERE x.tag = :key AND ${v} ORDER BY x.ns, x.position`,
       totals: "SELECT backing, issued, burned FROM total t WHERE ns = ? AND position = (SELECT max(position) FROM total u WHERE u.ns = t.ns AND u.backing = t.backing AND u.position <= ?)",
@@ -694,6 +695,10 @@ export class ReplayStore {
   }
   demandsWithTag(ns: number, p: bigint, tag: bigint): [string, Demand][] {
     return this.#q.demandsWithTag!.all({ ns, p, key: fieldToBytes(tag) }).map(row => this.#demand(row as Record<string, unknown>));
+  }
+  /** Every demand visible from (ns, p) naming `tag`, ended or not. */
+  presentedWithTag(ns: number, p: bigint, tag: bigint): [string, Demand][] {
+    return this.#q.presentedWithTag!.all({ ns, p, key: fieldToBytes(tag) }).map(row => this.#demand(row as Record<string, unknown>));
   }
   demands(ns: number, p: bigint): [string, Demand][] {
     return this.#q.demands!.all({ ns, p }).map(row => this.#demand(row as Record<string, unknown>));

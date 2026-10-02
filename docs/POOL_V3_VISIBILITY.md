@@ -121,9 +121,12 @@ that set without touching the cryptography (§C1.5), and in a small pool it can 
   once admitted or published, only the operator if refused at the door. The note's eventual spend reveals its
   nullifier and so its tag (C3.1): a payment made from it tells everyone, and its payee in particular, that its
   payer presented that quantity at that instant; a second demand over it carries the same tag, and a burn of it
-  links that lit burn to the demand. §C1.5 asks the wallet to spend such a note to a fresh one before any reuse;
-  **the reference wallet does not yet do so**: once the demand ends or its deadline passes, `prepare`, `demand`
-  and `burn` select the note like any other.
+  links that lit burn to the demand. §C1.5 asks the wallet to spend such a note to a fresh one before any reuse:
+  the reference wallet refuses a presented note to payments and burns and spends it only through `freshen`, a
+  payment of one demand's notes to one fresh note, which shows the payment came from that demand's notes and
+  links no two demands. A new demand may present again the notes of one earlier demand (never two together, nor
+  beside unpresented notes), which links it to that demand and keeps snapshot redemption (C2b.3.2) open where a
+  fresh spend is refused; the wallet says which demands it repeats.
 - **Anchors.** An input's anchor bounds its age; a note imported from a predecessor segment anchors at that
   segment's last root, so spends of old notes stand out after a takeover or a rescoping.
 - **Set fingerprinting.** The wallet spends one backing per statement (multi-backing payments are refused), so
@@ -140,12 +143,8 @@ identify the parties ([production requirements](PRODUCTION_REQUIREMENTS.md#relea
 
 These are wallet and deployment duties the rules above assume; each is listed in [WORK.md](../WORK.md)'s Next.
 
-1. Spend a note named in a demand that did not settle it (withdrawn, expired or failed) to a fresh one before
-   any reuse: a payment, a new demand or a burn (§C1.5, C3.1). The same holds for a note named in a request,
-   should the wallet file them. [Slice 10's plan](../decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b)
-   refuses such notes to payments and burns and spends them through a `freshen` of one demand's notes at a
-   time, but lets a new demand present again the notes of one earlier demand (never two together): that links
-   the new demand to that one, and keeps snapshot redemption (C2b.3.2) open where a fresh spend is refused.
+1. Spend a note named in a request to a fresh one before any reuse (§C1.5, C3.1), should the wallet file
+   requests; presented notes are freshened (above).
 2. Keep gap-publication funding apart from any identified coins: a funding key per demand, or a relay. The
    plan's relay command publishes a holder's act from a funding directory apart from the wallet; a relay of
    the holder's own still links its gap acts to each other and to its funding, and a third party's relay

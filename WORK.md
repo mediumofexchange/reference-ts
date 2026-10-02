@@ -10,21 +10,22 @@ fulfill → demand → accept → settle → burn and an offline-operator recove
 node (M10b dropped the fixture venue from commands) and then live on the testnet; the pilot CLI, the harness's second package reader
 (Next 7) and, against a case map, the transparent path retire. Milestones: **M10a** shipped relations and required verifier identities;
 **M10b** the command surface (below); **M10c1** the synthetic node, venue, parameters, lock/output conventions, `reader` and `operator`
-commands; **M10c2** the wallet and relay commands, presented-note `freshen`, and the packed-install drill on the synthetic node; **M10d**
+commands; **M10c2** (a: presented-note `freshen`; b: wallet and relay commands, the packed-install drill on the synthetic node); **M10d**
 the live testnet drill (needs the local machine: Open questions); **M10e** the retirements. Stop boundary: all delivered.
-Earlier: slice 9 (redemption in the wallet, PRs #69–#77) and the [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78) are done;
-pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, identity or verdict change is pool-v4.
+Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
 - **M10a done** (PR #79, [decision](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)):
   shipped relations with a manifest-checked loader; readers, journal and wallet require a verifier naming the configuration's circuits.
 - **M10b done** ([decision](decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b)):
-  one `moe` bin over role directories (wallet, operator, reader, relay): per-directory lock, umask 077, owner-only key files, Ergo venues
-  only (a test-only synthetic node), funding apart from the wallet, `freshen` for presented notes, rerun/exit-code rules; reviewed, read back.
+  one `moe` bin over role directories, per-directory lock, owner-only keys, Ergo venues only, funding apart from the wallet, `freshen`.
 - **M10c1 done** (PRs #83, #84; [decision](decisions/2026-10.md#2026-10-02--read-through-each-directorys-own-view-gate-venue-creation-on-the-nodes-network-and-queue-serves-journal-calls-with-the-services-slice-10-m10c1)):
   `moe` bin (`src/cli/`), parameters in the package, `venue create`, `reader` and `operator` commands; `command-drill.mjs` in `check:pool:v3`.
   Code review of slices 9–10 ([decision](decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)): publisher readiness race, failed-settlement publish, serve keep-alive/UNREPLAYED fixed.
-  **Next: M10c2** (Next 3). Every current report drifts (`check:evidence` at 09c8459) until the packed drill re-records.
+  **M10c2a** (branch `claude/m10c2a-freshen`): M10b item 9 in the wallet library. Acceptance: presented notes (saved demand
+  inputs, record demands of the seed by tag, ended or forced) refused to `prepare`/`burn`; `demand` re-presents one earlier demand's
+  notes only (`repeats`); `freshen` spends one demand's notes to a fresh note; unit tests; one deep review. Stop: merged.
+  **Next: M10c2b** (Next 3). Every current report drifts (`check:evidence` at 09c8459) until the packed drill re-records.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
@@ -37,10 +38,9 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
 
 ## Next
 1. Slice 9 done (Goal); the numbering below is kept for its references.
-2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds: M10b plans presented-note
-   `freshen` (re-demand allowed), the relay command (the funding duty stays open) and the explanations, all in M10c2. Open past slice 10:
-   a network transport and syncs that do not identify the holder or tie an address to the backing it spends (its own unit and review).
-3. M10c2 (M10b decision): wallet/backer and relay commands on `src/cli/`, `freshen`, statements through `serve` (commit-on-admission untested),
+2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds: presented-note `freshen` (M10c2a);
+   the relay command and explanations (M10c2b). Past slice 10: a transport and syncs not identifying the holder (own unit and review).
+3. M10c2b (M10b decision): wallet/backer and relay commands on `src/cli/`, statements through `serve` (commit-on-admission untested),
    peak RSS, packed drill (no `@noir-lang` in a reader); synthetic index lag knob; testnet context has no difficulty floor (M10d);
    bb.js `generateProof` logs to stdout: keep it off the wallet commands' one-object stdout; read the budget's boxes before readiness (review).
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet

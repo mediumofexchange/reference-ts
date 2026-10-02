@@ -458,6 +458,66 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(restored.act("back")!.status).toBe("final");
     // The lost wallet reads its demand ended by the withdrawal, so its notes are free there too.
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["available", "available"]);
+    // Both copies read the notes as presented by the ended demand: the restored one from its forced publication alone.
+    expect(after.holdings.map(h => h.presented)).toEqual([[demand.demand], [demand.demand]]);
+    expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.presented)).toEqual([[demand.demand], [demand.demand]]);
+  });
+
+  it("pays and burns no presented note, presents again one earlier demand's notes only, and freshens them (M10b item 9)", async () => {
+    const f = await fixture([6n, 4n, 5n, 2n]);
+    await f.holder.sync(f.served(), f.signed);
+    const presented = async (wallet = f.holder) => (await wallet.sync(f.served(), f.signed)).holdings
+      .map(h => [h.value, h.status, h.presented.map(id => Buffer.from(id).toString("hex"))] as const).sort((x, y) => Number(x[0] - y[0]));
+    const hexOf = (id: Uint8Array | undefined) => Buffer.from(id!).toString("hex");
+    const a = await f.holder.demand("a", 10n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
+    expect(a.repeats).toEqual([]);
+    await f.holder.submit("a", f.service); await f.publish();
+    await f.holder.withdraw("a-back", a.demand!, f.served(), f.signed); await f.holder.submit("a-back", f.service); await f.publish();
+    const A = hexOf(a.demand);
+    expect(await presented()).toEqual([[2n, "available", []], [4n, "available", [A]], [5n, "available", []], [6n, "available", [A]]]);
+    // A payment or burn of 9 would need a presented note: refused, pointing to freshen.
+    const request = f.backer.request("shop", f.backing, 9n);
+    await expect(f.holder.prepare("pay", { request, value: 9n }, f.served(), f.signed, prove))
+      .rejects.toMatchObject({ code: "FUNDS", message: expect.stringContaining("freshen") });
+    await expect(f.holder.burn("burn", 9n, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "FUNDS" });
+
+    // No unpresented note is 6, so A's note is presented again; the demand links to A only.
+    const b6 = await f.holder.demand("b", 6n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
+    expect(b6.repeats).toEqual([a.demand]);
+    expect(f.holder.act("b")).toEqual(b6);
+    await f.holder.submit("b", f.service); await f.publish();
+    await f.holder.withdraw("b-back", b6.demand!, f.served(), f.signed); await f.holder.submit("b-back", f.service); await f.publish();
+    const B = hexOf(b6.demand);
+    // A seed-restored copy finds both ended demands in the record by their tags.
+    expect(await presented(f.restore("restored", f.holder))).toEqual(await presented());
+    expect(await presented()).toEqual([[2n, "available", []], [4n, "available", [A]], [5n, "available", []], [6n, "available", [A, B].sort()]]);
+    // 11 is only A's 6 beside the unpresented 5: refused, as are A's and B's notes together for 10 + 0.
+    await expect(f.holder.demand("c", 11n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove))
+      .rejects.toMatchObject({ code: "FUNDS", message: expect.stringContaining("freshen") });
+    // 7 is two unpresented notes, preferred over anything presented.
+    const d = await f.holder.demand("d", 7n, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove);
+    expect(d.repeats).toEqual([]);
+    await f.holder.submit("d", f.service); await f.publish(); await f.holder.sync(f.served(), f.signed);
+    // A standing demand's notes are locked: freshen refuses them; an unknown demand presents nothing.
+    await expect(f.holder.freshen("x", d.demand!, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "LOCKED" });
+    await expect(f.holder.freshen("x", b(9), f.served(), f.signed, prove)).rejects.toMatchObject({ code: "ABSENT" });
+
+    // Freshen spends A's two notes, and only them, into one fresh note of their sum.
+    const fresh = await f.holder.freshen("fresh", a.demand!, f.served(), f.signed, prove);
+    expect(fresh).toMatchObject({ value: 10n, fee: undefined, freshens: a.demand, status: "prepared" });
+    expect(fresh.inputs.length).toBe(2);
+    expect(await f.holder.freshen("fresh", a.demand!, new Uint8Array(), f.signed, undefined as never)).toEqual(fresh);
+    await expect(f.holder.freshen("fresh", b6.demand!, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(f.holder.prepare("fresh", { request, value: 9n }, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT" });
+    await f.holder.submit("fresh", f.service); await f.publish();
+    const D = hexOf(d.demand);
+    expect(await presented()).toEqual([[2n, "locked", [D]], [5n, "locked", [D]], [10n, "available", []]]);
+    expect(f.holder.payment("fresh")!.status).toBe("final");
+    await expect(f.holder.freshen("again", a.demand!, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "ABSENT" });
+    // The fresh note pays.
+    await f.holder.prepare("pay", { request, value: 9n }, f.served(), f.signed, prove);
+    await f.holder.submit("pay", f.service); await f.publish(); await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.payment("pay")!.status).toBe("final");
   });
 
   it("counts releases witnessed without force, so the next settlement names an output nobody has seen", async () => {
@@ -685,7 +745,8 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // Past the first demand's deadline, one checkpoint holds a spend of its note and then its withdrawal.
     f.venue.advance(deadline - 9n);
     await f.holder.sync(f.served(), f.signed);
-    await f.holder.prepare("pay", { request: f.backer.request("shop", f.backing, 10n), value: 10n }, f.served(), f.signed, prove);
+    // A presented note moves only by freshen (item 9 of the M10b decision), itself a spend of it.
+    await f.holder.freshen("pay", spent.demand!, f.served(), f.signed, prove);
     await f.holder.submit("pay", f.service);
     await f.holder.withdraw("back", spent.demand!, f.served(), f.signed); await f.holder.submit("back", f.service);
     await f.publish();
@@ -702,10 +763,10 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const deadline = f.venue.witnessedIndex() + 10n;
     const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
     await f.holder.submit("redeem", f.service); await f.publish();
-    // Past its deadline its lock no longer stands: the holder pays the note away, which voids the demand.
+    // Past its deadline its lock no longer stands: the holder spends the note to a fresh one, which voids the demand.
     f.venue.advance(deadline + 2n);
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.status)).toEqual(["available"]);
-    await f.holder.prepare("pay", { request: f.backer.request("shop", f.backing, 10n), value: 10n }, f.served(), f.signed, prove);
+    await f.holder.freshen("pay", demand.demand!, f.served(), f.signed, prove);
     await f.holder.submit("pay", f.service); await f.publish();
     const at = f.venue.witnessedIndex(), read = await f.backer.presentation(demand.demand!, f.served(), f.signed);
     expect([read.ended, read.overdue]).toEqual([{ by: "void", at }, { reading: "dishonour", from: deadline + 1n, through: at - 1n }]);

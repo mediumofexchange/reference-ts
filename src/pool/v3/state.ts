@@ -55,6 +55,8 @@ export interface StateView extends RecoveryView {
   hasAnchor(root: bigint): boolean;
   /** The demand (hex identity) whose settlement created output `cm`, where a settlement did (C3.8's taken release). */
   settledFor(cm: bigint): string | undefined;
+  /** Every demand visible here naming `tag`, ended or not: the tag is presented (C3.1). */
+  presentedWithTag(tag: bigint): readonly (readonly [string, Demand])[];
 }
 
 /** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
@@ -122,6 +124,7 @@ export class StateHandle implements StateView {
   demand(id: string): Demand | undefined { return this.store.demand(this.ns, this.position, id); }
   demandsWithTag(tag: bigint): [string, Demand][] { return this.store.demandsWithTag(this.ns, this.position, tag); }
   demands(): [string, Demand][] { return this.store.demands(this.ns, this.position); }
+  presentedWithTag(tag: bigint): [string, Demand][] { return this.store.presentedWithTag(this.ns, this.position, tag); }
   /** A demand visible here, ended or not, with the events that stood it up and ended it (C3.8). */
   presented(id: string): ReturnType<ReplayStore["presented"]> { return this.store.presented(this.ns, this.position, id); }
   /** The visible events that spent a nullifier of tag `tag` (C3.8's void). */
@@ -183,6 +186,8 @@ export class ForceState implements StateView {
   readonly nullifiers = new Set<bigint>();
   readonly outputs = new Set<bigint>();
   readonly added = new Map<string, Demand>();
+  /** Every forced demand, ended or not: its tags are presented (`presentedWithTag`). */
+  readonly forced = new Map<string, Demand>();
   readonly ended = new Set<string>();
   readonly effective = new Set<string>();
   readonly spentTags = new Set<bigint>();
@@ -198,6 +203,9 @@ export class ForceState implements StateView {
   demand(id: string): Demand | undefined { return this.ended.has(id) ? undefined : this.added.get(id) ?? this.base.demand(id); }
   demandsWithTag(tag: bigint): (readonly [string, Demand])[] {
     return [...this.base.demandsWithTag(tag), ...[...this.added].filter(([, d]) => d.tags.includes(tag))].filter(([id]) => !this.ended.has(id));
+  }
+  presentedWithTag(tag: bigint): (readonly [string, Demand])[] {
+    return [...this.base.presentedWithTag(tag), ...[...this.forced].filter(([, d]) => d.tags.includes(tag))];
   }
 }
 export interface ForceContext {
@@ -230,7 +238,7 @@ function checkTaken(record: Record, state: ForceState): void {
 export function applyForceEffects(state: ForceState, record: Record): void {
   if (record.kind !== 4 && record.kind !== 5 && record.kind !== 6) throw new EvidenceRefusal("unsupported-scope");
   const { demand, ended } = recoveryEffect(record);
-  if (demand !== undefined) state.added.set(demand.id, demand.value);
+  if (demand !== undefined) { state.added.set(demand.id, demand.value); state.forced.set(demand.id, demand.value); }
   if (ended !== undefined) { state.ended.add(ended); state.added.delete(ended); }
   state.effective.add(hex(statementHash(record)));
   const { nfs, outputs } = effectOf(record);

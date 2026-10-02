@@ -55,7 +55,7 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
   type ProofTask } from "./witness.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
-const PROFILE = "moe/wallet/v3/7", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/8", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
     "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE", message: string) { super(message); this.name = "V3WalletError"; }
@@ -86,7 +86,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS saved_records (alias TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('1','2','3','4','5','6')),
     intent TEXT NOT NULL, statement TEXT NOT NULL UNIQUE, record BLOB NOT NULL, backing BLOB NOT NULL, operator BLOB NOT NULL,
     demand TEXT, zero BLOB, status TEXT NOT NULL CHECK(status IN ('prepared','final','failed')), receipt BLOB, checkpoint BLOB,
-    judging_index TEXT, judged TEXT NOT NULL) STRICT;
+    judging_index TEXT, judged TEXT NOT NULL, repeats TEXT CHECK(repeats IS NULL OR kind='4')) STRICT;
   CREATE TABLE IF NOT EXISTS saved_inputs (nf TEXT NOT NULL, alias TEXT NOT NULL REFERENCES saved_records(alias),
     PRIMARY KEY(nf, alias)) STRICT;
   CREATE TABLE IF NOT EXISTS saved_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES saved_records(alias),
@@ -105,7 +105,7 @@ const TABLES = [
   ["receiver_requests", ["alias", "request_id", "backing", "value", "cm"]],
   ["receiver_fulfilled", ["alias", "cm", "checkpoint", "judging_index", "terms", "signature"]],
   ["saved_records", ["alias", "kind", "intent", "statement", "record", "backing", "operator", "demand", "zero", "status", "receipt",
-    "checkpoint", "judging_index", "judged"]],
+    "checkpoint", "judging_index", "judged", "repeats"]],
   ["saved_inputs", ["nf", "alias"]],
   ["saved_outputs", ["cm", "alias", "value", "owner", "rho"]],
   ["saved_superseded", ["statement", "alias", "record", "receipt"]],
@@ -157,6 +157,8 @@ export interface Payment {
   readonly payee: bigint;
   readonly value: bigint;
   readonly fee: { readonly cm: bigint; readonly value: bigint } | undefined;
+  /** For a `freshen`, the demand whose presented notes it spends; `payee` is then this seed's fresh note of their sum. */
+  readonly freshens: Uint8Array | undefined;
   /** The positive inputs' nullifiers this payment reserves until it is final or failed. */
   readonly inputs: readonly bigint[];
   /** prepared: not in canonical history; final: its statement is; failed: an input was spent otherwise. */
@@ -167,7 +169,13 @@ export interface Payment {
    * first, with any receipt: evidence of that operator's acceptance, never finality. */
   readonly superseded: readonly { readonly record: Uint8Array; readonly receipt: Receipt | undefined }[];
 }
-export interface Holding { readonly cm: bigint; readonly value: bigint; readonly status: "available" | "reserved" | "locked" }
+/** A note of this seed. `presented` names the demands of this seed that present it (item 9 of the M10b decision, C3.1):
+ * a demand saved here whose inputs name it, whatever that demand's status, or one found in the record by its tag,
+ * ended or not, read with force included. A payment or burn selects no presented note; `freshen` moves one demand's. */
+export interface Holding {
+  readonly cm: bigint; readonly value: bigint; readonly status: "available" | "reserved" | "locked";
+  readonly presented: readonly Uint8Array[];
+}
 /** A demand of this seed standing over the backing (C3.3): its identity, notice and the holdings it names. */
 export interface StandingDemand {
   readonly id: Uint8Array;
@@ -197,6 +205,9 @@ export interface Act {
   readonly statement: Uint8Array;
   /** The demand's identity, for a demand, its withdrawal and its settlement. */
   readonly demand: Uint8Array | undefined;
+  /** For a demand presenting notes again: the earlier demands of this seed presenting any of them, whose tags it
+   * repeats, so it links to them (and they already to each other). Empty otherwise. */
+  readonly repeats: readonly Uint8Array[];
   /** The positive inputs' nullifiers it reserves while prepared: a burn's, a demand's, and a settlement's (its demand's). */
   readonly inputs: readonly bigint[];
   /** prepared: not yet in canonical history; final: its effect is; failed: it can no longer take effect as saved. */
@@ -244,12 +255,13 @@ function select(notes: readonly OwnedNote[], total: bigint): OwnedNote[] {
     if (isValue(pair - total) && (sum === undefined || pair < sum)) { best = [sorted[i]!, sorted[j]!]; sum = pair; }
     j--;
   }
-  requireThat(best !== undefined, "FUNDS", "no available one- or two-note selection covers the payment");
+  requireThat(best !== undefined, "FUNDS",
+    "no available unpresented one- or two-note selection covers it; a presented note moves only by freshen");
   return best;
 }
 /** C3.3: a demand names whole notes, so one note of exactly `total` or a pair summing to it; ties by commitment.
  * A holder presenting part of a note, or more than two, first pays itself the exact amount. */
-function exact(notes: readonly OwnedNote[], total: bigint): OwnedNote[] {
+function exact(notes: readonly OwnedNote[], total: bigint): OwnedNote[] | undefined {
   const sorted = [...notes].sort((a, b) => a.cm < b.cm ? -1 : a.cm > b.cm ? 1 : 0);
   const single = sorted.find(n => n.opening.value === total);
   if (single !== undefined) return [single];
@@ -257,7 +269,25 @@ function exact(notes: readonly OwnedNote[], total: bigint): OwnedNote[] {
     const other = sorted.find((n, j) => j > i && sorted[i]!.opening.value + n.opening.value === total);
     if (other !== undefined) return [sorted[i]!, other];
   }
-  throw new V3WalletError("FUNDS", "no available note or pair of notes is exactly the quantity; pay yourself that amount first");
+  return undefined;
+}
+/** Item 9 of the M10b decision: a demand's whole notes, unpresented ones first. Failing those, the notes of one earlier
+ * demand of this seed (all of them or a subset), which already share its tags, so the new demand links only to the
+ * demands presenting them; never notes of two earlier demands together, nor a presented note beside an unpresented
+ * one. Earlier demands are tried in identity order. `presented` is each note's presenting demands (hex). */
+function demandSelection(notes: readonly OwnedNote[], presented: readonly (readonly string[])[], total: bigint):
+  { readonly selected: OwnedNote[]; readonly repeats: string[] } {
+  const fresh = exact(notes.filter((_, i) => presented[i]!.length === 0), total);
+  if (fresh !== undefined) return { selected: fresh, repeats: [] };
+  for (const earlier of [...new Set(presented.flat())].sort()) {
+    const selected = exact(notes.filter((_, i) => presented[i]!.includes(earlier)), total);
+    if (selected !== undefined) {
+      const repeats = new Set(selected.flatMap(note => presented[notes.indexOf(note)]!));
+      return { selected, repeats: [...repeats].sort() };
+    }
+  }
+  throw new V3WalletError("FUNDS", "no unpresented note or pair, nor one earlier demand's notes, is exactly the quantity; " +
+    "pay yourself that amount first, or freshen an earlier demand's notes");
 }
 
 export class V3Wallet {
@@ -701,10 +731,23 @@ export class V3Wallet {
     requireThat([this.seen().toString(), latest("judged"), latest("judging_index")].every(v => v === undefined || at >= BigInt(v)), "CHANGED_VIEW",
       "the venue view is older than one this wallet has judged at");
   }
+  /** The demands of this seed presenting `note` (hex identities, sorted): those saved here whose inputs name it,
+   * whatever their status, and those of its backing the view holds naming its tag, ended or not, forced ones
+   * included. A seed-restored wallet misses a demand refused at the door, published without force, or admitted
+   * only into a segment the canonical one did not import (the wallet guide says so). */
+  private presentedBy(note: OwnedNote, force: ForceState | undefined): string[] {
+    const ids = new Set(this.db.prepare(`SELECT a.demand FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias
+      WHERE i.nf=? AND a.kind='4'`).all(note.nf.toString()).map(row => row.demand as string));
+    for (const [id, demand] of force?.presentedWithTag(tagOf(note.nf)) ?? []) {
+      if (!ids.has(id) && same(demand.backing, note.opening.backing) && this.presents(demand)) ids.add(id);
+    }
+    return [...ids].sort();
+  }
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
       status: this.reserved(note.nf) ? "reserved" as const :
-        force !== undefined && locked(force, tagOf(note.nf), at) ? "locked" as const : "available" as const }));
+        force !== undefined && locked(force, tagOf(note.nf), at) ? "locked" as const : "available" as const,
+      presented: Object.freeze(this.presentedBy(note, force).map(id => hexToBytes(id))) }));
   }
 
   /** Secret material for independently secured offline backup; never send to a
@@ -904,10 +947,16 @@ export class V3Wallet {
     name = alias(name); this.active();
     const row = this.db.prepare("SELECT * FROM saved_records WHERE alias=? AND kind='2'").get(name);
     if (row === undefined) return undefined;
-    const [, payee, value, fee, feeValue] = JSON.parse(row.intent as string) as [string, string, string, string | null, string | null];
+    const intent = JSON.parse(row.intent as string) as [string, string, string, string | null, string | null] | [string, "freshen", string];
+    let [, payee, value, fee, feeValue] = intent, freshens: Uint8Array | undefined;
+    if (intent[1] === "freshen") {
+      // Its one positive output is this seed's fresh note of the demand's notes' sum.
+      const out = this.db.prepare("SELECT cm,value FROM saved_outputs WHERE alias=? AND value!='0'").get(name)!;
+      freshens = hexToBytes(intent[2]); payee = out.cm as string; value = out.value as string; fee = null;
+    }
     const saved = this.saved(name, row);
-    return { record: saved.record, statement: saved.statement, payee: BigInt(payee), value: BigInt(value),
-      fee: fee === null ? undefined : { cm: BigInt(fee), value: BigInt(feeValue!) }, inputs: saved.inputs, status: saved.status,
+    return { record: saved.record, statement: saved.statement, payee: BigInt(payee), value: BigInt(value!),
+      fee: fee === null || fee === undefined ? undefined : { cm: BigInt(fee), value: BigInt(feeValue!) }, freshens, inputs: saved.inputs, status: saved.status,
       receipt: saved.receipt, final: saved.final,
       superseded: this.db.prepare("SELECT record,receipt FROM saved_superseded WHERE alias=? ORDER BY rowid").all(name).map(old =>
         ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : decodeReceipt(old.receipt as Uint8Array) })) };
@@ -990,29 +1039,41 @@ export class V3Wallet {
       const header = this.admissible(view);
       // The venue view behind this decision is checked before proving.
       observed.check();
-      const holdings = this.holdingsOf(notes, force, at), available = notes.filter((_, i) => holdings[i]!.status === "available");
+      const holdings = this.holdingsOf(notes, force, at);
+      const available = notes.filter((_, i) => holdings[i]!.status === "available" && holdings[i]!.presented.length === 0);
       const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
-      const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
-      // A zero input names the same backing and needs no membership (C1.2.3).
-      const zero = inputs.length === 1 ? this.fresh(backing, 0n) : undefined;
-      if (zero !== undefined) inputs.push({ ...inputs[0]!, note: zero });
-      const outputs: OutputNote[] = [payee, ...(fee === undefined ? [] : [fee.request]), this.fresh(backing, sum - total)];
-      while (outputs.length < 4) outputs.push(this.fresh(backing, 0n));
-      // Public order labels no position (C1.2.3); the saved record fixes it for retries.
-      for (let i = outputs.length - 1; i > 0; i--) { const j = randomInt(i + 1); [outputs[i], outputs[j]] = [outputs[j]!, outputs[i]!]; }
-      return { header, selected, inputs, zero, outputs, at };
+      return { header, ...this.spendPlan(backing, selected, [payee, ...(fee === undefined ? [] : [fee.request]),
+        this.fresh(backing, sum - total)]), at };
     });
     if (planned === undefined) return this.payment(name)!;
-    const { header, selected, inputs, zero, outputs, at } = planned;
+    return this.savePayment(name, intent, sameOrder, planned, prove);
+  }
+  /** A spend of `selected` (one note with a fresh zero input, or two) into `outputs`, padded with fresh zero outputs
+   * to four and shuffled: public order labels no position (C1.2.3), and the saved record fixes it for retries. */
+  private spendPlan(backing: Uint8Array, selected: OwnedNote[], outputs: OutputNote[]) {
+    const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
+    // A zero input names the same backing and needs no membership (C1.2.3).
+    const zero = inputs.length === 1 ? this.fresh(backing, 0n) : undefined;
+    if (zero !== undefined) inputs.push({ ...inputs[0]!, note: zero });
+    outputs = [...outputs];
+    while (outputs.length < 4) outputs.push(this.fresh(backing, 0n));
+    for (let i = outputs.length - 1; i > 0; i--) { const j = randomInt(i + 1); [outputs[i], outputs[j]] = [outputs[j]!, outputs[i]!]; }
+    return { selected, inputs, zero, outputs };
+  }
+  /** Prove a planned spend and save it under `name` with its reservations; a concurrent exact call that saved
+   * first wins (`sameOrder`), and its record is kept, never this proof. */
+  private async savePayment(name: string, intent: string, sameOrder: () => boolean | undefined,
+    planned: ReturnType<V3Wallet["spendPlan"]> & { readonly header: SegmentHeader; readonly at: bigint }, prove: LocalProver): Promise<Payment> {
+    const { header, selected, inputs, zero, outputs, at } = planned, backing = selected[0]!.opening.backing;
     const bytes = this.encoded(await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove));
     const statement = hex(statementHash(decodeRecord(bytes))), reserved = selected.map(note => note.nf.toString());
+    const taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE cm=?");
     this.transaction(() => {
-      // A concurrent exact call may have saved first: adopt its record, never this proof.
       const winner = sameOrder();
       if (winner !== undefined) { requireThat(winner, "CONFLICT", "alias names another payment order"); return; }
       requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
       requireThat(outputs.every(out => taken.get(out.cm.toString()) === undefined), "CONFLICT", "an output belongs to another payment");
-      this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,?,'prepared',NULL,NULL,NULL,?)").run(name, intent, statement,
+      this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,?,'prepared',NULL,NULL,NULL,?,NULL)").run(name, intent, statement,
         bytes, backing, header.operator, zero?.requestId ?? null, at.toString());
       for (const nf of reserved) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(nf, name);
       // Every opening is kept so a reproof can rebuild the same outputs (C1.2.5).
@@ -1020,6 +1081,50 @@ export class V3Wallet {
         .run(cm.toString(), name, opening.value.toString(), opening.owner.toString(), opening.rho.toString());
     });
     return this.payment(name)!;
+  }
+
+  /** Item 9 of the M10b decision (C3.1): spend the presented notes of this seed's earlier demand `demand` (its
+   * identity), each available one of them (its one note with a fresh zero input, or its pair), into one fresh note
+   * of their sum, never beside another demand's or an unpresented note, so it links no two demands. A payment
+   * (kind 2) under service: saved, submitted, reproved and resolved as one, and refused where admission is closed
+   * (SILENCE, an ended term), where a demand presenting the notes again is the remedy. Its intent binds the backing
+   * and the demand; an exact alias retry returns the saved record without evidence or proving. */
+  async freshen(name: string, demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Payment> {
+    name = alias(name); this.mutable();
+    const { backing, own } = this.termsOf(signed), key = hex(identifier(demand));
+    const intent = JSON.stringify([hex(backing), "freshen", key]);
+    const sameOrder = (): boolean | undefined => {
+      const row = this.db.prepare("SELECT kind,intent FROM saved_records WHERE alias=?").get(name);
+      if (row === undefined) return undefined;
+      requireThat(row.kind === "2", "CONFLICT", "alias names a saved act");
+      return row.intent === intent;
+    };
+    const existing = sameOrder();
+    if (existing !== undefined) {
+      requireThat(existing, "CONFLICT", "alias names another payment order");
+      return this.payment(name)!;
+    }
+    requireThat(typeof prove === "function", "INVALID", "a local prover is required");
+    const planned = await this.read(packageBytes, own, view => {
+      const racing = sameOrder();
+      if (racing !== undefined) {
+        requireThat(racing, "CONFLICT", "alias names another payment order");
+        return undefined;
+      }
+      const { force, notes, at, observed } = view;
+      this.current(at);
+      const header = this.admissible(view);
+      const holdings = this.holdingsOf(notes, force, at);
+      const its = notes.map((note, i) => ({ note, holding: holdings[i]! })).filter(({ holding }) => holding.presented.some(id => hex(id) === key));
+      const selected = its.filter(({ holding }) => holding.status === "available").map(({ note }) => note);
+      requireThat(its.length !== 0, "ABSENT", "no unspent note of this wallet is presented by that demand");
+      requireThat(selected.length !== 0, its.some(({ holding }) => holding.status === "locked") ? "LOCKED" : "CONFLICT",
+        "the demand's notes are held: a standing demand locks them, or a saved record reserves them");
+      observed.check();
+      return { header, ...this.spendPlan(backing, selected, [this.fresh(backing, selected.reduce((n, note) => n + note.opening.value, 0n))]), at };
+    });
+    if (planned === undefined) return this.payment(name)!;
+    return this.savePayment(name, intent, sameOrder, planned, prove);
   }
 
   /** pool-fees C1.2.5 and C4.4: once a prepared payment's segment is no longer
@@ -1102,7 +1207,8 @@ export class V3Wallet {
     if (row === undefined) return undefined;
     const saved = this.saved(name, row);
     return { kind: Number(row.kind) as Act["kind"], record: saved.record, statement: saved.statement,
-      demand: row.demand === null ? undefined : hexToBytes(row.demand as string), inputs: saved.inputs, status: saved.status,
+      demand: row.demand === null ? undefined : hexToBytes(row.demand as string),
+      repeats: row.repeats === null ? [] : (JSON.parse(row.repeats as string) as string[]).map(id => hexToBytes(id)), inputs: saved.inputs, status: saved.status,
       receipt: saved.receipt, final: saved.final };
   }
   /** The saved act under `name` if it is this exact intent; another intent, or a payment, under it refuses. */
@@ -1115,7 +1221,7 @@ export class V3Wallet {
   }
   /** Save a proven or signed act once: a concurrent exact call that saved first wins, and its record is kept. */
   private saveAct(name: string, kind: Act["kind"], intent: string, bytes: Uint8Array, backing: Uint8Array, operator: Uint8Array,
-    demand: string | undefined, inputs: readonly bigint[], at: bigint): Act {
+    demand: string | undefined, inputs: readonly bigint[], at: bigint, repeats?: readonly string[]): Act {
     const record = decodeRecord(bytes), statement = hex(statementHash(record));
     this.transaction(() => {
       if (this.savedAct(name, kind, intent) !== undefined) return;
@@ -1126,8 +1232,8 @@ export class V3Wallet {
         "another alias saved this statement");
       requireThat(kind !== 6 || !this.pendingSettlement(demand!, record.publicInputs[9]!), "CONFLICT",
         "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it");
-      this.db.prepare("INSERT INTO saved_records VALUES(?,?,?,?,?,?,?,?,NULL,'prepared',NULL,NULL,NULL,?)").run(name, String(kind), intent,
-        statement, bytes, backing, operator, demand ?? null, at.toString());
+      this.db.prepare("INSERT INTO saved_records VALUES(?,?,?,?,?,?,?,?,NULL,'prepared',NULL,NULL,NULL,?,?)").run(name, String(kind), intent,
+        statement, bytes, backing, operator, demand ?? null, at.toString(), repeats === undefined || repeats.length === 0 ? null : JSON.stringify(repeats));
       for (const nf of inputs) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(nf.toString(), name);
     });
     return this.act(name)!;
@@ -1193,24 +1299,25 @@ export class V3Wallet {
       const { header, gap } = this.route(view);
       requireThat(deadline > at + lag, "INVALID", "the deadline is not strictly ahead of the operator's horizon");
       requireThat(!gap || deadline > at + 2n * lag, "INVALID", "the deadline is not after every index C3.3's window allows");
-      const holdings = this.holdingsOf(notes, force, at);
-      const selected = exact(notes.filter((_, i) => holdings[i]!.status === "available"), quantity);
+      const holdings = this.holdingsOf(notes, force, at), available = holdings.map(h => h.status === "available");
+      const { selected, repeats } = demandSelection(notes.filter((_, i) => available[i]),
+        holdings.filter((_, i) => available[i]).map(h => h.presented.map(id => hex(id))), quantity);
       observed.check();
       const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
       if (inputs.length === 1) {
         inputs.push({ ...inputs[0]!, note: prepareExactOutput(this.seed, this.domain, paddingRequestId(this.seed, this.domain,
           selected[0]!.nf), backing, 0n) });
       }
-      return { header, inputs, nfs: selected.map(note => note.nf), at };
+      return { header, inputs, nfs: selected.map(note => note.nf), at, repeats };
     });
     if (planned === undefined) return this.act(name)!;
-    const { header, inputs, nfs, at } = planned;
+    const { header, inputs, nfs, at, repeats } = planned;
     const tags = inputs.map(i => i.note.opening.value === 0n ? 0n : tagOf(i.note.nf));
     const secret = presenterSecret(this.seed, this.domain, tags, at, deadline), presenter = ed25519.getPublicKey(secret);
     secret.fill(0);
     const bytes = this.encoded(await this.proven(demandTask({ domain: this.domain, header }, inputs,
       { backing, quantity, presenter, instant: at, deadline }), prove));
-    return this.saveAct(name, 4, intent, bytes, backing, header.operator, hex(statementHash(decodeRecord(bytes))), nfs, at);
+    return this.saveAct(name, 4, intent, bytes, backing, header.operator, hex(statementHash(decodeRecord(bytes))), nfs, at, repeats);
   }
 
   /** C3.4: the backer's acceptance of a demand standing over its backing, with C4.7's owner derived from this
@@ -1313,7 +1420,7 @@ export class V3Wallet {
   /** C3.6: withdraw this seed's demand `demand` (its identity) standing in canonical history (or with force in a
    * gap), saved here or found from the seed (`standing`), signed by its presenter for the canonical segment; in a
    * gap (`route`) the withdrawal is published (`publish`). Once the withdrawal is final the demand's notes are
-   * available again; C3.1 advises paying them to a fresh note before presenting them again. */
+   * available again; they are presented (C3.1): `freshen` moves them to a fresh note, and `demand` may present them again. */
   async withdraw(name: string, demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
     name = alias(name); this.mutable();
     const { backing, own } = this.termsOf(signed), id = identifier(demand), key = hex(id);
@@ -1353,7 +1460,7 @@ export class V3Wallet {
       this.current(view.at);
       const header = this.admissible(view);
       const holdings = this.holdingsOf(notes, force, at);
-      const selected = select(notes.filter((_, i) => holdings[i]!.status === "available"), quantity);
+      const selected = select(notes.filter((_, i) => holdings[i]!.status === "available" && holdings[i]!.presented.length === 0), quantity);
       observed.check();
       const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
       if (inputs.length === 1) inputs.push({ ...inputs[0]!, note: this.fresh(backing, 0n) });
