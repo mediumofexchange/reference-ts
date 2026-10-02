@@ -459,7 +459,7 @@ describe("a publication is sent once, and publications chain", () => {
     };
     const p = publisher([flaky]);
     const first = await p.publish(request());
-    n.spend(first.recordBox); // not shown: a retry sends it again
+    n.spend(first.recordBox); // not shown: a retry asks whether the node holds the transaction
     down = true;
     await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
     down = false;

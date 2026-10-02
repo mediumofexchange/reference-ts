@@ -12,7 +12,7 @@ import { hex, MempoolNode, plainBox, SCRIPTS } from "./ergo-chain.js";
 // synthetic node serves (slice 10 M10b, item 5), in the matching state.
 
 interface Answer { readonly name: string; readonly method: string; readonly path: string; readonly body?: string; readonly status: number; readonly answer: string }
-const recorded: { readonly answers: readonly Answer[] } = JSON.parse(readFileSync(new URL("./fixtures/ergo-node-answers.json", import.meta.url), "utf8"));
+const recorded: { readonly agreement: { readonly sameStatuses: boolean }; readonly answers: readonly Answer[] } = JSON.parse(readFileSync(new URL("./fixtures/ergo-node-answers.json", import.meta.url), "utf8"));
 const answer = (name: string): Answer => recorded.answers.find(a => a.name === name)!;
 const hash = (bytes: Uint8Array): Uint8Array => blake2b(bytes, { dkLen: 32 });
 const idIn = (name: string): Uint8Array => Buffer.from(answer(name).path.split("/").at(-1)!, "hex");
@@ -54,6 +54,12 @@ describe("the node publisher on recorded node answers", () => {
     expect(await recordedNode.unspentBoxes(treeOf("unspentBoxesUnknownTree"))).toEqual([]);
   });
 
+  it("was answered alike by a second node, and lists the mempool's boxes on a page past every confirmed one", () => {
+    expect(recorded.agreement.sameStatuses).toBe(true);
+    const far = JSON.parse(answer("unspentBoxesPooledFarPage").answer) as { boxId: string; inclusionHeight: number }[];
+    expect(far.map(box => [box.boxId, box.inclusionHeight])).toEqual([[JSON.parse(answer("poolCreatedBox").answer).boxId, 0]]);
+  });
+
   it("takes a refused submission as not accepted", async () => {
     await expect(recordedNode.submit(Uint8Array.of(0), new Uint8Array(32))).rejects.toThrow(/HTTP 400/);
   });
@@ -81,5 +87,18 @@ describe("MempoolNode answers as the recorded node does", () => {
     expect(await n.hasBox(published.change!.id)).toBe(true);
     expect(await n.hasTransaction(published.id)).toBe(true);
     expect(await n.unspentBoxes(payToPublicKeyTree(secp256k1.getPublicKey(createHash("sha256").update("fresh").digest(), true)))).toEqual([]);
+  });
+
+  it("shows a box its pool creates and spends until a block takes both transactions", async () => {
+    const n = new MempoolNode("node", verifyErgoProof);
+    n.fund(plainBox(TREE, 10_000_000n, 900_000n));
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n] });
+    const parent = await p.publish(request), child = await p.publish({ ...request, record: new Uint8Array(40).fill(3) });
+    expect(child.inputs.map(hex)).toEqual([hex(parent.change!.id)]);
+    expect(await n.hasBox(parent.change!.id)).toBe(true);
+    expect((await n.unspentBoxes(TREE)).map(bytes => hex(hash(bytes)))).toEqual([hex(child.change!.id)]);
+    n.take();
+    expect(await n.hasBox(parent.change!.id)).toBe(false);
+    expect(await n.hasBox(child.change!.id)).toBe(true);
   });
 });

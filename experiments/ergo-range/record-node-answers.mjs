@@ -30,8 +30,12 @@ const unspent = offset => `/blockchain/box/unspent/byErgoTree?offset=${offset}&l
  * output whose tree holds one to four boxes, a fresh key's tree, and ids nobody holds. */
 async function questions(base) {
   const pool = await json(base, "/transactions/unconfirmed?offset=0&limit=50");
-  const pooled = pool.find(t => t.outputs.some(plain));
-  assert(pooled !== undefined, `${base}: no pooled transaction with a plain output`);
+  // A pool entry whose first input is in the UTXO set: a stale entry's input answers 404 everywhere and says nothing.
+  let pooled;
+  for (const t of pool) {
+    if (t.outputs.some(plain) && (await call(base, "GET", `/utxo/byIdBinary/${t.inputs[0].boxId}`)).status === 200) { pooled = t; break; }
+  }
+  assert(pooled !== undefined, `${base}: no pooled transaction with a plain output and an unspent first input`);
   const [last] = await json(base, "/blocks/lastHeaders/1");
   let mined;
   for (let height = last.height - 2; height > last.height - 40 && mined === undefined; height--) {
@@ -60,6 +64,8 @@ async function questions(base) {
     ["unspentBoxes", "POST", unspent(0), mined.tree],
     ["unspentBoxesNextPage", "POST", unspent(100), mined.tree],
     ["unspentBoxesUnknownTree", "POST", unspent(0), fresh],
+    // Past every confirmed box of a tree with a pooled output: the mempool's boxes come with every page.
+    ["unspentBoxesPooledFarPage", "POST", unspent(100_000), pooled.outputs.find(plain).ergoTree],
     ["submitNotATransaction", "POST", "/transactions/bytes", "00"],
   ];
 }
@@ -75,10 +81,11 @@ assert.equal((await call(first, "GET", answers[1].path)).status, 200, "the poole
 const statuses = [];
 for (const [name, method, path, body] of await questions(second)) statuses.push([name, (await call(second, method, path, body)).status]);
 const sameStatuses = statuses.every(([name, status]) => answers.find(a => a.name === name)?.status === status);
+assert(sameStatuses, `the second node answered otherwise: ${JSON.stringify(statuses.filter(([name, status]) => answers.find(a => a.name === name)?.status !== status))}`);
 writeFileSync(out, `${JSON.stringify({
   about: "Real Ergo node answers to the six calls ergoNodePublisher makes, each body as served; recorded by experiments/ergo-range/record-node-answers.mjs.",
   recordedAt: new Date().toISOString(), node: first, appVersion: info.appVersion, network: info.network,
   agreement: { node: second, appVersion: otherInfo.appVersion, sameStatuses }, answers,
 }, null, 2)}\n`);
 for (const a of answers) console.log(a.status, a.name);
-console.log(`second node, same statuses: ${sameStatuses}`, statuses.filter(([name, status]) => answers.find(a => a.name === name)?.status !== status));
+console.log("second node: same statuses");

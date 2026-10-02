@@ -99,6 +99,10 @@ try {
   await compare("poolCreatedBox", `/utxo/withPool/byIdBinary/${change}`);
   await compare("poolSpentBox", `/utxo/withPool/byIdBinary/${funding}`);
   await compare("absentBox", `/utxo/withPool/byIdBinary/${absent("box")}`);
+  const unspent = "/blockchain/box/unspent/byErgoTree?offset=0&limit=100&sortDirection=asc&includeUnconfirmed=true&excludeMempoolSpent=true";
+  const far = await compare("unspentBoxesPooledFarPage", unspent.replace("offset=0", "offset=100000"), hex(tree));
+  assert.deepEqual(JSON.parse(far.text).map(box => [box.boxId, box.inclusionHeight]), [[change, 0]], "the mempool's boxes come with every page");
+  await assert.rejects(client.submit(pooled.signed, pooled.id), /HTTP 400/, "a pooled transaction is refused again");
   assert.equal(await client.hasTransaction(pooled.id), true);
   assert.equal(await client.hasTransaction(sha("absent")), false);
   assert.equal(await client.hasBox(Buffer.from(funding, "hex")), true, "a box the mempool spends is shown");
@@ -106,7 +110,7 @@ try {
   assert.deepEqual((await client.unspentBoxes(tree)).map(bytes => hex(hash(bytes))), [change], "the index leaves out the pool-spent box");
 
   await drill("mine", { count: 1 });
-  const unspent = "/blockchain/box/unspent/byErgoTree?offset=0&limit=100&sortDirection=asc&includeUnconfirmed=true&excludeMempoolSpent=true";
+  await assert.rejects(client.submit(pooled.signed, pooled.id), /HTTP 400/, "a mined transaction is refused again");
   await compare("minedTransaction", `/blockchain/transaction/byId/${id}`);
   await compare("minedTransactionInPool", `/transactions/unconfirmed/byTransactionId/${id}`);
   await compare("absentMinedTransaction", `/blockchain/transaction/byId/${absent("mined")}`);

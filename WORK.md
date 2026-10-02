@@ -22,10 +22,11 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
   one `moe` bin over role directories (wallet, operator, reader, relay) with a per-directory process lock, umask 077, keys in owner-only
   files, admin token never handed out, Ergo venues only (a test-only synthetic node serving the node REST paths), funding only in
   operator/relay directories, `serve` checkpointing on witnessed indices, presented notes refused to pay/burn and spent by `freshen`, and
-  per-command rerun and exit-code rules. Evidence: a scratch probe synced an `ErgoVenue` through `ergoNodeSupplier` from synthetic node JSON
-  to the in-process view (publisher endpoints unprobed); one fresh review (1 blocker, 11 material, all taken) and its read-back.
-  **Next: M10c1**, starting with the synthetic node's publisher endpoints. Every current report drifts (`check:evidence` at 09c8459:
-  M10a's prover and verifiers, area 11's `record-range.ts`/`ergo-check.mjs`) until slice 10's drill re-records them.
+  per-command rerun and exit-code rules; one fresh review (1 blocker, 11 material, all taken) and its read-back.
+- **M10c1 in progress.** Synthetic node done (PR #83, [decision](decisions/2026-10.md#2026-10-02--serve-the-synthetic-chain-through-the-node-rest-paths-answering-as-recorded-real-nodes-do-slice-10-m10c1)):
+  `synthetic-node.mjs` serves the chain and `MempoolNode` through both clients' REST paths, matching 16 recorded real node answers.
+  **Next:** the `moe` bin skeleton (lock, umask, `SQLITE_TMPDIR`, output/exit codes), parameters in the package, `venue create`, then the
+  `reader` and `operator` commands and drill steps. Every current report drifts (`check:evidence` at 09c8459) until the drill re-records.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
@@ -41,8 +42,7 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
 2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds: M10b plans presented-note
    `freshen` (re-demand allowed), the relay command (the funding duty stays open) and the explanations, all in M10c2. Open past slice 10:
    a network transport and syncs that do not identify the holder or tie an address to the backing it spends (its own unit and review).
-3. Slice 10 (Goal), per the M10b decision. M10c1 first: the synthetic node's six publisher endpoints over `MempoolNode`, tested against
-   recorded real node answers; the read side is probed (scratch, M10b evidence). No Ergo view rebuild is needed (recent testnet anchor).
+3. Slice 10 (Goal), per the M10b decision; M10c1's rest as Status says. Add a lag knob to the synthetic index (M10c1 review), so a drill meets the publisher's unindexed refusal.
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take

@@ -50,10 +50,10 @@ function reader(bytes) {
     }
     throw new SyntaxError("long VLQ");
   };
-  /** A tree in the shapes the synthetic venue uses: pay-to-public-key, or the miner-fee tree. */
+  /** A tree in the lengths MempoolNode reads: 36 bytes after a zero header (pay-to-public-key), 105 after 0x10 (the miner-fee tree). */
   const tree = () => {
     const first = bytes[at];
-    if (first === 0x00 && bytes[at + 1] === 0x08 && bytes[at + 2] === 0xcd) return take(36);
+    if (first === 0x00) return take(36);
     if (first === 0x10) return take(105);
     throw new SyntaxError("a tree of another shape");
   };
@@ -268,9 +268,13 @@ export class SyntheticNode {
       let split;
       try { split = splitSigned(hexToBytes(typeof body === "string" && HEX.test(body) ? body : "")); } catch { split = undefined; }
       if (split === undefined) return [400, { error: 400, reason: "bad.request", detail: "Can not parse transaction bytes: null" }];
-      const txId = hash(split.unsigned);
+      const txId = hash(split.unsigned), key = bytesToHex(txId);
+      // A node refuses a transaction it already holds: pooled, or mined (its inputs are spent).
+      if (this.mined.has(key) || this.mempool.pool.some(t => bytesToHex(hash(t.unsigned)) === key)) {
+        return [400, { error: 400, reason: "bad.request", detail: `Pool can not accept transaction ${key}, it is already in the mempool` }];
+      }
       return this.mempool.submit(hexToBytes(body), txId).then(() => {
-        this.proofs.set(bytesToHex(txId), split.proofs);
+        this.proofs.set(key, split.proofs);
         return [200, bytesToHex(txId)];
       }, error => [400, { error: 400, reason: "bad.request", detail: `Malformed transaction: ${error.message}` }]);
     }

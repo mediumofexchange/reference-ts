@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-02` [Serve the synthetic chain through the node REST paths, answering as recorded real nodes do (slice 10 M10c1)](decisions/2026-10.md#2026-10-02--serve-the-synthetic-chain-through-the-node-rest-paths-answering-as-recorded-real-nodes-do-slice-10-m10c1)
 - `2026-10-02` [Install one `moe` command over role directories, on Ergo venues only, with keys in files and funding apart from the wallet (slice 10 M10b)](decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b)
 - `2026-10-02` [Ship the six compiled relations in the package and require every reader's verifier to name them (slice 10 M10a)](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
 - `2026-10-02` [Count a replacement identity at its first entry in the walk itself, and drop the range helpers the runtime does not use (audit, area 11)](decisions/2026-10.md#2026-10-02--count-a-replacement-identity-at-its-first-entry-in-the-walk-itself-and-drop-the-range-helpers-the-runtime-does-not-use-audit-area-11)
