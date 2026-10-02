@@ -18,7 +18,7 @@
 // relative to the read (`+n`).
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
-import { relative, resolve, isAbsolute } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { compareBytes, EncodingError } from "../bytes.js";
@@ -26,7 +26,7 @@ import { ERGO_SYNTHETIC_REFERENCE } from "../ergo-profile.js";
 import type { Commitment } from "../venue-records.js";
 import { adoptedDomain } from "../pool/v3/configuration.js";
 import type { Receipt } from "../pool/v3/commitments.js";
-import { decodePublication, encodePublication } from "../pool/v3/records.js";
+import { decodePublication, decodeRecord, encodePublication } from "../pool/v3/records.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../pool/v3/terms.js";
 import { walletBackupDigest } from "../pool/v3/wallet-backup.js";
 import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest } from "../pool/v3/wallet-request.js";
@@ -56,7 +56,9 @@ const statusOf = (status: "prepared" | "final" | "failed") => status === "prepar
 const KINDS = { 1: "issue", 3: "burn", 4: "demand", 5: "withdrawal", 6: "settlement" } as const;
 
 function actOut(act: Act) {
-  return { status: statusOf(act.status), kind: KINDS[act.kind], statement: act.statement, demand: act.demand ?? null, repeats: act.repeats,
+  // A demand's deadline, absolute, so a rerun after a lost reply can name it exactly.
+  const deadline = act.kind === 4 ? { deadline: decodeRecord(act.record).publicInputs.at(-1)! } : {};
+  return { status: statusOf(act.status), kind: KINDS[act.kind], statement: act.statement, demand: act.demand ?? null, ...deadline, repeats: act.repeats,
     inputs: act.inputs.length, receipt: receiptOut(act.receipt), final: finalOut(act.final), record: sha256(act.record) };
 }
 function paymentOut(payment: Payment) {
@@ -206,11 +208,11 @@ function requestOf(args: Arguments, prefix = "") {
 }
 
 /** Paths a command writes outside the directory (a handoff's key and envelope): absolute, outside it, and distinct. */
-function outside(directory: Directory, ...paths: string[]): string[] {
+export function outside(directory: Pick<Directory, "path">, ...paths: string[]): string[] {
   const resolved = paths.map(path => resolve(path));
   for (const path of resolved) {
     const inner = relative(directory.path, path);
-    if (inner === "" || (!inner.startsWith("..") && !isAbsolute(inner))) throw new CommandError("PATH", `${path} lies inside the data directory`);
+    if (inner === "" || (inner !== ".." && !inner.startsWith(`..${sep}`) && !isAbsolute(inner))) throw new CommandError("PATH", `${path} lies inside the data directory`);
   }
   if (new Set(resolved).size !== resolved.length) throw new CommandError("PATH", "the paths must differ");
   return resolved;
@@ -497,7 +499,7 @@ async function demand(argv: readonly string[]): Promise<void> {
     const deadline = deadlineOf(args, opened.at!), saved = opened.wallet.act(alias) !== undefined;
     const source = saved ? undefined : await evidence(opened, args, kept);
     const act = await opened.wallet.demand(alias, quantity, deadline, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!);
-    print({ ...actOut(act), deadline, evidence: source?.source ?? "saved", notes: demandNotes(act) });
+    print({ ...actOut(act), evidence: source?.source ?? "saved", notes: demandNotes(act) });
   });
 }
 

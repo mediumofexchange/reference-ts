@@ -11,7 +11,7 @@
 // a relay of the holder's own links its gap acts to each other and to its
 // funding, and a third party's relay learns the holder's channel.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../bytes.js";
 import { adoptedDomain } from "../pool/v3/configuration.js";
 import { decodePublication } from "../pool/v3/records.js";
@@ -32,13 +32,13 @@ async function init(argv: readonly string[]): Promise<void> {
 
 /** A publication file as a wallet's `publish` or `publish-acceptance` writes it. */
 interface PublicationFile { readonly venue: Uint8Array; readonly backing: Uint8Array; readonly kind: 4; readonly subject: Uint8Array; readonly record: Uint8Array }
-function parsePublicationFile(value: unknown): PublicationFile {
+export function parsePublicationFile(value: unknown): PublicationFile {
   const invalid = (): never => { throw new CommandError("INVALID", "the file is not a moe publication file"); };
   if (value === null || typeof value !== "object" || Array.isArray(value)) return invalid();
   const v = value as { [key: string]: unknown };
   if (Object.keys(v).sort().join() !== "backing,kind,record,schema,subject,venue" || v.schema !== "moe-publication-1") invalid();
   const bytes = (x: unknown, length?: number): Uint8Array => typeof x === "string" && /^(?:[0-9a-f]{2})+$/.test(x) &&
-    (length === undefined || x.length === 2 * length) ? Buffer.from(x, "hex") : invalid();
+    (length === undefined || x.length === 2 * length) ? hexToBytes(x) : invalid();
   // A wallet publishes only at kind 4, the backing's publications (pool-v3 §13).
   if (v.kind !== "4") throw new CommandError("INVALID", "a relay publishes only a backing's publications (kind 4)");
   return { venue: bytes(v.venue, 32), backing: bytes(v.backing, 32), kind: 4, subject: bytes(v.subject, 32), record: bytes(v.record) };
