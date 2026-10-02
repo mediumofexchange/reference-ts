@@ -100,7 +100,9 @@ export function serviceClient(directory: Directory, kept: KeptTerms, view: View)
 }
 
 /** Whether a service call failed because the service did not answer (nothing listening, a dropped connection). */
-export const unanswered = (error: unknown): boolean => error instanceof TypeError && error.message === "fetch failed";
+export const unanswered = (error: unknown): boolean =>
+  (error instanceof TypeError && (error.message === "fetch failed" || error.message === "terminated")) ||
+  (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
 
 /** The service's package over what `evidence` retains; a service that does not answer is unavailable evidence. */
 async function served(client: V3ServiceClient, backing: Uint8Array, evidence: EvidenceStore): Promise<Uint8Array> {

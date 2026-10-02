@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CommandError, integer, hex32, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
@@ -96,7 +96,7 @@ describe('moe wallet and relay files', () => {
     try {
       writeSame(path, 'one');
       writeSame(path, 'one');
-      expect(() => writeSame(path, 'two')).toThrow(CommandError);
+      expect(() => writeSame(path, 'two')).toThrow(expect.objectContaining({ code: 'EXISTS' }));
       expect(readFileSync(path, 'utf8')).toBe('one');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
@@ -108,6 +108,15 @@ describe('moe wallet and relay files', () => {
       expect(() => outside(directory, inside)).toThrow(/inside the data directory/);
     }
     expect(() => outside(directory, join(tmpdir(), 'k'), join(tmpdir(), 'k'))).toThrow(/must differ/);
+  });
+  it('follows links to the data directory when it judges a handoff path', () => {
+    const base = mkdtempSync(join(tmpdir(), 'moe-link-')), data = join(base, 'data'), link = join(base, 'alias');
+    try {
+      mkdirSync(data); symlinkSync(data, link, 'dir');
+      expect(() => outside({ path: data }, join(link, 'handoff.key'))).toThrow(expect.objectContaining({ code: 'PATH' }));
+      expect(() => outside({ path: link }, join(data, 'new', 'handoff.key'))).toThrow(expect.objectContaining({ code: 'PATH' }));
+      expect(() => outside({ path: data }, join(base, 'key'), join(link, '..', 'key'))).toThrow(/must differ/);
+    } finally { rmSync(base, { recursive: true, force: true }); }
   });
   it('fences a second publisher store that saves after the first loaded the outbox', () => {
     const dir = mkdtempSync(join(tmpdir(), 'moe-relay-'));
@@ -130,7 +139,7 @@ describe('moe wallet and relay files', () => {
     expect(parsePublicationFile(file).record).toEqual(new Uint8Array([0xab, 0xcd]));
     for (const bad of [{ ...file, kind: '1' }, { ...file, extra: '1' }, { ...file, venue: '01'.repeat(31) }, { ...file, record: 'ABCD' },
       { ...file, schema: 'other' }, [file], null]) {
-      expect(() => parsePublicationFile(bad)).toThrow(CommandError);
+      expect(() => parsePublicationFile(bad)).toThrow(expect.objectContaining({ code: 'INVALID' }));
     }
   });
 });

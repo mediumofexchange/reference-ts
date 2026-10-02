@@ -286,6 +286,14 @@ try {
       const added = await ok(wallet("terms add", directory, backing2, "--terms", created.terms, "--signature", created.signature, "--synthetic"));
       assert.equal(added.obligor, init.backer);
     }
+    // A backer's venue create makes the wallet database in the run that creates the venue; a rerun over a lost one
+    // refuses rather than making a fresh seed.
+    const BK2 = join(scratch, "backer-2");
+    await ok(wallet("init", BK2, "--backer", ...common));
+    await ok(wallet("venue create", BK2, "--synthetic", "--depth", DEPTH));
+    assert.equal((await ok(wallet("venue create", BK2, "--synthetic", "--depth", DEPTH))).status, "existing");
+    for (const file of readdirSync(BK2).filter(name => name.startsWith("wallet.db"))) rmSync(join(BK2, file));
+    await refused(wallet("venue create", BK2, "--synthetic", "--depth", DEPTH), "ABSENT");
     // A holder's wallet holds no K: the backer's commands refuse it.
     await refused(wallet("burn", HD, "x", backing2, "1"), "ROLE");
     const relay = await ok(["relay", "init", "--dir", RL, "--venue", join(OP, "venue.json"), ...common, "--budget", "50000000"]);
@@ -405,6 +413,7 @@ try {
     const restoreArgs = ["wallet", "restore", "--dir", H3, "--venue", join(OP, "venue.json"), ...common, "--key", key, "--backup", out, "--digest", frozen.digest];
     await ok(restoreArgs);
     assert.deepEqual((await ok(restoreArgs)).status, "restored");
+    await refused([...restoreArgs.slice(0, -1), "0".repeat(64)], "EXISTS");
     // The handoff carries the wallet database; the public terms and service file are kept again.
     await ok(wallet("terms add", H3, backing2, "--terms", join(BK, "terms", backing2), "--signature", join(BK, "terms", `${backing2}.sig`), "--synthetic"));
     await ok(wallet("service add", H3, backing2, join(OW, "service.json")));
@@ -439,6 +448,9 @@ try {
     const other = JSON.parse(readFileSync(release, "utf8")); other.venue = "00".repeat(32);
     const forged = join(scratch, "other-venue.json"); writeFileSync(forged, JSON.stringify(other));
     await refused(["relay", "publish", "--dir", RL, forged], "VENUE");
+    const filed = JSON.parse(readFileSync(release, "utf8")); filed.subject = filed.backing = "00".repeat(32);
+    const misfiled = join(scratch, "other-subject.json"); writeFileSync(misfiled, JSON.stringify(filed));
+    await refused(["relay", "publish", "--dir", RL, misfiled], "SUBJECT");
   });
 
   await check("an interrupted venue create anchors again over a stale context; a publication past the spend budget refuses BUDGET", async () => {

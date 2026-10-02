@@ -4,8 +4,10 @@
 // decodes the publication and requires its backing to be the subject, refuses
 // a demand whose instant its view has not reached, then publishes with its
 // funding key (`funding.key`) within the directory's spend budget, keeping its
-// publisher's pending transactions in `relay.db`. A rerun is keyed by the
-// record: once the view witnesses it, the rerun prints that index.
+// publisher's pending transactions in `relay.db`. It prints the transaction its
+// publisher built last for the record (where an earlier one of the record's
+// lands instead, that one carries it). A rerun is keyed by the record: once
+// the view witnesses it, the rerun prints that index.
 //
 // This supplies the mechanism; the duty stays open (docs/POOL_V3_VISIBILITY.md):
 // a relay of the holder's own links its gap acts to each other and to its
@@ -84,10 +86,13 @@ async function publish(argv: readonly string[]): Promise<void> {
       try { sent = await view.venue.publish(4, file.subject, file.record); } catch (error) { throw budget.take() ?? error; }
       if (wait !== undefined) {
         const start = view.venue.witnessedIndex(), ms = pollMs(args);
-        for (;;) {
+        // Bounded by indices and by polls, so stalled nodes do not hold the directory without end.
+        for (let polls = 0; ; polls++) {
           const index = witnessed();
           if (index !== undefined) { print({ status: "final", record, index, transaction: sent === undefined ? null : bytesToHex(sent.id) }); return; }
-          if (view.venue.witnessedIndex() > start + wait) throw new CommandError("UNWITNESSED", `the view has not witnessed the record within ${wait} indices; rerun to publish again`);
+          if (view.venue.witnessedIndex() > start + wait || polls >= 120 * Number(wait)) {
+            throw new CommandError("UNWITNESSED", `the view has not witnessed the record within ${wait} indices; rerun to publish again`);
+          }
           process.stderr.write(`${JSON.stringify({ event: "waiting", witnessedIndex: view.venue.witnessedIndex().toString() })}\n`);
           await pause(ms);
           await view.sync();
