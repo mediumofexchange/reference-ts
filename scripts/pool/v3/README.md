@@ -39,6 +39,17 @@ synthetic chain establishes no deployment.
 Both modes guard journal and reader entries against the caller's independently
 held reference identity preimage.
 
+`synthetic-node.mjs` serves the synthetic chain and its mempool through the
+node REST paths `ergoNodeSupplier` and `ergoNodePublisher` call, plus two drill
+paths that fund a key and mine, so slice 10's command drill runs each party in
+its own process through the clients the live venue uses. It binds loopback
+only and is not shipped. `synthetic-node-check.mjs`
+(`npm run check:pool:v3-synthetic-node`, part of `check:scripts`) runs it as a
+separate process, compares its answers with real node answers recorded by
+`experiments/ergo-range/record-node-answers.mjs`
+(`test/fixtures/ergo-node-answers.json`), and reads back the four record kinds
+a view published through it.
+
 `history-store-check.mjs` (`npm run check:pool:v3-history`) is the real-proof
 acceptance of storage independent of history, on the local reference venue:
 73 statements, more than one package in memory once held, served by stream; a
