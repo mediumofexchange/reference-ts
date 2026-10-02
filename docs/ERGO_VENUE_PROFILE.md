@@ -281,12 +281,14 @@ until the journal is reopened.
   over several syncs and one supplier's side branches never spend another's
   budget. A refused header stops that supplier for the sync. Every new
   header a supplier added that is off the best chain at the end of that
-  sync counts against its `sideHeadersPerSupplier` (20,000 over the view's
-  life, per supplier object, so callers reuse their suppliers); past it the
-  supplier is not read and is withholding, which bounds what a cheap
-  future-timestamp side branch can cost in work and memory, while a branch
-  that briefly leads charges an honest supplier only its headers past the
-  fork.
+  sync counts against its `sideHeadersPerSupplier` (20,000 outstanding, per
+  supplier object, so callers reuse their suppliers), and every 16 heights
+  the best chain advances forgive one; past it the supplier is not read and
+  is withholding until forgiven. This bounds what a cheap future-timestamp
+  side branch can cost in work and memory to the quota plus one sync's
+  budget plus one header per 16 heights of the network's own advance, while
+  a branch that briefly leads charges an honest supplier only its headers
+  past the fork and honest orphans never accumulate into exclusion.
 - **Clock**: the snapshot's index is the lowest of the best chain's final
   index, the last index whose section and every earlier one are held, and,
   for a supplier its header budget stopped before its tip at or above the

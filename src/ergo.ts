@@ -81,14 +81,18 @@ export interface ErgoReaderPolicy {
   readonly headersPerSupplier: number;
   /** Headers asked of a supplier per request; a longer answer is cut to it. */
   readonly headersPerRequest: number;
-  /** New headers one supplier may add, over the view's life, that are off
-   * the best chain at the end of the sync that added them. Past it the
-   * supplier's headers are not read and it no longer holds the clock back:
-   * it is withholding. It is kept per supplier object, so a caller reuses
-   * its supplier objects across syncs. This bounds the
-   * work and memory a cheap side branch can cost (venue-ergo.md §3: without
-   * the node's clock rule, future timestamps lower a side branch's
-   * difficulty). */
+  /** New headers one supplier may have outstanding that were off the best
+   * chain at the end of the sync that added them; each is forgiven once the
+   * best chain has advanced `SIDE_HEADER_HEIGHTS` (16) heights for it, so
+   * honest reorganization traffic, far rarer than one header in 16 blocks,
+   * never spends it. Past it the supplier's headers are not read and it no
+   * longer holds the clock back: it is withholding until the chain forgives
+   * enough. It is kept per supplier object, so a caller reuses its supplier
+   * objects across syncs. This bounds the work and memory a cheap side branch
+   * can cost (venue-ergo.md §3: without the node's clock rule, future
+   * timestamps lower a side branch's difficulty) to this many headers, plus
+   * one sync's `headersPerSupplier`, plus one per 16 heights of best-chain
+   * advance, per supplier object. */
   readonly sideHeadersPerSupplier: number;
   /** Section bytes received, matching or not, after which one sync reads no
    * further section; the next sync continues. */
@@ -107,6 +111,8 @@ export const DEFAULT_ERGO_READER_POLICY: ErgoReaderPolicy = Object.freeze({
   retainedBytes: 256 * 1024 * 1024,
   supplierTimeoutMs: 60_000,
 });
+/** Heights of best-chain advance that forgive one header charged to a supplier's side-branch quota. */
+const SIDE_HEADER_HEIGHTS = 16n;
 /** What a retained object costs beside its record and subject. */
 const OBJECT_OVERHEAD = 64;
 /** The longest timer the runtime keeps: a longer one fires at once. */
@@ -194,8 +200,10 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   private readonly firstIndex = new Map<string, bigint>();
   private readonly protectedHeaders = new Map<string, Uint8Array>();
   private retained = 0;
-  /** Headers each supplier added while its chain ended off the best chain. */
-  private readonly sideHeaders = new WeakMap<object, number>();
+  /** Each supplier's outstanding side-branch charge, in heights (`SIDE_HEADER_HEIGHTS` per header it added that
+   * ended a sync off the best chain, less the best chain's advance since), and the highest best-chain height
+   * already credited against it. */
+  private readonly sideHeaders = new WeakMap<object, { readonly charge: bigint; readonly height: bigint }>();
   /** The supplier that supplied the last section, asked first for the next, so suppliers that fail cost nothing
    * while it supplies. */
   private preferred: ErgoSupplier | undefined;
@@ -342,7 +350,9 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       const best = this.store.best(), anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
       // Each supplier is charged, whatever ended its pass, exactly the headers it added that are not on the best
       // chain: a supplier whose chain keeps ending off it spends its side-branch quota and is then withholding, and a
-      // branch that briefly leads charges an honest supplier only its headers past the fork.
+      // branch that briefly leads charges an honest supplier only its headers past the fork. The best chain's advance
+      // since a supplier's last charge forgives one header per `SIDE_HEADER_HEIGHTS`: the network's work, never the
+      // supplier's, so a cheap branch gains only that rate, and an honest supplier's orphans never accumulate.
       let lowest: bigint | undefined;
       for (const { pass } of passes) for (const id of pass.added) {
         const height = this.store.heightOf(id);
@@ -351,8 +361,16 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       const onBest = new Set<string>();
       if (lowest !== undefined) for (let i = Number(lowest - anchorHeight - 1n); i < best.headers.length; i++) onBest.add(bytesToHex(best.headers[i]!.id));
       for (const { supplier, pass } of passes) {
-        const off = pass.added.filter(id => !onBest.has(bytesToHex(id))).length;
-        if (off > 0) this.sideHeaders.set(supplier, (this.sideHeaders.get(supplier) ?? 0) + off);
+        const off = BigInt(pass.added.filter(id => !onBest.has(bytesToHex(id))).length), entry = this.sideHeaders.get(supplier);
+        if (entry === undefined) {
+          if (off > 0n) this.sideHeaders.set(supplier, { charge: off * SIDE_HEADER_HEIGHTS, height: best.height });
+          continue;
+        }
+        // A heavier shorter chain lowers the best height; the credited height never falls, so no advance counts twice.
+        const advance = best.height > entry.height ? best.height - entry.height : 0n;
+        const charge = (entry.charge > advance ? entry.charge - advance : 0n) + off * SIDE_HEADER_HEIGHTS;
+        if (charge === 0n) this.sideHeaders.delete(supplier);
+        else this.sideHeaders.set(supplier, { charge, height: entry.height + advance });
       }
       // The best chain must keep the header at the published clock: its id commits to every block before it.
       const previous = this.snapshot, clock = previous?.witnessed ?? -1n;
@@ -379,7 +397,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         // failing costs a supplier nothing.
         const header = parseErgoHeader(last), fork = header === undefined ? undefined : this.store.forkHeight(header.id), height = header?.height;
         if (fork === undefined || height === undefined) continue;
-        if ((this.sideHeaders.get(supplier) ?? 0) >= this.policy.sideHeadersPerSupplier) continue;
+        if (this.sideQuotaSpent(supplier)) continue;
         const forkIndex = fork - anchorHeight - 1n;
         if (forkIndex >= clock && forkIndex < bound) bound = forkIndex;
       }
@@ -436,6 +454,11 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     }
   }
 
+  /** Whether a supplier's outstanding side-branch charge has reached its quota, as of the last sync it took part in. */
+  private sideQuotaSpent(supplier: ErgoSupplier): boolean {
+    return (this.sideHeaders.get(supplier)?.charge ?? 0n) >= BigInt(this.policy.sideHeadersPerSupplier) * SIDE_HEADER_HEIGHTS;
+  }
+
   /** Note the first index of each object of a section read at `index`. */
   private hold(index: bigint, objects: readonly AttributedObject[]): void {
     for (const object of objects) {
@@ -450,8 +473,8 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     const done = (stopped?: string): HeaderPass => ({ added: ids,
       report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
     const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last, protect: last };
-    const { headersPerSupplier: budget, sideHeadersPerSupplier: sideQuota, supplierTimeoutMs: timeout } = this.policy;
-    if ((this.sideHeaders.get(supplier) ?? 0) >= sideQuota) return done("side-branch quota");
+    const { headersPerSupplier: budget, supplierTimeoutMs: timeout } = this.policy;
+    if (this.sideQuotaSpent(supplier)) return done("side-branch quota");
     const fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT, perRequest = BigInt(this.policy.headersPerRequest);
     const anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
     const tip = await supplied(() => supplier.tipHeight(), timeout);

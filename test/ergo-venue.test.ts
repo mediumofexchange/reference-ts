@@ -464,7 +464,8 @@ describe("no supplier is trusted", () => {
   });
 
   it("a supplier whose chain keeps ending off the best chain spends its side-branch quota and then withholds", async () => {
-    const policy = { headersPerSupplier: 5, sideHeadersPerSupplier: 10 };
+    // Ten side headers less the honest chain's ten heights of advance, forgiven one header per 16, pass a quota of 9.
+    const policy = { headersPerSupplier: 5, sideHeadersPerSupplier: 9 };
     const honest = branch(14, { 9: [[committed(commitment(1n, 0xaa))]] });
     // A branch from the anchor, longer than the honest chain, that the supplier serves a budget at a time.
     const side = branch(40, {}, chain.anchor, 3);
@@ -499,7 +500,8 @@ describe("no supplier is trusted", () => {
 
   it("a lighter branch revealed below the budget each sync still spends its supplier's side-branch quota", async () => {
     const honest = branch(40), side = branch(30, {}, honest[4]!, 7);
-    const v = venue({ headersPerSupplier: 10, sideHeadersPerSupplier: 30 });
+    // Thirty side headers less the honest chain's 30 heights of advance meanwhile, forgiven one header per 16, pass 28.
+    const v = venue({ headersPerSupplier: 10, sideHeadersPerSupplier: 28 });
     await v.sync([serving(honest, "honest")]);
     const s = serving(side.slice(0, 9), "side");
     const stopped: (string | undefined)[] = [];
@@ -561,6 +563,31 @@ describe("no supplier is trusted", () => {
     const failed = new VenueError("Ergo sync failed; open a new view");
     expect(() => v.witnessedIndex()).toThrow(failed);
     await expect(v.sync([serving(blocks)])).rejects.toThrow(failed);
+  });
+
+  it("an honest supplier serving an orphan every few blocks is read for as long as the chain runs, while a flood still spends its side-branch quota", async () => {
+    const trunk = branch(160), v = venue({ sideHeadersPerSupplier: 2 });
+    const a = serving(trunk.slice(0, 1), "a"), b = serving(trunk.slice(0, 1), "b");
+    const rounds: [number, string | undefined][] = [];
+    for (let k = 1; k <= 6; k++) {
+      // Each round the chain advances 20 blocks, and b's node briefly followed a rival to the block below a's tip,
+      // which a's tip orphans: one header of b's off the best chain per round, past the old lifetime quota of two.
+      a.tip = trunk[20 * k - 1]!;
+      b.tip = chain.mine(trunk[20 * k - 3]!, [], 200 + k);
+      const report = await v.sync([a, b]);
+      rounds.push([report.suppliers[1]!.headersAdded, report.suppliers[1]!.stopped]);
+    }
+    expect(rounds).toEqual(Array.from({ length: 6 }, () => [1, undefined]));
+    expect(v.witnessedIndex()).toBe(116n);
+    // b now serves a lighter 30-block branch within one sync: far past its quota, so the next syncs do not read it
+    // while the chain advances 40 more blocks.
+    b.tip = branch(30, {}, trunk[80]!, 9).at(-1)!;
+    expect((await v.sync([a, b])).suppliers[1]).toEqual({ name: "b", headersAdded: 30 });
+    for (const end of [140, 160]) {
+      a.tip = trunk[end - 1]!;
+      expect((await v.sync([a, b])).suppliers[1]).toEqual({ name: "b", headersAdded: 0, stopped: "side-branch quota" });
+    }
+    expect(v.witnessedIndex()).toBe(156n);
   });
 
   it("takes a reader policy of its own budgets only, each a positive count the runtime can honour", () => {
