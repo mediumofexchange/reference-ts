@@ -230,6 +230,7 @@ export class MempoolNode implements ErgoPublishingSupplier {
   /** Ids of transactions `take` handed to a block. */
   readonly mined = new Set<string>();
   private readonly spentInPool = new Set<string>();
+  /** Every output of a pooled transaction, spent in the pool or not. */
   private readonly createdInPool = new Map<string, Uint8Array>();
 
   constructor(name: string, private readonly verify: (publicKey: Uint8Array, message: Uint8Array, proof: Uint8Array) => boolean) {
@@ -244,13 +245,38 @@ export class MempoolNode implements ErgoPublishingSupplier {
     return id;
   }
 
+  /** The node lost its mempool, and `unspent` is now its whole UTXO set. */
+  reset(unspent: readonly Uint8Array[] = []): void {
+    this.pool.splice(0);
+    this.boxes.clear();
+    this.confirmed.clear();
+    this.createdInPool.clear();
+    this.spentInPool.clear();
+    for (const box of unspent) this.fund(box);
+  }
+
+  /** Whoever holds the box spent it in a block: no answer shows it any more. */
+  spend(boxId: Uint8Array): void {
+    const key = bytesToHex(boxId);
+    this.boxes.delete(key);
+    this.confirmed.delete(key);
+    this.createdInPool.delete(key);
+  }
+
   async unspentBoxes(tree: Uint8Array): Promise<readonly Uint8Array[]> {
     const source = this.mempoolAware ? this.boxes : this.confirmed;
     return [...source.values()].filter(box => { const read = readBox(box); return read !== undefined && bytesToHex(read.tree) === bytesToHex(tree); }).map(copyBytes);
   }
 
+  /** A box as the node's `/utxo/withPool/byIdBinary` answers it: unspent in blocks or created in the mempool,
+   * even where a pooled transaction spends it (recorded real node answers, `test/fixtures/ergo-node-answers.json`). */
+  box(boxId: Uint8Array): Uint8Array | undefined {
+    const key = bytesToHex(boxId), box = this.boxes.get(key) ?? this.confirmed.get(key) ?? this.createdInPool.get(key);
+    return box === undefined ? undefined : copyBytes(box);
+  }
+
   async hasBox(boxId: Uint8Array): Promise<boolean> {
-    return this.boxes.has(bytesToHex(boxId));
+    return this.box(boxId) !== undefined;
   }
 
   async hasTransaction(id: Uint8Array): Promise<boolean> {
@@ -280,7 +306,6 @@ export class MempoolNode implements ErgoPublishingSupplier {
     for (const input of tx.inputs) {
       const key = bytesToHex(input.boxId);
       this.boxes.delete(key);
-      this.createdInPool.delete(key);
       this.spentInPool.add(key);
     }
     tx.outputs.forEach((output, index) => {
@@ -293,8 +318,8 @@ export class MempoolNode implements ErgoPublishingSupplier {
 
   /** The pool's transactions for the next block; their outputs become confirmed. */
   take(): ErgoTransactionView[] {
-    for (const id of this.spentInPool) this.confirmed.delete(id);
     for (const [id, box] of this.createdInPool) this.confirmed.set(id, box);
+    for (const id of this.spentInPool) this.confirmed.delete(id);
     this.createdInPool.clear();
     this.spentInPool.clear();
     for (const t of this.pool) this.mined.add(bytesToHex(hash(t.unsigned)));

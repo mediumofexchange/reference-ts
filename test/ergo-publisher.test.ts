@@ -65,7 +65,7 @@ describe("durable publisher exact retry", () => {
     const parent = await first.publish(request());
     await expect(first.publish(request(new Uint8Array(100).fill(8)))).rejects.toThrow(/kept and sent again/);
     const child = await first.publish(request(new Uint8Array(100).fill(8)));
-    n.pool.splice(0); n.boxes.clear(); for (const bytes of funding) n.fund(bytes);
+    n.reset(funding);
     const second = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
     const retried = await second.publish(request(new Uint8Array(100).fill(8)));
     expect(retried.signed).toEqual(child.signed); expect(retried.id).toEqual(child.id);
@@ -111,7 +111,7 @@ describe("durable publisher exact retry", () => {
     await expect(p.publish(request())).rejects.toThrow(/reopen from durable state/);
     const next = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
     const first = await next.publish(request()), durable = state.text;
-    n.pool.splice(0); n.boxes.clear(); n.refuse = () => true;
+    n.reset(); n.refuse = () => true;
     await expect(next.publish(request())).rejects.toThrow(/no supplier offered/);
     expect(next.unsettled).toBe(1); expect(state.text).toBe(durable);
     const reopened = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], persistence });
@@ -425,15 +425,14 @@ describe("a publication is sent once, and publications chain", () => {
     const again = await p.publish(request());
     expect(hex(again.id)).toBe(hex(first.id));
     expect(n.submitted).toHaveLength(1); // the record box is in the mempool: nothing is sent
-    n.boxes.delete(hex(first.recordBox));
+    n.spend(first.recordBox);
     await p.publish(request());
     expect(n.submitted).toHaveLength(1); // the node still holds the transaction
-    const pooled = n.pool.splice(0); // and now it does not: its input is unspent again
-    n.boxes.clear();
-    n.fund(funding);
+    const pooled = n.pool.length;
+    n.reset([funding]); // and now it does not: its input is unspent again
     await p.publish(request());
     expect(n.submitted).toEqual([hex(first.id), hex(first.id)]);
-    expect(pooled).toHaveLength(1);
+    expect(pooled).toBe(1);
   });
 
   it("keeps a transaction whose acceptance it never heard, and sends the same one again", async () => {
@@ -460,7 +459,7 @@ describe("a publication is sent once, and publications chain", () => {
     };
     const p = publisher([flaky]);
     const first = await p.publish(request());
-    n.boxes.delete(hex(first.recordBox)); // not shown: a retry sends it again
+    n.spend(first.recordBox); // not shown: a retry sends it again
     down = true;
     await expect(p.publish(request())).rejects.toThrow(/kept and sent again/);
     down = false;
@@ -534,9 +533,7 @@ describe("a publication is sent once, and publications chain", () => {
     const p = publisher([n]);
     const dropped = await p.publish(request());
     // The network forgot the first transaction: its input is unspent again and its outputs gone.
-    n.pool.splice(0);
-    n.boxes.clear();
-    n.fund(funding);
+    n.reset([funding]);
     const next = await p.publish(request(new Uint8Array(136).fill(7)));
     expect(next.inputs.map(hex)).toEqual([hex(dropped.change!.id)]);
     expect(n.submitted.slice(-2)).toEqual([hex(dropped.id), hex(next.id)]);
@@ -575,10 +572,7 @@ describe("a publication is sent once, and publications chain", () => {
     const first = await p.publish(request());
     expect(first.inputs.map(hex).sort()).toEqual([hex(hash(a)), hex(hash(b))].sort());
     // The network dropped it, and one of its inputs is gone for good; the other is still there.
-    n.pool.splice(0);
-    n.boxes.clear();
-    n.fund(b);
-    n.fund(plainBox(TREE, 5_000_000n, HEIGHT - 5n));
+    n.reset([b, plainBox(TREE, 5_000_000n, HEIGHT - 5n)]);
     const rebuilt = await p.publish(request());
     expect(rebuilt.inputs.map(hex)).toContain(hex(hash(b)));
     expect(rebuilt.inputs.map(hex)).not.toContain(hex(hash(a)));
@@ -590,7 +584,7 @@ describe("a publication is sent once, and publications chain", () => {
     const p = publisher([n]);
     const first = await p.publish(request());
     n.take(); // mined
-    n.boxes.delete(hex(first.recordBox)); // whoever holds the location spent it
+    n.spend(first.recordBox); // whoever holds the location spent it
     n.refuse = () => true; // its inputs are spent: sending it again is refused
     expect(hex((await p.publish(request())).id)).toBe(hex(first.id));
     expect(new Set(n.submitted)).toEqual(new Set([hex(first.id)]));
@@ -691,7 +685,7 @@ describe("replacement, settlement and supplier cost", () => {
     const published: { change?: { id: Uint8Array } }[] = [];
     for (let i = 1; i <= 20; i++) published.push(await p.publish(request(new Uint8Array(136).fill(i))));
     n.take(); // mined: each spent the change of the one before
-    for (const id of [...n.boxes.keys()]) if (!n.confirmed.has(id) || readPlainBox(n.boxes.get(id)!, TREE) === undefined) n.boxes.delete(id); // record boxes swept
+    for (const box of [...n.boxes.values()]) if (readPlainBox(box, TREE) === undefined) n.spend(hash(box)); // record boxes swept
     down = true; // no supplier answers while it settles
     await p.settle(() => true);
     expect(p.unsettled).toBe(0);
@@ -754,7 +748,7 @@ describe("replacement, settlement and supplier cost", () => {
     const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [slow], timeoutMs: T });
     for (let i = 1; i <= 30; i++) await p.publish(request(new Uint8Array(136).fill(i)));
     // The node restarts: its mempool is gone. Each answer now takes 20 ms, so one walk's deadline sends only part of the chain.
-    n.pool.splice(0); n.boxes.clear(); n.fund(funding);
+    n.reset([funding]);
     delay = 20;
     let attempts = 0;
     // Each attempt resends what the deadline allows; a coarse host timer (about 16 ms on Windows) sends less per walk.
@@ -791,7 +785,7 @@ describe("replacement, settlement and supplier cost", () => {
     await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n))).rejects.toThrow(/kept and sent again/); // replaced on its inputs
     // The replacement's input is now gone, and the first transaction's fate is unknown: nothing more is built.
     silent = first;
-    n.boxes.clear(); n.fund(plainBox(TREE, 10_000_000n, HEIGHT - 5n));
+    n.reset([plainBox(TREE, 10_000_000n, HEIGHT - 5n)]);
     await expect(p.publish(request(RECORD, SCRIPTS[1], HEIGHT + 1n))).rejects.toThrow(/kept and sent again/);
     expect(new Set(n.submitted).size).toBe(2);
     expect(asked).toContain(first);
@@ -827,7 +821,7 @@ describe("replacement, settlement and supplier cost", () => {
     const first = await p.publish(request());
     expect(first.inputs).toHaveLength(2);
     // The network dropped it and one input is gone for good; the rebuild keeps the other and needs more.
-    n.pool.splice(0); n.boxes.clear(); n.fund(small); n.fund(extra);
+    n.reset([small, extra]);
     offering = true;
     const rebuilt = await p.publish(request());
     expect(rebuilt.inputs.map(hex)).toEqual([hex(hash(small)), hex(hash(extra))]);

@@ -1,0 +1,123 @@
+{
+  "about": "Real Ergo node answers to the six calls ergoNodePublisher makes, each body as served; recorded by experiments/ergo-range/record-node-answers.mjs.",
+  "recordedAt": "2026-10-02T14:48:09.118Z",
+  "node": "https://node.sigmaspace.io",
+  "appVersion": "6.1.5-0-c3646640-20260901-1036-SNAPSHOT",
+  "network": "mainnet",
+  "agreement": {
+    "node": "https://node.ergopool.io",
+    "appVersion": "6.0.2-0-2cdbb8cf-20260123-1019-SNAPSHOT",
+    "sameStatuses": true
+  },
+  "answers": [
+    {
+      "name": "indexedHeight",
+      "method": "GET",
+      "path": "/blockchain/indexedHeight",
+      "status": 200,
+      "answer": "{\n  \"indexedHeight\" : 1885915,\n  \"fullHeight\" : 1885915\n}"
+    },
+    {
+      "name": "pooledTransaction",
+      "method": "GET",
+      "path": "/transactions/unconfirmed/byTransactionId/303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5",
+      "status": 200,
+      "answer": "{\n  \"id\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n  \"inputs\" : [\n    {\n      \"boxId\" : \"1ee0702e230b085ef6e4ae18c33ead4fffa6fd5378d657e5a8a074c31659782a\",\n      \"value\" : 1022514284,\n      \"ergoTree\" : \"0008cd03c96d7e3525aa57db09580b9e31c660a8321fa5a722b604c941ef566b431cf112\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 834714,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"3daefce28c8a00a941db2c292af78720f2b532d775e6a09acf4067d427be0034\",\n      \"index\" : 9,\n      \"spendingProof\" : {\n        \"proofBytes\" : \"\",\n        \"extension\" : {\n          \"127\" : \"0300\"\n        }\n      }\n    },\n    {\n      \"boxId\" : \"d8becf4511a51c12d2f7e594fd37e0b6a650695f3fe197d81ef4285bf02d5bb6\",\n      \"value\" : 5034322901,\n      \"ergoTree\" : \"0008cd0207b1deaf04ce5a0dde1472bfa72f9139cd669c172ae4b67d87591c0c5b3bf6ea\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 834714,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"3daefce28c8a00a941db2c292af78720f2b532d775e6a09acf4067d427be0034\",\n      \"index\" : 15,\n      \"spendingProof\" : {\n        \"proofBytes\" : \"\",\n        \"extension\" : {\n          \"127\" : \"0302\"\n        }\n      }\n    },\n    {\n      \"boxId\" : \"81da570377fabaa036c76741bbd3f0b65f89f14b0bb3c915a4930a8faa14f958\",\n      \"value\" : 1002632208,\n      \"ergoTree\" : \"0008cd030b79338e8961df1e675e69787bafd39dd2bff02e8478d4a90108db170055fec3\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 834714,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"3daefce28c8a00a941db2c292af78720f2b532d775e6a09acf4067d427be0034\",\n      \"index\" : 21,\n      \"spendingProof\" : {\n        \"proofBytes\" : \"\",\n        \"extension\" : {\n          \"127\" : \"0304\"\n        }\n      }\n    },\n    {\n      \"boxId\" : \"14db9c2e592ce5483d7510e2638ccbcd8e38662860c4f821b759f7af62c8552c\",\n      \"value\" : 1005970470,\n      \"ergoTree\" : \"0008cd037a638132763805bf4a4e60d48f330161fe9cf3476fdcd15238b6201a6472971d\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 834714,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"3daefce28c8a00a941db2c292af78720f2b532d775e6a09acf4067d427be0034\",\n      \"index\" : 45,\n      \"spendingProof\" : {\n        \"proofBytes\" : \"\",\n        \"extension\" : {\n          \"127\" : \"0306\"\n        }\n      }\n    }\n  ],\n  \"dataInputs\" : [\n  ],\n  \"outputs\" : [\n    {\n      \"boxId\" : \"aa6df9dd10ab88f85b63f2099dcfc863c90741bfad8e4263242334aadbdaf325\",\n      \"value\" : 923764284,\n      \"ergoTree\" : \"0008cd03c96d7e3525aa57db09580b9e31c660a8321fa5a722b604c941ef566b431cf112\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885915,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 0\n    },\n    {\n      \"boxId\" : \"3c863cc3536e2b4288b246e8acd4265b6272b07d0fa0f2f7ea86ee69a0b2f87e\",\n      \"value\" : 4935572901,\n      \"ergoTree\" : \"0008cd0207b1deaf04ce5a0dde1472bfa72f9139cd669c172ae4b67d87591c0c5b3bf6ea\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885915,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 1\n    },\n    {\n      \"boxId\" : \"ba9fc3f577ba6e151eb3916f31b6322abd843e1f8e6d5bef79a6ec56623177bd\",\n      \"value\" : 903882208,\n      \"ergoTree\" : \"0008cd030b79338e8961df1e675e69787bafd39dd2bff02e8478d4a90108db170055fec3\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885915,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 2\n    },\n    {\n      \"boxId\" : \"0f54200393ee39d2f146f67733b4479bf650de675c681cbfb0516b9ae9c4767a\",\n      \"value\" : 907220470,\n      \"ergoTree\" : \"0008cd037a638132763805bf4a4e60d48f330161fe9cf3476fdcd15238b6201a6472971d\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885915,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 3\n    },\n    {\n      \"boxId\" : \"539d0ea190c6c619f3f53cc21569401f6fd8b4c9e12a88903c879fa1f35609a8\",\n      \"value\" : 3291670,\n      \"ergoTree\" : \"0008cd032a26b7fe966e90ed9d9a3cc24c25990a91dda35d0b909fda242b851a65101b83\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885914,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 4\n    },\n    {\n      \"boxId\" : \"1135489691100eb7e69eafaf1298db073a70c1126defc83780d71cdee9ef5e5f\",\n      \"value\" : 3291666,\n      \"ergoTree\" : \"0008cd021ab040c5eb36208049647912a375dc314dc3e2e188b444b2c4a8eb459aa7997d\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885914,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 5\n    },\n    {\n      \"boxId\" : \"2090ab09548520e430f6052c685be360e49a6d0e5e500acff8b2bc1489dd3af6\",\n      \"value\" : 3291666,\n      \"ergoTree\" : \"0008cd035e1197953651bcde064b37029d7d0aafb90396674d995f508254bdc44d73bc73\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885914,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 6\n    },\n    {\n      \"boxId\" : \"d135b77a51678899b4d270a8c5dd341ed8557c990484ad86dc1ca61ccef53fb4\",\n      \"value\" : 3291666,\n      \"ergoTree\" : \"0008cd02b6e95d89499b44d4c0a1976521d5a2ce21330015ca04146e40a08b4fcaaefeed\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885914,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 7\n    },\n    {\n      \"boxId\" : \"b00d440fb017b6119ef9efc82423c1e52cb86533b3b1062a95e76e09a90df803\",\n      \"value\" : 3291666,\n      \"ergoTree\" : \"0008cd02780cf1a6875c1e9d3b608d21f0e555c618f05d863c1817f2877f05468ec5c38f\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885914,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 8\n    },\n    {\n      \"boxId\" : \"2a3b32fb9d842bb1957e01c0c9d6a40fb9f1bfa2cf2f8f0c5c938a2d4688c650\",\n      \"value\" : 3291666,\n      \"ergoTree\" : \"0008cd037537248e07814ce5fb6a1fa9db91c7ee8b15d51295e2025367a78ab73da526f8\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885914,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 9\n    },\n    {\n      \"boxId\" : \"e05137fc56bdd9e888d70e99999d2fcc28229d557d31430f6c99e701eeb7b59a\",\n      \"value\" : 375250000,\n      \"ergoTree\" : \"1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885914,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5\",\n      \"index\" : 10\n    }\n  ],\n  \"size\" : 721\n}"
+    },
+    {
+      "name": "pooledTransactionInIndex",
+      "method": "GET",
+      "path": "/blockchain/transaction/byId/303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a5",
+      "status": 404,
+      "answer": "{\n  \"error\" : 404,\n  \"reason\" : \"not-found\",\n  \"detail\" : null\n}"
+    },
+    {
+      "name": "absentPooledTransaction",
+      "method": "GET",
+      "path": "/transactions/unconfirmed/byTransactionId/0689d844873adac8b02a0cf51d61b6e3680b925a9f3674d0d061f774abf43b20",
+      "status": 404,
+      "answer": "{\n  \"error\" : 404,\n  \"reason\" : \"not-found\",\n  \"detail\" : null\n}"
+    },
+    {
+      "name": "poolCreatedBox",
+      "method": "GET",
+      "path": "/utxo/withPool/byIdBinary/aa6df9dd10ab88f85b63f2099dcfc863c90741bfad8e4263242334aadbdaf325",
+      "status": 200,
+      "answer": "{\n  \"boxId\" : \"aa6df9dd10ab88f85b63f2099dcfc863c90741bfad8e4263242334aadbdaf325\",\n  \"bytes\" : \"bc8cbeb8030008cd03c96d7e3525aa57db09580b9e31c660a8321fa5a722b604c941ef566b431cf112db8d730000303b1af1bf7abfd5b681ebadc1d62481093a0c6c64222469eacfe3eae35f72a500\"\n}"
+    },
+    {
+      "name": "poolSpentBox",
+      "method": "GET",
+      "path": "/utxo/withPool/byIdBinary/1ee0702e230b085ef6e4ae18c33ead4fffa6fd5378d657e5a8a074c31659782a",
+      "status": 200,
+      "answer": "{\n  \"boxId\" : \"1ee0702e230b085ef6e4ae18c33ead4fffa6fd5378d657e5a8a074c31659782a\",\n  \"bytes\" : \"eca8c9e7030008cd03c96d7e3525aa57db09580b9e31c660a8321fa5a722b604c941ef566b431cf1129af93200003daefce28c8a00a941db2c292af78720f2b532d775e6a09acf4067d427be003409\"\n}"
+    },
+    {
+      "name": "absentBox",
+      "method": "GET",
+      "path": "/utxo/withPool/byIdBinary/ddc5d23c1c452fb1dcf493a71cd73280fcaf05bab46b928460fc875b634ebcab",
+      "status": 404,
+      "answer": "{\n  \"error\" : 404,\n  \"reason\" : \"not-found\",\n  \"detail\" : null\n}"
+    },
+    {
+      "name": "minedTransaction",
+      "method": "GET",
+      "path": "/blockchain/transaction/byId/24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d",
+      "status": 200,
+      "answer": "{\n  \"id\" : \"24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d\",\n  \"blockId\" : \"2dbc4f813b769fbc8327896a18421234afb057ec1fa1e2805f781bcac1d56b31\",\n  \"inclusionHeight\" : 1885913,\n  \"timestamp\" : 1790952337810,\n  \"index\" : 20,\n  \"globalIndex\" : 11392667,\n  \"numConfirmations\" : 2,\n  \"inputs\" : [\n    {\n      \"globalIndex\" : 57748386,\n      \"inclusionHeight\" : 1885911,\n      \"address\" : \"2vTHJzWVd7ryXrP3fH9KfEFH2W62Njq1GBzqyvJUvZZAdMsYNN5dbwF9sC3raNEdCUK4xw4Ygjkz41mYRiAWsyFHLeAESUuDxTpbuyG77Y9riUxJN9tMZ6nLCLTpgP5T2XoaYEgGaBkbaf1n5fqUjFUvpoeFr9cLoHRevEEQAiQ6QKEaqsPaWrUq6TbujgvqEw6gB35xug7WKjANyZePMyyrbE1ySthXjLCj6KUGdruDaw63LQdk6XxVNjVdppMW9jHJt6xCGJn93gqtLGUeoErHeX3t3K93KC4Z\",\n      \"spentTransactionId\" : \"24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d\",\n      \"spendingProof\" : {\n        \"proofBytes\" : \"4979a5b272c810d5e03ca426d9b2bc78441d85c5f24af0a71af45d447fce8f9a2d2d56a9cf46704f7347155227341e7bf0f1476a936f26f4\",\n        \"extension\" : {\n          \"0\" : \"0400\"\n        }\n      },\n      \"boxId\" : \"6f946b63640087cb4b8d120bf8b1c479fa8abf6b532e86955200949893f98a08\",\n      \"value\" : 10000000,\n      \"ergoTree\" : \"100a040004000580dac409040004000e206a2b821b5727e85beb5e78b4efb9f0250d59cd48481d2ded2c23e91ba1d07c660402040204020402d804d601b2a5e4e3000400d602db63087201d603db6308a7d604e4c6a70407ea02d1ededed93b27202730000b2720373010093c27201c2a7e6c67201040792c172017302eb02cd7204d1ededededed938cb2db6308b2a4730300730400017305938cb27202730600018cb2720373070001918cb27202730800028cb272037309000293e4c672010407720492c17201c1a7efe6c672010561\",\n      \"assets\" : [\n        {\n          \"tokenId\" : \"74fa4aee3607ceb7bdefd51a856861b5dbfa434a8f6c93bfe967de8ed1a30a78\",\n          \"amount\" : 1\n        },\n        {\n          \"tokenId\" : \"ae399fcb751e8e247d0da8179a2bcca2aa5119fff9c85721ffab9cdc9a3cb2dd\",\n          \"amount\" : 303\n        }\n      ],\n      \"creationHeight\" : 1885909,\n      \"additionalRegisters\" : {\n        \"R4\" : \"0703aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344\",\n        \"R5\" : \"04a6dd03\",\n        \"R6\" : \"05aedabfec16\"\n      },\n      \"transactionId\" : \"6a3ae502ac543f4bb745fc11d41cc3bee537a489f56843137cfb01b37d26470e\",\n      \"index\" : 0\n    },\n    {\n      \"globalIndex\" : 57748387,\n      \"inclusionHeight\" : 1885911,\n      \"address\" : \"9hm33tzrktKsnVuMjFJLHzz6thjM8xUn9tZV8mYBnC3FXvGgmNR\",\n      \"spentTransactionId\" : \"24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d\",\n      \"spendingProof\" : {\n        \"proofBytes\" : \"1dc62e92d00d745a486c6f170eeb249ca5d2088110a7cfa754b77789c2bc8475874a43d70b80d46a342defda1030f01b7015fda89cf5c9d0\",\n        \"extension\" : {\n          \n        }\n      },\n      \"boxId\" : \"d29a6574d4cddb43f8b6e9a86d316d4b10c024559b6c008c0d7e582392c89841\",\n      \"value\" : 7219300000,\n      \"ergoTree\" : \"0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885909,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"6a3ae502ac543f4bb745fc11d41cc3bee537a489f56843137cfb01b37d26470e\",\n      \"index\" : 1\n    }\n  ],\n  \"dataInputs\" : [\n  ],\n  \"outputs\" : [\n    {\n      \"globalIndex\" : 57748588,\n      \"inclusionHeight\" : 1885913,\n      \"address\" : \"2vTHJzWVd7ryXrP3fH9KfEFH2W62Njq1GBzqyvJUvZZAdMsYNN5dbwF9sC3raNEdCUK4xw4Ygjkz41mYRiAWsyFHLeAESUuDxTpbuyG77Y9riUxJN9tMZ6nLCLTpgP5T2XoaYEgGaBkbaf1n5fqUjFUvpoeFr9cLoHRevEEQAiQ6QKEaqsPaWrUq6TbujgvqEw6gB35xug7WKjANyZePMyyrbE1ySthXjLCj6KUGdruDaw63LQdk6XxVNjVdppMW9jHJt6xCGJn93gqtLGUeoErHeX3t3K93KC4Z\",\n      \"spentTransactionId\" : null,\n      \"spendingProof\" : null,\n      \"boxId\" : \"c4bae621fa6f7eab6d510ecdefd662238ec50d6f340ed01f632faecb81469fd9\",\n      \"value\" : 10000000,\n      \"ergoTree\" : \"100a040004000580dac409040004000e206a2b821b5727e85beb5e78b4efb9f0250d59cd48481d2ded2c23e91ba1d07c660402040204020402d804d601b2a5e4e3000400d602db63087201d603db6308a7d604e4c6a70407ea02d1ededed93b27202730000b2720373010093c27201c2a7e6c67201040792c172017302eb02cd7204d1ededededed938cb2db6308b2a4730300730400017305938cb27202730600018cb2720373070001918cb27202730800028cb272037309000293e4c672010407720492c17201c1a7efe6c672010561\",\n      \"assets\" : [\n        {\n          \"tokenId\" : \"74fa4aee3607ceb7bdefd51a856861b5dbfa434a8f6c93bfe967de8ed1a30a78\",\n          \"amount\" : 1\n        },\n        {\n          \"tokenId\" : \"ae399fcb751e8e247d0da8179a2bcca2aa5119fff9c85721ffab9cdc9a3cb2dd\",\n          \"amount\" : 303\n        }\n      ],\n      \"creationHeight\" : 1885911,\n      \"additionalRegisters\" : {\n        \"R4\" : \"0703aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344\",\n        \"R5\" : \"04a8dd03\",\n        \"R6\" : \"0594839aec16\"\n      },\n      \"transactionId\" : \"24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d\",\n      \"index\" : 0\n    },\n    {\n      \"globalIndex\" : 57748589,\n      \"inclusionHeight\" : 1885913,\n      \"address\" : \"9hm33tzrktKsnVuMjFJLHzz6thjM8xUn9tZV8mYBnC3FXvGgmNR\",\n      \"spentTransactionId\" : null,\n      \"spendingProof\" : null,\n      \"boxId\" : \"048d63ca8ea11ad65cc65c7ea188e845372fa326cca25b671f006386323122d8\",\n      \"value\" : 7217800000,\n      \"ergoTree\" : \"0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885911,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d\",\n      \"index\" : 1\n    },\n    {\n      \"globalIndex\" : 57748590,\n      \"inclusionHeight\" : 1885913,\n      \"address\" : \"2iHkR7CWvD1R4j1yZg5bkeDRQavjAaVPeTDFGGLZduHyfWMuYpmhHocX8GJoaieTx78FntzJbCBVL6rf96ocJoZdmWBL2fci7NqWgAirppPQmZ7fN9V6z13Ay6brPriBKYqLp1bT2Fk4FkFLCfdPpe\",\n      \"spentTransactionId\" : \"7c1ad830daa3256b2a9c815d7cc211765cc59db6f7b36b03637f7ce35648474a\",\n      \"spendingProof\" : {\n        \"proofBytes\" : \"\",\n        \"extension\" : {\n          \n        }\n      },\n      \"boxId\" : \"83395d4f2d98d52f822c58dfce9363814a6b9402c0492dfac8f7242d0dec51c1\",\n      \"value\" : 1500000,\n      \"ergoTree\" : \"1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304\",\n      \"assets\" : [\n      ],\n      \"creationHeight\" : 1885911,\n      \"additionalRegisters\" : {\n        \n      },\n      \"transactionId\" : \"24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d\",\n      \"index\" : 2\n    }\n  ],\n  \"size\" : 677\n}"
+    },
+    {
+      "name": "minedTransactionInPool",
+      "method": "GET",
+      "path": "/transactions/unconfirmed/byTransactionId/24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d",
+      "status": 404,
+      "answer": "{\n  \"error\" : 404,\n  \"reason\" : \"not-found\",\n  \"detail\" : null\n}"
+    },
+    {
+      "name": "absentMinedTransaction",
+      "method": "GET",
+      "path": "/blockchain/transaction/byId/f6a0ca926fc3f6d21014c1e4f3288a108fa2e7d1b97d6e34c1aa893d22cc7bec",
+      "status": 404,
+      "answer": "{\n  \"error\" : 404,\n  \"reason\" : \"not-found\",\n  \"detail\" : null\n}"
+    },
+    {
+      "name": "confirmedBox",
+      "method": "GET",
+      "path": "/utxo/withPool/byIdBinary/048d63ca8ea11ad65cc65c7ea188e845372fa326cca25b671f006386323122d8",
+      "status": 200,
+      "answer": "{\n  \"boxId\" : \"048d63ca8ea11ad65cc65c7ea188e845372fa326cca25b671f006386323122d8\",\n  \"bytes\" : \"c0c6dbf11a0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344d78d73000024c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d01\"\n}"
+    },
+    {
+      "name": "unspentBoxes",
+      "method": "POST",
+      "path": "/blockchain/box/unspent/byErgoTree?offset=0&limit=100&sortDirection=asc&includeUnconfirmed=true&excludeMempoolSpent=true",
+      "body": "0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344",
+      "status": 200,
+      "answer": "[\n  {\n    \"globalIndex\" : 55009905,\n    \"inclusionHeight\" : 1774804,\n    \"address\" : \"9hm33tzrktKsnVuMjFJLHzz6thjM8xUn9tZV8mYBnC3FXvGgmNR\",\n    \"spentTransactionId\" : null,\n    \"spendingProof\" : null,\n    \"boxId\" : \"42f60318d4e0ce09b73ab7bcf48c5f9be8607f030db63730001efc2d20cacd3a\",\n    \"value\" : 1200000,\n    \"ergoTree\" : \"0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344\",\n    \"assets\" : [\n    ],\n    \"creationHeight\" : 1774802,\n    \"additionalRegisters\" : {\n      \n    },\n    \"transactionId\" : \"d7f01eb0a8684ab7e49cb1a1b3bc3ea52bf8e9b9867ce157f52ed20fbee9b6cb\",\n    \"index\" : 1\n  },\n  {\n    \"globalIndex\" : 57045530,\n    \"inclusionHeight\" : 1856493,\n    \"address\" : \"9hm33tzrktKsnVuMjFJLHzz6thjM8xUn9tZV8mYBnC3FXvGgmNR\",\n    \"spentTransactionId\" : null,\n    \"spendingProof\" : null,\n    \"boxId\" : \"eea635183846028854d64bbf8c47fd19e22918472261c9d18ce4381b9a9ef433\",\n    \"value\" : 1000000,\n    \"ergoTree\" : \"0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344\",\n    \"assets\" : [\n    ],\n    \"creationHeight\" : 1856492,\n    \"additionalRegisters\" : {\n      \n    },\n    \"transactionId\" : \"ee95ed63a89ad5a89c635d3d6ceb2a8919d07737463bd4cdc20dc220c70323fa\",\n    \"index\" : 1\n  },\n  {\n    \"globalIndex\" : 57748589,\n    \"inclusionHeight\" : 1885913,\n    \"address\" : \"9hm33tzrktKsnVuMjFJLHzz6thjM8xUn9tZV8mYBnC3FXvGgmNR\",\n    \"spentTransactionId\" : null,\n    \"spendingProof\" : null,\n    \"boxId\" : \"048d63ca8ea11ad65cc65c7ea188e845372fa326cca25b671f006386323122d8\",\n    \"value\" : 7217800000,\n    \"ergoTree\" : \"0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344\",\n    \"assets\" : [\n    ],\n    \"creationHeight\" : 1885911,\n    \"additionalRegisters\" : {\n      \n    },\n    \"transactionId\" : \"24c86406de9bf279d161ec70ae2c14ebf7968b83c0fe980257fc957f6600b42d\",\n    \"index\" : 1\n  }\n]"
+    },
+    {
+      "name": "unspentBoxesNextPage",
+      "method": "POST",
+      "path": "/blockchain/box/unspent/byErgoTree?offset=100&limit=100&sortDirection=asc&includeUnconfirmed=true&excludeMempoolSpent=true",
+      "body": "0008cd03aad1d62f62bc96e72f85d4bd2dd28d185c5af8ac145d59007dd70751f1382344",
+      "status": 200,
+      "answer": "[\n]"
+    },
+    {
+      "name": "unspentBoxesUnknownTree",
+      "method": "POST",
+      "path": "/blockchain/box/unspent/byErgoTree?offset=0&limit=100&sortDirection=asc&includeUnconfirmed=true&excludeMempoolSpent=true",
+      "body": "0008cd0360dbd250c9fbb6390a7ed9c8b146524616224dddfc64f21ddd3c9c9b5a14e1da",
+      "status": 200,
+      "answer": "[\n]"
+    },
+    {
+      "name": "submitNotATransaction",
+      "method": "POST",
+      "path": "/transactions/bytes",
+      "body": "00",
+      "status": 400,
+      "answer": "{\n  \"error\" : 400,\n  \"reason\" : \"bad.request\",\n  \"detail\" : \"Can not parse transaction bytes: null\"\n}"
+    }
+  ]
+}
