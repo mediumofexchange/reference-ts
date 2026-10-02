@@ -312,7 +312,8 @@ export interface ChainContext {
  * where witnessed strictly before its effective index (C2.5.5). A link whose
  * effective index is past `now` is pending, not in force. One identity
  * counts at its first entry and records witnessed after `now` are not read,
- * so the chain is the chain at `now` whichever answers the records came from. */
+ * so over records `admittedReplacements` returned, the chain is the chain at
+ * `now` whichever answers they came from. */
 export function replacementChain(admittedIn: readonly AdmittedReplacement[], context: ChainContext): ReplacementChain {
   if (context === null || typeof context !== "object" || !Array.isArray(admittedIn)) throw new EncodingError("invalid chain context");
   const { lag, now } = context, backing = bytes(context.backing, 32), original = bytes(context.original, 32);

@@ -437,26 +437,27 @@ describe("v3 replacement chain from ranges", () => {
     expect(range.replacementChain(window(0n, 20n, [at(8n, y)]), { backing, original: operator, lag: 0n, now: 8n }).pending?.from).toBe(12n);
   });
 
-  it("counts a second valid signature of one record at the record's first entry, where the lead floor reads it (C2.5.3)", () => {
+  it("reads a second valid signature of one record as that record, witnessed at its first entry (§13.3)", () => {
     // Ed25519 admits more than one valid signature per message; the rule-holder can sign one record twice.
-    const original = replacement(6n), message = replacementMessage(backing, original.replacement);
+    const x = replacement(15n), y = replacement(12n, b(45)), message = replacementMessage(backing, x.replacement);
     const { scalar, pointBytes } = ed25519.utils.getExtendedPublicKey(ruleSecret), n = ed25519.CURVE.n, nonce = 7n;
     const R = ed25519.Point.BASE.multiply(nonce).toBytes();
     const k = BigInt("0x" + Buffer.from(sha512(cat(R, pointBytes, message))).reverse().toString("hex")) % n;
-    const S = Buffer.from(integer((nonce + k * scalar) % n, 32)).reverse();
-    const signature = cat(R, S);
-    expect(ed25519.verify(signature, message, rule)).toBe(true);
-    expect(Buffer.from(signature).equals(Buffer.from(original.replacement.signature))).toBe(false);
-    const resigned = encodeReplacement(backing, { ...original.replacement, signature });
-    // Lag 1: the floor is the witnessing plus 3, so 6 is effective only from the entry at 3.
-    const entries = [{ index: 3n, record: original.record }, { index: 5n, record: resigned }];
-    const admitted = range.admittedReplacements({ request: request(2, backing), entries: ordered(entries, 2) }, rule);
-    expect(admitted.map(a => a.index)).toEqual([3n]);
-    expect(walk(entries, 1n).chain.map(l => l.from)).toEqual([0n, 6n]);
-    expect(walk([entries[1]!], 1n).chain).toHaveLength(1);
-    const later = range.admittedReplacements({ request: request(2, backing, 4n, 20n), entries: [entry(5n, resigned)] }, rule);
-    const earlier = range.admittedReplacements({ request: request(2, backing, 0n, 3n), entries: [entry(3n, original.record)] }, rule);
-    expect(range.replacementChain([...later, ...earlier], { backing, original: operator, lag: 1n, now: 20n }).chain.map(l => l.from)).toEqual([0n, 6n]);
+    const signature = cat(R, Buffer.from(integer((nonce + k * scalar) % n, 32)).reverse());
+    expect(Buffer.from(signature).equals(Buffer.from(x.replacement.signature))).toBe(false);
+    const resigned = encodeReplacement(backing, { ...x.replacement, signature });
+    // The copy is admitted on its own under the strict rule, with X's identity.
+    const alone = range.admittedReplacements({ request: request(2, backing), entries: [entry(8n, resigned)] }, rule);
+    expect(alone.map(a => a.index)).toEqual([8n]);
+    expect(Buffer.from(alone[0]!.identity)).toEqual(sha(message));
+    // X stands from 5 and Y supersedes it at 6; the resigned X at 8 is X again, not a later candidate.
+    const entries = [at(5n, x), at(6n, y), { index: 8n, record: resigned }];
+    expect(walk(entries, 0n).chain.map(l => l.from)).toEqual([0n, 12n]);
+    const windows = [
+      ...range.admittedReplacements({ request: request(2, backing, 0n, 6n), entries: ordered(entries.slice(0, 2), 2) }, rule),
+      ...range.admittedReplacements({ request: request(2, backing, 7n, 20n), entries: [entry(8n, resigned)] }, rule),
+    ];
+    expect(range.replacementChain(windows, { backing, original: operator, lag: 0n, now: 20n }).chain.map(l => l.from)).toEqual([0n, 12n]);
   });
 
   it("is in force at its effective index and pending one index before it", () => {
@@ -525,6 +526,7 @@ describe("v3 replacement chain from ranges", () => {
     let seed = 0x5eed_2026n;
     const next = (bound: number): number => { seed = (seed * 6364136223846793005n + 1442695040888963407n) % (1n << 64n); return Number((seed >> 33n) % BigInt(bound)); };
     const successors = [b(47), b(48), b(49), SECRETS.operator];
+    let crossWindowCopies = 0;
     for (let scenario = 0; scenario < 120; scenario++) {
       const venue = new LocalVenue(), runtime = makeBacking({
         obligor: KEYS.backer, payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n }, reliance: [],
@@ -537,7 +539,7 @@ describe("v3 replacement chain from ranges", () => {
         if (at > 20n) break;
         if (venue.witnessedIndex() < at) venue.advance(at - venue.witnessedIndex());
         let r: Replacement;
-        if (published.length > 0 && next(4) === 0) r = published[next(published.length)]!;
+        if (published.length > 0 && next(3) === 0) r = published[next(published.length)]!;
         else {
           const predecessor = published.length === 0 || next(2) === 0 ? name : sha(replacementMessage(name, published[next(published.length)]!));
           r = signedReplacement(name, next(8) === 0 ? b(50) : SECRETS.backer, successors[next(successors.length)]!, predecessor, at + BigInt(next(12)));
@@ -551,12 +553,14 @@ describe("v3 replacement chain from ranges", () => {
       expect(links(whole.chain)).toEqual(links(successionOf(runtime, venue)));
       expect(links([...whole.chain, ...(whole.pending === undefined ? [] : [whole.pending])])).toEqual(links(successionAhead(runtime, venue)));
       const split = BigInt(next(20));
-      const windowed = range.replacementChain([
-        ...range.admittedReplacements({ request: request(2, name, 0n, split), entries: ordered(entries.filter(e => e.index <= split), 2) }, KEYS.backer),
-        ...range.admittedReplacements({ request: request(2, name, split + 1n, 20n), entries: ordered(entries.filter(e => e.index > split), 2) }, KEYS.backer),
-      ], context);
+      const early = range.admittedReplacements({ request: request(2, name, 0n, split), entries: ordered(entries.filter(e => e.index <= split), 2) }, KEYS.backer);
+      const late = range.admittedReplacements({ request: request(2, name, split + 1n, 20n), entries: ordered(entries.filter(e => e.index > split), 2) }, KEYS.backer);
+      if (late.some(l => early.some(e => Buffer.from(e.identity).equals(l.identity)))) crossWindowCopies++;
+      const windowed = range.replacementChain([...early, ...late], context);
       expect(links(windowed.chain)).toEqual(links(whole.chain));
       expect(windowed.pending === undefined ? undefined : links([windowed.pending])).toEqual(whole.pending === undefined ? undefined : links([whole.pending]));
     }
+    // The windowed reading meets a copy of an earlier window's record in a share of the scenarios.
+    expect(crossWindowCopies).toBeGreaterThanOrEqual(5);
   });
 });
