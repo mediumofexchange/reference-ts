@@ -3,25 +3,25 @@
 Updated: 2026-10-02
 
 ## Goal
-**Slice 9 done: redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
-`V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); a settle refused under service reads as unreleased
-(adopted limit; more is pool-v4). **M9a** (PRs #69, #71) acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2**
-(PR #72) seed-found demands, locks, acts of an ended segment made again; **M9c1** (PR #73, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force))
-C3.8 per witnessed index, `TAKEN`; **M9c2** (PR #74, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)) findings (a)–(c), (e), (q);
-**M9d1** (PR #76) `prepare-crs.mjs` falls back to Ignition's transcript00 (same hashes), `redemption-store-check.mjs` real-proof issue to burn
-through wallet processes over the HTTP service, gap demand and settlement by publication; **M9d2** (PR #77) `wallet-crash.mjs` exits at the
-COMMIT of demand, accept, settle, withdraw and burn; the real-proof drill adds a seed-restored wallet settling and withdrawing standing
-demands, a late gap release (`DEADLINE`, then a new `rho_out`), a timely forged presenter signature (`SIGNATURE`) and a `TAKEN` release read
-as dishonour; other hostile C3.4–C3.8 cases stay stand-in (wallet guide). No runtime change in M9d; fresh review of M9d1+M9d2: no blocker, four
-findings fixed (rho asserted, timely forgery, wording, scope). Slice 8 done: pool-v3 adopted, one configuration (spec e7f7f24, §11.4); a byte,
-identity or verdict change (C3.8's residual too) is pool-v4. **Next: Next 2** (visibility table), then slice 10.
+**Visibility matrix done** ([Who sees what](docs/POOL_V3_VISIBILITY.md), branch `claude/visibility-table`): what each record shows,
+each party alone and each issuer/operator/witness coalition, traffic and small-pool inference for pool-v3 on Ergo, from the
+adopted bytes and the reference code; documentation only, no rule found wrong. A fresh review found three material claims
+(the operator joins a sync's backing to the spend it submits; a presented note is reused by `demand` and `burn` too; a
+request's tag links) and eleven minor ones, all fixed. The wallet duties it finds are Next 2. **Next: slice 10 (Next 3)**,
+with Next 2 in its wallet.
+
+**Slice 9 done: redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own),
+PRs #69–#74, #76, #77): `V3Wallet` owns both redemption roles under service and in a gap ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)),
+with C3.8's reading, crash exits at each act's commit and a real-proof drill through wallet processes; a settle refused under service
+reads as unreleased (adopted limit). Slice 8 done: pool-v3 adopted, one configuration (spec e7f7f24, §11.4); a byte, identity or
+verdict change (C3.8's residual too) is pool-v4.
 
 ## Status
 - Audit area 11 (PR #75, merged b101869, [decision](decisions/2026-10.md#2026-10-02--count-a-replacement-identity-at-its-first-entry-in-the-walk-itself-and-drop-the-range-helpers-the-runtime-does-not-use-audit-area-11)): the replacement walk counts an identity at its
   first entry itself; unused range helpers dropped. Reports binding `record-range.ts`/`ergo-check.mjs` are stale until re-recorded.
 
 ## Evidence
-- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
+- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json)/[Ergo](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json)/[Ergo](docs/pool-v3-succession-store-ergo-verification.json),
@@ -31,8 +31,11 @@ identity or verdict change (C3.8's residual too) is pool-v4. **Next: Next 2** (v
 
 ## Next
 1. Slice 9 done (Goal); the numbering below is kept for its references.
-2. Profile visibility table (docs/spec, any time before slice 10's wallet text): pool-v3 on Ergo per party and per issuer/operator/witness
-   collusion, with traffic (service connections, publication timing, node queries) and small-pool inference (§C1.4 asks profiles for their own).
+2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds, for slice 10's wallet:
+   spend a presented note (withdrawn, expired or failed demand) to a fresh one before any reuse (§C1.5, C3.1; `prepare`, `demand`
+   and `burn` select it today); keep gap-publication funding apart from identified coins (a key per demand, or a relay); a
+   transport and service credential that do not identify the holder, and syncs that do not tie an address to the backing it
+   spends (replica, every scoped backing, or unlinkable transport); the user-facing explanations.
 3. Slice 10, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
    require declared verifier identities ([decision](decisions/2026-09.md#2026-09-30--bound-evidence-storage-by-its-rows-and-bind-reader-verifiers-to-the-configuration));
    holder wallet (with the backer role), operator service and supply reader from a packed install (`bin`), fresh processes and data directories,
