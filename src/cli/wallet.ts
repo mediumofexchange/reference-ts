@@ -17,8 +17,8 @@
 // says which (`evidence`). Deadlines are witnessed indices, absolute or
 // relative to the read (`+n`).
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { compareBytes, EncodingError } from "../bytes.js";
@@ -85,7 +85,7 @@ interface Opened {
   close(): Promise<void>;
 }
 
-const WALLET_DB = "wallet.db";
+const WALLET_DB = "wallet.db", PENDING = "wallet.pending";
 
 /** The wallet database over a view: a new one only where `create` says so. */
 function walletOver(directory: Directory, view: View, verifier: ProofVerifier, create = false): V3Wallet {
@@ -181,9 +181,13 @@ function deadlineOf(args: Arguments, at: bigint): bigint {
   return relative ? at + value : value;
 }
 
+/** A backer's directory holds K; the role check reads no key bytes. */
+function requireBacker(directory: Directory): void {
+  if (!existsSync(directory.file("backer.key"))) throw new CommandError("ROLE", "this wallet holds no backer key: a backer's wallet is created with init --backer");
+}
 /** K, as the wallet's signer: read only by the commands that sign, and wiped when they close. */
 function backerKey(directory: Directory): Uint8Array {
-  if (!existsSync(directory.file("backer.key"))) throw new CommandError("ROLE", "this wallet holds no backer key: a backer's wallet is created with init --backer");
+  requireBacker(directory);
   return readSecret(directory.file("backer.key"), "backer.key");
 }
 async function withSigner<T>(directory: Directory, act: (sign: BackerSigner) => Promise<T>): Promise<T> {
@@ -209,12 +213,25 @@ function requestOf(args: Arguments, prefix = "") {
 
 /** Paths a command writes outside the directory (a handoff's key and envelope): absolute, outside it, and distinct. */
 export function outside(directory: Pick<Directory, "path">, ...paths: string[]): string[] {
-  const resolved = paths.map(path => resolve(path));
-  for (const path of resolved) {
-    const inner = relative(directory.path, path);
-    if (inner === "" || (inner !== ".." && !inner.startsWith(`..${sep}`) && !isAbsolute(inner))) throw new CommandError("PATH", `${path} lies inside the data directory`);
+  // Compared as the file system resolves them: links followed through the nearest existing ancestor, and without
+  // case where the platform's file names ignore it.
+  const real = (path: string): string => {
+    let head = resolve(path), tail = "";
+    for (;;) {
+      try { return join(realpathSync(head), tail); } catch {
+        const up = dirname(head);
+        if (up === head) return resolve(path);
+        tail = join(basename(head), tail); head = up;
+      }
+    }
+  };
+  const fold = (path: string): string => process.platform === "win32" || process.platform === "darwin" ? path.toLowerCase() : path;
+  const root = fold(real(directory.path)), resolved = paths.map(path => resolve(path)), compared = resolved.map(path => fold(real(path)));
+  for (const [i, path] of compared.entries()) {
+    const inner = relative(root, path);
+    if (inner === "" || (inner !== ".." && !inner.startsWith(`..${sep}`) && !isAbsolute(inner))) throw new CommandError("PATH", `${resolved[i]} lies inside the data directory`);
   }
-  if (new Set(resolved).size !== resolved.length) throw new CommandError("PATH", "the paths must differ");
+  if (new Set(compared).size !== compared.length) throw new CommandError("PATH", "the paths must differ");
   return resolved;
 }
 
@@ -248,8 +265,15 @@ async function init(argv: readonly string[]): Promise<void> {
 
 /** Create the wallet database (a fresh seed) over the directory's venue. */
 async function createDatabase(directory: Directory, args: Arguments): Promise<void> {
-  const view = openView(directory), verifier = await openVerifier(directory, verifierCount(args));
-  try { walletOver(directory, view, verifier, true).close(); } finally { await verifier.close(); view.close(); }
+  await withView(directory, args, (view, verifier) => { walletOver(directory, view, verifier, true).close(); });
+}
+/** `use` over the directory's view and a verifier, both closed after. */
+async function withView<T>(directory: Directory, args: Arguments, use: (view: View, verifier: ProofVerifier) => T): Promise<T> {
+  const view = openView(directory);
+  try {
+    const verifier = await openVerifier(directory, verifierCount(args));
+    try { return use(view, verifier); } finally { await verifier.close(); }
+  } finally { view.close(); }
 }
 
 /** `venue create` (backer): the venue, then the wallet database over it. */
@@ -258,10 +282,19 @@ async function venueCommand(argv: readonly string[]): Promise<void> {
   if (verb !== "create") throw new UsageError("moe wallet venue create");
   const args = parseArguments(rest, { dir: "value", synthetic: "switch", depth: "value", verifiers: "value" }, 0);
   const directory = openDirectory(required(args, "dir"), "wallet"), depth = flag(args, "depth");
-  backerKey(directory).fill(0);
+  requireBacker(directory);
+  // The run that creates the venue marks that it owes the wallet database, so an interrupted run creates it on rerun;
+  // a venue without the mark and without a database lost its database, which only a restore brings back.
+  const pending = directory.file(PENDING);
+  if (ownVenue(directory) === undefined && !existsSync(pending)) writeExclusive(pending, "the wallet database is created with the venue\n");
   const { venue, created } = await createVenue(directory, { synthetic: has(args, "synthetic"),
     ...(depth === undefined ? {} : { depth: integer(depth, "--depth", 1n, 1000n) }) });
-  if (!existsSync(directory.file(WALLET_DB))) await createDatabase(directory, args);
+  if (existsSync(pending)) {
+    if (!existsSync(directory.file(WALLET_DB))) await createDatabase(directory, args);
+    rmSync(pending);
+  } else if (!existsSync(directory.file(WALLET_DB))) {
+    throw new CommandError("ABSENT", "the venue exists but the wallet database is lost: restore it (restore, restore-seed) into a new directory");
+  }
   print({ status: created ? "created" : "existing", venue: venue.id, file: JSON.parse(venueText(venue.profile, venue.anchorHeight)) });
 }
 
@@ -303,13 +336,28 @@ async function seed(argv: readonly string[]): Promise<void> {
   });
 }
 
-/** stdin, whole: the seed's 64 hex digits and an optional newline. */
+/** stdin, at most 66 bytes: the seed's 64 hex digits and an optional newline. Never a terminal, which would echo it. */
 async function seedFromStdin(): Promise<Uint8Array> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-  const text = Buffer.concat(chunks).toString("utf8").replace(/\r?\n$/, "");
-  if (!/^[0-9a-f]{64}$/.test(text)) throw new CommandError("INVALID", "stdin is not a seed's 64 lowercase hex digits");
-  return Buffer.from(text, "hex");
+  if (process.stdin.isTTY) throw new CommandError("INVALID", "restore-seed reads the seed from a pipe or file on stdin, not a terminal");
+  const read = Buffer.alloc(67);
+  let length = 0;
+  try {
+    for await (const chunk of process.stdin) {
+      const bytes = chunk as Buffer;
+      if (length + bytes.length > 66) { bytes.fill(0); throw new CommandError("INVALID", "stdin is longer than a seed"); }
+      bytes.copy(read, length); length += bytes.length; bytes.fill(0);
+    }
+    let end = length;
+    if (end > 0 && read[end - 1] === 0x0a) end--;
+    if (end > 0 && read[end - 1] === 0x0d) end--;
+    const digits = read.subarray(0, end);
+    if (end !== 64 || !digits.every(c => (c >= 0x30 && c <= 0x39) || (c >= 0x61 && c <= 0x66))) {
+      throw new CommandError("INVALID", "stdin is not a seed's 64 lowercase hex digits");
+    }
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) seed[i] = parseInt(String.fromCharCode(digits[2 * i]!, digits[2 * i + 1]!), 16);
+    return seed;
+  } finally { read.fill(0); }
 }
 
 /** `--backer-key <file>` at a restore: K, copied into the new directory. */
@@ -322,13 +370,15 @@ function restoreBacker(directory: Directory, args: Arguments): object {
 
 /** `restore-seed`: a new directory whose wallet holds only the seed read from stdin (C4.6). */
 async function restoreSeed(argv: readonly string[]): Promise<void> {
+  // The arguments are checked before stdin is read, so a usage error does not wait on input.
+  const checked = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", verifiers: "value", "backer-key": "value" }, 0);
+  required(checked, "dir"); required(checked, "venue");
+  if (existsSync(resolve(required(checked, "dir")))) throw new CommandError("EXISTS", "restore-seed creates a new directory");
   const secret = await seedFromStdin();
   try {
     await initRole(argv, "wallet", { venue: "required", flags: { verifiers: "value", "backer-key": "value" }, fill: async (directory, args) => {
-      const view = openView(directory), verifier = await openVerifier(directory, verifierCount(args));
-      try {
-        V3Wallet.restoreSeed(directory.file(WALLET_DB), { venue: view.venue, reference: view.file.reference, verifier }, secret).close();
-      } finally { await verifier.close(); view.close(); }
+      await withView(directory, args, (view, verifier) =>
+        V3Wallet.restoreSeed(directory.file(WALLET_DB), { venue: view.venue, reference: view.file.reference, verifier }, secret).close());
       return { restored: "seed", ...restoreBacker(directory, args) };
     } });
   } finally { secret.fill(0); }
@@ -339,18 +389,24 @@ async function handoff(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, { dir: "value", key: "value", out: "value", verifiers: "value" }, 0);
   const directory = openDirectory(required(args, "dir"), "wallet");
   const [keyPath, outPath] = outside(directory, required(args, "key"), required(args, "out"));
-  // The key is on durable storage before the source freezes; a rerun reuses it.
-  let key = readOptional(keyPath!);
-  if (key === undefined) { key = new Uint8Array(randomBytes(32)); writeExclusive(keyPath!, key); }
-  if (key.length !== 32) throw new CommandError("INVALID", "the key file is not 32 bytes");
-  const ownKey = key;
-  try {
-    await withWallet(directory, args, {}, async ({ wallet }) => {
-      const bytes = wallet.exportBackup(ownKey);
+  await withWallet(directory, args, {}, async ({ wallet }) => {
+    // The key is on durable storage before the source freezes; a rerun reuses it. A frozen wallet takes only the
+    // key it was exported under, so no new key file is made for it.
+    let key = readOptional(keyPath!);
+    if (key === undefined) {
+      if (wallet.custody().frozen) throw new CommandError("FROZEN", "this wallet was already handed off: name the key file it was exported under");
+      key = new Uint8Array(randomBytes(32)); writeExclusive(keyPath!, key);
+    } else if (process.platform !== "win32" && (statSync(keyPath!).mode & 0o077) !== 0) {
+      key.fill(0);
+      throw new CommandError("MODE", `${keyPath} is readable or writable by group or others; a handoff key is owner-only`);
+    }
+    try {
+      if (key.length !== 32) throw new CommandError("INVALID", "the key file is not 32 bytes");
+      const bytes = wallet.exportBackup(key);
       writeSame(outPath!, bytes);
       print({ status: "frozen", digest: walletBackupDigest(bytes), key: keyPath, out: outPath });
-    });
-  } finally { ownKey.fill(0); }
+    } finally { key.fill(0); }
+  });
 }
 
 /** `restore --key <file> --backup <file> --digest <hex>`: a new directory holding the handoff's wallet; a rerun over a
@@ -371,10 +427,8 @@ async function restore(argv: readonly string[]): Promise<void> {
   const bytes = readRequired(required(probe, "backup"), "the handoff"), key = readSecret(required(probe, "key"), "the handoff key");
   try {
     await initRole(argv, "wallet", { venue: "required", flags, fill: async (directory, args) => {
-      const view = openView(directory), verifier = await openVerifier(directory, verifierCount(args));
-      try {
-        V3Wallet.restoreBackup(directory.file(WALLET_DB), { venue: view.venue, reference: view.file.reference, verifier }, bytes, key, digest).close();
-      } finally { await verifier.close(); view.close(); }
+      await withView(directory, args, (view, verifier) =>
+        V3Wallet.restoreBackup(directory.file(WALLET_DB), { venue: view.venue, reference: view.file.reference, verifier }, bytes, key, digest).close());
       return { restored: "handoff", digest, ...restoreBacker(directory, args) };
     } });
   } finally { key.fill(0); }
@@ -436,7 +490,8 @@ async function submit(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 2);
   await withWallet(directory, args, {}, async opened => {
     const receipt = await opened.wallet.submit(alias, submitter(opened, kept));
-    print({ status: "pending", alias, receipt: receiptOut(receipt), statement: receipt.statementHash });
+    const saved = opened.wallet.payment(alias) ?? opened.wallet.act(alias);
+    print({ status: saved === undefined ? "pending" : statusOf(saved.status), alias, receipt: receiptOut(receipt), statement: receipt.statementHash });
   });
 }
 
@@ -572,6 +627,7 @@ async function publish(argv: readonly string[]): Promise<void> {
     }
     const act = opened.wallet.act(alias);
     const publication = await captured(publisher => opened.wallet.publish(alias, publisher));
+    if (compareBytes(publication.subject, kept.backing) !== 0) throw new CommandError("BACKING", "the act is of another backing than the one whose gap the read judged");
     print({ status: "written", ...publicationFile(directory, kept, out, publication), act: act === undefined ? null : actOut(act), judgingIndex: view.judgingIndex });
   });
 }
@@ -590,7 +646,7 @@ async function publishAcceptance(argv: readonly string[]): Promise<void> {
 async function issue(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { request: "value", digest: "value", value: "value" }, 2);
   const value = integer(required(args, "value"), "--value", 1n, (1n << 64n) - 1n), output = requestOf(args);
-  backerKey(directory).fill(0);
+  requireBacker(directory);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const saved = opened.wallet.act(alias) !== undefined, source = saved ? undefined : await evidence(opened, args, kept);
     const act = await withSigner(directory, sign => opened.wallet.issue(alias, output, value, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!, sign));
@@ -602,7 +658,7 @@ async function issue(argv: readonly string[]): Promise<void> {
 async function accept(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { deadline: "value", out: "value" }, 3);
   const id = hex32(args.positional[2]!, "the demand"), out = required(args, "out");
-  backerKey(directory).fill(0);
+  requireBacker(directory);
   await withWallet(directory, args, { sync: true }, async opened => {
     const deadline = deadlineOf(args, opened.at!);
     const source = await evidence(opened, args, kept);
@@ -618,7 +674,7 @@ async function accept(argv: readonly string[]): Promise<void> {
 async function burn(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 3);
   const quantity = integer(args.positional[2]!, "the quantity", 1n, (1n << 64n) - 1n);
-  backerKey(directory).fill(0);
+  requireBacker(directory);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const saved = opened.wallet.act(alias) !== undefined, source = saved ? undefined : await evidence(opened, args, kept);
     print({ ...actOut(await opened.wallet.burn(alias, quantity, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!)),

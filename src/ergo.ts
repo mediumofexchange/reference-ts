@@ -600,8 +600,9 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     await this.publish(kind, subject, record);
   }
 
-  /** `publishRecord`, answering the transaction a supplier accepted, or undefined where this view already holds the
-   * record and nothing was sent. */
+  /** `publishRecord`, answering the publication the publisher built last for the record (where an earlier one it
+   * replaced lands instead, that one carries the record), or undefined where this view already holds the record and
+   * nothing was sent. */
   async publish(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Promise<ErgoPublication | undefined> {
     if (kind !== 1 && kind !== 2 && kind !== 3 && kind !== 4) throw new EncodingError("invalid Ergo record kind");
     const length = byteLength(record);
