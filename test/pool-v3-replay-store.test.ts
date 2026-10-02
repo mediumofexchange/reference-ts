@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fieldToBytes } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT, NoteTree, notePathProves } from "../src/pool/note-tree.js";
+import { EvidenceRefusal } from "../src/pool/v3/refusals.js";
 import { ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 
@@ -160,5 +161,21 @@ describe("replay storage", () => {
       expect(first.walkRows()).toBeGreaterThan(0);
       first.closeWalk(walk);
     } finally { first.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("keeps one object per venue position: a position answered for a second backing leaves the read unresolved (§13.1)", () => {
+    const store = new ReplayStore(), backingA = new Uint8Array(32).fill(1), backingB = new Uint8Array(32).fill(2);
+    try {
+      store.putPublications(backingA, [{ index: 5n, ordinal: 1n, record: Uint8Array.of(1) }, { index: 5n, ordinal: 2n, record: Uint8Array.of(2) }]);
+      store.putPublications(backingB, [{ index: 5n, ordinal: 3n, record: Uint8Array.of(3) }]);
+      let refusal: unknown;
+      try { store.putPublications(backingB, [{ index: 5n, ordinal: 2n, record: Uint8Array.of(4) }]); } catch (error) { refusal = error; }
+      expect(refusal).toBeInstanceOf(EvidenceRefusal);
+      expect((refusal as EvidenceRefusal).status).toBe("unresolved-evidence");
+      expect(() => store.putPublications(backingA, [{ index: 5n, ordinal: 1n, record: Uint8Array.of(1) }])).toThrow(EvidenceRefusal);
+      expect(store.publicationCount(backingA, 5n)).toBe(2);
+      expect(store.publicationCount(backingB, 5n)).toBe(1);
+      expect(store.nextPublication(backingB, undefined, 5n)?.ordinal).toBe(3n);
+    } finally { store.close(); }
   });
 });

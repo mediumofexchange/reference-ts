@@ -1050,16 +1050,11 @@ export class ReplayStore {
     this.#db.prepare("INSERT OR IGNORE INTO answer_replacement VALUES (?, ?, ?, ?)").run(backing, identity, be(index), record);
   }
   putPublications(backing: Uint8Array, entries: readonly RangeEntry[]): void {
-    const put = this.#db.prepare("INSERT INTO answer_publication VALUES (?, ?, ?, ?)");
+    // One venue position answered for two subjects cannot be both (§13.1): a kept row at the position leaves the read
+    // unresolved. Each answer is extended once past its kept index, so a same-subject repeat does not arise.
+    const put = this.#db.prepare("INSERT INTO answer_publication VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING");
     for (const { index, ordinal, record } of entries) {
-      try { put.run(backing, be(index), be(ordinal), record); } catch (error) {
-        // One venue position answered for two subjects cannot be both (§13.1). SQLite names this index for any repeat of a
-        // position, so a same-subject repeat reads the same; each answer is extended once past its kept index, so none arises.
-        if (error instanceof Error && /UNIQUE constraint failed: answer_publication\.idx, answer_publication\.ordinal$/.test(error.message)) {
-          throw new EvidenceRefusal("unresolved-evidence");
-        }
-        throw error;
-      }
+      if (Number(put.run(backing, be(index), be(ordinal), record).changes) === 0) throw new EvidenceRefusal("unresolved-evidence");
     }
   }
   #held(operator: Uint8Array, row: Record<string, unknown> | undefined): HeldCommitment | undefined {

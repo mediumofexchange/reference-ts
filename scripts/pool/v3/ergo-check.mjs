@@ -13,7 +13,7 @@ import { ErgoVenue } from "../../../dist/ergo.js";
 import { ergoProfileIdentity, frameTransaction } from "../../../dist/ergo-profile.js";
 import { BranchSupplier, Chain, plainOutput, recordOutput, transaction } from "../../../dist/ergo-synthetic.js";
 import { FixtureVenue } from "../../../dist/record-venue.js";
-import { mergeVenueOrder } from "../../../dist/record-range.js";
+import { venueOrder } from "../../../dist/pool/v3/scope-reader.js";
 import { recordReader, replayEvidencePackage, RANGE_LIMITS } from "./local-replay.mjs";
 import { checkCompactRuntime } from "./compact-runtime-check.mjs";
 
@@ -150,7 +150,10 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
         answers.push([expected, actual]); counts.kind4Subjects++;
       }
       if (answers.length > 0) {
-        const union = mergeVenueOrder(answers.map(([expected]) => expected)), ergoUnion = mergeVenueOrder(answers.map(([, actual]) => actual));
+        // The union in venue order: by (index, ordinal), as the adopted block reads it; no two subjects share a position.
+        const unionOf = side => answers.flatMap(pair => pair[side].entries.map(e => ({ ...e, subject: pair[side].request.subject }))).sort(venueOrder);
+        const union = unionOf(0), ergoUnion = unionOf(1);
+        assert.ok(ergoUnion.every((e, i) => i === 0 || venueOrder(ergoUnion[i - 1], e) < 0), `${label}: one object per position`);
         assert.deepEqual(ergoUnion.map(e => [e.index, e.ordinal, hex(e.subject), hex(e.record)]), union.map(e => [e.index, e.ordinal << 32n, hex(e.subject), hex(e.record)]), `${label}: union`);
         counts.unionPositions += union.length;
       }

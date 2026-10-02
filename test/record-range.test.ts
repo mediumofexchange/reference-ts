@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { sha512 } from "@noble/hashes/sha2.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import * as range from "../src/record-range.js";
@@ -99,7 +100,7 @@ describe("v3 record-range answers", () => {
         expect(() => range.encodeRangeAnswer(wrong, wide)).toThrow(/length does not fit/);
         const forged = Buffer.from(encoded); forged.writeUInt32BE(length, 102 + 16);
         const input = length > bound ? cat(forged, Uint8Array.of(0)) : forged.subarray(0, 102 + 20 + length);
-        expect(() => range.decodeRangeAnswer(input, atBound.request, wide)).toThrow(EncodingError);
+        expect(() => range.decodeRangeAnswer(input, atBound.request, wide)).toThrow(/length does not fit/);
       }
     }
     const shorter: range.RangeAnswer = { request: request(4, backing), entries: [entry(1n, new Uint8Array(0)), entry(1n, Uint8Array.of(1), 1n)] };
@@ -116,7 +117,8 @@ describe("v3 record-range answers", () => {
     for (const expected of others) expect(() => range.decodeRangeAnswer(encoded, expected, wide)).toThrow(/another request/);
     expect(() => range.decodeRangeAnswer(encoded, { ...answer.request, fromIndex: 9n, toIndex: 8n }, wide)).toThrow(/malformed range request/);
     const reversed = Buffer.from(encoded); reversed.writeBigUInt64BE(9n, 82);
-    expect(() => range.decodeRangeAnswer(reversed, { ...answer.request, fromIndex: 9n }, wide)).toThrow(EncodingError);
+    // A carried range whose start passes its end answers no well-formed request.
+    expect(() => range.decodeRangeAnswer(reversed, answer.request, wide)).toThrow(/another request/);
   });
 
   it("orders kind-4 entries strictly by (index, ordinal) and kinds 1-3 canonically by record bytes with a zero ordinal", () => {
@@ -165,10 +167,12 @@ describe("v3 record-range answers", () => {
     const decode = (input: Uint8Array): range.RangeAnswer => range.decodeRangeAnswer(input, answer.request, wide);
     expect(decode(encoded).entries).toHaveLength(3);
     expect(() => range.encodeRangeAnswer({ ...answer, entries: [entry(3n, new Uint8Array(new SharedArrayBuffer(136)))] }, wide)).toThrow(/shared/);
-    for (let cut = 1; cut <= encoded.length; cut += 37) expect(() => decode(encoded.subarray(0, encoded.length - cut))).toThrow(EncodingError);
+    for (let cut = 1; cut <= encoded.length; cut += 37) {
+      expect(() => decode(encoded.subarray(0, encoded.length - cut))).toThrow(/truncated range|impossible range entry count|length does not fit/);
+    }
     expect(() => decode(cat(encoded, Uint8Array.of(0)))).toThrow(/trailing/);
     const count = Buffer.from(encoded); count.writeUInt32BE(4, 98);
-    expect(() => decode(count)).toThrow(EncodingError);
+    expect(() => decode(count)).toThrow("truncated range entry");
     const huge = Buffer.from(encoded); huge.writeUInt32BE(0xffffffff, 98);
     expect(() => decode(huge)).toThrow(range.RangeLimitError);
     const impossible = Buffer.from(encoded); impossible.writeUInt32BE(24, 98);
@@ -178,7 +182,7 @@ describe("v3 record-range answers", () => {
     const context = Buffer.from(encoded); context[0] = context[0]! ^ 1;
     expect(() => decode(context)).toThrow(/context/);
     expect(() => decode(new Uint8Array(new SharedArrayBuffer(encoded.length)))).toThrow(/shared/);
-    expect(() => range.decodeRangeAnswer(encoded, { ...answer.request, venue: new Uint8Array(new SharedArrayBuffer(32)) }, wide)).toThrow(EncodingError);
+    expect(() => range.decodeRangeAnswer(encoded, { ...answer.request, venue: new Uint8Array(new SharedArrayBuffer(32)) }, wide)).toThrow(/shared/);
   });
 
   it("applies exact byte and entry budgets before allocating or copying records", () => {
@@ -196,7 +200,7 @@ describe("v3 record-range answers", () => {
     try {
       expect(() => range.decodeRangeAnswer(encoded, answer.request, { maxBytes: size, maxEntries: 1n })).toThrow(range.RangeLimitError);
       const count = Buffer.from(encoded); count.writeUInt32BE(3, 98);
-      expect(() => range.decodeRangeAnswer(count, answer.request, { maxBytes: size, maxEntries: 3n })).toThrow(EncodingError);
+      expect(() => range.decodeRangeAnswer(count, answer.request, { maxBytes: size, maxEntries: 3n })).toThrow("truncated range entry");
       expect(copies).toBe(0);
     } finally { Uint8Array.prototype.slice = original; }
     const empty: range.RangeAnswer = { request: request(3, obligor), entries: [] };
@@ -248,21 +252,6 @@ describe("v3 record-range answers", () => {
     }
   });
 
-  it("merges several backings' publication answers into the venue's order and refuses mixed ranges or shared positions", () => {
-    const a: range.RangeAnswer = { request: request(4, backing, 0n, 9n), entries: [entry(2n, Uint8Array.of(1), 4n), entry(5n, Uint8Array.of(2), 0n)] };
-    const c: range.RangeAnswer = { request: request(4, b(18), 0n, 9n), entries: [entry(2n, Uint8Array.of(3), 1n), entry(2n, Uint8Array.of(4), 9n), entry(5n, Uint8Array.of(5), 2n)] };
-    const merged = range.mergeVenueOrder([a, c]);
-    expect(merged.map(e => [e.index, e.ordinal, e.record[0], e.subject[0]])).toEqual([[2n, 1n, 3, 18], [2n, 4n, 1, 17], [2n, 9n, 4, 18], [5n, 0n, 2, 17], [5n, 2n, 5, 18]]);
-    expect(Object.isFrozen(merged) && Object.isFrozen(merged[0])).toBe(true);
-    const shared: range.RangeAnswer = { request: request(4, b(19), 0n, 9n), entries: [entry(2n, Uint8Array.of(6), 4n)] };
-    expect(() => range.mergeVenueOrder([a, shared])).toThrow(/one venue position/);
-    expect(() => range.mergeVenueOrder([a, { ...c, request: { ...c.request, toIndex: 8n } }])).toThrow(/different venues or ranges/);
-    expect(() => range.mergeVenueOrder([a, { ...c, request: { ...c.request, venue: b(13) } }])).toThrow(/different venues or ranges/);
-    expect(() => range.mergeVenueOrder([a, { request: request(1, operator, 0n, 9n), entries: [] }])).toThrow(/wrong range kind/);
-    const commitments: range.RangeAnswer = { request: request(1, operator, 0n, 9n), entries: [entry(3n, commitment(1n)), entry(3n, commitment(2n))] };
-    expect(() => range.mergeVenueOrder([commitments])).toThrow(/wrong range kind/);
-    expect(() => range.mergeVenueOrder([])).toThrow(/no range answers/);
-  });
 });
 
 describe("v3 held commitments from record ranges", () => {
@@ -313,7 +302,7 @@ describe("v3 held commitments from record ranges", () => {
     expect(() => range.heldCommitments({ request: req, entries: [entry(6n, second), entry(6n, first)] })).toThrow(/out of order/);
     expect(() => range.heldCommitments({ request: req, entries: [entry(9n, commitment(5n)), entry(3n, commitment(2n))] })).toThrow(/out of order/);
     expect(() => range.heldCommitments({ request: request(1, operator, 10n, 20n), entries: [entry(3n, commitment(2n))] }, { fromIndex: 10n, highest: 1n })).toThrow(/range/);
-    expect(() => range.heldCommitments({ request: req, entries: [{ index: 3n, ordinal: 0n, record: [1, 2] as unknown as Uint8Array }] })).toThrow(EncodingError);
+    expect(() => range.heldCommitments({ request: req, entries: [{ index: 3n, ordinal: 0n, record: [1, 2] as unknown as Uint8Array }] })).toThrow("not a byte array");
     expect(() => range.revocationIndex({ request: request(3, obligor, 10n, 20n), entries: [entry(0n, encodeRevocation(signRevocation(obligorSecret)))] })).toThrow(/range/);
   });
 
@@ -373,7 +362,6 @@ describe("v3 revocation and replacement records from ranges", () => {
     expect(values(admitted[0]!.replacement)).toEqual(values(good.replacement));
     expect(range.admittedReplacements(answer, undefined)).toEqual([]);
     expect(range.admittedReplacements(answer, otherName.subarray(0, 32))).toEqual([]);
-    expect(range.firstWitnessed(answer).map(e => e.index)).toEqual([1n, 2n, 2n, 2n, 3n, 3n]);
     expect(() => range.admittedReplacements({ request: request(4, backing), entries: [] }, rule)).toThrow(/wrong range kind/);
   });
 });
@@ -400,8 +388,8 @@ describe("v3 replacement chain from ranges", () => {
     expect(walk([at(5n, exact)], 2n).chain.map(l => l.from)).toEqual([0n, 10n]);
     expect(walk([at(5n, early)], 0n).chain.map(l => l.from)).toEqual([0n, 9n]);
     expect(walk([at(5n, exact)], 5n).chain).toHaveLength(1);
-    expect(() => range.replacementChain([], { backing, original: operator, lag: -1n, now: 20n })).toThrow(EncodingError);
-    expect(() => range.replacementChain([], { backing, original: b(1).subarray(0, 31), lag: 0n, now: 20n })).toThrow(EncodingError);
+    expect(() => range.replacementChain([], { backing, original: operator, lag: -1n, now: 20n })).toThrow("invalid chain context");
+    expect(() => range.replacementChain([], { backing, original: b(1).subarray(0, 31), lag: 0n, now: 20n })).toThrow("invalid range bytes");
   });
 
   it("supersedes only before the standing candidate's force, revokes by naming the incumbent and ties by the lesser identity (C2.5.4-5)", () => {
@@ -429,7 +417,53 @@ describe("v3 replacement chain from ranges", () => {
     expect(range.linkInForce(three, 15n).from).toBe(15n);
     expect(range.linkInForce(three, 14n).from).toBe(0n);
     expect(range.linkInForce(three, 400n).from).toBe(16n);
-    expect(() => range.linkInForce([], 3n)).toThrow(EncodingError);
+    expect(() => range.linkInForce([], 3n)).toThrow("invalid chain");
+  });
+
+  it("counts one identity at its first entry however the admitted records were gathered (§13.3, C2.5.5)", () => {
+    // X stands from 5; Y, witnessed before X's force, supersedes it; a copy of X republished at 8 supersedes nothing.
+    const x = replacement(15n), y = replacement(12n, b(45));
+    const whole = walk([at(5n, x), at(6n, y), at(8n, x)], 0n).chain.map(l => l.from);
+    expect(whole).toEqual([0n, 12n]);
+    const window = (from: bigint, to: bigint, entries: { index: bigint; record: Uint8Array }[]): readonly range.AdmittedReplacement[] =>
+      range.admittedReplacements({ request: request(2, backing, from, to), entries: ordered(entries, 2) }, rule);
+    const windows = [...window(0n, 6n, [at(5n, x), at(6n, y)]), ...window(7n, 20n, [at(8n, x)])];
+    expect(windows.map(a => a.index)).toEqual([5n, 6n, 8n]);
+    expect(range.replacementChain(windows, { backing, original: operator, lag: 0n, now: 20n }).chain.map(l => l.from)).toEqual(whole);
+    // Given in any order, the earlier entry is the identity's witnessing.
+    expect(range.replacementChain([...windows].reverse(), { backing, original: operator, lag: 0n, now: 20n }).chain.map(l => l.from)).toEqual(whole);
+    // A record witnessed after `now` is not read: the chain is the chain at `now`.
+    expect(range.replacementChain(window(0n, 20n, [at(9n, y)]), { backing, original: operator, lag: 0n, now: 8n })).toEqual({ chain: [expect.anything()] });
+    expect(range.replacementChain(window(0n, 20n, [at(8n, y)]), { backing, original: operator, lag: 0n, now: 8n }).pending?.from).toBe(12n);
+  });
+
+  it("counts a second valid signature of one record at the record's first entry, where the lead floor reads it (C2.5.3)", () => {
+    // Ed25519 admits more than one valid signature per message; the rule-holder can sign one record twice.
+    const original = replacement(6n), message = replacementMessage(backing, original.replacement);
+    const { scalar, pointBytes } = ed25519.utils.getExtendedPublicKey(ruleSecret), n = ed25519.CURVE.n, nonce = 7n;
+    const R = ed25519.Point.BASE.multiply(nonce).toBytes();
+    const k = BigInt("0x" + Buffer.from(sha512(cat(R, pointBytes, message))).reverse().toString("hex")) % n;
+    const S = Buffer.from(integer((nonce + k * scalar) % n, 32)).reverse();
+    const signature = cat(R, S);
+    expect(ed25519.verify(signature, message, rule)).toBe(true);
+    expect(Buffer.from(signature).equals(Buffer.from(original.replacement.signature))).toBe(false);
+    const resigned = encodeReplacement(backing, { ...original.replacement, signature });
+    // Lag 1: the floor is the witnessing plus 3, so 6 is effective only from the entry at 3.
+    const entries = [{ index: 3n, record: original.record }, { index: 5n, record: resigned }];
+    const admitted = range.admittedReplacements({ request: request(2, backing), entries: ordered(entries, 2) }, rule);
+    expect(admitted.map(a => a.index)).toEqual([3n]);
+    expect(walk(entries, 1n).chain.map(l => l.from)).toEqual([0n, 6n]);
+    expect(walk([entries[1]!], 1n).chain).toHaveLength(1);
+    const later = range.admittedReplacements({ request: request(2, backing, 4n, 20n), entries: [entry(5n, resigned)] }, rule);
+    const earlier = range.admittedReplacements({ request: request(2, backing, 0n, 3n), entries: [entry(3n, original.record)] }, rule);
+    expect(range.replacementChain([...later, ...earlier], { backing, original: operator, lag: 1n, now: 20n }).chain.map(l => l.from)).toEqual([0n, 6n]);
+  });
+
+  it("is in force at its effective index and pending one index before it", () => {
+    expect(walk([at(5n, replacement(20n))], 0n, 20n).chain.map(l => l.from)).toEqual([0n, 20n]);
+    const before = walk([at(5n, replacement(20n))], 0n, 19n);
+    expect(before.chain).toHaveLength(1);
+    expect(before.pending?.from).toBe(20n);
   });
 
   it("agrees with the runtime walk over the same records in every scenario", async () => {
@@ -454,6 +488,14 @@ describe("v3 replacement chain from ranges", () => {
         { at: 12n, effective: 19n, successor: SECRETS.operator, predecessor: 0 }],
       [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 9n, successor: s2, predecessor: "backing" },
         { at: 8n, effective: 8n, successor: s2, predecessor: "backing" }],
+      // A revocation and a handover tied at one index; a void record beside a valid one at one index.
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 12n, successor: s2, predecessor: "backing" },
+        { at: 7n, effective: 9n, successor: SECRETS.operator, predecessor: "backing" }],
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 18n, successor: s2, predecessor: 0 },
+        { at: 12n, effective: 10n, successor: s2, predecessor: 0 }],
+      // A revocation, then a fresh handover witnessed after the revoked candidate's effective index.
+      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 8n, successor: SECRETS.operator, predecessor: "backing" },
+        { at: 12n, effective: 15n, successor: s2, predecessor: "backing" }],
     ];
     for (const steps of scenarios) {
       const venue = new LocalVenue(), runtime = makeBacking({
@@ -472,6 +514,49 @@ describe("v3 replacement chain from ranges", () => {
       const ours = range.replacementChain(range.admittedReplacements(answer, KEYS.backer), { backing: name, original: KEYS.operator, lag: venue.lag(), now: 20n });
       expect(links(ours.chain)).toEqual(links(successionOf(runtime, venue)));
       expect(links([...ours.chain, ...(ours.pending === undefined ? [] : [ours.pending])])).toEqual(links(successionAhead(runtime, venue)));
+    }
+  });
+
+  it("agrees with the runtime walk on seeded scenarios with republished copies, revocations and ties, read whole or in two windows", async () => {
+    const { makeBacking } = await import("../src/backing.js");
+    const { LocalVenue } = await import("../src/venue.js");
+    const { successionAhead, successionOf } = await import("../src/replacement.js");
+    const { KEYS, SECRETS } = await import("./support.js");
+    let seed = 0x5eed_2026n;
+    const next = (bound: number): number => { seed = (seed * 6364136223846793005n + 1442695040888963407n) % (1n << 64n); return Number((seed >> 33n) % BigInt(bound)); };
+    const successors = [b(47), b(48), b(49), SECRETS.operator];
+    for (let scenario = 0; scenario < 120; scenario++) {
+      const venue = new LocalVenue(), runtime = makeBacking({
+        obligor: KEYS.backer, payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n }, reliance: [],
+        evidence: { setting: "transparent", operator: KEYS.operator, silence: { noCommitmentDuration: 10n, challengeWindow: 5n }, replacementRule: KEYS.backer },
+      });
+      const name = runtime.name, published: Replacement[] = [], entries: { index: bigint; record: Uint8Array }[] = [];
+      let at = 1n;
+      for (let step = 0, steps = 1 + next(6); step < steps; step++) {
+        at += BigInt(next(4));
+        if (at > 20n) break;
+        if (venue.witnessedIndex() < at) venue.advance(at - venue.witnessedIndex());
+        let r: Replacement;
+        if (published.length > 0 && next(4) === 0) r = published[next(published.length)]!;
+        else {
+          const predecessor = published.length === 0 || next(2) === 0 ? name : sha(replacementMessage(name, published[next(published.length)]!));
+          r = signedReplacement(name, next(8) === 0 ? b(50) : SECRETS.backer, successors[next(successors.length)]!, predecessor, at + BigInt(next(12)));
+          published.push(r);
+        }
+        venue.publishReplacement(name, r); entries.push({ index: at, record: encodeReplacement(name, r) });
+      }
+      if (venue.witnessedIndex() < 20n) venue.advance(20n - venue.witnessedIndex());
+      const context = { backing: name, original: KEYS.operator, lag: venue.lag(), now: 20n };
+      const whole = range.replacementChain(range.admittedReplacements({ request: request(2, name, 0n, 20n), entries: ordered(entries, 2) }, KEYS.backer), context);
+      expect(links(whole.chain)).toEqual(links(successionOf(runtime, venue)));
+      expect(links([...whole.chain, ...(whole.pending === undefined ? [] : [whole.pending])])).toEqual(links(successionAhead(runtime, venue)));
+      const split = BigInt(next(20));
+      const windowed = range.replacementChain([
+        ...range.admittedReplacements({ request: request(2, name, 0n, split), entries: ordered(entries.filter(e => e.index <= split), 2) }, KEYS.backer),
+        ...range.admittedReplacements({ request: request(2, name, split + 1n, 20n), entries: ordered(entries.filter(e => e.index > split), 2) }, KEYS.backer),
+      ], context);
+      expect(links(windowed.chain)).toEqual(links(whole.chain));
+      expect(windowed.pending === undefined ? undefined : links([windowed.pending])).toEqual(whole.pending === undefined ? undefined : links([whole.pending]));
     }
   });
 });
