@@ -66,7 +66,8 @@
     "check:pool:v3-journal": "node scripts/pool/v3/journal-crash.mjs",
     "check:pool:v3-service": "node scripts/pool/v3/service-check.mjs",
     "check:pool:v3-programs": "node scripts/pool/v3/programs.mjs",
-    "check:scripts": "npm run check:pool:v3-programs && npm run check:package && npm run check:pilot && npm run check:ergo-persistence && npm run check:pool:v3-wallet && npm run check:pool:v3-journal && npm run check:pool:v3-service",
+    "check:pool:v3-synthetic-node": "node scripts/pool/v3/synthetic-node-check.mjs",
+    "check:scripts": "npm run check:pool:v3-programs && npm run check:package && npm run check:pilot && npm run check:ergo-persistence && npm run check:pool:v3-wallet && npm run check:pool:v3-journal && npm run check:pool:v3-service && npm run check:pool:v3-synthetic-node",
     "check": "npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:scripts",
     "prepublishOnly": "npm run check"
   },
