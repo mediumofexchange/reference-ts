@@ -144,8 +144,8 @@ These are wallet and deployment duties the rules above assume; each is listed in
    any reuse: a payment, a new demand or a burn (§C1.5, C3.1). The same holds for a note named in a request,
    should the wallet file them. [Slice 10's plan](../decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b)
    refuses such notes to payments and burns and spends them through a `freshen` of one demand's notes at a
-   time, but lets a new demand present them again: that links the holder's own demands to each other, and
-   keeps snapshot redemption (C2b.3.2) open where a fresh spend is refused.
+   time, but lets a new demand present again the notes of one earlier demand (never two together): that links
+   the new demand to that one, and keeps snapshot redemption (C2b.3.2) open where a fresh spend is refused.
 2. Keep gap-publication funding apart from any identified coins: a funding key per demand, or a relay. The
    plan's relay command publishes a holder's act from a funding directory apart from the wallet; a relay of
    the holder's own still links its gap acts to each other and to its funding, and a third party's relay
