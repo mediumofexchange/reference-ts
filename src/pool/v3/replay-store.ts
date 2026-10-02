@@ -985,11 +985,11 @@ export class ReplayStore {
     this.#db.prepare("INSERT INTO publication VALUES (?, ?, ?, ?, ?, ?, ?)").run(backing, be(p.index), be(p.ordinal), recordHash, p.force ? 1 : 0,
       p.check ?? null, bytes ?? null);
   }
-  /** The SHA256 of the record a kept publication verdict was classified from, if one is kept at this position. */
-  publicationRecordHash(backing: Uint8Array, index: bigint, ordinal: bigint): Uint8Array | undefined {
-    const row = this.#db.prepare("SELECT record_hash FROM publication WHERE backing = ? AND idx = ? AND ordinal = ?")
-      .get(backing, be(index), be(ordinal)) as { record_hash: unknown } | undefined;
-    return row === undefined ? undefined : bytes(row.record_hash);
+  /** The publication verdict kept at this position, with the SHA256 of the record it was classified from. */
+  keptPublication(backing: Uint8Array, index: bigint, ordinal: bigint): { readonly recordHash: Uint8Array; readonly force: boolean; readonly check: string | undefined } | undefined {
+    const row = this.#db.prepare("SELECT record_hash, force, detail FROM publication WHERE backing = ? AND idx = ? AND ordinal = ?")
+      .get(backing, be(index), be(ordinal)) as { record_hash: unknown; force: unknown; detail: unknown } | undefined;
+    return row === undefined ? undefined : { recordHash: bytes(row.record_hash), force: row.force === 1n, check: row.detail === null ? undefined : row.detail as string };
   }
   /** `backing`'s classified publications through `through`, in venue order. */
   *publicationVerdicts(backing: Uint8Array, through: bigint): Generator<WalkPublication> {

@@ -6,7 +6,7 @@ import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
-import { decodeReceipt } from "../src/pool/v3/commitments.js";
+import { decodeReceipt, encodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
@@ -193,6 +193,33 @@ describe("v3 recovery journal and independent package reader", () => {
     const old = items.findIndex(item => item.kind === 4);
     await expect(f.read({ ...served, package: encodeEvidencePackage(items.filter((_, i) => i !== old)) }))
       .rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("answers a statement adopted from the gap with the adopting segment's receipt, not its discarded tail's (C2b.4.2, §7.2)", async () => {
+    const f = await fixture(); f.venue.advance(3n);
+    // Admitted after the last witnessed checkpoint, never committed: a tail the return discards (C2b.4.1).
+    const demand = f.demand(3n), bytes = encodeRecord(demand);
+    const tail = decodeReceipt(await f.j.submit(bytes));
+    // The holder publishes the same statement with force once the gap is open, and the returning segment adopts it.
+    f.venue.advance(6n);
+    await f.venue.publishRecord(4, f.backing, f.publication(1, demand));
+    const opening = await f.j.return("return"); await f.j.publish();
+    const [adopted] = await f.j.adopt(), receipt = decodeReceipt(adopted!);
+    expect([receipt.statementHash, receipt.position, receipt.after]).toEqual([statementHash(demand), 1n, opening.sequence]);
+    expect(receipt.segment).not.toEqual(tail.segment);
+    // Exact resubmission, and a re-proof of the statement, return the adopted receipt.
+    expect(await f.j.submit(bytes)).toEqual(adopted);
+    const reproved = encodeRecord({ ...demand, proof: new Uint8Array(32).fill(4).fill(9, 1) });
+    expect(await f.j.submit(reproved)).toEqual(adopted);
+    expect(await f.j.adopt()).toEqual([adopted]);
+    await f.j.audit();
+    // A reader finalizes the adopted receipt once the segment commits it; the tail's lapsed at the silence boundary.
+    await f.j.commit("adopted"); await f.j.publish();
+    const served = await f.j.package(), items = decodeEvidencePackage(served.package);
+    const verdict = async (receipt: Uint8Array) => (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+      { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
+    expect(await verdict(adopted!)).toMatchObject({ status: "final" });
+    expect(await verdict(encodeReceipt(tail))).toMatchObject({ status: "lapsed" });
   });
 
   it("reads force, publications and the non-service count through kept state and retained evidence as a fresh read does", async () => {

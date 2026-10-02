@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 ## Goal
 Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
@@ -8,11 +8,12 @@ a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 **Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
 `V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PRs #69, #71)
 acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2** (PR #72) seed-found demands, locks, `CHANGED_VIEW`, acts of an ended
-segment made again. **M9c1** (PR #73, merged 1c2da66, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
-`presentation` reads C3.8 per witnessed index (ends prospective; past the deadline dishonour or lapse; none for a demand witnessed at or past
-its deadline), `publishAcceptance`, force reports `TAKEN`; reviewed (major fixed, read back); unit suite 1993/1993, `check:scripts`, stand-in proofs.
-**Next: M9c2**, Next 4 (a)–(c), (e), (q) (start with (q), a correctness finding in the reader just touched); then **M9d** real-proof and
-crash drills (seed-restored demands, a C3.8 reading among them), review.
+segment made again. **M9c1** (PR #73, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
+`presentation` reads C3.8 per witnessed index, `publishAcceptance`, force reports `TAKEN`. **M9c2** (PR #74, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)):
+review findings (q) kept force dependency explicit (was unreachable), (a) testnet anchor below mainnet's initial difficulty, (e) side-branch
+quota forgiven as the chain advances, (b) `package()` serves a published commitment only in flight, (c) adoption replaces a lapsed tail's
+receipt; one fail-before test each, unit suite 1998/1998, `check:scripts`, fresh review (two minor on (a), taken as text).
+**Next: M9d** real-proof and crash drills (seed-restored demands, a C3.8 reading among them), review; needs CI or the local machine for proofs.
 
 ## Status
 - Slice 8: M8b (PR #68) live two-backing drill ([report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)); M8a (PR #67) manifest, mainnet guard; M7, M4–M6, M5b.
@@ -36,10 +37,7 @@ crash drills (seed-restored demands, a C3.8 reading among them), review.
    the full path of Next 1 and an offline-operator recovery past the old 67-statement ceiling, live. Size verifier instances against about 85 MB
    each and destroy the key-deriving instance after building the verifier (M5b.6). Retire the pilot CLI, the harness's second package reader
    (Next 7) and, against a case map, the transparent path. It needs no Ergo view rebuild (recent testnet anchor, persisted reference view).
-4. Review findings deferred; slice 9 takes (a)–(c), (e), (q), slice 11 (k)–(n), (s), the rest when their files are touched.
-   (a) `guard.ts` accepts a testnet-context profile anchored on a mainnet header until the next epoch boundary (<=127 blocks); fix by a
-   difficulty bound. (b) `store.ts` `package()` serves a published commitment never held after the lag (C2.4.3). (c) `store.ts` `submit` may
-   return an old-segment receipt for an adopted forced record (traced only). (e) ErgoVenue's side-branch quota never resets. (f) Wallet
+4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take
    identity-checked key bytes, needing no G1 file. (k) A read under a silence or non-service clause judges every held checkpoint again at each
@@ -51,8 +49,7 @@ crash drills (seed-restored demands, a C3.8 reading among them), review.
    completes (at most 32 times), and drop spent notes' witnesses. (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
    predecessor segment whose snapshots lie on two forks serves only the longer trail (a fix needs an ancestor test without a walk per snapshot).
    (p) `package-reader.ts` reads the selection through its own backing's entry before the walk, so a malformed selection's refusal reason
-   differs per backing. (q) `scope-reader.ts` `forces` reuses kept publication verdicts without their snapshot dependencies: a kept replay store
-   read with a smaller evidence store answers where a fresh read is unresolved. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged
+   differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged
    before silence lapse (label, or an answer where lapse is unresolved). (s) Journal: an older own segment's lost trail is skipped silently when serving; each wallet GET `/evidence` takes the
    journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed; `client.package()` peaks near
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
@@ -91,6 +88,8 @@ crash drills (seed-restored demands, a C3.8 reading among them), review.
 ## Open questions
 - Non-blocking (2026-10-01): cloud runs get HTTP 403 from both CRS hosts (`prepare-crs.mjs`), so real-proof checks run only in CI or locally;
   M9d's drills need the local machine or a network policy allowing `crs.aztec-cdn.foundation`/`crs.aztec-labs.com`.
+- Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
+  mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 
 Roughly **60% done / 40% remaining**, range **50–70%**, reassessed 2026-10-01 (direction): the remainder lacked redemption's operations,
 the visibility table and release assurance; with them installable commands, the design point, qualified storage and mainnet remain.

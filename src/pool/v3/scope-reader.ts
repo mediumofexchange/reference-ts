@@ -220,20 +220,27 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
   const forceStates = new Map<string, { key: string; state: ReturnType<typeof openForceState> }>();
   const snapshotAt = (backing: Uint8Array, terms: RootTerms, index: bigint): Promise<ValidScope | undefined> =>
     latest(backing, terms, { index, strict: true });
-  const classifyPublication = async (backing: Uint8Array, terms: RootTerms, view: RecordView, duration: bigint,
-    entry: RangeEntry): Promise<{ force: boolean; check?: string; bytes?: Uint8Array }> => {
-    const name = hex(backing);
+  // What a publication's verdict reads besides its own bytes: the backing's latest valid snapshot strictly before
+  // its index, classified on this read's evidence. Undefined where the publication cannot force.
+  const dependency = async (backing: Uint8Array, terms: RootTerms, duration: bigint,
+    entry: RangeEntry): Promise<{ readonly record: Record; readonly snapshot: ValidScope } | undefined> => {
     let publication;
     try { publication = decodePublication(entry.record); }
     catch (error) {
-      if (error instanceof EncodingError) return { force: false };
+      if (error instanceof EncodingError) return undefined;
       throw error;
     }
     if (!same(publication.domain, selection.domain) || !same(publication.backing, backing) ||
-        publication.kind === 2 || publication.kind === 5) return { force: false };
+        publication.kind === 2 || publication.kind === 5) return undefined;
     const snapshot = await snapshotAt(backing, terms, entry.index);
-    if (snapshot === undefined || entry.index - snapshot.index <= duration) return { force: false };
-    const source = snapshot.state, key = `${source.ns}:${source.position}`;
+    if (snapshot === undefined || entry.index - snapshot.index <= duration) return undefined;
+    return { record: publication.record, snapshot };
+  };
+  const classifyPublication = async (backing: Uint8Array, terms: RootTerms, view: RecordView, duration: bigint,
+    entry: RangeEntry): Promise<{ force: boolean; check?: string; bytes?: Uint8Array }> => {
+    const name = hex(backing), found = await dependency(backing, terms, duration, entry);
+    if (found === undefined) return { force: false };
+    const { snapshot } = found, source = snapshot.state, key = `${source.ns}:${source.position}`;
     // The snapshot's view with every earlier forced publication of this backing after its adoption index,
     // in venue order. The snapshot only moves forward with the index, so one running state per backing
     // extends while it stays; a publication that forces applies its effects to it, and a refused one
@@ -244,7 +251,7 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
       for (const prior of store.forced(backing, source.adoptionIndices.get(name) ?? 0n, entry.index)) applyForceEffects(state, decodeRecord(prior.bytes));
       kept = { key, state }; forceStates.set(name, kept);
     }
-    const { state } = kept, record = publication.record, bytes = encodeRecord(record);
+    const { state } = kept, { record } = found, bytes = encodeRecord(record);
     try {
       await applyForceRecord(state, bytes, { mode: "force", domain: selection.domain, backing,
         segment: snapshot.segment, scope: new ScopeTree(snapshot.header.entries).root(), issuer: terms.obligor,
@@ -274,10 +281,14 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
       if (read.busy) throw new Error("publication prefix order");
       read.busy = true;
       try {
-        // A verdict kept by an earlier read stands for the same record at the same venue position (§14 kept classes).
-        const recordHash = sha256(entry.record), kept = store.publicationRecordHash(backing, entry.index, entry.ordinal);
+        // A verdict kept by an earlier read stands for the same record at the same venue position (§14 kept classes),
+        // once its snapshot is classified on this read's evidence: only the force check is taken from it.
+        const recordHash = sha256(entry.record), kept = store.keptPublication(backing, entry.index, entry.ordinal);
         if (kept !== undefined) {
-          if (!same(kept, recordHash)) throw new KeptStateMismatch("a kept publication's record");
+          if (!same(kept.recordHash, recordHash)) throw new KeptStateMismatch("a kept publication's record");
+          // A publication that cannot force is refused with no check; one that can is forced or refused by one.
+          const unforceable = await dependency(backing, terms, duration, entry) === undefined;
+          if (unforceable !== (!kept.force && kept.check === undefined)) throw new KeptStateMismatch("a kept publication");
           // The running force state did not apply it, so the next classification rebuilds from the rows.
           forceStates.delete(name);
         } else {
