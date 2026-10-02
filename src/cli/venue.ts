@@ -250,7 +250,9 @@ export class SpendBudget {
     const total = (tree: Uint8Array) => [...shadow.boxes.values()].reduce((sum, box) => sum + (readPlainBox(box, tree)?.value ?? 0n), 0n);
     const before = total(this.tree), feeBefore = total(fee);
     try { await shadow.submit(signed, id); } catch {
-      throw new CommandError("BUDGET", "the transaction does not replay over the funding key's unspent boxes");
+      // Not the budget: the node's listing of the key's boxes does not carry the transaction's inputs (an index
+      // behind its mempool, or another spender); nothing is reserved and the publication is tried again later.
+      throw new CommandError("UNREPLAYED", "the transaction does not replay over the unspent boxes the node lists for the funding key");
     }
     const cost = before - total(this.tree), paid = total(fee) - feeBefore;
     if (paid <= 0n || cost < paid) throw new CommandError("BUDGET", "the transaction's cost is not a publication's");

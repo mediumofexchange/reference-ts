@@ -72,7 +72,10 @@ async function openOperator(directory: Directory, args: Arguments): Promise<Oper
  * refusal (`BUDGET`) is what the command reports. */
 async function budgeted<T>(op: Operator, act: () => Promise<T>): Promise<T> {
   op.budget.take();
-  try { return await act(); } catch (error) { throw op.budget.take() ?? error; }
+  try { return await act(); } catch (error) {
+    const refused = op.budget.take();
+    throw refused !== undefined && error instanceof V3StoreError && error.code === "UNAVAILABLE" ? refused : error;
+  }
 }
 
 const pause = (ms: number) => new Promise(done => setTimeout(done, ms));
@@ -192,7 +195,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   }
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   writeReplace(directory.file("service.json"), `${JSON.stringify({ url, walletToken }, null, 2)}\n`);
-  let stopping = false, wake: (() => void) | undefined;
+  let stopping = false, pendingNoted = false, wake: (() => void) | undefined;
   const stop = () => { stopping = true; wake?.(); };
   process.once("SIGTERM", stop); process.once("SIGINT", stop);
   print({ status: "serving", url, operator: op.operator, interval, silence: silence ?? null });
@@ -206,7 +209,11 @@ async function serve(argv: readonly string[]): Promise<void> {
     if (signed === undefined) return;
     // The latest signed commitment, a pending return's opening included, is published until the venue holds it.
     if (!signed.held) { await budgeted(op, () => journal.publish()); return; }
-    if (s.pendingReturn) return;
+    if (s.pendingReturn) {
+      if (!pendingNoted) log({ event: "return held", message: "stop serve and run moe operator adopt" });
+      pendingNoted = true;
+      return;
+    }
     const admitted = signed.admitted > 0n && s.now >= signed.at + interval;
     const keepAlive = silence !== undefined && s.heldIndex !== undefined && s.now >= s.heldIndex + silence / 2n;
     if (!admitted && !keepAlive) return;
