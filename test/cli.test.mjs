@@ -112,7 +112,7 @@ describe('moe wallet and relay files', () => {
   it('follows links to the data directory when it judges a handoff path', () => {
     const base = mkdtempSync(join(tmpdir(), 'moe-link-')), data = join(base, 'data'), link = join(base, 'alias');
     try {
-      mkdirSync(data); symlinkSync(data, link, 'dir');
+      mkdirSync(data); symlinkSync(data, link, 'junction');
       expect(() => outside({ path: data }, join(link, 'handoff.key'))).toThrow(expect.objectContaining({ code: 'PATH' }));
       expect(() => outside({ path: link }, join(data, 'new', 'handoff.key'))).toThrow(expect.objectContaining({ code: 'PATH' }));
       expect(() => outside({ path: data }, join(base, 'key'), join(link, '..', 'key'))).toThrow(/must differ/);
