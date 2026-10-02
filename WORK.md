@@ -25,7 +25,13 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
 - **M10c2a done** (PR on `claude/m10c2a-freshen`; [decision](decisions/2026-10.md#2026-10-02--read-a-note-as-presented-from-saved-demands-and-the-records-tags-save-which-demands-a-re-demand-repeats-and-freshen-into-one-note-slice-10-m10c2a)):
   presented notes refused to `prepare`/`burn`, re-demand of one earlier demand's notes (`Act.repeats`), `freshen`, `Holding.presented`;
   profile `moe/wallet/v3/8`; reviewed and read back. The real-proof freshen runs in M10c2b's drill.
-  **Next: M10c2b** (Next 3): wallet and relay commands over the library as it stands. Every current report drifts (`check:evidence` at 09c8459) until the packed drill re-records.
+  **Active: M10c2b1** (branch `claude/m10c2b-wallet-commands`): `moe wallet` (holder, `--backer`) and `moe relay` commands per the
+  M10b decision (items 2, 3, 6, 8, 12, 13) over the library as it stands. Acceptance: `command-drill.mjs` runs, in fresh processes on
+  separate directories over the synthetic node, terms create → open → issue → pay → serve commits on admission → fulfill (rerun exits 4)
+  → demand → accept with the acceptance relayed → settle → burn, final by `sync` and the reader's supply; a gap demand and settlement
+  published through `relay publish`; freshen of a withdrawn demand's notes with real proofs; handoff/restore and restore-seed; each
+  command's peak RSS. Stop: reviewed and merged. **M10c2b2** then: the packed-install drill (no `@noir-lang` in a reader) and the
+  recovery past the 67-statement ceiling. Every current report drifts (`check:evidence` at 09c8459) until the packed drill re-records.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
