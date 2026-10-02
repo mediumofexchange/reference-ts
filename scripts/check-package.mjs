@@ -93,7 +93,17 @@ assert.equal(core.ErgoVenue, undefined);
     assert.equal(createHash('sha256').update(Buffer.from(program.bytecode, 'base64')).digest('hex'), POOL_V3_MANIFEST.circuits[name].bytecode);
   }
 }
-console.log('Built tarball consumer: imports, canonical round trip and signature passed');
+{
+  // The one executable ships as the package's bin and answers a usage error without a role (slice 10 M10b).
+  const { readFileSync } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const manifest = new URL(import.meta.resolve('@mediumofexchange/reference/package.json'));
+  assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).bin, { moe: 'dist/cli/moe.js' });
+  const usage = spawnSync(process.execPath, [fileURLToPath(new URL('dist/cli/moe.js', manifest))], { encoding: 'utf8', windowsHide: true });
+  assert.equal(usage.status, 2, usage.stderr);
+  assert.match(usage.stderr, /^usage: moe <role>/);
+}
+console.log('Built tarball consumer: imports, canonical round trip, signature and the moe bin passed');
 `);
   process.stdout.write(run([join(consumer, 'check.mjs')], consumer));
 } finally {

@@ -221,6 +221,14 @@ export interface ServedEvidence extends ServedPackage {
   readonly parts: Iterable<EvidencePart>;
 }
 
+/** `V3OperatorJournal.status()`: indices are the venue's witnessed indices. */
+export interface JournalStatus {
+  readonly now: bigint;
+  readonly signed?: { readonly sequence: bigint; readonly at: bigint; readonly published: boolean; readonly held: boolean; readonly admitted: bigint };
+  readonly heldIndex?: bigint;
+  readonly pendingReturn: boolean;
+}
+
 export class V3OperatorJournal {
   private readonly db: DatabaseSync;
   private readonly domain: Uint8Array;
@@ -1192,6 +1200,22 @@ export class V3OperatorJournal {
         last.published = true; engine.revision++;
       }
       return copyCommitment(last.commitment);
+    });
+  }
+
+  /** Where the journal stands, for a caller that schedules checkpoints and publication on the witnessed index
+   * (`moe operator serve`): the venue's clock; the latest signed commitment, the index it was signed at, whether
+   * its publication was recorded and whether the venue holds exactly it; the statements admitted past it; the
+   * index at which the venue witnessed this key's latest commitment; and whether a return awaits adoption. Signs
+   * and publishes nothing and changes no signed state or revision; like every command it records what it has
+   * read of the venue (its observed index and held answers) under the owner fence. */
+  async status(): Promise<JournalStatus> {
+    return this.run(async engine => {
+      const view = this.view(engine), last = engine.last;
+      return { now: view.now, pendingReturn: engine.pendingReturn,
+        ...(last === undefined ? {} : { signed: { sequence: last.commitment.sequence, at: last.at, published: last.published,
+          held: this.isHeld(view.now, last), admitted: (engine.state?.position ?? last.length) - last.length } }),
+        ...(view.latest === undefined ? {} : { heldIndex: view.latest.index }) };
     });
   }
 

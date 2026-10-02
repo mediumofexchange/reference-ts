@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-02` [Read through each directory's own view, gate venue creation on the node's network, and queue serve's journal calls with the service's (slice 10 M10c1)](decisions/2026-10.md#2026-10-02--read-through-each-directorys-own-view-gate-venue-creation-on-the-nodes-network-and-queue-serves-journal-calls-with-the-services-slice-10-m10c1)
 - `2026-10-02` [Serve the synthetic chain through the node REST paths, answering as recorded real nodes do (slice 10 M10c1)](decisions/2026-10.md#2026-10-02--serve-the-synthetic-chain-through-the-node-rest-paths-answering-as-recorded-real-nodes-do-slice-10-m10c1)
 - `2026-10-02` [Install one `moe` command over role directories, on Ergo venues only, with keys in files and funding apart from the wallet (slice 10 M10b)](decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b)
 - `2026-10-02` [Ship the six compiled relations in the package and require every reader's verifier to name them (slice 10 M10a)](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
