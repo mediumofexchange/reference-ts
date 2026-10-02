@@ -6,23 +6,26 @@ Updated: 2026-10-02
 **Slice 10: installable commands on the testnet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 3).
 Acceptance: from a packed install (`npm pack` tarball in a fresh directory), `bin` commands for the holder wallet (with the backer
 role), the operator service and the supply reader, in fresh processes on separate data directories, complete issue → pay → receive →
-fulfill → demand → accept → settle → burn and an offline-operator recovery past the old 67-statement ceiling, on the local and synthetic
-Ergo venues and then live on the testnet; the pilot CLI, the harness's second package reader (Next 7) and, against a case map, the
-transparent path retire. Milestones: **M10a** shipped relations and required verifier identities (below); **M10b** the command surface
-(commands, data directories, key custody and backup, configuration, venue clients, verifier sizing, Next 2's privacy duties), decided and
-reviewed before code; **M10c** the commands and a packed-install drill on the local and synthetic Ergo venues; **M10d** the live testnet
-drill (needs the local machine: Open questions); **M10e** the retirements. Stop boundary: all five delivered.
+fulfill → demand → accept → settle → burn and an offline-operator recovery past the old 67-statement ceiling, on the synthetic Ergo
+node (M10b dropped the fixture venue from commands) and then live on the testnet; the pilot CLI, the harness's second package reader
+(Next 7) and, against a case map, the transparent path retire. Milestones: **M10a** shipped relations and required verifier identities;
+**M10b** the command surface (below); **M10c1** the synthetic node, venue, parameters, lock/output conventions, `reader` and `operator`
+commands; **M10c2** the wallet and relay commands, presented-note `freshen`, and the packed-install drill on the synthetic node; **M10d**
+the live testnet drill (needs the local machine: Open questions); **M10e** the retirements. Stop boundary: all delivered.
 Earlier: slice 9 (redemption in the wallet, PRs #69–#77) and the [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78) are done;
 pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, identity or verdict change is pool-v4.
 
 ## Status
 - **M10a done** (PR #79, [decision](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)):
-  `src/pool/v3/programs.json` ships the six relations; `adoptedPrograms`/`openV3Verifier` check them against the manifest and
-  `openV3Prover(api)` takes no artifacts; `check:pool:v3-programs` requires the sources to compile to the file exactly. Readers, journal
-  and wallet require a `DeclaredVerifier` naming the configuration's six circuits; the undeclared per-object name and in-memory fallback are gone.
-  Evidence: unit suite, `check:scripts`, local real-proof `check:pool:v3 -- --ergo`, CI green on Ubuntu and Windows; one fresh review, no blocker.
-  **Next: M10b**, the command-surface decision. Every current report below drifts (`check:evidence` at 09c8459: M10a's prover and
-  verifiers, area 11's `record-range.ts`/`ergo-check.mjs`) until slice 10's drill re-records them.
+  shipped relations with a manifest-checked loader; readers, journal and wallet require a verifier naming the configuration's circuits.
+- **M10b done** ([decision](decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b)):
+  one `moe` bin over role directories (wallet, operator, reader, relay) with a per-directory process lock, umask 077, keys in owner-only
+  files, admin token never handed out, Ergo venues only (a test-only synthetic node serving the node REST paths), funding only in
+  operator/relay directories, `serve` checkpointing on witnessed indices, presented notes refused to pay/burn and spent by `freshen`, and
+  per-command rerun and exit-code rules. Evidence: a scratch probe synced an `ErgoVenue` through `ergoNodeSupplier` from synthetic node JSON
+  to the in-process view (publisher endpoints unprobed); one fresh review (1 blocker, 11 material, all taken) and its read-back.
+  **Next: M10c1**, starting with the synthetic node's publisher endpoints. Every current report drifts (`check:evidence` at 09c8459:
+  M10a's prover and verifiers, area 11's `record-range.ts`/`ergo-check.mjs`) until slice 10's drill re-records them.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
@@ -35,14 +38,11 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
 
 ## Next
 1. Slice 9 done (Goal); the numbering below is kept for its references.
-2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds, for slice 10's wallet:
-   spend a presented note (withdrawn, expired or failed demand) to a fresh one before any reuse (§C1.5, C3.1; `prepare`, `demand`
-   and `burn` select it today); keep gap-publication funding apart from identified coins (a key per demand, or a relay); a
-   transport and service credential that do not identify the holder, and syncs that do not tie an address to the backing it
-   spends (replica, every scoped backing, or unlinkable transport); the user-facing explanations.
-3. Slice 10 (Goal). For M10b: size verifier instances against about 85 MB each and destroy the key-deriving instance after building the
-   verifier (M5b.6); whether commands accept only verifiers `openV3Verifier` built (a declaration is the caller's claim, and every
-   accepted verifier names kept state alike: M10a review); no Ergo view rebuild is needed (recent testnet anchor, persisted reference view).
+2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds: M10b plans presented-note
+   `freshen` (re-demand allowed), the relay command (the funding duty stays open) and the explanations, all in M10c2. Open past slice 10:
+   a network transport and syncs that do not identify the holder or tie an address to the backing it spends (its own unit and review).
+3. Slice 10 (Goal), per the M10b decision. M10c1 first: the synthetic node's six publisher endpoints over `MempoolNode`, tested against
+   recorded real node answers; the read side is probed (scratch, M10b evidence). No Ergo view rebuild is needed (recent testnet anchor).
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take
