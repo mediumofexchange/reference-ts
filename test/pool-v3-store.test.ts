@@ -566,6 +566,30 @@ describe("the v3 operator journal", () => {
     expect((await k.package()).selection.sequence).toBe(2n);
   });
 
+  it("serves a published commitment the venue never held only until the lag passes (C2.4.3)", async () => {
+    const { venue, j } = await opened();
+    await j.submit(issue());
+    // The venue takes the publication and never holds it.
+    const publish = venue.publishRecord.bind(venue);
+    venue.publishRecord = async () => {};
+    const dropped = await j.commit("c2"); await j.publish();
+    const at = venue.witnessedIndex();
+    // In flight, the operator serves the book that commitment stands on (C2.4.4).
+    venue.advance(at + lag - 1n);
+    expect((await j.package()).selection.sequence).toBe(2n);
+    // Past the lag it can no longer assume it: the held opening is served, and a reader reads it.
+    venue.advance(at + lag);
+    const served = await j.package();
+    expect(served.selection.sequence).toBe(1n);
+    const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+      { verifier, venue, reference });
+    expect(result.state?.position).toBe(0n);
+    // A late inclusion is held, and served again (inclusion is bounded above by nothing, C2.3.5).
+    venue.publishRecord = publish;
+    await venue.publishRecord(1, operator, encodeCommitment(dropped));
+    expect((await j.package()).selection.sequence).toBe(2n);
+  });
+
   it("fences an older handle and reopens from its rows without verifying a proof", async () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     let verified = 0;

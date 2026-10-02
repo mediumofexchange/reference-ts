@@ -1285,7 +1285,7 @@ export class V3OperatorJournal {
   }
 
   /**
-   * The evidence for the latest commitment published or held on the venue, by parts (§14 incremental
+   * The evidence for the latest commitment held on the venue or published and still in flight (C2.4.3–4), by parts (§14 incremental
    * retrieval): the read's own §12 package (the configuration and that commitment), and every other object
    * of every checkpoint signed through it that a reader served through sequence `after` does not hold yet
    * (`parts`). Records admitted after the selection are not served, nor is a commitment still in the outbox.
@@ -1299,7 +1299,11 @@ export class V3OperatorJournal {
     requireThat(typeof after === "bigint" && after >= 0n && after < U64, "REFUSED", "the served sequence is not a u64", "SEQUENCE");
     return this.run(async engine => {
       const view = this.view(engine);
+      // A published commitment the venue has not shown is served while it is in flight (C2.4.4); once the lag
+      // from its signing has passed without it, the operator can no longer assume it (C2.4.3), and the latest
+      // held one is served instead.
       let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
+      if (selected !== undefined && view.now >= decimal(selected.at) + view.lag) selected = undefined;
       for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
         if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
         if (this.ownHeld(held) === undefined) continue;
