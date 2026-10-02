@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 ## Goal
 Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
@@ -11,7 +11,10 @@ acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M
 segment made again. **M9c1** (PR #73, merged 1c2da66, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
 `presentation` reads C3.8 per witnessed index (ends prospective; past the deadline dishonour or lapse; none for a demand witnessed at or past
 its deadline), `publishAcceptance`, force reports `TAKEN`; reviewed (major fixed, read back); unit suite 1993/1993, `check:scripts`, stand-in proofs.
-**Next: M9c2**, Next 4 (a)–(c), (e), (q) (start with (q), a correctness finding in the reader just touched); then **M9d** real-proof and
+**Active: M9c2** (branch `claude/m9c2-review-findings`): Next 4 (a)–(c), (e), (q). Acceptance: each is fixed with a regression test that fails
+before the fix and asserts the specific refusal or answer, or (c, traced only) is reproduced and fixed or argued unreachable in the decision log;
+unit suite, typecheck, `check:scripts`, `check:docs` pass; an independent adversarial review of the integrated patch, findings resolved; merged
+with CI green (real-proof jobs there: CRS hosts refuse cloud runs). Stop: no other Next 4 items, no M9d. Then **M9d** real-proof and
 crash drills (seed-restored demands, a C3.8 reading among them), review.
 
 ## Status
