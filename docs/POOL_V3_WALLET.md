@@ -519,11 +519,21 @@ evidence from the operator's HTTP service: issue, payment and fulfillment, a dem
 the settlement (read settled by a third wallet, C3.8) and a burn, each act but the burn retried exactly in another
 process with no evidence, prover or signer. With the operator offline past silence, an issue and a burn refuse
 `SILENCE`, and the holder demands and settles by publication and reads both final by force; a holder-only reader in a
-fresh process confirms supply and force ([local](pool-v3-redemption-store-verification.json),
-[synthetic Ergo](pool-v3-redemption-store-ergo-verification.json)). Abrupt exits inside redemption acts, seed-restored
-demands and the hostile C3.4–C3.8 cases with real proofs are not covered yet (M9d2).
+fresh process confirms supply and force. A wallet restored from the seed alone finds the holder's two standing
+demands, settles one and withdraws the other; the lost wallet's settlement under the same acceptance is the same
+statement and reads final from the restored one's admission. In the gap, a release published after its acceptance
+deadline has no force (`DEADLINE`), fails its act and counts, so the next settlement spends the same notes under a new
+`rho_out`; a copy of that settlement with a forged presenter signature, witnessed first and in time, has no force
+(`SIGNATURE`, though its proof verifies), and the genuine one is final by force; a release
+whose output a settlement of another demand under an acceptance naming the same owner created first is `TAKEN`, and
+past the deadline its demand reads as the backer's dishonour ([local](pool-v3-redemption-store-verification.json),
+[synthetic Ergo](pool-v3-redemption-store-ergo-verification.json)). The other hostile C3.4–C3.8 cases above (a lapse, a
+void, a demand outside C3.3's window, a forged withdrawal, refusals under service) have stand-in proofs only.
 `npm run check:pool:v3-wallet` exercises fresh processes at request, fulfillment,
-payment, receipt, reproof, export and restore commit boundaries with synthetic evidence, and at a read's
+payment, receipt, reproof, export and restore commit boundaries, and at the one commit of a demand, an acceptance,
+a settlement, a withdrawal and a burn (before it, the act is made again: the same statement for the seed-derived acts, the same record with the
+stand-in prover, a fresh change output for a burn; after it, an exact retry returns it with no evidence, prover or signer), with
+synthetic evidence, and at a read's
 commits to its evidence file and its kept replay file (before either, the kept state stands; between the
 replay commit and its digest, the file is discarded and replayed). These are process-exit
 tests, not physical power-loss or qualified-storage evidence.
