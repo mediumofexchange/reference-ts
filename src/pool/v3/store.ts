@@ -236,8 +236,8 @@ export class V3OperatorJournal {
   private readonly path: string;
   /** The admission state and the imported prefixes it reads, in this database. */
   private readonly replays: ReplayStore;
-  /** The kept state of the journal's own reads, opened at the first read: a file beside the database where the
-   * verifier declares its circuits (§14 names kept state by them), else memory dropped after each operation. */
+  /** The kept state of the journal's own reads, opened at the first read: a file beside the database,
+   * named by the verifier's circuits (§14). */
   private reading: ReplayStore | undefined;
   /** The evidence the journal serves and reads: its own records, heads, directories and snapshots, and what a takeover took. */
   private readonly evidence: EvidenceStore;

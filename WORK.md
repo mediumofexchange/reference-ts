@@ -39,7 +39,8 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
    transport and service credential that do not identify the holder, and syncs that do not tie an address to the backing it
    spends (replica, every scoped backing, or unlinkable transport); the user-facing explanations.
 3. Slice 10 (Goal). For M10b: size verifier instances against about 85 MB each and destroy the key-deriving instance after building the
-   verifier (M5b.6); no Ergo view rebuild is needed (recent testnet anchor, persisted reference view).
+   verifier (M5b.6); whether commands accept only verifiers `openV3Verifier` built (a declaration is the caller's claim, and every
+   accepted verifier names kept state alike: M10a review); no Ergo view rebuild is needed (recent testnet anchor, persisted reference view).
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take

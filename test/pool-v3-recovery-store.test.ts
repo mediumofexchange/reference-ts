@@ -153,7 +153,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const range = f.venue.range.bind(f.venue), ranges = vi.spyOn(f.venue, "range").mockImplementation((...args) => { duringRead(); return range(...args); });
     const sign = vi.spyOn(ed25519, "sign");
     try {
-      await expect(f.j.adopt()).rejects.toMatchObject({ code: "STALE" });
+      await expect(f.j.adopt()).rejects.toMatchObject({ code: "STALE", message: "the venue changed during the journal operation" });
       expect(sign).not.toHaveBeenCalled();
     } finally { sign.mockRestore(); ranges.mockRestore(); }
     // Failed adoption must not persist receipts or make exact retry succeed.

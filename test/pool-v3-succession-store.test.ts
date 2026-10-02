@@ -215,7 +215,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     const range = f.venue.range.bind(f.venue), ranges = vi.spyOn(f.venue, "range").mockImplementation((...args) => { f.venue.advance(third.effective); return range(...args); });
     const sign = vi.spyOn(ed25519, "sign");
     try {
-      await expect(successor.adopt()).rejects.toMatchObject({ code: "STALE" });
+      await expect(successor.adopt()).rejects.toMatchObject({ code: "STALE", message: "the venue changed during the journal operation" });
       expect(f.venue.witnessedIndex()).toBe(third.effective);
       expect(sign).not.toHaveBeenCalled();
     } finally { sign.mockRestore(); ranges.mockRestore(); }

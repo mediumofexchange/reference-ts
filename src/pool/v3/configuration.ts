@@ -113,6 +113,8 @@ export function requireConfigurationVerifier(identities: VerifierIdentities | un
   if (identities === null || typeof identities !== "object" || Object.keys(identities).length !== RELATIONS.length) return refuse();
   const owned: { [name: string]: VerifierIdentities[string] } = {}, configuration = decodeConfiguration(ADOPTED);
   for (const name of RELATIONS) {
+    // Each relation's own entry: one inherited from a prototype is not what the verifier declares.
+    if (!Object.hasOwn(identities, name)) refuse();
     const own: unknown = identities[name], expected = configuration.circuits[name];
     if (own === null || typeof own !== "object") refuse();
     const { bytecode, vk, kind } = own as { readonly bytecode: unknown; readonly vk: unknown; readonly kind: unknown };

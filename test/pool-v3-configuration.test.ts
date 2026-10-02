@@ -85,6 +85,9 @@ describe("the configuration frame, pool-v3 §11.1, and §11.4's adopted configur
     expect(() => requireConfigurationVerifier(structuredClone(own))).not.toThrow();
     // A verifier naming none is refused: there is no test double to compare nothing against.
     expect(() => requireConfigurationVerifier(undefined)).toThrow(refusal);
+    // Six own keys of no relation over the real identities inherited from a prototype declare none of them.
+    const inherited = Object.assign(Object.create(own), Object.fromEntries(RELATIONS.map((_, i) => [`junk${i}`, own.issue])));
+    expect(() => requireConfigurationVerifier(inherited)).toThrow(refusal);
     const { request: _request, ...fewer } = own;
     for (const name of RELATIONS) for (const field of ["bytecode", "vk"] as const) {
       const changed = Uint8Array.from(own[name][field]); changed[31] = changed[31]! ^ 1;

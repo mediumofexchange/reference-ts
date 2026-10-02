@@ -16,7 +16,7 @@
 //   carries only that read's own items;
 // - `<path>.replay` with its digest, the kept classes, replay state and venue
 //   answers of its reads (replay-store.ts), with an incremental witness for
-//   each of this seed's notes, kept where the verifier declares its circuits.
+//   each of this seed's notes, named by the verifier's circuits.
 //   It shows which outputs are this seed's, so it needs the database's protection.
 import { randomBytes, randomInt } from "node:crypto";
 import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
@@ -493,8 +493,8 @@ export class V3Wallet {
           lag: result.ranges.lag, clock: result.clock, result };
       } catch (error) {
         // §14: kept witnesses answer only at their namespaces' tips. A read below one (a venue view older than
-        // an earlier read's) discards the kept state and replays; with nothing kept the failure stays visible.
-        if (!(error instanceof KeptStateMismatch) || store === undefined || again) throw error;
+        // an earlier read's) discards the kept state and replays once.
+        if (!(error instanceof KeptStateMismatch) || again) throw error;
         store.discardKept();
       }
     }
