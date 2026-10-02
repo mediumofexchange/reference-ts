@@ -1,0 +1,45 @@
+import { describe, it, expect } from 'vitest';
+import { CommandError, integer, hex32, parseArguments, UsageError } from '../src/cli/common.js';
+import { parseVenue, venueText } from '../src/cli/venue.js';
+import { ERGO_SYNTHETIC_REFERENCE, ownErgoProfile } from '../src/ergo-profile.js';
+import { SYNTHETIC_SCRIPTS } from '../src/ergo-synthetic.js';
+
+describe('moe command arguments', () => {
+  it('reads positionals and declared flags, refusing unknown, repeated and valueless ones', () => {
+    const args = parseArguments(['a', '--dir', 'D', '--node', 'x', '--node', 'y', '--synthetic'], { dir: 'value', node: 'values', synthetic: 'switch' }, 1);
+    expect(args.positional).toEqual(['a']);
+    expect(args.flags.get('node')).toEqual(['x', 'y']);
+    expect(args.flags.get('synthetic')).toEqual(['true']);
+    expect(() => parseArguments(['--other', 'x'], { dir: 'value' }, 0)).toThrow(UsageError);
+    expect(() => parseArguments(['--dir', 'a', '--dir', 'b'], { dir: 'value' }, 0)).toThrow('given twice');
+    expect(() => parseArguments(['--dir'], { dir: 'value' }, 0)).toThrow('needs a value');
+    expect(() => parseArguments(['--dir', '--node'], { dir: 'value', node: 'values' }, 0)).toThrow('needs a value');
+    expect(() => parseArguments(['a', 'b'], {}, 1)).toThrow('expected 1 argument');
+  });
+  it('takes decimal integers in range and lowercase 32-byte hex only', () => {
+    expect(integer('12', 'n')).toBe(12n);
+    for (const bad of ['', '-1', '012', '1e3', ' 1', '0x10']) expect(() => integer(bad, 'n')).toThrow(UsageError);
+    expect(() => integer('7', 'n', 1n, 6n)).toThrow('out of range');
+    expect(hex32('ab'.repeat(32), 'h')).toHaveLength(32);
+    for (const bad of ['AB'.repeat(32), 'ab'.repeat(31), 'ab'.repeat(33)]) expect(() => hex32(bad, 'h')).toThrow(UsageError);
+  });
+});
+
+describe('moe venue files', () => {
+  const profile = ownErgoProfile({ reference: ERGO_SYNTHETIC_REFERENCE, anchor: new Uint8Array(32).fill(5), depth: 2n, scripts: SYNTHETIC_SCRIPTS });
+  const file = () => JSON.parse(venueText(profile, 900_002n));
+  it('round-trips the identity preimage and anchor height', () => {
+    const venue = parseVenue(file());
+    expect(venue.anchorHeight).toBe(900_002n);
+    expect(venue.profile.depth).toBe(2n);
+    expect(venue.reference.context).toBe(ERGO_SYNTHETIC_REFERENCE);
+  });
+  it('refuses a mainnet or unknown context, an extra field, two kinds at one location and a short anchor height', () => {
+    expect(() => parseVenue({ ...file(), context: 'moe/venue/ergo/v3' })).toThrow('mainnet stays disabled');
+    expect(() => parseVenue({ ...file(), extra: 1 })).toThrow(CommandError);
+    const locations = file().locations; locations[1] = locations[0];
+    expect(() => parseVenue({ ...file(), locations })).toThrow(CommandError);
+    expect(() => parseVenue({ ...file(), anchorHeight: '1024' })).toThrow(CommandError);
+    expect(() => parseVenue({ ...file(), depth: '-1' })).toThrow(CommandError);
+  });
+});

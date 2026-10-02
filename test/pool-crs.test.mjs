@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ensureParameter, PARAMETER_FILES, readParameters } from '../scripts/pool/prepare-crs.mjs';
+import { copyParameters, ensureParameter, PARAMETER_FILES, readParameters } from '../src/pool/parameter-files.js';
 import { BN254_PARAMETERS } from '../src/pool/parameters.js';
 
 const good = Buffer.from([1, 2, 3, 4]);
@@ -94,5 +94,14 @@ describe('verified proving parameter download', () => {
       expect(g1).toEqual(good);
       expect(g2).toEqual(Buffer.alloc(128, 7));
     } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+  it('copies an offline install\'s parameters only when each is the pinned one', async () => {
+    const from = await mkdtemp(join(tmpdir(), 'moe-crs-from-')), to = await mkdtemp(join(tmpdir(), 'moe-crs-to-'));
+    try {
+      await writeFile(join(from, 'bn254_g1.dat'), Buffer.alloc(PARAMETER_FILES[0].bytes, 1));
+      await writeFile(join(from, 'bn254_g2.dat'), Buffer.alloc(128, 2));
+      await expect(copyParameters(from, to)).rejects.toThrow('No verified bn254_g1.dat');
+      expect(await readdir(to)).toEqual([]);
+    } finally { await rm(from, { recursive: true, force: true }); await rm(to, { recursive: true, force: true }); }
   });
 });

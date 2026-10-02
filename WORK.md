@@ -23,10 +23,9 @@ pool-v3 is adopted with one configuration (spec e7f7f24, §11.4), and a byte, id
   files, admin token never handed out, Ergo venues only (a test-only synthetic node serving the node REST paths), funding only in
   operator/relay directories, `serve` checkpointing on witnessed indices, presented notes refused to pay/burn and spent by `freshen`, and
   per-command rerun and exit-code rules; one fresh review (1 blocker, 11 material, all taken) and its read-back.
-- **M10c1 in progress.** Synthetic node done (PR #83, [decision](decisions/2026-10.md#2026-10-02--serve-the-synthetic-chain-through-the-node-rest-paths-answering-as-recorded-real-nodes-do-slice-10-m10c1)):
-  `synthetic-node.mjs` serves the chain and `MempoolNode` through both clients' REST paths, matching 16 recorded real node answers.
-  **Next:** the `moe` bin skeleton (lock, umask, `SQLITE_TMPDIR`, output/exit codes), parameters in the package, `venue create`, then the
-  `reader` and `operator` commands and drill steps. Every current report drifts (`check:evidence` at 09c8459) until the drill re-records.
+- **M10c1 in progress** (synthetic node: PR #83). Branch `claude/m10c1-commands`: `moe` bin (`src/cli/`, lock/umask/`SQLITE_TMPDIR`,
+  exit codes), parameters in the package, `venue create`, `reader` and `operator` commands; `command-drill.mjs` passes (in `check:pool:v3`).
+  **Next:** fresh review of the branch, decision entry, merge; then M10c2. Every current report drifts (`check:evidence` at 09c8459).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
