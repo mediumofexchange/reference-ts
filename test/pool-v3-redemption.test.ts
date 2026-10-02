@@ -536,7 +536,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.submit("redeem", f.service); await f.publish();
     const stranger = f.open("stranger"), filed = f.venue.witnessedIndex();
     expect(await stranger.presentation(id, f.served(), f.signed)).toEqual({ demand: id, backing: f.backing, quantity: 10n, deadline,
-      witnessed: filed, ended: undefined, overdue: undefined, acceptances: [] });
+      witnessed: filed, inTerm: true, ended: undefined, overdue: undefined, acceptances: [] });
     // Past its deadline it is the backer's failure, from the next index on, to anybody holding the record.
     f.venue.advance(deadline);
     expect((await stranger.presentation(id, f.served(), f.signed)).overdue).toBeUndefined();
@@ -602,6 +602,56 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const read = await f.holder.presentation(id, f.served(), f.signed);
     expect(read.acceptances.map(a => [a.owner, a.witnessed, a.timely])).toEqual([[9n, base.deadline - lag, false]]);
     expect(read.overdue?.reading).toBe("dishonour");
+  });
+
+  it("reads no failure for a demand first witnessed after its deadline, and the record's own timing for a withdrawal witnessed late", async () => {
+    const f = await fixture([10n, 6n], 1000n);
+    await f.holder.sync(f.served(), f.signed);
+    const at = f.venue.witnessedIndex();
+    const withdrawn = await f.holder.demand("withdrawn", 6n, at + 10n, f.served(), f.signed, prove);
+    await f.holder.submit("withdrawn", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed);
+    // A demand and a withdrawal are admitted in time, but the operator holds its checkpoint past both deadlines.
+    const deadline = f.venue.witnessedIndex() + lag + 1n, late = await f.holder.demand("late", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("late", f.service);
+    await f.holder.withdraw("back", withdrawn.demand!, f.served(), f.signed); await f.holder.submit("back", f.service);
+    f.venue.advance(at + 20n);
+    await f.publish();
+    const back = f.venue.witnessedIndex();
+    // The late demand reaches the record past its deadline: no term K could meet, so no dishonour (C3.3).
+    const read = await f.backer.presentation(late.demand!, f.served(), f.signed);
+    expect([read.witnessed > deadline, read.inTerm, read.overdue]).toEqual([true, false, undefined]);
+    // The withdrawal counts from the checkpoint that witnessed it: the indices before it read as they stood.
+    const w = await f.backer.presentation(withdrawn.demand!, f.served(), f.signed);
+    expect([w.inTerm, w.ended, w.overdue]).toEqual([true, { by: "withdrawal", at: back }, { reading: "dishonour", from: at + 11n, through: back - 1n }]);
+  });
+
+  it("names the end first in history order at one index, and places an acceptance at its first copy, a release's included", async () => {
+    const f = await fixture([10n, 6n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 20n;
+    const spent = await f.holder.demand("spent", 10n, deadline - 10n, f.served(), f.signed, prove);
+    const answered = await f.holder.demand("answered", 6n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("spent", f.service); await f.holder.submit("answered", f.service); await f.publish();
+    await f.backer.sync(f.served(), f.signed);
+    // K's acceptance first reaches the venue inside the holder's release (no gap here, so no force), then on its own.
+    const acceptance = await f.backer.accept("answer", answered.demand!, deadline - 5n, f.served(), f.signed, sign);
+    await f.holder.settle("settle", acceptance, f.served(), f.signed, prove);
+    await f.holder.publish("settle", f.venue);
+    const carried = f.venue.witnessedIndex();
+    await f.backer.publishAcceptance("answer", f.venue);
+    // Past the first demand's deadline, one checkpoint holds a spend of its note and then its withdrawal.
+    f.venue.advance(deadline - 9n);
+    await f.holder.sync(f.served(), f.signed);
+    await f.holder.prepare("pay", { request: f.backer.request("shop", f.backing, 10n), value: 10n }, f.served(), f.signed, prove);
+    await f.holder.submit("pay", f.service);
+    await f.holder.withdraw("back", spent.demand!, f.served(), f.signed); await f.holder.submit("back", f.service);
+    await f.publish();
+    expect((await f.backer.presentation(spent.demand!, f.served(), f.signed)).ended).toEqual({ by: "void", at: f.venue.witnessedIndex() });
+    f.venue.advance(deadline + 1n);
+    const read = await f.backer.presentation(answered.demand!, f.served(), f.signed);
+    expect(read.acceptances.map(a => [a.witnessed, a.timely, a.taken])).toEqual([[carried, true, false]]);
+    expect(read.overdue?.reading).toBe("lapse");
   });
 
   it("reads a demand voided from the index a spend of its note was witnessed at, keeping the dishonour before it", async () => {

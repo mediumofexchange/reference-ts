@@ -30,7 +30,7 @@ export interface WitnessedAcceptance {
   readonly taken: boolean;
 }
 /** One demand's C3.8 reading at the judging index. Its outcome there is `ended?.by`, else `overdue?.reading`,
- * else standing (at or before its deadline). */
+ * else standing (at or before its deadline) or, for a demand witnessed only once its deadline had come, no reading. */
 export interface Presentation {
   readonly demand: Uint8Array;
   readonly backing: Uint8Array;
@@ -38,6 +38,10 @@ export interface Presentation {
   readonly deadline: bigint;
   /** The index the demand was first witnessed at, in history or by its publication with force. */
   readonly witnessed: bigint;
+  /** Whether its deadline is strictly ahead of that index (C3.3). A demand first witnessed at or after its deadline
+   * sets no term no acceptance could meet, a manufactured verdict (Construction §C3), so it reads neither dishonour
+   * nor lapse; an operator that admits it at its door and witnesses it late cannot make one against K. */
+  readonly inTerm: boolean;
   /** Its end and the index that end was witnessed at: its own settlement, its withdrawal, or a void (a tag of it
    * spent otherwise than by its own settlement, in history or by a settlement with force). */
   readonly ended: { readonly by: "settlement" | "withdrawal" | "void"; readonly at: bigint } | undefined;
@@ -66,16 +70,18 @@ export function readPresentation(frontier: Pick<FrontierResult, "canonical" | "f
   const kept = state?.presented(id);
   let notice: Demand | undefined = kept?.demand, witnessed = kept === undefined ? undefined : placed(kept.event);
   type End = NonNullable<Presentation["ended"]>;
-  const ends: End[] = [];
-  const end = (by: End["by"], at: bigint): void => { ends.push({ by, at }); };
-  if (kept?.end !== undefined) end(kept.end.kind === 6 ? "settlement" : "withdrawal", placed(kept.end));
+  // Each end with its order within its index: a history event's namespace and position, a publication's venue order.
+  const ends: (End & { readonly order: readonly bigint[] })[] = [];
+  const history = (by: End["by"], event: StoredEvent): void => { ends.push({ by, at: placed(event), order: [0n, BigInt(event.ns), event.position] }); };
+  const venue = (by: End["by"], at: bigint, i: number): void => { ends.push({ by, at, order: [1n, BigInt(i)] }); };
+  if (kept?.end !== undefined) history(kept.end.kind === 6 ? "settlement" : "withdrawal", kept.end);
   // Forced publications through t, in venue order: the demand itself, its end, and settlements of other demands.
-  for (const forced of frontier.force) {
+  for (const [i, forced] of frontier.force.entries()) {
     const effect = recoveryEffect(forced.record);
     if (effect.demand?.id === id) {
       notice ??= effect.demand.value;
       if (witnessed === undefined || forced.index < witnessed) witnessed = forced.index;
-    } else if (effect.ended === id) end(forced.record.kind === 6 ? "settlement" : "withdrawal", forced.index);
+    } else if (effect.ended === id) venue(forced.record.kind === 6 ? "settlement" : "withdrawal", forced.index, i);
   }
   if (notice === undefined || witnessed === undefined || !same(notice.backing, backing)) return undefined;
   // C3.8's void: a tag of it spent otherwise than by its own settlement, from the index that spend was witnessed at.
@@ -83,12 +89,12 @@ export function readPresentation(frontier: Pick<FrontierResult, "canonical" | "f
   for (const tag of tags) {
     for (const event of state?.tagSpends(tag) ?? []) {
       if (event.kind === 6 && settlementDemand(decodeRecord(event.settlement!)) === id) continue;
-      end("void", placed(event));
+      history("void", event);
     }
   }
-  for (const forced of frontier.force) {
+  for (const [i, forced] of frontier.force.entries()) {
     if (forced.record.kind !== 6 || settlementDemand(forced.record) === id) continue;
-    if (effectOf(forced.record).nfs.some(nf => tags.includes(tagOf(nf)))) end("void", forced.index);
+    if (effectOf(forced.record).nfs.some(nf => tags.includes(tagOf(nf)))) venue("void", forced.index, i);
   }
   // Its acceptances: K's strict signature, due no later than the demand, each at its first witnessed index.
   const found = new Map<string, WitnessedAcceptance>();
@@ -102,13 +108,20 @@ export function readPresentation(frontier: Pick<FrontierResult, "canonical" | "f
     } else if (taken && !prior.taken) found.set(key, { ...prior, taken });
   }
   const acceptances = [...found.values()];
-  // The earliest end; at one index a settlement or withdrawal is named before a void.
-  const ended = ends.reduce<End | undefined>((first, e) => first === undefined || e.at < first.at ? e : first, undefined);
+  // The earliest end: by index, then by its order there (history before the venue's publications at one index).
+  const earlier = (a: (typeof ends)[number], b: (typeof ends)[number]): boolean => {
+    if (a.at !== b.at) return a.at < b.at;
+    for (let k = 0; k < a.order.length && k < b.order.length; k++) if (a.order[k] !== b.order[k]) return a.order[k]! < b.order[k]!;
+    return false;
+  };
+  const first = ends.reduce<(typeof ends)[number] | undefined>((e, x) => e === undefined || earlier(x, e) ? x : e, undefined);
+  const ended: End | undefined = first === undefined ? undefined : { by: first.by, at: first.at };
   // Past the deadline and not yet ended: the holder's lapse where a timely acceptance stood unreleased, else the
   // backer's failure. Every timely acceptance is witnessed, and any release of it taken, by the deadline.
+  const inTerm = notice.deadline > witnessed;
   const from = notice.deadline + 1n, through = ended === undefined || ended.at - 1n > t ? t : ended.at - 1n;
-  const overdue = through >= from ? { reading: acceptances.some(a => a.timely && !a.taken) ? "lapse" as const : "dishonour" as const,
+  const overdue = inTerm && through >= from ? { reading: acceptances.some(a => a.timely && !a.taken) ? "lapse" as const : "dishonour" as const,
     from, through } : undefined;
   return { demand: new Uint8Array(demand), backing: new Uint8Array(notice.backing), quantity: notice.quantity, deadline: notice.deadline,
-    witnessed, ended, overdue, acceptances };
+    witnessed, inTerm, ended, overdue, acceptances };
 }

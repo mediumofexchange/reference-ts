@@ -11,7 +11,7 @@ import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, segmentIdentity } from "../src/pool/v3/headers.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
-import { decodeRecord, encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
+import { acceptanceBytes, decodeRecord, encodePublication, encodeRecord, statementHash, type Record } from "../src/pool/v3/records.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { decodeTrail } from "../src/pool/v3/trail.js";
@@ -248,7 +248,12 @@ describe.skipIf(!supported)("v3 wallet over multi-backing scopes", () => {
     await expect(f.payer.accept("ax", id, deadline - 2n, served, f.x.signed, signX)).rejects.toMatchObject({ code: "ABSENT" });
     await expect(f.payer.presentation(id, served, f.x.signed)).rejects.toMatchObject({ code: "ABSENT" });
     expect(f.payer.act("wx")).toBeUndefined();
-    expect(await f.payer.presentation(id, served, f.y.signed)).toMatchObject({ backing: f.y.name, quantity: 20n, deadline, ended: undefined });
+    // y's K signs an acceptance of it, routed to the sibling x: evidence only beside its demand's own backing, so none.
+    const acceptance = { domain, demand: id, owner: 5n, deadline: deadline - 2n };
+    await f.venue.publishRecord(4, f.x.name, encodePublication({ domain, backing: f.x.name, kind: 2,
+      acceptance: { ...acceptance, signature: ed25519.sign(acceptanceBytes(acceptance), issuerY) } }));
+    expect(await f.payer.presentation(id, await f.served(f.a), f.y.signed)).toMatchObject({ backing: f.y.name, quantity: 20n, deadline,
+      ended: undefined, acceptances: [] });
     expect(await f.payer.withdraw("wy", id, served, f.y.signed)).toMatchObject({ kind: 5, demand: id });
   });
 

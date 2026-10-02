@@ -135,6 +135,9 @@ describe("publication force over the snapshot forest", () => {
     const snapshot = openForceState(history); await applyForceRecord(snapshot, held, context());
     expect(snapshot.settledFor(output)).toBe(Buffer.from(statementHash(decodeRecord(own))).toString("hex"));
     await refuses(snapshot, release, "TAKEN", context({ index: 12n }));
+    // A taken release whose nullifier is also spent names SPENT: taken means every other condition held.
+    const both = openForceState(state); both.nullifiers.add(101n);
+    await refuses(both, release, "SPENT", context({ index: 12n }));
     // An output a non-settlement created takes no release.
     const spentTo = openForceState(fresh()); await applyForceRecord(spentTo, held, context()); spentTo.outputs.add(output);
     await refuses(spentTo, release, "OUTPUT", context({ index: 12n }));

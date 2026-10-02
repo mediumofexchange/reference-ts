@@ -366,7 +366,11 @@ if any: its settlement, its withdrawal, or a void (one of its notes spent
 otherwise than by its own settlement), from the index witnessed; and the
 indices past its deadline at which it stood unended (`overdue`), read as the
 backer's dishonour or, where a timely acceptance stood unreleased, the
-holder's lapse. A later end does not erase those indices. The acceptances it
+holder's lapse. A later end does not erase those indices. A demand first
+witnessed at or after its own deadline (an operator that admitted it and
+checkpointed late) sets no term K could meet (`inTerm` false, C3.3) and
+reads neither; a withdrawal or settlement admitted in time but witnessed
+after the deadline leaves the indices before its witnessing as they stood. The acceptances it
 lists are those the venue witnessed, alone or in a release, that K signed and
 that are due no later than the demand; one is timely where its deadline is
 later than its first witnessed index by more than the lag (C3.4), and one whose
