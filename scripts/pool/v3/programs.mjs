@@ -1,7 +1,7 @@
 // The six compiled relations the package ships (src/pool/v3/programs.json), checked by compiling the
 // sources again: each artifact keeps only what witness generation and key derivation read (the ABI, the
 // bytecode and the compiler version), never the debug symbols or file map, which hold this machine's paths.
-// The runtime loader (src/pool/v3/verifier.ts) checks each bytecode against the manifest; this check also
+// The runtime loader (src/pool/v3/programs.ts) checks each bytecode against the manifest; this check also
 // binds the ABI, which no identity covers, to the sources.
 //
 // Usage: node scripts/pool/v3/programs.mjs [--write]

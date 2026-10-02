@@ -21,7 +21,7 @@ import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, 
 import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof, type ErgoPublisherPersistence,
   type ErgoPublishingSupplier } from "../ergo-publisher.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
-import { ergoNodeSupplier, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
+import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
 import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
@@ -89,9 +89,9 @@ export function suppliers(directory: Directory): ErgoSupplier[] {
 async function nodeInfo(directory: Directory): Promise<{ readonly network: unknown; readonly fullHeight: bigint }> {
   for (const url of directory.config.nodes) {
     try {
-      const response = await fetch(`${url.replace(/\/+$/, "")}/info`, { signal: AbortSignal.timeout(NODE_TIMEOUT_MS) });
-      const text = await response.text();
-      if (!response.ok || text.length > 1 << 20) continue;
+      // Read bounded, as every other node answer is: an endpoint is untrusted and may stream without end.
+      const text = await nodeText(fetch, `${url.replace(/\/+$/, "")}/info`, "/info", { signal: AbortSignal.timeout(NODE_TIMEOUT_MS) }, 1 << 20);
+      if (text === undefined) continue;
       const info = parseNodeJson(text), height = info instanceof Map ? info.get("fullHeight") : undefined;
       if (info instanceof Map && typeof height === "bigint" && height >= 0n) return { network: info.get("network"), fullHeight: height };
     } catch { /* the next endpoint */ }
@@ -135,11 +135,16 @@ function locationTree(key: Uint8Array, kind: RecordKind): Uint8Array {
 }
 
 /** `venue create`: anchor at the node's full height less the depth, under the synthetic context only when asked.
- * A rerun prints the existing file. */
+ * A rerun prints the existing file where it is the context and depth asked, and refuses (`VENUE`) otherwise. */
 export async function createVenue(directory: Directory, options: { readonly synthetic: boolean; readonly depth?: bigint }): Promise<{ readonly venue: VenueFile; readonly created: boolean }> {
-  const existing = ownVenue(directory);
-  if (existing !== undefined) return { venue: existing, created: false };
-  const depth = options.depth ?? DEFAULT_ERGO_DEPTH, context = options.synthetic ? ERGO_SYNTHETIC_REFERENCE : ERGO_TESTNET_REFERENCE;
+  const existing = ownVenue(directory), context = options.synthetic ? ERGO_SYNTHETIC_REFERENCE : ERGO_TESTNET_REFERENCE;
+  if (existing !== undefined) {
+    if (existing.profile.reference !== context || (options.depth !== undefined && options.depth !== existing.profile.depth)) {
+      throw new CommandError("VENUE", "venue.json names another context or depth than asked");
+    }
+    return { venue: existing, created: false };
+  }
+  const depth = options.depth ?? DEFAULT_ERGO_DEPTH;
   // The headers decide what a reader accepts; the creator's own node's word only keeps a creator from naming the
   // context it did not mean (a difficulty-1 synthetic chain is also below the testnet context's bound).
   const { network, fullHeight: full } = await nodeInfo(directory);

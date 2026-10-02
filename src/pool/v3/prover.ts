@@ -1,7 +1,7 @@
 // The runtime prover for pool-v3 (§3, §4): a holder or backer proves locally,
 // as the release contract requires. Witnesses are generated with
 // `@noir-lang/noir_js` and proofs made with `@aztec/bb.js` under UltraHonk's
-// zero-knowledge target, both optional peer dependencies like the verifier.
+// zero-knowledge target, both exact-pinned dependencies.
 //
 // The prover executes the package's six shipped relations (`programs.ts`),
 // whose bytecode identities the loader checks and whose keys the verifier

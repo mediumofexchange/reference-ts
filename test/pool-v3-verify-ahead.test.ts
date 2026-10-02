@@ -2,6 +2,7 @@
 // may drop, and where a failure reading the trail surfaces. The reader's verdicts ahead and in turn are compared
 // through readFrontier in pool-v3-kept-state.test.ts.
 import { describe, expect, it } from "vitest";
+import { EncodingError } from "../src/bytes.js";
 import { limbsOf } from "../src/pool/field.js";
 import { decodeRecord, deliveryHash, encodeRecord } from "../src/pool/v3/records.js";
 import type { Adopted, ProofCheck } from "../src/pool/v3/state.js";
@@ -80,7 +81,7 @@ describe("pool-v3 proofs verified ahead of the replay (M5b.6)", () => {
     expect(asked).toEqual(Array.from({ length: 20 }, (_, i) => BigInt(100 + i)).filter((_, i) => i < 5 || i >= 9));
     const broken = [...records(6), new Uint8Array([1, 2, 3]), ...records(3)];
     const seen: number[] = [];
-    await expect(replay({ parallel: 4, verify: () => Promise.resolve(true) }, broken, { onRecord: i => seen.push(i) })).rejects.toThrow();
+    await expect(replay({ parallel: 4, verify: () => Promise.resolve(true) }, broken, { onRecord: i => seen.push(i) })).rejects.toThrow(EncodingError);
     expect(seen.at(-1)).toBe(6);
   });
 

@@ -528,6 +528,45 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect([f.holder.act("s1")!.status, f.holder.act("s0")!.status]).toEqual(["final", "failed"]);
   });
 
+  it("publishes no failed settlement, whose release would disclose the output a later one at its count names (C3.5)", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 40n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    const early = await f.backer.accept("early", demand.demand!, f.venue.witnessedIndex() + 2n * lag + 1n, f.served(), f.signed, sign);
+    const s1 = await f.holder.settle("s1", early, f.served(), f.signed, prove);
+    // s1 is not admitted before its acceptance deadline, so it fails; no release of it was witnessed.
+    f.venue.advance(early.deadline + 1n);
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    expect(f.holder.act("s1")!.status).toBe("failed");
+    const later = await f.backer.accept("later", demand.demand!, f.venue.witnessedIndex() + 20n, f.served(), f.signed, sign);
+    const s2 = await f.holder.settle("s2", later, f.served(), f.signed, prove);
+    expect(decodeRecord(s2.record).publicInputs[9]).toBe(decodeRecord(s1.record).publicInputs[9]);
+    await expect(f.holder.publish("s1", f.venue)).rejects.toMatchObject({ code: "CONFLICT", message: "a failed settlement is not published" });
+    await f.holder.submit("s2", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("s2")!.status).toBe("final");
+  });
+
+  it("fails a saved withdrawal once another copy of the wallet settled its demand", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 30n;
+    const demand = await f.holder.demand("redeem", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    await f.holder.withdraw("back", demand.demand!, f.served(), f.signed);
+    const restored = f.restore("restored", f.holder);
+    await restored.sync(f.served(), f.signed);
+    const acceptance = await f.backer.accept("answer", demand.demand!, deadline - 5n, f.served(), f.signed, sign);
+    await restored.settle("s", acceptance, f.served(), f.signed, prove);
+    await restored.submit("s", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed);
+    expect([f.holder.act("redeem")!.status, f.holder.act("back")!.status]).toEqual(["final", "failed"]);
+  });
+
   // C3.8: any wallet reads a demand's outcome from public evidence, each event from the index it was witnessed at.
   it("reads an unanswered demand as the backer's dishonour past its deadline, kept through a later withdrawal", async () => {
     const f = await fixture([10n]);

@@ -161,14 +161,29 @@ function serialized() {
   };
 }
 
+/** Whether serve commits to keep the held checkpoint alive: at half the window the journal commits in after the venue
+ * witnessed it. The journal commits only while its horizon (now + lag) stays within the least silence duration of
+ * the served terms from that checkpoint (`serviceClock`), so the window is the duration less the lag. */
+export function keepAliveDue(now: bigint, heldIndex: bigint | undefined, silence: bigint | undefined, lag: bigint): boolean {
+  return silence !== undefined && heldIndex !== undefined && now >= heldIndex + (silence - lag) / 2n;
+}
+
+/** Whether a failed poll leaves serve polling: a journal refusal other than its storage, fence or conflict, a
+ * refused budget, or a transaction the node's index cannot replay yet (M10c1 item 6). */
+export function servePollsOn(error: unknown): error is CommandError | V3StoreError {
+  if (error instanceof CommandError) return error.code === "BUDGET" || error.code === "UNREPLAYED";
+  return error instanceof V3StoreError && !["STORAGE", "FENCED", "CONFLICT"].includes(error.code);
+}
+
 /**
  * `serve --interval <n> [--port <p>]`: run the loopback service and, on each poll, sync the view and act on the
  * witnessed index (M10b item 7): publish the latest signed commitment while the venue does not hold it; with it
  * held and no return pending, commit (command id `serve:<index>`) and publish when statements were admitted since
- * it and `interval` indices have passed since it was signed, or, at the latest, half the least silence duration of
- * the served terms after the venue witnessed it. At most one commitment is in flight. Writes `service.json`
- * (the URL and the service-wide wallet token, to hand to holders) and prints one line once listening; stops on
- * SIGTERM or SIGINT.
+ * it and `interval` indices have passed since it was signed, or, at the latest, half the window the journal commits
+ * in after the venue witnessed it: the least silence duration of the served terms less the lag. At most one
+ * commitment is in flight. Writes `service.json` (the URL and the service-wide wallet token, to hand to holders)
+ * and prints one line once listening and one once stopped; a refused budget or a transaction the node's index cannot
+ * replay yet is logged and tried again on the next poll. Stops on SIGTERM or SIGINT.
  */
 async function serve(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, { ...POLL, interval: "value", port: "value" }, 0);
@@ -176,7 +191,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   const interval = integer(required(args, "interval"), "--interval", 1n, 1n << 32n);
   const port = Number(integer(flag(args, "port") ?? "0", "--port", 0n, 65535n)), ms = pollMs(args);
   const op = await openOperator(directory, args), journal = op.journal;
-  const silence = servedSilence(directory, op.operator), queue = serialized();
+  const silence = servedSilence(directory, op.operator), lag = op.view.venue.lag(), queue = serialized();
   // The service's journal calls take their turn with the schedule's, so neither meets the other's BUSY or a
   // view that moved under it.
   const queued = new Proxy(journal, { get(target, property) {
@@ -219,7 +234,7 @@ async function serve(argv: readonly string[]): Promise<void> {
       return;
     }
     const admitted = signed.admitted > 0n && s.now >= signed.at + interval;
-    const keepAlive = silence !== undefined && s.heldIndex !== undefined && s.now >= s.heldIndex + silence / 2n;
+    const keepAlive = keepAliveDue(s.now, s.heldIndex, silence, lag);
     if (!admitted && !keepAlive) return;
     const commitment = await journal.commit(`serve:${s.now}`);
     log({ event: "committed", at: s.now, admitted: signed.admitted, commitment: commitmentOf(commitment) });
@@ -229,8 +244,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   try {
     while (!stopping) {
       try { await queue(tick); } catch (error) {
-        const budget = error instanceof CommandError && error.code === "BUDGET";
-        if (!budget && (!(error instanceof V3StoreError) || ["STORAGE", "FENCED", "CONFLICT"].includes(error.code))) throw error;
+        if (!servePollsOn(error)) throw error;
         log({ event: "refused", code: error.code, message: error.message });
       }
       if (!stopping) await new Promise<void>(done => { wake = done; setTimeout(done, ms); });

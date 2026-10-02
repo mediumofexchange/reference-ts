@@ -9,7 +9,7 @@
 // verifies only under the adopted configuration.
 //
 // Nothing here needs a proving backend: a party can check its install without
-// the optional peer dependencies.
+// loading either backend package.
 import { readFileSync } from "node:fs";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";

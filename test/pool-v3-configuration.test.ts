@@ -96,6 +96,11 @@ describe("the configuration frame, pool-v3 §11.1, and §11.4's adopted configur
     for (const identities of [{}, fewer, { ...own, withdrawal: own.issue }, { ...own, spend: own.burn, burn: own.spend }]) {
       expect(() => requireConfigurationVerifier(identities)).toThrow(refusal);
     }
+    // A relation hidden from enumeration beside an extra name, or an extra symbol, is not the six names either:
+    // the kept-state name (verifierName) reads the enumerable keys.
+    const { issue, ...rest } = own, hidden = Object.defineProperty({ ...rest, extra: issue }, "issue", { value: issue, enumerable: false });
+    expect(() => requireConfigurationVerifier(hidden as unknown as typeof own)).toThrow(refusal);
+    expect(() => requireConfigurationVerifier({ ...own, [Symbol("extra")]: issue })).toThrow(refusal);
     // Malformed identities are the same setup error, not an encoding verdict.
     for (const identities of [null, "identities", { ...own, spend: null }, { ...own, spend: { bytecode: "x", vk: own.spend.vk } },
       { ...own, spend: { vk: own.spend.vk } }, { ...own, spend: { ...own.spend, vk: Array.from(own.spend.vk) } }]) {

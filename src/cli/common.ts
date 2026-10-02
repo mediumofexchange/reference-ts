@@ -9,8 +9,8 @@
 // dies, and refuses `BUSY` before opening anything else. On Windows modes are
 // not enforced and nothing checks ACLs (a stated limit).
 import { randomUUID } from "node:crypto";
-import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
@@ -184,20 +184,48 @@ export async function initDirectory(dir: string, config: Config, fill: (director
   return opened;
 }
 
-/** Write a new file and sync it; refuses an existing one. */
-export function writeExclusive(path: string, data: string | Uint8Array): void {
+/** Create `path` owner-only, write all of `data` and sync it; refuses an existing file. */
+function writeNew(path: string, data: string | Uint8Array): void {
+  const fd = openSync(path, "wx", 0o600), bytes = typeof data === "string" ? Buffer.from(data, "utf8") : data;
+  try {
+    for (let done = 0; done < bytes.length;) done += writeSync(fd, bytes, done, bytes.length - done);
+    fsyncSync(fd);
+  } finally { closeSync(fd); }
+}
+/** Sync the directory holding `path`, so a link or rename into it outlives a crash; on Windows, which refuses to
+ * sync a directory, and where the platform cannot open one, the file system orders it. */
+function syncParent(path: string): void {
+  if (process.platform === "win32") return;
   let fd: number;
-  try { fd = openSync(path, "wx", 0o600); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists`);
+  try { fd = openSync(dirname(path), "r"); } catch (error) {
+    if (["EISDIR", "EPERM", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) return;
     throw error;
   }
-  try { writeSync(fd, typeof data === "string" ? Buffer.from(data, "utf8") : data); fsyncSync(fd); } finally { closeSync(fd); }
+  try { fsyncSync(fd); } catch (error) {
+    // Some file systems cannot sync a directory; they order the link or rename themselves.
+    if ((error as NodeJS.ErrnoException).code !== "EINVAL") throw error;
+  } finally { closeSync(fd); }
+}
+
+/** Write a new file whole or not at all: a synced temporary file linked into place, which refuses an existing one.
+ * A crash leaves the file absent or complete, so a rerun never meets an empty or partial one. */
+export function writeExclusive(path: string, data: string | Uint8Array): void {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    writeNew(temporary, data);
+    try { linkSync(temporary, path); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists`);
+      throw error;
+    }
+  } finally { rmSync(temporary, { force: true }); }
+  syncParent(path);
 }
 
 /** Replace a file atomically (a synced temporary file renamed over it). */
 export function writeReplace(path: string, data: string | Uint8Array): void {
   const temporary = `${path}.${randomUUID()}.tmp`;
-  try { writeExclusive(temporary, data); renameSync(temporary, path); } finally { rmSync(temporary, { force: true }); }
+  try { writeNew(temporary, data); renameSync(temporary, path); } finally { rmSync(temporary, { force: true }); }
+  syncParent(path);
 }
 
 /** A file's bytes, or undefined where it does not exist. */
