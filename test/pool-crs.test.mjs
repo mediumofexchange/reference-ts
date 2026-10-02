@@ -52,6 +52,25 @@ describe('verified proving parameter download', () => {
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 
+  it('falls back to the transcript at its offset, reordering each coordinate\'s limbs before the hash', async () => {
+    const element = Buffer.from([...Array(32).keys()]), limbs = Buffer.concat([3, 2, 1, 0].map(j => element.subarray(8 * j, 8 * j + 8)));
+    const point = { ...parameter, bytes: 32, transcript: 28, sha256: createHash('sha256').update(element).digest('hex') };
+    const directory = await mkdtemp(join(tmpdir(), 'moe-crs-test-'));
+    const transcript = (body, range = 'bytes 28-59/1000') => async (url, init) => {
+      if (!url.includes('transcript00')) return response(Buffer.alloc(0));
+      expect(init.headers.Range).toBe('bytes=28-59');
+      return response(body, 206, { 'content-range': range });
+    };
+    try {
+      for (const [body, range] of [[element, undefined], [limbs, 'bytes 0-31/1000'], [limbs, 'bytes 28-59/59']]) {
+        await expect(ensureParameter(directory, point, options(transcript(body, range)))).rejects.toThrow('No verified');
+        expect(await readdir(directory)).toEqual([]);
+      }
+      await ensureParameter(directory, point, options(transcript(limbs)));
+      expect(await readFile(join(directory, point.name))).toEqual(element);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+
   it('accepts a longer cached copy by its leading bytes, and reads only those', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'moe-crs-test-'));
     try {

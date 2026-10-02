@@ -11,13 +11,24 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const hosts = ['https://crs.aztec-cdn.foundation', 'https://crs.aztec-labs.com'];
+// The last source: the transcript itself, where the CDN hosts are unreachable. Its points start after a 28-byte
+// header (5,040,001 G1, then 2 G2); each coordinate is four big-endian u64 limbs, least significant first.
+const TRANSCRIPT = 'https://aztec-ignition.s3.eu-west-2.amazonaws.com/MAIN%20IGNITION/monomial/transcript00.dat';
 /** Each file's leading `bytes` are the parameter; a longer copy (such as all 2^19 points) is read by its prefix. */
 export const PARAMETER_FILES = Object.freeze([
-  Object.freeze({ name: 'bn254_g1.dat', source: 'g1.dat', bytes: 2097152, range: true,
+  Object.freeze({ name: 'bn254_g1.dat', source: 'g1.dat', bytes: 2097152, range: true, transcript: 28,
     sha256: '50d2f4e9567be2b8e382cedfd078b96a3428a94597b7e88c4116e105d578ce77' }),
-  Object.freeze({ name: 'bn254_g2.dat', source: 'g2.dat', bytes: 128, range: false,
+  Object.freeze({ name: 'bn254_g2.dat', source: 'g2.dat', bytes: 128, range: false, transcript: 28 + 64 * 5040001,
     sha256: '01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f' }),
 ]);
+/** A transcript coordinate's limbs in the files' order: each 32-byte element big-endian. */
+const fromTranscript = bytes => Buffer.concat([...Array(bytes.length / 32)].flatMap((_, i) =>
+  [3, 2, 1, 0].map(j => bytes.subarray(32 * i + 8 * j, 32 * i + 8 * j + 8))));
+/** Where a parameter is fetched from, in order; the hash decides, not the host. */
+const sources = parameter => [
+  ...hosts.map(host => ({ host, url: `${host}/${parameter.source}`, first: parameter.range ? 0 : undefined, convert: bytes => bytes })),
+  ...(parameter.transcript === undefined ? [] : [{ host: TRANSCRIPT, url: TRANSCRIPT, first: parameter.transcript, convert: fromTranscript }]),
+];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const matches = (bytes, parameter) => bytes.length === parameter.bytes && sha(bytes) === parameter.sha256;
 
@@ -38,17 +49,18 @@ export async function ensureParameter(directory, parameter, { fetchImpl = fetch,
   const cached = await leading(target, parameter.bytes);
   if (cached !== undefined && matches(cached, parameter)) return;
   const failures = [];
-  for (const host of hosts) {
+  for (const { host, url, first, convert } of sources(parameter)) {
     let response;
     try {
-      response = await fetchImpl(`${host}/${parameter.source}`, {
-        headers: parameter.range ? { Range: `bytes=0-${parameter.bytes - 1}` } : {},
+      const last = first === undefined ? undefined : first + parameter.bytes - 1;
+      response = await fetchImpl(url, {
+        headers: first === undefined ? {} : { Range: `bytes=${first}-${last}` },
         signal: AbortSignal.timeout(60_000), cache: 'no-store',
       });
-      if (response.status !== (parameter.range ? 206 : 200)) throw new Error(`HTTP ${response.status}`);
-      if (parameter.range) {
-        const range = /^bytes 0-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') ?? '');
-        if (!range || BigInt(range[1]) !== BigInt(parameter.bytes - 1) || BigInt(range[2]) < BigInt(parameter.bytes)) {
+      if (response.status !== (first === undefined ? 200 : 206)) throw new Error(`HTTP ${response.status}`);
+      if (first !== undefined) {
+        const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') ?? '');
+        if (!range || BigInt(range[1]) !== BigInt(first) || BigInt(range[2]) !== BigInt(last) || BigInt(range[3]) <= BigInt(last)) {
           throw new Error('incorrect Content-Range');
         }
       }
@@ -62,7 +74,7 @@ export async function ensureParameter(directory, parameter, { fetchImpl = fetch,
         if (received > parameter.bytes) throw new Error('oversized body');
         chunks.push(chunk);
       }
-      const bytes = Buffer.concat(chunks);
+      const bytes = received === parameter.bytes ? convert(Buffer.concat(chunks)) : Buffer.concat(chunks);
       if (!matches(bytes, parameter)) throw new Error(`length or SHA-256 mismatch (${received} bytes)`);
       // A bad response never occupies the reusable cache, even after interruption.
       await mkdir(directory, { recursive: true });
