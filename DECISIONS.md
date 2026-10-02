@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-02` [Close five deferred review findings: kept force, testnet anchor, side-branch quota, served lag and adopted receipts (M9c2)](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)
 - `2026-10-01` [Read C3.8 per witnessed index from the record a frontier read holds, and tell a taken release apart at force](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)
 - `2026-10-01` [Find a seed's standing demands by their presenter keys, hold them by their locks, and make an act of an ended segment again](decisions/2026-10.md#2026-10-01--find-a-seeds-standing-demands-by-their-presenter-keys-hold-them-by-their-locks-and-make-an-act-of-an-ended-segment-again)
 - `2026-10-01` [Build redemption into the wallet before packaging commands, and give the design point and release assurance slices of their own](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)

@@ -221,11 +221,13 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     const store = ergoHeaderStore(this.profile.anchor, anchorContext, this.profile.reference === ERGO_TESTNET_REFERENCE ? "testnet" : "mainnet");
     if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
     // Each context selects its header rules, and a header id names no network, so each reference context also
-    // bounds its anchor's difficulty; a header id commits to its ancestry, so a profile naming either context can
-    // never follow the mainnet. The synthetic context reads the mainnet rules only above an anchor of difficulty 1,
+    // bounds its anchor's difficulty; a header id commits to its ancestry, so the bound keeps a profile naming either
+    // context off the mainnet. The synthetic context reads the mainnet rules only above an anchor of difficulty 1,
     // which no mainnet header has. The testnet context reads only above an anchor below mainnet's initial
     // difficulty: the testnet's rules keep a parent's difficulty within an epoch, so a mainnet anchor would
     // otherwise be followed up to its next epoch boundary (at most 127 headers, each with the mainnet's work).
+    // No mainnet header sampled to date is below it (the newest about 51 times above); a mainnet hashrate collapse
+    // past that margin would reopen the 127-header exposure, and testnet hashrate past it would refuse real anchors.
     if (this.profile.reference !== undefined) {
       const last: unknown = anchorContext[anchorContext.length - 1];
       const anchor = last instanceof Uint8Array ? parseErgoHeader(copyBytes(last)) : undefined;

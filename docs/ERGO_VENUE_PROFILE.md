@@ -46,7 +46,10 @@ context cannot follow the mainnet. `moe/venue/ergo-testnet/reference`
 (`ERGO_TESTNET_REFERENCE`) selects the pinned testnet rules below, and
 `ErgoVenue` reads it only above an anchor below mainnet's initial difficulty
 (about 1.2e12): within an epoch those rules keep the parent's difficulty, so a
-mainnet anchor would otherwise be followed up to its next epoch boundary.
+mainnet anchor would otherwise be followed up to its next epoch boundary. The
+bound rests on sampled headers, not a rule: no mainnet header in the fixtures is
+below it (the newest about 51 times above), and testnet headers sit about 100
+times below it.
 `ownErgoProfile` refuses every other context. Beside them,
 `moe/venue/local/reference` (`LOCAL_REFERENCE`, `src/record-venue.ts`) names
 a `FixtureVenue` by a 32-byte label and its lag, with no header rules. The
