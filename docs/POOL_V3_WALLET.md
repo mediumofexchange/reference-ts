@@ -153,7 +153,12 @@ capsule and one owner derivation per lit settlement; a later read scans only
 new records and reads this seed's notes from their kept witnesses. Zero, spent and
 force-spent notes are not holdings; notes under a standing demand are `locked`
 until it ends or its deadline passes (C3.7), and inputs of a saved payment or
-burn, a prepared demand or a prepared settlement are `reserved`. The view also
+burn, a prepared demand or a prepared settlement are `reserved`. Each holding
+names the demands of this seed that present it (`presented`): those saved here
+whose inputs name it, whatever their status, and those the record holds naming
+its tag, ended or not, forced ones included. A seed-restored wallet misses a
+demand refused at the door, published without force, or admitted only into a
+segment the canonical one did not import. The view also
 lists this seed's standing demands over its unspent notes (identity, quantity,
 instant, deadline and the holdings each names); a demand one of whose notes was
 spent is void and not listed. The view covers one backing at one witnessed
@@ -251,10 +256,10 @@ would go final, as an act does. Output reservations are permanent. Release
 with other outputs (cancellation), same-segment tail repair (C2.10.9a) and
 release of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. Payments and acts are one kind of saved record
-under one alias namespace. The wallet profile is `moe/wallet/v3/6`; a database
+under one alias namespace. The wallet profile is `moe/wallet/v3/8`; a database
 of an earlier profile (withdrawals and settlements naming a demand by alias,
 payments and acts saved apart, no saved acts, no output openings, or a package
-saved with each fulfillment) is refused.
+saved with each fulfillment, or no saved demand links) is refused.
 
 ## Redeeming and issuing
 
@@ -274,7 +279,17 @@ gap, on the local venue).
   horizon. The settled note is found by `sync` through that owner, and
   `burn` destroys a quantity from available notes with fresh change.
 - **Holder.** `demand` presents whole notes: one of exactly the quantity or a
-  pair summing to it (otherwise pay yourself that amount first, C3.3), the
+  pair summing to it (otherwise pay yourself that amount first, C3.3),
+  unpresented ones first; failing those, the notes of one earlier demand of
+  this seed (all or a subset), whose tags it then repeats, so it links to the
+  demands presenting them (`repeats`), never notes of two earlier demands
+  together nor a presented note beside an unpresented one (`FUNDS`). A
+  re-demand keeps snapshot redemption (C2b.3.2) open where a fresh spend is
+  refused (`SILENCE`, an ended term). `prepare` and `burn` select no presented
+  note; `freshen(alias, demand, …)` spends the demand's available notes (one
+  with a fresh zero input, or its pair) into one fresh note of their sum, a
+  payment (kind 2) submitted, reproved and resolved as one, which links no two
+  demands (§C1.5, C3.1; `LOCKED` while the demand stands). The
   instant at the read's witnessed index and the holder's deadline strictly
   ahead of the horizon. Its presenter key comes from the seed and the notice
   (tags, instant, deadline), and a one-note demand's zero padding from the
@@ -503,7 +518,10 @@ interleaved destination, continuation of pending work including reproof after
 takeover, and seed restoration of holdings with change.
 `test/pool-v3-redemption.test.ts` runs issue → demand → accept → settle → burn through two wallets and a journal with
 stand-in proofs: exact retries and alias conflicts, the seed's presenter and `rho_out`, reservation and its
-release by a final withdrawal, a re-demand of freed notes, non-exact quantities, horizon deadlines, foreign
+release by a final withdrawal, a re-demand of freed notes; presented notes refused to payment and burn, a re-demand
+of one earlier demand's notes preferred after unpresented ones and never mixed, `freshen` with its retry and its
+`LOCKED`, `ABSENT` and alias refusals, and presented notes read alike by a seed-restored copy, a forced demand's
+included; non-exact quantities, horizon deadlines, foreign
 signers, forged or altered acceptances, settlement after withdrawal, and acts across an offline backup. In a gap
 with the operator offline it demands, settles and withdraws by publication: issue, payment and burn refuse `SILENCE`,
 a deadline inside C3.3's window refuses, and acts become final by force. A release

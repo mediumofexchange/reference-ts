@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-02` [Read a note as presented from saved demands and the record's tags, save which demands a re-demand repeats, and freshen into one note (slice 10 M10c2a)](decisions/2026-10.md#2026-10-02--read-a-note-as-presented-from-saved-demands-and-the-records-tags-save-which-demands-a-re-demand-repeats-and-freshen-into-one-note-slice-10-m10c2a)
 - `2026-10-02` [Close the code review of slices 9–10: the publisher's readiness race, a failed settlement's disclosure, serve's keep-alive window and verifier key sets](decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)
 - `2026-10-02` [Read through each directory's own view, gate venue creation on the node's network, and queue serve's journal calls with the service's (slice 10 M10c1)](decisions/2026-10.md#2026-10-02--read-through-each-directorys-own-view-gate-venue-creation-on-the-nodes-network-and-queue-serves-journal-calls-with-the-services-slice-10-m10c1)
 - `2026-10-02` [Serve the synthetic chain through the node REST paths, answering as recorded real nodes do (slice 10 M10c1)](decisions/2026-10.md#2026-10-02--serve-the-synthetic-chain-through-the-node-rest-paths-answering-as-recorded-real-nodes-do-slice-10-m10c1)

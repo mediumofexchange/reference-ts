@@ -33,7 +33,7 @@ const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicIn
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);
 const TABLES = ["receiver_requests", "receiver_fulfilled", "saved_records", "saved_inputs", "saved_outputs", "saved_superseded", "backer_acceptances"];
-const COLUMNS = [5, 6, 14, 2, 5, 4, 5];
+const COLUMNS = [5, 6, 15, 2, 5, 4, 5];
 /** The specific refusal, not merely a throw. */
 function throws(action: () => unknown, shape: unknown): void {
   let thrown: unknown;
@@ -280,6 +280,15 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     refused(variant(t => { t[0]![0]![3] = new Uint8Array([1]) as never; }), /does not fit/);
     refused(variant(t => { t[2]![0]![9] = "cancelled"; }), /does not fit/);
     refused(variant(t => { t[0]!.push(t[0]![0]!); }), /does not fit/);
+    // Repeats belong to demands only; a freshen intent names one demand and has one positive output.
+    refused(variant(t => { t[2]![0]![14] = "[]"; }), /does not fit/);
+    refused(variant(t => { const row = t[2]!.find(r => r[1] === "2")!; row[2] = JSON.stringify(["00", "freshen", "zz"]); }), /malformed saved record/);
+    refused(variant(t => { const row = t[2]!.find(r => r[1] === "2")!; row[1] = "4"; row[14] = '["zz"]'; }), /malformed saved record/);
+    refused(variant(t => {
+      // A freshen whose saved outputs are not exactly one positive note.
+      const row = t[2]!.find(r => r[1] === "2")!; row[2] = JSON.stringify(["00", "freshen", "ab".repeat(32)]);
+      t[4] = t[4]!.filter(out => out[1] !== row[0] || out[2] === "0");
+    }), /malformed saved record/);
 
     // Destinations must be new: files, the source, memory and leftover sidecars refuse.
     const occupied = f.path("occupied"); writeFileSync(occupied, "keep");
