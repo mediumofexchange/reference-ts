@@ -34,7 +34,9 @@ C3.8 outcome per witnessed index (settled, withdrawn or voided, else past its de
 the holder's lapse), and the backer publishes its acceptance; a gap release taken by another demand's settlement
 is refused `TAKEN` and releases its acceptance (stand-in proof cases, slice 9 M9a–M9c1). With real proofs, wallet
 processes over the operator's service issue, pay, demand, accept, settle and burn, and demand and settle by
-publication in a gap ([local](pool-v3-redemption-store-verification.json), [synthetic Ergo](pool-v3-redemption-store-ergo-verification.json); M9d1).
+publication in a gap; a wallet restored from its seed settles and withdraws the standing demands it finds, and late,
+forged and taken gap releases have no force ([local](pool-v3-redemption-store-verification.json), [synthetic Ergo](pool-v3-redemption-store-ergo-verification.json); M9d1–M9d2).
+Each redemption act survives an abrupt exit at its commit (stand-in proofs).
 Cancellation/release, multi-backing payment, continuous backup and physical
 qualification remain open. Every read keeps its replay state in node:sqlite
 (`replay-store.ts`, [storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):

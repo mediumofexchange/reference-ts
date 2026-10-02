@@ -3,21 +3,18 @@
 Updated: 2026-10-02
 
 ## Goal
-Slice 8 done: pool-v3 adopted with one configuration (spec e7f7f24, §11.4; [decision](decisions/2026-10.md#2026-10-01--adopt-pool-v3-with-one-configuration-and-hold-its-manifest-in-the-runtime-m8a));
-a byte, identity or verdict change (C3.8's residual too) is pool-v4.
-**Active: slice 9, redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
-`V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PRs #69, #71)
-acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2** (PR #72) seed-found demands, locks, `CHANGED_VIEW`, acts of an ended
-segment made again. **M9c1** (PR #73, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
-`presentation` reads C3.8 per witnessed index, `publishAcceptance`, force reports `TAKEN`. **M9c2** (PR #74, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)):
-review findings (a)–(c), (e), (q). **M9d1** (branch `claude/peaceful-tesla-behrng`): `prepare-crs.mjs` falls back to Aztec Ignition's
-transcript00 (S3, limbs reordered, same hashes), so cloud runs prove; `redemption-store-check.mjs` (in `check:pool:v3`): real-proof issue →
-pay → fulfill → demand → published acceptance → settle → burn, each wallet act a fresh process over the operator's HTTP service, acts
-retried exactly without sync, evidence, prover or signer, a third wallet's C3.8 reading; offline past silence, issue and burn refuse
-`SILENCE`, demand and settle publish with force; a fresh reader confirms supply. Local (2.2 min) and synthetic Ergo pass here.
-**Next: M9d2** abrupt exits inside redemption acts (extend `wallet-crash.mjs`: demand, accept, settle, burn, publish), seed-restored demands
-settled and withdrawn by real proofs, and C3.4–C3.8 hostile cases with real proofs (late release without force, forged release, `TAKEN`);
-then a fresh review of the integrated M9d (tooling and drills; no runtime change in M9d1).
+**Slice 9 done: redemption in the wallet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)):
+`V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); a settle refused under service reads as unreleased
+(adopted limit; more is pool-v4). **M9a** (PRs #69, #71) acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2**
+(PR #72) seed-found demands, locks, acts of an ended segment made again; **M9c1** (PR #73, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force))
+C3.8 per witnessed index, `TAKEN`; **M9c2** (PR #74, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)) findings (a)–(c), (e), (q);
+**M9d1** (PR #76) `prepare-crs.mjs` falls back to Ignition's transcript00 (same hashes), `redemption-store-check.mjs` real-proof issue to burn
+through wallet processes over the HTTP service, gap demand and settlement by publication; **M9d2** (PR #77) `wallet-crash.mjs` exits at the
+COMMIT of demand, accept, settle, withdraw and burn; the real-proof drill adds a seed-restored wallet settling and withdrawing standing
+demands, a late gap release (`DEADLINE`, then a new `rho_out`), a timely forged presenter signature (`SIGNATURE`) and a `TAKEN` release read
+as dishonour; other hostile C3.4–C3.8 cases stay stand-in (wallet guide). No runtime change in M9d; fresh review of M9d1+M9d2: no blocker, four
+findings fixed (rho asserted, timely forgery, wording, scope). Slice 8 done: pool-v3 adopted, one configuration (spec e7f7f24, §11.4); a byte,
+identity or verdict change (C3.8's residual too) is pool-v4. **Next: Next 2** (visibility table), then slice 10.
 
 ## Status
 - Audit area 11 (PR #75, merged b101869, [decision](decisions/2026-10.md#2026-10-02--count-a-replacement-identity-at-its-first-entry-in-the-walk-itself-and-drop-the-range-helpers-the-runtime-does-not-use-audit-area-11)): the replacement walk counts an identity at its
@@ -33,8 +30,7 @@ then a fresh review of the integrated M9d (tooling and drills; no runtime change
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 9 (Goal above): a settle refused under service reads as unreleased (adopted limit; more is pool-v4). Acceptance: the real-proof wallet path
-   (M9d1, done) plus crash drills inside redemption acts, seed-restored demands and C3.4–C3.8 hostile cases with real proofs (M9d2).
+1. Slice 9 done (Goal); the numbering below is kept for its references.
 2. Profile visibility table (docs/spec, any time before slice 10's wallet text): pool-v3 on Ergo per party and per issuer/operator/witness
    collusion, with traffic (service connections, publication timing, node queries) and small-pool inference (§C1.4 asks profiles for their own).
 3. Slice 10, installable commands on the testnet: ship the compiled artifacts with a loader checked against the manifest (drops `programs`);
@@ -96,5 +92,5 @@ then a fresh review of the integrated M9d (tooling and drills; no runtime change
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
   mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 
-Roughly **60% done / 40% remaining**, range **50–70%**, reassessed 2026-10-01 (direction): the remainder lacked redemption's operations,
-the visibility table and release assurance; with them installable commands, the design point, qualified storage and mainnet remain.
+Roughly **62% done / 38% remaining**, range **52–72%**, reassessed 2026-10-02 (slice 9 done): redemption's operations now run through the
+wallet with real proofs; the visibility table, installable commands, the design point, release assurance, qualified storage and mainnet remain.
