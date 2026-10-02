@@ -43,8 +43,9 @@ import { compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js
 export const EIP37_ACTIVATION_HEIGHT = 844_673n;
 export const DIFFICULTY_EPOCH = 128n;
 const USE_LAST_EPOCHS = 8n, BLOCK_INTERVAL_MS = 120_000n, PRECISION = 1_000_000_000n;
-/** Mainnet's `initialDifficultyHex`, the floor of the predictive estimate. */
-const INITIAL_DIFFICULTY = 0x0117_6500_0000n;
+/** Mainnet's `initialDifficultyHex`, the floor of the predictive estimate and
+ * the bound below which `ErgoVenue` requires a testnet reference anchor. */
+export const INITIAL_DIFFICULTY = 0x0117_6500_0000n;
 /** Pinned v6.0.6 reference-testnet rules, not caller-selected parameters. */
 const TESTNET_INTERVAL_MS = 45_000n, TESTNET_INITIAL_DIFFICULTY = 1n;
 const TESTNET_V2_ACTIVATION_HEIGHT = 2_147_483_647n;

@@ -1,15 +1,18 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { makeBacking, type Backing } from "../src/backing.js";
 import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
 import { DEFAULT_ERGO_DEPTH, ergoAnchorContext, ergoProfile, ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
-import { ergoProfileIdentity, type ErgoTransactionView } from "../src/ergo-profile.js";
+import { decodeCompactBits, INITIAL_DIFFICULTY, parseErgoHeader } from "../src/ergo-headers.js";
+import { ERGO_TESTNET_REFERENCE, ergoProfileIdentity, type ErgoTransactionView } from "../src/ergo-profile.js";
 import {
   admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, revocationIndex,
   type HeldCommitment, type RangeAnswer, type RangeRequest, type RecordKind,
 } from "../src/record-range.js";
 import { encodeReplacement, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
 import { encodeRevocation, signRevocation } from "../src/revocation.js";
+import { referenceVenue, requireReferenceVenue } from "../src/pool/v3/guard.js";
 import { VenueError } from "../src/venue-error.js";
 import {
   ANCHOR_HEIGHT, BranchSupplier, Chain, hex, plainOutput, rawOutput, recordOutput, SCRIPTS, transaction, type Block, type Output,
@@ -125,6 +128,33 @@ describe("a venue's identity is the profile's", () => {
     expect(Buffer.from(chain.reanchored(0x0101_0000).anchorId)).toEqual(Buffer.from(chain.anchor.id));
     expect(ergoProfile(PROFILE.anchor, SCRIPTS).depth).toBe(DEFAULT_ERGO_DEPTH);
     expect(DEFAULT_ERGO_DEPTH).toBe(10n);
+  });
+
+  it("reads the testnet reference context only above an anchor below mainnet's initial difficulty", () => {
+    // The anchor's difficulty is the one varied input: each profile passes the guard and each context authenticates
+    // its anchor at testnet height. Mid-epoch the testnet rules require the parent's difficulty, so without the bound
+    // a mainnet anchor's chain would be followed, with its real work, up to the next epoch boundary.
+    const nBits = (file: string): number[] => (JSON.parse(readFileSync(new URL(`./fixtures/${file}`, import.meta.url), "utf8")) as
+      { headers: { bytes: string }[] }).headers.map(entry => parseErgoHeader(Uint8Array.from(Buffer.from(entry.bytes, "hex")))!.nBits);
+    const testnet = (bits: number) => {
+      const other = chain.reanchored(bits), profile = { ...PROFILE, reference: ERGO_TESTNET_REFERENCE, anchor: other.anchorId } as const;
+      return { reference: { context: ERGO_TESTNET_REFERENCE, profile } as const, read: () => new ErgoVenue(profile, other.context) };
+    };
+    const refusal = new VenueError("the testnet reference context reads only a chain whose anchor is below mainnet's initial difficulty");
+    // Every real mainnet header in the fixtures, from genesis (at that difficulty) to height 1,873,409, is refused.
+    const mainnet = [...nBits("ergo-mainnet-v1-headers.json"), ...nBits("ergo-mainnet-recalculation.json")];
+    expect(mainnet.length).toBeGreaterThan(0);
+    for (const bits of [...mainnet, 0x0601_1765]) {
+      const { reference, read } = testnet(bits);
+      expect(referenceVenue(reference).lag).toBe(PROFILE.depth + 1n);
+      expect(read).toThrow(refusal);
+    }
+    // Every real testnet header in the fixtures, and the difficulty just below the bound, is read and passes the guard.
+    expect(decodeCompactBits(0x0601_1765)).toBe(INITIAL_DIFFICULTY);
+    for (const bits of [...nBits("ergo-testnet-recalculation.json"), 0x0601_1764]) {
+      const { reference, read } = testnet(bits), view = read();
+      expect(requireReferenceVenue(reference, view)).toEqual(view.id);
+    }
   });
 
   it("refuses an anchor context that does not end at the profile's anchor", () => {
