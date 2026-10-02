@@ -15,7 +15,7 @@
 //
 // Usage: node scripts/pool/v3/command-drill.mjs  (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -26,7 +26,7 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../..
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
 
-const root = resolve(import.meta.dirname, "../../.."), MOE = join(root, "dist/cli/moe.js"), RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href;
+const root = resolve(import.meta.dirname, "../../.."), RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const obligorSecret = new Uint8Array(32).fill(41), obligor = ed25519.getPublicKey(obligorSecret);
 const SILENCE = 16n, DEPTH = "2";
@@ -41,6 +41,26 @@ function signTerms(name, operator, venue) {
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "command-drill-")));
 const checks = [], processes = [];
+
+/** The package exactly as a consumer installs it: packed, installed into a fresh directory outside the checkout's
+ * dependency tree, and its `moe` run from there. */
+function installPacked() {
+  const npm = process.env.npm_execpath, consumer = join(scratch, "consumer");
+  const run = (args, cwd) => {
+    const result = npm === undefined ? spawnSync("npm", args, { cwd, encoding: "utf8", windowsHide: true, shell: process.platform === "win32", timeout: 300_000 })
+      : spawnSync(process.execPath, [npm, ...args], { cwd, encoding: "utf8", windowsHide: true, timeout: 300_000 });
+    assert.equal(result.status, 0, `npm ${args.join(" ")}: ${result.error?.message ?? result.stderr}`);
+    return result.stdout;
+  };
+  const [packed] = JSON.parse(run(["pack", "--json", "--ignore-scripts", "--pack-destination", scratch], root));
+  mkdirSync(consumer);
+  writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "moe-drill-consumer", private: true, type: "module" }));
+  run(["install", "--ignore-scripts", "--no-audit", "--no-fund", join(scratch, packed.filename)], consumer);
+  const bin = join(consumer, "node_modules", "@mediumofexchange", "reference", "dist", "cli", "moe.js");
+  assert(statSync(bin).isFile(), "the packed install carries the moe bin");
+  return { bin, tarballBytes: statSync(join(scratch, packed.filename)).size, files: packed.entryCount };
+}
+const packed = installPacked(), MOE = packed.bin;
 const check = async (label, fn) => { await fn(); checks.push(label); process.stderr.write(`passed: ${label}\n`); };
 
 const node = await serveSyntheticNode();
@@ -71,9 +91,9 @@ function moe(args, { mining, input } = {}) {
     child.on("error", failed);
     child.on("close", status => {
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
-      let maxRssKb = null;
-      try { maxRssKb = JSON.parse(readFileSync(rss, "utf8")).maxRssKb; rmSync(rss); } catch { /* a process that died before its exit handler */ }
-      processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began), maxRssKb });
+      let maxRssKb = null, noir = null;
+      try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* a process that died before its exit handler */ }
+      processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
       let json;
       try { json = stdout.trim() === "" ? undefined : JSON.parse(stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
       let refusal;
@@ -113,9 +133,9 @@ function serve(directory) {
     // the operating system releases its directory lock either way.
     child.kill("SIGTERM"); const status = await exited;
     if (process.platform !== "win32") assert.equal(status, 0, stderr);
-    let maxRssKb = null;
-    try { maxRssKb = JSON.parse(readFileSync(rss, "utf8")).maxRssKb; rmSync(rss); } catch { /* ended outright (Windows) */ }
-    processes.push({ command: "operator serve (running)", status, elapsedMs: Math.round(performance.now() - began), maxRssKb });
+    let maxRssKb = null, noir = null;
+    try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* ended outright (Windows) */ }
+    processes.push({ command: "operator serve (running)", status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
   } };
 }
 
@@ -491,7 +511,18 @@ console.log(JSON.stringify(open.filter(path => path.includes("etilqs_"))));`);
     assert(temporary.length > 0 && temporary.every(path => path.startsWith(RD + sep)), JSON.stringify(temporary));
   });
 
-  console.log(JSON.stringify({ status: "passed", checks, processes }, null, 2));
+  await check("from the packed install, no process that proves nothing loads a @noir-lang module; proving ones do", async () => {
+    const PROVING = new Set(["wallet pay", "wallet freshen", "wallet reprove", "wallet issue", "wallet demand", "wallet settle", "wallet burn"]);
+    const ended = processes.filter(p => p.noir !== null);
+    assert(ended.length > 0 && ended.some(p => PROVING.has(p.command) && p.status === 0));
+    for (const p of ended) {
+      if (p.command.startsWith("reader ") || p.command.startsWith("relay ") || p.command.startsWith("operator ") ||
+          (p.command.startsWith("wallet ") && !PROVING.has(p.command))) assert.equal(p.noir, false, `${p.command} loaded @noir-lang`);
+      else if (p.status === 0) assert.equal(p.noir, true, `${p.command} proved without the witness generator?`);
+    }
+  });
+
+  console.log(JSON.stringify({ status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files }, checks, processes }, null, 2));
   completed = true;
 } finally {
   await node.close();
