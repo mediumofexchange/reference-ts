@@ -484,13 +484,13 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   // store keeps state across processes, so where the read witnesses outputs, the predicate's identity must be
   // declared too, not named per object. Witnesses stay only at a namespace's tip; a path read below it discards
   // the kept state (replay-store.ts `witness`).
-  requireConfigurationVerifier(context.verifier.identities);
+  const identities = requireConfigurationVerifier(context.verifier.identities);
   if (store.kept && context.witness !== undefined && !(context.witness.identity instanceof Uint8Array)) {
     throw new TypeError("a kept store needs a witness predicate that declares its identity");
   }
   // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
   const { trails } = evidence, walk = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
-    verifier: context.verifier, witness: context.witness }));
+    verifier: { verify: context.verifier.verify, identities }, witness: context.witness }));
   const views = new Map<string, Promise<RecordView>>(), running = new Map<string, Promise<ScopeVerdict>>();
   const cursors = new Map<string, { term: number; after: bigint | undefined; busy: boolean }>();
   // Whether any classification began, and the bound a refused read's fault pass starts below.

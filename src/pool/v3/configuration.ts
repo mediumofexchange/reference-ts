@@ -110,7 +110,10 @@ export function configurationHash(value: Configuration): Uint8Array {
  */
 export function requireConfigurationVerifier(identities: VerifierIdentities | undefined): VerifierIdentities {
   const refuse = (): never => { throw new TypeError("the verifier's circuit identities are not the configuration's"); };
-  if (identities === null || typeof identities !== "object" || Object.keys(identities).length !== RELATIONS.length) return refuse();
+  // Exactly the six names as the verifier's own enumerable keys: a hidden or extra one would name another verifier
+  // in kept state (`verifierName` reads the enumerable keys) than the one checked here.
+  if (identities === null || typeof identities !== "object" || Object.keys(identities).length !== RELATIONS.length ||
+      Reflect.ownKeys(identities).length !== RELATIONS.length) return refuse();
   const owned: { [name: string]: VerifierIdentities[string] } = {}, configuration = decodeConfiguration(ADOPTED);
   for (const name of RELATIONS) {
     // Each relation's own entry: one inherited from a prototype is not what the verifier declares.

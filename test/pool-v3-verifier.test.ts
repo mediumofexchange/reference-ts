@@ -49,7 +49,7 @@ describe("the verifier over the package's shipped relations, pool-v3 §11.1", ()
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("imports nothing from @noir-lang: a verify-only party installs only the backend", () => {
+  it("imports nothing from @noir-lang: a verify-only party loads only the backend", () => {
     const seen = new Set<string>(), bare = new Set<string>(), pending = [fileURLToPath(new URL("../src/pool/v3/verifier.ts", import.meta.url))];
     while (pending.length > 0) {
       const file = pending.pop()!;

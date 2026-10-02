@@ -16,7 +16,7 @@
 // the backend's own loader, which reads an unchecked directory or downloads,
 // is never used.
 // This module and `v3/prover.ts` are the only ones that import `@aztec/bb.js`,
-// an optional peer dependency.
+// an exact-pinned dependency.
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
