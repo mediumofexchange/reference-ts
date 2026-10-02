@@ -21,7 +21,8 @@ import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
-import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { decodeRecord, deliveryHash, encodePublication, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { withdrawalRecord } from "../src/pool/v3/witness.js";
 import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -423,6 +424,60 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(fresh.carrying.map(item => item.sequence)).toEqual(["1", "2", "3"]);
     expect(outcome(await read(store))).toEqual(fresh);
     expect(outcome(await read(store))).toEqual(fresh);
+  });
+
+  it("reuses a kept publication verdict only with its snapshot classified on this read's evidence, and discards one that snapshot rules out (§14)", async () => {
+    const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
+    const backings = ["kept force x", "kept force y"].map(thing => {
+      const fields = { configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
+        payout: { thing, quantumExponent: 0, perUnit: 1n }, silence: { noCommitmentDuration: 50n, challengeWindow: 5n } };
+      const terms = encodeRootTerms(fields);
+      return { name: rootTermsName(terms), signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) } };
+    }).sort((a, z) => compareBytes(a.name, z.name));
+    const [x, y] = backings as [typeof backings[0], typeof backings[0]];
+    const items: EvidenceItem[] = [];
+    type Scoped = { header: SegmentHeader; id: Uint8Array; scoped: typeof backings; state: SegmentState };
+    function checkpoint(seg: Scoped, sequence: bigint, index: bigint): { commitment: Commitment; directory: Uint8Array } {
+      const snapshots = seg.scoped.map(item => ({ backing: item.name, segment: seg.id, historyHash: seg.state.history,
+        evidenceHash: seg.state.evidence, ...seg.state.total(hex(item.name)) }));
+      const directory = encodeEvidenceDirectory(snapshots.map(s => ({ name: s.backing, digest: snapshotDigest(s) })));
+      for (const s of snapshots) items.push({ kind: 4, payload: snapshotBytes(s) });
+      items.push({ kind: 3, payload: directory });
+      items.push({ kind: 6, payload: encodeTrail({ header: segmentBytes(seg.header), terms: seg.scoped.map(item => item.signed), records: [] }) });
+      const commitment = signCommitment(operatorSecret, sequence, directoryRoot(snapshots.map(s => ({ name: s.backing, digest: snapshotDigest(s) }))));
+      venue.witness(1, operator, index, encodeCommitment(commitment));
+      return { commitment, directory };
+    }
+    // S1 scopes x and y and is y's canonical segment; S2 then scopes x alone, importing S1's opening.
+    const h1: SegmentHeader = { domain, venue: venue.id, operator, sequence: 1n, entries: [x, y].map(item => ({ backing: item.name, link: item.name })) };
+    const s1: Scoped = { header: h1, id: segmentIdentity(h1), scoped: [x, y], state: openSegmentState(operatorStore, segmentIdentity(h1), b(90), undefined) };
+    const c1 = checkpoint(s1, 1n, 1n).commitment;
+    const h2: SegmentHeader = { domain, venue: venue.id, operator, sequence: 2n,
+      entries: [{ backing: x.name, link: x.name, opening: { operator, sequence: c1.sequence, root: c1.root } }] };
+    const s2: Scoped = { header: h2, id: segmentIdentity(h2), scoped: [x], state: openSegmentState(operatorStore, segmentIdentity(h2), b(91), s1.state) };
+    const s2Directory = checkpoint(s2, 2n, 3n).directory;
+    // A withdrawal published to x after S2's opening: its verdict reads x's snapshot strictly before it, S2's opening.
+    const withdrawal = withdrawalRecord({ domain, header: h2 }, b(70), b(71));
+    venue.witness(4, x.name, 4n, encodePublication({ domain, backing: x.name, kind: 4, record: withdrawal }));
+    const read = (packageItems: EvidenceItem[], store?: ReplayStore) => readFrontier(pack(packageItems), y.signed, venue.witnessedIndex(),
+      { verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }) });
+    const refusal = (result: Promise<unknown>) => result.then(() => "read", (error: Error) => error.message);
+    const kept = files(), store = opened(kept.path, kept), fresh = outcome(await read(items));
+    expect(fresh.ranges.publications).toEqual([{ backing: hex(x.name), index: "4", ordinal: "0", force: false }]);
+    expect(outcome(await read(items, store))).toEqual(fresh);
+    // Without S2's directory a fresh read cannot place the withdrawal's snapshot, and neither can the kept read.
+    const withoutS2 = items.filter(item => !(item.kind === 3 && compareBytes(item.payload, s2Directory) === 0));
+    expect(await refusal(read(withoutS2))).toContain("unresolved-evidence");
+    expect(await refusal(read(withoutS2, store))).toBe(await refusal(read(withoutS2)));
+    expect(outcome(await read(items, store))).toEqual(fresh);
+    // A kept verdict its snapshot rules out (force within the silence duration), its digest recorded again, is
+    // discarded: the read gives the fresh verdict.
+    store.close();
+    const db = new DatabaseSync(kept.path); db.exec("UPDATE publication SET force = 1"); db.close();
+    writeFileSync(kept.digest, createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
+    const reopened = opened(kept.path, kept);
+    expect(reopened.keptRows()).toBeGreaterThan(0);
+    expect(outcome(await read(items, reopened))).toEqual(fresh);
   });
 
   it("reads a growing history from packages carrying only new objects, as a fresh read of the complete package does (§14)", async () => {
