@@ -192,9 +192,10 @@ function writeNew(path: string, data: string | Uint8Array): void {
     fsyncSync(fd);
   } finally { closeSync(fd); }
 }
-/** Sync the directory holding `path`, so a link or rename into it outlives a crash; where the platform cannot open
- * a directory (Windows), the file system orders it. */
+/** Sync the directory holding `path`, so a link or rename into it outlives a crash; on Windows, which refuses to
+ * sync a directory, and where the platform cannot open one, the file system orders it. */
 function syncParent(path: string): void {
+  if (process.platform === "win32") return;
   let fd: number;
   try { fd = openSync(dirname(path), "r"); } catch (error) {
     if (["EISDIR", "EPERM", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) return;
