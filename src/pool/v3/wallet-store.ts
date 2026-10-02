@@ -611,8 +611,8 @@ export class V3Wallet {
    * longer the canonical one (a dead segment never becomes canonical again; a new alias acts in the live one), a
    * demand's instant has left C3.3's window at every horizon from this read on, an issue's or settlement's output
    * exists from another statement (a settlement's also from one with force), a reserved input was spent otherwise,
-   * a withdrawal's demand was settled, or a settlement's demand no longer stands or its acceptance deadline has
-   * passed (no door admits it after). Demands are judged after the acts that end them. A view older than the one a
+   * a withdrawal's or a settlement's demand no longer stands (ended by an act of another copy too), or a
+   * settlement's acceptance deadline has passed (no door admits it after). Demands are judged after the acts that end them. A view older than the one a
    * record was built from decides no failure for it. A failure read from one view is local accounting: an operator
    * reading behind this wallet may still admit the record, which then goes final. */
   private resolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint):
@@ -644,7 +644,7 @@ export class V3Wallet {
       else switch (record.kind) {
         case 1: status = canonical.state.hasOutput(p[8]!) ? "failed" : undefined; break;
         case 3: status = spent(name) ? "failed" : undefined; break;
-        case 5: status = ended(demand!, "6") ? "failed" : undefined; break;
+        case 5: status = ended(demand!, "6") || force.demand(demand!) === undefined ? "failed" : undefined; break;
         case 6: status = force.demand(demand!) === undefined || force.hasOutput(p[14]!) || spent(name) ||
           at > settlementAuthorization(record).acceptance.deadline ? "failed" : undefined; break;
       }
@@ -1415,10 +1415,13 @@ export class V3Wallet {
    * counts towards the next settlement's disclosure count. Venue refusals surface as the publisher's `VenueError`. */
   async publish(name: string, publisher: RecordPublisher): Promise<void> {
     name = alias(name); this.mutable();
-    const row = this.db.prepare("SELECT kind,record,backing FROM saved_records WHERE alias=? AND kind!='2'").get(name);
+    const row = this.db.prepare("SELECT kind,record,backing,status FROM saved_records WHERE alias=? AND kind!='2'").get(name);
     requireThat(row !== undefined, "UNKNOWN", "unknown act");
     const kind = ({ "4": 1, "6": 3, "5": 4 } as const)[row.kind as string];
     requireThat(kind !== undefined, "INVALID", "only a demand, a withdrawal or a release is published");
+    // A failed settlement has no force at any later index, and its release would disclose the output that a later
+    // settlement of the demand at the same disclosure count names (C3.5).
+    requireThat(kind !== 3 || row.status !== "failed", "CONFLICT", "a failed settlement is not published");
     const send = publisher?.publishRecord;
     requireThat(typeof send === "function", "INVALID", "a venue publisher is required");
     const backing = copyUnshared(row.backing as Uint8Array);

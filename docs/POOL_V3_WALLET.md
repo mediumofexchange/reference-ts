@@ -329,7 +329,12 @@ nothing. An output disclosed only to an operator is not counted (C3.5).
 Because `rho_out` reads no acceptance or owner, `settle` refuses (`CONFLICT`)
 while another settlement of the demand is prepared at the same count: one
 published release would otherwise let K compute the other's output for any
-owner. Publish or resolve the prepared one first.
+owner. Publish or resolve the prepared one first. For the same reason
+`publish` refuses (`CONFLICT`) a settlement that has failed: it has no force
+at any later index, and a later settlement at the same count names its output.
+A release sent in time but witnessed only after a later settlement at its count
+was built still discloses that settlement's output; C3.5's count reads only
+witnessed releases (WORK.md Open questions).
 
 Resolution: an act is final once its statement is in canonical history,
 imports included, or (a demand, withdrawal or settlement) has force at the
