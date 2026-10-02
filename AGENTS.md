@@ -164,7 +164,7 @@ verdicts cannot close runtime or release gates.
 
 ## Handoff and workspace hygiene
 
-Keep AGENTS.md under 200 lines and WORK.md under 100. Before stopping/compaction, replace stale
+Keep AGENTS.md at most 200 lines and WORK.md at most 100. Before stopping/compaction, replace stale
 handoff status with goal/acceptance, branch/relevant commits, evidence, next executable action,
 blockers/review owed, and companion branch or decision links. Distinguish source/model/proof/
 fixture/live evidence. Do not append diaries or create decisions merely to record completion.
