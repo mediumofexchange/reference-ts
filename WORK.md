@@ -9,7 +9,7 @@ a byte, identity or verdict change (C3.8's residual too) is pool-v4.
 `V3Wallet` owns both redemption roles ([guide](docs/POOL_V3_WALLET.md#redeeming-and-issuing)); acceptance and stop: Next 1. Done: **M9a** (PRs #69, #71)
 acts under service; **M9b1** (PR #70) gap acts, `publish`, disclosure count; **M9b2** (PR #72) seed-found demands, locks, `CHANGED_VIEW`, acts of an ended
 segment made again. **M9c1** (PR #73, [decision](decisions/2026-10.md#2026-10-01--read-c38-per-witnessed-index-from-the-record-a-frontier-read-holds-and-tell-a-taken-release-apart-at-force)):
-`presentation` reads C3.8 per witnessed index, `publishAcceptance`, force reports `TAKEN`. **M9c2** (PR #74, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)):
+`presentation` reads C3.8 per witnessed index, `publishAcceptance`, force reports `TAKEN`. **M9c2** (PR #74, merged 4673719, [decision](decisions/2026-10.md#2026-10-02--close-five-deferred-review-findings-kept-force-testnet-anchor-side-branch-quota-served-lag-and-adopted-receipts-m9c2)):
 review findings (q) kept force dependency explicit (was unreachable), (a) testnet anchor below mainnet's initial difficulty, (e) side-branch
 quota forgiven as the chain advances, (b) `package()` serves a published commitment only in flight, (c) adoption replaces a lapsed tail's
 receipt; one fail-before test each, unit suite 1998/1998, `check:scripts`, fresh review (two minor on (a), taken as text).
