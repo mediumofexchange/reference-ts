@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-03` [Measure the design point at sizes a run can prove, and give the holder's transport and funding a slice before release assurance](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)
 - `2026-10-03` [Keep the Ergo view in append-only SQLite rows and reopen it without re-verifying (slice 11 M11a)](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)
 - `2026-10-03` [Read every replay-harness package through the runtime reader, and drop the no-venue replay (slice 10 M10e2)](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)
 - `2026-10-03` [Hold the note tree's last leaf and judge §7's position bound first (audit, area 27)](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)
