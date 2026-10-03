@@ -19,9 +19,12 @@
 //
 // **Reads are a materialised view.** `RecordVenue` is synchronous, so this syncs
 // asynchronously and answers synchronously from the last complete snapshot.
-// The view keeps objects attributed at the four locations, by index, and
-// accepted headers; the optional journal also retains lossless root evidence.
-// A later sync reads the new blocks only.
+// The view keeps its accepted headers, the best chain by height, each read
+// block's raw section and the objects attributed at the four locations in
+// SQLite rows (`ergo-store.ts`): in its journal's file, or in a private
+// in-memory database for a view without one. Memory holds the anchor's context
+// and one sync's reads, not the chain. A later sync reads the new blocks only,
+// and a reopened view resumes from its rows without re-checking their work.
 //
 // **The witnessed index is the block that included the transaction**, index
 // `i` being the block `i + 1` heights above the anchor, never a box's creation
@@ -45,15 +48,15 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { arrayLength, byteLength, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
-import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, INITIAL_DIFFICULTY, type ErgoHeaderStore } from "./ergo-headers.js";
+import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, INITIAL_DIFFICULTY, type ErgoHeaderRows, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
-  attributeSection, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, ownErgoProfile, rangeEntries, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
+  attributeSection, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, orderedEntries, ownErgoProfile, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
 import type { ErgoPublication, ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
-import type { ErgoCheckpoint, ErgoVenueJournal } from "./ergo-store.js";
+import { ErgoVenueJournal, objectKey, type ErgoSectionRow, type ErgoViewState } from "./ergo-store.js";
 import {
-  copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RangeLimits, type RangeRequest, type RecordKind,
+  copyLimits, copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
 import type { RecordPublisher, RecordVenue } from "./record-venue.js";
 import { VenueError } from "./venue-error.js";
@@ -87,18 +90,19 @@ export interface ErgoReaderPolicy {
    * honest reorganization traffic, far rarer than one header in 16 blocks,
    * never spends it. Past it the supplier's headers are not read and it no
    * longer holds the clock back: it is withholding until the chain forgives
-   * enough. It is kept per supplier object, so a caller reuses its supplier
-   * objects across syncs. This bounds the work and memory a cheap side branch
-   * can cost (venue-ergo.md §3: without the node's clock rule, future
-   * timestamps lower a side branch's difficulty) to this many headers, plus
-   * one sync's `headersPerSupplier`, plus one per 16 heights of best-chain
-   * advance, per supplier object. */
+   * enough. It is kept per supplier name, with the view's rows, so it
+   * outlives the process and suppliers need distinct names. This bounds the
+   * work and storage a cheap side branch can cost (venue-ergo.md §3: without
+   * the node's clock rule, future timestamps lower a side branch's difficulty)
+   * to this many headers, plus one sync's `headersPerSupplier`, plus one per
+   * 16 heights of best-chain advance, per supplier name. */
   readonly sideHeadersPerSupplier: number;
   /** Section bytes received, matching or not, after which one sync reads no
    * further section; the next sync continues. */
   readonly sectionBytesPerSync: number;
-  /** Bytes the retained objects may take (each record, its subject and a
-   * fixed overhead); past it the clock stops until the budget is raised. */
+  /** Bytes the retained objects may take in the view's rows (each record, its
+   * subject and a fixed overhead); past it the clock stops until the budget is
+   * raised. */
   readonly retainedBytes: number;
   /** A supplier call not settled in this many milliseconds did not supply. */
   readonly supplierTimeoutMs: number;
@@ -107,8 +111,8 @@ export const DEFAULT_ERGO_READER_POLICY: ErgoReaderPolicy = Object.freeze({
   headersPerSupplier: 2_000,
   headersPerRequest: 500,
   sideHeadersPerSupplier: 20_000,
-  sectionBytesPerSync: 256 * 1024 * 1024,
-  retainedBytes: 256 * 1024 * 1024,
+  sectionBytesPerSync: 32 * 1024 * 1024,
+  retainedBytes: 8 * 1024 * 1024 * 1024,
   supplierTimeoutMs: 60_000,
 });
 /** Heights of best-chain advance that forgive one header charged to a supplier's side-branch quota. */
@@ -144,11 +148,10 @@ export interface ErgoSupplierReport {
   readonly stopped?: string;
 }
 
-/** One complete view: the clock, the attributed objects by index through it,
- * and the header at the clock, which later chains must keep. */
+/** One complete view: the clock and the header at it, which later chains must
+ * keep. Its objects are the rows through the clock. */
 interface Snapshot {
   readonly witnessed: bigint;
-  readonly sections: readonly (readonly AttributedObject[])[];
   readonly witnessedHeaderId: Uint8Array;
 }
 /** A supplier's header pass: its report, the ids of the headers it added,
@@ -189,21 +192,21 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   private readonly venueId: Uint8Array;
   private readonly store: ErgoHeaderStore;
   private readonly policy: ErgoReaderPolicy;
-  /** Attributed objects by index, from index 0 through the clock: a sync reads no further than the clock it publishes. */
-  private readonly sections: (readonly AttributedObject[])[] = [];
-  /** The header ids the sections were read for, by index. */
-  private readonly sectionHeaders: Uint8Array[] = [];
-  /** Lossless root evidence, retained only by a durable view. */
-  private readonly sectionViews: (readonly ErgoTransactionView[])[] = [];
-  /** The first index of each distinct object (kind, subject and record) the sections hold, so that whether the view
-   * holds a record costs no scan of its history. */
-  private readonly firstIndex = new Map<string, bigint>();
-  private readonly protectedHeaders = new Map<string, Uint8Array>();
+  /** The rows: headers, sections through the clock and their objects. A sync reads no further than the clock it
+   * publishes, and writes what it read in its one commit. */
+  private readonly journal: ErgoVenueJournal;
+  /** Whether the rows outlive this instance, in a journal the caller handed in. */
+  private readonly durable: boolean;
+  /** The header each supplier's last pass reached, by supplier name, kept through pruning until it is on the best chain:
+   * a fork longer than one sync's budget, or one whose supplier failed mid-pass, accumulates across syncs and restarts. */
+  private readonly protectedHeaders = new Map<string, Map<string, Uint8Array>>();
+  /** A kept header at least the depth above the clock's block that descends from it. */
+  private buried: Uint8Array | undefined;
   private retained = 0;
   /** Each supplier's outstanding side-branch charge, in heights (`SIDE_HEADER_HEIGHTS` per header it added that
    * ended a sync off the best chain, less the best chain's advance since), and the highest best-chain height
    * already credited against it. */
-  private readonly sideHeaders = new WeakMap<object, { readonly charge: bigint; readonly height: bigint }>();
+  private readonly sideHeaders = new Map<string, { readonly charge: bigint; readonly height: bigint }>();
   /** The supplier that supplied the last section, asked first for the next, so suppliers that fail cost nothing
    * while it supplies. */
   private preferred: ErgoSupplier | undefined;
@@ -213,12 +216,21 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   /** Where this view's own records go out; a view without one only reads. */
   private publisher: ErgoPublisher | undefined;
 
+  /** A view keeps its rows in `journal`, attached to it alone, or without one in a private in-memory database. */
   constructor(profile: ErgoProfile, anchorContext: readonly Uint8Array[], policy: Partial<ErgoReaderPolicy> = {}, publisher?: ErgoPublisher,
-    private readonly journal?: ErgoVenueJournal) {
+    journal?: ErgoVenueJournal) {
     this.publisher = publisher;
     this.profile = ownErgoProfile(profile);
     this.venueId = ergoProfileIdentity(this.profile);
-    const store = ergoHeaderStore(this.profile.anchor, anchorContext, this.profile.reference === ERGO_TESTNET_REFERENCE ? "testnet" : "mainnet");
+    this.durable = journal !== undefined;
+    this.journal = journal ?? ErgoVenueJournal.memory(this.venueId);
+    const { rows, state } = this.journal.attach(this.venueId);
+    let store: ErgoHeaderStore | undefined;
+    try { store = ergoHeaderStore(this.profile.anchor, anchorContext, this.profile.reference === ERGO_TESTNET_REFERENCE ? "testnet" : "mainnet", rows); } catch (error) {
+      // The store reads its best tip from the rows; a row it cannot read is stored evidence that reproduces nothing.
+      if (error instanceof VenueError) throw error;
+      throw new VenueError("stored Ergo evidence does not reproduce its witnessed view");
+    }
     if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
     // Each context selects its header rules, and a header id names no network, so each reference context also
     // bounds its anchor's difficulty; a header id commits to its ancestry, so the bound keeps a profile naming either
@@ -247,8 +259,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       throw new TypeError("invalid Ergo reader policy");
     }
     this.policy = Object.freeze(owned);
-    const saved = journal?.load(this.venueId);
-    if (saved !== undefined) this.restore(saved);
+    this.restore(state);
   }
 
   /** Attach once after opening the owning operator journal's outbox. */
@@ -257,60 +268,55 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     this.publisher = publisher;
   }
 
-  private restore(saved: ErgoCheckpoint): void {
+  /** The stored clock, checked as far as is cheap: the rows are this view's own (pool-v3 §14), so no work or root is
+   * re-checked, but the clock's block must stand on the best chain the rows name, and some kept header must have
+   * buried it at the depth (venue-ergo §2). */
+  private restore(state: ErgoViewState): void {
     const invalid = (): never => { throw new VenueError("stored Ergo evidence does not reproduce its witnessed view"); };
-    const headers = new Map<string, ReturnType<typeof parseErgoHeader>>();
-    for (const bytes of saved.headers) {
-      if (this.store.add(bytes) !== "added") invalid();
-      const header = parseErgoHeader(bytes)!; headers.set(bytesToHex(header.id), header);
+    if (state.retained > this.policy.retainedBytes) throw new VenueError("stored Ergo evidence exceeds the retained budget");
+    this.retained = state.retained;
+    try { this.restoreClock(state); } catch (error) {
+      // A row the checks read but cannot find or parse is stored evidence that does not reproduce the view.
+      if (error instanceof VenueError) throw error;
+      invalid();
     }
-    for (const id of saved.protectedHeaders) {
-      const key = bytesToHex(id);
-      if (!headers.has(key) || this.protectedHeaders.has(key)) invalid();
-      this.protectedHeaders.set(key, copyBytes(id));
+  }
+  private restoreClock(state: ErgoViewState): void {
+    const invalid = (): never => { throw new VenueError("stored Ergo evidence does not reproduce its witnessed view"); };
+    for (const { name, id } of state.protectedHeaders) {
+      if (this.store.heightOf(id) === undefined) invalid();
+      const kept = this.protectedHeaders.get(name) ?? new Map<string, Uint8Array>();
+      kept.set(bytesToHex(id), copyBytes(id)); this.protectedHeaders.set(name, kept);
     }
-    const best = this.store.best(), anchor = this.store.tip().anchorHeight;
-    let parent = this.profile.anchor;
-    for (const [index, section] of saved.sections.entries()) {
-      const header = headers.get(bytesToHex(section.header));
-      if (header === undefined || header.height !== anchor + 1n + BigInt(index) || compareBytes(header.parentId, parent) !== 0) invalid();
-      const read = ownSection(section.views), objects = read.views === undefined ? undefined : attributeSection(this.profile, read.views, header!.transactionsRoot);
-      if (objects === undefined) invalid();
-      this.retained += objects!.reduce((total, object) => total + retainedSize(object), 0);
-      if (this.retained > this.policy.retainedBytes) throw new VenueError("stored Ergo evidence exceeds the retained budget");
-      this.hold(BigInt(index), objects!);
-      this.sections.push(objects!); this.sectionHeaders.push(copyBytes(section.header)); this.sectionViews.push(read.views!);
-      parent = section.header;
-    }
-    if (saved.witnessed === undefined) {
-      if (saved.pin !== undefined || saved.sections.length !== 0 || saved.failure !== undefined) invalid();
-    } else {
-      if (saved.witnessed !== BigInt(saved.sections.length) - 1n || saved.pin === undefined || compareBytes(parent, saved.pin) !== 0) invalid();
-      // What a sync checks of its published clock: the best chain keeps its block, however short a heavier chain
-      // has since made it, and some kept chain buried that block at the depth (venue-ergo §2). Pruning keeps every
-      // descendant of the clock's block, and headers are stored parents first.
-      if (saved.failure === undefined) {
-        const final = best.headers[Number(saved.witnessed)];
-        if (final === undefined || compareBytes(final.id, saved.pin!) !== 0) invalid();
-        const above = new Set([bytesToHex(saved.pin!)]);
-        let deepest = final!.height;
-        for (const header of headers.values()) {
-          if (!above.has(bytesToHex(header!.parentId))) continue;
-          above.add(bytesToHex(header!.id));
-          if (header!.height > deepest) deepest = header!.height;
-        }
-        if (deepest < final!.height + this.profile.depth) invalid();
+    for (const { name, charge, height } of state.charges) this.sideHeaders.set(name, { charge, height });
+    if (state.witnessed !== undefined) {
+      const anchor = this.store.tip().anchorHeight, height = anchor + 1n + state.witnessed;
+      if (state.failure === undefined) {
+        const final = this.store.bestAt(height);
+        if (final === undefined || compareBytes(final.id, state.pin!) !== 0) invalid();
+        // A heavier chain can be shorter, so the burying header may be on a side branch, meeting the best chain at or
+        // above the clock's block.
+        const buried = state.buried!, top = this.store.heightOf(buried), meets = this.store.forkHeight(buried);
+        if (top === undefined || top < height + this.profile.depth || meets === undefined || meets < height) invalid();
       }
-      this.snapshot = Object.freeze({ witnessed: saved.witnessed, witnessedHeaderId: copyBytes(saved.pin!), sections: Object.freeze([...this.sections]) });
+      this.buried = state.buried;
+      this.snapshot = Object.freeze({ witnessed: state.witnessed, witnessedHeaderId: copyBytes(state.pin!) });
     }
-    this.failure = saved.failure;
+    this.failure = state.failure;
   }
 
-  private persist(snapshot: Snapshot | undefined): void {
-    this.journal?.commit({ headers: this.store.retained(),
-      sections: this.sectionViews.map((views, index) => ({ header: this.sectionHeaders[index]!, views })),
-      witnessed: snapshot?.witnessed, pin: snapshot?.witnessedHeaderId,
-      protectedHeaders: [...this.protectedHeaders.values()], failure: this.failure });
+  /** Write one sync's sections and the state after it, in one transaction. */
+  private persist(snapshot: Snapshot | undefined, sections: readonly ErgoSectionRow[]): void {
+    if (snapshot !== undefined) {
+      // A pin the best chain buries at the depth takes its tip as the burying header; otherwise, as when a heavier but
+      // shorter chain leads, the pin has not moved and the earlier burying header still descends from it.
+      const tip = this.store.tip(), height = tip.anchorHeight + 1n + snapshot.witnessed;
+      if (this.failure === undefined && tip.height >= height + this.profile.depth) this.buried = tip.id;
+    }
+    this.journal.commit({ sections, witnessed: snapshot?.witnessed, pin: snapshot?.witnessedHeaderId, buried: snapshot === undefined ? undefined : this.buried,
+      failure: this.failure, retained: this.retained,
+      charges: [...this.sideHeaders].map(([name, { charge, height }]) => ({ name, charge, height })),
+      protectedHeaders: [...this.protectedHeaders].flatMap(([name, ids]) => [...ids.values()].map(id => ({ name, id }))) });
   }
 
   get id(): Uint8Array {
@@ -350,53 +356,49 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     this.syncing = true;
     try {
       this.journal?.assertOwner();
-      const passes: { supplier: ErgoSupplier; pass: HeaderPass }[] = [];
-      for (const source of sources) passes.push({ supplier: source.supplier, pass: await this.syncHeaders(source.supplier, source.name) });
-      // Protection keeps a stopped pass's headers through a durable view's pruning; a memory view prunes nothing.
-      if (this.journal !== undefined) for (const { pass } of passes) if (pass.protect !== undefined) {
-        const id = blake2b(pass.protect, { dkLen: 32 }); this.protectedHeaders.set(bytesToHex(id), id);
+      const passes: { supplier: ErgoSupplier; name: string; pass: HeaderPass }[] = [];
+      for (const source of sources) passes.push({ ...source, pass: await this.syncHeaders(source.supplier, source.name) });
+      // A supplier whose passes reached a header keeps only what they reached under its name, whatever ended them; one
+      // that reached none (down, or refused at once) keeps what it had.
+      for (const { name, pass } of passes) if (pass.protect !== undefined) this.protectedHeaders.delete(name);
+      for (const { name, pass } of passes) if (pass.protect !== undefined) {
+        const id = blake2b(pass.protect, { dkLen: 32 }), kept = this.protectedHeaders.get(name) ?? new Map<string, Uint8Array>();
+        kept.set(bytesToHex(id), id); this.protectedHeaders.set(name, kept);
       }
-      const best = this.store.best(), anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
+      const best = this.store.tip(), anchorHeight = best.anchorHeight, depth = this.profile.depth;
       // Each supplier is charged, whatever ended its pass, exactly the headers it added that are not on the best
       // chain: a supplier whose chain keeps ending off it spends its side-branch quota and is then withholding, and a
       // branch that briefly leads charges an honest supplier only its headers past the fork. The best chain's advance
       // since a supplier's last charge forgives one header per `SIDE_HEADER_HEIGHTS`: the network's work, never the
       // supplier's, so a cheap branch gains only that rate, and an honest supplier's orphans never accumulate.
-      let lowest: bigint | undefined;
-      for (const { pass } of passes) for (const id of pass.added) {
-        const height = this.store.heightOf(id);
-        if (height !== undefined && (lowest === undefined || height < lowest)) lowest = height;
-      }
-      const onBest = new Set<string>();
-      if (lowest !== undefined) for (let i = Number(lowest - anchorHeight - 1n); i < best.headers.length; i++) onBest.add(bytesToHex(best.headers[i]!.id));
-      for (const { supplier, pass } of passes) {
-        const off = BigInt(pass.added.filter(id => !onBest.has(bytesToHex(id))).length), entry = this.sideHeaders.get(supplier);
+      for (const { name, pass } of passes) {
+        const off = BigInt(pass.added.filter(id => !this.store.isBest(id)).length), entry = this.sideHeaders.get(name);
         if (entry === undefined) {
-          if (off > 0n) this.sideHeaders.set(supplier, { charge: off * SIDE_HEADER_HEIGHTS, height: best.height });
+          if (off > 0n) this.sideHeaders.set(name, { charge: off * SIDE_HEADER_HEIGHTS, height: best.height });
           continue;
         }
         // A heavier shorter chain lowers the best height; the credited height never falls, so no advance counts twice.
         const advance = best.height > entry.height ? best.height - entry.height : 0n;
         const charge = (entry.charge > advance ? entry.charge - advance : 0n) + off * SIDE_HEADER_HEIGHTS;
-        if (charge === 0n) this.sideHeaders.delete(supplier);
-        else this.sideHeaders.set(supplier, { charge, height: entry.height + advance });
+        if (charge === 0n) this.sideHeaders.delete(name);
+        else this.sideHeaders.set(name, { charge, height: entry.height + advance });
       }
       // The best chain must keep the header at the published clock: its id commits to every block before it.
       const previous = this.snapshot, clock = previous?.witnessed ?? -1n;
       if (previous !== undefined) {
-        const kept = best.headers[Number(previous.witnessed)];
+        const kept = this.store.bestAt(anchorHeight + 1n + previous.witnessed);
         if (kept === undefined || compareBytes(kept.id, previous.witnessedHeaderId) !== 0) {
           this.failure = "venue failure: the best chain left a block witnessed under the depth";
-          this.persist(previous);
+          this.persist(previous, []);
           throw new VenueError(this.failure);
         }
       }
-      // Every sync reads sections only up to the clock it publishes, so the sections are exactly those through the
-      // clock, all on the chain that keeps its block.
-      if (BigInt(this.sections.length) !== clock + 1n) throw new Error("the Ergo view's sections do not end at its clock");
+      // Every sync reads sections only up to the clock it publishes, so the stored sections are exactly those through
+      // the clock, all on the chain that keeps its block; this sync's are held here until its commit.
+      const read: ErgoSectionRow[] = [];
       const chainWitnessed = best.height - depth - anchorHeight - 1n;
       let bound = chainWitnessed;
-      for (const { supplier, pass: { last } } of passes) {
+      for (const { name, pass: { last } } of passes) {
         if (last === undefined) continue;
         // A supplier the header budget stopped before its tip may yet show a heavier chain from its last header, so
         // the clock stays at or below where that header meets the best chain: the reader's own budget cannot make it
@@ -406,56 +408,56 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         // failing costs a supplier nothing.
         const header = parseErgoHeader(last), fork = header === undefined ? undefined : this.store.forkHeight(header.id), height = header?.height;
         if (fork === undefined || height === undefined) continue;
-        if (this.sideQuotaSpent(supplier)) continue;
+        if (this.sideQuotaSpent(name)) continue;
         const forkIndex = fork - anchorHeight - 1n;
         if (forkIndex >= clock && forkIndex < bound) bound = forkIndex;
       }
       const missed = new Set<ErgoSupplier>();
       let spent = 0, sectionsRead = 0, unresolved: bigint | undefined, reason: ErgoSyncReport["unresolvedReason"];
-      for (let index = BigInt(this.sections.length); index <= bound; index++) {
+      for (let index = clock + 1n; index <= bound; index++) {
         // Checked before each section, so one larger than the budget is still read, alone in its sync.
         if (spent >= this.policy.sectionBytesPerSync) { unresolved = index; reason = "section budget"; break; }
-        const header = best.headers[Number(index)]!;
+        const header = this.store.bestAt(anchorHeight + 1n + index)!;
         const asked = sources.map(source => source.supplier).filter(s => !missed.has(s));
         const first = this.preferred === undefined ? -1 : asked.indexOf(this.preferred);
         if (first > 0) asked.unshift(...asked.splice(first, 1));
-        const read = await this.readSection(asked, missed, header.id, header.transactionsRoot);
-        spent += read.bytes;
-        if (read.objects === undefined) { unresolved = index; reason = read.retainedStop ? "retained budget" : "no section"; break; }
-        this.preferred = read.supplier;
-        this.hold(index, read.objects);
-        this.sections.push(read.objects);
-        this.sectionHeaders.push(copyBytes(header.id));
-        if (this.journal !== undefined) this.sectionViews.push(read.views!);
+        const section = await this.readSection(asked, missed, header.id, header.transactionsRoot);
+        spent += section.bytes;
+        if (section.objects === undefined) { unresolved = index; reason = section.retainedStop ? "retained budget" : "no section"; break; }
+        this.preferred = section.supplier;
+        read.push({ index, header: header.id, views: section.views!,
+          objects: section.objects });
         sectionsRead++;
       }
-      const witnessed = BigInt(this.sections.length) - 1n < bound ? BigInt(this.sections.length) - 1n : bound;
+      // Every section read is at or below the bound, so the clock is the last one read.
+      const witnessed = clock + BigInt(read.length);
       let next = this.snapshot;
-      if (witnessed >= 0n && witnessed >= clock) {
-        next = Object.freeze({ witnessed, sections: Object.freeze(this.sections.slice(0, Number(witnessed) + 1)),
-          witnessedHeaderId: copyBytes(best.headers[Number(witnessed)]!.id) });
+      if (witnessed >= 0n && witnessed > clock) {
+        next = Object.freeze({ witnessed, witnessedHeaderId: copyBytes(read[read.length - 1]!.header) });
       }
-      if (this.journal !== undefined && next !== undefined) {
-        const canonical = new Set(best.headers.map(h => bytesToHex(h.id)));
-        for (const key of this.protectedHeaders.keys()) if (canonical.has(key)) this.protectedHeaders.delete(key);
-        this.store.prune(next.witnessedHeaderId, [...this.protectedHeaders.values()]);
+      if (next !== undefined) {
+        for (const [name, ids] of this.protectedHeaders) {
+          for (const [key, id] of ids) if (this.store.isBest(id)) ids.delete(key);
+          if (ids.size === 0) this.protectedHeaders.delete(name);
+        }
+        this.store.prune(next.witnessedHeaderId, [...this.protectedHeaders.values()].flatMap(ids => [...ids.values()]));
       }
       // No await: commit evidence and pin before exposing the new snapshot.
-      this.persist(next);
+      this.persist(next, read);
       this.snapshot = next;
       const snapshot = this.snapshot;
       // The publisher forgets what this view now holds, in its own queue: it never fails or holds up the sync.
       if (this.publisher !== undefined && snapshot !== undefined) this.publisher.settle(request => this.holds(request)).catch(() => {});
       return Object.freeze({
         witnessedIndex: snapshot?.witnessed, witnessedHeaderId: snapshot === undefined ? undefined : copyBytes(snapshot.witnessedHeaderId),
-        chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: best.height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
+        chainWitnessedIndex: chainWitnessed >= 0n ? chainWitnessed : undefined, tipHeight: this.store.tip().height, suppliers: Object.freeze(passes.map(({ pass }) => pass.report)),
         sectionsRead, unresolvedIndex: unresolved, ...(reason === undefined ? {} : { unresolvedReason: reason }),
       });
     } catch (error) {
       // Suppliers' failures are answers, so whatever reaches here is the view's own: it may have read sections past
       // its clock, and it fails closed rather than answer from a state no sync completed.
       if (this.failure === undefined) {
-        this.failure = this.journal !== undefined ? "durable Ergo sync failed; reopen the journal" : "Ergo sync failed; open a new view";
+        this.failure = this.durable ? "durable Ergo sync failed; reopen the journal" : "Ergo sync failed; open a new view";
       }
       throw error;
     } finally {
@@ -464,26 +466,19 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   }
 
   /** Whether a supplier's outstanding side-branch charge has reached its quota, as of the last sync it took part in. */
-  private sideQuotaSpent(supplier: ErgoSupplier): boolean {
-    return (this.sideHeaders.get(supplier)?.charge ?? 0n) >= BigInt(this.policy.sideHeadersPerSupplier) * SIDE_HEADER_HEIGHTS;
-  }
-
-  /** Note the first index of each object of a section read at `index`. */
-  private hold(index: bigint, objects: readonly AttributedObject[]): void {
-    for (const object of objects) {
-      const key = objectKey(object.kind, object.subject, object.record);
-      if (!this.firstIndex.has(key)) this.firstIndex.set(key, index);
-    }
+  private sideQuotaSpent(name: string): boolean {
+    return (this.sideHeaders.get(name)?.charge ?? 0n) >= BigInt(this.policy.sideHeadersPerSupplier) * SIDE_HEADER_HEIGHTS;
   }
 
   private async syncHeaders(supplier: ErgoSupplier, name: string): Promise<HeaderPass> {
     let added = 0, fetched = 0, last: Uint8Array | undefined;
     const ids: Uint8Array[] = [];
-    const done = (stopped?: string): HeaderPass => ({ added: ids,
+    // Every pass protects the last header it reached above the anchor, whatever ended it.
+    const done = (stopped?: string): HeaderPass => ({ added: ids, ...(last === undefined ? {} : { protect: last }),
       report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
-    const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last, protect: last };
+    const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last };
     const { headersPerSupplier: budget, supplierTimeoutMs: timeout } = this.policy;
-    if (this.sideQuotaSpent(supplier)) return done("side-branch quota");
+    if (this.sideQuotaSpent(name)) return done("side-branch quota");
     const fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT, perRequest = BigInt(this.policy.headersPerRequest);
     const anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
     const tip = await supplied(() => supplier.tipHeight(), timeout);
@@ -493,7 +488,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     let from = start > anchorHeight ? start : anchorHeight + 1n, back = depth + 1n;
     while (from <= tip.value) {
       if (added >= budget) return unfinished();
-      if (fetched >= fetchBudget) return last === undefined ? done("fetch budget") : { ...done("fetch budget"), protect: last };
+      if (fetched >= fetchBudget) return done("fetch budget");
       const to = from + perRequest - 1n < tip.value ? from + perRequest - 1n : tip.value, asked = Number(to - from + 1n);
       const answer = await supplied(() => supplier.headers(from, to), timeout);
       if (!answer.ok) return done(answer.failure);
@@ -549,10 +544,55 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     return { bytes };
   }
 
+  /**
+   * Re-check every row this view keeps, as a reader that never trusted them
+   * would: every header's linkage, difficulty and score (and its work where
+   * `work` is set, the costly part), every section's transaction root against
+   * the best chain's header at its index, every object attributed again from
+   * its section under this release's rules, and the retained bytes. For a view
+   * restored from a backup or copied from elsewhere, or after a disk fault:
+   * reopening checks only what is cheap. Linear in the rows; it reads nothing
+   * from suppliers and changes nothing. Throws `VenueError` naming the first
+   * row that does not reproduce; answers what it checked.
+   */
+  audit(options: { readonly work?: boolean } = {}): { readonly headers: number; readonly sections: bigint; readonly objects: bigint } {
+    const work = options.work === true;
+    if (this.syncing) throw new VenueError("a sync is in progress");
+    const snapshot = this.requireSnapshot(), anchorHeight = this.store.tip().anchorHeight;
+    const refuse = (why: string): never => { throw new VenueError(`Ergo view audit: ${why}`); };
+    let headers = 0;
+    try { headers = this.store.audit(work); } catch (error) {
+      if (error instanceof VenueError) throw error;
+      refuse(error instanceof Error ? error.message : String(error));
+    }
+    let next = 0n, objects = 0n, retained = 0;
+    try { for (const section of this.journal.sections()) {
+      const header = this.store.bestAt(anchorHeight + 1n + section.index);
+      if (section.index !== next || header === undefined || compareBytes(header.id, section.header) !== 0) refuse(`section ${section.index} is not the best chain's next`);
+      const derived = attributeSection(this.profile, section.views, header!.transactionsRoot);
+      if (derived === undefined) refuse(`section ${section.index} does not reproduce its header's root`);
+      const same = derived!.length === section.objects.length && derived!.every((object, i) => {
+        const kept = section.objects[i]!;
+        return object.kind === kept.kind && object.ordinal === kept.ordinal && compareBytes(object.subject, kept.subject) === 0 &&
+          compareBytes(object.record, kept.record) === 0 && compareBytes(objectKey(object.kind, object.subject, object.record), kept.key) === 0;
+      });
+      if (!same) refuse(`section ${section.index}'s objects are not those it attributes`);
+      for (const object of derived!) retained += retainedSize(object);
+      objects += BigInt(derived!.length); next++;
+    } } catch (error) {
+      if (error instanceof VenueError) throw error;
+      refuse(`section ${next}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (next !== snapshot.witnessed + 1n) refuse("the sections do not reach the clock");
+    if (this.journal.objectCount() !== objects) refuse("objects are kept beyond the sections");
+    if (retained !== this.retained) refuse("the retained bytes are not the objects'");
+    return Object.freeze({ headers, sections: next, objects });
+  }
+
   // --- Reads ------------------------------------------------------------------
 
   private requireSnapshot(): Snapshot {
-    this.journal?.assertOwner();
+    this.journal.assertOwner();
     if (this.failure !== undefined) throw new VenueError(this.failure);
     if (this.snapshot === undefined) throw new VenueError("this view has no settled snapshot");
     return this.snapshot;
@@ -577,7 +617,9 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       throw error;
     }
     if (compareBytes(own.venue, this.venueId) !== 0 || own.toIndex > snapshot.witnessed) return undefined;
-    return encodeRangeAnswer({ request: own, entries: rangeEntries(index => snapshot.sections[Number(index)], own)! }, limits);
+    const bound = copyLimits(limits);
+    const objects = this.journal.objects(own.kind, own.subject, own.fromIndex, own.toIndex, bound);
+    return encodeRangeAnswer({ request: own, entries: orderedEntries(own.kind, objects) }, bound);
   }
 
   /**
@@ -628,7 +670,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   /** The first index this view witnessed the exact record at, under its kind and subject, or undefined where its
    * witnessed index holds none. */
   witnessedAt(kind: RecordKind, subject: Uint8Array, record: Uint8Array): bigint | undefined {
-    const snapshot = this.requireSnapshot(), first = this.firstIndex.get(objectKey(kind, copyUnshared(subject), copyUnshared(record)));
+    const snapshot = this.requireSnapshot(), first = this.journal.firstIndex(objectKey(kind, copyUnshared(subject), copyUnshared(record)));
     return first !== undefined && first <= snapshot.witnessed ? first : undefined;
   }
 
@@ -639,12 +681,6 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   }
 }
 
-/** One object's identity in the view's index: its kind, subject and exact record bytes. */
-function objectKey(kind: RecordKind, subject: Uint8Array, record: Uint8Array): string {
-  const bytes = new Uint8Array(1 + subject.length + record.length);
-  bytes[0] = kind; bytes.set(subject, 1); bytes.set(record, 1 + subject.length);
-  return bytesToHex(blake2b(bytes, { dkLen: 32 }));
-}
 
 /** A supplier's answer, or its failure: a supplier that throws, rejects or
  * does not settle within `timeoutMs` is one that did not supply. Only

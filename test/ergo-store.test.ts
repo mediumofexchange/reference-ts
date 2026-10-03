@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
 import { encodeCommitment, signCommitment } from "../src/venue-records.js";
@@ -135,10 +134,11 @@ describe("durable independently replayed Ergo view", () => {
     const path = file(), main = chain.extend(chain.anchor, 10), old = opened(path);
     await old.venue.sync([supplier(main)]);
     const fork = chain.extend(main[0]!, 3, () => [], 31);
-    await old.venue.sync([supplier(fork)]); old.journal.close();
+    // The branch is kept while it is the last its supplier reached, and pruned once that supplier reaches another.
+    await old.venue.sync([supplier(fork)]); await old.venue.sync([supplier(main)]); old.journal.close();
     const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path);
-    const stored = JSON.parse(db.prepare("SELECT payload FROM ergo_checkpoint").get()!.payload as string); db.close();
-    expect(stored.headers).toHaveLength(main.length);
+    expect(db.prepare("SELECT count(*) AS n FROM headers").get()!.n).toBe(main.length);
+    expect(db.prepare("SELECT count(*) AS n FROM side").get()!.n).toBe(0); db.close();
     const next = opened(path), extension = chain.extend(fork.at(-1)!, 10, () => [], 31);
     await expect(next.venue.sync([supplier(extension)])).rejects.toThrow(/best chain left/);
   });
@@ -158,8 +158,8 @@ describe("durable independently replayed Ergo view", () => {
     expect((await next.venue.sync([noisy])).suppliers[0]!.stopped).toBe("fetch budget");
     next.journal.close(); const again = opened(path); await again.venue.sync([]); again.journal.close();
     const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path);
-    const stored = JSON.parse(db.prepare("SELECT payload FROM ergo_checkpoint").get()!.payload as string); db.close();
-    expect(stored.protectedHeaders).toContain(bytesToHex(fork[1]!.id)); expect(stored.headers).toHaveLength(14);
+    const protectedIds = db.prepare("SELECT id FROM protected").all().map(row => bytesToHex(row.id as Uint8Array));
+    expect(protectedIds).toContain(bytesToHex(fork[1]!.id)); expect(db.prepare("SELECT count(*) AS n FROM headers").get()!.n).toBe(14); db.close();
   });
 
   it("protects no anchor or context header a supplier repeats until the fetch budget, so the view reopens", async () => {
@@ -200,28 +200,88 @@ describe("durable independently replayed Ergo view", () => {
     larger.journal.close(); expect(() => opened(path, { retainedBytes: 232 })).toThrow(/retained budget/);
   });
 
-  it("refuses root-changing omissions, corrupt bytes, missing history and a foreign identity on restore", async () => {
-    for (const change of ["digest", "section", "header", "pin", "protection", "unburied"] as const) {
+  it("refuses missing or corrupt rows, a moved pin, an unburied clock, a foreign identity and the old checkpoint format on restore", async () => {
+    const refusals = { pin: /invalid stored Ergo view/, section: /invalid stored Ergo view/, header: /does not reproduce/, bytes: /does not reproduce/,
+      best: /does not reproduce/, protection: /does not reproduce/, unburied: /does not reproduce/, tip: /does not reproduce/ };
+    for (const change of Object.keys(refusals) as (keyof typeof refusals)[]) {
       const path = file(), old = opened(path), blocks = records(); await old.venue.sync([supplier(blocks)]); old.journal.close();
       const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path);
-      const stored = JSON.parse(db.prepare("SELECT payload FROM ergo_checkpoint").get()!.payload as string);
-      if (change === "section") stored.sections[3].views = [];
-      if (change === "header") stored.headers.splice(1, 1);
-      if (change === "pin") stored.pin = "00".repeat(32);
-      if (change === "protection") stored.protectedHeaders = ["00".repeat(32)];
-      // Genuine sections through the tip and the clock on it: no kept header buries that block at the depth.
-      if (change === "unburied") {
-        for (const block of blocks.slice(stored.sections.length)) {
-          stored.sections.push({ header: bytesToHex(block.id), views: block.section.map(t => ({ unsigned: bytesToHex(t.unsigned), witnessId: bytesToHex(t.witnessId) })) });
-        }
-        stored.witnessed = String(stored.sections.length - 1); stored.pin = bytesToHex(blocks.at(-1)!.id);
-      }
-      const payload = JSON.stringify(stored), digest = bytesToHex(sha256(new TextEncoder().encode(payload)));
-      db.prepare("UPDATE ergo_checkpoint SET payload=?,digest=?").run(payload, change === "digest" ? "00".repeat(32) : digest); db.close();
-      // A payload that is not the one committed is no checkpoint; one that is, but does not reproduce its view, is refused for that.
-      expect(() => opened(path)).toThrow(change === "digest" ? "invalid stored Ergo checkpoint" : "stored Ergo evidence does not reproduce its witnessed view");
+      const pin = db.prepare("SELECT pin, witnessed FROM meta").get()!, pinHeight = chain.anchor.height + 1n + BigInt(pin.witnessed as number);
+      if (change === "pin") db.prepare("UPDATE meta SET pin=?").run(new Uint8Array(32));
+      if (change === "section") db.prepare("DELETE FROM sections WHERE idx=?").run(pin.witnessed as number);
+      if (change === "header") db.prepare("DELETE FROM headers WHERE id=?").run(pin.pin as Uint8Array);
+      if (change === "bytes") db.prepare("UPDATE headers SET bytes=? WHERE id=?").run(blocks[0]!.bytes, pin.pin as Uint8Array);
+      if (change === "best") db.prepare("UPDATE best SET id=? WHERE height=?").run(blocks[0]!.id, pinHeight);
+      if (change === "protection") db.prepare("INSERT INTO protected VALUES('synthetic',?)").run(new Uint8Array(32));
+      // The chain cut back to below the clock's depth: no kept header buries its block.
+      if (change === "unburied") for (const table of ["best", "headers"]) db.prepare(`DELETE FROM ${table} WHERE height>=?`).run(pinHeight + profile.depth);
+      if (change === "tip") db.prepare("DELETE FROM headers WHERE id=?").run(blocks.at(-1)!.id);
+      db.close();
+      expect(() => opened(path), change).toThrow(refusals[change]);
     }
     const path = file(), old = opened(path); old.journal.close();
-    expect(() => new ErgoVenueJournal(path, new Uint8Array(32).fill(9))).toThrow("invalid stored Ergo checkpoint");
+    expect(() => new ErgoVenueJournal(path, new Uint8Array(32).fill(9))).toThrow("invalid stored Ergo view");
+    const { DatabaseSync } = await import("node:sqlite"), legacy = file(), db = new DatabaseSync(legacy);
+    db.exec("CREATE TABLE ergo_checkpoint (id INTEGER PRIMARY KEY)"); db.close();
+    expect(() => new ErgoVenueJournal(legacy, id)).toThrow("older format");
+  });
+
+  it("audits every row again: linkage, difficulty and score, work, roots and objects, and names the first that does not reproduce", async () => {
+    const healthy = opened(file()), blocks = records(); await healthy.venue.sync([supplier(blocks)]);
+    expect(healthy.venue.audit({ work: true })).toEqual({ headers: 10, sections: 8n, objects: 2n });
+    const audits = {
+      gap: [/section 4 is not the best chain's next/, "DELETE FROM sections WHERE idx=3"],
+      object: [/section 3's objects are not those it attributes/, "DELETE FROM objects WHERE idx=3"],
+      record: [/section 0's objects are not those it attributes/, "UPDATE objects SET record=zeroblob(length(record)) WHERE idx=0"],
+      root: [/section 1 does not reproduce its header's root/, "UPDATE sections SET views=(SELECT views FROM sections WHERE idx=0) WHERE idx=1"],
+      extra: [/objects are kept beyond the sections/, "INSERT INTO objects SELECT 99, position, kind, subject, ordinal, record, key FROM objects WHERE idx=0"],
+      score: [/height \d+: its difficulty or score is wrong/, "UPDATE headers SET score='12345' WHERE height=(SELECT max(height) FROM best)"],
+      link: [/height \d+: it does not link to the best chain below it/, "UPDATE headers SET parent=zeroblob(32) WHERE height=(SELECT min(height) FROM best)"],
+    } as const;
+    for (const [name, [refusal, sql]] of Object.entries(audits)) {
+      const path = file(), old = opened(path); await old.venue.sync([supplier(blocks)]); old.journal.close();
+      const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path); db.exec(sql); db.close();
+      expect(() => opened(path).venue.audit(), name).toThrow(refusal);
+    }
+  });
+
+  it("keeps each supplier's side-branch charge by name across a restart, so a new process grants no fresh quota", async () => {
+    const path = file(), main = chain.extend(chain.anchor, 12), policy = { sideHeadersPerSupplier: 2 };
+    const old = opened(path, policy); await old.venue.sync([supplier(main)]);
+    const side = new BranchSupplier("side", chain.extend(main[2]!, 6, () => [], 61).at(-1)!, chain);
+    expect((await old.venue.sync([supplier(main), side])).suppliers[1]).toEqual({ name: "side", headersAdded: 6 });
+    old.journal.close();
+    const next = opened(path, policy), again = new BranchSupplier("side", chain.extend(main[3]!, 3, () => [], 62).at(-1)!, chain);
+    expect((await next.venue.sync([supplier(main), again])).suppliers[1]).toEqual({ name: "side", headersAdded: 0, stopped: "side-branch quota" });
+  });
+
+  it("protects what a failing supplier reached, so a heavier deep fork it serves in pieces still fails the venue, durable or not", async () => {
+    for (const durable of [true, false]) {
+      const path = file(), main = chain.extend(chain.anchor, 12), policy = { headersPerRequest: 4 };
+      const view = durable ? opened(path, policy).venue : new ErgoVenue(profile, chain.context, policy);
+      await view.sync([supplier(main)]);
+      // Each pass steps back to where the fork meets the chain, reads one request and then fails: no pass reaches the
+      // fork's tip and none is stopped by its budget, so only protection carries its progress to the next sync.
+      const source = supplier(chain.extend(main[0]!, 15, () => [], 63));
+      let calls = 0;
+      source.before = async call => { calls = call === "tip" ? 0 : calls + 1; if (calls === 5) throw new Error("gone"); };
+      let failed = false;
+      for (let i = 0; i < 12 && !failed; i++) {
+        try { await view.sync([source]); } catch (error) { expect(String(error)).toMatch(/best chain left/); failed = true; }
+      }
+      expect(failed, durable ? "durable" : "memory").toBe(true);
+    }
+  });
+
+  it("refuses a range past the reader's budget while reading the rows, and a view kept under other rules", async () => {
+    const path = file(), old = opened(path), blocks = records(); await old.venue.sync([supplier(blocks)]);
+    const { RangeLimitError } = await import("../src/record-range.js");
+    expect(() => old.venue.range({ venue: old.venue.id, kind: 1, subject: first.operator, fromIndex: 0n, toIndex: 7n }, { maxBytes: 1000000n, maxEntries: 1n }))
+      .toThrow(RangeLimitError);
+    expect(() => old.venue.range({ venue: old.venue.id, kind: 1, subject: first.operator, fromIndex: 0n, toIndex: 7n }, { maxBytes: 100n, maxEntries: 10n }))
+      .toThrow(RangeLimitError);
+    old.journal.close();
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path); db.exec("UPDATE meta SET rules='moe/ergo-view-rules/0'"); db.close();
+    expect(() => opened(path)).toThrow("other view rules");
   });
 });
