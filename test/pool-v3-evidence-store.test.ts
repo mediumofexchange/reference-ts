@@ -394,6 +394,43 @@ describe("v3 evidence store", () => {
     expect([file.count("chain"), file.count("segment_head")]).toEqual([5, 1]);
   });
 
+  // The served-trail checks the retired harness check (`verifyTrailEvidence`) asserted, on the runtime path.
+  it("serves a trail only as the evidence of its own backing, segment and ordered records", () => {
+    const store = new EvidenceStore(), at = (n: number) => store.importBytes(pack([])).served(expectedAt(n), snapshotAt(n));
+    const altered = (change: (record: Record) => Record): Uint8Array => encodeRecord(change(decodeRecord(records[0]!)));
+    const proofOnly = altered(r => ({ ...r, proof: b(99) }));
+    const authorizationOnly = altered(r => { const authorization = Uint8Array.from(r.authorization); authorization[0]! ^= 1; return { ...r, authorization }; });
+    // Swapped order, or a record differing only in its proof or authorization, is not the snapshot's evidence.
+    store.importTrails([trail(0, { records: [records[1]!, records[0]!] }), trail(0, { records: [proofOnly, records[1]!] }),
+      trail(0, { records: [authorizationOnly, records[1]!] })]);
+    expect(at(2)).toBeUndefined();
+    const swapped = nextEvidenceHash(nextEvidenceHash(chain[0]!, evidenceHashes(decodeRecord(records[1]!)), 1n), evidenceHashes(decodeRecord(records[0]!)), 2n);
+    const swappedSnapshot = { ...snapshotAt(2), evidenceHash: swapped };
+    expect(recordsOf(store.importBytes(pack([])).served({ backing, segment, digest: snapshotDigest(swappedSnapshot) }, swappedSnapshot)))
+      .toEqual([records[1]!, records[0]!].map(r => [...r]));
+    store.importTrails([trail(2)]);
+    expect(recordsOf(at(2))).toEqual(records.slice(0, 2).map(r => [...r]));
+    // The expected backing and segment, and the snapshot's segment, must each be the served one.
+    const batch = store.importBytes(pack([]));
+    expect(batch.served({ ...expectedAt(2), backing: b(8) }, snapshotAt(2))).toBeUndefined();
+    expect(batch.served({ ...expectedAt(2), segment: b(149) }, snapshotAt(2))).toBeUndefined();
+    const elsewhere = { ...snapshotAt(2), segment: b(157) };
+    expect(batch.served({ ...expectedAt(2), digest: snapshotDigest(elsewhere) }, elsewhere)).toBeUndefined();
+    // A head that does not scope the backing serves nothing for it, even at its seed; scoping it, the empty prefix.
+    const unscoped: SegmentHeader = { ...header, entries: [{ backing: b(6), link: b(6) }] }, other = segmentIdentity(unscoped);
+    store.importTrails([encodeTrail({ header: segmentBytes(unscoped), terms, records: [] })]);
+    const seed = { ...snapshotAt(0), segment: other, evidenceHash: genesisEvidenceHash(other) };
+    expect(store.importBytes(pack([])).served({ backing, segment: other, digest: snapshotDigest(seed) }, seed)).toBeUndefined();
+    expect(at(0)?.length).toBe(0n);
+    // Under a head scoping both, a snapshot of one backing is not served as the other's.
+    const both: SegmentHeader = { ...header, entries: [{ backing, link: backing }, { backing: b(8), link: b(8) }] }, shared = segmentIdentity(both);
+    store.importTrails([encodeTrail({ header: segmentBytes(both), terms: [...terms, ...terms], records: [] })]);
+    const own = { ...snapshotAt(0), segment: shared, evidenceHash: genesisEvidenceHash(shared) }, digest = snapshotDigest(own);
+    expect(store.importBytes(pack([])).served({ backing: b(8), segment: shared, digest }, own)).toBeUndefined();
+    expect(store.importBytes(pack([])).served({ backing, segment: shared, digest }, own)?.length).toBe(0n);
+    store.close();
+  });
+
   it("reads a long trail in pages from the seed or from a kept position", () => {
     const store = new EvidenceStore(), many = Array.from({ length: 4100 }, (_, i) => issue(100 + i));
     store.importTrails([trail(0, { records: many })]);

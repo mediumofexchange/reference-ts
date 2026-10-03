@@ -136,9 +136,9 @@ Missing presenter evidence cannot hide an independently failed K signature.
 Proof and signature checks remain separate. `fault-observer.ts` supplies the same
 observations to the runtime and harness. Both single-backing public package readers
 accept kind-7 evidence and apply the existing dependency-resolved exclusion gates.
-Successful runtime reads return optional `faultEvidence` observations; throwing
-reads return no partial state or diagnostic package. The harness separately retains
-observations through refusal. Neither interface treats observations as state.
+Successful runtime reads return optional `faultEvidence` observations; a refusal
+returns no partial state, and `refusalFacts` gives the observations and receipt
+contradictions established before it. Neither treats observations as state.
 The classifier applies
 [§9.1 at 183c09f](https://github.com/mediumofexchange/money-from-first-principles/blob/183c09f/pool-v3.md#91-compact-intrinsic-exclusion)
 to strict proof rejection or issue-K rejection for a single-backing or shared-scope

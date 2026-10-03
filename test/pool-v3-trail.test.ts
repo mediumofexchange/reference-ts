@@ -7,7 +7,7 @@ import type { SegmentEntry, SegmentHeader } from "../src/pool/v3/headers.js";
 import type { Record as PoolRecord } from "../src/pool/v3/records.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/venue-records.js";
-import { flipping, hugeSparse, lookAlikes, lyingLength } from "./hostile-bytes.js";
+import { hugeSparse, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent Buffer/node:crypto framing and hash oracle. The directory is
 // genuinely signed; synthetic proofs, terms and roots make no replay claim.
@@ -71,9 +71,6 @@ function withdrawalRecord(source = sourceSegment): RawRecord {
   return rawRecord(5, [...limbs(domain), ...limbs(source), 79n, ...limbs(demand)],
     new Uint8Array(0), Buffer.alloc(64, 83), []);
 }
-function kindSevenRecord(): RawRecord {
-  return rawRecord(7, [...limbs(domain), ...limbs(backing), 89n, 97n, 0n], b(101), new Uint8Array(0), []);
-}
 function evidenceTriple(record: RawRecord): { statementHash: Buffer; proofHash: Buffer; signatureHash: Buffer } {
   return { statementHash: sha(record.statement), proofHash: record.proof.length ? sha(record.proof) : zero(),
     signatureHash: record.authorization.length ? sha(record.authorization) : zero() };
@@ -124,7 +121,7 @@ function fixture(records: readonly RawRecord[] = [issueRecord(), withdrawalRecor
 }
 
 describe("v3 served-trail transport", () => {
-  it("matches independent bytes and authenticates ordered evidence from a real signed directory", () => {
+  it("matches independent bytes beside a real signed directory", () => {
     const x = fixture(), expectedBytes = rawTrail(x.served);
     expect(expectedBytes.length).toBe(29 + x.served.header.length
       + x.served.terms.reduce((sum, term) => sum + 68 + term.terms.length, 0)
@@ -135,35 +132,14 @@ describe("v3 served-trail transport", () => {
     expect(verifyCommitment(x.commitment)).toBe(true);
     expect(x.commitment.operator).toEqual(operator);
     expect(x.commitment.root).toEqual(directoryRoot(x.directory));
-    expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, x.served, x.limits)).toBe(true);
   });
 
-  it("binds record order, proof, authorization and capsules but grants no authority to terms", () => {
-    const x = fixture(), [first, second] = x.served.records;
-    expect(first).toBeDefined(); expect(second).toBeDefined();
-    const variants: trailCodec.ServedTrail[] = [
-      { ...x.served, records: [first!] },
-      { ...x.served, records: [second!, first!] },
-      { ...x.served, records: [Uint8Array.from(first!, (value, index) => index === x.records[0]!.statement.length + 4 ? value ^ 1 : value), second!] },
-      { ...x.served, records: [first!, Uint8Array.from(second!, (value, index) => index === x.records[1]!.statement.length + 8 ? value ^ 1 : value)] },
-      { ...x.served, records: [Uint8Array.from(first!, (value, index) => index === first!.length - 1 ? value ^ 1 : value), second!] },
-      { ...x.served, records: [issueRecord(sourceSegment, 62).bytes, second!] },
-    ];
-    for (const changed of variants) {
-      expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, changed, x.limits)).toBe(false);
-    }
-    const changedTerms = x.served.terms.map(term => ({ terms: Uint8Array.from(term.terms, value => value ^ 0xff),
-      signature: Uint8Array.from(term.signature, value => value ^ 0xff) }));
-    expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, { ...x.served, terms: changedTerms }, x.limits)).toBe(true);
-  });
-
-  it("returns false for malformed inner records while preserving their opaque outer bytes", () => {
+  it("preserves malformed inner records as opaque outer bytes", () => {
     const x = fixture(), malformed = Uint8Array.of(0xff, 0, 7);
     const carried = { ...x.served, records: [malformed] };
     const limits = { maxBytes: BigInt(rawTrail(carried).length), maxEvents: 1n };
     const decoded = trailCodec.decodeTrail(rawTrail(carried), limits);
     expect(Buffer.from(decoded.records[0]!)).toEqual(Buffer.from(malformed));
-    expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, carried, limits)).toBe(false);
     const maximum = new Uint8Array(trailCodec.MAX_TRAIL_RECORD_BYTES);
     const atLimit = { ...x.served, records: [maximum] };
     const maxLimits = { maxBytes: BigInt(rawTrail(atLimit).length), maxEvents: 1n };
@@ -171,38 +147,6 @@ describe("v3 served-trail transport", () => {
       .toBe(trailCodec.MAX_TRAIL_RECORD_BYTES);
     expect(() => trailCodec.encodeTrail({ ...atLimit, records: [new Uint8Array(trailCodec.MAX_TRAIL_RECORD_BYTES + 1)] },
       { ...maxLimits, maxBytes: maxLimits.maxBytes + 1n })).toThrow(EncodingError);
-  });
-
-  it("authenticates zero events without treating nonempty imports or invalid totals as empty state", () => {
-    const imported: SegmentEntry = { backing, link: b(47),
-      opening: { sequence: maxU64, operator: otherOperator, root: b(131) } };
-    const x = fixture([], rawHeader([imported]));
-    expect(x.snapshot.evidenceHash).toEqual(sha(cat(ascii("evidence-seed"), x.expected.segment)));
-    expect(x.served.records).toHaveLength(0);
-    expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, x.served, x.limits)).toBe(true);
-    expect(trailCodec.verifyTrailEvidence(x.expected, { ...x.snapshot, evidenceHash: b(137) }, x.served, x.limits)).toBe(false);
-    const absent = fixture([], rawHeader([{ backing: otherBacking, link: b(139) }]));
-    expect(trailCodec.verifyTrailEvidence(absent.expected, absent.snapshot, absent.served, absent.limits)).toBe(false);
-    for (const expected of [{ ...x.expected, backing: otherBacking }, { ...x.expected, segment: b(149) },
-      { ...x.expected, digest: b(151) }]) {
-      expect(trailCodec.verifyTrailEvidence(expected, x.snapshot, x.served, x.limits)).toBe(false);
-    }
-    for (const snapshot of [{ ...x.snapshot, backing: otherBacking }, { ...x.snapshot, segment: b(157) }]) {
-      expect(trailCodec.verifyTrailEvidence(x.expected, snapshot, x.served, x.limits)).toBe(false);
-    }
-  });
-
-  it("retains adopted source binding and can authenticate kind 7 without declaring valid replay", () => {
-    const adopted = fixture([issueRecord(sourceSegment)]);
-    expect(sourceSegment).not.toEqual(adopted.expected.segment);
-    expect(trailCodec.verifyTrailEvidence(adopted.expected, adopted.snapshot, adopted.served, adopted.limits)).toBe(true);
-    const substituted = fixture([issueRecord(b(149))]);
-    expect(trailCodec.verifyTrailEvidence(adopted.expected, adopted.snapshot, substituted.served, substituted.limits)).toBe(false);
-
-    const kindSeven = fixture([kindSevenRecord()]);
-    expect(trailCodec.verifyTrailEvidence(kindSeven.expected, kindSeven.snapshot, kindSeven.served, kindSeven.limits)).toBe(true);
-    // True here authenticates committed bytes only; kind 7, adoption authority,
-    // source domain, force and state remain replay checks outside this API.
   });
 
   it("rejects every truncation, trailing byte and outer context substitution", () => {
@@ -241,10 +185,8 @@ describe("v3 served-trail transport", () => {
     for (const action of [
       () => trailCodec.encodeTrail(x.served, { ...x.limits, maxBytes: x.limits.maxBytes - 1n }),
       () => trailCodec.decodeTrail(encoded, { ...x.limits, maxBytes: x.limits.maxBytes - 1n }),
-      () => trailCodec.verifyTrailEvidence(x.expected, x.snapshot, x.served, { ...x.limits, maxBytes: x.limits.maxBytes - 1n }),
       () => trailCodec.encodeTrail(x.served, { ...x.limits, maxEvents: 1n }),
       () => trailCodec.decodeTrail(encoded, { ...x.limits, maxEvents: 1n }),
-      () => trailCodec.verifyTrailEvidence(x.expected, x.snapshot, x.served, { ...x.limits, maxEvents: 1n }),
     ]) expect(action).toThrow(trailCodec.TrailLimitError);
     const hugeCount = Buffer.from(encoded); hugeCount.set(integer(maxU64, 8), at.eventCount);
     expect(() => trailCodec.decodeTrail(hugeCount, { maxBytes: BigInt(hugeCount.length), maxEvents: maxU64 })).toThrow(EncodingError);
@@ -252,11 +194,7 @@ describe("v3 served-trail transport", () => {
       const limits = { maxBytes: bad, maxEvents: 2n };
       expect(() => trailCodec.encodeTrail(x.served, limits)).toThrow(EncodingError);
       expect(() => trailCodec.decodeTrail(encoded, limits)).toThrow(EncodingError);
-      expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, x.served, limits)).toBe(false);
     }
-    const failure = new Error("programming failure");
-    expect(() => trailCodec.verifyTrailEvidence(x.expected, x.snapshot,
-      { ...x.served, get records(): readonly Uint8Array[] { throw failure; } }, x.limits)).toThrow(failure);
   });
 
   it("has no header-scope event cap and applies the exact caller-selected boundary", () => {
@@ -291,7 +229,6 @@ describe("v3 served-trail transport", () => {
       { ...fresh.served, records: new Uint8Array(0) }, { ...fresh.served, terms: fresh.served.terms.slice(1) }];
     for (const value of invalid) {
       expect(() => trailCodec.encodeTrail(value as trailCodec.ServedTrail, fresh.limits)).toThrow(EncodingError);
-      expect(trailCodec.verifyTrailEvidence(fresh.expected, fresh.snapshot, value as trailCodec.ServedTrail, fresh.limits)).toBe(false);
     }
     for (const value of [undefined, null, {}, "bytes", new Uint8ClampedArray(encoded.length)]) {
       expect(() => trailCodec.decodeTrail(value as Uint8Array, fresh.limits)).toThrow(EncodingError);
@@ -310,13 +247,9 @@ describe("v3 served-trail transport", () => {
     // A record's reported length is not its length; the judged records are the hashed ones.
     const shorter = x.served.records[1]!, lying = { ...x.served, records: [x.served.records[0]!, lyingLength(shorter, shorter.length + 9)] };
     expect(Buffer.from(trailCodec.encodeTrail(lying, x.limits))).toEqual(encoded);
-    const flipped = flipping(x.served, "records", x.served.records, [x.served.records[1]!, x.served.records[0]!]);
-    expect(trailCodec.verifyTrailEvidence(x.expected, x.snapshot, flipped, x.limits)).toBe(true);
-    expect(trailCodec.verifyTrailEvidence(flipping(x.expected, "segment", b(1), x.expected.segment), x.snapshot, x.served, x.limits)).toBe(false);
     // A sparse record list of the largest u32 length meets the event budget, or stops at its first hole.
     const sparse = { ...x.served, records: hugeSparse<Uint8Array>() };
     expect(() => trailCodec.encodeTrail(sparse, x.limits)).toThrow(trailCodec.TrailLimitError);
-    expect(() => trailCodec.verifyTrailEvidence(x.expected, x.snapshot, sparse, x.limits)).toThrow(trailCodec.TrailLimitError);
     expect(() => trailCodec.encodeTrail(sparse, { maxBytes: maxU64, maxEvents: maxU64 })).toThrow("not a byte array");
   });
 });

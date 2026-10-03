@@ -5,7 +5,8 @@ import { FAULT_LIMITS, boundFaultInputs, faultObserver } from "./fault-evidence.
 import { EncodingError } from "../../../dist/bytes.js";
 import { decodeCommitment, directoryRoot, signCommitment } from "../../../dist/venue-records.js";
 import { createHash } from "node:crypto";
-import { EvidenceRefusal, LIMITS } from "./evidence-reader.mjs";
+import { LIMITS } from "./codec.mjs";
+import { EvidenceRefusal } from "../../../dist/pool/v3/refusals.js";
 
 export function compactFault(snapshotBytes, records, position, codec) {
   const snapshot = codec.decodeSnapshot(snapshotBytes), at = Number(position - 1n);

@@ -87,6 +87,8 @@ export async function replayEvidencePackage(input, verifier, codec) {
     // Owned before any await; the reader judges the selection's shape itself.
     const bytes = copyUnshared(input.package), seed = input.seed === undefined ? undefined : copyUnshared(input.seed);
     const selection = { ...source, ...Object.fromEntries(fields.map(key => [key, copyUnshared(source[key])])) };
+    // A receipt query is seedless: a seed scans a state, never a receipt.
+    if (seed !== undefined && codec.decodeEvidencePackage(bytes).some(item => item.kind === 10)) throw new EvidenceRefusal("unsupported-scope");
     // Reference provenance belongs to the caller's verifier, never the package; it is judged before anything else.
     const reference = structuredClone(verifier.reference);
     requireReplay(same(selection.venue, referenceVenue(reference).id), "VENUE_REFERENCE");
@@ -102,7 +104,6 @@ export async function replayEvidencePackage(input, verifier, codec) {
     const authenticated = { configurationChecked: true, signedTermsAuthenticated: true, termsAuthorityAuthenticated: true,
       currentRangeAuthenticated: selection.mode !== "historical-fixture", rangeEvidence };
     if (result.receipt !== undefined) {
-      if (seed !== undefined) throw new EvidenceRefusal("unsupported-scope");
       return { ...refused("receipt-status"), ...facts(result), receipt: result.receipt, ...authenticated };
     }
     const { carrying, state, clock, ranges } = result;

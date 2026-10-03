@@ -316,13 +316,16 @@ also runs in the Linux/Windows v3 CI job. This extends local evidence scanning
 with state checks; it does not adopt a v3 configuration or reinterpret v2.
 The [retained report](pool-v3-local-replay-verification.json) records source,
 bytecode/key hashes, real-proof checks and the resulting public audit.
-`compact-runtime-check.mjs` also sends the single-backing compact-fault groups
-through both public package readers. It compares selected state, classification,
-clock and fault observations across successor imports, spent predecessors and
-returned segments; the Ergo pass repeats these reads over verified synthetic
-headers. Selection-independent unresolved/resource fixtures require the exact
-refusal from both public APIs, including faults inside the adopted block. These
-are candidate reference reads, with no adopted configuration or live-chain claim.
+Every group is read by the runtime's `readPackage`; the harness adds only its
+input shapes, the venue it selects, note scanning and the report's fields.
+`frontier-check.mjs` also reads the single-backing compact-fault groups with
+`readFrontier` from the root terms alone, and compares classification, fault
+observations and canonical state with the selected read across successor imports,
+spent predecessors and returned segments; the Ergo pass repeats these reads over
+verified synthetic headers. Selection-independent unresolved/resource fixtures
+require the same refusal from the frontier, including faults inside the adopted
+block. These are candidate reference reads, with no adopted configuration or
+live-chain claim.
 
 The fixture issues 10, pays 7 with change 3, then burns 5 with receiver change
 2. A seedless public verifier checks the 439-byte candidate configuration and

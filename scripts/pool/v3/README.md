@@ -165,7 +165,7 @@ later unavailable evidence cannot erase it. Other refusals retain already
 proven contradictions in `receiptEvidence`. Adopted receipts name the new
 segment and position while retaining original proof and authorization hashes.
 Receipt results expose no wallet candidates or spending authority. Multiple
-receipts per package and receipt reads without venue evidence are unsupported.
+receipts per package and any read without venue evidence are unsupported.
 
 Signed non-service terms enable a seedless C2b.5.2 count in the audit. The
 reader uses the canonical checkpoint strictly before the judging index,
@@ -181,10 +181,11 @@ state. A non-service clause needs no silence clause; without the former
 there is no count. Missing range or ancestry evidence returns no audit.
 The count adds no budget of its own and shares the fixture authority boundary.
 
-The reader is the runtime's (`src/pool/v3/reader.ts` and `state.ts` in
-`dist/`); `local-replay.mjs` layers imports, scopes, receipts, recovery force
-and non-service counts over it, and reads each package's venue data through
-the verifier's record factory, a `RecordVenue` (`FixtureVenue` by default).
+The reader is the runtime's `readPackage` (`src/pool/v3/package-reader.ts` in
+`dist/`): `local-replay.mjs` encodes each fixture as §12 bytes, reads it under
+the venue the verifier's record factory selects (a `RecordVenue`,
+`FixtureVenue` by default), and reports the result in the harness's fields with
+the seed's notes; a refusal keeps the facts the read established before it.
 
 To replay every group above a second time through `ErgoVenue`, run
 `npm run check:pool:ergo-replay` (Node 24; it needs only the root
