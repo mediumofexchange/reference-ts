@@ -24,7 +24,7 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTer
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask, type SegmentContext } from "../src/pool/v3/witness.js";
 import { ScopeTree } from "../src/pool/scope.js";
-import { RangeLimitError, type RangeRequest } from "../src/record-range.js";
+import { RangeLimitError, type RangeRequest, type RecordKind } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordPublisher, type RecordVenue } from "../src/record-venue.js";
 import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
 
@@ -265,6 +265,27 @@ describe("the v3 operator journal", () => {
     expect(next.package).toEqual(served.package);
   });
 
+  it("admits while its last commitment is in flight and signs the next only once the venue holds it (C2.4.3)", async () => {
+    // A venue that shows a published record only when the test witnesses it.
+    const venue = FixtureVenue.reference(label, lag);
+    let held: [RecordKind, Uint8Array, Uint8Array] | undefined;
+    const slow: RecordVenue & RecordPublisher = { id: venue.id, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+      range: (request, limits) => venue.range(request, limits),
+      publishRecord: async (kind, subject, record) => { if (held === undefined) held = [kind, subject, record]; } };
+    const j = journal(path(), slow);
+    const show = (): void => { const [kind, subject, record] = held!; venue.witness(kind, subject, venue.witnessedIndex(), record); held = undefined; };
+    await j.open("genesis", signed); await j.publish(); venue.advance(venue.witnessedIndex() + 1n); show();
+    await j.submit(issue());
+    const c2 = await j.commit("c2"); await j.publish();
+    const signedAt = venue.witnessedIndex();
+    // Admission continues in the window, after the commitment in flight.
+    expect(decodeReceipt(await j.submit(payment())).after).toBe(c2.sequence);
+    expect(await refusal(j.commit("c3"))).toEqual(["SCHEDULE", undefined]);
+    // Once the venue holds it (witnessed at the next index, inside the lag), the next commitment is signed.
+    venue.advance(signedAt + 1n); show();
+    expect((await j.commit("c3")).sequence).toBe(c2.sequence + 1n);
+  });
+
   it("returns original replies to exact retries and refuses a reused identifier", async () => {
     const { j } = await opened();
     const first = await j.submit(issue());
@@ -306,15 +327,26 @@ describe("the v3 operator journal", () => {
     // The issue is not in a checkpoint witnessed before the revocation.
     expect(await refusal(j.commit("c2"))).toEqual(["UNSUPPORTED", undefined]);
     const { venue: v2, j: j2 } = await opened();
-    await j2.submit(issue()); await j2.commit("c2"); await j2.publish();
+    const admitted = await j2.submit(issue()); await j2.commit("c2"); await j2.publish();
     await v2.publishRecord(3, issuer, encodeRevocation(signRevocation(issuerSecret)));
     v2.advance(v2.witnessedIndex() + lag);
     expect(await refusal(j2.submit(issue(output(payerSeed, 70, 3n))))).toEqual(["REFUSED", "REVOKED"]);
+    // An exact repeat of the issue admitted before the revocation is answered with its receipt (inv 26).
+    expect(await j2.submit(issue())).toEqual(admitted);
     await j2.submit(payment());
     // A commitment held after the revocation finalizes no issuance: the issue stays finalized by the one before it.
     await j2.commit("c3"); await j2.publish(); v2.advance(v2.witnessedIndex() + lag);
     expect(decodeReceipt(await j2.submit(burning())).position).toBe(3n);
     expect(await refusal(j2.submit(issue(output(payerSeed, 71, 3n))))).toEqual(["REFUSED", "REVOKED"]);
+  });
+
+  it("refuses to open a backing whose K the backer has revoked (C2.6)", async () => {
+    const venue = FixtureVenue.reference(label, lag);
+    await venue.publishRecord(3, issuer, encodeRevocation(signRevocation(issuerSecret)));
+    venue.advance(venue.witnessedIndex() + lag);
+    const opening = journal(path(), venue).open("genesis", signed);
+    await expect(opening).rejects.toThrow("the backer has revoked K");
+    expect(await refusal(opening)).toEqual(["UNSUPPORTED", undefined]);
   });
 
   it("refuses service when the venue holds a commitment of this key the journal did not sign", async () => {

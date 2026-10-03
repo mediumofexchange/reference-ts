@@ -126,8 +126,10 @@ describe("v3 recovery journal and independent package reader", () => {
   });
 
   it("refuses the silence horizon before retiring the tail at a witnessed boundary", async () => {
-    const f = await fixture(); f.venue.advance(5n);
+    const f = await fixture(), admitted = f.demand(0n, 6n), receipt = await f.j.submit(encodeRecord(admitted)); f.venue.advance(5n);
     await expect(f.j.submit(encodeRecord(f.demand(5n)))).rejects.toMatchObject({ code: "SCHEDULE", check: "SILENCE" });
+    // An exact repeat of a statement admitted before the horizon is still answered with its receipt (inv 26).
+    expect(await f.j.submit(encodeRecord(admitted))).toEqual(receipt);
     await expect(f.j.return("too-early")).rejects.toMatchObject({ code: "STALE" });
     expect((await f.read()).clock!.boundary).toBeNull();
     f.venue.advance(7n);
