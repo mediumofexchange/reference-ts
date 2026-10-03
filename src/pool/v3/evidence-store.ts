@@ -78,9 +78,14 @@ export interface StoredTrail extends TrailHead {
    * (at 0, the seed). Read from the kept rows' links without checking a record: `records(position)` then
    * checks each later one. Undefined where it does not pass, or a link is missing. */
   through(position: bigint, evidence: Uint8Array): bigint | undefined;
+  /** `through`, giving up the process's turn after each page of links walked. */
+  reaches(position: bigint, evidence: Uint8Array): Promise<bigint | undefined>;
   /** The records after position `after` through `length`, in order, read from storage one at a time,
    * each checked against the chain value at its position before it is given. */
   records(after?: bigint): Iterable<Uint8Array>;
+  /** `records`, giving up the process's turn after each page of links walked, so serving a long trail
+   * leaves the process answering others; the links walked are never changed (§10). */
+  stream(after?: bigint): AsyncIterable<Uint8Array>;
   /** evidenceHash at `position` (0 is the seed), for a position within the cut, checked by its chain step. */
   evidence(position: bigint): Uint8Array | undefined;
 }
@@ -113,6 +118,17 @@ export type EvidencePart =
       readonly chunks: Iterable<Uint8Array> | AsyncIterable<Uint8Array> } };
 /** Records a walk back holds at a time: a trail is read in pages, so memory does not grow with its length. */
 const PAGE = 4096n;
+/** What a walk yields after each page of links: a synchronous reader passes over it, an asynchronous one gives
+ * up the process's turn there (about 30 ms of links a page). */
+const TURN: unique symbol = Symbol("turn");
+type Walk<T> = Generator<typeof TURN, T, void>;
+const turn = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+function walked<T>(walk: Walk<T>): T {
+  for (;;) { const step = walk.next(); if (step.done === true) return step.value; }
+}
+async function walkedAsync<T>(walk: Walk<T>): Promise<T> {
+  for (;;) { const step = walk.next(); if (step.done === true) return step.value; await turn(); }
+}
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 const bytes = (value: unknown): Uint8Array => new Uint8Array(value as Uint8Array);
@@ -600,40 +616,58 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       const step = chainStep(q, segment, value, p);
       return step === undefined || (previous !== undefined && !same(step.prev, previous)) ? broken() : step;
     };
+    /** `through`'s walk back from the top to `position`. */
+    function* reach(position: bigint, evidence: Uint8Array): Walk<bigint | undefined> {
+      if (position < 0n || position > length) return undefined;
+      if (position === 0n) return same(evidence, seed) ? 0n : undefined;
+      const held = q.step!.get(evidence, segment) as { position: bigint; size: bigint } | undefined;
+      if (held === undefined || BigInt(held.position) !== position) return undefined;
+      let value = top!;
+      for (let p = length; p > position; p--) {
+        if (p !== length && (length - p) % PAGE === 0n) yield TURN;
+        const row = q.step!.get(value, segment) as { prev: unknown; position: bigint } | undefined;
+        if (row === undefined || BigInt(row.position) !== p) return undefined;
+        value = bytes(row.prev);
+      }
+      return same(value, evidence) ? BigInt(held.size) : undefined;
+    }
+    /** `records`, with a turn after each page of links walked. */
+    function* walk(after: bigint): Generator<Uint8Array | typeof TURN, void, void> {
+      if (after >= length) return;
+      // Walk back once to position `after`, keeping only the value at each page's top.
+      const tops: Uint8Array[] = [];
+      let value = top!;
+      for (let p = length; p > after; p--) {
+        if ((length - p) % PAGE === 0n) {
+          if (p !== length) yield TURN;
+          tops.push(value);
+        }
+        value = stepBack(value, p);
+      }
+      // The chain starts at the seed, or at the kept value at `after` that the caller checked against its own state.
+      if (after === 0n && !same(value, seed)) broken();
+      // Then read the pages forward, one page's values in memory at a time, each record checked before it is given.
+      let previous = value, p = after + 1n;
+      for (let i = tops.length - 1; i >= 0; i--) {
+        yield TURN;
+        const to = length - BigInt(i) * PAGE, page = back(tops[i]!, to, p).reverse();
+        for (const entry of page) {
+          const { record } = checked(entry, p, previous);
+          previous = entry; p++;
+          yield record;
+        }
+      }
+    }
     return Object.freeze({ header: head.header, segment, term: head.term, length, bytes: size,
-      through(position: bigint, evidence: Uint8Array): bigint | undefined {
-        if (position < 0n || position > length) return undefined;
-        if (position === 0n) return same(evidence, seed) ? 0n : undefined;
-        const held = q.step!.get(evidence, segment) as { position: bigint; size: bigint } | undefined;
-        if (held === undefined || BigInt(held.position) !== position) return undefined;
-        let value = top!;
-        for (let p = length; p > position; p--) {
-          const row = q.step!.get(value, segment) as { prev: unknown; position: bigint } | undefined;
-          if (row === undefined || BigInt(row.position) !== p) return undefined;
-          value = bytes(row.prev);
-        }
-        return same(value, evidence) ? BigInt(held.size) : undefined;
-      },
+      through: (position: bigint, evidence: Uint8Array): bigint | undefined => walked(reach(position, evidence)),
+      reaches: (position: bigint, evidence: Uint8Array): Promise<bigint | undefined> => walkedAsync(reach(position, evidence)),
       *records(after = 0n): Iterable<Uint8Array> {
-        if (after >= length) return;
-        // Walk back once to position `after`, keeping only the value at each page's top.
-        const tops: Uint8Array[] = [];
-        let value = top!;
-        for (let p = length; p > after; p--) {
-          if ((length - p) % PAGE === 0n) tops.push(value);
-          value = stepBack(value, p);
-        }
-        // The chain starts at the seed, or at the kept value at `after` that the caller checked against its own state.
-        if (after === 0n && !same(value, seed)) broken();
-        // Then read the pages forward, one page's values in memory at a time, each record checked before it is given.
-        let previous = value, p = after + 1n;
-        for (let i = tops.length - 1; i >= 0; i--) {
-          const to = length - BigInt(i) * PAGE, page = back(tops[i]!, to, p).reverse();
-          for (const entry of page) {
-            const { record } = checked(entry, p, previous);
-            previous = entry; p++;
-            yield record;
-          }
+        for (const step of walk(after)) if (step !== TURN) yield step;
+      },
+      async *stream(after = 0n): AsyncIterable<Uint8Array> {
+        for (const step of walk(after)) {
+          if (step === TURN) await turn();
+          else yield step;
         }
       },
       evidence(position: bigint): Uint8Array | undefined {
@@ -651,14 +685,14 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
 /** A kept trail as a supplier streams it: §10's head, then each record after `after` behind its u32 length, read
  * and checked one at a time. Undefined where the trail's chain does not pass through `after`. A scoped terms
  * field the evidence does not hold is served empty: it names no backing, so it is no evidence (§12.1). */
-export function trailPart(trail: StoredTrail, after?: TrailTip): EvidencePart | undefined {
-  const held = after === undefined ? 0n : trail.through(after.position, after.evidence);
+export async function trailPart(trail: StoredTrail, after?: TrailTip): Promise<EvidencePart | undefined> {
+  const held = after === undefined ? 0n : await trail.reaches(after.position, after.evidence);
   if (held === undefined) return undefined;
   const count = decodeSegmentHeader(trail.header).entries.length;
   const head = trailHead(trail.header, Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }), trail.length);
-  const chunks = function* (): Iterable<Uint8Array> {
+  const chunks = async function* (): AsyncIterable<Uint8Array> {
     yield head;
-    for (const record of trail.records(after?.position ?? 0n)) {
+    for await (const record of trail.stream(after?.position ?? 0n)) {
       const framed = new Uint8Array(4 + record.length);
       new DataView(framed.buffer).setUint32(0, record.length, false); framed.set(record, 4);
       yield framed;

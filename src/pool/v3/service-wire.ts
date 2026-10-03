@@ -111,7 +111,7 @@ export async function* servedFrames(served: ServedEvidence): AsyncIterable<Uint8
   if (served.package.length > MAX_OWN_PACKAGE_BYTES) throw new EncodingError("served package too large");
   yield concatBytes(SERVED, fixed(s.domain), fixed(s.venue), fixed(s.backing), fixed(s.operator), u64(s.sequence), fixed(s.root),
     u32(served.package.length), served.package);
-  for (const part of served.parts) {
+  for await (const part of served.parts) {
     if ("package" in part) {
       if (part.package.length > MAX_V3_SERVED_PART_BYTES) throw new EncodingError("served package part too large");
       yield concatBytes(Uint8Array.of(1), u32(part.package.length), part.package);

@@ -112,7 +112,8 @@ operation: its rows are never changed, so commands run while a stream is read.
 A stream that fails after its headers ends short of its end mark, which the
 client refuses; the server emits `evidenceError` with the cause. A trail's
 first record is preceded by one walk over its kept links, about 7.5 µs per
-record served, during which the process answers nothing else. `sync` takes no
+record served; it gives up the process's turn after each page of 4,096 links
+(about 30 ms), so commands are answered meanwhile. `sync` takes no
 overall deadline or abort signal yet. Losing a response does not
 cancel or roll back journal work. Recover an uncertain submit or commit by its
 exact saved statement or command ID. Reopening the journal fences older owners

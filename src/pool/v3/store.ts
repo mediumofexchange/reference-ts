@@ -218,7 +218,7 @@ export interface ServedPackage {
  * configuration and the selected commitment. `parts` hold every other object a reader of the selection needs
  * that was not served through the sequence the reader named, and are read from rows as they are consumed. */
 export interface ServedEvidence extends ServedPackage {
-  readonly parts: Iterable<EvidencePart>;
+  readonly parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>;
 }
 
 /** `V3OperatorJournal.status()`: indices are the venue's witnessed indices. */
@@ -1239,7 +1239,7 @@ export class V3OperatorJournal {
    * the trail passes through it, else whole; a trail already served that far is left out. Memory holds one
    * package part or one record at a time. Served rows are never changed, so no command waits for a reader.
    */
-  private *parts(selected: Signed, after: bigint): Iterable<EvidencePart> {
+  private async *parts(selected: Signed, after: bigint): AsyncIterable<EvidencePart> {
     try {
       const through = selected.commitment.sequence, from = after < through ? after : through;
       const tops = new Map<string, TrailTip>(), batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
@@ -1300,8 +1300,8 @@ export class V3OperatorJournal {
         const base = from === 0n ? undefined : this.ownTop(top.segment, from);
         // A reader served through `from` holds this top where its own trail passes through it.
         if (base !== undefined && base.position >= top.position &&
-            this.retained.trail(base.segment, base.evidence)?.through(top.position, top.evidence) !== undefined) continue;
-        yield (base === undefined ? undefined : trailPart(trail, base)) ?? trailPart(trail)!;
+            await this.retained.trail(base.segment, base.evidence)?.reaches(top.position, top.evidence) !== undefined) continue;
+        yield (base === undefined ? undefined : await trailPart(trail, base)) ?? (await trailPart(trail))!;
       }
     } catch (error) {
       if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
