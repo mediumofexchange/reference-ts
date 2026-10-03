@@ -22,11 +22,15 @@ export const SIGNATURE_LENGTH = 64;
  * Owned bytes of the given length, or undefined. The brand and length are read
  * through the intrinsic getters (`bytes.ts`): a DataView, another typed array or
  * a Proxy can claim the Uint8Array prototype and pass `instanceof`, and genuine
- * bytes can carry an own `length`; either reached noble's unguarded reads.
+ * bytes can carry an own `length`; either reached noble's unguarded reads. The
+ * length is judged on the copy, since a view over growable shared memory can
+ * change length between any two reads of the caller's object.
  */
 function owned(value: unknown, length?: number): Uint8Array | undefined {
   try {
-    return length === undefined || byteLength(value as Uint8Array) === length ? copyBytes(value as Uint8Array) : undefined;
+    if (length !== undefined && byteLength(value as Uint8Array) !== length) return undefined;
+    const own = copyBytes(value as Uint8Array);
+    return length === undefined || own.length === length ? own : undefined;
   } catch {
     return undefined;
   }

@@ -123,9 +123,10 @@ describe("the local reference venue", () => {
     const answer = venue.range(request, limits)!, before = answer.slice();
     answer.fill(0);
     expect(venue.range(request, limits)).toEqual(before);
+    const id = Uint8Array.from(venue.id);
     venue.id.fill(0);
-    expect(venue.id).toEqual(request.venue);
-    const data = venue.export(), exported = venue.export();
+    expect(venue.id).toEqual(id);
+    const exported = structuredClone(venue.export()), data = venue.export();
     data.id.fill(0xee);
     for (const record of data.records) { record.subject.fill(0xee); record.record.fill(0xee); }
     expect(venue.export()).toEqual(exported);

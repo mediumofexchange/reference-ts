@@ -303,7 +303,7 @@ export interface ChainContext {
   readonly now: bigint;
 }
 /** C2.5's walk over admitted records (§13.3), the rules of
- * `src/replacement.ts`'s walk read from range entries: a record whose
+ * the retired transparent walk read from range entries: a record whose
  * effective index is below its witnessing plus twice the lag plus one is no
  * replacement (C2.5.3); a candidate names the current link and is strictly
  * later than the incumbent's force, or names the incumbent and revokes

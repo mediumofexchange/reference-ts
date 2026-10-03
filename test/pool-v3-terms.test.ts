@@ -105,17 +105,19 @@ describe("v3 model constant-root terms", () => {
   });
 
   it("refuses out-of-range clause numbers and identifiers of the wrong length on encode, and decodes frozen terms", () => {
-    for (const nonService of [{ duration: 0n, count: 1n << 32n, window: 0n }, { duration: 0n, count: -1n, window: 0n },
-      { duration: 1n << 64n, count: 1n, window: 0n }, { duration: 0n, count: 1n, window: -1n }]) {
-      expect(() => terms.encodeRootTerms({ ...fields(), nonService })).toThrow(EncodingError);
-    }
-    for (const silence of [{ noCommitmentDuration: -1n, challengeWindow: 0n }, { noCommitmentDuration: 0n, challengeWindow: 1n << 64n }]) {
-      expect(() => terms.encodeRootTerms({ ...fields(), silence })).toThrow(EncodingError);
-    }
-    expect(() => terms.encodeRootTerms({ ...fields(), interval: 1n << 64n })).toThrow(EncodingError);
+    const refused = (x: terms.RootTerms, reason: string): void => {
+      expect(() => terms.encodeRootTerms(x)).toThrow(new EncodingError(reason));
+    };
+    refused({ ...fields(), nonService: { duration: 0n, count: 1n << 32n, window: 0n } }, "invalid non-service count");
+    refused({ ...fields(), nonService: { duration: 0n, count: -1n, window: 0n } }, "invalid non-service count");
+    refused({ ...fields(), nonService: { duration: 1n << 64n, count: 1n, window: 0n } }, "invalid non-service duration");
+    refused({ ...fields(), nonService: { duration: 0n, count: 1n, window: -1n } }, "invalid non-service window");
+    refused({ ...fields(), silence: { noCommitmentDuration: -1n, challengeWindow: 0n } }, "invalid no-commitment duration");
+    refused({ ...fields(), silence: { noCommitmentDuration: 0n, challengeWindow: 1n << 64n } }, "invalid challenge window");
+    refused({ ...fields(), interval: 1n << 64n }, "invalid witness interval");
     for (const length of [31, 33]) {
-      expect(() => terms.encodeRootTerms({ ...fields(), venue: new Uint8Array(length) })).toThrow(EncodingError);
-      expect(() => terms.encodeRootTerms({ ...fields(), configuration: new Uint8Array(length) })).toThrow(EncodingError);
+      refused({ ...fields(), venue: new Uint8Array(length) }, "invalid venue bytes");
+      refused({ ...fields(), configuration: new Uint8Array(length) }, "invalid configuration bytes");
     }
     const decoded = terms.decodeRootTerms(raw(all()));
     expect([decoded, decoded.payout, decoded.silence, decoded.nonService].every(Object.isFrozen)).toBe(true);
