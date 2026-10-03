@@ -6,7 +6,9 @@ import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
-import { decodeReceipt, encodeReceipt } from "../src/pool/v3/commitments.js";
+import { decodeReceipt, encodeReceipt, verifyReceipt } from "../src/pool/v3/commitments.js";
+import { segmentIdentity } from "../src/pool/v3/headers.js";
+import { ScopeTree } from "../src/pool/scope.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
@@ -70,10 +72,10 @@ describe("v3 recovery journal and independent package reader", () => {
     };
     const demand = (instant: bigint, deadline = 20n, secret = presenterSecret) => record(demandTask(context, inputs,
       { backing, quantity: 10n, presenter: ed25519.getPublicKey(secret), instant, deadline }));
-    const settle = (d: Record, deadline: bigint, secret = presenterSecret) => {
+    const settle = (d: Record, deadline: bigint, secret = presenterSecret, acceptor = issuerSecret) => {
       const id = statementHash(d), ownerSecret = deriveSettlementOwnerSecret(b(22), domain, id, deadline).value;
       const opening = { backing, value: 10n, owner: ownerOf(ownerSecret), rho: 42n }, output = { opening, cm: commitmentOf(domain, opening) };
-      const acceptance = authorizeAcceptance({ domain, demand: id, owner: opening.owner, deadline }, issuerSecret);
+      const acceptance = authorizeAcceptance({ domain, demand: id, owner: opening.owner, deadline }, acceptor);
       return authorizeSettlement(record(settleTask(context, inputs, output, id)), acceptance, secret);
     };
     const publication = (kind: 1 | 3 | 4 | 5, r: Record) => encodePublication({ domain, backing, kind, record: r });
@@ -87,8 +89,16 @@ describe("v3 recovery journal and independent package reader", () => {
     const withdraw = withdrawalRecord(f.context, statementHash(first), presenterSecret);
     await f.j.submit(encodeRecord(withdraw));
     const second = f.demand(1n, 7n), settled = f.settle(second, 4n);
-    await f.j.submit(encodeRecord(second));
-    expect(decodeReceipt(await f.j.submit(encodeRecord(settled))).position).toBe(5n);
+    const filed = await f.j.submit(encodeRecord(second));
+    // An acceptance K did not sign is refused at admission, whoever released (C3.5).
+    await expect(f.j.submit(encodeRecord(f.settle(second, 4n, presenterSecret, b(91))))).rejects.toMatchObject({ code: "REFUSED", check: "SIGNATURE" });
+    const closing = await f.j.submit(encodeRecord(settled));
+    expect(decodeReceipt(closing).position).toBe(5n);
+    // Demand, withdrawal and settlement receipts verify under the segment's authority, each bound to its own statement.
+    const header = f.context.header, authority = { domain, segment: segmentIdentity(header), scopeRoot: new ScopeTree(header.entries).root(), operator };
+    const receipts = [receipt, await f.j.submit(encodeRecord(withdraw)), filed, closing].map(decodeReceipt);
+    expect(receipts.map(r => verifyReceipt(authority, r))).toEqual([true, true, true, true]);
+    expect(verifyReceipt(authority, { ...receipts[3]!, statementHash: receipts[2]!.statementHash })).toBe(false);
     await f.j.commit("settled"); await f.j.publish();
     const result = await f.read(await f.j.package());
     expect(result.state.issued - result.state.burned).toBe(10n);
@@ -240,6 +250,19 @@ describe("v3 recovery journal and independent package reader", () => {
       { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
     expect(await verdict(adopted!)).toMatchObject({ status: "final" });
     expect(await verdict(encodeReceipt(tail))).toMatchObject({ status: "lapsed" });
+  });
+
+  it("reads a receipt the held checkpoints have not yet reached as pending, and final once its checkpoint is held (C2b.4)", async () => {
+    const f = await fixture(), receipt = await f.j.submit(encodeRecord(f.demand(1n)));
+    const verdict = async () => {
+      const served = await f.j.package(), items = decodeEvidencePackage(served.package);
+      return (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+        { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
+    };
+    expect(await verdict()).toMatchObject({ status: "pending", includedAt: [], contradictedAt: [] });
+    // Signed and published, the commitment carrying it makes the receipt final.
+    await f.j.commit("carrying"); await f.j.publish();
+    expect(await verdict()).toMatchObject({ status: "final" });
   });
 
   it("reads force, publications and the non-service count through kept state and retained evidence as a fresh read does", async () => {

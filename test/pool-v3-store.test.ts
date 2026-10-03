@@ -26,6 +26,7 @@ import { authorizeIssue, burnTask, issueTask, spendTask, type ProofTask, type Se
 import { ScopeTree } from "../src/pool/scope.js";
 import { RangeLimitError, type RangeRequest, type RecordKind } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordPublisher, type RecordVenue } from "../src/record-venue.js";
+import { VenueError } from "../src/venue-error.js";
 import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
 
 // The pool-v3 operator journal (src/pool/v3/store.ts) on the local reference
@@ -288,11 +289,13 @@ describe("the v3 operator journal", () => {
 
   it("returns original replies to exact retries and refuses a reused identifier", async () => {
     const { j } = await opened();
-    const first = await j.submit(issue());
-    expect(await j.submit(issue())).toEqual(first);
+    const first = await j.submit(issue()), kept = Uint8Array.from(first);
+    // A caller that overwrites its reply changes no later answer.
+    first.fill(0);
+    expect(await j.submit(issue())).toEqual(kept);
     // The same statement with another proof keeps its original receipt and evidence (§7.2).
     const other = encodeRecord(authorizeIssue(record(issueTask(context, funded), 1), issuerSecret));
-    expect(await j.submit(other)).toEqual(first);
+    expect(await j.submit(other)).toEqual(kept);
     expect(await j.open("genesis", signed)).toEqual(await j.open("genesis", signed));
     const c = await j.commit("c2");
     expect(await j.commit("c2")).toEqual(c);
@@ -338,6 +341,22 @@ describe("the v3 operator journal", () => {
     await j2.commit("c3"); await j2.publish(); v2.advance(v2.witnessedIndex() + lag);
     expect(decodeReceipt(await j2.submit(burning())).position).toBe(3n);
     expect(await refusal(j2.submit(issue(output(payerSeed, 71, 3n))))).toEqual(["REFUSED", "REVOKED"]);
+  });
+
+  it("binds a journal to its operator key and venue, and answers a venue with no view UNAVAILABLE", async () => {
+    const { file, venue, j } = await opened();
+    j.close();
+    // The journal judges both when it is constructed; a promise carries a synchronous refusal to `refusal`.
+    const attempt = (act: () => Promise<unknown>): Promise<unknown> => { try { return act(); } catch (error) { return Promise.reject(error); } };
+    // Another operator key over the same file (another venue is refused earlier, by the reference guard).
+    const refused = attempt(() => journal(file, venue, b(97)).package());
+    await expect(refused).rejects.toThrow("journal identity does not match");
+    expect(await refusal(refused)).toEqual(["STORAGE", undefined]);
+    const dark: RecordVenue & RecordPublisher = { id: venue.id, lag: () => venue.lag(), range: (request, limits) => venue.range(request, limits),
+      witnessedIndex: () => { throw new VenueError("no view"); }, publishRecord: (kind, subject, record) => venue.publishRecord(kind, subject, record) };
+    const blind = attempt(() => journal(file, dark).submit(issue()));
+    await expect(blind).rejects.toThrow("the venue has no view");
+    expect(await refusal(blind)).toEqual(["UNAVAILABLE", undefined]);
   });
 
   it("refuses to open a backing whose K the backer has revoked (C2.6)", async () => {

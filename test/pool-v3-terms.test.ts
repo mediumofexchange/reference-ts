@@ -106,6 +106,25 @@ describe("v3 model constant-root terms", () => {
     expect(terms.decodeRootTerms(raw({ ...fields(), payout: { thing: "x", quantumExponent: -128, perUnit: 1n } })).payout.quantumExponent).toBe(-128);
   });
 
+  it("refuses out-of-range clause numbers and identifiers of the wrong length on encode, and decodes frozen terms", () => {
+    for (const nonService of [{ duration: 0n, count: 1n << 32n, window: 0n }, { duration: 0n, count: -1n, window: 0n },
+      { duration: 1n << 64n, count: 1n, window: 0n }, { duration: 0n, count: 1n, window: -1n }]) {
+      expect(() => terms.encodeRootTerms({ ...fields(), nonService })).toThrow(EncodingError);
+    }
+    for (const silence of [{ noCommitmentDuration: -1n, challengeWindow: 0n }, { noCommitmentDuration: 0n, challengeWindow: 1n << 64n }]) {
+      expect(() => terms.encodeRootTerms({ ...fields(), silence })).toThrow(EncodingError);
+    }
+    expect(() => terms.encodeRootTerms({ ...fields(), interval: 1n << 64n })).toThrow(EncodingError);
+    for (const length of [31, 33]) {
+      expect(() => terms.encodeRootTerms({ ...fields(), venue: new Uint8Array(length) })).toThrow(EncodingError);
+      expect(() => terms.encodeRootTerms({ ...fields(), configuration: new Uint8Array(length) })).toThrow(EncodingError);
+    }
+    const decoded = terms.decodeRootTerms(raw(all()));
+    expect([decoded, decoded.payout, decoded.silence, decoded.nonService].every(Object.isFrozen)).toBe(true);
+    // A fixed vector beside the independent framing, so neither can drift with the other.
+    expect(hash(terms.encodeRootTerms(all())).toString("hex")).toBe("1d70b1d6e358a42355cc1ab0cc36b763022d8812c07dce573d1d8fb8b6ca27d3");
+  });
+
   it("refuses every truncation, trailing byte, unknown tag and malformed framing", () => {
     const x = all(), bytes = raw(x);
     for (let i = 0; i < bytes.length; i++) expect(() => terms.decodeRootTerms(bytes.subarray(0, i))).toThrow(EncodingError);

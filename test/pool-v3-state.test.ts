@@ -147,6 +147,7 @@ describe("the v3 state machine in replay mode", () => {
     // A standing demand locks its tag against another demand and a spend of the tagged note, while its deadline stands.
     expect(await refusal(state, demand([root, root], [locked, 0n], 8n), context)).toBe("LOCKED");
     expect(await refusal(state, spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]), context)).toBe("LOCKED");
+    expect(await refusal(state, burn(5n, [root, root], [301n, 302n], 120n), context)).toBe("LOCKED");
     await applyRecord(state, spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]), replay({ index: 10n }));
     expect(state.hasSpentTag(locked)).toBe(true);
     const unindexed = await applyRecord(fresh(), demand([EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT], [locked, 0n], 9n), replay({ index: undefined }))

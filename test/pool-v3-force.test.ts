@@ -98,6 +98,8 @@ describe("publication force over the snapshot forest", () => {
     await refuses(state, d, "REPEATED_STATEMENT");
     await refuses(state, demand(6n), "LOCKED");
     await refuses(state, withdrawal(d, b(6)), "SIGNATURE");
+    // A demand ends only under its own backing: in a scope of several, another backing's exit names no demand.
+    await refuses(state, withdrawal(d), "DEMAND", context({ backing: b(20) }));
     await refuses(state, settle(d, 12n, 101n, 301n, b(6)), "SIGNATURE");
     // An acceptance K did not sign, under the presenter's valid release (C3.5).
     await refuses(state, settle(d, 12n, 101n, 301n, presenterSecret, 5n, 102n, b(6)), "SIGNATURE");
