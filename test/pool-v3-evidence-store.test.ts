@@ -605,6 +605,14 @@ describe("v3 evidence store", () => {
     const given: Uint8Array[] = [];
     await expect((async () => { for await (const record of full.stream()) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
     expect(given).toEqual(records.slice(0, 3));
+    // The cut's row at 4 lost: the fork's lone row there is a genuine step, but the walk back from the cut's top
+    // meets another value at 4, so nothing of the cut is spliced after it.
+    supplierDb.prepare("UPDATE chain SET prev = ? WHERE evidence = ?").run(chain[3]!, chain[4]!);
+    supplierDb.prepare("DELETE FROM chain WHERE evidence = ?").run(chain[4]!);
+    given.length = 0;
+    await expect((async () => { for await (const record of full.stream()) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(given).toEqual([...records.slice(0, 3), forked[3]]);
+    await expect((async () => { for await (const record of full.stream(4n)) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
     for (const store of [receiver, empty]) store.close();
     supplierDb.close();
   });

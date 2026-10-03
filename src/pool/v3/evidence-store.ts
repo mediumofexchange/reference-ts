@@ -639,8 +639,8 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       }
       return same(value, evidence) ? BigInt(held.size) : undefined;
     }
-    /** `records`, with a turn after each page of links walked. */
-    function* walk(after: bigint): Generator<Uint8Array | typeof TURN, void, void> {
+    /** `records`, with a turn after each page of links walked; `expected` is a value at `after` its caller established. */
+    function* walk(after: bigint, expected?: Uint8Array): Generator<Uint8Array | typeof TURN, void, void> {
       if (after >= length) return;
       // Walk back once to position `after`, keeping only the value at each page's top.
       const tops: Uint8Array[] = [];
@@ -654,6 +654,7 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       }
       // The chain starts at the seed, or at the kept value at `after` that the caller checked against its own state.
       if (after === 0n && !same(value, seed)) broken();
+      if (expected !== undefined && !same(value, expected)) broken();
       // Then read the pages forward, one page's values in memory at a time, each record checked before it is given.
       let previous = value, p = after + 1n;
       for (let i = tops.length - 1; i >= 0; i--) {
@@ -683,20 +684,14 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
         if ((p - after) % FORWARD_TURN === 0n) yield TURN;
         const next = q.at!.all(segment, p) as { evidence: unknown }[];
         if (next.length === 0) broken();
-        if (next.length > 1) { yield* fromValue(p - 1n, previous); return; }
+        // The walk back must meet the value read forward at p − 1; a different one is no part of this trail.
+        if (next.length > 1) { yield* walk(p - 1n, previous); return; }
         // `checked` holds the value's chain step and its link back to `previous`.
         const value = bytes(next[0]!.evidence), { record } = checked(value, p, previous);
         previous = value;
         yield record;
       }
       if (!same(previous, top!)) broken();
-    }
-    /** The walk back's records after `after`, whose kept value `value` the forward read established. */
-    function* fromValue(after: bigint, value: Uint8Array): Generator<Uint8Array | typeof TURN, void, void> {
-      if (after === 0n) { yield* walk(0n); return; }
-      // The walk back reaches the cut's own value at `after`; a different one is no part of this trail.
-      if ((yield* reach(after, value)) === undefined) broken();
-      yield* walk(after);
     }
     return Object.freeze({ header: head.header, segment, term: head.term, length, bytes: size,
       through: (position: bigint, evidence: Uint8Array): bigint | undefined => walked(reach(position, evidence)),
