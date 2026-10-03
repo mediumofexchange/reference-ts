@@ -23,8 +23,15 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
   ceiling, a gap redemption through the relay, the operator's return/adopt and a lapsed payment re-proved; no `@noir-lang` in a
   process that proves nothing; peak RSS up to about 470 MB. Re-recorded here: recovery, succession, scope, history, redemption (local,
   Ergo); still drifting: conformance, local replay, local journal (their checks write to scratch) and older probe reports.
-  **Next: M10e** (retire the pilot CLI, the harness's second package reader (Next 7) and, against a case map, the transparent path),
-  which the cloud can do; M10d (live testnet drill) needs the local machine (Open questions).
+  M10d (live testnet drill) needs the local machine (Open questions).
+- **M10e1 active** (`claude/m10e1-transparent-retirement`): retire the pilot and the transparent path against a case map.
+  Why now: every role runs over v3, and a shipped root barrel exporting a frozen second claim layer is a second path to read,
+  review and keep building. Acceptance: a decision maps every transparent and pilot test by behaviour (covered on v3 by a named
+  case, neutral and kept, transparent-only, gap, later slice); gaps the v3 runtime holds are ported as tests naming the refusal;
+  the transparent modules, pilot, their tests, scripts and guide go (permalinks at the last revision); neutral tests import
+  `venue-records.ts`; the root barrel, rules, architecture, status and README name only what remains; `npm run check` passes.
+  Limits: the map is by inventory and read-back, no new runtime behaviour. Stop: merged. Then M10e2: the harness's second
+  package reader (Next 7).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
