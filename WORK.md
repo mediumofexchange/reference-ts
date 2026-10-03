@@ -17,14 +17,12 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
   `command-drill.mjs` runs them all from an `npm pack` install with real proofs on the synthetic node, past the old 67-statement
   ceiling and through an offline operator's return. Reports still drifting: conformance, local replay, local journal, older probes.
   M10d (live testnet drill) needs the local machine (Open questions).
-- **M10e1 active** (`claude/m10e1-transparent-retirement`): retire the pilot and the transparent path against a
-  [case map](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1).
-  Acceptance: every transparent and pilot test mapped by behaviour; gaps the v3 runtime holds ported as tests naming the refusal;
-  the transparent modules, pilot, tests, scripts and guide deleted (kept at `8d207eb`); rules, architecture, status and README
-  name only what remains; `npm run check` passes. Limits: the map is by inventory and read-back. Stop: merged.
-  Done on the branch: the map (four inventories), about forty ported cases, the deletion, a `keys.ts` fix (look-alike bytes threw).
-  Owed: independent review of the `keys.ts` fix and the ports, then merge. Next: M10e2, the harness's second package reader (Next 7),
-  with the map's one owed runtime case (a held non-carrying checkpoint leaves a dropped backing's clock open, C2b.6.1).
+- **M10e1 done** (PR #89; [case map](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)):
+  the pilot and transparent path retired (kept at `8d207eb`) after four inventories mapped every case by behaviour and about forty
+  gaps were ported as v3 tests; `keys.ts` now answers false for look-alike or resizing bytes. One fresh review: no blocker or major,
+  minors fixed. Local: `npm run check`, local replay (224 groups), store reports re-recorded; CI green incl. real-proof jobs.
+  **Next: M10e2**, the harness's second package reader (Next 7), with the map's one owed runtime case: a held non-carrying
+  checkpoint leaves a dropped backing's no-commitment clock open (C2b.6.1; model only today).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).

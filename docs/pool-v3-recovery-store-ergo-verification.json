@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1186
+      "elapsedMs": 1280
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 924
+      "elapsedMs": 996
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2390
+      "elapsedMs": 2627
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2506
+      "elapsedMs": 2547
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2480
+      "elapsedMs": 2631
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1447
+      "elapsedMs": 1336
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2362
+      "elapsedMs": 2428
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2487
+      "elapsedMs": 2597
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2514
+      "elapsedMs": 2542
     }
   ],
   "transactions": [
@@ -114,13 +114,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "767cab4bcdcbe43a496751445c6d2f7c13d3ea87415012d4469c535f6af2ecb7",
+    "history": "c6d7950275740a09b4aab15fec0fbd0c538964ee4c2fe0a3d8599faebfa23052",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "5e64eeb94e7734447fdf559473134cdecbb383d12cf439b5d4447db8d851f4d8"
+        "sha256": "a79b01705fcfdf8ac515e8578dfb9f29bea62233e3bc1dc508087bf23ca0091d"
       },
       {
         "index": "27",
@@ -130,12 +130,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "8272829cb54b7d28d5e1c303bcb9f6b86179e916b785083c0aa397edc59733a3"
+        "sha256": "9d59c5adde2462b069bc4b581d28d926c5f77f77feb8ed7fbffdaa2f8e62d2a0"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "e0ef71919c8ec7b7336ed8805e0a11ceae5ab422b6e740b816f4dc1ba3f88887"
+        "sha256": "ee617f2b9b409290a3b06454bd25b00be45928d746df2951b47d757eb535803e"
       }
     ],
     "clock": {
@@ -156,17 +156,17 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 33702,
+  "elapsedMs": 37012,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
-    "dist/contexts.js": "d5bf60db247c0a298a978a278c41b52e692b18af9f457e206d9fb54b19c5ef6f",
+    "dist/contexts.js": "72694438fc22bc25bc517ce1a310f94ca45171c6a46b50b1bb6dd31c98ef6322",
     "dist/ergo-headers.js": "14f042f3e3884fe04b30f50fef93c31cf22bb9199b29fce2399c1be58e5b405b",
     "dist/ergo-profile.js": "6accb1f4e0307f6570e8ebfdccb656fcb3a9dd10ecaae4d3ab1d7fe80e77c36c",
     "dist/ergo-publisher.js": "41f26ff08349bc0f8f595519b9566e0f708a65dd4d385a32edff21a29fbd0067",
     "dist/ergo-supplier.js": "19f5ec645000c756d3332477c2cba3c431fe3bcda617f8afde40ccf40de2f661",
     "dist/ergo-synthetic.js": "6888728d3d42d27880ecf777b8f5717e4ac355dc516452b4fb3307e826ae17d7",
     "dist/ergo.js": "e8db3dd08e739037e95fa34392be52d031b3bb76cc12852d4d2956391225674b",
-    "dist/keys.js": "07993d86bebf4555f59b82374f616cecfe9be5dc1d3ff19ac8fbc7d31163ed5c",
+    "dist/keys.js": "9075b1091976522893cf4613e326423a46d726c4ee4adfa6710691641f9f240c",
     "dist/pool/field.js": "8348d48159c397cb49bcb03ced9e606103d689d7892072b27b9a05b50e9f2bb8",
     "dist/pool/note-tree.js": "48fa3cfdcc8183f5aaa86889c9a066a775afc6ff79148d294933d26a1fbf40d1",
     "dist/pool/notes.js": "eb63d7562dea56fa98ab5313b8049524d51f8e733b26a09e25e666a967bbeb31",
@@ -206,7 +206,7 @@
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
     "dist/pool/v3/verify-ahead.js": "ac0418efa0aada00095d7d0d827efefe90b34d7e457e1bd9d53fea0f8d0a4315",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
-    "dist/record-range.js": "98044663680c2f44261abf308f19de5704ae63b0c1d8b7354a683cb83c02ba2d",
+    "dist/record-range.js": "9c20853584287b64a9e0c5069847abb2a68f7c6204780229e0b751cb34a56695",
     "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
     "dist/venue-records.js": "c4f6a71db791baab7db23888229c9165ed6c9d0d22d8c9f068d2f1affb4c965e",
@@ -235,7 +235,7 @@
     "scripts/pool/v3/testnet-budget.mjs": "1e889ddb208d115192eaef05fb052faac3187b161bc8f6386baf085fc807b079",
     "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
-    "src/contexts.ts": "740bb1e22250d772ff15dad541c4eecfe26709a6d0b47ccda05b34b385b13d88",
+    "src/contexts.ts": "cc3a7290bc16ca32d9378ada8500b213af075ed6dcbf57413f17d5815b6dc1a0",
     "src/ergo-headers.ts": "0ede67068a6ed938809521e07a5c9ab51fcf66f8de7bffe7b8beb3f1a7e2c6e5",
     "src/ergo-profile.ts": "12ee44043a1dce07e8c86984b061b87cb79fa3193365b162d97db7632c21d631",
     "src/ergo-publisher.ts": "09b2d8044abb0c83165b01d8ea5613f38d33a4c0ee322494e8d00ab5cfc1e08d",
@@ -243,7 +243,7 @@
     "src/ergo-supplier.ts": "5e08585611930e0aa134763b92c4141926289a6b4c551567f348df6005853d1b",
     "src/ergo-synthetic.ts": "73c8f3555ebfc0c5a462ff071ec646d3e128701a84bd79f633d4f60e769bbb8d",
     "src/ergo.ts": "b21a6fd9a7a836658ce78461a2f0ccec852bd989a8bf7dd4e6d83c363d719172",
-    "src/keys.ts": "ad96f0ef84d0657a34aa610909d1ee425cb213d70313cf0c1661e91e76a5ae8d",
+    "src/keys.ts": "0b063bfb4030dbae01abe88c7c59cad9324d47800f1025d55c2742d8060a5dd2",
     "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
     "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
     "src/pool/note-tree.ts": "05087d8637faa1db300b8b98af7002eff3a6eb40b8e48900c7c90ee5a51a8fbb",
@@ -285,7 +285,7 @@
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
     "src/pool/v3/verify-ahead.ts": "7f67861fb3e768576b60d0d896c3b26c61b4096809b8eb2d4b1dbaacf3b9561e",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
-    "src/record-range.ts": "6a3d51df17c657ac29015f6e6f7cdab597900db6de631055eacac728b6ad6bdb",
+    "src/record-range.ts": "3933baf7a22b1bea1c69fd58abd596fc6cb991c6c00ff875e7731d104dd379b6",
     "src/record-venue.ts": "fefd8000b4eece2966c95147283df7f70631f00f63cb82487e51ea15103a606f",
     "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
     "src/venue-records.ts": "ce98c25655612077396eeba5938c506a94fb6e162e2538fa2afe0f6ae4b1afde"
