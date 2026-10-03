@@ -117,6 +117,15 @@ describe("publication force over the snapshot forest", () => {
     expect(state.added.size).toBe(0); expect(state.nullifiers.size).toBe(0);
   });
 
+  it("ends a demand by one exit only: a withdrawn demand settles no more, a settled one withdraws no more (C3.6-7, inv 27)", async () => {
+    const d = demand(), withdrawn = openForceState(fresh());
+    await applyForceRecord(withdrawn, d, context()); await applyForceRecord(withdrawn, withdrawal(d), context());
+    await refuses(withdrawn, settle(d), "DEMAND", context({ index: 12n }));
+    const settled = openForceState(fresh());
+    await applyForceRecord(settled, d, context()); await applyForceRecord(settled, settle(d), context({ index: 12n }));
+    await refuses(settled, withdrawal(d), "DEMAND", context({ index: 12n }));
+  });
+
   it("takes a release's output only by a settlement of another demand naming the same owner (C3.8)", async () => {
     // K files a demand over its own snapshot note (nullifier 201) and, under its own acceptance naming the
     // holder's owner 88, settles it to the holder's published rho 99 ahead of the holder's release.
@@ -174,6 +183,21 @@ describe("recovery admission and replay clocks", () => {
     await applyRecord(state, d, ctx); await applyRecord(state, settlement, ctx);
     expect(state.eventIndices()).toEqual([9n, 12n]); expect(state.demands().length).toBe(0);
     expect(state.nullifiers()).toEqual([101n, 102n]); expect(state.leaves).toBe(1n);
+  });
+
+  it("replays a settlement under another demand's standing lock as refused, and a withdrawal releases its own demand's lock only (C3.7)", async () => {
+    // The first demand's lock lapses after its deadline (12); a second demand over the same tag stands until 16.
+    const first = demand(), second = demand(11n, 16n), state = fresh();
+    await applyRecord(state, first, replay());
+    await expect(applyRecord(state, demand(8n, 16n), replay({ index: 10n }))).rejects.toMatchObject({ check: "LOCKED" });
+    await applyRecord(state, second, replay({ index: 13n }));
+    await expect(applyRecord(state, settle(first), replay({ index: 13n }))).rejects.toMatchObject({ check: "LOCKED" });
+    expect(state.position).toBe(2n);
+    await applyRecord(state, withdrawal(first), replay({ index: 13n }));
+    await expect(applyRecord(state, demand(12n, 18n), replay({ index: 14n }))).rejects.toMatchObject({ check: "LOCKED" });
+    // A settlement is never locked by its own demand.
+    await applyRecord(state, settle(second, 16n), replay({ index: 14n }));
+    expect([state.position, state.demands().length, state.nullifiers()]).toEqual([4n, 0, [101n, 102n]]);
   });
 
   it("admits at the horizon and replays a timely admission after its deadline", async () => {

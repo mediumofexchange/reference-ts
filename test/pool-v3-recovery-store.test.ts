@@ -97,6 +97,22 @@ describe("v3 recovery journal and independent package reader", () => {
     expect(result.state.position).toBe(5n);
   });
 
+  it("answers an exact repeat of an ended demand, its withdrawal or its settlement with the first receipt, and refuses the other exit (C3.6-7, inv 26)", async () => {
+    const f = await fixture(), first = f.demand(2n, 6n), withdraw = withdrawalRecord(f.context, statementHash(first), presenterSecret);
+    const receipts = [await f.j.submit(encodeRecord(first)), await f.j.submit(encodeRecord(withdraw))];
+    // The withdrawn demand leaves the record: it can be settled no more.
+    await expect(f.j.submit(encodeRecord(f.settle(first, 4n)))).rejects.toMatchObject({ code: "REFUSED", check: "DEMAND" });
+    const second = f.demand(1n, 7n), settled = f.settle(second, 4n);
+    receipts.push(await f.j.submit(encodeRecord(second)), await f.j.submit(encodeRecord(settled)));
+    await expect(f.j.submit(encodeRecord(withdrawalRecord(f.context, statementHash(second), presenterSecret))))
+      .rejects.toMatchObject({ code: "REFUSED", check: "DEMAND" });
+    // Past every deadline, after a commit and a publication, each exact repeat is answered before any door judges it.
+    await f.j.commit("ended"); await f.j.publish(); f.venue.advance(8n - f.venue.witnessedIndex());
+    // A new demand over the settled note is judged, and refused.
+    await expect(f.j.submit(encodeRecord(f.demand(6n, 12n)))).rejects.toMatchObject({ code: "REFUSED", check: "LOCKED" });
+    for (const [i, r] of [first, withdraw, second, settled].entries()) expect(await f.j.submit(encodeRecord(r))).toEqual(receipts[i]);
+  });
+
   it("refuses strict demand deadlines, invalid instants, wrong withdrawal keys and expired acceptance", async () => {
     const f = await fixture();
     for (const r of [f.demand(2n, 4n), f.demand(3n), f.demand(0n, 3n)]) {
