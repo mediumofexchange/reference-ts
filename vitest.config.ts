@@ -20,6 +20,8 @@ export default defineConfig({
     maxWorkers: 2,
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // Gives each worker an event-loop turn between tests (see the file).
+    setupFiles: ["./test/event-loop.setup.ts"],
     // `scratch/` is gitignored and is where a proof script is compiled to run
     // against `./src/*.js` — which puts a full copy of `test/` there too. Those
     // copies are inside vitest's default include, so a suite run collected them

@@ -3,32 +3,29 @@
 Updated: 2026-10-03
 
 ## Goal
-**Slice 10: installable commands on the testnet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 3).
-Acceptance: from a packed install, `moe` wallet (with the backer role), operator, reader and relay commands in fresh processes on
-separate directories complete issue → pay → receive → fulfill → demand → accept → settle → burn and an offline-operator recovery past
-the old 67-statement ceiling on the synthetic node (done, M10c2) and live on the testnet (M10d, local machine); the pilot CLI, the
-harness's second package reader and, against a case map, the transparent path retire (M10e, done). Stop boundary: all delivered.
-Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78). pool-v3 adopted (spec e7f7f24, §11.4).
+**Slice 11: the design point** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 4).
+Acceptance: through the `moe` commands on the synthetic node, measured against the [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
+operator admission at peak, reader first sync and wallet steady state, with memory independent of history length and restarts
+that resume without re-verifying retained history; Next 4 (k)–(n), (s) closed. Milestones: **M11a** the Ergo view on append-only
+SQLite rows (flat heap and per-sync work over a long synthetic chain, reopen without PoW/root re-checks, same verdicts and answers);
+M11b the scale findings; M11c the measurements and their report. Stop boundary: all three delivered; a budget that fails names its lever.
+Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices 9–10 (PRs #69–#91). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
-- **M10a–M10c2 done** (PRs #79–#88; decisions from [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
-  to [M10c2b1](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)):
-  the `moe` bin's wallet (holder, `--backer`), operator, reader and relay commands ([commands](docs/POOL_V3_WALLET.md#commands));
-  `command-drill.mjs` runs them all from an `npm pack` install with real proofs on the synthetic node, past the old 67-statement
-  ceiling and through an offline operator's return. The twelve current v3 reports are re-recorded at M10e2 (CI run 37106533478).
-  M10d (live testnet drill) needs the local machine (Open questions).
-- **M10e1 done** (PR #89; [case map](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)):
-  the pilot and transparent path retired (kept at `8d207eb`) after four inventories mapped every case by behaviour and about
-  forty gaps were ported as v3 tests. One fresh review: no blocker or major, minors fixed; CI green incl. real-proof jobs.
-- **M10e2 done** (PR #91; [decision](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)):
-  every local-check group (223 local, 230 Ergo) is read by `readPackage`; refusals carry their facts (`refusalFacts`, old 4(h));
-  the no-venue/no-index replay, `verifyTrailEvidence` and `evidence-reader.mjs` retired; the C2b.6.1 owed case landed.
-  One fresh review: no blocker or major, minors fixed. Slice 10 now waits only on M10d (local machine).
-  **Next: slice 11** (Next 5), the design point, from the cloud; M10d whenever the local machine runs.
+- **Slice 10 done but M10d** (PRs #79–#91; decisions from [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
+  to [M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)):
+  the `moe` bin's wallet (holder, `--backer`), operator, reader and relay commands ([commands](docs/POOL_V3_WALLET.md#commands)) run from an
+  `npm pack` install with real proofs on the synthetic node (`command-drill.mjs`); the pilot, transparent path (kept at `8d207eb`) and the
+  harness's second reader retired. M10d (live testnet drill) needs the local machine (Open questions).
+- **M11a (this branch, `claude/m11a-ergo-view-rows`)**: the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
+  flat heap (10–18 MB from 10⁴ to 10⁵ synthetic blocks), reopen in 192 ms (was 74 s at 10⁴), `audit()`, durable side charges and
+  per-supplier protection. A design review and an integrated review: majors and minors resolved (decision). PR #92: the twelve
+  current v3 reports re-recorded from CI run 37132637881; a vitest setup now yields a turn per test (a worker's 60 s RPC timeout
+  failed Windows on a 73 s synchronous file). **Next: M11b**, Next 4 (k)–(n), (s), then M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
-- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
+- Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md).
 - Current reports: [conformance](docs/pool-v3-conformance-verification.json), [journal](docs/pool-v3-store-verification.json),
   [replay](docs/pool-v3-local-replay-verification.json), [recovery](docs/pool-v3-recovery-store-verification.json)/[Ergo](docs/pool-v3-recovery-store-ergo-verification.json),
   [succession](docs/pool-v3-succession-store-verification.json)/[Ergo](docs/pool-v3-succession-store-ergo-verification.json),
@@ -60,10 +57,11 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
    exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
-5. Slice 11, the design point: measure operator admission at peak, reader first sync and wallet steady state through the commands against the
-   [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), with Next 4 (k)–(n), (s), and rebuild the Ergo view on
-   append-only SQLite rows (its limits and plan: the [direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own)'s
-   decision 4). Levers (Poseidon2 on Barretenberg at 0.12 against 1.14 ms a node hash, a 10⁶ first-sync run) only if a budget fails.
+5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
+   sync, about 0.9 s at a hostile 20,000-header quota); sections asked of several suppliers at once (first-sync time, if M11c shows
+   the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch
+   budget on known headers; pre-existing); `moe venue audit` for restored views (release assurance's backup drills). Levers
+   (Poseidon2 on Barretenberg at 0.12 against 1.14 ms a node hash, a 10⁶ first-sync run) only if a budget fails.
 6. Release assurance: reproducible builds of the package and its artifacts, installed-package interoperability, backup and restore drills
    within the standing authority. Security reviews until then are done by separate AI instances (fresh reviewers, the rolling audits);
    the external independent review comes only once the product is complete (answered 2026-10-01).

@@ -348,8 +348,12 @@ export interface ErgoHeaderChain {
 export interface ErgoHeaderStore {
   /** Accept one header whose parent is the anchor or an accepted header. */
   add(bytes: Uint8Array): "added" | "known" | ErgoHeaderRefusal;
-  /** The best chain, copied out: linear in its length, so call it after a batch of additions. */
+  /** The best chain, copied out: linear in its length, for callers that want all of it. */
   best(): ErgoHeaderChain;
+  /** The best chain's header at a height above the anchor, undefined above its tip. */
+  bestAt(height: bigint): ErgoHeaderView | undefined;
+  /** Whether an accepted header above the anchor is on the best chain. */
+  isBest(id: Uint8Array): boolean;
   /** The best chain's tip and the anchor's height, in constant time. */
   tip(): { readonly id: Uint8Array; readonly height: bigint; readonly score: bigint; readonly anchorHeight: bigint };
   /** The height of the highest header that is both an ancestor of (or equal
@@ -357,131 +361,309 @@ export interface ErgoHeaderStore {
    * where they share nothing above it, undefined for an id the store has not
    * accepted above the anchor. Linear in the distance to that ancestor. */
   forkHeight(id: Uint8Array): bigint | undefined;
-  /** The height of an accepted header, in constant time; undefined for one the store has not accepted. */
+  /** The height of an accepted header; undefined for one the store has not accepted. */
   heightOf(id: Uint8Array): bigint | undefined;
-  /** Accepted descendants in insertion order (tie precedence), copied. */
-  retained(): readonly Uint8Array[];
+  /** An accepted header above the anchor and its ancestors off the best chain, from it down; empty for a header on
+   * the best chain or not accepted. Linear in the distance to the best chain. */
+  offBest(id: Uint8Array): readonly Uint8Array[];
   /** Drop complete inferior side subtrees below a final header, except
    * those containing a protected incomplete supplier pass. */
   prune(witnessed: Uint8Array, protectedIds: readonly Uint8Array[]): void;
+  /** Check every header the rows hold, best and side, as `add` accepted it: parsed from its bytes, linked to its
+   * parent one height below, a later timestamp, the required difficulty and the score it adds; the work too where
+   * `work` is set. The best chain must link from the anchor to the tip. Throws on the first header that does not;
+   * answers how many were checked. Linear in the rows, so it is for audits, never a sync. */
+  audit(work: boolean): number;
 }
-interface Entry { readonly header: ErgoHeader; readonly parent: Entry | undefined; readonly score: bigint; readonly above: boolean }
+
+/** One accepted header above the anchor as its rows keep it. */
+export interface ErgoHeaderRow { readonly height: bigint; readonly parentId: Uint8Array; readonly score: bigint; readonly bytes: Uint8Array }
+/**
+ * Where a store keeps what it accepted above the anchor: every header with its
+ * chain's score, the best chain by height and the headers off it. The store
+ * reads ancestry from here, so what it holds in memory does not grow with the
+ * chain; a durable view's rows are its journal's (`ergo-store.ts`). Ids and
+ * bytes passed in are the store's own; rows return bytes the store may keep.
+ */
+export interface ErgoHeaderRows {
+  get(id: Uint8Array): ErgoHeaderRow | undefined;
+  put(id: Uint8Array, row: ErgoHeaderRow): void;
+  delete(id: Uint8Array): void;
+  /** The best chain's id at a height above the anchor, undefined above its tip. */
+  bestAt(height: bigint): Uint8Array | undefined;
+  /** The best chain's tip height; undefined while it is the anchor. */
+  bestHeight(): bigint | undefined;
+  /** Make `ids` the best chain from `fromHeight` upward, dropping every height above the last. */
+  setBest(fromHeight: bigint, ids: readonly Uint8Array[]): void;
+  /** Accepted headers off the best chain. */
+  sides(): readonly Uint8Array[];
+  addSide(id: Uint8Array): void;
+  removeSide(id: Uint8Array): void;
+}
+
+/** Rows in memory: for a store used on its own, whose memory then grows with the chain it accepts. */
+export function memoryHeaderRows(): ErgoHeaderRows {
+  const headers = new Map<string, ErgoHeaderRow>(), best: Uint8Array[] = [], side = new Map<string, Uint8Array>();
+  let base: bigint | undefined;
+  return {
+    get: id => headers.get(bytesToHex(id)),
+    put: (id, row) => { headers.set(bytesToHex(id), row); },
+    delete: id => { headers.delete(bytesToHex(id)); },
+    bestAt: height => base === undefined || height < base ? undefined : best[Number(height - base)],
+    bestHeight: () => base === undefined || best.length === 0 ? undefined : base + BigInt(best.length) - 1n,
+    setBest(fromHeight, ids) {
+      if (base === undefined) base = fromHeight;
+      if (fromHeight < base || fromHeight > base + BigInt(best.length)) throw new Error("best chain rows must stay contiguous");
+      best.length = Number(fromHeight - base);
+      best.push(...ids);
+    },
+    sides: () => [...side.values()],
+    addSide: id => { side.set(bytesToHex(id), id); },
+    removeSide: id => { side.delete(bytesToHex(id)); },
+  };
+}
+
+/** Stored entries a store keeps parsed at most, cleared when full. */
+const ENTRY_CACHE = 4096;
+/** An accepted header as the store walks it: its links, height and score at hand, its bytes parsed only when a rule
+ * reads them (a stored row's work was checked when it was accepted). */
+interface Entry { readonly id: Uint8Array; readonly parentId: Uint8Array; readonly height: bigint; readonly score: bigint; readonly above: boolean; readonly header: ErgoHeader }
+const parsed = (header: ErgoHeader, score: bigint, above: boolean): Entry =>
+  Object.freeze({ id: header.id, parentId: header.parentId, height: header.height, score, above, header });
+const view = (header: ErgoHeader): ErgoHeaderView => Object.freeze({ id: copyBytes(header.id), parentId: copyBytes(header.parentId),
+  height: header.height, version: BigInt(header.version), transactionsRoot: copyBytes(header.transactionsRoot) });
 
 /** A store rooted at the anchor. `context` is the chain, ascending, of at
  * least `ANCHOR_CONTEXT` headers below the anchor followed by the anchor
  * itself; it is authenticated by linkage alone, its last id must be
  * `anchorId`. Mainnet anchors must precede only EIP-37 headers; testnet anchors
  * are at least 1,025, giving the full lookback above genesis height 1.
- * The closed rule selector is chosen by ErgoVenue from its owned profile. */
-export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Array[], rules: ErgoHeaderRules = "mainnet"): ErgoHeaderStore | undefined {
+ * The closed rule selector is chosen by ErgoVenue from its owned profile.
+ * `rows` holds everything above the anchor and may already hold a chain this
+ * store's rules accepted before (a durable view's); the context stays in memory. */
+export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Array[], rules: ErgoHeaderRules = "mainnet",
+  rows: ErgoHeaderRows = memoryHeaderRows()): ErgoHeaderStore | undefined {
   const anchor = ownBytes(anchorId);
   if (anchor === undefined || anchor.length !== 32 || !Array.isArray(context) || context.length < ANCHOR_CONTEXT + 1 ||
       (rules !== "mainnet" && rules !== "testnet")) return undefined;
-  const byId = new Map<string, Entry>();
+  const below = new Map<string, Entry>(), byHeight: Entry[] = [];
   let previous: Entry | undefined;
   for (const bytes of context) {
     const header = parseErgoHeader(bytes);
-    if (header === undefined || byId.has(bytesToHex(header.id))) return undefined;
-    if (previous !== undefined && (header.height !== previous.header.height + 1n || compareBytes(header.parentId, previous.header.id) !== 0)) return undefined;
-    previous = Object.freeze({ header, parent: previous, score: 0n, above: false });
-    byId.set(bytesToHex(header.id), previous);
+    if (header === undefined || below.has(bytesToHex(header.id))) return undefined;
+    if (previous !== undefined && (header.height !== previous.height + 1n || compareBytes(header.parentId, previous.id) !== 0)) return undefined;
+    previous = parsed(header, 0n, false);
+    below.set(bytesToHex(header.id), previous); byHeight.push(previous);
   }
-  const root = previous!;
+  const root = previous!, anchorHeight = root.height, lowest = byHeight[0]!.height;
   const minimum = rules === "testnet" ? BigInt(ANCHOR_CONTEXT) + 1n : EIP37_ACTIVATION_HEIGHT - 1n;
-  if (compareBytes(root.header.id, anchor) !== 0 || root.header.height < minimum) return undefined;
-  let best = root;
+  if (compareBytes(root.id, anchor) !== 0 || anchorHeight < minimum) return undefined;
 
-  const ancestorAt = (entry: Entry, height: bigint): Entry | undefined => {
-    let at: Entry | undefined = entry;
-    while (at !== undefined && at.header.height > height) at = at.parent;
-    return at?.header.height === height ? at : undefined;
+  /** Entries read from the rows, kept for repeated walks until they are many; a pruned id leaves at once. */
+  const cache = new Map<string, Entry>();
+  /** An accepted header above the anchor from the rows. Its bytes are parsed, and their id, parent and height
+   * checked against the row, the first time a rule reads them. */
+  const stored = (id: Uint8Array): Entry | undefined => {
+    const key = bytesToHex(id), kept = cache.get(key);
+    if (kept !== undefined) return kept;
+    const row = rows.get(id);
+    if (row === undefined) return undefined;
+    if (row.height <= anchorHeight || row.parentId.length !== 32) throw new Error("a stored header row is malformed");
+    let header: ErgoHeader | undefined;
+    const at: Entry = Object.freeze({ id: copyBytes(id), parentId: row.parentId, height: row.height, score: row.score, above: true,
+      get header(): ErgoHeader {
+        if (header !== undefined) return header;
+        const read = parseErgoHeader(row.bytes);
+        if (read === undefined || compareBytes(read.id, id) !== 0 || read.height !== row.height || compareBytes(read.parentId, row.parentId) !== 0) {
+          throw new Error("a stored header row does not reproduce its id, parent and height");
+        }
+        return header = read;
+      } });
+    if (cache.size >= ENTRY_CACHE) cache.clear();
+    cache.set(key, at);
+    return at;
+  };
+  const entry = (id: Uint8Array): Entry | undefined => below.get(bytesToHex(id)) ?? stored(id);
+  const tipOf = (): Entry => {
+    const height = rows.bestHeight();
+    if (height === undefined) return root;
+    const at = stored(rows.bestAt(height)!);
+    if (at === undefined || at.height !== height) throw new Error("the best chain's rows do not reach its tip");
+    return at;
+  };
+  let best = tipOf();
+  /** The best chain's header at a height above the anchor and at most its tip. */
+  const bestEntry = (height: bigint): Entry => {
+    const id = rows.bestAt(height), at = id === undefined ? undefined : stored(id);
+    if (at === undefined) throw new Error("the best chain's rows are incomplete");
+    return at;
+  };
+  const onBest = (at: Entry): boolean => !at.above || compareBytes(rows.bestAt(at.height) ?? new Uint8Array(0), at.id) === 0;
+  const parentOf = (at: Entry): Entry | undefined => at.above ? entry(at.parentId) : byHeight[Number(at.height - lowest) - 1];
+  /** The ancestor of `at` at `height`: by height once the walk reaches the best chain or the context. */
+  const ancestorAt = (at: Entry | undefined, height: bigint): Entry | undefined => {
+    while (at !== undefined && at.height > height) {
+      if (onBest(at)) {
+        if (height <= anchorHeight) return height < lowest ? undefined : byHeight[Number(height - lowest)];
+        return height > best.height ? undefined : bestEntry(height);
+      }
+      at = parentOf(at);
+    }
+    return at?.height === height ? at : undefined;
+  };
+  /** The highest header on the best chain (the anchor included) that `at` descends from or is. */
+  const fork = (at: Entry): Entry => {
+    let walk: Entry | undefined = at;
+    while (walk !== undefined && !onBest(walk)) walk = parentOf(walk);
+    if (walk === undefined) throw new Error("an accepted header does not descend from the anchor");
+    return walk;
   };
   const required = (parent: Entry): bigint | undefined => {
     // HeadersProcessor.requiredDifficultyAfter applies this before the legacy
     // epoch calculation. The parser's maximum height makes only the child case reachable.
-    if (rules === "testnet" && (parent.header.height === TESTNET_V2_ACTIVATION_HEIGHT || parent.header.height + 1n === TESTNET_V2_ACTIVATION_HEIGHT)) return 32n;
-    if (parent.header.height % DIFFICULTY_EPOCH !== 0n) return decodeCompactBits(parent.header.nBits);
+    if (rules === "testnet" && (parent.height === TESTNET_V2_ACTIVATION_HEIGHT || parent.height + 1n === TESTNET_V2_ACTIVATION_HEIGHT)) return 32n;
+    if (parent.height % DIFFICULTY_EPOCH !== 0n) return decodeCompactBits(parent.header.nBits);
     const previousHeaders: ErgoHeader[] = [];
     for (let i = USE_LAST_EPOCHS; i >= 0n; i--) {
-      const ancestor = ancestorAt(parent, parent.header.height - i * DIFFICULTY_EPOCH);
+      const ancestor = ancestorAt(parent, parent.height - i * DIFFICULTY_EPOCH);
       // The context covers eight epochs below the anchor, so an ancestor is missing only if the store is misbuilt.
       if (ancestor === undefined) return undefined;
       previousHeaders.push(ancestor.header);
     }
     return rules === "testnet" ? testnetDifficulty(previousHeaders) : eip37Difficulty(previousHeaders);
   };
+  /** Make `tip` the best chain's tip: its headers above where it meets the old best chain replace the old ones,
+   * which become side headers. */
+  const promote = (tip: Entry): void => {
+    const path: Entry[] = [];
+    let at: Entry | undefined = tip;
+    while (at !== undefined && !onBest(at)) { path.push(at); at = parentOf(at); }
+    if (at === undefined) throw new Error("an accepted header does not descend from the anchor");
+    for (let height = at.height + 1n; height <= best.height; height++) rows.addSide(bestEntry(height).id);
+    path.reverse();
+    for (const step of path) rows.removeSide(step.id);
+    rows.setBest(at.height + 1n, path.map(step => step.id));
+    best = tip;
+  };
+
+  /** Why an accepted header no longer meets the rules it was accepted under, or undefined. */
+  const fault = (at: Entry, work: boolean): string | undefined => {
+    const parent = parentOf(at), header = at.header;
+    if (parent === undefined) return "its parent is missing";
+    if (header.height !== parent.height + 1n || header.timestamp <= parent.header.timestamp) return "it does not follow its parent";
+    const difficulty = required(parent);
+    if (difficulty === undefined || decodeCompactBits(header.nBits) !== difficulty || at.score !== parent.score + difficulty) return "its difficulty or score is wrong";
+    if (work && !autolykosPowValid(header)) return "its work does not hold";
+    return undefined;
+  };
 
   return Object.freeze({
+    audit(work: boolean): number {
+      let checked = 0, parent: Entry = root;
+      for (let height = anchorHeight + 1n; height <= best.height; height++, checked++) {
+        const at = bestEntry(height), why = compareBytes(at.parentId, parent.id) !== 0 ? "it does not link to the best chain below it" : fault(at, work);
+        if (why !== undefined) throw new Error(`best-chain header at height ${height}: ${why}`);
+        parent = at;
+      }
+      for (const id of rows.sides()) {
+        // The best chain is the heaviest accepted, the first accepted of equal scores keeping it.
+        const at = stored(id), why = at === undefined ? "its row is missing" : at.above && onBest(at) ? "it is on the best chain"
+          : at.score > best.score ? "it outscores the best chain" : fault(at, work);
+        if (why !== undefined) throw new Error(`side header ${bytesToHex(id)}: ${why}`);
+        checked++;
+      }
+      return checked;
+    },
     add(input: Uint8Array): "added" | "known" | ErgoHeaderRefusal {
       const header = parseErgoHeader(input);
       if (header === undefined) return "malformed";
-      if (byId.has(bytesToHex(header.id))) return "known";
-      const parent = byId.get(bytesToHex(header.parentId));
+      if (entry(header.id) !== undefined) return "known";
+      const parent = entry(header.parentId);
       if (parent === undefined) return "unknown-parent";
       if (!parent.above && parent !== root) return "below-anchor";
-      if (header.height !== parent.header.height + 1n) return "height";
+      if (header.height !== parent.height + 1n) return "height";
       if (header.timestamp <= parent.header.timestamp) return "timestamp";
       const difficulty = required(parent);
       if (difficulty === undefined) throw new Error("anchor context misses a difficulty ancestor");
       // A difficulty above q admits no hit; the node compares decoded values, so any encoding of the value is accepted.
       if (difficulty <= 0n || difficulty > Q || decodeCompactBits(header.nBits) !== difficulty) return "difficulty";
       if (!autolykosPowValid(header)) return "pow";
-      const entry = Object.freeze({ header, parent, score: parent.score + difficulty, above: true });
-      byId.set(bytesToHex(header.id), entry);
+      const added = parsed(header, parent.score + difficulty, true);
+      rows.put(header.id, { height: header.height, parentId: header.parentId, score: added.score, bytes: header.bytes });
       // The node keeps its best chain unless a new one has strictly more score.
-      if (entry.score > best.score) best = entry;
+      if (added.score > best.score) promote(added);
+      else rows.addSide(header.id);
       return "added";
     },
     best(): ErgoHeaderChain {
       const headers: ErgoHeaderView[] = [];
-      for (let at: Entry | undefined = best; at !== undefined && at !== root; at = at.parent) {
-        const { id, parentId, height, version, transactionsRoot } = at.header;
-        headers.push(Object.freeze({ id: copyBytes(id), parentId: copyBytes(parentId), height, version: BigInt(version), transactionsRoot: copyBytes(transactionsRoot) }));
-      }
-      headers.reverse();
-      return Object.freeze({ tipId: copyBytes(best.header.id), height: best.header.height, score: best.score, headers: Object.freeze(headers) });
+      for (let height = anchorHeight + 1n; height <= best.height; height++) headers.push(view(bestEntry(height).header));
+      return Object.freeze({ tipId: copyBytes(best.id), height: best.height, score: best.score, headers: Object.freeze(headers) });
+    },
+    bestAt(height: bigint): ErgoHeaderView | undefined {
+      if (typeof height !== "bigint" || height <= anchorHeight || height > best.height) return undefined;
+      return view(bestEntry(height).header);
+    },
+    isBest(id: Uint8Array): boolean {
+      const owned = ownBytes(id), at = owned === undefined || owned.length !== 32 ? undefined : stored(owned);
+      return at !== undefined && onBest(at);
     },
     tip() {
-      return Object.freeze({ id: copyBytes(best.header.id), height: best.header.height, score: best.score, anchorHeight: root.header.height });
+      return Object.freeze({ id: copyBytes(best.id), height: best.height, score: best.score, anchorHeight });
     },
     forkHeight(id: Uint8Array): bigint | undefined {
-      const owned = ownBytes(id);
-      if (owned === undefined || owned.length !== 32) return undefined;
-      let at = byId.get(bytesToHex(owned));
-      if (at === undefined || !at.above) return undefined;
-      // Walk the best chain down to the side header's height, then both down together until they meet.
-      let onBest: Entry | undefined = best;
-      while (onBest !== undefined && onBest.header.height > at.header.height) onBest = onBest.parent;
-      while (at !== undefined && onBest !== undefined && at !== onBest) {
-        if (at.header.height >= onBest.header.height) at = at.parent;
-        else onBest = onBest.parent;
-      }
-      return at?.header.height ?? root.header.height;
+      const owned = ownBytes(id), at = owned === undefined || owned.length !== 32 ? undefined : stored(owned);
+      return at === undefined ? undefined : fork(at).height;
+    },
+    offBest(id: Uint8Array): readonly Uint8Array[] {
+      const owned = ownBytes(id), path: Uint8Array[] = [];
+      let at = owned === undefined || owned.length !== 32 ? undefined : stored(owned);
+      while (at !== undefined && !onBest(at)) { path.push(copyBytes(at.id)); at = parentOf(at); }
+      return path;
     },
     heightOf(id: Uint8Array): bigint | undefined {
       const owned = ownBytes(id);
-      return owned !== undefined && owned.length === 32 ? byId.get(bytesToHex(owned))?.header.height : undefined;
-    },
-    retained(): readonly Uint8Array[] {
-      return [...byId.values()].filter(e => e.above).map(e => copyBytes(e.header.bytes));
+      if (owned === undefined || owned.length !== 32) return undefined;
+      return below.get(bytesToHex(owned))?.height ?? rows.get(owned)?.height;
     },
     prune(witnessed: Uint8Array, protectedIds: readonly Uint8Array[]): void {
-      const final = byId.get(bytesToHex(witnessed));
-      if (final === undefined || ancestorAt(best, final.header.height) !== final) throw new Error("pruning requires a best-chain final header");
-      const keep = new Set<Entry>();
-      for (let at: Entry | undefined = best; at !== undefined; at = at.parent) keep.add(at);
+      const final = stored(witnessed);
+      if (final === undefined || !onBest(final)) throw new Error("pruning requires a best-chain final header");
+      const keep = new Set<string>();
       for (const id of protectedIds) {
-        let at = byId.get(bytesToHex(id));
+        let at = entry(id);
         if (at === undefined) throw new Error("unknown protected header");
-        while (at !== undefined && !keep.has(at)) { keep.add(at); at = at.parent; }
+        while (at !== undefined && !onBest(at) && !keep.has(bytesToHex(at.id))) { keep.add(bytesToHex(at.id)); at = parentOf(at); }
       }
-      // Insertion order is parent-before-child. Keeping an ancestor alone
-      // does not protect its divergent children; only whole protected paths
-      // and descendants of the final header are required for continuation.
-      for (const [id, entry] of byId) {
-        if (!entry.above || keep.has(entry)) continue;
-        if (ancestorAt(entry, final.header.height) !== final) byId.delete(id);
+      // A side header is kept while it descends from the final header (it meets the best chain at or above it) or
+      // lies on a protected path. Keeping an ancestor alone does not protect its divergent children; only whole
+      // protected paths and descendants of the final header are required for continuation. Each side header's
+      // meeting height is walked once.
+      const meets = new Map<string, bigint>();
+      const meeting = (at: Entry): bigint => {
+        const walked: string[] = [];
+        let walk: Entry | undefined = at, height: bigint | undefined;
+        while (walk !== undefined && !onBest(walk)) {
+          const known = meets.get(bytesToHex(walk.id));
+          if (known !== undefined) { height = known; break; }
+          walked.push(bytesToHex(walk.id)); walk = parentOf(walk);
+        }
+        if (height === undefined) {
+          if (walk === undefined) throw new Error("an accepted header does not descend from the anchor");
+          height = walk.height;
+        }
+        for (const key of walked) meets.set(key, height);
+        return height;
+      };
+      const doomed: Uint8Array[] = [];
+      for (const id of rows.sides()) {
+        if (keep.has(bytesToHex(id))) continue;
+        const at = stored(id);
+        if (at === undefined) throw new Error("a side header row is missing");
+        if (meeting(at) < final.height) doomed.push(id);
       }
+      // Deleted only once every side header is judged, so no walk meets a deleted parent.
+      for (const id of doomed) { rows.delete(id); rows.removeSide(id); cache.delete(bytesToHex(id)); }
     },
   });
 }

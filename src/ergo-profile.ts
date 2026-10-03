@@ -414,15 +414,28 @@ export function attributeSection(profile: ErgoProfile, transactions: readonly Er
  * of the range has no section. The caller checks the venue and that
  * `toIndex` is witnessed. */
 export function rangeEntries(sectionAt: (index: bigint) => readonly AttributedObject[] | undefined, request: RangeRequest): RangeEntry[] | undefined {
-  const entries: RangeEntry[] = [];
+  const matching: { index: bigint; ordinal: bigint; record: Uint8Array }[] = [];
   for (let index = request.fromIndex; index <= request.toIndex; index++) {
     const objects = sectionAt(index);
     if (objects === undefined) return undefined;
-    const matching = objects
-      .filter(object => object.kind === request.kind && compareBytes(object.subject, request.subject) === 0)
-      .map(object => ({ index, ordinal: request.kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
-    if (request.kind !== PUBLICATION_RANGE) matching.sort((a, b) => compareBytes(a.record, b.record));
-    for (const entry of matching) entries.push(entry);
+    for (const object of objects) {
+      if (object.kind === request.kind && compareBytes(object.subject, request.subject) === 0) matching.push({ index, ordinal: object.ordinal, record: object.record });
+    }
+  }
+  return orderedEntries(request.kind, matching);
+}
+
+/** §7's order of one kind and subject's objects, given in index and section order: a kind-4 run keeps its section
+ * order and ordinal, any other kind is ordered by record bytes within an index at ordinal 0. Records are copied. */
+export function orderedEntries(kind: RecordKind, objects: readonly { readonly index: bigint; readonly ordinal: bigint; readonly record: Uint8Array }[]): RangeEntry[] {
+  const entries: RangeEntry[] = [];
+  for (let at = 0; at < objects.length;) {
+    let end = at;
+    while (end < objects.length && objects[end]!.index === objects[at]!.index) end++;
+    const matching = objects.slice(at, end).map(object => ({ index: object.index, ordinal: kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
+    if (kind !== PUBLICATION_RANGE) matching.sort((x, y) => compareBytes(x.record, y.record));
+    entries.push(...matching);
+    at = end;
   }
   return entries;
 }
