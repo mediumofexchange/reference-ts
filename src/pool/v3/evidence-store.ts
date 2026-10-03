@@ -214,9 +214,8 @@ export class EvidenceStore {
         OR position != excluded.position OR size != excluded.size OR bytes != excluded.bytes`,
       step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
       entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
-      // A forward step: the kept values of a segment at one position, after a given value; two say a fork.
+      // A forward step: the kept values of a segment at one position; two say a fork.
       at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
-      after: "SELECT evidence FROM chain WHERE segment = ? AND position = ? AND prev = ? LIMIT 2",
       supplied: "SELECT sequence FROM supplier WHERE source = ?",
       supply: "INSERT INTO supplier VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET sequence = excluded.sequence",
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
@@ -629,6 +628,8 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       if (position === 0n) return same(evidence, seed) ? 0n : undefined;
       const held = q.step!.get(evidence, segment) as { position: bigint; size: bigint } | undefined;
       if (held === undefined || BigInt(held.position) !== position) return undefined;
+      // The only value kept at the position is the cut's own, since every value of the cut is kept: no walk.
+      if ((q.at!.all(segment, position) as unknown[]).length === 1) return BigInt(held.size);
       let value = top!;
       for (let p = length; p > position; p--) {
         if (p !== length && (length - p) % PAGE === 0n) yield TURN;
@@ -666,10 +667,10 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
         }
       }
     }
-    /** `records` read forward by position: one kept value per position after the last is the chain's own, since
-     * every value of the cut is kept, so no walk back precedes the first record. Two values after one (a fork
-     * kept beside the cut) or two at `after` leave the rest to the walk back. Damage met forward is met after
-     * the records before it, which a receiver checks against the chain it holds. */
+    /** `records` read forward by position: where one value is kept at a position it is the cut's own, since every
+     * value of the cut is kept, so no walk back precedes the first record. Two values at a position (a fork kept
+     * beside the cut) leave the rest to the walk back. Damage met forward refuses after the records before it,
+     * each a genuine step of its segment, which a receiver checks against the chain it holds. */
     function* forward(after: bigint): Generator<Uint8Array | typeof TURN, void, void> {
       if (after >= length) return;
       let previous = seed;
@@ -680,9 +681,10 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       }
       for (let p = after + 1n; p <= length; p++) {
         if ((p - after) % FORWARD_TURN === 0n) yield TURN;
-        const next = q.after!.all(segment, p, previous) as { evidence: unknown }[];
+        const next = q.at!.all(segment, p) as { evidence: unknown }[];
         if (next.length === 0) broken();
         if (next.length > 1) { yield* fromValue(p - 1n, previous); return; }
+        // `checked` holds the value's chain step and its link back to `previous`.
         const value = bytes(next[0]!.evidence), { record } = checked(value, p, previous);
         previous = value;
         yield record;
@@ -693,7 +695,7 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
     function* fromValue(after: bigint, value: Uint8Array): Generator<Uint8Array | typeof TURN, void, void> {
       if (after === 0n) { yield* walk(0n); return; }
       // The walk back reaches the cut's own value at `after`; a different one is no part of this trail.
-      if (walked(reach(after, value)) === undefined) broken();
+      if ((yield* reach(after, value)) === undefined) broken();
       yield* walk(after);
     }
     return Object.freeze({ header: head.header, segment, term: head.term, length, bytes: size,

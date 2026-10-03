@@ -539,7 +539,8 @@ describe("v3 evidence store", () => {
   }, 60_000);
 
   it("streams a kept trail after a position its chain passes through, and takes such parts into another store", async () => {
-    const supplier = new EvidenceStore(), tip = { segment, position: 3n, evidence: chain[3]! };
+    const supplierDb = new DatabaseSync(":memory:", { readBigInts: true }), supplier = new EvidenceStore(supplierDb);
+    const tip = { segment, position: 3n, evidence: chain[3]! };
     // A fork of the same segment after position 3.
     const forked = [...records.slice(0, 3), issue(10), issue(11)], fork = [...chain.slice(0, 4)];
     for (let i = 3; i < 5; i++) fork.push(nextEvidenceHash(fork[i]!, evidenceHashes(decodeRecord(forked[i]!)), BigInt(i + 1)));
@@ -599,7 +600,13 @@ describe("v3 evidence store", () => {
       { package: pack([{ kind: 4, payload: snapshot }]) }, (await trailPart(full))!]))
       .toEqual(pack([{ kind: 1, payload: Uint8Array.of(1) }, { kind: 4, payload: snapshot }, { kind: 6, payload: bare(6) }]));
     await expect(wholePackage(pack([]), [(await trailPart(full, tip))!])).rejects.toThrow("a whole package takes whole trails");
-    for (const store of [supplier, receiver, empty]) store.close();
+    // The cut's link at 4 damaged where the fork leaves it: the cut's own records before, then the walk back meets it.
+    supplierDb.prepare("UPDATE chain SET prev = ? WHERE evidence = ?").run(b(1), chain[4]!);
+    const given: Uint8Array[] = [];
+    await expect((async () => { for await (const record of full.stream()) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(given).toEqual(records.slice(0, 3));
+    for (const store of [receiver, empty]) store.close();
+    supplierDb.close();
   });
 
   it("records the sequence each supplier's evidence was kept through, in the file that holds the evidence", () => {
