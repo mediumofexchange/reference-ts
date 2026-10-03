@@ -45,6 +45,27 @@ describe("replay storage", () => {
     expect(watched.size).toBeGreaterThan(5);
   });
 
+  it("gives NoteTree's path for a witness born at any leaf as blocks beside it fill and complete across records", () => {
+    const store = new ReplayStore(), ns = store.open(new Uint8Array(32), new Uint8Array(32), undefined, genesis);
+    const tree = new NoteTree(), born: bigint[] = [], edges = new Set([0, 1, 2, 3, 7, 8, 15, 16, 63, 64, 255, 256, 511]);
+    let leaves = 0;
+    for (let i = 0; leaves < 700; i++) {
+      // Records of 0 to 12 outputs, so a block completes inside one record, across two, or at its last output.
+      const outputs = Array.from({ length: (i * 7) % 13 }, next), first = leaves;
+      const tip = store.append(ns, append(outputs, [], cm => edges.has(first + outputs.indexOf(cm)) || cm % 11n === 0n));
+      outputs.forEach((cm, j) => { if (edges.has(first + j) || cm % 11n === 0n) born.push(BigInt(first + j)); });
+      tree.appendAll(outputs); leaves += outputs.length;
+      expect(tip.noteRoot).toBe(tree.root());
+      if (i % 5 !== 0 && leaves < 690) continue;
+      for (const leaf of born) {
+        const w = store.witness(ns, tip.position, leaf)!;
+        expect(w.path).toEqual(tree.path(leaf));
+        expect(w.anchor).toBe(tree.root());
+      }
+    }
+    expect(born.length).toBeGreaterThan(70);
+  });
+
   it("reads an earlier position, and rolls a refused checkpoint back to its pre-state", async () => {
     const store = new ReplayStore(), ns = store.open(new Uint8Array(32), new Uint8Array(32), undefined, genesis);
     store.append(ns, append([1n], [11n]));

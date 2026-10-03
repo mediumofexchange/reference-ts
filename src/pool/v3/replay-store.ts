@@ -183,8 +183,9 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
   "answer", "answer_held", "answer_replacement", "answer_publication"];
 /** Kept venue answers refer to no namespace, so collection keeps them. */
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
-/** The kept file's layout: another layout's file is discarded rather than read. */
-const SCHEMA_VERSION = 5;
+/** The kept file's layout: another layout's file is discarded rather than read. 6: a witness row holds an
+ * incomplete right block as the empty subtree, which an earlier build would return as its path. */
+const SCHEMA_VERSION = 6;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -281,7 +282,14 @@ const encodeSiblings = (siblings: readonly bigint[]): Uint8Array => {
   return out;
 };
 const decodeSiblings = (blob: Uint8Array): bigint[] => Array.from({ length: NOTE_TREE_DEPTH }, (_, h) => bytesToField(blob.subarray(32 * h, 32 * h + 32)));
-const msb = (x: bigint): number => x.toString(2).length - 1;
+/** At each height h, the node of the block holding the next free leaf, folded from the frontier of `leaves` leaves:
+ * the still-filling block's node wherever `leaves` is not a multiple of 2^h. */
+const fillingNodes = (leaves: bigint, ommers: readonly (bigint | undefined)[]): bigint[] => {
+  const nodes = [EMPTY_NOTE_SUBTREE[0]!];
+  for (let k = 0; k < NOTE_TREE_DEPTH - 1; k++) nodes.push(((leaves >> BigInt(k)) & 1n) === 1n ?
+    noteNode(k, ommers[k]!, nodes[k]!) : noteNode(k, nodes[k]!, EMPTY_NOTE_SUBTREE[k]!));
+  return nodes;
+};
 
 /** SHA256 of a closed file, read in pieces so memory stays flat. */
 function fileDigest(path: string): string {
@@ -321,6 +329,8 @@ export class ReplayStore {
   #sinceKeep = 0;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
   #lost = false;
+  /** The last frontier `witness` folded, by its namespace, leaf count and root: the paths of one tip share it. */
+  #filling: { readonly key: string; readonly nodes: readonly bigint[] } | undefined;
 
   /** A private in-memory database by default: short reads and tests run the same code. A path with `kept`
    * is the party's kept state (§14): reopened only where the digest check passes, discarded otherwise, and
@@ -404,7 +414,7 @@ export class ReplayStore {
       importedNullifiers: "SELECT nf FROM nullifier WHERE ns = ? AND position <= ?",
       spentGet: "SELECT key, bit, l, r, hash FROM spent WHERE ns = ? AND id = ?",
       spentPut: "INSERT OR REPLACE INTO spent VALUES (?, ?, ?, ?, ?, ?, ?)",
-      witnesses: "SELECT leaf, siblings FROM witness WHERE ns = ?",
+      witnessesIn: "SELECT leaf, siblings FROM witness WHERE ns = ? AND leaf >= ? AND leaf < ?",
       witness: "SELECT siblings FROM witness WHERE ns = ? AND leaf = ?",
       putWitness: "INSERT INTO witness VALUES (?, ?, ?, ?)",
       moveWitness: "UPDATE witness SET siblings = ? WHERE ns = ? AND leaf = ?",
@@ -785,6 +795,16 @@ export class ReplayStore {
     const row = this.#q.witness!.get(ns, leaf) as { siblings: Uint8Array } | undefined;
     if (row === undefined) return undefined;
     const siblings = decodeSiblings(bytes(row.siblings)), right = Array.from({ length: NOTE_TREE_DEPTH }, (_, h) => ((leaf >> BigInt(h)) & 1n) === 1n);
+    // A right sibling is kept once its block completes; an empty block is the empty subtree, and the one block
+    // still filling (where the path meets the last leaf's) is folded from the frontier.
+    const leaves = tip.leaves, key = `${ns}:${leaves}:${tip.noteRoot}`;
+    if (this.#filling?.key !== key) this.#filling = { key, nodes: fillingNodes(leaves, this.frontier(ns).ommers) };
+    for (let h = 0; h < NOTE_TREE_DEPTH; h++) {
+      if (right[h]) continue;
+      const start = ((leaf >> BigInt(h)) + 1n) << BigInt(h);
+      if (start >= leaves) siblings[h] = EMPTY_NOTE_SUBTREE[h]!;
+      else if (start + (1n << BigInt(h)) > leaves) siblings[h] = this.#filling.nodes[h]!;
+    }
     return { leaf, anchor: tip.noteRoot, ns, path: Object.freeze({ siblings: Object.freeze(siblings), right: Object.freeze(right) }) };
   }
 
@@ -1151,23 +1171,24 @@ export class ReplayStore {
           rightmost.push(node);
         }
         noteRoot = node;
-        // A witness's sibling at height h changes when a leaf lands in the block beside it at h.
-        const valueAt = (h: number, block: bigint): bigint => completed.get(`${h}:${block}`) ??
-          (block === last >> BigInt(h) ? rightmost[h]! : (() => { throw new Error("witness block is neither complete nor rightmost"); })());
-        const update = (leaf: bigint, siblings: bigint[]): void => {
-          const levels = new Set<number>();
-          for (let j = first > leaf ? first : leaf + 1n; j <= last; j++) levels.add(msb(leaf ^ j));
-          for (const h of levels) siblings[h] = valueAt(h, (leaf >> BigInt(h)) ^ 1n);
-        };
-        for (const w of this.#q.witnesses!.all(ns)) {
-          const r = w as { leaf: bigint; siblings: Uint8Array }, siblings = decodeSiblings(bytes(r.siblings));
-          update(BigInt(r.leaf), siblings);
-          this.#q.moveWitness!.run(encodeSiblings(siblings), ns, r.leaf);
+        // A witness row holds the siblings that no longer change: the left ones from its birth, and a right one
+        // once the block beside it completes; `witness` takes a still-filling right block from the frontier.
+        // Only the witnesses beside a block completed here are rewritten, each at most once per height over its
+        // life (31 times), so the work per record does not grow with the outputs ever witnessed on average; a
+        // record completing a block of height h rewrites the witnesses among the 2^h leaves left of it.
+        for (const w of born) this.#q.putWitness!.run(ns, w.leaf, fieldToBytes(record.outputs[Number(w.leaf - first)]!.cm), encodeSiblings(w.siblings));
+        const moved = new Map<bigint, bigint[]>();
+        for (const [key, value] of completed) {
+          const [h, block] = key.split(":").map(BigInt) as [bigint, bigint];
+          if (h >= BigInt(NOTE_TREE_DEPTH) || (block & 1n) === 0n) continue;
+          for (const w of this.#q.witnessesIn!.iterate(ns, (block - 1n) << h, block << h)) {
+            const r = w as { leaf: bigint; siblings: Uint8Array }, leaf = BigInt(r.leaf);
+            const siblings = moved.get(leaf) ?? decodeSiblings(bytes(r.siblings));
+            siblings[Number(h)] = value;
+            moved.set(leaf, siblings);
+          }
         }
-        for (const w of born) {
-          update(w.leaf, w.siblings);
-          this.#q.putWitness!.run(ns, w.leaf, fieldToBytes(record.outputs[Number(w.leaf - first)]!.cm), encodeSiblings(w.siblings));
-        }
+        for (const [leaf, siblings] of moved) this.#q.moveWitness!.run(encodeSiblings(siblings), ns, leaf);
       }
       const spent = this.#spent(ns);
       for (const { nf, tag } of record.nullifiers) {

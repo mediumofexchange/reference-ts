@@ -17,11 +17,12 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   the `moe` bin's wallet (holder, `--backer`), operator, reader and relay commands ([commands](docs/POOL_V3_WALLET.md#commands)) run from an
   `npm pack` install with real proofs on the synthetic node (`command-drill.mjs`); the pilot, transparent path (kept at `8d207eb`) and the
   harness's second reader retired. M10d (live testnet drill) needs the local machine (Open questions).
-- **M11a (this branch, `claude/m11a-ergo-view-rows`)**: the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
-  flat heap (10–18 MB from 10⁴ to 10⁵ synthetic blocks), reopen in 192 ms (was 74 s at 10⁴), `audit()`, durable side charges and
-  per-supplier protection. A design review and an integrated review: majors and minors resolved (decision). PR #92: the twelve
-  current v3 reports re-recorded from CI run 37132637881; a vitest setup now yields a turn per test (a worker's 60 s RPC timeout
-  failed Windows on a 73 s synchronous file). **Next: M11b**, Next 4 (k)–(n), (s), then M11c.
+- **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
+  flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
+- **M11b in progress** (`claude/m11b-scale-findings`). M11b1, Next 4(n): a witness row changes only when a block beside it
+  completes and `witness` folds the filling block from the frontier: a wallet's record cost no longer grows with its notes
+  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6. One fresh adversarial review:
+  no blocker or major; two minors, two nits fixed. PR #93, reports from CI run 37138352927. **Next: (l)**, then (m), (k), (s); M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -44,11 +45,12 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    transaction. (h) closed in M10e2. (j) Verify-only parties could take
    identity-checked key bytes, needing no G1 file. (k) A read under a silence or non-service clause judges every held checkpoint again at each
    admission (persisting the walk's cursors would bound it). (l) One index holding more objects under one subject than an answer's budget
-   (4,096 entries, 1 MiB) refuses every read of that subject and every journal command; size the one-index budget from the venue's block bound.
-   (m) Serving a trail walks back over every record served before its first byte (7.5 µs each, blocking); read a segment forward by position.
-   `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) A replay rewrites every kept witness of its segment at
-   each record with outputs, so a wallet's cost per record grows with the notes it ever held; update a witness only when a sibling subtree
-   completes (at most 32 times), and drop spent notes' witnesses. (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
+   (4,096 entries, 1 MiB) refuses every read of that subject and every journal command; size the one-index budget from the venue's block bound
+   (no spec change, §13.1 budgets are local: ask a refused single index again under the venue's section bound, `ergo.ts` MAX_SECTION_*).
+   (m) Serving a trail walks back over every record served before its first byte (7.5 µs each, blocking); read a segment forward by position
+   (`chain` links back only: a forward step needs an index on `prev`, a layout change, and a fork gives one value two children).
+   `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
+   (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
    predecessor segment whose snapshots lie on two forks serves only the longer trail (a fix needs an ancestor test without a walk per snapshot).
    (p) `package-reader.ts` reads the selection through its own backing's entry before the walk, so a malformed selection's refusal reason
    differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged

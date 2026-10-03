@@ -1107,10 +1107,8 @@ M = 100 and 14,656-byte stand-in proofs (15.6 KB per statement):
   statement is the reader's replay cost (39–43 ms at M5b.4b) with the seed's
   scan of four outputs.
 - *Limits:* stand-in proofs, one backing and one segment, and a wallet that
-  owns none of the outputs. A replay updates every kept witness of its segment
-  at each record that adds outputs, so a wallet holding many notes pays for
-  each of them at every record; that cost was not measured here
-  (WORK.md Next 4(n)).
+  owns none of the outputs. A wallet's cost per record no longer grows with
+  the notes it holds ([M11b](#a-wallets-witnesses-kept-at-completion-m11b)).
 
 ### Real proofs past the old package (M5b.5c.2)
 
@@ -1243,6 +1241,37 @@ time.
     own;
   - one backing and segment on the reference venue, with no venue ranges;
   - the 10⁶ figure is extrapolated, not run.
+
+### A wallet's witnesses kept at completion (M11b)
+
+A replay kept every witnessed output's 32 siblings current and rewrote each
+witness of its segment at every record adding outputs, so a wallet's cost per
+record grew with the notes it ever held. The store now writes a right sibling
+once its block completes (at most once per height per witness, found from the
+blocks a record completes) and folds the one still-filling block from the
+frontier when it reads a path; the paths of one tip share that fold. A
+throwaway vitest probe timed `ReplayStore.append` of 2-output records after W
+one-output witnessed records, on a 4-core cloud container on 2026-10-03:
+
+| Witnesses kept | Before (`1808a22`, 200 records) | After (500 records) |
+|---|---|---|
+| 0 | 16.5 ms per record | 17.5 ms |
+| 250 | 53.0 ms | not run |
+| 1,000 | 162.0 ms | 17.3 ms |
+| 4,000 | not finished in 15 min | 18.1 ms |
+
+- *Result:* about 0.15 ms per kept witness per record before; flat on average
+  after, the note tree's root being the cost. A wallet holding 1,000 notes
+  through the design point's 10⁶ records would have spent about 45 h on
+  witnesses alone.
+- *Bound:* each witness is rewritten at most 31 times over its life, so the
+  average is flat; one record that completes a block of height h rewrites the
+  witnesses among the 2^h leaves left of it (a review's probe: 2,048
+  witnesses, 309 ms for the record completing height 11, against 16 ms).
+- *Limits:* the store alone, with no proof, scan or journal; one run per
+  point. A spent note's witness is still kept, and a holdings read still
+  scans every witnessed output once. The kept file's layout moved to 6, so a
+  wallet's earlier kept file is replayed once.
 
 ## Invalid-checkpoint evidence
 
