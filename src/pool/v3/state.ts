@@ -9,7 +9,7 @@
 // |-----------|------------------------------------|----------------------------------------------|------------------------------------------------------|
 // | admission | the horizon: read index plus lag    | yes; door deadlines apply                   | yes                                                  |
 // | replay    | the checkpoint's witnessed index    | yes; door deadlines not re-judged (C3.8)     | yes                                                  |
-// | adoption  | an adopted publication's own index  | no: exact bytes the force judgment verified  | yes                                                  |
+// | adoption  | an adopted publication's own index  | no: exact bytes the force judgment verified  | spent/outputs only; no issue is adopted              |
 // | force     | the publication's witnessed index  | yes; door deadlines apply                   | spent/outputs and recovery effects only               |
 //
 // The state lives in a ReplayStore (replay-store.ts, storage decision
@@ -86,7 +86,11 @@ export class StateHandle implements StateView {
   get position(): bigint { return this.#at ?? this.store.tip(this.ns).position; }
   get segment(): Uint8Array { return this.store.tip(this.ns).segment; }
   /** This namespace's state at `position`, fixed while its tip moves on. */
-  at(position: bigint): StateHandle { return new StateHandle(this.store, this.ns, position); }
+  at(position: bigint): StateHandle {
+    // Unavailable history is not the genesis state (C2b.3.1): a position past the tip has no state to read.
+    if (position < 0n || position > this.store.tip(this.ns).position) throw new RangeError("a state is read at or below its tip");
+    return new StateHandle(this.store, this.ns, position);
+  }
   #event(): StoredEvent | undefined { const p = this.position; return p === 0n ? undefined : this.store.event(this.ns, p); }
   get history(): Uint8Array {
     if (this.#at === undefined) return this.store.tip(this.ns).history;
@@ -368,6 +372,8 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
   const record = decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
   // A request (kind 7) decodes but is never a history event (§7): a trail carrying one fails replay (§10.1).
   requireReplay([1, 2, 3, 4, 5, 6].includes(kind), "KIND");
+  // §7: advancing past 2^64 − 1 refuses before any state is read or the u64 position framed.
+  requireReplay(position + 1n < VALUE_BOUND, "CAPACITY");
   if (mode === "admission") {
     if (replay.index === undefined) throw new TypeError("admission is judged at the horizon");
     if (kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
@@ -415,7 +421,7 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
         ...(replay.lag === undefined ? {} : { lag: replay.lag }), door: mode === "admission" && kind >= 4 });
     }
     checkUniqueEffects(nfs, outputs, state);
-    requireReplay(state.leaves + BigInt(outputs.length) <= NOTE_TREE_CAPACITY && position + 1n < VALUE_BOUND, "CAPACITY");
+    requireReplay(state.leaves + BigInt(outputs.length) <= NOTE_TREE_CAPACITY, "CAPACITY");
     return { bytes, record, identity, at, evidence, digests, backing: key, demand, demandId, position };
   } };
 }

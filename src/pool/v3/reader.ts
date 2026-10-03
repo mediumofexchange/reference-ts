@@ -478,7 +478,10 @@ function frontierRoot(leaves: bigint, ommers: readonly (bigint | undefined)[]): 
     if (left !== undefined) node = noteNode(h, left, node ?? EMPTY_NOTE_SUBTREE[h]!);
     else if (node !== undefined) node = noteNode(h, node, EMPTY_NOTE_SUBTREE[h]!);
   }
-  return leaves >> BigInt(NOTE_TREE_DEPTH) !== 0n ? undefined : node ?? EMPTY_NOTE_ROOT;
+  // A full tree (2^32 leaves, pool-v2 §4) has no left subtree waiting: its root is the stored whole tree.
+  const full = ommers[NOTE_TREE_DEPTH];
+  if (leaves === 1n << BigInt(NOTE_TREE_DEPTH)) return node === undefined ? full : undefined;
+  return leaves >> BigInt(NOTE_TREE_DEPTH) !== 0n || full !== undefined ? undefined : node ?? EMPTY_NOTE_ROOT;
 }
 
 /** §14's snapshot check before resuming: the note root from the stored frontier, the spent root from the

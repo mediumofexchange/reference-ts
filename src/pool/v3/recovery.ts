@@ -39,7 +39,7 @@ export const tagOf = (nf: bigint): bigint => poseidon2Hash([1007n, nf]);
  * nothing locks where no index was witnessed (a read without venue answers). */
 export function locked(view: Pick<RecoveryView, "demandsWithTag">, tag: bigint, at: bigint | undefined, except?: string): boolean {
   if (at === undefined) return false;
-  return view.demandsWithTag(tag).some(([id, demand]) => id !== except && demand.deadline >= at && demand.tags.includes(tag));
+  return view.demandsWithTag(tag).some(([id, demand]) => id !== except && demand.deadline >= at);
 }
 
 export function effectOf(record: Record): Effect {
@@ -90,7 +90,8 @@ export function checkRecovery(record: Record, view: RecoveryView, { check, backi
       check(auth.acceptance.deadline <= demand!.deadline, "DEADLINE");
       check(verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
         verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, demand!.presenter), "SIGNATURE");
-      if (door) check(demand!.deadline >= at! && auth.acceptance.deadline >= at!, "DEADLINE");
+      // The demand's deadline is at or after the acceptance's, so this bounds both.
+      if (door) check(auth.acceptance.deadline >= at!, "DEADLINE");
       check(nfs.every((nf, i) => demand!.tags[i] === 0n || demand!.tags[i] === tagOf(nf)), "TAGS");
       check(nfs.every(nf => !locked(view, tagOf(nf), at, demandId)), "LOCKED");
     }

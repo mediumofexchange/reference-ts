@@ -266,14 +266,15 @@ const branchHash = (bit: number, left: Uint8Array, right: Uint8Array): Uint8Arra
   return sha256(f);
 };
 
-// The frontier: ommers[h] is the completed left subtree of height h waiting for its right sibling, present where bit h of the leaf count is 1.
+// The frontier: ommers[h] is the completed left subtree of height h waiting for its right sibling, present where bit h of the leaf count is 1;
+// ommers[NOTE_TREE_DEPTH] is the whole tree once it holds all 2^32 leaves (pool-v2 §4). A row written before that slot existed reads it absent.
 const encodeOmmers = (ommers: readonly (bigint | undefined)[]): Uint8Array => {
-  const out = new Uint8Array(33 * NOTE_TREE_DEPTH);
+  const out = new Uint8Array(33 * (NOTE_TREE_DEPTH + 1));
   ommers.forEach((value, h) => { if (value !== undefined) { out[33 * h] = 1; out.set(fieldToBytes(value), 33 * h + 1); } });
   return out;
 };
-const decodeOmmers = (blob: Uint8Array): (bigint | undefined)[] => Array.from({ length: NOTE_TREE_DEPTH }, (_, h) =>
-  blob[33 * h] === 0 ? undefined : bytesToField(blob.subarray(33 * h + 1, 33 * h + 33)));
+const decodeOmmers = (blob: Uint8Array): (bigint | undefined)[] => Array.from({ length: NOTE_TREE_DEPTH + 1 }, (_, h) =>
+  blob.length < 33 * h + 33 || blob[33 * h] === 0 ? undefined : bytesToField(blob.subarray(33 * h + 1, 33 * h + 33)));
 const encodeSiblings = (siblings: readonly bigint[]): Uint8Array => {
   const out = new Uint8Array(32 * NOTE_TREE_DEPTH);
   siblings.forEach((value, h) => out.set(fieldToBytes(value), 32 * h));
