@@ -150,7 +150,7 @@ class JournalHeaderRows implements ErgoHeaderRows {
     if (ids.length === 0 || (top !== undefined && fromHeight > top + 1n)) throw new Error("best chain rows must stay contiguous");
     if (this.changed !== undefined && fromHeight >= this.changed.from) {
       this.changed.ids.length = Number(fromHeight - this.changed.from);
-      this.changed.ids.push(...ids);
+      for (const id of ids) this.changed.ids.push(id);
     } else this.changed = { from: fromHeight, ids: [...ids] };
   }
   sides(): readonly Uint8Array[] { return [...this.side.values()]; }

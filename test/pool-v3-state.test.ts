@@ -362,7 +362,8 @@ describe("the reader's venue", () => {
       range: (request, limits) => { limited.push(limits.maxBytes, limits.maxEntries); return venue.range(request, limits); },
       indexLimits: () => ({ maxBytes: (1n << 64n) - 1n, maxEntries: (1n << 64n) - 1n }) };
     expect([...(await view(unbounded, { ...selection, judgingIndex: 6n })).held(operator)]).toHaveLength(2);
-    expect(limited.filter((_, i) => i % 2 === 0 && limited[i] !== RANGE_LIMITS.maxBytes)).toEqual([INDEX_LIMITS.maxBytes, INDEX_LIMITS.maxBytes]);
+    const retried = limited.flatMap((value, i) => i % 2 === 0 && value !== RANGE_LIMITS.maxBytes ? [[value, limited[i + 1]]] : []);
+    expect(retried).toEqual([[INDEX_LIMITS.maxBytes, INDEX_LIMITS.maxEntries], [INDEX_LIMITS.maxBytes, INDEX_LIMITS.maxEntries]]);
     // A bound that cannot be read is the venue's failure, and a promise the caller's error, as for its answers.
     const failing = (indexLimits: () => unknown): RecordVenue => ({ ...bounded(0n), indexLimits } as RecordVenue);
     expect(await status(view(failing(() => { throw new VenueError("no bound"); }), { ...selection, judgingIndex: 6n }))).toBe("unresolved-evidence");
