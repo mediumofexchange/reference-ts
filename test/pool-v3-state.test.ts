@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { limbsOf } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../src/pool/note-tree.js";
 import { decodeRecord, deliveryHash, encodeRecord, publicationBound, statementBytes, statementHash, withdrawalBytes, type Record } from "../src/pool/v3/records.js";
-import { readRecordView, RANGE_LIMITS, storedTipHolds, type ReaderSelection } from "../src/pool/v3/reader.js";
+import { INDEX_LIMITS, readRecordView, RANGE_LIMITS, storedTipHolds, type ReaderSelection } from "../src/pool/v3/reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -357,6 +357,16 @@ describe("the reader's venue", () => {
     // Past the venue's own bound, and on a venue that declares none, the index stays refused.
     expect(await status(view(bounded(RANGE_LIMITS.maxEntries), { ...selection, judgingIndex: 6n }))).toBeInstanceOf(RangeLimitError);
     expect(await status(view(venue, { ...selection, judgingIndex: 6n }))).toBeInstanceOf(RangeLimitError);
+    // A venue's bound past the reader's own ceiling is asked under the ceiling.
+    const limited: bigint[] = [], unbounded: RecordVenue = { ...bounded(0n),
+      range: (request, limits) => { limited.push(limits.maxBytes, limits.maxEntries); return venue.range(request, limits); },
+      indexLimits: () => ({ maxBytes: (1n << 64n) - 1n, maxEntries: (1n << 64n) - 1n }) };
+    expect([...(await view(unbounded, { ...selection, judgingIndex: 6n })).held(operator)]).toHaveLength(2);
+    expect(limited.filter((_, i) => i % 2 === 0 && limited[i] !== RANGE_LIMITS.maxBytes)).toEqual([INDEX_LIMITS.maxBytes, INDEX_LIMITS.maxBytes]);
+    // A bound that cannot be read is the venue's failure, and a promise the caller's error, as for its answers.
+    const failing = (indexLimits: () => unknown): RecordVenue => ({ ...bounded(0n), indexLimits } as RecordVenue);
+    expect(await status(view(failing(() => { throw new VenueError("no bound"); }), { ...selection, judgingIndex: 6n }))).toBe("unresolved-evidence");
+    expect(await status(view(failing(() => Promise.resolve(INDEX_LIMITS)), { ...selection, judgingIndex: 6n }))).toBeInstanceOf(TypeError);
   });
 
   it("keeps each answer, asks the venue only past the index it is kept through, and reads a lower index bounded (§§13.2–13.3)", async () => {
