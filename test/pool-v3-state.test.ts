@@ -284,6 +284,10 @@ describe("the v3 state machine in admission mode", () => {
     const root = state.noteRoot();
     const kind4 = await applyRecord(state, demand([root, root], [1n, 2n], 20n), context).then(() => undefined, (e: unknown) => e);
     expect(kind4).toBeInstanceOf(TypeError);
+    // Every mode judges at a witnessed index; an untyped caller omitting it is refused, not judged lock-free.
+    for (const admission of [true, false]) {
+      await expect(applyRecord(state, issue(1n, 110n), replay({ admission, index: undefined as unknown as bigint }))).rejects.toThrow(TypeError);
+    }
     expect(state.position).toBe(1n);
   });
 });

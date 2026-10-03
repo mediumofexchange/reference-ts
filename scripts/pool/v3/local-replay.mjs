@@ -4,7 +4,6 @@
 // pool-v3 §§3,5,7,10,12,13; pool-v2 §8 host checks; pool-spent C1.2.8–9.
 import { createHash } from "node:crypto";
 import { compareBytes, copyUnshared, EncodingError } from "../../../dist/bytes.js";
-import { directoryRoot } from "../../../dist/venue-records.js";
 import { CapsuleAssociationError, CapsuleFormatError } from "../../../dist/pool/v3/capsules.js";
 import { ownedNotes, seedWitness } from "../../../dist/pool/v3/holdings.js";
 import { RANGE_LIMITS } from "../../../dist/pool/v3/reader.js";
@@ -115,8 +114,9 @@ export async function replayEvidencePackage(input, verifier, codec) {
       siblings: note.path.siblings.map(String), right: [...note.path.right],
       pathScope: note.local ? "replayed-local-tree-only" : "replayed-imported-tree-only", spendable: false }));
     // The selected snapshot the read authenticated: the one the selection's directory names for its backing.
-    const items = codec.decodeEvidencePackage(bytes), directory = items.filter(item => item.kind === 3)
-      .map(item => codec.decodeEvidenceDirectory(item.payload)).find(entries => same(directoryRoot(entries), selection.root));
+    // A directory's root is its preimage's hash (§12), so others are never decoded.
+    const items = codec.decodeEvidencePackage(bytes);
+    const directory = codec.decodeEvidenceDirectory(items.find(item => item.kind === 3 && same(sha256(item.payload), selection.root)).payload);
     const digest = directory.find(entry => same(entry.name, selection.backing)).digest;
     const snapshot = codec.decodeSnapshot(items.find(item => item.kind === 4 && same(sha256(item.payload), digest)).payload);
     return { status: selection.mode === "historical-fixture" ? "historical-local-replay" : "selected-local-replay",

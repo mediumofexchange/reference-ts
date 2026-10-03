@@ -35,10 +35,8 @@ export interface RecoveryEffect {
 
 export const tagOf = (nf: bigint): bigint => poseidon2Hash([1007n, nf]);
 
-/** Whether a standing demand other than `except` locks `tag` at index `at`;
- * nothing locks where no index was witnessed (a read without venue answers). */
-export function locked(view: Pick<RecoveryView, "demandsWithTag">, tag: bigint, at: bigint | undefined, except?: string): boolean {
-  if (at === undefined) return false;
+/** Whether a standing demand other than `except` locks `tag` at index `at`. */
+export function locked(view: Pick<RecoveryView, "demandsWithTag">, tag: bigint, at: bigint, except?: string): boolean {
   return view.demandsWithTag(tag).some(([id, demand]) => id !== except && demand.deadline >= at);
 }
 
@@ -59,8 +57,8 @@ export interface RecoveryCheck {
   readonly check: (condition: boolean, name: string) => void;
   readonly backing: Uint8Array;
   readonly issuer: Uint8Array;
-  /** The publication's own index, or the checkpoint's index in replay; undefined without venue answers. */
-  readonly at: bigint | undefined;
+  /** The publication's own index, or the checkpoint's index in replay. */
+  readonly at: bigint;
   readonly lag?: bigint;
   /** Admission at the horizon or publication force at its own index: C3.8's door deadlines apply. */
   readonly door?: boolean;
@@ -71,13 +69,13 @@ export interface RecoveryCheck {
 export function checkRecovery(record: Record, view: RecoveryView, { check, backing, issuer, at, lag, door = false }: RecoveryCheck): void {
   const p = record.publicInputs, kind = record.kind, id = hex(statementHash(record));
   const { nfs } = effectOf(record);
-  if (door && (at === undefined || lag === undefined)) throw new TypeError("a door is judged at an index under the venue's lag");
+  if (door && lag === undefined) throw new TypeError("a door is judged at an index under the venue's lag");
   if (kind >= 4) check(!view.isEffective(id), "REPEATED_STATEMENT");
   if (kind === 4) {
     const tags = p.slice(10, 12).filter(tag => tag !== 0n);
     check(tags.length > 0 && new Set(tags).size === tags.length, "TAGS");
     check(tags.every(tag => !view.hasSpentTag(tag) && !locked(view, tag, at)), "LOCKED");
-    if (door) check(p[14]! >= at! - 2n * lag! && p[14]! <= at! - lag! && p[15]! > at!, "DEADLINE");
+    if (door) check(p[14]! >= at - 2n * lag! && p[14]! <= at - lag! && p[15]! > at, "DEADLINE");
   } else if (kind === 5 || kind === 6) {
     const demandId = hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!));
     const demand = view.demand(demandId);
@@ -91,7 +89,7 @@ export function checkRecovery(record: Record, view: RecoveryView, { check, backi
       check(verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
         verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, demand!.presenter), "SIGNATURE");
       // The demand's deadline is at or after the acceptance's, so this bounds both.
-      if (door) check(auth.acceptance.deadline >= at!, "DEADLINE");
+      if (door) check(auth.acceptance.deadline >= at, "DEADLINE");
       check(nfs.every((nf, i) => demand!.tags[i] === 0n || demand!.tags[i] === tagOf(nf)), "TAGS");
       check(nfs.every(nf => !locked(view, tagOf(nf), at, demandId)), "LOCKED");
     }

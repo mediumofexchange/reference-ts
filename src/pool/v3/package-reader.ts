@@ -93,14 +93,16 @@ function readKinds(batch: EvidenceBatch): void {
  * the selected envelope remains complete. The selection's scope and every
  * scope in its ancestry may name one backing or several (C2.10.3–7). */
 export async function readPackage(source: PackageSource, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
-  const owned = ownPackageRead(selected, options);
-  return withEvidence(source, options, batch => keptOrAgain(options, async () => {
-    const { context, faults, venue } = openPackage(batch, owned, options);
-    try {
-      const result = await classifyScopes(context, venue, batch);
-      return { ...result, ...faults.result() };
-    } catch (error) { throw withFacts(error, faults, context); }
-  }));
+  return withFacts(async attach => {
+    const owned = ownPackageRead(selected, options);
+    return withEvidence(source, options, batch => keptOrAgain(options, async () => {
+      const { context, faults, venue } = openPackage(batch, owned, options);
+      try {
+        const result = await classifyScopes(context, venue, batch);
+        return { ...result, ...faults.result() };
+      } catch (error) { throw attach(error, faults, context); }
+    }));
+  });
 }
 
 /** What a package read had established when it refused: the observational fault facts (pool-v3 §9) and a
@@ -114,11 +116,22 @@ const established = new WeakMap<object, RefusalFacts>();
 export function refusalFacts(error: unknown): RefusalFacts | undefined {
   return error !== null && typeof error === "object" ? established.get(error) : undefined;
 }
-function withFacts(error: unknown, faults: ReportingFaultObserver, context: Pick<ImportContext, "receiptWalk">): unknown {
-  if (error !== null && typeof error === "object") {
-    established.set(error, { ...faults.result(), ...(context.receiptWalk === undefined ? {} : { receiptEvidence: context.receiptWalk.evidence() }) });
+type Attach = (error: unknown, faults: ReportingFaultObserver, context: Pick<ImportContext, "receiptWalk">) => unknown;
+/** One read whose walk attaches its facts to what it throws. An error this read threw without attaching (one a
+ * caller's adapter shares across reads, say) keeps no facts of an earlier read. */
+async function withFacts<T>(read: (attach: Attach) => Promise<T>): Promise<T> {
+  let attached: unknown;
+  const attach: Attach = (error, faults, context) => {
+    if (error !== null && typeof error === "object") {
+      established.set(error, { ...faults.result(), ...(context.receiptWalk === undefined ? {} : { receiptEvidence: context.receiptWalk.evidence() }) });
+    }
+    attached = error;
+    return error;
+  };
+  try { return await read(attach); } catch (error) {
+    if (error !== attached && error !== null && typeof error === "object") established.delete(error);
+    throw error;
   }
-  return error;
 }
 
 /** §14: kept state that fails a check before reuse is discarded, and the read classifies again from the evidence.
@@ -181,14 +194,16 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
  * Selection and receipt metadata supply no frontier authority. */
 export async function readFrontier(source: PackageSource, signed: SignedTerms, judgingIndex: bigint,
   options: FrontierReader): Promise<FrontierResult & FaultResult> {
-  const owned = ownFrontierRead(signed, judgingIndex, options);
-  return withEvidence(source, options, batch => keptOrAgain(options, async () => {
-    const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
-    try {
-      const result = await classifyScopeFrontier(context, venue, batch);
-      return { ...result, ...faults.result() };
-    } catch (error) { throw withFacts(error, faults, {}); }
-  }));
+  return withFacts(async attach => {
+    const owned = ownFrontierRead(signed, judgingIndex, options);
+    return withEvidence(source, options, batch => keptOrAgain(options, async () => {
+      const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
+      try {
+        const result = await classifyScopeFrontier(context, venue, batch);
+        return { ...result, ...faults.result() };
+      } catch (error) { throw attach(error, faults, {}); }
+    }));
+  });
 }
 
 /** The reader's own inputs and the authenticated terms, checked before the package is read. */

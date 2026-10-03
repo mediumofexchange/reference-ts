@@ -374,6 +374,8 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
   requireReplay([1, 2, 3, 4, 5, 6].includes(kind), "KIND");
   // §7: advancing past 2^64 − 1 refuses before any state is read or the u64 position framed.
   requireReplay(position + 1n < VALUE_BOUND, "CAPACITY");
+  // Every mode judges at a witnessed index (in admission, the horizon); an untyped caller cannot omit it.
+  if (typeof replay.index !== "bigint") throw new TypeError("a record is judged at a witnessed index");
   if (mode === "admission" && kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
   const demandId = kind === 5 || kind === 6 ? hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!)) : undefined;
   const demand = demandId === undefined ? undefined : state.demand(demandId);

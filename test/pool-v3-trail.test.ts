@@ -7,7 +7,7 @@ import type { SegmentEntry, SegmentHeader } from "../src/pool/v3/headers.js";
 import type { Record as PoolRecord } from "../src/pool/v3/records.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
 import { directoryRoot, signCommitment, verifyCommitment } from "../src/venue-records.js";
-import { hugeSparse, lookAlikes, lyingLength } from "./hostile-bytes.js";
+import { flipping, hugeSparse, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent Buffer/node:crypto framing and hash oracle. The directory is
 // genuinely signed; synthetic proofs, terms and roots make no replay claim.
@@ -247,6 +247,9 @@ describe("v3 served-trail transport", () => {
     // A record's reported length is not its length; the judged records are the hashed ones.
     const shorter = x.served.records[1]!, lying = { ...x.served, records: [x.served.records[0]!, lyingLength(shorter, shorter.length + 9)] };
     expect(Buffer.from(trailCodec.encodeTrail(lying, x.limits))).toEqual(encoded);
+    // Records read once: a getter answering other records later changes nothing encoded.
+    const flipped = flipping(x.served, "records", x.served.records, [x.served.records[1]!, x.served.records[0]!]);
+    expect(Buffer.from(trailCodec.encodeTrail(flipped, x.limits))).toEqual(encoded);
     // A sparse record list of the largest u32 length meets the event budget, or stops at its first hole.
     const sparse = { ...x.served, records: hugeSparse<Uint8Array>() };
     expect(() => trailCodec.encodeTrail(sparse, x.limits)).toThrow(trailCodec.TrailLimitError);
