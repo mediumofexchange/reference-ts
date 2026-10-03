@@ -1,17 +1,13 @@
 # Current work
 
-Updated: 2026-10-02
+Updated: 2026-10-03
 
 ## Goal
 **Slice 10: installable commands on the testnet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 3).
-Acceptance: from a packed install (`npm pack` tarball in a fresh directory), `bin` commands for the holder wallet (with the backer
-role), the operator service and the supply reader, in fresh processes on separate data directories, complete issue → pay → receive →
-fulfill → demand → accept → settle → burn and an offline-operator recovery past the old 67-statement ceiling, on the synthetic Ergo
-node (M10b dropped the fixture venue from commands) and then live on the testnet; the pilot CLI, the harness's second package reader
-(Next 7) and, against a case map, the transparent path retire. Milestones: **M10a** shipped relations and required verifier identities;
-**M10b** the command surface (below); **M10c1** the synthetic node, venue, parameters, lock/output conventions, `reader` and `operator`
-commands; **M10c2** (a: presented-note `freshen`; b: wallet and relay commands, the packed-install drill on the synthetic node); **M10d**
-the live testnet drill (needs the local machine: Open questions); **M10e** the retirements. Stop boundary: all delivered.
+Acceptance: from a packed install, `moe` wallet (with the backer role), operator, reader and relay commands in fresh processes on
+separate directories complete issue → pay → receive → fulfill → demand → accept → settle → burn and an offline-operator recovery past
+the old 67-statement ceiling on the synthetic node (done, M10c2) and live on the testnet (M10d, local machine); the pilot CLI, the
+harness's second package reader (Next 7) and, against a case map, the transparent path retire (M10e). Stop boundary: all delivered.
 Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
@@ -20,12 +16,15 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
   [M10c1](decisions/2026-10.md#2026-10-02--read-through-each-directorys-own-view-gate-venue-creation-on-the-nodes-network-and-queue-serves-journal-calls-with-the-services-slice-10-m10c1),
   [M10c2a](decisions/2026-10.md#2026-10-02--read-a-note-as-presented-from-saved-demands-and-the-records-tags-save-which-demands-a-re-demand-repeats-and-freshen-into-one-note-slice-10-m10c2a)):
   shipped relations, the `moe` bin with `reader` and `operator`, the synthetic node, presented notes and `freshen`.
-- **M10c2b1** (branch `claude/m10c2b-wallet-commands`, [decision](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)):
-  `moe wallet` (holder, `--backer`) and `moe relay` ([commands](docs/POOL_V3_WALLET.md#commands)); `command-drill.mjs` runs terms create →
-  issue → pay → commit on admission → fulfill (exit 4 rerun) → demand → relayed acceptance → settle → burn, freshen, restores and a gap
-  settlement through the relay with real proofs, each process's peak RSS recorded. **Next: M10c2b2** (Next 3): the packed-install drill
-  (no `@noir-lang` in a reader) and the recovery past the 67-statement ceiling. Every current report drifts (`check:evidence` at 09c8459)
-  until the packed drill re-records.
+- **M10c2 done** (PR #87 and this branch, `claude/m10c2b2-packed-drill`; [decision](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)):
+  `moe wallet` (holder, `--backer`) and `moe relay` ([commands](docs/POOL_V3_WALLET.md#commands)), reviewed and read back.
+  `command-drill.mjs` runs every command from an `npm pack` install over the synthetic node with real proofs: issue → pay → commit
+  on admission → fulfill → demand → relayed acceptance → settle → burn, freshen, restores, 70 issues past the old 67-statement
+  ceiling, a gap redemption through the relay, the operator's return/adopt and a lapsed payment re-proved; no `@noir-lang` in a
+  process that proves nothing; peak RSS up to about 470 MB. Re-recorded here: recovery, succession, scope, history, redemption (local,
+  Ergo); still drifting: conformance, local replay, local journal (their checks write to scratch) and older probe reports.
+  **Next: M10e** (retire the pilot CLI, the harness's second package reader (Next 7) and, against a case map, the transparent path),
+  which the cloud can do; M10d (live testnet drill) needs the local machine (Open questions).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
@@ -40,9 +39,8 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
 1. Slice 9 done (Goal); the numbering below is kept for its references.
 2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds: `freshen`, the relay
    command and explanations landed (M10c2). Past slice 10: a transport and syncs not identifying the holder (own unit and review).
-3. M10c2b2: packed drill (`npm pack` into a fresh directory; no `@noir-lang` in a reader), the 67-statement offline recovery through
-   the commands; synthetic index lag knob; testnet context has no difficulty floor (M10d);
-   bb.js `generateProof` logs to stdout: keep it off the wallet commands' one-object stdout; read the budget's boxes before readiness (review).
+3. M10c2 leftovers: synthetic index lag knob; testnet context has no difficulty floor (M10d); read the budget's boxes before
+   readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take
@@ -93,8 +91,10 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
+- Non-blocking (2026-10-03): needs the local machine: M10d, the live testnet drill of the `moe` commands (own testnet node,
+  a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
   mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 
-Roughly **62% done / 38% remaining**, range **52–72%**, reassessed 2026-10-02 (slice 9 done): redemption's operations now run through the
-wallet with real proofs; the visibility table, installable commands, the design point, release assurance, qualified storage and mainnet remain.
+Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-03: every role runs as installable commands with real proofs on the
+synthetic node; the live drill, retirements, the design point, release assurance, a holder-private transport, qualified storage and mainnet remain.
