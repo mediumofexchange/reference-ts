@@ -3,12 +3,13 @@
 Updated: 2026-10-03
 
 ## Goal
-**Slice 10: installable commands on the testnet** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 3).
-Acceptance: from a packed install, `moe` wallet (with the backer role), operator, reader and relay commands in fresh processes on
-separate directories complete issue → pay → receive → fulfill → demand → accept → settle → burn and an offline-operator recovery past
-the old 67-statement ceiling on the synthetic node (done, M10c2) and live on the testnet (M10d, local machine); the pilot CLI, the
-harness's second package reader and, against a case map, the transparent path retire (M10e, done). Stop boundary: all delivered.
-Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78). pool-v3 adopted (spec e7f7f24, §11.4).
+**Slice 11: the design point** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 4).
+Acceptance: through the `moe` commands on the synthetic node, measured against the [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
+operator admission at peak, reader first sync and wallet steady state, with memory independent of history length and restarts
+that resume without re-verifying retained history; Next 4 (k)–(n), (s) closed. Milestones: **M11a** the Ergo view on append-only
+SQLite rows (flat heap and per-sync work over a long synthetic chain, reopen without PoW/root re-checks, same verdicts and answers);
+M11b the scale findings; M11c the measurements and their report. Stop boundary: all three delivered; a budget that fails names its lever.
+Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices 9–10 (PRs #69–#91). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
 - **M10a–M10c2 done** (PRs #79–#88; decisions from [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
