@@ -672,7 +672,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           const scoped = header.entries[i]!, name = hex(scoped.backing);
           merged.adoptionIndices.set(name, parents[i]?.state.adoptionIndices.get(name) ?? 0n);
           if (await recovery.forces(scoped.backing, scopedTerms.get(name)!, held.index)) {
-            adopted.push(...store.forced(scoped.backing, merged.adoptionIndices.get(name)!, held.index));
+            for (const forced of store.forced(scoped.backing, merged.adoptionIndices.get(name)!, held.index)) adopted.push(forced);
           }
         }
         segmentBase = { imported: merged, block: adopted.sort(venueOrder), openingIndex: held.index, parents: parents.map(p => p === undefined ? undefined : rowKey(p.commitment)) };
@@ -775,7 +775,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     for (const scoped of valid?.header.entries ?? [{ backing: selection.backing }]) {
       const scopedTerms = valid?.scopedTerms.get(hex(scoped.backing)) ?? terms;
       if (!await recovery.forces(scoped.backing, scopedTerms, selection.judgingIndex)) continue;
-      publications.push(...recovery.verdictsThrough(scoped.backing, selection.judgingIndex));
+      for (const verdict of recovery.verdictsThrough(scoped.backing, selection.judgingIndex)) publications.push(verdict);
       for (const forced of store.forced(scoped.backing, undefined, selection.judgingIndex)) force.push(forcedOf(forced));
     }
     const clock = valid === undefined ? null : (await scopeClocks(valid.header, name => valid.scopedTerms.get(hex(name))!,

@@ -19,10 +19,11 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   harness's second reader retired. M10d (live testnet drill) needs the local machine (Open questions).
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
-- **M11b in progress** (`claude/m11b-scale-findings`). M11b1, Next 4(n): a witness row changes only when a block beside it
-  completes and `witness` folds the filling block from the frontier: a wallet's record cost no longer grows with its notes
-  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6. One fresh adversarial review:
-  no blocker or major; two minors, two nits fixed. PR #93, reports from CI run 37138352927. **Next: (l)**, then (m), (k), (s); M11c.
+- **M11b in progress**. M11b1 (PR #93), Next 4(n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6. M11b2, (l):
+  a single index past the reader's 4,096-entry/1 MiB budget is asked again under the venue's `indexLimits` (Ergo: 2^21 entries, from its
+  section bound), capped at the reader's `INDEX_LIMITS` (2^18, 32 MiB; [view](docs/ERGO_VENUE_PROFILE.md)). One fresh adversarial review: no
+  blocker; a major (a spread `push` overflowed past ~125k entries), two minors, a nit fixed. PR #94, reports: CI run 37146665206.
+  **Next: (m)** (`claude/m11b-trail-forward`), then (k), (s); M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -44,9 +45,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) closed in M10e2. (j) Verify-only parties could take
    identity-checked key bytes, needing no G1 file. (k) A read under a silence or non-service clause judges every held checkpoint again at each
-   admission (persisting the walk's cursors would bound it). (l) One index holding more objects under one subject than an answer's budget
-   (4,096 entries, 1 MiB) refuses every read of that subject and every journal command; size the one-index budget from the venue's block bound
-   (no spec change, §13.1 budgets are local: ask a refused single index again under the venue's section bound, `ergo.ts` MAX_SECTION_*).
+   admission (persisting the walk's cursors would bound it). (l) closed (M11b2; a fixture venue declares no
+   index bound, its records being its owner's).
    (m) Serving a trail walks back over every record served before its first byte (7.5 µs each, blocking); read a segment forward by position
    (`chain` links back only: a forward step needs an index on `prev`, a layout change, and a fork gives one value two children).
    `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
