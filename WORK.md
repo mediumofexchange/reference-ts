@@ -19,8 +19,9 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   harness's second reader retired. M10d (live testnet drill) needs the local machine (Open questions).
 - **M11a (this branch, `claude/m11a-ergo-view-rows`)**: the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
   flat heap (10–18 MB from 10⁴ to 10⁵ synthetic blocks), reopen in 192 ms (was 74 s at 10⁴), `audit()`, durable side charges and
-  per-supplier protection. A design review and an integrated review: majors and minors resolved (decision). Delivery: PR, CI
-  real-proof jobs and the twelve current v3 reports re-recorded from its artifact. **Next: M11b**, Next 4 (k)–(n), (s), then M11c.
+  per-supplier protection. A design review and an integrated review: majors and minors resolved (decision). PR #92: the twelve
+  current v3 reports re-recorded from CI run 37132637881; a vitest setup now yields a turn per test (a worker's 60 s RPC timeout
+  failed Windows on a 73 s synchronous file). **Next: M11b**, Next 4 (k)–(n), (s), then M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
