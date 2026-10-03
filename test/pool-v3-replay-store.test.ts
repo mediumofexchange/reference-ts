@@ -172,7 +172,7 @@ describe("replay storage", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-point-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const first = new ReplayStore(path, { digest, every: 1 }), context = new Uint8Array(32).fill(7);
     try {
-      const walk = first.openWalk(context), ns = first.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
+      const { walk } = first.openWalk(context), ns = first.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
       first.append(ns, append([next()], []));
       first.keepPoint();
       expect(existsSync(digest)).toBe(true);

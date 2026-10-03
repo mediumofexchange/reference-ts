@@ -20,7 +20,7 @@ import type { Commitment } from "../../venue-records.js";
 import { identifierOf, VALUE_BOUND } from "../field.js";
 import { ScopeTree } from "../scope.js";
 import { requireConfigurationVerifier } from "./configuration.js";
-import { decodeReceipt, decodeSnapshot, snapshotBytes, type Snapshot } from "./commitments.js";
+import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest, type Snapshot } from "./commitments.js";
 import { decodeSegmentHeader, segmentBytes, type SegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
@@ -216,7 +216,7 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
   viewFor: (backing: Uint8Array, terms: RootTerms) => Promise<RecordView>, latest: Latest,
   snapshotIndexAt: (backing: Uint8Array, terms: RootTerms, index: bigint) => Promise<bigint>) {
   const { selection, verifier, store } = context;
-  const progress = new Map<string, { last: RangeEntry | undefined; busy: boolean }>();
+  const progress = new Map<string, { last: Pick<RangeEntry, "index" | "ordinal"> | undefined; busy: boolean }>();
   const running = new Map<string, { upto: bigint; boundary: bigint | undefined }>();
   const forceStates = new Map<string, { key: string; state: ReturnType<typeof openForceState> }>();
   const snapshotAt = (backing: Uint8Array, terms: RootTerms, index: bigint): Promise<ValidScope | undefined> =>
@@ -275,7 +275,7 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
     // after the first gap. Strict-prefix clock reads descend in index here.
     if (context.receiptBytes !== undefined && (await clock(backing, terms, 0n, through))!.boundary === undefined) return false;
     const view = await viewFor(backing, terms);
-    if (!progress.has(name)) progress.set(name, { last: undefined, busy: false });
+    if (!progress.has(name)) progress.set(name, { last: store.progress(walk, backing), busy: false });
     const read = progress.get(name)!;
     for (let entry = view.nextPublication(read.last); entry !== undefined && entry.index <= through; entry = view.nextPublication(read.last)) {
       // Nested reads come from snapshots strictly before the entry in progress.
@@ -297,7 +297,7 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
           store.putPublication(backing, { index: entry.index, ordinal: entry.ordinal, force: verdict.force, check: verdict.check }, recordHash, verdict.bytes);
         }
       } finally { read.busy = false; }
-      read.last = entry;
+      read.last = entry; store.putProgress(walk, backing, entry.index, entry.ordinal);
     }
     return true;
   };
@@ -320,13 +320,21 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
     const duration = terms.silence?.noCommitmentDuration;
     if (duration === undefined) return null;
     const view = await viewFor(backing, terms), key = `${hex(backing)}:${opening}`;
-    // A copy: clock reads nested in this one's awaits never share its state.
-    const kept = running.get(key), state = kept !== undefined && kept.upto <= through ? { ...kept } : { upto: opening, boundary: undefined };
+    // A copy: clock reads nested in this one's awaits never share its state. A kept walk's state is where an
+    // earlier read left it.
+    let kept = running.get(key);
+    if (kept === undefined && (kept = store.clockState(walk, backing, opening)) !== undefined) running.set(key, kept);
+    const state = kept !== undefined && kept.upto <= through ? { ...kept } : { upto: opening, boundary: undefined }, began = { ...state };
     for (let at = firstPoint(view, state.upto + 1n, through); at !== undefined && state.boundary === undefined; at = firstPoint(view, at + 1n, through)) {
       const last = await snapshotIndexAt(backing, terms, at);
       // A reset is a breakpoint even if the gap's first index has no record.
       if (at - last > duration) { const first = last + duration + 1n; state.boundary = first > opening ? first : opening + 1n; }
       state.upto = at;
+    }
+    // The walk keeps the fold over the breakpoints read, never one computed afresh behind its furthest.
+    if (state.upto !== began.upto || state.boundary !== began.boundary) {
+      const row = store.clockState(walk, backing, opening);
+      if (row === undefined || row.upto <= state.upto) store.putClockState(walk, backing, opening, state.upto, state.boundary);
     }
     if (state.boundary !== undefined && state.upto < through) state.upto = through;
     // Keep the furthest state: a clock read for an earlier index during this one's awaits computes afresh.
@@ -406,14 +414,21 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
   // Every held commitment in the backing's terms, carrying or not, counted around the
   // selection. Those after it are placed by their directories before any proof is
   // checked, so evidence withheld there refuses before the selection's trail is verified.
-  let heldBefore = 0, heldAfter = 0, passed = false;
+  // The selection lies in the term in force at its index, which is its operator's (above); terms cover disjoint
+  // ranges in chain order, and within one a key's index and sequence rise together, so those before it are counted.
+  let heldBefore = 0, heldAfter = 0;
   for (let i = 0; i < view.chain.length; i++) {
     const term = view.chain[i]!, end = view.termEnd(i);
-    for (let held = view.nextHeld(term.operator, term.from); held !== undefined && held.index <= end;
-      held = view.nextHeld(term.operator, term.from, held.commitment.sequence)) {
-      if (matches(held.commitment, selection)) passed = true;
-      else if (passed) { heldAfter++; view.carries(held); } else heldBefore++;
+    const own = term.from <= selectedHeld.index && selectedHeld.index <= end;
+    if (!own && term.from > selectedHeld.index) {
+      for (let held = view.nextHeld(term.operator, term.from); held !== undefined && held.index <= end;
+        held = view.nextHeld(term.operator, term.from, held.commitment.sequence)) { heldAfter++; view.carries(held); }
+      continue;
     }
+    if (!own) { heldBefore += view.heldCount(term.operator, term.from, end); continue; }
+    heldBefore += view.heldCount(term.operator, term.from, end, selection.sequence);
+    for (let held = view.nextHeld(term.operator, term.from, selection.sequence); held !== undefined && held.index <= end;
+      held = view.nextHeld(term.operator, term.from, held.commitment.sequence)) { heldAfter++; view.carries(held); }
   }
   // A refusal met classifying the selection is met below it, where the descent had gone: its fault pass starts there.
   walk.refusedBelow(selectedHeld);
@@ -489,8 +504,13 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     throw new TypeError("a kept store needs a witness predicate that declares its identity");
   }
   // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
-  const { trails } = evidence, walk = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
-    verifier: { verify: context.verifier.verify, identities }, witness: context.witness }));
+  // A read from the party's retained evidence, with no fault items or receipt of its own, resumes the selected
+  // backing's kept walk (§14 kept walk): what it classified stands, and this read classifies what is new.
+  const retained = evidence.retained, keptWalk = retained !== undefined && context.receiptBytes === undefined &&
+    faults.holdsEvidence?.() !== true ? { selected: selection.backing, evidence: retained.identity, mark: retained.mark,
+      holds: (mark: Uint8Array) => retained.holds(mark), through: selection.judgingIndex } : undefined;
+  const { trails } = evidence, { walk, resumed } = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
+    verifier: { verify: context.verifier.verify, identities }, witness: context.witness }), keptWalk);
   const views = new Map<string, Promise<RecordView>>(), running = new Map<string, Promise<ScopeVerdict>>();
   const cursors = new Map<string, { term: number; after: bigint | undefined; busy: boolean }>();
   // Whether any classification began, and the bound a refused read's fault pass starts below.
@@ -505,8 +525,35 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
     return decodeSnapshot(bytes);
   };
+  // A resumed walk reads a class an earlier read made only after §14's checks on this read's evidence: the venue
+  // holds the same commitment at the same index, the kept snapshot authenticates against the checkpoint's retained
+  // directory and scope, and a valid class's trail is retained and its state passes the snapshot check. Evidence no
+  // longer retained leaves the read unresolved, as a read of every checkpoint would; anything else that does not
+  // match is kept state to discard. Classes behind the cursor that the read does not load are not read again.
+  const judgedHere = new Set<string>(), rechecked = new Set<string>();
+  const recheck = (row: WalkVerdict): void => {
+    const id = hex(row.key);
+    if (!resumed || judgedHere.has(id) || rechecked.has(id)) return;
+    const held = store.heldAt(row.operator, row.sequence, selection.judgingIndex);
+    if (held === undefined || held.index !== row.index || !same(held.commitment.root, row.root) || !same(held.commitment.signature, row.signature)) {
+      throw new KeptStateMismatch("a kept walk's commitment");
+    }
+    const snapshot = decodeSnapshot(row.snapshot), directory = evidence.directory(row.root);
+    if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    const entry = directory.find(item => same(item.name, snapshot.backing));
+    if (entry === undefined || !same(entry.digest, snapshotDigest(snapshot))) throw new KeptStateMismatch("a kept walk's snapshot");
+    if (evidence.snapshot(entry.digest) === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    const scope = checkpointScope(trails, snapshot.backing, entry.digest, snapshot);
+    const s = row.state;
+    if (row.class === "valid") {
+      scope.fullTrail();
+      if (s === undefined || !keptStateHolds(store, s.ns, s.position, s.identity, snapshot)) throw new KeptStateMismatch("a kept walk's state");
+    }
+    rechecked.add(id);
+  };
   /** A verdict row as the walk reads it, its scope from the segment's row. */
   const load = (row: WalkVerdict): ScopeVerdict => {
+    recheck(row);
     const scope = store.scope(row.segment)!, header = decodeSegmentHeader(scope.header);
     const base: Classified = { commitment: { operator: row.operator, sequence: row.sequence, root: row.root, signature: row.signature },
       index: row.index, segment: row.segment, header, snapshot: decodeSnapshot(row.snapshot) };
@@ -528,13 +575,25 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   // Each backing's held checkpoints within its terms, carrying it, classified in rank order up to a bound.
   // A classification in progress reads only earlier checkpoints of any backing, so a nested advance of
   // the same backing never passes the one in progress.
+  // The cursor moves past a term only where a later term begins: the last term stays open to a later read, whose view
+  // can hold more of its checkpoints. Each move is kept with the walk.
   const advance = async (backing: Uint8Array, terms: RootTerms, child: Child | undefined): Promise<void> => {
     const name = hex(backing), view = await viewFor(backing, terms);
-    if (!cursors.has(name)) cursors.set(name, { term: 0, after: undefined, busy: false });
+    if (!cursors.has(name)) {
+      // A kept cursor's term is the same link in this read's chain: links in force at the kept index stay (C2.5.3), and
+      // later ones are appended after them.
+      const kept = store.cursor(walk, backing);
+      if (kept !== undefined && !same(view.chain[kept.term]?.link ?? new Uint8Array(), kept.link)) throw new KeptStateMismatch("a kept walk's term");
+      cursors.set(name, { term: kept?.term ?? 0, after: kept?.after, busy: false });
+    }
     const cursor = cursors.get(name)!;
     while (cursor.term < view.chain.length) {
       const term = view.chain[cursor.term]!, next = view.nextHeld(term.operator, term.from, cursor.after);
-      if (next === undefined || next.index > view.termEnd(cursor.term)) { cursor.term++; cursor.after = undefined; continue; }
+      if (next === undefined || next.index > view.termEnd(cursor.term)) {
+        if (cursor.term + 1 === view.chain.length) return;
+        cursor.term++; cursor.after = undefined; store.putCursor(walk, backing, cursor.term, view.chain[cursor.term]!.link, cursor.after);
+        continue;
+      }
       if (!before(next, child)) return;
       if (cursor.busy) throw new Error("candidate order");
       cursor.busy = true;
@@ -543,7 +602,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           store.putValid(walk, backing, next.index, next.commitment.operator, next.commitment.sequence, rowKey(next.commitment));
         }
       } finally { cursor.busy = false; }
-      cursor.after = next.commitment.sequence;
+      cursor.after = next.commitment.sequence; store.putCursor(walk, backing, cursor.term, term.link, cursor.after);
     }
   };
   // The latest valid carrying checkpoint of a backing within its terms before a bound (rank order), or of all.
@@ -601,7 +660,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       // Every check before replay ran afresh, so a kept class is the one it gives.
       if (kept !== undefined && verdict.class !== kept.class) throw new KeptStateMismatch("a kept class");
       // The row is written again from this judgment, so what later reads load comes from this read's evidence.
-      keep(held, verdict);
+      keep(held, verdict); judgedHere.add(hex(key));
       store.keepPoint();
       return verdict;
     });

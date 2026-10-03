@@ -30,6 +30,7 @@
 // holds that mark, so a lost file asks for everything again.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concatBytes } from "@noble/hashes/utils.js";
+import { randomBytes } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { compareBytes, copyBytes, copyUnshared, EncodingError, FrameFeed } from "../../bytes.js";
 import type { SnapshotDigest } from "../../venue-records.js";
@@ -97,8 +98,20 @@ export interface TrailEvidence {
    * where the segment's head scopes its backing; later records are not its evidence. */
   served(expected: ExpectedSnapshot, snapshot: Snapshot): StoredTrail | undefined;
 }
+/** A retained store's identity and where its lineage stood when a batch began: one row per batch, each the hash of
+ * the one before and fresh randomness, committed with what the batch kept. A store restored from an earlier copy
+ * no longer holds a later mark, so a kept walk read from it is not resumed. */
+export interface RetainedLineage {
+  readonly identity: Uint8Array;
+  readonly mark: Uint8Array;
+  /** Whether this store's lineage still passes through `mark`. */
+  holds(mark: Uint8Array): boolean;
+}
 /** The evidence a walk looks up, and the quota its venue answers are charged to. */
 export interface WalkEvidence {
+  /** The retained store the evidence is read from, where the store outlives the read (a file or a host's database);
+   * undefined for a private in-memory store. A kept walk is bound to it (pool-v3 §14 kept walk). */
+  readonly retained?: RetainedLineage | undefined;
   directory(root: Uint8Array): readonly SnapshotDigest[] | undefined;
   snapshot(digest: Uint8Array): Uint8Array | undefined;
   readonly trails: TrailEvidence;
@@ -149,6 +162,12 @@ const SCHEMA = `
     bytes BLOB NOT NULL);
   CREATE INDEX chain_position ON chain(segment, position);
   CREATE TABLE supplier (source BLOB PRIMARY KEY, sequence INTEGER NOT NULL) WITHOUT ROWID;`;
+/** A retained store's identity, drawn once when its file or host's tables are made. Added beside layout 4's tables
+ * where missing, so a file made before it gains one: nothing else reads it. */
+const IDENTITY_SCHEMA = `CREATE TABLE IF NOT EXISTS evidence_identity (id INTEGER PRIMARY KEY CHECK (id = 1), value BLOB NOT NULL);
+  CREATE TABLE IF NOT EXISTS evidence_lineage (n INTEGER PRIMARY KEY, h BLOB NOT NULL);`;
+/** Lineage rows kept: a kept walk whose mark is older is resumed no more, and its next read judges every checkpoint once. */
+const LINEAGE_KEPT = 65_536n;
 
 /** A kept position a trail is assembled after: its chain value and the frame bytes of its records. */
 interface Base { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array; readonly size: bigint }
@@ -158,6 +177,7 @@ export class EvidenceStore {
   readonly #q: Record<string, StatementSync>;
   readonly #quota: bigint;
   readonly #hosted: boolean;
+  readonly #identity: Uint8Array | undefined;
   #busy = false;
   #savepoints = 0;
 
@@ -192,6 +212,13 @@ export class EvidenceStore {
         if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the evidence file is in use");
         throw error;
       }
+    }
+    // A store that outlives its reads keeps one identity in its own rows; a private in-memory one has none.
+    if (source === ":memory:") this.#identity = undefined;
+    else {
+      this.#db.exec(IDENTITY_SCHEMA);
+      this.#db.prepare("INSERT OR IGNORE INTO evidence_identity VALUES (1, ?)").run(randomBytes(16));
+      this.#identity = new Uint8Array((this.#db.prepare("SELECT value FROM evidence_identity WHERE id = 1").get() as { value: Uint8Array }).value);
     }
     this.#q = Object.fromEntries(Object.entries({
       batch: "INSERT INTO batch VALUES (NULL) RETURNING id",
@@ -394,7 +421,25 @@ export class EvidenceStore {
   /** A new batch; `spent` is what earlier parts of the same supply already charged to the quota. */
   #batch(spent = 0n): EvidenceBatch {
     const id = (this.#q.batch!.get() as { id: bigint }).id;
-    return new EvidenceBatch(this.#db, this.#q, id, this.#quota, spent);
+    return new EvidenceBatch(this.#db, this.#q, id, this.#quota, spent, this.#lineage());
+  }
+
+  /** A new lineage row for a batch of a retained store, in the batch's own transaction where it has one. */
+  #lineage(): RetainedLineage | undefined {
+    const identity = this.#identity;
+    if (identity === undefined) return undefined;
+    const last = this.#db.prepare("SELECT n, h FROM evidence_lineage ORDER BY n DESC LIMIT 1").get() as { n: bigint; h: Uint8Array } | undefined;
+    const n = (last?.n ?? 0n) + 1n, h = sha256(concatBytes(last === undefined ? identity : new Uint8Array(last.h), randomBytes(16)));
+    this.#db.prepare("INSERT INTO evidence_lineage VALUES (?, ?)").run(n, h);
+    if (n > LINEAGE_KEPT) this.#db.prepare("DELETE FROM evidence_lineage WHERE n <= ?").run(n - LINEAGE_KEPT);
+    const mark = new Uint8Array(40); new DataView(mark.buffer).setBigUint64(0, n); mark.set(h, 8);
+    const db = this.#db;
+    return { identity: copyBytes(identity), mark, holds(kept: Uint8Array): boolean {
+      if (!(kept instanceof Uint8Array) || kept.length !== 40) return false;
+      const row = db.prepare("SELECT h FROM evidence_lineage WHERE n = ?").get(new DataView(kept.buffer, kept.byteOffset).getBigUint64(0)) as
+        { h: Uint8Array } | undefined;
+      return row !== undefined && compareBytes(new Uint8Array(row.h), kept.subarray(8)) === 0;
+    } };
   }
 
   #sink(batch: EvidenceBatch): PackageSink {
@@ -528,8 +573,10 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
   #bytes = 0n;
   readonly id: bigint;
 
-  constructor(db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint, spent = 0n) {
-    this.#db = db; this.#q = q; this.id = id; this.#quota = quota; this.#bytes = spent;
+  readonly retained: RetainedLineage | undefined;
+
+  constructor(db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint, spent = 0n, retained?: RetainedLineage) {
+    this.#db = db; this.#q = q; this.id = id; this.#quota = quota; this.#bytes = spent; this.retained = retained;
   }
 
   /** Count taken bytes against the party's quota. */

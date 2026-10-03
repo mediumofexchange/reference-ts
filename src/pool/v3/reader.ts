@@ -71,6 +71,8 @@ export interface RecordView {
   previousHeld(operator: Uint8Array, toIndex: bigint, before?: bigint): HeldCommitment | undefined;
   /** The least index in [from, to] at which `operator` holds a commitment. */
   firstHeldIndex(operator: Uint8Array, from: bigint, to: bigint): bigint | undefined;
+  /** How many commitments `operator` holds in [from, to], below sequence `before` if given. */
+  heldCount(operator: Uint8Array, from: bigint, to: bigint, before?: bigint): number;
   termEnd(i: number): bigint;
   carries(held: HeldCommitment): SnapshotDigest | undefined;
   /** This backing's publications (kind 4), in venue order; a venue position two backings share leaves the read unresolved. */
@@ -243,6 +245,7 @@ export async function readRecordView(selection: Pick<ReaderSelection, "mode" | "
     nextHeld: (operator, fromIndex, after) => store.nextHeld(heldOf(operator), fromIndex, after, t),
     previousHeld: (operator, toIndex, before) => store.previousHeld(heldOf(operator), toIndex, before, t),
     firstHeldIndex: (operator, from, to) => store.firstHeldIndex(heldOf(operator), from, to < t ? to : t),
+    heldCount: (operator, from, to, before) => store.heldCount(heldOf(operator), from, to < t ? to : t, before),
     nextPublication: after => store.nextPublication(publicationsKept(), after, t),
     publications, publicationCount: () => store.publicationCount(publicationsKept(), t) };
 }

@@ -292,7 +292,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     await f.read(counting(), store);
     expect(namespaceCount(kept.path)).toBe(1);
     // Another configuration, venue or reader version names another context (§14): nothing kept under the old one stays.
-    store.closeWalk(store.openWalk(new Uint8Array(32).fill(7)));
+    store.closeWalk(store.openWalk(new Uint8Array(32).fill(7)).walk);
     expect(namespaceCount(kept.path)).toBe(0);
     const verifier = counting(), again = await f.read(verifier, store);
     expect(outcome(again)).toEqual(outcome(await f.read(counting())));
