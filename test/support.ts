@@ -26,3 +26,10 @@ export const KEYS = {
   mallory: pub(SECRETS.mallory),
   operator: pub(SECRETS.operator),
 } as const;
+
+/** Every item of a sync or async iterable, in order. */
+export async function collected<T>(items: Iterable<T> | AsyncIterable<T>): Promise<T[]> {
+  const out: T[] = [];
+  for await (const item of items) out.push(item);
+  return out;
+}

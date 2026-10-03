@@ -28,6 +28,7 @@ import { RangeLimitError, type RangeRequest, type RecordKind } from "../src/reco
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordPublisher, type RecordVenue } from "../src/record-venue.js";
 import { VenueError } from "../src/venue-error.js";
 import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
+import { collected } from "./support.js";
 
 // The pool-v3 operator journal (src/pool/v3/store.ts) on the local reference
 // venue, over records built by witness.ts with proofs a test verifier judges.
@@ -867,7 +868,7 @@ describe("the v3 operator journal", () => {
     const client = new V3ServiceClient(`http://127.0.0.1:${(server.address() as { port: number }).port}/`, tokens.walletToken, { operator, reference });
     return { client, requests };
   }
-  const kinds = (parts: Iterable<EvidencePart>): string[] => [...parts].map(part => "package" in part ?
+  const kinds = (parts: readonly EvidencePart[]): string[] => parts.map(part => "package" in part ?
     `package:${decodeEvidencePackage(part.package).map(item => item.kind).join("")}` : `trail:${part.trail.after?.position ?? "whole"}`);
 
   it("serves a reader's later sync only what is new, over HTTP, and its reads equal a read of the whole package", async () => {
@@ -890,9 +891,9 @@ describe("the v3 operator journal", () => {
     await j.submit(records[1]!); await j.submit(records[2]!); await j.commit("c3"); await j.publish();
     // After sequence 2 the journal serves the new checkpoint's directory and snapshot, and the trail's head
     // with the records after position 1: nothing a reader served through 2 holds.
-    const parts = [...(await j.serve(backing, 2n)).parts];
+    const parts = await collected((await j.serve(backing, 2n)).parts);
     expect(kinds(parts)).toEqual(["package:34", "trail:1"]);
-    const trail = parts[1] as Extract<EvidencePart, { trail: unknown }>, sent = Buffer.concat([...trail.trail.chunks as Iterable<Uint8Array>]);
+    const trail = parts[1] as Extract<EvidencePart, { trail: unknown }>, sent = Buffer.concat(await collected(trail.trail.chunks));
     expect(sent.length).toBe(head + framed(records[1]!) + framed(records[2]!));
     expect([sent.includes(Buffer.from(records[0]!)), sent.includes(Buffer.from(records[1]!)), sent.includes(Buffer.from(records[2]!))]).toEqual([false, true, true]);
     const second = await client.sync(backing, evidence);
@@ -906,13 +907,13 @@ describe("the v3 operator journal", () => {
     expect(await client.package(backing)).toEqual(whole);
 
     // Nothing new: the selection and the read's own package only. A sequence past the selection serves nothing either.
-    expect([kinds((await j.serve(backing, 3n)).parts), kinds((await j.serve(backing, 99n)).parts)]).toEqual([[], []]);
+    expect([kinds(await collected((await j.serve(backing, 3n)).parts)), kinds(await collected((await j.serve(backing, 99n)).parts))]).toEqual([[], []]);
     const third = await client.sync(backing, evidence);
     expect(third).toEqual(second);
     expect(requests.at(-1)!.bytes).toBe(20 + 172 + second.package.length + 1);
     // Checkpoints without records add their objects and no trail.
     await j.commit("c4"); await j.publish();
-    expect(kinds((await j.serve(backing, 3n)).parts)).toEqual(["package:34"]);
+    expect(kinds(await collected((await j.serve(backing, 3n)).parts))).toEqual(["package:34"]);
     expect((await read(await client.sync(backing, evidence), evidence)).position).toBe(3n);
 
     // A store that lacks what its recorded sequence implies is served again from nothing, once.
@@ -939,11 +940,11 @@ describe("the v3 operator journal", () => {
   it("serves its parts while other commands run, from rows a command never changes", async () => {
     const { j } = await opened();
     await j.submit(issue()); await j.commit("c2"); await j.publish();
-    const served = await j.serve(), parts = served.parts[Symbol.iterator]();
+    const served = await j.serve(), parts = (served.parts as AsyncIterable<EvidencePart>)[Symbol.asyncIterator]();
     // Between two parts: an admission, a commitment and its publication.
-    const taken: EvidencePart[] = [parts.next().value as EvidencePart];
+    const taken: EvidencePart[] = [(await parts.next()).value as EvidencePart];
     await j.submit(payment()); await j.commit("c3"); await j.publish();
-    for (let next = parts.next(); next.done !== true; next = parts.next()) taken.push(next.value);
+    for (let next = await parts.next(); next.done !== true; next = await parts.next()) taken.push(next.value);
     // The parts are the selection's: what was admitted and signed meanwhile is not among them.
     expect(kinds(taken)).toEqual(["package:3344", "trail:whole"]);
     const evidence = new EvidenceStore();

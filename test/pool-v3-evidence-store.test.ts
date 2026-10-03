@@ -16,6 +16,7 @@ import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementByte
 import { authenticatedScope } from "../src/pool/v3/scope-evidence.js";
 import { encodeRootTerms, MAX_ROOT_TERMS_BYTES, rootTermsName, rootTermsSignatureMessage, verifyRootTermsSignature } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
+import { collected } from "./support.js";
 
 // The terms signature check, counted where it runs and otherwise unchanged.
 vi.mock("../src/pool/v3/terms.js", async original => {
@@ -508,8 +509,38 @@ describe("v3 evidence store", () => {
     expect(() => new EvidenceStore(file.path)).toThrow(new TypeError("the evidence file has another layout"));
   });
 
+  it("serves a trail forward by position, with no walk back before its first record, giving up the turn as it goes", async () => {
+    const long = Array.from({ length: 4096 + 5 }, (_, i) => records[i % records.length]!), values = [genesisEvidenceHash(segment)];
+    for (const [i, record] of long.entries()) values.push(nextEvidenceHash(values[i]!, evidenceHashes(decodeRecord(record)), BigInt(i + 1)));
+    const db = new DatabaseSync(":memory:", { readBigInts: true }), store = new EvidenceStore(db);
+    store.importTrails([encodeTrail({ header: headerBytes, terms, records: long })]);
+    const full = store.retained().trail(segment, values.at(-1)!)!;
+    // Another task's timer: the first record comes before it runs, and it runs as the records go on.
+    let turns = 0, running = true;
+    const other = (): void => { if (running) { turns++; setImmediate(other); } };
+    setImmediate(other);
+    const served = full.stream()[Symbol.asyncIterator](), first = await served.next();
+    const before = turns, rest: Uint8Array[] = [];
+    for (let next = await served.next(); next.done !== true; next = await served.next()) rest.push(next.value);
+    running = false;
+    expect([before, turns >= 16]).toEqual([0, true]);
+    expect([first.value as Uint8Array, ...rest]).toEqual([...full.records()]);
+    expect(await collected(full.stream(4096n))).toEqual(long.slice(4096));
+    // `reaches` is `through`, giving up the turn on its walk.
+    expect([await full.reaches(5n, values[5]!), await full.reaches(5n, values[4]!)]).toEqual([full.through(5n, values[5]!), undefined]);
+    expect(await full.reaches(5n, values[5]!)).toBe(BigInt(long.slice(0, 5).reduce((n, r) => n + 4 + r.length, 0)));
+    // A kept value lost in the middle: read forward, the records before it are given and the read is then unresolved.
+    db.prepare("DELETE FROM chain WHERE evidence = ?").run(values[2000]!);
+    const given: Uint8Array[] = [];
+    await expect((async () => { for await (const record of full.stream()) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(given).toHaveLength(1999);
+    expect(() => [...full.records()]).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
+    db.close();
+  }, 60_000);
+
   it("streams a kept trail after a position its chain passes through, and takes such parts into another store", async () => {
-    const supplier = new EvidenceStore(), tip = { segment, position: 3n, evidence: chain[3]! };
+    const supplierDb = new DatabaseSync(":memory:", { readBigInts: true }), supplier = new EvidenceStore(supplierDb);
+    const tip = { segment, position: 3n, evidence: chain[3]! };
     // A fork of the same segment after position 3.
     const forked = [...records.slice(0, 3), issue(10), issue(11)], fork = [...chain.slice(0, 4)];
     for (let i = 3; i < 5; i++) fork.push(nextEvidenceHash(fork[i]!, evidenceHashes(decodeRecord(forked[i]!)), BigInt(i + 1)));
@@ -532,40 +563,58 @@ describe("v3 evidence store", () => {
     // does not verify, so it was never kept and is served empty.
     const bare = (n: number): Uint8Array => trail(n, { terms: [{ terms: new Uint8Array(), signature: new Uint8Array(64) }] });
     const after = (n: number): Uint8Array => concat(bare(6).subarray(0, bare(0).length), bare(6).subarray(bare(0).length + Number(sizes(n))));
-    expect(await bytesOf(trailPart(full))).toEqual(bare(6));
-    expect(await bytesOf(trailPart(full, tip))).toEqual(after(3));
-    expect(await bytesOf(trailPart(full, { segment, position: 6n, evidence: chain[6]! }))).toEqual(after(6));
-    expect(await bytesOf(trailPart(held.trail(segment, chain[0]!)!))).toEqual(bare(0));
-    expect(trailPart(full, { ...tip, evidence: chain[2]! })).toBeUndefined();
-    expect(trailPart(full, { segment, position: 5n, evidence: fork[5]! })).toBeUndefined();
+    // Read forward, a fork kept beside the cut is passed by the walk back, at the fork and after it.
+    for (const after of [0n, 2n, 3n, 4n, 6n]) expect(await collected(full.stream(after))).toEqual([...full.records(after)]);
+    expect(await collected(held.trail(segment, fork[5]!)!.stream())).toEqual(forked);
+    expect(await collected(held.trail(segment, fork[5]!)!.stream(4n))).toEqual(forked.slice(4));
+    expect(await bytesOf(await trailPart(full))).toEqual(bare(6));
+    expect(await bytesOf(await trailPart(full, tip))).toEqual(after(3));
+    expect(await bytesOf(await trailPart(full, { segment, position: 6n, evidence: chain[6]! }))).toEqual(after(6));
+    expect(await bytesOf(await trailPart(held.trail(segment, chain[0]!)!))).toEqual(bare(0));
+    expect(await trailPart(full, { ...tip, evidence: chain[2]! })).toBeUndefined();
+    expect(await trailPart(full, { segment, position: 5n, evidence: fork[5]! })).toBeUndefined();
 
     const snapshot = snapshotBytes(snapshotAt(3)), receiver = new EvidenceStore();
-    expect(await receiver.take([{ package: pack([{ kind: 1, payload: Uint8Array.of(1) }, { kind: 4, payload: snapshot }]) }, trailPart(held.trail(segment, chain[3]!)!)!])).toBe(true);
+    expect(await receiver.take([{ package: pack([{ kind: 1, payload: Uint8Array.of(1) }, { kind: 4, payload: snapshot }]) }, (await trailPart(held.trail(segment, chain[3]!)!))!])).toBe(true);
     expect(recordsOf(receiver.retained().served(expectedAt(3), snapshotAt(3)))).toEqual(records.slice(0, 3).map(r => [...r]));
-    expect(await receiver.take((async function* () { yield trailPart(full, tip)!; })())).toBe(true);
+    expect(await receiver.take((async function* () { yield (await trailPart(full, tip))!; })())).toBe(true);
     const kept = receiver.retained();
     expect(recordsOf(kept.served(expectedAt(6), snapshotAt(6)))).toEqual(records.map(r => [...r]));
     // A package part's per-read items are dropped at once; its objects stay.
     expect([kept.payloads(1), kept.snapshot(sha256(snapshot))]).toEqual([[], snapshot]);
     // A trail after a position the receiver does not hold is not kept; the other parts are.
     const empty = new EvidenceStore();
-    expect(await empty.take([trailPart(full, tip)!, { package: pack([{ kind: 4, payload: snapshot }]) }])).toBe(false);
+    expect(await empty.take([(await trailPart(full, tip))!, { package: pack([{ kind: 4, payload: snapshot }]) }])).toBe(false);
     expect([[...empty.retained().heads(segment)], empty.retained().snapshot(sha256(snapshot))]).toEqual([[], snapshot]);
     // The quota bounds all the parts of one take together, as it bounds one package, rows included: the
     // trail's item row and six record rows (128 + 6 × 192 bytes), and each object's 700 bytes and item row.
     const small = new EvidenceStore(":memory:", { maxBatchBytes: BigInt(bare(6).length) + 1280n + 2n * 828n + 100n });
     const object = (n: number): EvidencePart => ({ package: pack([{ kind: 4, payload: new Uint8Array(700).fill(n) }]) });
-    expect(await small.take([trailPart(full)!, object(1)])).toBe(true);
-    await expect(small.take([trailPart(full)!, object(2), object(3), object(4)])).rejects.toThrow(PackageLimitError);
+    expect(await small.take([(await trailPart(full))!, object(1)])).toBe(true);
+    await expect(small.take([(await trailPart(full))!, object(2), object(3), object(4)])).rejects.toThrow(PackageLimitError);
     expect([small.retained().snapshot(sha256(new Uint8Array(700).fill(3))) !== undefined, small.retained().snapshot(sha256(new Uint8Array(700).fill(4)))])
       .toEqual([true, undefined]);
     small.close();
     // A supplier's parts served from nothing are one whole package; a trail after a position is not a frame.
     expect(await wholePackage(pack([{ kind: 1, payload: Uint8Array.of(1) }]), [{ package: pack([{ kind: 4, payload: snapshot }]) },
-      { package: pack([{ kind: 4, payload: snapshot }]) }, trailPart(full)!]))
+      { package: pack([{ kind: 4, payload: snapshot }]) }, (await trailPart(full))!]))
       .toEqual(pack([{ kind: 1, payload: Uint8Array.of(1) }, { kind: 4, payload: snapshot }, { kind: 6, payload: bare(6) }]));
-    await expect(wholePackage(pack([]), [trailPart(full, tip)!])).rejects.toThrow("a whole package takes whole trails");
-    for (const store of [supplier, receiver, empty]) store.close();
+    await expect(wholePackage(pack([]), [(await trailPart(full, tip))!])).rejects.toThrow("a whole package takes whole trails");
+    // The cut's link at 4 damaged where the fork leaves it: the cut's own records before, then the walk back meets it.
+    supplierDb.prepare("UPDATE chain SET prev = ? WHERE evidence = ?").run(b(1), chain[4]!);
+    const given: Uint8Array[] = [];
+    await expect((async () => { for await (const record of full.stream()) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(given).toEqual(records.slice(0, 3));
+    // The cut's row at 4 lost: the fork's lone row there is a genuine step, but the walk back from the cut's top
+    // meets another value at 4, so nothing of the cut is spliced after it.
+    supplierDb.prepare("UPDATE chain SET prev = ? WHERE evidence = ?").run(chain[3]!, chain[4]!);
+    supplierDb.prepare("DELETE FROM chain WHERE evidence = ?").run(chain[4]!);
+    given.length = 0;
+    await expect((async () => { for await (const record of full.stream()) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(given).toEqual([...records.slice(0, 3), forked[3]]);
+    await expect((async () => { for await (const record of full.stream(4n)) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
+    for (const store of [receiver, empty]) store.close();
+    supplierDb.close();
   });
 
   it("records the sequence each supplier's evidence was kept through, in the file that holds the evidence", () => {

@@ -20,6 +20,7 @@ import { authorizeIssue, demandTask, issueTask, spendTask, type ProofTask, type 
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, encodeReplacement, encodeRevocation, replacementHash, replacementMessage,
   signCommitment, signRevocation, type Replacement } from "../src/venue-records.js";
+import { collected } from "./support.js";
 
 // Public-evidence succession through the runtime journal and independent reader.
 // Proof bytes are explicit stand-ins; real-key acceptance is a separate gate.
@@ -225,36 +226,36 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
   it("serves what an opening took from that opening on, and no trail a reader of its own checkpoints holds", async () => {
     const f = await transferred(), evidence = new EvidenceStore();
     /** Each part: a package's kinds, or a trail's operator, header sequence, base position and record count. */
-    const shape = (parts: Iterable<EvidencePart>): string[] => [...parts].map(part => {
+    const shape = async (parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>): Promise<string[]> => Promise.all((await collected(parts)).map(async part => {
       if ("package" in part) return `package:${[...new Set(decodeEvidencePackage(part.package).map(item => item.kind))].join("")}`;
-      const trail = decodeTrail(Buffer.concat([...part.trail.chunks as Iterable<Uint8Array>])), header = decodeSegmentHeader(trail.header);
+      const trail = decodeTrail(Buffer.concat(await collected(part.trail.chunks))), header = decodeSegmentHeader(trail.header);
       return `${Buffer.from(header.operator).equals(Buffer.from(aKey)) ? "A" : "B"}${header.sequence}:${part.trail.after?.position ?? "whole"}:${trail.records.length}`;
-    });
+    }));
     // A reader of A's journal, kept through its sequence 2: A's first segment with its one record.
-    expect(shape((await f.a.serve()).parts)).toEqual(["package:34", "A1:whole:1"]);
+    expect(await shape((await f.a.serve()).parts)).toEqual(["package:34", "A1:whole:1"]);
     expect(await evidence.take((await f.a.serve()).parts)).toBe(true);
     await f.successor.submit(f.spend(f.successorContext)); await f.successor.commit("spent"); await f.successor.publish();
     // B serves what it took of A with its own: A's trail is new to a reader of B's journal.
-    expect(shape((await f.successor.serve()).parts).sort()).toEqual(["A1:whole:1", "B1:whole:1", "package:34"]);
+    expect((await shape((await f.successor.serve()).parts)).sort()).toEqual(["A1:whole:1", "B1:whole:1", "package:34"]);
     const back = await f.replace(aSecret, f.next.link), publicB = await f.successor.package(); f.venue.advance(back.effective);
     await f.a.takeover("back-to-a", f.signed, publicB.package);
     // The opening that took B's evidence is signed but not served yet: neither is what it took.
-    expect(shape((await f.a.serve(undefined, 2n)).parts)).toEqual([]);
+    expect(await shape((await f.a.serve(undefined, 2n)).parts)).toEqual([]);
     await f.a.publish(); await f.a.adopt();
     const ctx = await f.openingContext(f.a);
     await f.a.submit(f.issue(ctx, 75)); await f.a.commit("resumed"); await f.a.publish();
     // After sequence 2: A's new objects and what its opening took, B's trail and A's new segment, whole. A's first
     // segment is named again by what was taken, at a position the reader's own trail passes through: not served.
     const later = await f.a.serve(undefined, 2n);
-    expect(shape((await f.a.serve(undefined, 2n)).parts).sort()).toEqual(["A3:whole:1", "B1:whole:1", "package:34"]);
+    expect((await shape((await f.a.serve(undefined, 2n)).parts)).sort()).toEqual(["A3:whole:1", "B1:whole:1", "package:34"]);
     expect(await evidence.take(later.parts)).toBe(true);
     const result = await readPackage(later.package, { ...later.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue: f.venue, reference, evidence });
     expect([result.state?.issued, result.state?.hasNullifier(f.input.note.nf)]).toEqual([20n, true]);
     // A reader kept through the opening holds what it took: only the new checkpoint and the records after the opening.
-    expect(shape((await f.a.serve(undefined, 3n)).parts)).toEqual(["package:34", "A3:0:1"]);
+    expect(await shape((await f.a.serve(undefined, 3n)).parts)).toEqual(["package:34", "A3:0:1"]);
     // From nothing, all of it; and the whole package is those parts.
-    expect(shape((await f.a.serve()).parts).sort()).toEqual(["A1:whole:1", "A3:whole:1", "B1:whole:1", "package:34"]);
+    expect((await shape((await f.a.serve()).parts)).sort()).toEqual(["A1:whole:1", "A3:whole:1", "B1:whole:1", "package:34"]);
     expect((await f.read(await f.a.package())).state.issued).toBe(20n);
     evidence.close();
   });
@@ -267,14 +268,14 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
       .sort((x, y) => x.kind - y.kind || Buffer.compare(x.hash, y.hash));
     const successor = f.create(bSecret, "b");
     await successor.takeover("takeover", f.signed, encodeEvidencePackage(hashed)); await successor.publish(); await successor.adopt();
-    const parts = [...(await successor.serve()).parts], packages = parts.flatMap(part => "package" in part ? [decodeEvidencePackage(part.package)] : []);
+    const parts = await collected((await successor.serve()).parts), packages = parts.flatMap(part => "package" in part ? [decodeEvidencePackage(part.package)] : []);
     expect(packages.map(items => items.length)).toEqual([1024, 82]);
     const served = new Set(packages.flat().map(item => Buffer.from(item.payload).toString("hex")));
     expect(junk.every(item => served.has(Buffer.from(item.payload).toString("hex")))).toBe(true);
     expect(parts.filter(part => "trail" in part)).toHaveLength(2);
     expect((await f.read(await successor.package())).state.issued).toBe(10n);
     // A reader kept through the opening is served none of them again.
-    expect([...(await successor.serve(undefined, 1n)).parts]).toEqual([]);
+    expect(await collected((await successor.serve(undefined, 1n)).parts)).toEqual([]);
   });
 
   it("preserves A's own counter and spent notes when the same journal resumes after A-to-B-to-A", async () => {
