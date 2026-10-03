@@ -339,6 +339,26 @@ describe("the reader's venue", () => {
     expect([...read.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[1n, 1n], [3000n, 3n], [4600n, 4n]]);
   }, 60_000);
 
+  it("asks one index past the per-answer budget again under the venue's bound for an index, and refuses past that bound", async () => {
+    const venue = FixtureVenue.reference(b(12), 2n, 6n), secret = b(33), operator = ed25519.getPublicKey(secret);
+    const commitment = (sequence: bigint) => encodeCommitment(signCommitment(secret, sequence, b(Number(sequence))));
+    // Anyone can file objects under a subject: one index holds more of each kind than one answer may.
+    for (let i = 0n; i <= RANGE_LIMITS.maxEntries; i++) { venue.witness(2, BACKING, 3n, new Uint8Array(233)); venue.witness(1, operator, 3n, new Uint8Array(136)); }
+    venue.witness(1, operator, 3n, commitment(1n)); venue.witness(1, operator, 5n, commitment(2n));
+    const asked: string[] = [];
+    const bounded = (maxEntries: bigint): RecordVenue => ({ id: venue.id, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+      range: (request, limits) => { asked.push(`${request.kind}:${request.fromIndex}-${request.toIndex}/${limits.maxEntries}`); return venue.range(request, limits); },
+      indexLimits: () => ({ maxBytes: 4n << 20n, maxEntries }) });
+    const read = await view(bounded(RANGE_LIMITS.maxEntries + 2n), { ...selection, judgingIndex: 6n });
+    expect(read.chain.map(link => link.from)).toEqual([0n]);
+    expect([...read.held(operator)].map(h => [h.index, h.commitment.sequence])).toEqual([[3n, 1n], [5n, 2n]]);
+    // Only the single index is asked under the venue's bound; windows on either side keep the reader's budget.
+    expect(asked.filter(a => a.startsWith("1:"))).toEqual(["1:0-6/4096", "1:0-2/4096", "1:3-6/4096", "1:3-4/4096", "1:3-3/4096", "1:3-3/4098", "1:4-5/4096", "1:6-6/4096"]);
+    // Past the venue's own bound, and on a venue that declares none, the index stays refused.
+    expect(await status(view(bounded(RANGE_LIMITS.maxEntries), { ...selection, judgingIndex: 6n }))).toBeInstanceOf(RangeLimitError);
+    expect(await status(view(venue, { ...selection, judgingIndex: 6n }))).toBeInstanceOf(RangeLimitError);
+  });
+
   it("keeps each answer, asks the venue only past the index it is kept through, and reads a lower index bounded (§§13.2–13.3)", async () => {
     const venue = FixtureVenue.reference(b(12), 2n, 8n), secret = b(33), operator = ed25519.getPublicKey(secret);
     const commitment = (sequence: bigint) => encodeCommitment(signCommitment(secret, sequence, b(Number(sequence))));

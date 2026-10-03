@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
-  admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
+  admittedReplacements, copyLimits, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
   type AdmittedReplacement, type ChainLink, type HeldCommitment, type HeldPrior, type RangeAnswer, type RangeEntry, type RangeLimits, type RecordKind,
 } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
@@ -87,24 +87,30 @@ function read<T>(call: () => T): T {
 }
 
 /** One §13 answer over [start, t], read as successive windows. A window over the
- * reader's per-answer budget is asked again in halves; one index over it stays
- * refused (RangeLimitError), as a whole answer over it was. Each window's
- * answer must be the exact answer to its own request (§13.1). */
+ * reader's per-answer budget is asked again in halves. One index over it is asked
+ * again under the venue's own bound for an index (`indexLimits`), since anyone
+ * can fill one index under a subject past a fixed budget; past that bound, or
+ * where the venue declares none, it stays refused (RangeLimitError). The budgets
+ * are local (§13.1). Each window's answer must be the exact answer to its own
+ * request. */
 function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, subject: Uint8Array, start: bigint, t: bigint,
   take: (answer: RangeAnswer) => boolean | void): void {
   let from = start, span = t - start + 1n;
   while (from <= t) {
     const to = from + span - 1n > t ? t : from + span - 1n;
     const request = Object.freeze({ venue: copyBytes(venueId), kind, subject: copyBytes(subject), fromIndex: from, toIndex: to });
-    let bytes: unknown;
-    try { bytes = read(() => venue.range(request, RANGE_LIMITS)); } catch (error) {
-      if (error instanceof RangeLimitError && to > from) { span = (to - from + 1n) / 2n; continue; }
-      throw error;
+    let limits = RANGE_LIMITS, bytes: unknown;
+    try { bytes = read(() => venue.range(request, limits)); } catch (error) {
+      if (!(error instanceof RangeLimitError)) throw error;
+      if (to > from) { span = (to - from + 1n) / 2n; continue; }
+      if (venue.indexLimits === undefined) throw error;
+      limits = copyLimits(venue.indexLimits());
+      bytes = read(() => venue.range(request, limits));
     }
     if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
     if (!(bytes instanceof Uint8Array)) throw new EncodingError("range answer");
     // `take` returns true once it needs no later window.
-    if (take(decodeRangeAnswer(bytes, request, RANGE_LIMITS)) === true) return;
+    if (take(decodeRangeAnswer(bytes, request, limits)) === true) return;
     from = to + 1n; span *= 2n;
   }
 }

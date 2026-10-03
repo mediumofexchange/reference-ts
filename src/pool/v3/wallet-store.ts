@@ -229,6 +229,7 @@ function heldView(source: RecordVenue, id: Uint8Array, at: bigint) {
   const venue: RecordVenue = {
     get id() { return new Uint8Array(id); }, lag: () => lag, witnessedIndex: () => at,
     range: (request, limits) => source.range(request, limits),
+    ...(source.indexLimits === undefined ? {} : { indexLimits: () => source.indexLimits!() }),
   };
   return { venue, check() {
     requireThat(same(source.id, id) && source.lag() === lag && source.witnessedIndex() === at, "CHANGED_VIEW", "venue changed during verification");

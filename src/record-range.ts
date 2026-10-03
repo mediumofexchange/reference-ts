@@ -11,6 +11,8 @@ import {
 } from "./venue-records.js";
 
 const FIXED_BYTES = 102, ENTRY_BYTES = 20, MAX_U32 = 0xffff_ffff, MAX_U64 = (1n << 64n) - 1n;
+/** An answer's bytes before its entries: context and request, then the count. */
+export const RANGE_FRAME_BYTES = FIXED_BYTES;
 export type RecordKind = 1 | 2 | 3 | 4;
 export const COMMITMENT_RANGE = 1 as const, REPLACEMENT_RANGE = 2 as const;
 export const REVOCATION_RANGE = 3 as const, PUBLICATION_RANGE = 4 as const;
