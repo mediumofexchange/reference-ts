@@ -57,8 +57,10 @@ mechanism or a later slice
 and its runtime, guides and reports remain at
 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
-The frozen transparent implementation and its local pilot remain adversarial
-and integration evidence. The duplicate private-payment experiment is retired;
+The transparent implementation and its local pilot are retired the same way
+([case map](../decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)),
+and remain at [8d207eb](https://github.com/mediumofexchange/reference-ts/tree/8d207eb).
+The duplicate private-payment experiment is retired;
 its active case map and immutable historical report are in the architecture guide.
 
 Use [the architecture map](PRIVATE_PAYMENT_ARCHITECTURE.md) for component
@@ -329,7 +331,8 @@ C2.3.3 by ascending sequence within an index with lesser-bytes ties and
 reader-established priors, replacement identities, first-entry revocations,
 and C2.5's walk over admitted replacements (one identity at its first entry,
 lead floor from the venue's lag, supersession, revocation and the lesser
-identity at one index), checked against the transparent path's walk. The
+identity at one index), checked against the answers the retired transparent
+walk gave for 135 scenarios. The
 reader orders several backings' publications by `venueOrder` in
 `src/pool/v3/scope-reader.ts`.
 The reader (`src/pool/v3/reader.ts`) reads them through a `RecordVenue`

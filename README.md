@@ -62,17 +62,18 @@ for proof setup and limits.
 |---|---|
 | [Architecture](docs/PRIVATE_PAYMENT_ARCHITECTURE.md) | Active components, models, and retirement conditions for retained experiments. |
 | [Protocol rules](docs/PROTOCOL_RULES.md) | Specification rules mapped to code and tests. |
-| [Backing encoding](src/backing.ts) | Canonical terms and the hash that names a backing. |
+| [Root terms](src/pool/v3/terms.ts) | Canonical v3 terms and the hash that names a backing. |
 | [Shielded pool](src/pool/) | Private notes, verification, history and durable operation. |
 | [Recovery design](docs/POOL_V3_RECOVERY_MAP.md) | Successor integration work and unresolved dependencies. |
 | [Who sees what](docs/POOL_V3_VISIBILITY.md) | What pool-v3 on Ergo discloses to each party, coalition and traffic observer. |
 | [Decisions](DECISIONS.md) | Dated choices, rationale, evidence and specification changes. |
 
-The frozen transparent path remains test evidence until its remaining cases
-move to the pool. The private-payment research framework has been retired;
-its active equivalents and historical results are mapped in the
+The transparent path and its local pilot are retired against a
+[case map](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)
+and remain at [8d207eb](https://github.com/mediumofexchange/reference-ts/tree/8d207eb).
+The private-payment research framework has been retired too; its active
+equivalents and historical results are mapped in the
 [retirement map](docs/PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions).
-The [local pilot guide](docs/PILOT.md) documents the transparent integration harness.
 
 ## Contributing
 

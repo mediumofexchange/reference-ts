@@ -11,7 +11,6 @@ vi.mock("../src/keys.js", async importOriginal => {
     return actual.verifySignatureStrict(...args);
   } };
 });
-import { decodeBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
 import { hiddenShared, lookAlikes } from "./hostile-bytes.js";
 
@@ -55,7 +54,7 @@ function all(): terms.RootTerms {
 }
 
 describe("v3 model constant-root terms", () => {
-  it("matches independent Buffer framing, node SHA256 and Ed25519; v2 refuses v3", () => {
+  it("matches independent Buffer framing, node SHA256 and Ed25519; v3 refuses v2", () => {
     for (const x of [fields(), all()]) {
       const bytes = raw(x), message = cat(Buffer.from("moe/backing-signature/v1"), hash(bytes));
       expect(Buffer.from(terms.encodeRootTerms(x))).toEqual(bytes);
@@ -65,7 +64,6 @@ describe("v3 model constant-root terms", () => {
       const signature = sign(null, message, sk(secret));
       expect(verify(null, message, createPublicKey(sk(secret)), signature)).toBe(true);
       expect(terms.verifyRootTermsSignature(bytes, signature)).toBe(true);
-      expect(() => decodeBacking(bytes)).toThrow("unsupported construction");
       const v2 = Buffer.from(bytes); v2[v2.indexOf("moe/pool/v3") + 10] = 0x32;
       expect(() => terms.decodeRootTerms(v2)).toThrow(EncodingError);
       expect(terms.verifyRootTermsSignature(v2, signature)).toBe(false);

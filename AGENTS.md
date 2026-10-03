@@ -37,10 +37,10 @@ one moded state machine and one reader over the neutral core and the shared prim
 retired (Git history at `a020215`); do not restore its mechanisms without a decision. V3 is
 adopted (pool-v3 §11.4, manifest in `v3/configuration.ts`); a byte, identity or verdict change is v4.
 
-The transparent path is frozen as a differential oracle and adversarial case library. Port cases as
-pool rules land, then retire covered material. Do not review or extend it otherwise, or port the
-retired exhibit walk/signed opening claim. Keep one production path and never reinterpret pinned
-versions. Develop wallet, transport and witness feasibility alongside the core.
+The transparent path and its pilot are retired against a case map (Git history at `8d207eb`):
+recover their cases from there when a version takes up reliance, payout in claims or cross-operator
+presentation, and never port the retired exhibit walk/signed opening claim. Keep one production path
+and never reinterpret pinned versions. Develop wallet, transport and witness feasibility alongside the core.
 
 Standing authorization effective 2026-09-08 covers development, protocol decisions and merge/push
 after verification until superseded; it excludes real funds, public releases, live deployment,

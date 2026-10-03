@@ -279,6 +279,8 @@ describe("the v3 operator journal", () => {
     await j.submit(issue());
     const c2 = await j.commit("c2"); await j.publish();
     const signedAt = venue.witnessedIndex();
+    // Published and not yet shown by the venue, it is served (C2.4.4).
+    expect((await j.package()).selection.sequence).toBe(c2.sequence);
     // Admission continues in the window, after the commitment in flight.
     expect(decodeReceipt(await j.submit(payment())).after).toBe(c2.sequence);
     expect(await refusal(j.commit("c3"))).toEqual(["SCHEDULE", undefined]);

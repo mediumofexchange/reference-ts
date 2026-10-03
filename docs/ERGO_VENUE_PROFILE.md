@@ -335,9 +335,9 @@ until the journal is reopened.
   Every subject is answered from the same sections, so no subject is
   registered before a sync. Readers take held commitments (pool-v3 §13.3),
   replacements and revocations from range answers through
-  `src/record-range.ts`. The view has no transparent `Venue` face, so the
-  frozen transparent path has no Ergo venue, and the profile's rule that
-  another declaration uses only kind 1–3 records holds by construction.
+  `src/record-range.ts`. The view has no other read face, so the profile's
+  rule that another declaration uses only kind 1–3 records holds by
+  construction.
 - **Publishing** (`src/ergo-publisher.ts`): a view given an `ErgoPublisher`
   exposes neutral `publishRecord(kind, subject, bytes)` for kinds 1–4.
   Kind 4 uses a maximal adjacent same-subject output run in one transaction;
