@@ -9,10 +9,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, 
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { compareBytes } from "../src/bytes.js";
 import { FixtureVenue, LOCAL_REFERENCE, type RecordVenue } from "../src/record-venue.js";
-import { directoryRoot, encodeCommitment, signCommitment, type Commitment } from "../src/venue-records.js";
+import { directoryRoot, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { decodeSnapshot, encodeReceipt, genesisEvidenceHash, nextEvidenceHash, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
@@ -25,7 +25,7 @@ import { decodeRecord, deliveryHash, encodePublication, encodeRecord, evidenceHa
 import { withdrawalRecord } from "../src/pool/v3/witness.js";
 import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
-import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
+import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
 
@@ -43,10 +43,10 @@ const counting = (identities: Configuration["circuits"] = configuration.circuits
 };
 interface Segment { header: SegmentHeader; id: Uint8Array; state: SegmentState; records: Uint8Array[]; evidence?: Uint8Array }
 
-function fixture() {
+function fixture(extra: Partial<RootTerms> = {}) {
   const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore(), accept: ProofCheck = { verify: () => true };
-  const fields = { configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
-    payout: { thing: "kept state test", quantumExponent: 0, perUnit: 1n } };
+  const fields: RootTerms = { configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
+    payout: { thing: "kept state test", quantumExponent: 0, perUnit: 1n }, ...extra };
   const terms = encodeRootTerms(fields), backing = rootTermsName(terms);
   const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
   const items: EvidenceItem[] = [];
@@ -117,7 +117,7 @@ function fixture() {
     checkpoint({ ...segment, records: rewritten, evidence: chain(rewritten) }, 4n, 4n);
     await issue(106n); checkpoint(segment, 5n, 5n);
   }
-  return { venue, segment, items, checkpoint, issued, issue, read, readReceipt, fetchedAfter, receipt, chain, first };
+  return { venue, backing, segment, items, checkpoint, issued, issue, read, readReceipt, fetchedAfter, receipt, chain, first };
 }
 
 /** A verifier refusing proof 99 and throwing `broken` on proof 98, answering in turn, or, with `parallel`, later
@@ -418,12 +418,18 @@ describe("pool-v3 §14 kept classes across reads", () => {
       scopedTerms: new Map([x, y].map(item => [hex(item.name), item.fields])), verifier: { verify: () => true }, index: 2n, block: [] });
     s1.records.push(bytes);
     checkpoint(s1, 3n, 3n);
-    const read = (store?: ReplayStore) => readFrontier(pack(items), x.signed, venue.witnessedIndex(),
-      { verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }) });
+    const read = (store?: ReplayStore, evidence?: EvidenceStore, signed = x.signed) => readFrontier(pack(items), signed, venue.witnessedIndex(),
+      { verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }), ...(evidence === undefined ? {} : { evidence }) });
     const kept = files(), store = opened(kept.path, kept), fresh = outcome(await read());
     expect(fresh.carrying.map(item => item.sequence)).toEqual(["1", "2", "3"]);
     expect(outcome(await read(store))).toEqual(fresh);
     expect(outcome(await read(store))).toEqual(fresh);
+    // From retained evidence, each selected backing keeps a walk of its own: reads of x and y alternate as fresh reads do.
+    const evidence = retained(kept.evidence), freshY = outcome(await read(undefined, undefined, y.signed));
+    for (let i = 0; i < 2; i++) {
+      expect(outcome(await read(store, evidence))).toEqual(fresh);
+      expect(outcome(await read(store, evidence, y.signed))).toEqual(freshY);
+    }
   });
 
   it("reuses a kept publication verdict only with its snapshot classified on this read's evidence, and discards one that snapshot rules out (§14)", async () => {
@@ -656,5 +662,123 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(() => new ReplayStore(":memory:", { digest: "x" })).toThrow(TypeError);
     expect(() => new ReplayStore("same", { digest: "same" })).toThrow(TypeError);
     expect(() => new ReplayStore("file", { digest: "d", every: 0 })).toThrow(TypeError);
+  });
+});
+
+describe("pool-v3 §14 kept walk", () => {
+  /** A kept file and retained evidence, with the number of checkpoints each read judges (writes a class for). */
+  function party() {
+    const kept = files(), store = opened(kept.path, kept), evidence = retained(kept.evidence);
+    const judged = vi.spyOn(store, "putVerdict");
+    const take = (): number => { const n = judged.mock.calls.length; judged.mockClear(); return n; };
+    return { kept, store, evidence, take };
+  }
+  const settled = (read: Promise<Awaited<ReturnType<typeof readFrontier>>>) =>
+    read.then(result => ({ read: outcome(result) }), (error: Error) => ({ refused: error.message }));
+
+  it("judges only checkpoints a later read has not, and reads at every index as a fresh read does", async () => {
+    const f = fixture(), p = party();
+    await f.first();
+    const at = (index?: bigint) => index === undefined ? {} : { at: index };
+    const both = async (index?: bigint) => {
+      const kept = await f.read(counting(), p.store, { evidence: p.evidence, ...at(index) });
+      expect(outcome(kept)).toEqual(outcome(await f.read(counting(), undefined, at(index))));
+      return p.take();
+    };
+    expect(await both()).toBe(5);
+    expect(await both()).toBe(0);
+    f.venue.advance(12n); await f.issue(107n); f.checkpoint(f.segment, 6n, 11n);
+    expect(await both()).toBe(1);
+    // An earlier index reads on a walk of its own, judging every checkpoint it reaches, and leaves the kept walk.
+    expect(await both(8n)).toBe(5);
+    f.venue.advance(16n); await f.issue(108n); f.checkpoint(f.segment, 7n, 15n);
+    expect(await both()).toBe(1);
+    expect(p.store.walkRows()).toBe(0);
+    // Reopened, the kept walk resumes: nothing is judged again.
+    p.store.close(); p.evidence.close();
+    const q = party(); Object.assign(q, { kept: p.kept });
+    const reopened = opened(p.kept.path, p.kept), evidence = retained(p.kept.evidence), judged = vi.spyOn(reopened, "putVerdict");
+    expect(outcome(await f.read(counting(), reopened, { evidence }))).toEqual(outcome(await f.read(counting())));
+    expect(judged.mock.calls.length).toBe(0);
+  });
+
+  it("begins again on other retained evidence, or on its own evidence restored to before the kept walk's last read", async () => {
+    const f = fixture(), p = party();
+    await f.first();
+    const fresh = async () => outcome(await f.read(counting()));
+    expect(outcome(await f.read(counting(), p.store, { evidence: p.evidence }))).toEqual(await fresh());
+    expect(p.take()).toBe(5);
+    p.evidence.close();
+    const backup = `${p.kept.evidence}.backup`; writeFileSync(backup, readFileSync(p.kept.evidence));
+    let evidence = retained(p.kept.evidence);
+    f.venue.advance(12n); await f.issue(107n); f.checkpoint(f.segment, 6n, 11n);
+    expect(outcome(await f.read(counting(), p.store, { evidence }))).toEqual(await fresh());
+    expect(p.take()).toBe(1);
+    // The evidence file restored from the earlier copy: the kept walk's mark is past it, so every checkpoint is judged.
+    evidence.close(); writeFileSync(p.kept.evidence, readFileSync(backup));
+    evidence = retained(p.kept.evidence);
+    expect(outcome(await f.read(counting(), p.store, { evidence }))).toEqual(await fresh());
+    expect(p.take()).toBe(6);
+    // Another retained store: begun again too.
+    const other = retained(join(dirname(p.kept.evidence), "other.sqlite"));
+    expect(outcome(await f.read(counting(), p.store, { evidence: other }))).toEqual(await fresh());
+    expect(p.take()).toBe(6);
+    // A private in-memory store reads on a walk of its own and leaves the kept walk to the retained one.
+    expect(outcome(await f.read(counting(), p.store))).toEqual(await fresh());
+    expect(p.take()).toBe(6);
+    expect(outcome(await f.read(counting(), p.store, { evidence: other }))).toEqual(await fresh());
+    expect(p.take()).toBe(0);
+  });
+
+  it("carries the silence clock forward: a gap, a lapse and later checkpoints read as a fresh read does at each index", async () => {
+    const f = fixture({ silence: { noCommitmentDuration: 8n, challengeWindow: 5n } }), p = party();
+    await f.first();
+    const both = async () => {
+      const kept = await settled(f.read(counting(), p.store, { evidence: p.evidence }));
+      expect(kept).toEqual(await settled(f.read(counting())));
+      return kept;
+    };
+    await both();
+    for (const index of [12n, 13n, 14n, 16n]) { f.venue.advance(index); await both(); }
+    // Past the boundary (5 + 8 + 1): a later checkpoint of the segment lapses.
+    f.venue.advance(18n); await f.issue(107n); f.checkpoint(f.segment, 6n, 17n);
+    for (const index of [18n, 22n]) { f.venue.advance(index); await both(); }
+    p.take();
+    f.venue.advance(24n);
+    const last = await both();
+    expect(p.take()).toBe(0);
+    expect("read" in last && last.read.clock?.boundary).toBe("14");
+    expect("read" in last && last.read.carrying.at(-1)).toMatchObject({ sequence: "6", class: "lapsed" });
+  });
+
+  it("keeps a term open to later checkpoints, and reads a successor link that takes effect after the kept index", async () => {
+    const ruleSecret = b(41), nextSecret = b(42), next = ed25519.getPublicKey(nextSecret);
+    const f = fixture({ replacementRule: ed25519.getPublicKey(ruleSecret) }), p = party();
+    await f.first();
+    let last: Awaited<ReturnType<typeof settled>> | undefined;
+    const both = async () => {
+      const kept = await settled(f.read(counting(), p.store, { evidence: p.evidence }));
+      expect(kept).toEqual(await settled(f.read(counting())));
+      last = kept;
+      return p.take();
+    };
+    expect(await both()).toBe(5);
+    f.venue.advance(12n); await f.issue(107n); f.checkpoint(f.segment, 6n, 11n);
+    expect(await both()).toBe(1);
+    const fields = { role: ROLE_OPERATOR, successor: next, predecessor: f.backing, effective: 20n,
+      signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+    const message = replacementMessage(f.backing, fields);
+    f.venue.advance(16n);
+    f.venue.witness(2, f.backing, 13n, encodeReplacement(f.backing, { ...fields, signature: ed25519.sign(message, ruleSecret),
+      successorSignature: ed25519.sign(message, nextSecret) }));
+    f.venue.advance(16n); await f.issue(108n); f.checkpoint(f.segment, 7n, 15n);
+    expect(await both()).toBe(1);
+    f.venue.advance(22n); await f.issue(109n); f.checkpoint(f.segment, 8n, 21n);
+    await both();
+    f.venue.advance(24n);
+    expect(await both()).toBe(0);
+    // The successor's term holds from 20: the chain grew past the kept index, and the original's later checkpoint is outside its term.
+    expect(last !== undefined && "read" in last && last.read.ranges.chain.length).toBe(2);
+    expect(last !== undefined && "read" in last && last.read.carrying.map(item => item.sequence)).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
   });
 });

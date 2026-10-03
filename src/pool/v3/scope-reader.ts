@@ -551,8 +551,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     }
     rechecked.add(id);
   };
-  /** A verdict row as the walk reads it, its scope from the segment's row. */
-  const load = (row: WalkVerdict): ScopeVerdict => {
+  /** A verdict row as the walk reads it for `backing`, its scope from the segment's row. A valid class's totals are
+   * that backing's at its position: the row is shared by every backing the checkpoint scopes, and a walk for
+   * another backing writes it again with its own. */
+  const load = (row: WalkVerdict, backing: Uint8Array): ScopeVerdict => {
     recheck(row);
     const scope = store.scope(row.segment)!, header = decodeSegmentHeader(scope.header);
     const base: Classified = { commitment: { operator: row.operator, sequence: row.sequence, root: row.root, signature: row.signature },
@@ -560,9 +562,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (row.class === "excluded") return { ...base, class: "excluded", check: row.detail! };
     if (row.class === "lapsed") return { ...base, class: "lapsed", ...(row.detail === undefined ? {} : { clock: JSON.parse(row.detail) as ClockRecord }) };
     const s = row.state!;
+    const { issued, burned } = store.total(s.ns, s.position, hex(backing));
     return { ...base, class: "valid", openingIndex: s.opening,
       scopedTerms: new Map(header.entries.map((scoped, i) => [hex(scoped.backing), decodeRootTerms(scope.terms[i]!.terms)])),
-      state: new ReplayResult(store, s.ns, s.position, { issued: s.issued, burned: s.burned, adoptionIndices: s.adoption, identity: s.identity }) };
+      state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }) };
   };
   const keep = (held: HeldCommitment, verdict: ScopeVerdict): void => {
     const c = held.commitment, state = verdict.class === "valid" ? verdict.state : undefined;
@@ -610,7 +613,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     await advance(backing, terms, child);
     const key = store.latestValid(walk, backing, child === undefined ? undefined : child.strict ? { index: child.index, strict: true } :
       { index: child.index, operator: child.commitment.operator, sequence: child.commitment.sequence });
-    return key === undefined ? undefined : load(store.verdict(walk, key)!) as ValidScope;
+    return key === undefined ? undefined : load(store.verdict(walk, key)!, backing) as ValidScope;
   };
   const snapshotIndexAt = async (backing: Uint8Array, terms: RootTerms, index: bigint): Promise<bigint> => {
     await advance(backing, terms, { index, strict: true });
@@ -645,7 +648,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   };
   const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
     const id = keyOf(held.commitment), key = rowKey(held.commitment), classified = store.verdict(walk, key);
-    if (classified !== undefined) return Promise.resolve(load(classified));
+    if (classified !== undefined) return Promise.resolve(load(classified, backing));
     if (running.has(id)) return running.get(id)!;
     let kept: WalkVerdict | undefined;
     try { kept = store.keptVerdict(key); } catch (error) {
