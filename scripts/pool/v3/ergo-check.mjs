@@ -15,7 +15,7 @@ import { BranchSupplier, Chain, plainOutput, recordOutput, transaction } from ".
 import { FixtureVenue } from "../../../dist/record-venue.js";
 import { venueOrder } from "../../../dist/pool/v3/scope-reader.js";
 import { recordReader, replayEvidencePackage, RANGE_LIMITS } from "./local-replay.mjs";
-import { checkCompactRuntime } from "./compact-runtime-check.mjs";
+import { checkFrontier } from "./frontier-check.mjs";
 
 const hex = bytes => Buffer.from(bytes).toString("hex");
 export const ERGO_EVIDENCE_KIND = "ergo-venue-synthetic-chain";
@@ -132,7 +132,7 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
       rawBytes: blocks.reduce((sum, block) => sum + block.bytes.length + block.section.reduce((n, tx) => n + tx.unsigned.length + tx.witnessId.length, 0), 0) };
   };
   const run = (input, chosen) => replayEvidencePackage(portable(input), chosen, codec);
-  const counts = { groups: 0, compactRuntimeGroups: 0, kind4Subjects: 0, unionPositions: 0, otherRanges: 0, rawBytes: 0, blocks: 0 };
+  const counts = { groups: 0, frontierGroups: 0, kind4Subjects: 0, unionPositions: 0, otherRanges: 0, rawBytes: 0, blocks: 0 };
   await test("every replay group agrees through ErgoVenue from verified headers, exact unsigned bytes and checked roots", async () => {
     for (const { label, payload, result } of groups) {
       const { input, blocks, pin, rawBytes } = convert(payload);
@@ -163,8 +163,8 @@ export async function checkErgoReplay({ groups, primary, codec, verifier, portab
         counts.otherRanges++;
       }
       assert.deepEqual(await run(input, selected({ pin })), underErgo(result), label);
-      if (await checkCompactRuntime({ payload: input, result: underErgo(result), verifier: selected({ pin }), codec, portable, label })) {
-        counts.compactRuntimeGroups++;
+      if (await checkFrontier({ payload: input, result: underErgo(result), verifier: selected({ pin }), codec, portable, label })) {
+        counts.frontierGroups++;
       }
       counts.groups++; counts.rawBytes += rawBytes; counts.blocks += blocks.length;
     }

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compareBytes, EncodingError } from "../src/bytes.js";
-import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
+import { FixtureVenue, LOCAL_REFERENCE, type RecordVenue } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, encodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR,
   signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
@@ -17,7 +17,7 @@ import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { decodeFaultEvidence, encodeFaultEvidence } from "../src/pool/v3/fault-evidence.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import type { CanonicalCheckpoint } from "../src/pool/v3/scope-reader.js";
-import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
+import { readFrontier, readPackage, refusalFacts } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -227,6 +227,10 @@ describe("single-backing complete frontier reader", () => {
     }
     await expect(f.read(pack([{ kind: 5, payload: b(1) }]))).rejects.toMatchObject({ status: "unsupported-scope" });
     await expect(f.read(pack([{ kind: 1, payload: b(1) }]))).rejects.toMatchObject({ check: "CONFIGURATION" });
+    // A selection naming another venue than the reader's reference one is refused before the package is read.
+    const opening = f.checkpoint(f.segment(), 1n);
+    await expect(readPackage(f.selectedPackage(opening), { ...f.selection(opening), venue: b(99) }, f.options))
+      .rejects.toMatchObject({ check: "VENUE_REFERENCE" });
   });
 
   it("reads a package the same with a directory no commitment names, whether or not it decodes", async () => {
@@ -359,6 +363,18 @@ describe("single-backing compact fault packages", () => {
     const f = await compactFixture();
     await expect(f.readSelected(f.compactItems, [f.fault], f.hostile)).rejects.toMatchObject({ status: "unresolved-evidence" });
     await expect(f.readSelected(f.f.items, [f.fault], f.hostile)).rejects.toMatchObject({ check: "PROOF" });
+  });
+
+  it("reports a refusal's facts from the read that refused, and none of an earlier read (Next 4(h))", async () => {
+    const f = await compactFixture(), refused = await f.readSelected(f.f.items, [f.fault], f.hostile).then(() => undefined, (e: unknown) => e);
+    expect(refused).toMatchObject({ check: "PROOF" });
+    expect(refusalFacts(refused)?.faultEvidence).toEqual((await f.readCompact()).faultEvidence);
+    // The same error thrown again before another read's walk (a caller's adapter sharing one instance) keeps none.
+    const own = f.f.venue, venue: RecordVenue = { id: own.id, witnessedIndex: () => own.witnessedIndex(),
+      range: (request, limits) => own.range(request, limits), lag: () => { throw refused; } };
+    await expect(readPackage(pack(f.f.items), f.f.selection(f.selected), { ...f.f.options, venue })).rejects.toBe(refused);
+    expect(refusalFacts(refused)).toBeUndefined();
+    expect(refusalFacts(new Error("never read"))).toBeUndefined();
   });
 
   it("cannot descend with altered target fields, snapshot fields, positions or suffix", async () => {

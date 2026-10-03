@@ -7,7 +7,7 @@ import { ScopeTree } from "../../../dist/pool/scope.js";
 import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { directoryRoot, encodeCommitment, encodeReplacement, replacementHash, replacementMessage, ROLE_OPERATOR, signCommitment } from "../../../dist/venue-records.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
-import { inspectRestorationEvidence, LIMITS } from "./evidence-reader.mjs";
+import { LIMITS } from "./codec.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { FixtureVenue } from "../../../dist/record-venue.js";
@@ -294,7 +294,6 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
       const answer = await replayLocalPackage({ ...missing, seed: receiverSeed }, verifier, codec);
       assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
     }
-    assert.equal(inspectRestorationEvidence(receiverSeed, payload.selection, payload.package, codec).status, "unsupported-scope");
     // A continuation with no held opening is unresolved, so a later operator
     // cannot treat it as excluded and roll back to its remembered A state.
     const stale = checkpoint(segment(operatorSecret, toA.link, 3n, reference(a1)), 3n, 14n);

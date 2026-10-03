@@ -9,11 +9,12 @@ import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
 import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration } from "./configuration.js";
-import { faultObserver, type FaultResult } from "./fault-observer.js";
+import { faultObserver, type FaultResult, type ReportingFaultObserver } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
 import type { ReaderSelection, SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
+import type { ReceiptFact } from "./receipt-state.js";
 import { checkpointScope } from "./scope-evidence.js";
 import { classifyScopeFrontier, classifyScopes, type FrontierContext, type FrontierResult, type ImportContext,
   type ScopeResult } from "./scope-reader.js";
@@ -92,12 +93,46 @@ function readKinds(batch: EvidenceBatch): void {
  * the selected envelope remains complete. The selection's scope and every
  * scope in its ancestry may name one backing or several (C2.10.3–7). */
 export async function readPackage(source: PackageSource, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
-  const owned = ownPackageRead(selected, options);
-  return withEvidence(source, options, batch => keptOrAgain(options, async () => {
-    const { context, faults, venue } = openPackage(batch, owned, options);
-    const result = await classifyScopes(context, venue, batch);
-    return { ...result, ...faults.result() };
-  }));
+  return withFacts(async attach => {
+    const owned = ownPackageRead(selected, options);
+    return withEvidence(source, options, batch => keptOrAgain(options, async () => {
+      const { context, faults, venue } = openPackage(batch, owned, options);
+      try {
+        const result = await classifyScopes(context, venue, batch);
+        return { ...result, ...faults.result() };
+      } catch (error) { throw attach(error, faults, context); }
+    }));
+  });
+}
+
+/** What a package read had established when it refused: the observational fault facts (pool-v3 §9) and a
+ * receipt walk's contradictions (C2.10.9b). Neither changes the refusal; a caller may report them beside it. */
+export interface RefusalFacts extends FaultResult {
+  readonly receiptEvidence?: { readonly contradictedAt: readonly ReceiptFact[] };
+}
+const established = new WeakMap<object, RefusalFacts>();
+/** The facts a package read established before it threw `error` (WORK.md Next 4(h)); undefined for an error
+ * thrown before the walk began. Facts are keyed by the error object: an adapter sharing one error instance
+ * between concurrent reads may see one read's facts cleared by the other's. */
+export function refusalFacts(error: unknown): RefusalFacts | undefined {
+  return error !== null && typeof error === "object" ? established.get(error) : undefined;
+}
+type Attach = (error: unknown, faults: ReportingFaultObserver, context: Pick<ImportContext, "receiptWalk">) => unknown;
+/** One read whose walk attaches its facts to what it throws. An error this read threw without attaching (one a
+ * caller's adapter shares across reads, say) keeps no facts of an earlier read. */
+async function withFacts<T>(read: (attach: Attach) => Promise<T>): Promise<T> {
+  let attached: unknown;
+  const attach: Attach = (error, faults, context) => {
+    if (error !== null && typeof error === "object") {
+      established.set(error, { ...faults.result(), ...(context.receiptWalk === undefined ? {} : { receiptEvidence: context.receiptWalk.evidence() }) });
+    }
+    attached = error;
+    return error;
+  };
+  try { return await read(attach); } catch (error) {
+    if (error !== attached && error !== null && typeof error === "object") established.delete(error);
+    throw error;
+  }
 }
 
 /** §14: kept state that fails a check before reuse is discarded, and the read classifies again from the evidence.
@@ -160,12 +195,16 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
  * Selection and receipt metadata supply no frontier authority. */
 export async function readFrontier(source: PackageSource, signed: SignedTerms, judgingIndex: bigint,
   options: FrontierReader): Promise<FrontierResult & FaultResult> {
-  const owned = ownFrontierRead(signed, judgingIndex, options);
-  return withEvidence(source, options, batch => keptOrAgain(options, async () => {
-    const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
-    const result = await classifyScopeFrontier(context, venue, batch);
-    return { ...result, ...faults.result() };
-  }));
+  return withFacts(async attach => {
+    const owned = ownFrontierRead(signed, judgingIndex, options);
+    return withEvidence(source, options, batch => keptOrAgain(options, async () => {
+      const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
+      try {
+        const result = await classifyScopeFrontier(context, venue, batch);
+        return { ...result, ...faults.result() };
+      } catch (error) { throw attach(error, faults, {}); }
+    }));
+  });
 }
 
 /** The reader's own inputs and the authenticated terms, checked before the package is read. */

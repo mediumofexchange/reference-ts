@@ -1,15 +1,9 @@
-// Served-trail transport and LOCAL evidence authentication, pool-v3 §10 at
-// 7ea0ee8. No terms validation, history replay, complete opening or verdict.
-import { sha256 } from "@noble/hashes/sha2.js";
+// Served-trail transport, pool-v3 §10 at 7ea0ee8: the frame and its one reader.
+// Which records are a snapshot's evidence is the evidence store's (`served`).
 import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, EncodingError, FrameFeed, type FrameReader } from "../../bytes.js";
 import { V3_SEGMENT_CONTEXT as HEADER_CONTEXT, V3_TRAIL_CONTEXT as CONTEXT } from "../../contexts.js";
 import { isValue } from "../field.js";
 import { decodeSegmentHeader, MAX_HEADER_BYTES, type SegmentHeader } from "./headers.js";
-import {
-  decodeSnapshot, genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, type Snapshot,
-} from "./commitments.js";
-import { decodeRecord, hashEvidenceFields, statementBytes } from "./records.js";
-import type { ExpectedSnapshot } from "./fault-evidence.js";
 import { MAX_ROOT_TERMS_BYTES } from "./terms.js";
 
 const FIXED_BYTES = 29, MIN_HEADER_BYTES = 263;
@@ -142,7 +136,7 @@ export function* trailReader(sink: TrailSink, total: bigint,
 
 /** Shape and budgets precede header decoding and all payload hashing.
  * Each caller field is read once into the owned trail returned, the only one
- * the encoder and the verifier then read. */
+ * the encoder then reads. */
 function requireTrail(input: ServedTrail, budgetIn?: TrailLimits): { size: number; header: SegmentHeader; trail: ServedTrail } {
   const budget = budgetIn === undefined ? undefined : limits(budgetIn); object(input);
   const termField = input.terms, recordField = input.records;
@@ -220,34 +214,4 @@ export function decodeTrail(bytesIn: Uint8Array, budgetIn?: TrailLimits): Served
   }, BigInt(input.length), { keepLongTerms: true, budget }));
   feed.feed(input); feed.end();
   return Object.freeze({ header: header!, terms: Object.freeze(terms), records: Object.freeze(records) });
-}
-
-/** True authenticates the header and ordered local event evidence only.
- * It does NOT authenticate terms/signatures, recompute history/state/totals,
- * resolve imports/adoption/record ranges or classify a checkpoint. Strict inner
- * record failure is inconclusive here; use §9 for raw target authentication.
- * The expected snapshot must come from the expected signed directory.
- * Resource and programming failures propagate, never becoming exclusion. */
-export function verifyTrailEvidence(expectedIn: ExpectedSnapshot, snapshotIn: Snapshot,
-  trailIn: ServedTrail, budget?: TrailLimits): boolean {
-  try {
-    // Every argument is read once into owned values; the answer is about them.
-    object(expectedIn);
-    const expected = { backing: bytes(expectedIn.backing, 32), segment: bytes(expectedIn.segment, 32), digest: bytes(expectedIn.digest, 32) };
-    const { header, trail } = requireTrail(trailIn, budget);
-    const snapshot = decodeSnapshot(snapshotBytes(snapshotIn)), digest = snapshotDigest(snapshot);
-    if (compareBytes(snapshot.backing, expected.backing) !== 0 || compareBytes(snapshot.segment, expected.segment) !== 0 ||
-        compareBytes(digest, expected.digest) !== 0 || compareBytes(sha256(trail.header), expected.segment) !== 0 ||
-        !header.entries.some(entry => compareBytes(entry.backing, expected.backing) === 0)) return false;
-    let evidence = genesisEvidenceHash(expected.segment);
-    for (let i = 0; i < trail.records.length; i++) {
-      const record = decodeRecord(trail.records[i]!);
-      const triple = hashEvidenceFields(sha256(statementBytes(record)), record.proof, record.authorization);
-      evidence = nextEvidenceHash(evidence, triple, BigInt(i) + 1n);
-    }
-    return compareBytes(evidence, snapshot.evidenceHash) === 0;
-  } catch (error) {
-    if (error instanceof EncodingError) return false;
-    throw error;
-  }
 }

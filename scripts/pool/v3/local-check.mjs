@@ -16,7 +16,7 @@ import { ScopeTree } from "../../../dist/pool/scope.js";
 import { limbsOf, fieldToBytes } from "../../../dist/pool/field.js";
 import { decodeReplacement, directoryRoot, encodeCommitment, encodeReplacement, encodeRevocation, replacementHash, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation } from "../../../dist/venue-records.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
-import { LIMITS } from "./evidence-reader.mjs";
+import { LIMITS } from "./codec.mjs";
 import { RadixSpentSet } from "../../../dist/pool/v3/spent-set.js";
 import { recordReader, replayLocalPackage, replayEvidencePackage, PACKAGE_LIMITS, RANGE_LIMITS } from "./local-replay.mjs";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../../../dist/record-venue.js";
@@ -30,8 +30,7 @@ import { field } from "../fixtures.mjs";
 import { RELATION_KINDS, loadManifest, checkSources, adoptedConfiguration, readKeys } from "./manifest.mjs";
 import { v3Codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
-import { checkCompactRuntime } from "./compact-runtime-check.mjs";
-import { checkScopeRuntime } from "./scope-runtime-check.mjs";
+import { checkFrontier } from "./frontier-check.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
 assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "unknown local-check option");
@@ -313,7 +312,8 @@ try {
       assert.equal(result.check, "CONFIGURATION"); assert.equal(result.audit, null);
     }
     const missing = clone(complete); delete missing.package.configuration;
-    assert.equal((await replayLocalPackage(missing, beforeProof, codec)).check, "CONFIGURATION");
+    // Without its configuration the package is missing evidence.
+    assert.equal((await replayLocalPackage(missing, beforeProof, codec)).status, "unresolved-evidence");
     assert.equal((await replayLocalPackage({ ...complete, issuerKey }, beforeProof, codec)).check, "INPUT_FIELDS");
     const domainSwap = clone(complete); domainSwap.selection.domain = b(88);
     assert.equal((await replayLocalPackage(domainSwap, beforeProof, codec)).check, "CONFIGURATION");
@@ -384,10 +384,10 @@ try {
     const misplaced = await replayLocalPackage(wrongOperator, verifier, codec);
     assert.equal(misplaced.status, "lapsed-selection"); assert.equal(misplaced.audit, null); assert.deepEqual(misplaced.candidates, []);
     await reject(wrongLink, "TERMS_SCOPE");
-    // Without the venue's chain, empty-book evidence supports only the original scope.
+    // Without the venue's chain nothing establishes the terms' authority: the read is unsupported.
     for (const input of [wrongOperator, wrongLink]) {
       const { venue: _, ...trailOnly } = input;
-      await reject(trailOnly, "TERMS_INITIAL_SCOPE");
+      assert.equal((await replayLocalPackage(trailOnly, verifier, codec)).status, "unsupported-scope");
     }
   });
   await test("a successor's empty book is derived from the witnessed chain rather than the original key", async () => {
@@ -704,6 +704,11 @@ try {
     const kept = await settled(silentPackage({ checkpoints: pair }));
     assert.deepEqual(classes(kept), ["valid", "valid", "lapsed"]);
     assert.deepEqual(clockOf(kept), clock("10", "3", "17", true, "14"));
+    // C2b.6.1: no non-carrying commitment resets the clock. The operator's sequence 4 at index 8 carries only
+    // another backing; it is held, closes nothing, and the selection still stands.
+    const dropped = await settled(silentPackage({ extra: [{ sequence: 4n, at: 8n, directory: before }] }));
+    assert.deepEqual(classes(dropped), ["valid", "valid"]);
+    assert.deepEqual(clockOf(dropped), clock("10", "3", "17", true, "14"));
     // Witnessed at the last index the duration allows, a checkpoint closes the interval and supersedes.
     const inTime = [checkpoint(3n, 3n), checkpoint(4n, 13n)];
     await settled(silentPackage({ checkpoints: inTime }), "superseded-selection");
@@ -790,9 +795,9 @@ try {
     await assert.rejects(replayLocalPackage(complete, { ...verifier, record: () => ({ id: venue, range() { throw failure; }, witnessedIndex: () => 20n, lag: () => 2n }) }, codec), error => error === failure);
     const { venue: omitted, ...withoutVenue } = complete;
     assert.equal(omitted.records.length, 4);
+    // Without the verifier's own ranges nothing is judged (§13).
     const plain = await replayLocalPackage(withoutVenue, verifier, codec);
-    assert.equal(plain.status, "selected-local-replay"); assert.equal(plain.rangeEvidence, "none");
-    assert.equal(plain.currentRangeAuthenticated, false); assert.equal(plain.termsAuthorityAuthenticated, false); assert.equal(plain.audit.range, null);
+    assert.equal(plain.status, "unsupported-scope"); assert.equal(plain.rangeEvidence, "none"); assert.equal(plain.audit, null);
     assert.equal((await replayEvidencePackage(portable(withoutVenue), verifier, codec)).status, "unsupported-scope");
   });
   let dependency;
@@ -1004,14 +1009,11 @@ try {
     await refuse({ ...packed, package: codec.encodeEvidencePackage(order([...items, other]), PACKAGE_LIMITS) }, "unsupported-scope");
     const claimedRange = { kind: 11, payload: Buffer.from('{"complete":true,"final":true}') };
     await refuse({ ...packed, package: codec.encodeEvidencePackage([...items, claimedRange], PACKAGE_LIMITS) }, "unsupported-scope");
-    await refuse({ ...packed, package: new Uint8Array(Number(PACKAGE_LIMITS.maxBytes) + 1) }, "resource-refusal");
-    const originalClone = globalThis.structuredClone;
-    try {
-      globalThis.structuredClone = () => { throw new Error("unbounded input reached ownership copy"); };
-      await refuse({ ...packed, package: new Uint8Array(Number(PACKAGE_LIMITS.maxBytes) + 1) }, "resource-refusal");
-      await refuse({ ...packed, selection: { ...packed.selection, extra: new Uint8Array(2048) } }, "unresolved-evidence");
-      await refuse({ ...packed, seed: new Uint8Array(33) }, "unresolved-evidence");
-    } finally { globalThis.structuredClone = originalClone; }
+    // The reader bounds each item, not the package (its item budget is the evidence store's unit tests'); bytes
+    // that frame no package are unresolved.
+    await refuse({ ...packed, package: new Uint8Array(Number(PACKAGE_LIMITS.maxBytes) + 1) }, "unresolved-evidence");
+    await refuse({ ...packed, selection: { ...packed.selection, extra: new Uint8Array(2048) } }, "unresolved-evidence");
+    await refuse({ ...packed, seed: new Uint8Array(33) }, "unresolved-evidence");
     await refuse({ ...packed, package: packed.package.subarray(0, packed.package.length - 1) }, "unresolved-evidence");
     await refuse({ ...packed, package: complete.package }, "unresolved-evidence");
     await refuse({ ...packed, complete: true }, "invalid-local-replay");
@@ -1038,20 +1040,8 @@ try {
     }
     const storage = new Uint8Array(2_097_152); storage.set(viewed.selection.root, 17);
     viewed.selection.root = storage.subarray(17, 49);
-    const originalClone = globalThis.structuredClone;
-    let ownershipCopies = 0;
-    try {
-      globalThis.structuredClone = (value, ...options) => {
-        if (value?.package && value?.selection) {
-          ownershipCopies += 1;
-          assert.equal(value.package.configuration.buffer.byteLength, value.package.configuration.length);
-          assert.equal(value.selection.root.buffer.byteLength, 32); assert.equal(value.seed.buffer.byteLength, 32);
-        }
-        return originalClone(value, ...options);
-      };
-      assert.deepEqual(await replayEvidencePackage(viewed, verifier, codec), receiver);
-      assert.equal(ownershipCopies, 1);
-    } finally { globalThis.structuredClone = originalClone; }
+    // Views into larger allocations read as their own bytes.
+    assert.deepEqual(await replayEvidencePackage(viewed, verifier, codec), receiver);
     for (const field of ["package", "seed"]) {
       const p = portable({ ...complete, seed: receiverSeed }), original = p[field];
       p[field] = new Uint8Array(new SharedArrayBuffer(original.length)); p[field].set(original);
@@ -1101,12 +1091,6 @@ try {
   await test("history-free term and silence lapse agree in portable packages", async () => {
     for (const { payload, result } of lapsePairs) assert.deepEqual(await replayEvidencePackage(portable(payload), verifier, codec), result);
   });
-  const scopeRuntime = await checkScopeRuntime({ portable, verifier, reference, codec, test, pairs: [
-    { payload: scoped.payload, result: scoped.result },
-    { payload: scopeRecovery.payload, result: scopeRecovery.result }, { payload: scopeRecovery.payloadY, result: scopeRecovery.resultY },
-    scopeRecovery.unequal, scoped.compact, scoped.lapse, scopeRecovery.lapse, ...scoped.intrinsicCases, ...scopeRecovery.intrinsicCases,
-    ...[...scopeReceiptPairs, ...scopeCountPairs].map(([payload, result]) => ({ payload, result })),
-  ] });
   const recovery = await checkRecovery({ codec, verifier, configurationBytes, domain, venue, prove,
     test: (name, fn) => test(`Recovery: ${name}`, fn), operatorSecret, issuerSecret, receiverSeed, payerSeed });
   intrinsicPairs.push(...recovery.intrinsicCases);
@@ -1155,12 +1139,12 @@ try {
       assert.equal(result.audit, null); assert.deepEqual(result.candidates, []);
     }
   });
-  let compactRuntimeGroups = 0;
-  await test("public single-backing package and frontier readers preserve compact fault, import and recovery verdicts", async () => {
+  let frontierGroups = 0;
+  await test("the frontier reader reaches the selected compact fault, import and recovery verdicts from the root terms", async () => {
     for (const item of replayPairs({ imported, silent, recovery }, { receiverSeed })) {
-      if (await checkCompactRuntime({ ...item, verifier, codec, portable })) compactRuntimeGroups++;
+      if (await checkFrontier({ ...item, verifier, codec, portable })) frontierGroups++;
     }
-    assert.ok(compactRuntimeGroups > 0);
+    assert.ok(frontierGroups > 0);
   });
   let ergo;
   if (withErgo) {
@@ -1276,7 +1260,7 @@ try {
     ...["issue", "spend", "burn", "demand", "settle", "request", "notes"].map(name => `scripts/pool/v3/circuits/${name}.nr`),
     "src/pool/circuits/vendor/poseidon2.nr", "package-lock.json"]);
   checkSources(manifest);
-  const report = { schema: "moe-v3-local-replay-experiment-24", specification: V3_SPECIFICATION, node: process.version,
+  const report = { schema: "moe-v3-local-replay-experiment-25", specification: V3_SPECIFICATION, node: process.version,
     compactIntrinsic: intrinsicPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactAuthorizations: authorizationPairs.map(item => ({ packageBytes: portable(item.payload).package.length, result: item.result })),
     compactFaults: { faultRecordBytes: imported.compact.faultBytes,
@@ -1288,11 +1272,10 @@ try {
     configHash: hex(domain), configurationBytes: configurationBytes.length, backing: hex(backing),
     platform: process.platform, checks, identities, metrics,
     sourceSha256Lf: sourceHashes(sources),
-    compactRuntimeGroups,
+    frontierGroups,
     audit, receiver, dependency, imports: { packageBytes: portable(imported.payload).package.length,
       audit: imported.result, receiver: imported.receiver },
     silenceImports: { packageBytes: portable(silent.payload).package.length, audit: silent.result, receiver: silent.receiver },
-    scopeRuntime,
     scopeImports: { packageBytes: portable(scoped.payload).package.length,
       audit: scoped.result, receiver: scoped.receiver, receiverOtherBacking: scoped.receiverY },
     scopeRecovery: { packageBytes: portable(scopeRecovery.payload).package.length,

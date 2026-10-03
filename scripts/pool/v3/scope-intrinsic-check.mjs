@@ -5,7 +5,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { directoryRoot, signCommitment } from "../../../dist/venue-records.js";
 import { replayLocalPackage } from "./local-replay.mjs";
 import { compactFault, withoutFaultReasons } from "./fault-check.mjs";
-import { LIMITS } from "./evidence-reader.mjs";
+import { LIMITS } from "./codec.mjs";
 
 const same = (a, b) => Buffer.compare(a, b) === 0;
 const hex = bytes => Buffer.from(bytes).toString("hex");

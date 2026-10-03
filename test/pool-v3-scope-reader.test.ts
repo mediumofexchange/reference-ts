@@ -21,7 +21,7 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTer
 import { encodeTrail } from "../src/pool/v3/trail.js";
 
 // Oracle proofs isolate the scope reader's evidence contract; real-proof
-// scope groups run in scripts/pool/v3/local-check.mjs (scope-runtime-check.mjs).
+// scope groups run in scripts/pool/v3/local-check.mjs through readPackage.
 const b = (n: number) => new Uint8Array(32).fill(n);
 const issuerSecret = b(3), operatorSecret = b(4);
 const issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
