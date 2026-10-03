@@ -3,12 +3,13 @@
 Updated: 2026-10-03
 
 ## Goal
-**Slice 11: the design point** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 4).
+**Slice 11: the design point** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 4; [M11c's method](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)).
 Acceptance: through the `moe` commands on the synthetic node, measured against the [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
 operator admission at peak, reader first sync and wallet steady state, with memory independent of history length and restarts
 that resume without re-verifying retained history; Next 4 (k)–(n), (s) closed. Milestones: **M11a** the Ergo view on append-only
 SQLite rows (flat heap and per-sync work over a long synthetic chain, reopen without PoW/root re-checks, same verdicts and answers);
-M11b the scale findings; M11c the measurements and their report. Stop boundary: all three delivered; a budget that fails names its lever.
+M11b the scale findings; M11c the measurements and report: commands with real proofs at ~10³ statements, the runtime with stand-in
+records under real verification load at 10⁴/10⁵ (10⁶ local only; no stand-in path in the product). Stop: all three; a failing budget names its lever.
 Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices 9–10 (PRs #69–#91). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
@@ -21,9 +22,9 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
 - **M11b in progress**. M11b1 (PR #93), (n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6.
   M11b2 (PR #94, 014a038), (l): one index past the reader's 4,096-entry/1 MiB budget is asked again under the venue's `indexLimits`, capped at
-  `INDEX_LIMITS` (2^18, 32 MiB; [view](docs/ERGO_VENUE_PROFILE.md)). M11b3 (`claude/m11b-trail-forward`), (m): a served trail is read forward
+  `INDEX_LIMITS` (2^18, 32 MiB; [view](docs/ERGO_VENUE_PROFILE.md)). M11b3 (PR #95, e2c503d), (m): a served trail is read forward
   by position (index `chain(segment, position)`; evidence layout 4, journal `pool-store/v3/5`), so no walk precedes its first byte; a fork
-  falls back to the walk back ([service](docs/POOL_V3_SERVICE.md)); PR #95, reports: CI run 37151741994. Each had one fresh adversarial
+  falls back to the walk back ([service](docs/POOL_V3_SERVICE.md)); reports: CI run 37151741994. Each had one fresh adversarial
   review, findings fixed and read back. **Next: (k)**, then (s); M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
@@ -38,8 +39,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 
 ## Next
 1. Slice 9 done (Goal); the numbering below is kept for its references.
-2. Privacy duties the [visibility matrix](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) finds: `freshen`, the relay
-   command and explanations landed (M10c2). Past slice 10: a transport and syncs not identifying the holder (own unit and review).
+2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2). **Slice 12** ([direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)):
+   duties 2–3 (transport, a credential not per holder, syncs, gap funding); first probe: clients through a SOCKS5 proxy such as Tor.
 3. M10c2 leftovers: synthetic index lag knob; testnet context has no difficulty floor (M10d); read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
@@ -63,9 +64,9 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch
    budget on known headers; pre-existing); `moe venue audit` for restored views (release assurance's backup drills). Levers
    (Poseidon2 on Barretenberg at 0.12 against 1.14 ms a node hash, a 10⁶ first-sync run) only if a budget fails.
-6. Release assurance: reproducible builds of the package and its artifacts, installed-package interoperability, backup and restore drills
-   within the standing authority. Security reviews until then are done by separate AI instances (fresh reviewers, the rolling audits);
-   the external independent review comes only once the product is complete (answered 2026-10-01).
+6. **Slice 13**, release assurance, after 12 (Next 4's open correctness findings close in it at the latest): reproducible builds of the
+   package and its artifacts, installed-package interoperability, backup and restore drills within the standing authority. Security reviews
+   until then: separate AI instances (fresh reviewers, rolling audits); the external review once the product is complete (2026-10-01).
 7. The harness's second reader retired (M10e2). Left: run its proof-free cases in vitest with stand-in proofs and consider a real-proof
    job only for ready PRs (CI time); narrow the still-optional stored event indices (`StoredEvent.index`, `judgedIndex`) when touched.
 8. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging;
