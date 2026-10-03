@@ -382,3 +382,11 @@ describe("Ergo venue-profile candidate", () => {
     expect(objects).toEqual(expected);
   });
 });
+
+describe("an index's ordered entries", () => {
+  it("orders more entries at one index than a call takes arguments", () => {
+    const objects = Array.from({ length: 200_000 }, (_, i) => ({ index: 7n, ordinal: BigInt(i), record: Uint8Array.of(i & 0xff) }));
+    const kind3 = profile.orderedEntries(3, objects), kind4 = profile.orderedEntries(4, objects);
+    expect([kind3.length, kind4.length, kind3[0]!.ordinal, kind4.at(-1)!.ordinal, kind3.at(-1)!.record[0]]).toEqual([200_000, 200_000, 0n, 199_999n, 0xff]);
+  });
+});

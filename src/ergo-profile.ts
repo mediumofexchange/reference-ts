@@ -434,7 +434,8 @@ export function orderedEntries(kind: RecordKind, objects: readonly { readonly in
     while (end < objects.length && objects[end]!.index === objects[at]!.index) end++;
     const matching = objects.slice(at, end).map(object => ({ index: object.index, ordinal: kind === PUBLICATION_RANGE ? object.ordinal : 0n, record: copyBytes(object.record) }));
     if (kind !== PUBLICATION_RANGE) matching.sort((x, y) => compareBytes(x.record, y.record));
-    entries.push(...matching);
+    // One push per entry: an index can hold far more entries than a call takes arguments.
+    for (const entry of matching) entries.push(entry);
     at = end;
   }
   return entries;

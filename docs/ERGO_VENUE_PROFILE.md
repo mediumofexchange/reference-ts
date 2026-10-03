@@ -438,7 +438,10 @@ past a reader's 4,096-entry, 1 MiB budget, so the view declares the most one
 index can hold (`ERGO_INDEX_LIMITS`, `RecordVenue.indexLimits`): each object's
 output carries its 32-byte subject beside its record within one section of at
 most 64 MiB, so at most 2^21 entries in 64 MiB and 102 bytes. The reader asks a
-single index its budget refuses again under that bound.
+single index its budget refuses again under that bound, capped at its own
+`INDEX_LIMITS` (2^18 entries, 32 MiB): an entry costs about 1 KB of memory
+across the read, so the cap keeps one answer within the 1 GiB budget. Mainnet's
+voted 1,271,009-byte blocks hold about 35,000 objects at most, far inside it.
 
 A reopen re-checks no work and no root: each header's work is checked once
 (venue-ergo §10) and the rows are the party's own. It checks the format, the

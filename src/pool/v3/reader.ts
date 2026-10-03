@@ -35,6 +35,11 @@ const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0
 
 /** The reader's local budget for one range answer; never a protocol bound. */
 export const RANGE_LIMITS: RangeLimits = Object.freeze({ maxBytes: 1_048_576n, maxEntries: 4096n });
+/** The most the reader takes for one index past RANGE_LIMITS, whatever its venue declares. An entry costs
+ * about 1 KB of memory across the Ergo view's read, the answer and its decoding (M11b2 review), so one such
+ * answer stays near 400 MB with its bytes' copies, within the declared 1 GiB. 2^18 entries is a section of
+ * about 9 MiB, seven times Ergo's voted block size, filled with empty records. Never a protocol bound. */
+export const INDEX_LIMITS: RangeLimits = Object.freeze({ maxBytes: 32n << 20n, maxEntries: 1n << 18n });
 
 /** The reader's independently chosen selection: one configuration, venue, backing and commitment, judged at one index. */
 export interface ReaderSelection {
@@ -88,9 +93,10 @@ function read<T>(call: () => T): T {
 
 /** One §13 answer over [start, t], read as successive windows. A window over the
  * reader's per-answer budget is asked again in halves. One index over it is asked
- * again under the venue's own bound for an index (`indexLimits`), since anyone
- * can fill one index under a subject past a fixed budget; past that bound, or
- * where the venue declares none, it stays refused (RangeLimitError). The budgets
+ * again under the venue's own bound for an index (`indexLimits`), capped at the
+ * reader's INDEX_LIMITS, since anyone can fill one index under a subject past a
+ * fixed budget; past that bound, or where the venue declares none, it stays
+ * refused (RangeLimitError). The budgets
  * are local (§13.1). Each window's answer must be the exact answer to its own
  * request. */
 function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, subject: Uint8Array, start: bigint, t: bigint,
@@ -104,7 +110,9 @@ function readWindows(venue: RecordVenue, venueId: Uint8Array, kind: RecordKind, 
       if (!(error instanceof RangeLimitError)) throw error;
       if (to > from) { span = (to - from + 1n) / 2n; continue; }
       if (venue.indexLimits === undefined) throw error;
-      limits = copyLimits(venue.indexLimits());
+      const declared = copyLimits(read(() => venue.indexLimits!()));
+      limits = { maxBytes: declared.maxBytes < INDEX_LIMITS.maxBytes ? declared.maxBytes : INDEX_LIMITS.maxBytes,
+        maxEntries: declared.maxEntries < INDEX_LIMITS.maxEntries ? declared.maxEntries : INDEX_LIMITS.maxEntries };
       bytes = read(() => venue.range(request, limits));
     }
     if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");

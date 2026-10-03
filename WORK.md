@@ -19,10 +19,11 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   harness's second reader retired. M10d (live testnet drill) needs the local machine (Open questions).
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
-- **M11b in progress**. M11b1 (PR #93), Next 4(n): a wallet's record cost no longer grows with its notes
-  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6. M11b2 (`claude/m11b-answer-budget`), (l):
-  a single index past the reader's 4,096-entry/1 MiB budget is asked again under the venue's `indexLimits` (Ergo: 2^21 entries, 64 MiB
-  and 102 bytes, from its section bound; [view](docs/ERGO_VENUE_PROFILE.md)); review in progress. **Next: (m)**, then (k), (s); M11c.
+- **M11b in progress**. M11b1 (PR #93), Next 4(n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6. M11b2, (l):
+  a single index past the reader's 4,096-entry/1 MiB budget is asked again under the venue's `indexLimits` (Ergo: 2^21 entries, from its
+  section bound), capped at the reader's `INDEX_LIMITS` (2^18, 32 MiB; [view](docs/ERGO_VENUE_PROFILE.md)). One fresh adversarial review: no
+  blocker; a major (a spread `push` overflowed past ~125k entries), two minors, a nit fixed. PR #94, reports: CI run 37146665206.
+  **Next: (m)** (`claude/m11b-trail-forward`), then (k), (s); M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
