@@ -509,30 +509,33 @@ describe("v3 evidence store", () => {
     expect(() => new EvidenceStore(file.path)).toThrow(new TypeError("the evidence file has another layout"));
   });
 
-  it("gives up the process's turn after each page of links it walks while serving a trail, and serves the same records", async () => {
-    // A page and five records: serving walks back over every record it serves before the first, about 7.5 µs each.
+  it("serves a trail forward by position, with no walk back before its first record, giving up the turn as it goes", async () => {
     const long = Array.from({ length: 4096 + 5 }, (_, i) => records[i % records.length]!), values = [genesisEvidenceHash(segment)];
     for (const [i, record] of long.entries()) values.push(nextEvidenceHash(values[i]!, evidenceHashes(decodeRecord(record)), BigInt(i + 1)));
-    const store = new EvidenceStore();
+    const db = new DatabaseSync(":memory:", { readBigInts: true }), store = new EvidenceStore(db);
     store.importTrails([encodeTrail({ header: headerBytes, terms, records: long })]);
     const full = store.retained().trail(segment, values.at(-1)!)!;
-    // A timer of another task runs while the walk goes on: before the first record, once per page walked back and once ahead.
+    // Another task's timer: the first record comes before it runs, and it runs as the records go on.
     let turns = 0, running = true;
     const other = (): void => { if (running) { turns++; setImmediate(other); } };
     setImmediate(other);
     const served = full.stream()[Symbol.asyncIterator](), first = await served.next();
-    const before = turns;
-    const rest: Uint8Array[] = [];
+    const before = turns, rest: Uint8Array[] = [];
     for (let next = await served.next(); next.done !== true; next = await served.next()) rest.push(next.value);
     running = false;
-    expect(before).toBeGreaterThanOrEqual(2);
+    expect([before, turns >= 16]).toEqual([0, true]);
     expect([first.value as Uint8Array, ...rest]).toEqual([...full.records()]);
-    expect(rest).toHaveLength(long.length - 1);
-    // After a position, and the walk that finds whether the chain passes through it.
     expect(await collected(full.stream(4096n))).toEqual(long.slice(4096));
+    // `reaches` is `through`, giving up the turn on its walk.
     expect([await full.reaches(5n, values[5]!), await full.reaches(5n, values[4]!)]).toEqual([full.through(5n, values[5]!), undefined]);
     expect(await full.reaches(5n, values[5]!)).toBe(BigInt(long.slice(0, 5).reduce((n, r) => n + 4 + r.length, 0)));
-    store.close();
+    // A kept value lost in the middle: read forward, the records before it are given and the read is then unresolved.
+    db.prepare("DELETE FROM chain WHERE evidence = ?").run(values[2000]!);
+    const given: Uint8Array[] = [];
+    await expect((async () => { for await (const record of full.stream()) given.push(record); })()).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(given).toHaveLength(1999);
+    expect(() => [...full.records()]).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
+    db.close();
   }, 60_000);
 
   it("streams a kept trail after a position its chain passes through, and takes such parts into another store", async () => {
@@ -559,6 +562,10 @@ describe("v3 evidence store", () => {
     // does not verify, so it was never kept and is served empty.
     const bare = (n: number): Uint8Array => trail(n, { terms: [{ terms: new Uint8Array(), signature: new Uint8Array(64) }] });
     const after = (n: number): Uint8Array => concat(bare(6).subarray(0, bare(0).length), bare(6).subarray(bare(0).length + Number(sizes(n))));
+    // Read forward, a fork kept beside the cut is passed by the walk back, at the fork and after it.
+    for (const after of [0n, 2n, 3n, 4n, 6n]) expect(await collected(full.stream(after))).toEqual([...full.records(after)]);
+    expect(await collected(held.trail(segment, fork[5]!)!.stream())).toEqual(forked);
+    expect(await collected(held.trail(segment, fork[5]!)!.stream(4n))).toEqual(forked.slice(4));
     expect(await bytesOf(await trailPart(full))).toEqual(bare(6));
     expect(await bytesOf(await trailPart(full, tip))).toEqual(after(3));
     expect(await bytesOf(await trailPart(full, { segment, position: 6n, evidence: chain[6]! }))).toEqual(after(6));

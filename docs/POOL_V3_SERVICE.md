@@ -110,10 +110,13 @@ connections for commands. Node's header/request receive timeouts apply
 separately. Serving holds no journal
 operation: its rows are never changed, so commands run while a stream is read.
 A stream that fails after its headers ends short of its end mark, which the
-client refuses; the server emits `evidenceError` with the cause. A trail's
-first record is preceded by one walk over its kept links, about 7.5 µs per
-record served; it gives up the process's turn after each page of 4,096 links
-(about 30 ms), so commands are answered meanwhile. `sync` takes no
+client refuses; the server emits `evidenceError` with the cause. A trail is
+read forward by position (an index on its kept rows), one lookup and one check
+per record, giving up the process's turn every 256 records, so its first record
+needs no walk and commands are answered meanwhile. A fork kept beside the
+served trail, or a resumed position with two kept values, falls back to one
+walk back over its kept links (about 7.5 µs per record served, giving up the
+turn each 4,096 links). `sync` takes no
 overall deadline or abort signal yet. Losing a response does not
 cancel or roll back journal work. Recover an uncertain submit or commit by its
 exact saved statement or command ID. Reopening the journal fences older owners

@@ -1074,8 +1074,8 @@ the delivered code:
   in one process; the reader kept the evidence and did not replay it (the
   M5b.4b probe measures that read). Before a trail's first record the journal
   walks its kept links back once, about 7.5 µs per record served in the
-  review's run (0.75 s at 10⁵ records); since M11b3 it gives up the
-  process's turn after each page of 4,096 links.
+  review's run (0.75 s at 10⁵ records). Since M11b3 a trail is read
+  forward by position and only a fork falls back to that walk.
 
 ### The wallet on its kept files (M5b.5c.1)
 

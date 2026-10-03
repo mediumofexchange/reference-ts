@@ -60,7 +60,7 @@ const READ_KINDS: readonly number[] = Object.freeze([1, 2, 3, 4, 6, 7, 10]);
 /** Kinds one read takes from its own package: the configuration, the selected commitment, faults and a receipt. */
 const PER_READ_KINDS: readonly number[] = Object.freeze([1, 2, 7, 10]);
 /** The retained file's layout: a file of another layout is refused rather than read. */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export interface SignedTermsField { readonly terms: Uint8Array; readonly signature: Uint8Array }
 /** A stored trail's header, and its scoped terms field `i` read on demand; a field too long to verify is undefined. */
@@ -118,6 +118,9 @@ export type EvidencePart =
       readonly chunks: Iterable<Uint8Array> | AsyncIterable<Uint8Array> } };
 /** Records a walk back holds at a time: a trail is read in pages, so memory does not grow with its length. */
 const PAGE = 4096n;
+/** Records read forward between two turns of a served trail: each is checked (about 0.1 ms), so a turn comes
+ * every few tens of milliseconds. */
+const FORWARD_TURN = 256n;
 /** What a walk yields after each page of links: a synchronous reader passes over it, an asynchronous one gives
  * up the process's turn there (about 30 ms of links a page). */
 const TURN: unique symbol = Symbol("turn");
@@ -144,6 +147,7 @@ const SCHEMA = `
   CREATE TABLE segment_terms (segment BLOB, i INTEGER, terms BLOB NOT NULL, signature BLOB NOT NULL, PRIMARY KEY(segment, i)) WITHOUT ROWID;
   CREATE TABLE chain (evidence BLOB NOT NULL UNIQUE, segment BLOB NOT NULL, prev BLOB NOT NULL, position INTEGER NOT NULL, size INTEGER NOT NULL,
     bytes BLOB NOT NULL);
+  CREATE INDEX chain_position ON chain(segment, position);
   CREATE TABLE supplier (source BLOB PRIMARY KEY, sequence INTEGER NOT NULL) WITHOUT ROWID;`;
 
 /** A kept position a trail is assembled after: its chain value and the frame bytes of its records. */
@@ -210,6 +214,9 @@ export class EvidenceStore {
         OR position != excluded.position OR size != excluded.size OR bytes != excluded.bytes`,
       step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
       entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
+      // A forward step: the kept values of a segment at one position, after a given value; two say a fork.
+      at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
+      after: "SELECT evidence FROM chain WHERE segment = ? AND position = ? AND prev = ? LIMIT 2",
       supplied: "SELECT sequence FROM supplier WHERE source = ?",
       supply: "INSERT INTO supplier VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET sequence = excluded.sequence",
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
@@ -652,11 +659,42 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
         yield TURN;
         const to = length - BigInt(i) * PAGE, page = back(tops[i]!, to, p).reverse();
         for (const entry of page) {
+          if (p > after + 1n && (p - after - 1n) % FORWARD_TURN === 0n) yield TURN;
           const { record } = checked(entry, p, previous);
           previous = entry; p++;
           yield record;
         }
       }
+    }
+    /** `records` read forward by position: one kept value per position after the last is the chain's own, since
+     * every value of the cut is kept, so no walk back precedes the first record. Two values after one (a fork
+     * kept beside the cut) or two at `after` leave the rest to the walk back. Damage met forward is met after
+     * the records before it, which a receiver checks against the chain it holds. */
+    function* forward(after: bigint): Generator<Uint8Array | typeof TURN, void, void> {
+      if (after >= length) return;
+      let previous = seed;
+      if (after > 0n) {
+        const at = q.at!.all(segment, after) as { evidence: unknown }[];
+        if (at.length !== 1) { yield* walk(after); return; }
+        previous = bytes(at[0]!.evidence);
+      }
+      for (let p = after + 1n; p <= length; p++) {
+        if ((p - after) % FORWARD_TURN === 0n) yield TURN;
+        const next = q.after!.all(segment, p, previous) as { evidence: unknown }[];
+        if (next.length === 0) broken();
+        if (next.length > 1) { yield* fromValue(p - 1n, previous); return; }
+        const value = bytes(next[0]!.evidence), { record } = checked(value, p, previous);
+        previous = value;
+        yield record;
+      }
+      if (!same(previous, top!)) broken();
+    }
+    /** The walk back's records after `after`, whose kept value `value` the forward read established. */
+    function* fromValue(after: bigint, value: Uint8Array): Generator<Uint8Array | typeof TURN, void, void> {
+      if (after === 0n) { yield* walk(0n); return; }
+      // The walk back reaches the cut's own value at `after`; a different one is no part of this trail.
+      if (walked(reach(after, value)) === undefined) broken();
+      yield* walk(after);
     }
     return Object.freeze({ header: head.header, segment, term: head.term, length, bytes: size,
       through: (position: bigint, evidence: Uint8Array): bigint | undefined => walked(reach(position, evidence)),
@@ -665,7 +703,7 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
         for (const step of walk(after)) if (step !== TURN) yield step;
       },
       async *stream(after = 0n): AsyncIterable<Uint8Array> {
-        for (const step of walk(after)) {
+        for (const step of forward(after)) {
           if (step === TURN) await turn();
           else yield step;
         }
