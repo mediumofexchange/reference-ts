@@ -112,7 +112,8 @@ export interface RefusalFacts extends FaultResult {
 }
 const established = new WeakMap<object, RefusalFacts>();
 /** The facts a package read established before it threw `error` (WORK.md Next 4(h)); undefined for an error
- * thrown before the walk began. */
+ * thrown before the walk began. Facts are keyed by the error object: an adapter sharing one error instance
+ * between concurrent reads may see one read's facts cleared by the other's. */
 export function refusalFacts(error: unknown): RefusalFacts | undefined {
   return error !== null && typeof error === "object" ? established.get(error) : undefined;
 }

@@ -7,7 +7,7 @@ Updated: 2026-10-03
 Acceptance: from a packed install, `moe` wallet (with the backer role), operator, reader and relay commands in fresh processes on
 separate directories complete issue → pay → receive → fulfill → demand → accept → settle → burn and an offline-operator recovery past
 the old 67-statement ceiling on the synthetic node (done, M10c2) and live on the testnet (M10d, local machine); the pilot CLI, the
-harness's second package reader (Next 7) and, against a case map, the transparent path retire (M10e). Stop boundary: all delivered.
+harness's second package reader and, against a case map, the transparent path retire (M10e, done). Stop boundary: all delivered.
 Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
@@ -18,11 +18,13 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
   ceiling and through an offline operator's return. Reports still drifting: conformance, local replay, local journal, older probes.
   M10d (live testnet drill) needs the local machine (Open questions).
 - **M10e1 done** (PR #89; [case map](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)):
-  the pilot and transparent path retired (kept at `8d207eb`) after four inventories mapped every case by behaviour and about forty
-  gaps were ported as v3 tests; `keys.ts` now answers false for look-alike or resizing bytes. One fresh review: no blocker or major,
-  minors fixed. Local: `npm run check`, local replay (224 groups), store reports re-recorded; CI green incl. real-proof jobs.
-  **Next: M10e2**, the harness's second package reader (Next 7), with the map's one owed runtime case: a held non-carrying
-  checkpoint leaves a dropped backing's no-commitment clock open (C2b.6.1; model only today).
+  the pilot and transparent path retired (kept at `8d207eb`) after four inventories mapped every case by behaviour and about
+  forty gaps were ported as v3 tests. One fresh review: no blocker or major, minors fixed; CI green incl. real-proof jobs.
+- **M10e2 done** (PR #91; [decision](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)):
+  every local-check group (223 local, 230 Ergo) is read by `readPackage`; refusals carry their facts (`refusalFacts`, old 4(h));
+  the no-venue/no-index replay, `verifyTrailEvidence` and `evidence-reader.mjs` retired; the C2b.6.1 owed case landed.
+  One fresh review: no blocker or major, minors fixed. Slice 10 now waits only on M10d (local machine).
+  **Next: slice 11** (Next 5), the design point, from the cloud; M10d whenever the local machine runs.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -42,7 +44,7 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
-   transaction. (h) Runtime package-reader refusals drop the receipt walk's contradictions and fault facts. (j) Verify-only parties could take
+   transaction. (h) closed in M10e2. (j) Verify-only parties could take
    identity-checked key bytes, needing no G1 file. (k) A read under a silence or non-service clause judges every held checkpoint again at each
    admission (persisting the walk's cursors would bound it). (l) One index holding more objects under one subject than an answer's budget
    (4,096 entries, 1 MiB) refuses every read of that subject and every journal command; size the one-index budget from the venue's block bound.
@@ -65,10 +67,8 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
 6. Release assurance: reproducible builds of the package and its artifacts, installed-package interoperability, backup and restore drills
    within the standing authority. Security reviews until then are done by separate AI instances (fresh reviewers, the rolling audits);
    the external independent review comes only once the product is complete (answered 2026-10-01).
-7. Harness as a second package reader (retires in slice 10): `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`.
-   After 4(h), read every `local-check` group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete
-   `{compact,scope}-runtime-check.mjs`; retire `verifyTrailEvidence`. Run the harness's proof-free cases in vitest with stand-in proofs; consider a real-proof job only for ready PRs.
-   Only that no-venue replay judges without an index (no lock or revocation applies): make `SegmentReplay.index` required if it goes.
+7. The harness's second reader retired (M10e2). Left: run its proof-free cases in vitest with stand-in proofs and consider a real-proof
+   job only for ready PRs (CI time); narrow the still-optional stored event indices (`StoredEvent.index`, `judgedIndex`) when touched.
 8. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging;
    served-trail caller-object cache; drop the explicit `vite` dev pin at the next dependency change; test a second commit refused while one is in
    flight (`store.ts` `ready`). Move `store-check.mjs`/`history-store-check.mjs` onto `drill.mjs` and one `receiptFields`; retire `header-verify`
