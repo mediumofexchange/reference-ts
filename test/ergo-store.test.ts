@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
-import { encodeCommitment, signCommitment } from "../src/commitment.js";
+import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 import { ergoProfileIdentity } from "../src/ergo-profile.js";
 import { decodeRangeAnswer, heldCommitments } from "../src/record-range.js";
 import { BranchSupplier, Chain, MempoolNode, plainBox, recordOutput, transaction, WorkedChain, type Block } from "./ergo-chain.js";

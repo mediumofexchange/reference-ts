@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { decodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RecordKind } from "../src/record-range.js";
 import type { RecordPublisher } from "../src/record-venue.js";
-import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
+import { encodeCommitment, signCommitment, type Commitment } from "../src/venue-records.js";
 import { ErgoVenue } from "../src/ergo.js";
 import { attributeBlock, collBytes, frameTransaction, MINER_FEE_TREE_HEX } from "../src/ergo-profile.js";
 import {

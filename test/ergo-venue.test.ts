@@ -1,8 +1,10 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { makeBacking, type Backing } from "../src/backing.js";
-import { encodeCommitment, signCommitment, type Commitment } from "../src/commitment.js";
+import {
+  encodeCommitment, encodeReplacement, encodeRevocation, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation,
+  type Commitment, type Replacement,
+} from "../src/venue-records.js";
 import { DEFAULT_ERGO_DEPTH, ergoAnchorContext, ergoProfile, ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
 import { decodeCompactBits, INITIAL_DIFFICULTY, parseErgoHeader } from "../src/ergo-headers.js";
 import { ERGO_TESTNET_REFERENCE, ergoProfileIdentity, type ErgoTransactionView } from "../src/ergo-profile.js";
@@ -10,8 +12,6 @@ import {
   admittedReplacements, decodeRangeAnswer, heldCommitments, RangeLimitError, revocationIndex,
   type HeldCommitment, type RangeAnswer, type RangeRequest, type RecordKind,
 } from "../src/record-range.js";
-import { encodeReplacement, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
-import { encodeRevocation, signRevocation } from "../src/revocation.js";
 import { referenceVenue, requireReferenceVenue } from "../src/pool/v3/guard.js";
 import { VenueError } from "../src/venue-error.js";
 import {
@@ -77,29 +77,10 @@ function replacement(backing: Backing, successor: Uint8Array, successorSecret: U
 const replaced = (backing: Backing, r: Replacement): Output => recordOutput(2, backing.name, encodeReplacement(backing.name, r));
 const revoked = (secret: Uint8Array, key: Uint8Array): Output => recordOutput(3, key, encodeRevocation(signRevocation(secret)));
 
-const backing = makeBacking({
-  obligor: KEYS.backer,
-  payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n },
-  reliance: [],
-  evidence: {
-    setting: "transparent",
-    operator: KEYS.operator,
-    silence: { noCommitmentDuration: 10n, challengeWindow: 5n },
-    witnessing: { venue: VENUE_ID, interval: 5n },
-  },
-});
-const ruled = makeBacking({
-  obligor: KEYS.backer2,
-  payout: { thing: "USD", quantumExponent: -2, perUnit: 100n },
-  reliance: [],
-  evidence: {
-    setting: "transparent",
-    operator: KEYS.operator,
-    silence: { noCommitmentDuration: 1000n, challengeWindow: 5n },
-    replacementRule: KEYS.backer2,
-    witnessing: { venue: VENUE_ID, interval: 5n },
-  },
-});
+// Two backing names: replacements are filed under, and name, a backing; the venue reads nothing else of it.
+interface Backing { readonly name: Uint8Array }
+const backing: Backing = { name: new Uint8Array(32).fill(0x61) };
+const ruled: Backing = { name: new Uint8Array(32).fill(0x62) };
 
 function signal(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
