@@ -23,6 +23,7 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
   minors fixed. Local: `npm run check`, local replay (224 groups), store reports re-recorded; CI green incl. real-proof jobs.
   **Next: M10e2**, the harness's second package reader (Next 7), with the map's one owed runtime case: a held non-carrying
   checkpoint leaves a dropped backing's no-commitment clock open (C2b.6.1; model only today).
+- **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
@@ -67,6 +68,7 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
 7. Harness as a second package reader (retires in slice 10): `local-replay.mjs`/`evidence-reader.mjs` open packages beside `package-reader.ts`.
    After 4(h), read every `local-check` group through `readPackage`/`readFrontier`, keep the no-venue trail replay, delete
    `{compact,scope}-runtime-check.mjs`; retire `verifyTrailEvidence`. Run the harness's proof-free cases in vitest with stand-in proofs; consider a real-proof job only for ready PRs.
+   Only that no-venue replay judges without an index (no lock or revocation applies): make `SegmentReplay.index` required if it goes.
 8. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging;
    served-trail caller-object cache; drop the explicit `vite` dev pin at the next dependency change; test a second commit refused while one is in
    flight (`store.ts` `ready`). Move `store-check.mjs`/`history-store-check.mjs` onto `drill.mjs` and one `receiptFields`; retire `header-verify`
