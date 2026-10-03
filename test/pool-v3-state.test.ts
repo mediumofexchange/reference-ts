@@ -1,15 +1,16 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { limbsOf } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../src/pool/note-tree.js";
-import { deliveryHash, encodeRecord, publicationBound, statementBytes, type Record } from "../src/pool/v3/records.js";
-import { readRecordView, RANGE_LIMITS, type ReaderSelection } from "../src/pool/v3/reader.js";
+import { decodeRecord, deliveryHash, encodeRecord, publicationBound, statementBytes, statementHash, withdrawalBytes, type Record } from "../src/pool/v3/records.js";
+import { readRecordView, RANGE_LIMITS, storedTipHolds, type ReaderSelection } from "../src/pool/v3/reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 import { fieldToBytes } from "../src/pool/field.js";
-import { applyRecord, modeAt, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
+import { applyRecord, judgeRecord, modeAt, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
 import { RangeLimitError } from "../src/record-range.js";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../src/record-venue.js";
@@ -154,6 +155,100 @@ describe("the v3 state machine in replay mode", () => {
       .then(() => undefined, (e: unknown) => e);
     expect(unindexed).toBeInstanceOf(EvidenceRefusal);
     expect((unindexed as EvidenceRefusal).status).toBe("unsupported-scope");
+  });
+});
+
+describe("the v3 state machine at its bounds and across a scope", () => {
+  const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString("hex");
+  const snapshot = (s: SegmentState) => ({ position: s.position, leaves: s.leaves, history: hex(s.history), evidence: hex(s.evidence),
+    noteRoot: s.noteRoot(), spent: hex(s.spentRoot()), nullifiers: s.nullifiers(), outputs: [...s.outputs()].map(o => o.cm),
+    demands: s.demands().length, totals: [...s.totals()], facts: hex(s.store.factDigest(s.ns, s.position)), events: s.eventCount() });
+  /** A namespace in a store over `db`, whose tip row the test rewrites to stand at a bound. */
+  const hosted = (): { db: DatabaseSync; state: SegmentState } => {
+    const db = new DatabaseSync(":memory:", { readBigInts: true });
+    return { db, state: openSegmentState(new ReplayStore(db), SEGMENT, b(40), undefined) };
+  };
+
+  it("holds exactly 2^32 leaves (pool-v2 §4): the last one lands and its root reproduces from the frontier; one more is CAPACITY", async () => {
+    const { db, state } = hosted();
+    // A frontier one leaf short of full, written in the 32-slot layout a row had before the full-tree slot.
+    const ommers = new Uint8Array(33 * 32);
+    for (let h = 0; h < 32; h++) { ommers[33 * h] = 1; ommers.set(fieldToBytes(BigInt(h + 1)), 33 * h + 1); }
+    db.prepare("UPDATE namespace SET leaves = ?, ommers = ? WHERE ns = ?").run((1n << 32n) - 1n, ommers, state.ns);
+    await applyRecord(state, issue(1n, 101n), replay());
+    expect(state.leaves).toBe(1n << 32n);
+    expect(state.hasOutput(101n)).toBe(true);
+    // §14's snapshot check rebuilds the note root from the stored frontier alone.
+    expect(storedTipHolds(state.store, state.ns)).toBe(true);
+    expect(await refusal(state, issue(1n, 102n), replay())).toBe("CAPACITY");
+  });
+
+  it("refuses a position past 2^64 − 1 as CAPACITY before reading the state or framing the position (§7)", async () => {
+    const last = fresh();
+    // A handle standing at the last u64 position; the store itself is never asked about it.
+    Object.defineProperty(last, "position", { get: () => (1n << 64n) - 1n });
+    await expect(judgeRecord(last, issue(1n, 101n), replay())).rejects.toMatchObject({ check: "CAPACITY" });
+  });
+
+  it("undoes every write of a record whose history misses the last valid checkpoint's (C2.10.12)", async () => {
+    const valid = fresh();
+    await applyRecord(valid, issue(10n, 101n), replay());
+    const root = valid.noteRoot(), pay = spend([root, root], [201n, 202n], [110n, 111n, 112n, 113n]);
+    await applyRecord(valid, pay, replay());
+    const lastValid = { position: 2n, historyHash: b(9), evidenceHash: valid.evidence };
+    const state = fresh();
+    await applyRecord(state, issue(10n, 101n), replay({ lastValid }));
+    const before = snapshot(state);
+    expect(await refusal(state, pay, replay({ lastValid }))).toBe("CONTINUITY");
+    expect(snapshot(state)).toEqual(before);
+    expect(state.hasNullifier(201n) || state.hasAnchor(valid.noteRoot())).toBe(false);
+  });
+
+  it("judges a last valid prefix's records at the index each was judged at, not the new checkpoint's (C3.7)", async () => {
+    const first = fresh();
+    await applyRecord(first, issue(10n, 101n), replay());
+    const root = first.noteRoot(), standing = demand([root, root], [tagOf(301n), 0n], 9n);
+    const pay = spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]);
+    await applyRecord(first, standing, replay());
+    await applyRecord(first, pay, replay({ index: 10n }));
+    const lastValid = { position: 3n, historyHash: first.history, evidenceHash: first.evidence, judgedIndex: (p: bigint) => first.judgedIndex(p) };
+    const again = fresh();
+    for (const bytes of [issue(10n, 101n), standing, pay]) await applyRecord(again, bytes, replay({ index: 6n, lastValid }));
+    expect(again.eventIndices()).toEqual([5n, 5n, 10n]);
+    // Without the prefix, the spend judged at 6 meets the lock standing through 9.
+    const unfinalized = fresh();
+    for (const bytes of [issue(10n, 101n), standing]) await applyRecord(unfinalized, bytes, replay({ index: 6n }));
+    expect(await refusal(unfinalized, pay, replay({ index: 6n }))).toBe("LOCKED");
+  });
+
+  it("reads each scoped backing's terms, key and revocation, and a withdrawal's backing from its demand", async () => {
+    const otherSecret = b(25), otherTerms = { obligor: ed25519.getPublicKey(otherSecret) } as unknown as RootTerms, presenter = b(5);
+    const scoped = (overrides: Partial<SegmentReplay> = {}): SegmentReplay => replay({ index: 4n,
+      scopedTerms: new Map([[hex(BACKING), terms], [hex(OTHER), otherTerms]]), revocations: new Map([[hex(BACKING), undefined], [hex(OTHER), 5n]]), ...overrides });
+    const state = fresh();
+    expect(await refusal(state, issue(3n, 201n, {}, OTHER), scoped())).toBe("SIGNATURE");
+    await applyRecord(state, issue(3n, 201n, { signer: otherSecret }, OTHER), scoped());
+    expect(await refusal(state, issue(3n, 202n, { signer: otherSecret }, OTHER), scoped({ index: 5n }))).toBe("REVOKED");
+    await applyRecord(state, issue(3n, 202n, {}, BACKING), scoped({ index: 5n }));
+    expect(await refusal(state, issue(3n, 203n, {}, b(6)), scoped())).toBe("BACKING");
+    const root = state.noteRoot();
+    const standing = encodeRecord({ domain: DOMAIN, kind: 4, publicInputs: [...prefix(), ...limbsOf(OTHER), 3n, root, 0n, tagOf(999n), 0n,
+      ...limbsOf(ed25519.getPublicKey(presenter)), 1n, 50n], proof: new Uint8Array(32).fill(4), authorization: new Uint8Array(0), capsules: [] });
+    await applyRecord(state, standing, scoped());
+    const unsigned: Record = { domain: DOMAIN, kind: 5, publicInputs: [...prefix(), ...limbsOf(statementHash(decodeRecord(standing)))],
+      proof: new Uint8Array(0), authorization: new Uint8Array(64), capsules: [] };
+    const withdrawal = encodeRecord({ ...unsigned, authorization: ed25519.sign(withdrawalBytes(unsigned), presenter) });
+    expect(await refusal(state, withdrawal, scoped({ scopedTerms: new Map([[hex(BACKING), terms]]) }))).toBe("BACKING");
+    await applyRecord(state, withdrawal, scoped());
+    expect(state.demands()).toEqual([]);
+    expect([...state.totals()].map(([name, total]) => [name, total.issued])).toEqual([[hex(BACKING), 3n], [hex(OTHER), 3n]]);
+  });
+
+  it("reads a state at or below its tip only (C2b.3.1)", async () => {
+    const state = fresh();
+    await applyRecord(state, issue(10n, 101n), replay());
+    expect(state.at(0n).noteRoot()).toBe(EMPTY_NOTE_ROOT);
+    expect(() => state.at(2n)).toThrow(RangeError);
   });
 });
 

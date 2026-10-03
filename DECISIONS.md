@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-03` [Hold the note tree's last leaf and judge §7's position bound first (audit, area 27)](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)
 - `2026-10-03` [Retire the pilot and the transparent path against a case map of their checks (slice 10 M10e1)](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)
 - `2026-10-02` [Run the wallet and relay commands over the library, with kept evidence, acceptance files and a status read (slice 10 M10c2b1)](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)
 - `2026-10-02` [Read a note as presented from saved demands and the record's tags, save which demands a re-demand repeats, and freshen into one note (slice 10 M10c2a)](decisions/2026-10.md#2026-10-02--read-a-note-as-presented-from-saved-demands-and-the-records-tags-save-which-demands-a-re-demand-repeats-and-freshen-into-one-note-slice-10-m10c2a)
