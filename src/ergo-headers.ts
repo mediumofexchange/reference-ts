@@ -415,7 +415,7 @@ export function memoryHeaderRows(): ErgoHeaderRows {
       if (base === undefined) base = fromHeight;
       if (fromHeight < base || fromHeight > base + BigInt(best.length)) throw new Error("best chain rows must stay contiguous");
       best.length = Number(fromHeight - base);
-      best.push(...ids);
+      for (const id of ids) best.push(id);
     },
     sides: () => [...side.values()],
     addSide: id => { side.set(bytesToHex(id), id); },

@@ -56,7 +56,7 @@ import type { ErgoPublication, ErgoPublisher, ErgoRecordRequest } from "./ergo-p
 import type { ErgoSupplier } from "./ergo-supplier.js";
 import { ErgoVenueJournal, objectKey, type ErgoSectionRow, type ErgoViewState } from "./ergo-store.js";
 import {
-  copyLimits, copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, type RangeLimits, type RangeRequest, type RecordKind,
+  copyLimits, copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, RANGE_FRAME_BYTES, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
 import type { RecordPublisher, RecordVenue } from "./record-venue.js";
 import { VenueError } from "./venue-error.js";
@@ -127,6 +127,12 @@ const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 const ANCHOR_CONTEXT_TIMEOUT_MS = 5 * 60_000;
 /** The most transactions and bytes one section answer is read for, far above any block the network admits. */
 const MAX_SECTION_TRANSACTIONS = 1 << 20, MAX_SECTION_BYTES = 64 * 1024 * 1024;
+/** The most one index's answer holds for one kind and subject (`RecordVenue.indexLimits`). Every object's first
+ * output carries its 32-byte subject (R4) beside its record bytes, all within one section, so an index holds at
+ * most MAX_SECTION_BYTES / 32 objects and each entry's 20 framing bytes fit in what its subject took. */
+export const ERGO_INDEX_LIMITS: RangeLimits = Object.freeze({
+  maxBytes: BigInt(RANGE_FRAME_BYTES + MAX_SECTION_BYTES), maxEntries: BigInt(MAX_SECTION_BYTES / 32),
+});
 
 /** What one sync did, for the operator's logs; the view's reads are the answers. */
 export interface ErgoSyncReport {
@@ -649,6 +655,11 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     const bound = copyLimits(limits);
     const objects = this.journal.objects(own.kind, own.subject, own.fromIndex, own.toIndex, bound);
     return encodeRangeAnswer({ request: own, entries: orderedEntries(own.kind, objects) }, bound);
+  }
+
+  /** `ERGO_INDEX_LIMITS`: no section this view reads holds more under one kind and subject. */
+  indexLimits(): RangeLimits {
+    return ERGO_INDEX_LIMITS;
   }
 
   /**

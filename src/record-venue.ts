@@ -44,6 +44,10 @@ export interface RecordVenue {
   /** The last index this venue has witnessed; answers reach no further. */
   witnessedIndex(): bigint;
   range(request: RangeRequest, limits: RangeLimits): Uint8Array | undefined;
+  /** The most one index's answer for one kind and subject can hold, where this venue bounds what one index
+   * carries. A reader asks a single index past its own per-answer budget again under it; a venue that
+   * declares none leaves that index refused. */
+  indexLimits?(): RangeLimits;
 }
 
 /**

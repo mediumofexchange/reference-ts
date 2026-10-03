@@ -30,7 +30,8 @@ const INPUT_SHAPES = ["package,selection", "package,seed,selection", "package,se
  * wrapper that replaces `range` may take the request alone. */
 export const recordReader = (venue, evidenceKind) => ({ evidenceKind, id: venue.id,
   range: (request, limits = RANGE_LIMITS) => venue.range(request, limits),
-  witnessedIndex: () => venue.witnessedIndex(), lag: () => venue.lag() });
+  witnessedIndex: () => venue.witnessedIndex(), lag: () => venue.lag(),
+  ...(venue.indexLimits === undefined ? {} : { indexLimits: () => venue.indexLimits() }) });
 
 /** The harness's object form of a package as §12 bytes: each object once, in canonical order (kind, then
  * payload hash). Encoding copies every payload synchronously, before any await. */

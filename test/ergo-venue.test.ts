@@ -5,7 +5,7 @@ import {
   encodeCommitment, encodeReplacement, encodeRevocation, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation,
   type Commitment, type Replacement,
 } from "../src/venue-records.js";
-import { DEFAULT_ERGO_DEPTH, ergoAnchorContext, ergoProfile, ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
+import { DEFAULT_ERGO_DEPTH, ERGO_INDEX_LIMITS, ergoAnchorContext, ergoProfile, ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
 import { decodeCompactBits, INITIAL_DIFFICULTY, parseErgoHeader } from "../src/ergo-headers.js";
 import { ERGO_TESTNET_REFERENCE, ergoProfileIdentity, type ErgoTransactionView } from "../src/ergo-profile.js";
 import {
@@ -642,6 +642,19 @@ describe("its answers are §13's", () => {
     const drifted = decodeRangeAnswer(v.range(drifting, wide)!, { ...request, toIndex: 2n }, wide);
     expect(drifted.entries.map(e => e.index)).toEqual([1n]);
   });
+
+  it("bound one index's answer by its section, so an index filled past a reader's budget is answered under that bound", async () => {
+    // Each object's output carries its 32-byte subject beside its record: 64 MiB of section bytes, 2^21 objects.
+    expect(ERGO_INDEX_LIMITS).toEqual({ maxBytes: 102n + (64n << 20n), maxEntries: 1n << 21n });
+    const junk = (n: number) => recordOutput(1, KEYS.operator, new Uint8Array(136).fill(n & 0xff));
+    const flood = Array.from({ length: 5 }, (_, t) => Array.from({ length: 820 }, (_, i) => junk(t * 820 + i)));
+    const { v } = await synced(6, { 1: [...flood, [committed(commitment(1n, 0xaa))]] });
+    expect(v.indexLimits()).toBe(ERGO_INDEX_LIMITS);
+    const request: RangeRequest = { venue: VENUE_ID, kind: 1, subject: KEYS.operator, fromIndex: 1n, toIndex: 1n };
+    expect(() => v.range(request, { maxBytes: 1n << 20n, maxEntries: 4096n })).toThrow(RangeLimitError);
+    const answered = decodeRangeAnswer(v.range(request, ERGO_INDEX_LIMITS)!, request, ERGO_INDEX_LIMITS);
+    expect(answered.entries).toHaveLength(4_101);
+  }, 60_000);
 });
 
 describe("this view reads; publishing is a wallet handed to it", () => {

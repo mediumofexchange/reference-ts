@@ -756,7 +756,8 @@ export class V3OperatorJournal {
 
   /** The journal's kept §13 answers through `at` (§§13.2–13.3), by default in its own database, where no
    * reader's quota bounds them. Extending one there writes, so it runs inside a journal transaction, under
-   * the fence. A venue that cannot answer, or one index past the per-answer budget, leaves the operation unavailable. */
+   * the fence. A venue that cannot answer, or one index past the venue's bound for an index, leaves the
+   * operation unavailable. */
   private answers<T>(at: bigint, read: (answers: KeptAnswers) => T, store = this.replays): T {
     if (store === this.replays && !this.db.isTransaction) throw new Error("venue answers are kept inside a journal transaction");
     try { return read(keptAnswers(this.venue, this.venueId, store, at, () => {})); } catch (error) {
