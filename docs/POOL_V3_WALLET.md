@@ -569,12 +569,16 @@ and a gap release taken by another demand's settlement under an acceptance namin
 releases the holder's acceptance and leaves the backer's dishonour. Not covered: a release of the demand in another
 segment, a gap across several backings, an ended term or a return, and a venue that witnesses an exact republication
 again.
-`command-drill.mjs` (in `check:pool:v3`; `npm run check:pool:v3-commands` alone) runs the commands with real proofs in
-fresh processes on separate directories over the synthetic Ergo node: a backer's terms, issue, payment, serve committing
+`command-drill.mjs` (in `check:pool:v3`; `npm run check:pool:v3-commands` alone) runs the commands from an `npm pack`
+install in a fresh directory, with real proofs, in fresh processes on separate directories over the synthetic Ergo
+node, and checks that no process proving nothing loads a `@noir-lang` module: a backer's terms, issue, payment, serve committing
 on admission, fulfillment and its exit-4 rerun, a demand, the acceptance relayed, settlement and burn read final by sync
 and the reader's supply, a withdrawn demand's notes refused to a payment and freshened, restore-seed and a handoff
-restore, and, with the operator offline past silence, a demand and settlement published through the relay and read
-final by force; it records each process's peak RSS.
+restore; past the old 67-statement ceiling, 70 real-proof issues to the holder's seed (made through the library in the
+drill's process) read by the holder's sync and the reader's supply; with the operator offline past silence, a payment
+prepared as it went quiet, a demand and settlement published through the relay and read final by force, the operator's
+return and adoption, and the lapsed payment proved again, final and fulfilled. It records each process's peak RSS
+(at most about 470 MB for a proving wallet command over that history).
 `redemption-store-check.mjs` (in `check:pool:v3`; `npm run check:pool:v3-redemption` alone) runs the same path with real
 proofs, each wallet operation in a fresh process that opens its database, proves with its own prover and syncs its kept
 evidence from the operator's HTTP service: issue, payment and fulfillment, a demand, the backer's published acceptance,

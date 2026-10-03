@@ -12,21 +12,32 @@
 // the reader's supply. A withdrawn demand's notes are refused to a payment and freshened; restore-seed and a
 // handoff restore the holdings; with the operator offline past silence a demand and its settlement are published
 // through the relay and read final by force. Every process's peak RSS is recorded.
+// M10c2b2: every command runs from an `npm pack` install in a fresh directory, and no process that proves nothing
+// loads a `@noir-lang` module. Past the old 67-statement ceiling (one package in memory), the backer issues 70 notes
+// with real proofs to the holder's seed (through the wallet library in this process, to keep the drill's length),
+// read by the holder's sync and the reader's supply; then, with the operator offline past silence, a payment
+// prepared as it went quiet lapses, the gap redemption runs through the relay, the operator returns and adopts, and
+// the lapsed payment is proved again and final, its payee fulfilling it.
 //
 // Usage: node scripts/pool/v3/command-drill.mjs  (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { parseVenue } from "../../../dist/cli/venue.js";
+import { openView, parseVenue } from "../../../dist/cli/venue.js";
+import { readParameters } from "../../../dist/pool/parameter-files.js";
+import { startBackend } from "../../../dist/pool/proof-verifier.js";
+import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
+import { openV3Prover } from "../../../dist/pool/v3/prover.js";
+import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 import { adoptedDomain } from "../../../dist/pool/v3/configuration.js";
 import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../../../dist/pool/v3/terms.js";
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
 
-const root = resolve(import.meta.dirname, "../../.."), MOE = join(root, "dist/cli/moe.js"), RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href;
+const root = resolve(import.meta.dirname, "../../.."), RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const obligorSecret = new Uint8Array(32).fill(41), obligor = ed25519.getPublicKey(obligorSecret);
 const SILENCE = 16n, DEPTH = "2";
@@ -41,6 +52,26 @@ function signTerms(name, operator, venue) {
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "command-drill-")));
 const checks = [], processes = [];
+
+/** The package exactly as a consumer installs it: packed, installed into a fresh directory outside the checkout's
+ * dependency tree, and its `moe` run from there. */
+function installPacked() {
+  const npm = process.env.npm_execpath, consumer = join(scratch, "consumer");
+  const run = (args, cwd) => {
+    const result = npm === undefined ? spawnSync("npm", args, { cwd, encoding: "utf8", windowsHide: true, shell: process.platform === "win32", timeout: 300_000 })
+      : spawnSync(process.execPath, [npm, ...args], { cwd, encoding: "utf8", windowsHide: true, timeout: 300_000 });
+    assert.equal(result.status, 0, `npm ${args.join(" ")}: ${result.error?.message ?? result.stderr}`);
+    return result.stdout;
+  };
+  const [packed] = JSON.parse(run(["pack", "--json", "--ignore-scripts", "--pack-destination", scratch], root));
+  mkdirSync(consumer);
+  writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "moe-drill-consumer", private: true, type: "module" }));
+  run(["install", "--ignore-scripts", "--no-audit", "--no-fund", join(scratch, packed.filename)], consumer);
+  const bin = join(consumer, "node_modules", "@mediumofexchange", "reference", "dist", "cli", "moe.js");
+  assert(statSync(bin).isFile(), "the packed install carries the moe bin");
+  return { bin, tarballBytes: statSync(join(scratch, packed.filename)).size, files: packed.entryCount };
+}
+const packed = installPacked(), MOE = packed.bin;
 const check = async (label, fn) => { await fn(); checks.push(label); process.stderr.write(`passed: ${label}\n`); };
 
 const node = await serveSyntheticNode();
@@ -71,9 +102,9 @@ function moe(args, { mining, input } = {}) {
     child.on("error", failed);
     child.on("close", status => {
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
-      let maxRssKb = null;
-      try { maxRssKb = JSON.parse(readFileSync(rss, "utf8")).maxRssKb; rmSync(rss); } catch { /* a process that died before its exit handler */ }
-      processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began), maxRssKb });
+      let maxRssKb = null, noir = null;
+      try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* a process that died before its exit handler */ }
+      processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
       let json;
       try { json = stdout.trim() === "" ? undefined : JSON.parse(stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
       let refusal;
@@ -113,9 +144,9 @@ function serve(directory) {
     // the operating system releases its directory lock either way.
     child.kill("SIGTERM"); const status = await exited;
     if (process.platform !== "win32") assert.equal(status, 0, stderr);
-    let maxRssKb = null;
-    try { maxRssKb = JSON.parse(readFileSync(rss, "utf8")).maxRssKb; rmSync(rss); } catch { /* ended outright (Windows) */ }
-    processes.push({ command: "operator serve (running)", status, elapsedMs: Math.round(performance.now() - began), maxRssKb });
+    let maxRssKb = null, noir = null;
+    try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* ended outright (Windows) */ }
+    processes.push({ command: "operator serve (running)", status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
   } };
 }
 
@@ -233,7 +264,7 @@ try {
   // The wallet and relay commands (M10c2b): a backer's terms on the operator's venue, holders' wallets, a relay.
   const OW = join(scratch, "operator-wallets"), BK = join(scratch, "backer"), HD = join(scratch, "holder"), SH = join(scratch, "shop"), RL = join(scratch, "relay");
   const wallet = (verb, directory, ...rest) => ["wallet", ...verb.split(" "), "--dir", directory, ...rest];
-  let backing2, serving;
+  let backing2, serving, walletOperator;
   /** Mine and rerun `args` until it exits 0 and `until` holds of its output, a few rounds at most. */
   const settled = async (args, until, rounds = 12) => {
     for (let round = 0; ; round++) {
@@ -273,6 +304,7 @@ try {
     // A journal holds one genesis segment: the backer's backing has an operator directory of its own on the same venue.
     const operator = await ok(["operator", "init", "--dir", OW, "--venue", join(OP, "venue.json"), ...common, "--budget", "50000000"]);
     await call("/synthetic/fund", { tree: operator.fundingTree, value: "1000000000" });
+    walletOperator = operator.operator;
     const init = await ok(wallet("init", BK, "--backer", "--venue", join(OP, "venue.json"), ...common));
     assert.match(init.backer, /^[0-9a-f]{64}$/);
     await refused(wallet("terms create", HD), "ABSENT");
@@ -421,10 +453,50 @@ try {
     assert.deepEqual((await ok(wallet("status", H3, "fresh-2"))).status, "final", "the handoff carries the saved records");
   });
 
-  await check("with the operator offline past silence, a demand and its settlement are published through the relay and read final by force", async () => {
+  /** The backer issues `count` notes of one unit to `seed`, each with a real proof, through the wallet library in this
+   * process over the backer's own directory (no command holds it meanwhile), submitted to the running service. */
+  async function bulkIssue(count, seed) {
+    const directory = { path: BK, config: JSON.parse(readFileSync(join(BK, "config.json"), "utf8")), file: name => join(BK, name) };
+    const view = openView(directory), api = await startBackend(await readParameters(PARAMETER_DIRECTORY));
+    let prover, held, key;
+    try {
+      await view.sync();
+      prover = await openV3Prover(api);
+      held = new V3Wallet(join(BK, "wallet.db"), { venue: view.venue, reference: view.file.reference, verifier: prover.verifier });
+      const terms = { terms: readFileSync(join(BK, "terms", backing2)), signature: readFileSync(join(BK, "terms", `${backing2}.sig`)) };
+      const service = JSON.parse(readFileSync(join(OW, "service.json"), "utf8")), backing = Buffer.from(backing2, "hex"), domain = adoptedDomain();
+      const client = new V3ServiceClient(service.url, service.walletToken, { operator: Buffer.from(walletOperator, "hex"), reference: view.file.reference });
+      key = readFileSync(join(BK, "backer.key"));
+      const evidence = (await held.supply(store => client.sync(backing, store))).package;
+      for (let i = 0; i < count; i++) {
+        const id = new Uint8Array(32); id[0] = 0xb0; id[31] = i;
+        const out = prepareExactOutput(seed, domain, id, backing, 1n);
+        await held.issue(`bulk-${i}`, { domain, opening: out.opening, cm: out.cm, capsule: out.capsule }, 1n, evidence, terms,
+          task => prover.prove(task), message => ed25519.sign(message, key));
+        await held.submit(`bulk-${i}`, client);
+      }
+    } finally { held?.close(); key?.fill(0); await prover?.close(); await api.destroy(); view.close(); }
+  }
+
+  const BULK = 70;
+  await check(`past the old 67-statement ceiling: ${BULK} real-proof issues to the holder's seed, synced by the holder and the reader`, async () => {
+    const { seed } = await ok(wallet("seed", H3, "--show"));
+    await bulkIssue(BULK, Buffer.from(seed, "hex"));
+    const read = await supplyUntil(read => read.issued === String(10 + BULK), 12, backing2);
+    assert(BigInt(read.position) > 67n, `position ${read.position}`);
+    const view = await settled(wallet("sync", H3, backing2), view => view.holdings.length === BULK + 1);
+    assert.equal(view.available, String(7 + BULK));
+  });
+
+  await check("with the operator offline past silence, a demand and its settlement are published through the relay and read final by force; " +
+      "the operator returns and adopts, and the payment the silence lapsed is proved again and final", async () => {
     // Each party keeps the package of its last sync; serve signs nothing while the chain does not move.
-    for (const directory of [H3, BK]) await ok(wallet("sync", directory, backing2));
+    for (const directory of [H3, BK, SH]) await ok(wallet("sync", directory, backing2));
     await serving.stop();
+    // A payment prepared as the operator went quiet: its submission is not answered, and the record stays saved.
+    const late = await request(SH, "late", 1);
+    await refused(wallet("pay", H3, "late-pay", backing2, ...late.args, "--value", "1"), "UNAVAILABLE");
+    assert.equal((await ok(wallet("status", H3, "late-pay"))).status, "pending");
     await mine(Number(SILENCE) + 4);
     const shown = await ok(wallet("demand", H3, "gap", backing2, "7", "--deadline", "+60"));
     assert.equal(shown.evidence, "kept");
@@ -442,8 +514,21 @@ try {
     const release = join(scratch, "gap-settle.json");
     await ok(wallet("publish", H3, "gap-settle", backing2, "--out", release));
     await ok(["relay", "publish", "--dir", RL, release]);
-    await settled(wallet("sync", H3, backing2), view => view.holdings.length === 0);
+    await settled(wallet("sync", H3, backing2), view => !view.holdings.some(h => h.value === "7"));
     assert.equal((await ok(wallet("status", H3, "gap-settle"))).status, "final");
+    // The operator returns past the silence and adopts the gap's block; serve starts again.
+    await ok(["operator", "return", "--dir", OW, "--id", "return-1", "--poll-ms", "100"], { mining: "waiting" });
+    await ok(["operator", "adopt", "--dir", OW, "--poll-ms", "100"], { mining: "waiting" });
+    serving = serve(OW);
+    await serving.listening;
+    for (const directory of [H3, SH]) await ok(wallet("service add", directory, backing2, join(OW, "service.json")));
+    // The lapsed payment's segment is no longer canonical: proved again in the returned segment, then final.
+    const reproved = await settled(wallet("reprove", H3, "late-pay", backing2), payment => payment.superseded === 1);
+    assert.equal(reproved.status, "pending");
+    await submit(H3, "late-pay");
+    await finalOf(H3, "late-pay");
+    assert.equal((await settled(wallet("fulfill", SH, "late", backing2), () => true)).value, "1");
+    await serving.stop();
     // A relay refuses a file for another venue.
     const other = JSON.parse(readFileSync(release, "utf8")); other.venue = "00".repeat(32);
     const forged = join(scratch, "other-venue.json"); writeFileSync(forged, JSON.stringify(other));
@@ -503,7 +588,18 @@ console.log(JSON.stringify(open.filter(path => path.includes("etilqs_"))));`);
     assert(temporary.length > 0 && temporary.every(path => path.startsWith(RD + sep)), JSON.stringify(temporary));
   });
 
-  console.log(JSON.stringify({ status: "passed", checks, processes }, null, 2));
+  await check("from the packed install, no process that proves nothing loads a @noir-lang module; proving ones do", async () => {
+    const PROVING = new Set(["wallet pay", "wallet freshen", "wallet reprove", "wallet issue", "wallet demand", "wallet settle", "wallet burn"]);
+    const ended = processes.filter(p => p.noir !== null);
+    assert(ended.length > 0 && ended.some(p => PROVING.has(p.command) && p.status === 0));
+    for (const p of ended) {
+      if (p.command.startsWith("reader ") || p.command.startsWith("relay ") || p.command.startsWith("operator ") ||
+          (p.command.startsWith("wallet ") && !PROVING.has(p.command))) assert.equal(p.noir, false, `${p.command} loaded @noir-lang`);
+      else if (p.status === 0) assert.equal(p.noir, true, `${p.command} proved without the witness generator?`);
+    }
+  });
+
+  console.log(JSON.stringify({ status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files }, checks, processes }, null, 2));
   completed = true;
 } finally {
   await node.close();
