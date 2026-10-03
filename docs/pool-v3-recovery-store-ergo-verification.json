@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1138
+      "elapsedMs": 732
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 851
+      "elapsedMs": 590
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2229
+      "elapsedMs": 1384
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2221
+      "elapsedMs": 1357
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2217
+      "elapsedMs": 1358
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1201
+      "elapsedMs": 745
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2220
+      "elapsedMs": 1372
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2218
+      "elapsedMs": 1359
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2217
+      "elapsedMs": 1368
     }
   ],
   "transactions": [
@@ -114,13 +114,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "e72ac1beb66033778fe51ffccae2f3bbf1e718ba06232e3a201e380b16b63c53",
+    "history": "925baff483d31230a03594facb3b40be2233e4adbae86c47f1ccfb9c2f416a6d",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "bc4e21f716c13123298f77341bcd7c4efe28eb3505c23ab1bdfc6c8383cb8b24"
+        "sha256": "d0ccb5ef55df92e952c43c6719c8fcb4b0cee59a504d736e3375aa7865418710"
       },
       {
         "index": "27",
@@ -130,12 +130,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "4374cf88e95eca0afd1b1c72ef8cd9faa5afb6016de6a533fb2de7b006c6d862"
+        "sha256": "467e28840d11cb15b380bf4d8c659fea512e59b53dbbe906e164e2a3c1072488"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "397fb50d0333e98c7d5457d41b790114a0b72962745aad26193c3e644f76f16c"
+        "sha256": "780a3ed4f33945b33bc04bdab56fc18228305e977dc00923cdc73b7eaeb82cec"
       }
     ],
     "clock": {
@@ -156,7 +156,7 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 31345,
+  "elapsedMs": 20176,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "72694438fc22bc25bc517ce1a310f94ca45171c6a46b50b1bb6dd31c98ef6322",
@@ -197,7 +197,7 @@
     "dist/pool/v3/records.js": "93adfd8958036966e071e376b94baf6c676312e5f39cac4cacb478e2cad33898",
     "dist/pool/v3/recovery.js": "9be92e726068fce7aac63a2454d1d5af6d83cd5b9987f14a2c71e3defd7d5dd5",
     "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
-    "dist/pool/v3/replay-store.js": "0ac1807d973b0ac31b218faac7055ca5df65f1eca8933bb643306744130a793f",
+    "dist/pool/v3/replay-store.js": "238b3cbb305612015839a79f6cefc124910f0b6a71c9d4c85227f98ad15f0e7c",
     "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
     "dist/pool/v3/scope-reader.js": "102fe026bbeba85f0b40fc9f1c56c67bfcc12f22d7c1cc7c66e99a8979aa714c",
     "dist/pool/v3/state.js": "87de0eda1d581848b794f0b71b52dc2aea2c9318998ca95c8faa1269e1ab984e",
@@ -275,7 +275,7 @@
     "src/pool/v3/records.ts": "0b46e880f05c6776cda9f8918a8383cc0a8b4b4eb81beddf29331a1749108c32",
     "src/pool/v3/recovery.ts": "c025d9f2d2d75a9f6cdc8fcaf5e6fefabb199e85bb486200ba16f1aa7f63079d",
     "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
-    "src/pool/v3/replay-store.ts": "f678879f67922df0781b7976959c72f857d6de482548bc0a0a4f6abe714cc8a9",
+    "src/pool/v3/replay-store.ts": "699ac9a247c2e16e9c421022072399ae43683b8808ab32bd6397daf716264ecb",
     "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
     "src/pool/v3/scope-reader.ts": "b941100df0d50ab63ceb42ad42254f43e12acc7b852487414ff3ba8a7ced2113",
     "src/pool/v3/state.ts": "c11b837bc2e8e98d920effef14b102526ff945e9f5a63b823138e447842bd218",

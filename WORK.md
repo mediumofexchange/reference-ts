@@ -22,7 +22,7 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 - **M11b in progress** (`claude/m11b-scale-findings`). M11b1, Next 4(n): a witness row changes only when a block beside it
   completes and `witness` folds the filling block from the frontier: a wallet's record cost no longer grows with its notes
   ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6. One fresh adversarial review:
-  no blocker or major; two minors, two nits fixed. **Next: (l)**, then (m), (k), (s); M11c.
+  no blocker or major; two minors, two nits fixed. PR #93, reports from CI run 37138352927. **Next: (l)**, then (m), (k), (s); M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
