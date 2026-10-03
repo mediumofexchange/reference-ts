@@ -217,7 +217,7 @@ describe("durable independently replayed Ergo view", () => {
       if (change === "header") db.prepare("DELETE FROM headers WHERE id=?").run(pin.pin as Uint8Array);
       if (change === "bytes") db.prepare("UPDATE headers SET bytes=? WHERE id=?").run(blocks[0]!.bytes, pin.pin as Uint8Array);
       if (change === "best") db.prepare("UPDATE best SET id=? WHERE height=?").run(blocks[0]!.id, pinHeight);
-      if (change === "protection") db.prepare("INSERT INTO protected VALUES('synthetic',?)").run(new Uint8Array(32));
+      if (change === "protection") db.prepare("INSERT INTO protected VALUES('synthetic',?,0)").run(new Uint8Array(32));
       // The chain cut back to below the clock's depth: no kept header buries its block.
       if (change === "unburied") for (const table of ["best", "headers"]) db.prepare(`DELETE FROM ${table} WHERE height>=?`).run(pinHeight + profile.depth);
       if (change === "tip") db.prepare("DELETE FROM headers WHERE id=?").run(blocks.at(-1)!.id);
@@ -297,7 +297,10 @@ describe("durable independently replayed Ergo view", () => {
     only.tip = chain.extend(main[0]!, 3, () => [], 64).at(-1)!;
     await old.venue.sync([only]); old.journal.close();
     // Its stale branch spent the quota; its next answers extend the best tip and are read, the side branch still is not.
-    const next = opened(path, policy); only.tip = chain.extend(main.at(-1)!, 40).at(-1)!;
+    const next = opened(path, policy);
+    only.tip = chain.extend(main[5]!, 2, () => [], 65).at(-1)!;
+    expect((await next.venue.sync([only])).suppliers[0]).toEqual({ name: "only", headersAdded: 0, stopped: "side-branch quota" });
+    only.tip = chain.extend(main.at(-1)!, 40).at(-1)!;
     let report = await next.venue.sync([only]);
     expect(report.suppliers[0]).toEqual({ name: "only", headersAdded: 40, stopped: "side-branch quota" });
     report = await next.venue.sync([only]);
@@ -308,11 +311,15 @@ describe("durable independently replayed Ergo view", () => {
   it("audits chain selection and stray header rows, keys objects by a 32-byte subject, and refuses a malformed supplier name", async () => {
     const blocks = records();
     for (const [name, sql, refusal] of [
-      ["selection", "UPDATE headers SET score='999999' WHERE id=(SELECT id FROM headers WHERE height=(SELECT min(height) FROM best))", /score is wrong|outscores/],
+      ["selection", `DELETE FROM best WHERE height>${chain.anchor.height + 4n}; INSERT INTO side SELECT id FROM headers WHERE height>${chain.anchor.height + 4n};
+        DELETE FROM sections WHERE idx>1; DELETE FROM objects WHERE idx>1`, /it outscores the best chain/],
       ["stray", "INSERT INTO headers SELECT zeroblob(32), height, parent, score, bytes FROM headers LIMIT 1", /neither the best chain nor a side branch/],
     ] as const) {
       const path = file(), old = opened(path); await old.venue.sync([supplier(blocks)]); old.journal.close();
-      const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path); db.exec(sql); db.close();
+      const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path); db.exec(sql);
+      // The stored best chain cut to a prefix of the heavier headers kept as side headers, with a clock it buries.
+      if (name === "selection") db.prepare("UPDATE meta SET witnessed=1, pin=?, buried=?, retained=?").run(blocks[1]!.id, blocks[3]!.id, 0);
+      db.close();
       expect(() => opened(path).venue.audit(), name).toThrow(refusal);
     }
     const view = opened(file()).venue; await view.sync([supplier(blocks)]);
@@ -320,7 +327,7 @@ describe("durable independently replayed Ergo view", () => {
     expect(view.witnessedAt(1, first.operator, record)).toBe(0n);
     expect(view.witnessedAt(1, Uint8Array.of(...first.operator, record[0]!), record.subarray(1))).toBeUndefined();
     expect(view.witnessedAt(1, new Uint8Array(0), Uint8Array.of(...first.operator, ...record))).toBeUndefined();
-    await expect(view.sync([new BranchSupplier("\ud800", blocks.at(-1)!, chain)])).rejects.toThrow(TypeError);
+    await expect(view.sync([new BranchSupplier("\ud800", blocks.at(-1)!, chain)])).rejects.toThrow(new TypeError("a supplier's name is not well-formed text"));
     expect(view.witnessedIndex()).toBe(7n);
   });
 

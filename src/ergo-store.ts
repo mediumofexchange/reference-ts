@@ -78,7 +78,8 @@ export interface ErgoSectionRow {
 }
 /** A supplier's outstanding side-branch charge, kept by its name across processes. */
 export interface ErgoSideCharge { readonly name: string; readonly charge: bigint; readonly height: bigint }
-/** A header a supplier's last pass reached, kept through pruning under that supplier's name. */
+/** A header a supplier's last pass reached, kept through pruning under that supplier's name; a list keeps each
+ * name's headers oldest first. */
 export interface ErgoProtectedHeader { readonly name: string; readonly id: Uint8Array }
 /** The view's state beside its rows. */
 export interface ErgoViewState {
@@ -237,7 +238,7 @@ export class ErgoVenueJournal {
         CREATE TABLE IF NOT EXISTS best (height INTEGER PRIMARY KEY, id BLOB NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS side (id BLOB PRIMARY KEY) STRICT, WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS charges (name TEXT PRIMARY KEY, charge TEXT NOT NULL, height INTEGER NOT NULL) STRICT, WITHOUT ROWID;
-        CREATE TABLE IF NOT EXISTS protected (name TEXT NOT NULL, id BLOB NOT NULL, PRIMARY KEY(name, id)) STRICT, WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS protected (name TEXT NOT NULL, id BLOB NOT NULL, age INTEGER NOT NULL, PRIMARY KEY(name, id)) STRICT, WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS sections (idx INTEGER PRIMARY KEY, header BLOB NOT NULL, views BLOB NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS objects (idx INTEGER NOT NULL, position INTEGER NOT NULL, kind INTEGER NOT NULL, subject BLOB NOT NULL,
           ordinal INTEGER NOT NULL, record BLOB NOT NULL, key BLOB NOT NULL, PRIMARY KEY(idx, position)) STRICT, WITHOUT ROWID;
@@ -287,7 +288,8 @@ export class ErgoVenueJournal {
       requireStored(isBlob(last?.header, 32) && compareBytes(last.header, row.pin as Uint8Array) === 0);
     }
     const charges = this.db.prepare("SELECT name, charge, height FROM charges"); charges.setReadBigInts(true);
-    const protectedHeaders = this.db.prepare("SELECT name, id FROM protected").all().map(p => {
+    // Oldest first within a name, as the view evicts them.
+    const protectedHeaders = this.db.prepare("SELECT name, id FROM protected ORDER BY name, age").all().map(p => {
       requireStored(typeof p.name === "string"); return { name: p.name as string, id: blob(p.id, 32) };
     });
     this.rows = new JournalHeaderRows(this.db);
@@ -310,8 +312,8 @@ export class ErgoVenueJournal {
         row.objects.forEach((o, position) => object.run(row.index, position, o.kind, o.subject, o.ordinal, o.record, objectKey(o.kind, o.subject, o.record)));
       }
       this.db.prepare("DELETE FROM protected").run();
-      const keep = this.db.prepare("INSERT OR IGNORE INTO protected VALUES(?,?)");
-      for (const { name, id } of state.protectedHeaders) keep.run(name, id);
+      const keep = this.db.prepare("INSERT OR IGNORE INTO protected VALUES(?,?,?)");
+      state.protectedHeaders.forEach(({ name, id }, age) => keep.run(name, id, age));
       this.db.prepare("DELETE FROM charges").run();
       const charge = this.db.prepare("INSERT INTO charges VALUES(?,?,?)");
       for (const c of state.charges) charge.run(c.name, c.charge.toString(), c.height);

@@ -374,6 +374,8 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       // read and charged again.
       for (const { name, pass } of passes) if (pass.protect !== undefined) {
         const id = blake2b(pass.protect, { dkLen: 32 }), kept = this.protectedHeaders.get(name) ?? new Map<string, Uint8Array>();
+        // A header on the best chain needs no protection and takes no path's place.
+        if (this.store.isBest(id)) continue;
         for (const below of this.store.offBest(id)) kept.delete(bytesToHex(below));
         kept.set(bytesToHex(id), id);
         while (kept.size > PROTECTED_PER_SUPPLIER) kept.delete(kept.keys().next().value!);
