@@ -15,7 +15,7 @@ Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md
   to [M10c2b1](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)):
   the `moe` bin's wallet (holder, `--backer`), operator, reader and relay commands ([commands](docs/POOL_V3_WALLET.md#commands));
   `command-drill.mjs` runs them all from an `npm pack` install with real proofs on the synthetic node, past the old 67-statement
-  ceiling and through an offline operator's return. Reports still drifting: conformance, local replay, local journal, older probes.
+  ceiling and through an offline operator's return. The twelve current v3 reports are re-recorded at M10e2 (CI run 37106533478).
   M10d (live testnet drill) needs the local machine (Open questions).
 - **M10e1 done** (PR #89; [case map](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)):
   the pilot and transparent path retired (kept at `8d207eb`) after four inventories mapped every case by behaviour and about
