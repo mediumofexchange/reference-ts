@@ -6,7 +6,7 @@ import type { Snapshot } from "../src/pool/v3/commitments.js";
 import type { SegmentEntry, SegmentHeader } from "../src/pool/v3/headers.js";
 import type { Record as PoolRecord } from "../src/pool/v3/records.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
-import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
+import { directoryRoot, signCommitment, verifyCommitment } from "../src/venue-records.js";
 import { flipping, hugeSparse, lookAlikes, lyingLength } from "./hostile-bytes.js";
 
 // Independent Buffer/node:crypto framing and hash oracle. The directory is

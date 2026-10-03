@@ -30,13 +30,14 @@ function withdrawal(d: Uint8Array, signer = presenterSecret): Uint8Array {
     proof: new Uint8Array(), authorization: new Uint8Array(64), capsules: [] };
   return encodeRecord({ ...record, authorization: ed25519.sign(withdrawalBytes(record), signer) });
 }
-function settle(d: Uint8Array, deadline = 12n, nf = 101n, output = 301n, signer = presenterSecret, quantity = 5n, padding = 102n): Uint8Array {
+function settle(d: Uint8Array, deadline = 12n, nf = 101n, output = 301n, signer = presenterSecret, quantity = 5n, padding = 102n,
+  acceptor = issuerSecret): Uint8Array {
   const id = statementHash(decodeRecord(d));
   const record: Record = { domain, kind: 6, publicInputs: [...prefix, ...limbsOf(backing), quantity, 88n, 99n,
     EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT, nf, padding, output, ...limbsOf(id)], proof: b(8), authorization: new Uint8Array(136), capsules: [] };
   const acceptance = { domain, demand: id, owner: 88n, deadline };
   return encodeRecord({ ...record, authorization: encodeSettlementAuthorization(deadline,
-    ed25519.sign(acceptanceBytes(acceptance), issuerSecret),
+    ed25519.sign(acceptanceBytes(acceptance), acceptor),
     ed25519.sign(releaseBytes(domain, id, acceptanceId(acceptance), statementHash(record)), signer)) });
 }
 function alter(bytes: Uint8Array, at: number, value: bigint): Uint8Array {
@@ -97,7 +98,11 @@ describe("publication force over the snapshot forest", () => {
     await refuses(state, d, "REPEATED_STATEMENT");
     await refuses(state, demand(6n), "LOCKED");
     await refuses(state, withdrawal(d, b(6)), "SIGNATURE");
+    // A demand ends only under its own backing: in a scope of several, another backing's exit names no demand.
+    await refuses(state, withdrawal(d), "DEMAND", context({ backing: b(20) }));
     await refuses(state, settle(d, 12n, 101n, 301n, b(6)), "SIGNATURE");
+    // An acceptance K did not sign, under the presenter's valid release (C3.5).
+    await refuses(state, settle(d, 12n, 101n, 301n, presenterSecret, 5n, 102n, b(6)), "SIGNATURE");
     await refuses(state, settle(d, 12n, 201n), "TAGS");
     // A slot the demand tagged 0 carrying value, signed by both parties: the tag check passes
     // it, so only the demand's quantity keeps the settlement to the named claims (C3.5, invariant 27).
@@ -115,6 +120,15 @@ describe("publication force over the snapshot forest", () => {
     expect(overlay(state)).toEqual(before);
     await applyForceRecord(state, withdrawal(d), context({ index: 20n }));
     expect(state.added.size).toBe(0); expect(state.nullifiers.size).toBe(0);
+  });
+
+  it("ends a demand by one exit only: a withdrawn demand settles no more, a settled one withdraws no more (C3.6-7, inv 27)", async () => {
+    const d = demand(), withdrawn = openForceState(fresh());
+    await applyForceRecord(withdrawn, d, context()); await applyForceRecord(withdrawn, withdrawal(d), context());
+    await refuses(withdrawn, settle(d), "DEMAND", context({ index: 12n }));
+    const settled = openForceState(fresh());
+    await applyForceRecord(settled, d, context()); await applyForceRecord(settled, settle(d), context({ index: 12n }));
+    await refuses(settled, withdrawal(d), "DEMAND", context({ index: 12n }));
   });
 
   it("takes a release's output only by a settlement of another demand naming the same owner (C3.8)", async () => {
@@ -174,6 +188,21 @@ describe("recovery admission and replay clocks", () => {
     await applyRecord(state, d, ctx); await applyRecord(state, settlement, ctx);
     expect(state.eventIndices()).toEqual([9n, 12n]); expect(state.demands().length).toBe(0);
     expect(state.nullifiers()).toEqual([101n, 102n]); expect(state.leaves).toBe(1n);
+  });
+
+  it("replays a settlement under another demand's standing lock as refused, and a withdrawal releases its own demand's lock only (C3.7)", async () => {
+    // The first demand's lock lapses after its deadline (12); a second demand over the same tag stands until 16.
+    const first = demand(), second = demand(11n, 16n), state = fresh();
+    await applyRecord(state, first, replay());
+    await expect(applyRecord(state, demand(8n, 16n), replay({ index: 10n }))).rejects.toMatchObject({ check: "LOCKED" });
+    await applyRecord(state, second, replay({ index: 13n }));
+    await expect(applyRecord(state, settle(first), replay({ index: 13n }))).rejects.toMatchObject({ check: "LOCKED" });
+    expect(state.position).toBe(2n);
+    await applyRecord(state, withdrawal(first), replay({ index: 13n }));
+    await expect(applyRecord(state, demand(12n, 18n), replay({ index: 14n }))).rejects.toMatchObject({ check: "LOCKED" });
+    // A settlement is never locked by its own demand.
+    await applyRecord(state, settle(second, 16n), replay({ index: 14n }));
+    expect([state.position, state.demands().length, state.nullifiers()]).toEqual([4n, 0, [101n, 102n]]);
   });
 
   it("admits at the horizon and replays a timely admission after its deadline", async () => {

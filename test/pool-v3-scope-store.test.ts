@@ -18,7 +18,9 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../sr
 import { decodeTrail } from "../src/pool/v3/trail.js";
 import { authorizeIssue, demandTask, issueTask, spendTask, type NoteInput, type ProofTask, type SegmentContext } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
-import { encodeReplacement, replacementHash, replacementMessage, type Replacement } from "../src/venue-records.js";
+import {
+  encodeReplacement, encodeRevocation, replacementHash, replacementMessage, signRevocation, type Replacement,
+} from "../src/venue-records.js";
 
 // Slice 7 M2: the journal opens, serves, splits and rejoins a two-backing scope
 // (the story of scripts/pool/v3/scope-check.mjs) and an independent reader
@@ -118,6 +120,18 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     const forY = await f.a.package(f.y.name);
     expect(forY.selection.backing).toEqual(f.y.name); expect(forY.package).toEqual(f.held.package);
     await expect(f.a.package(b(99))).rejects.toMatchObject({ code: "REFUSED", check: "SCOPE" });
+  });
+
+  it("refuses issuance into every backing of a revoked K and none of another obligor's (C2.6)", async () => {
+    const f = fixture(), a = f.create(), z = f.backingOf("scope journal z", issuerX);
+    await a.open("genesis", [f.x.signed, f.y.signed, z.signed]); await a.publish();
+    const ctx = await f.context(a);
+    await f.venue.publishRecord(3, ed25519.getPublicKey(issuerX), encodeRevocation(signRevocation(issuerX)));
+    f.venue.advance(f.venue.witnessedIndex() + lag);
+    for (const [name, id] of [[f.x.name, 41], [z.name, 42]] as const) {
+      await expect(a.submit(f.issue(ctx, f.output(name, id, 1n), issuerX))).rejects.toMatchObject({ code: "REFUSED", check: "REVOKED" });
+    }
+    expect(decodeReceipt(await a.submit(f.issue(ctx, f.output(f.y.name, 43, 1n), issuerY))).position).toBe(1n);
   });
 
   it("splits at x's term end, rejoins after the tail is witnessed, and spends across both backings", async () => {

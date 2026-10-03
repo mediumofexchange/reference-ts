@@ -6,7 +6,9 @@ import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
-import { decodeReceipt, encodeReceipt } from "../src/pool/v3/commitments.js";
+import { decodeReceipt, encodeReceipt, verifyReceipt } from "../src/pool/v3/commitments.js";
+import { segmentIdentity } from "../src/pool/v3/headers.js";
+import { ScopeTree } from "../src/pool/scope.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
@@ -70,10 +72,10 @@ describe("v3 recovery journal and independent package reader", () => {
     };
     const demand = (instant: bigint, deadline = 20n, secret = presenterSecret) => record(demandTask(context, inputs,
       { backing, quantity: 10n, presenter: ed25519.getPublicKey(secret), instant, deadline }));
-    const settle = (d: Record, deadline: bigint, secret = presenterSecret) => {
+    const settle = (d: Record, deadline: bigint, secret = presenterSecret, acceptor = issuerSecret) => {
       const id = statementHash(d), ownerSecret = deriveSettlementOwnerSecret(b(22), domain, id, deadline).value;
       const opening = { backing, value: 10n, owner: ownerOf(ownerSecret), rho: 42n }, output = { opening, cm: commitmentOf(domain, opening) };
-      const acceptance = authorizeAcceptance({ domain, demand: id, owner: opening.owner, deadline }, issuerSecret);
+      const acceptance = authorizeAcceptance({ domain, demand: id, owner: opening.owner, deadline }, acceptor);
       return authorizeSettlement(record(settleTask(context, inputs, output, id)), acceptance, secret);
     };
     const publication = (kind: 1 | 3 | 4 | 5, r: Record) => encodePublication({ domain, backing, kind, record: r });
@@ -87,14 +89,38 @@ describe("v3 recovery journal and independent package reader", () => {
     const withdraw = withdrawalRecord(f.context, statementHash(first), presenterSecret);
     await f.j.submit(encodeRecord(withdraw));
     const second = f.demand(1n, 7n), settled = f.settle(second, 4n);
-    await f.j.submit(encodeRecord(second));
-    expect(decodeReceipt(await f.j.submit(encodeRecord(settled))).position).toBe(5n);
+    const filed = await f.j.submit(encodeRecord(second));
+    // An acceptance K did not sign is refused at admission, whoever released (C3.5).
+    await expect(f.j.submit(encodeRecord(f.settle(second, 4n, presenterSecret, b(91))))).rejects.toMatchObject({ code: "REFUSED", check: "SIGNATURE" });
+    const closing = await f.j.submit(encodeRecord(settled));
+    expect(decodeReceipt(closing).position).toBe(5n);
+    // Demand, withdrawal and settlement receipts verify under the segment's authority, each bound to its own statement.
+    const header = f.context.header, authority = { domain, segment: segmentIdentity(header), scopeRoot: new ScopeTree(header.entries).root(), operator };
+    const receipts = [receipt, await f.j.submit(encodeRecord(withdraw)), filed, closing].map(decodeReceipt);
+    expect(receipts.map(r => verifyReceipt(authority, r))).toEqual([true, true, true, true]);
+    expect(verifyReceipt(authority, { ...receipts[3]!, statementHash: receipts[2]!.statementHash })).toBe(false);
     await f.j.commit("settled"); await f.j.publish();
     const result = await f.read(await f.j.package());
     expect(result.state.issued - result.state.burned).toBe(10n);
     expect(result.state.demands().length).toBe(0);
     expect(result.state.hasNullifier(f.input.note.nf)).toBe(true);
     expect(result.state.position).toBe(5n);
+  });
+
+  it("answers an exact repeat of an ended demand, its withdrawal or its settlement with the first receipt, and refuses the other exit (C3.6-7, inv 26)", async () => {
+    const f = await fixture(), first = f.demand(2n, 6n), withdraw = withdrawalRecord(f.context, statementHash(first), presenterSecret);
+    const receipts = [await f.j.submit(encodeRecord(first)), await f.j.submit(encodeRecord(withdraw))];
+    // The withdrawn demand leaves the record: it can be settled no more.
+    await expect(f.j.submit(encodeRecord(f.settle(first, 4n)))).rejects.toMatchObject({ code: "REFUSED", check: "DEMAND" });
+    const second = f.demand(1n, 7n), settled = f.settle(second, 4n);
+    receipts.push(await f.j.submit(encodeRecord(second)), await f.j.submit(encodeRecord(settled)));
+    await expect(f.j.submit(encodeRecord(withdrawalRecord(f.context, statementHash(second), presenterSecret))))
+      .rejects.toMatchObject({ code: "REFUSED", check: "DEMAND" });
+    // Past every deadline, after a commit and a publication, each exact repeat is answered before any door judges it.
+    await f.j.commit("ended"); await f.j.publish(); f.venue.advance(8n - f.venue.witnessedIndex());
+    // A new demand over the settled note is judged, and refused.
+    await expect(f.j.submit(encodeRecord(f.demand(6n, 12n)))).rejects.toMatchObject({ code: "REFUSED", check: "LOCKED" });
+    for (const [i, r] of [first, withdraw, second, settled].entries()) expect(await f.j.submit(encodeRecord(r))).toEqual(receipts[i]);
   });
 
   it("refuses strict demand deadlines, invalid instants, wrong withdrawal keys and expired acceptance", async () => {
@@ -110,8 +136,10 @@ describe("v3 recovery journal and independent package reader", () => {
   });
 
   it("refuses the silence horizon before retiring the tail at a witnessed boundary", async () => {
-    const f = await fixture(); f.venue.advance(5n);
+    const f = await fixture(), admitted = f.demand(0n, 6n), receipt = await f.j.submit(encodeRecord(admitted)); f.venue.advance(5n);
     await expect(f.j.submit(encodeRecord(f.demand(5n)))).rejects.toMatchObject({ code: "SCHEDULE", check: "SILENCE" });
+    // An exact repeat of a statement admitted before the horizon is still answered with its receipt (inv 26).
+    expect(await f.j.submit(encodeRecord(admitted))).toEqual(receipt);
     await expect(f.j.return("too-early")).rejects.toMatchObject({ code: "STALE" });
     expect((await f.read()).clock!.boundary).toBeNull();
     f.venue.advance(7n);
@@ -222,6 +250,19 @@ describe("v3 recovery journal and independent package reader", () => {
       { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
     expect(await verdict(adopted!)).toMatchObject({ status: "final" });
     expect(await verdict(encodeReceipt(tail))).toMatchObject({ status: "lapsed" });
+  });
+
+  it("reads a receipt the held checkpoints have not yet reached as pending, and final once its checkpoint is held (C2b.4)", async () => {
+    const f = await fixture(), receipt = await f.j.submit(encodeRecord(f.demand(1n)));
+    const verdict = async () => {
+      const served = await f.j.package(), items = decodeEvidencePackage(served.package);
+      return (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+        { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
+    };
+    expect(await verdict()).toMatchObject({ status: "pending", includedAt: [], contradictedAt: [] });
+    // Signed and published, the commitment carrying it makes the receipt final.
+    await f.j.commit("carrying"); await f.j.publish();
+    expect(await verdict()).toMatchObject({ status: "final" });
   });
 
   it("reads force, publications and the non-service count through kept state and retained evidence as a fresh read does", async () => {

@@ -4,9 +4,9 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, it } from "vitest";
 import * as range from "../src/record-range.js";
 import { EncodingError } from "../src/bytes.js";
-import { encodeCommitment, signCommitment } from "../src/commitment.js";
-import { encodeReplacement, replacementMessage, ROLE_OPERATOR, type Replacement } from "../src/replacement.js";
-import { encodeRevocation, signRevocation } from "../src/revocation.js";
+import {
+  encodeCommitment, encodeReplacement, encodeRevocation, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation, type Replacement,
+} from "../src/venue-records.js";
 import { flipping, hiddenShared, hugeSparse, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 // Independent Buffer framing and hash oracle. Commitments, replacements and
@@ -467,99 +467,180 @@ describe("v3 replacement chain from ranges", () => {
     expect(before.pending?.from).toBe(20n);
   });
 
-  it("agrees with the runtime walk over the same records in every scenario", async () => {
-    const { makeBacking } = await import("../src/backing.js");
-    const { LocalVenue } = await import("../src/venue.js");
-    const { successionAhead, successionOf } = await import("../src/replacement.js");
-    const { KEYS, SECRETS } = await import("./support.js");
-    const s1 = b(47), s2 = b(48);
-    interface Step { at: bigint; effective: bigint; successor: Uint8Array; predecessor: "backing" | number; signer?: Uint8Array }
-    const scenarios: Step[][] = [
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: s2, predecessor: 0 }],
-      [{ at: 5n, effective: 15n, successor: s1, predecessor: "backing" }, { at: 8n, effective: 12n, successor: s2, predecessor: "backing" }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 10n, effective: 20n, successor: s2, predecessor: "backing" }],
-      [{ at: 5n, effective: 15n, successor: s1, predecessor: "backing" }, { at: 8n, effective: 12n, successor: SECRETS.operator, predecessor: "backing" }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 5n, effective: 11n, successor: s2, predecessor: "backing" }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 6n, effective: 10n, successor: s2, predecessor: 0 }],
-      [{ at: 5n, effective: 30n, successor: s1, predecessor: "backing" }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: SECRETS.operator, predecessor: 0 }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing", signer: b(49) }, { at: 6n, effective: 12n, successor: s2, predecessor: "backing" }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: s2, predecessor: 0 },
-        { at: 12n, effective: 19n, successor: SECRETS.operator, predecessor: 0 }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 9n, successor: s2, predecessor: "backing" },
-        { at: 8n, effective: 8n, successor: s2, predecessor: "backing" }],
-      // A revocation and a handover tied at one index; a void record beside a valid one at one index.
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 12n, successor: s2, predecessor: "backing" },
-        { at: 7n, effective: 9n, successor: SECRETS.operator, predecessor: "backing" }],
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 18n, successor: s2, predecessor: 0 },
-        { at: 12n, effective: 10n, successor: s2, predecessor: 0 }],
-      // A revocation, then a fresh handover witnessed after the revoked candidate's effective index.
-      [{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 8n, successor: SECRETS.operator, predecessor: "backing" },
-        { at: 12n, effective: 15n, successor: s2, predecessor: "backing" }],
-    ];
-    for (const steps of scenarios) {
-      const venue = new LocalVenue(), runtime = makeBacking({
-        obligor: KEYS.backer, payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n }, reliance: [],
-        evidence: { setting: "transparent", operator: KEYS.operator, silence: { noCommitmentDuration: 10n, challengeWindow: 5n }, replacementRule: KEYS.backer },
-      });
-      const name = runtime.name, published: Replacement[] = [], entries: { index: bigint; record: Uint8Array }[] = [];
-      for (const step of steps) {
-        const predecessor = step.predecessor === "backing" ? name : sha(replacementMessage(name, published[step.predecessor]!));
-        const r = signedReplacement(name, step.signer ?? SECRETS.backer, step.successor, predecessor, step.effective);
-        if (venue.witnessedIndex() < step.at) venue.advance(step.at - venue.witnessedIndex());
-        venue.publishReplacement(name, r); published.push(r); entries.push({ index: step.at, record: encodeReplacement(name, r) });
-      }
-      if (venue.witnessedIndex() < 20n) venue.advance(20n - venue.witnessedIndex());
-      const answer: range.RangeAnswer = { request: request(2, name, 0n, 20n), entries: ordered(entries, 2) };
-      const ours = range.replacementChain(range.admittedReplacements(answer, KEYS.backer), { backing: name, original: KEYS.operator, lag: venue.lag(), now: 20n });
-      expect(links(ours.chain)).toEqual(links(successionOf(runtime, venue)));
-      expect(links([...ours.chain, ...(ours.pending === undefined ? [] : [ours.pending])])).toEqual(links(successionAhead(runtime, venue)));
+  const froms = (walked: range.ReplacementChain): bigint[] => walked.chain.map(l => l.from);
+  const identity = (r: { replacement: Replacement }): Uint8Array => sha(replacementMessage(backing, r.replacement));
+  const onLink = (successorSecret: Uint8Array, predecessor: Uint8Array, effective: bigint): { record: Uint8Array } =>
+    ({ record: encodeReplacement(backing, signedReplacement(backing, ruleSecret, successorSecret, predecessor, effective)) });
+
+  it("reads naming the incumbent as no handover, and a successor named next takes force (C2.5.4)", () => {
+    // Naming the incumbent first does not freeze the link: the next record there is read.
+    const third = replacement(9n, b(45));
+    const after = walk([at(5n, replacement(6n, operatorSecret)), at(8n, third)], 0n, 9n);
+    expect(froms(after)).toEqual([0n, 9n]);
+    expect(Buffer.from(after.chain[1]!.operator)).toEqual(Buffer.from(ed25519.getPublicKey(b(45))));
+    // A revocation of a standing candidate, then a fresh handover witnessed before the revoked one's effective index.
+    expect(froms(walk([at(5n, replacement(20n)), at(9n, replacement(10n, operatorSecret)), at(15n, replacement(30n, b(45)))], 0n, 30n)))
+      .toEqual([0n, 30n]);
+  });
+
+  it("passes over a void record and seats a later good one at the same link (C2.5.4)", () => {
+    const first = replacement(10n), link = identity(first);
+    const voided = onLink(b(46), link, 7n), good = onLink(b(47), link, 30n);
+    const walked = walk([at(3n, first), at(5n, voided), at(8n, good)], 0n, 30n);
+    expect(froms(walked)).toEqual([0n, 10n, 30n]);
+    expect(walked.chain.map(l => Buffer.from(l.operator).toString("hex"))).not.toContain(Buffer.from(ed25519.getPublicKey(b(46))).toString("hex"));
+  });
+
+  it("reads nothing from a replacement naming a predecessor the chain never had", () => {
+    const stray = onLink(otherSecret, b(0xee), 10n);
+    expect(range.admittedReplacements({ request: request(2, backing), entries: [entry(1n, stray.record)] }, rule)).toHaveLength(1);
+    const walked = walk([at(1n, stray)], 0n);
+    expect(froms(walked)).toEqual([0n]);
+    expect(walked.pending).toBeUndefined();
+  });
+
+  it("applies the lead floor to a record naming the incumbent too: below it no revocation, at it one (C2.5.3)", () => {
+    const first = replacement(20n);
+    for (const [lag, below] of [[0n, 9n], [2n, 13n]] as const) {
+      // The floor of a record witnessed at 9 is 9 + 2·lag + 1.
+      expect(froms(walk([at(5n, first), at(9n, replacement(below, operatorSecret))], lag))).toEqual([0n, 20n]);
+      expect(froms(walk([at(5n, first), at(9n, replacement(below + 1n, operatorSecret))], lag))).toEqual([0n]);
     }
   });
 
-  it("agrees with the runtime walk on seeded scenarios with republished copies, revocations and ties, read whole or in two windows", async () => {
-    const { makeBacking } = await import("../src/backing.js");
-    const { LocalVenue } = await import("../src/venue.js");
-    const { successionAhead, successionOf } = await import("../src/replacement.js");
-    const { KEYS, SECRETS } = await import("./support.js");
+  it("revokes a candidate by naming the incumbent at the incumbent's own effective index (C2.5.4)", () => {
+    const first = replacement(10n), link = identity(first);
+    const candidate = at(7n, onLink(b(45), link, 40n));
+    expect(froms(walk([at(5n, first), candidate], 0n, 40n))).toEqual([0n, 10n, 40n]);
+    // Effective 10 is not after the incumbent's force, yet it names the incumbent, so it revokes.
+    expect(froms(walk([at(5n, first), candidate, at(9n, onLink(otherSecret, link, 10n))], 0n, 40n))).toEqual([0n, 10n]);
+  });
+
+  it("answers each reading index as the prefix in force and the first link ahead", () => {
+    const first = replacement(10n), second = onLink(b(45), identity(first), 20n);
+    // Admitted over a range reaching past every reading index: a record witnessed after `now` is not read.
+    const admitted = range.admittedReplacements({ request: request(2, backing, 0n, 25n), entries: ordered([at(5n, first), at(12n, second)], 2) }, rule);
+    for (let now = 0n; now <= 25n; now++) {
+      const walked = range.replacementChain(admitted, { backing, original: operator, lag: 0n, now });
+      const expected = now < 5n ? [[0n], undefined] : now < 10n ? [[0n], 10n] : now < 12n ? [[0n, 10n], undefined]
+        : now < 20n ? [[0n, 10n], 20n] : [[0n, 10n, 20n], undefined];
+      expect([froms(walked), walked.pending?.from]).toEqual(expected);
+    }
+  });
+
+  it("walks a wide admitted set at one link, each superseding the last before its force, with no stack or spread bound", () => {
+    const count = 130_000, successor = ed25519.getPublicKey(b(45));
+    const stubs: range.AdmittedReplacement[] = Array.from({ length: count }, (_, i) => {
+      const id = new Uint8Array(32); new DataView(id.buffer).setUint32(0, i + 1);
+      return { index: BigInt(i + 1), identity: id,
+        replacement: { role: ROLE_OPERATOR, successor, predecessor: backing, effective: 1_000_000n, signature: new Uint8Array(64), successorSignature: new Uint8Array(64) } };
+    });
+    const wide = range.replacementChain(stubs, { backing, original: operator, lag: 0n, now: 200_000n });
+    expect(froms(wide)).toEqual([0n]);
+    expect(Buffer.from(wide.pending!.link)).toEqual(Buffer.from(stubs[count - 1]!.identity));
+  });
+
+  // The frozen transparent walk (`successionOf`, `successionAhead` in `replacement.ts`, retired in slice 10 M10e1 and kept at
+  // the M10e1 base revision) answered every scenario below; its answers are kept as data. They were read under this backing
+  // name and a lag of zero, and ties fall by identity, so the name stays fixed. A link is named by its operator and the
+  // index it takes force, and by the record it stands on: the backing name, or the position of the record in `published`.
+  const NAME = Buffer.from("faf6cb5fccde64888cbce60dfc3d3485bf5de90d82b1d37108a7dcf9139ca2e2", "hex");
+  const named = new Map([[47, "s1"], [48, "s2"], [49, "s3"], [7, "operator"]]
+    .map(([n, label]) => [Buffer.from(ed25519.getPublicKey(b(n as number))).toString("hex"), label as string]));
+  function labels(walked: range.ReplacementChain, published: readonly Replacement[]): [string, string] {
+    const hashes = published.map(r => Buffer.from(sha(replacementMessage(NAME, r))).toString("hex"));
+    const label = (l: range.ChainLink): string => {
+      const link = Buffer.from(l.link);
+      return `${named.get(Buffer.from(l.operator).toString("hex"))}@${l.from}:${link.equals(NAME) ? "name" : hashes.indexOf(link.toString("hex"))}`;
+    };
+    return [walked.chain.map(label).join(" "), [...walked.chain, ...(walked.pending === undefined ? [] : [walked.pending])].map(label).join(" ")];
+  }
+
+  it("answers every scenario as the transparent walk did (in force, and with the pending link ahead)", () => {
+    const s1 = b(47), s2 = b(48), operatorSecret = b(7), backer = b(1), rule = ed25519.getPublicKey(backer);
+    interface Step { at: bigint; effective: bigint; successor: Uint8Array; predecessor: "backing" | number; signer?: Uint8Array }
+    const scenarios: [Step[], string, string?][] = [
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }], "operator@0:name s1@10:0"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: s2, predecessor: 0 }],
+        "operator@0:name s1@10:0 s2@20:1"],
+      [[{ at: 5n, effective: 15n, successor: s1, predecessor: "backing" }, { at: 8n, effective: 12n, successor: s2, predecessor: "backing" }],
+        "operator@0:name s2@12:1"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 10n, effective: 20n, successor: s2, predecessor: "backing" }],
+        "operator@0:name s1@10:0"],
+      [[{ at: 5n, effective: 15n, successor: s1, predecessor: "backing" }, { at: 8n, effective: 12n, successor: operatorSecret, predecessor: "backing" }],
+        "operator@0:name"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 5n, effective: 11n, successor: s2, predecessor: "backing" }],
+        "operator@0:name s2@11:1"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 6n, effective: 10n, successor: s2, predecessor: 0 }],
+        "operator@0:name s1@10:0"],
+      [[{ at: 5n, effective: 30n, successor: s1, predecessor: "backing" }], "operator@0:name", "operator@0:name s1@30:0"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: operatorSecret, predecessor: 0 }],
+        "operator@0:name s1@10:0 operator@20:1"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing", signer: b(49) }, { at: 6n, effective: 12n, successor: s2, predecessor: "backing" }],
+        "operator@0:name s2@12:1"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 20n, successor: s2, predecessor: 0 },
+        { at: 12n, effective: 19n, successor: operatorSecret, predecessor: 0 }], "operator@0:name s1@10:0 s2@20:1"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 9n, successor: s2, predecessor: "backing" },
+        { at: 8n, effective: 8n, successor: s2, predecessor: "backing" }], "operator@0:name s2@9:1"],
+      // A revocation and a handover tied at one index; a void record beside a valid one at one index.
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 12n, successor: s2, predecessor: "backing" },
+        { at: 7n, effective: 9n, successor: operatorSecret, predecessor: "backing" }], "operator@0:name"],
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 12n, effective: 18n, successor: s2, predecessor: 0 },
+        { at: 12n, effective: 10n, successor: s2, predecessor: 0 }], "operator@0:name s1@10:0 s2@18:1"],
+      // A revocation, then a fresh handover witnessed after the revoked candidate's effective index.
+      [[{ at: 5n, effective: 10n, successor: s1, predecessor: "backing" }, { at: 7n, effective: 8n, successor: operatorSecret, predecessor: "backing" },
+        { at: 12n, effective: 15n, successor: s2, predecessor: "backing" }], "operator@0:name s2@15:2"],
+    ];
+    for (const [steps, inForce, ahead = inForce] of scenarios) {
+      const published: Replacement[] = [], entries: { index: bigint; record: Uint8Array }[] = [];
+      for (const step of steps) {
+        const predecessor = step.predecessor === "backing" ? NAME : sha(replacementMessage(NAME, published[step.predecessor]!));
+        const r = signedReplacement(NAME, step.signer ?? backer, step.successor, predecessor, step.effective);
+        published.push(r); entries.push({ index: step.at, record: encodeReplacement(NAME, r) });
+      }
+      const answer: range.RangeAnswer = { request: request(2, NAME, 0n, 20n), entries: ordered(entries, 2) };
+      const ours = range.replacementChain(range.admittedReplacements(answer, rule), { backing: NAME, original: ed25519.getPublicKey(operatorSecret), lag: 0n, now: 20n });
+      expect(labels(ours, published)).toEqual([inForce, ahead]);
+    }
+  });
+
+  it("answers seeded scenarios with republished copies, revocations and ties as the transparent walk did, read whole or in two windows", () => {
+    const backer = b(1), rule = ed25519.getPublicKey(backer);
     let seed = 0x5eed_2026n;
     const next = (bound: number): number => { seed = (seed * 6364136223846793005n + 1442695040888963407n) % (1n << 64n); return Number((seed >> 33n) % BigInt(bound)); };
-    const successors = [b(47), b(48), b(49), SECRETS.operator];
+    const successors = [b(47), b(48), b(49), b(7)];
+    const answers: string[] = [];
     let crossWindowCopies = 0;
     for (let scenario = 0; scenario < 120; scenario++) {
-      const venue = new LocalVenue(), runtime = makeBacking({
-        obligor: KEYS.backer, payout: { thing: "EUR", quantumExponent: -2, perUnit: 100n }, reliance: [],
-        evidence: { setting: "transparent", operator: KEYS.operator, silence: { noCommitmentDuration: 10n, challengeWindow: 5n }, replacementRule: KEYS.backer },
-      });
-      const name = runtime.name, published: Replacement[] = [], entries: { index: bigint; record: Uint8Array }[] = [];
+      const published: Replacement[] = [], entries: { index: bigint; record: Uint8Array }[] = [];
       let at = 1n;
       for (let step = 0, steps = 1 + next(6); step < steps; step++) {
         at += BigInt(next(4));
         if (at > 20n) break;
-        if (venue.witnessedIndex() < at) venue.advance(at - venue.witnessedIndex());
         let r: Replacement;
         if (published.length > 0 && next(3) === 0) r = published[next(published.length)]!;
         else {
-          const predecessor = published.length === 0 || next(2) === 0 ? name : sha(replacementMessage(name, published[next(published.length)]!));
-          r = signedReplacement(name, next(8) === 0 ? b(50) : SECRETS.backer, successors[next(successors.length)]!, predecessor, at + BigInt(next(12)));
+          const predecessor = published.length === 0 || next(2) === 0 ? NAME : sha(replacementMessage(NAME, published[next(published.length)]!));
+          r = signedReplacement(NAME, next(8) === 0 ? b(50) : backer, successors[next(successors.length)]!, predecessor, at + BigInt(next(12)));
           published.push(r);
         }
-        venue.publishReplacement(name, r); entries.push({ index: at, record: encodeReplacement(name, r) });
+        entries.push({ index: at, record: encodeReplacement(NAME, r) });
       }
-      if (venue.witnessedIndex() < 20n) venue.advance(20n - venue.witnessedIndex());
-      const context = { backing: name, original: KEYS.operator, lag: venue.lag(), now: 20n };
-      const whole = range.replacementChain(range.admittedReplacements({ request: request(2, name, 0n, 20n), entries: ordered(entries, 2) }, KEYS.backer), context);
-      expect(links(whole.chain)).toEqual(links(successionOf(runtime, venue)));
-      expect(links([...whole.chain, ...(whole.pending === undefined ? [] : [whole.pending])])).toEqual(links(successionAhead(runtime, venue)));
+      const context = { backing: NAME, original: ed25519.getPublicKey(b(7)), lag: 0n, now: 20n };
+      const whole = range.replacementChain(range.admittedReplacements({ request: request(2, NAME, 0n, 20n), entries: ordered(entries, 2) }, rule), context);
+      answers.push(labels(whole, published).join(" | "));
       const split = BigInt(next(20));
-      const early = range.admittedReplacements({ request: request(2, name, 0n, split), entries: ordered(entries.filter(e => e.index <= split), 2) }, KEYS.backer);
-      const late = range.admittedReplacements({ request: request(2, name, split + 1n, 20n), entries: ordered(entries.filter(e => e.index > split), 2) }, KEYS.backer);
+      const early = range.admittedReplacements({ request: request(2, NAME, 0n, split), entries: ordered(entries.filter(e => e.index <= split), 2) }, rule);
+      const late = range.admittedReplacements({ request: request(2, NAME, split + 1n, 20n), entries: ordered(entries.filter(e => e.index > split), 2) }, rule);
       if (late.some(l => early.some(e => Buffer.from(e.identity).equals(l.identity)))) crossWindowCopies++;
       const windowed = range.replacementChain([...early, ...late], context);
       expect(links(windowed.chain)).toEqual(links(whole.chain));
       expect(windowed.pending === undefined ? undefined : links([windowed.pending])).toEqual(whole.pending === undefined ? undefined : links([whole.pending]));
     }
+    // The transparent walk's 120 answers, one line each, hashed; 89 hand over at least once and one ends with a link pending.
+    expect(answers.filter(a => a.split(" | ")[0]!.includes(" ")).length).toBe(89);
+    expect(answers.filter(a => { const [inForce, ahead] = a.split(" | "); return inForce !== ahead; }).length).toBe(1);
+    expect(sha(Buffer.from(answers.join("\n"))).toString("hex")).toBe("18d70c02d14d89c28c1384a2c843e57b03e8de4357cdcf4e569e0e45e63a0c14");
     // The windowed reading meets a copy of an earlier window's record in a share of the scenarios.
     expect(crossWindowCopies).toBeGreaterThanOrEqual(5);
   });

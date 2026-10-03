@@ -55,6 +55,14 @@ describe("v3 service HTTP trust boundary", () => {
     return { status: response.status, body: await response.json() };
   }
 
+  it("starts only with two distinct 32-byte credentials", () => {
+    const journal = { configurationDomain: domain.slice() } as unknown as V3OperatorJournal;
+    for (const credentials of [{ walletToken: TOKEN, adminToken: TOKEN }, { walletToken: "bad", adminToken: ADMIN },
+      { walletToken: TOKEN, adminToken: "AA".repeat(32) }, { walletToken: TOKEN.slice(2), adminToken: ADMIN }]) {
+      expect(() => createV3Service(journal, credentials)).toThrow("distinct 32-byte credentials required");
+    }
+  });
+
   it("authorizes wallet submit/evidence and reserves commit/publish for the admin credential", async () => {
     const f = await fixture(), submission = command({ kind: "submit", record: bytesToHex(record()) });
     expect((await raw(f.url, submission)).status).toBe(200);

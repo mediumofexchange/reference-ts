@@ -6,7 +6,7 @@ import { deliveryHash, encodeRecord, evidenceHashes, hashEvidenceFields, stateme
   type EvidenceDigests, type Record as StatementRecord } from "../src/pool/v3/records.js";
 import { EncodingError } from "../src/bytes.js";
 import * as contexts from "../src/contexts.js";
-import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
+import { directoryRoot, signCommitment, verifyCommitment } from "../src/venue-records.js";
 import { FIELD_MODULUS, limbsOf } from "../src/pool/field.js";
 import { verifySignatureStrict } from "../src/keys.js";
 import { flipping, hugeSparse, iterating, lookAlikes, lyingLength } from "./hostile-bytes.js";

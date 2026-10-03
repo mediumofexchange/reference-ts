@@ -150,6 +150,12 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
       .rejects.toMatchObject({ code: "FUNDS" });
     await expect(f.holder.demand("now", 10n, f.venue.witnessedIndex() + lag, f.served(), f.signed, prove))
       .rejects.toMatchObject({ code: "INVALID" });
+    // A demand names a positive quantity (C3.4); nothing is planned or saved for another.
+    for (const quantity of [0n, -1n, 5 as never as bigint, 1n << 64n]) {
+      await expect(f.holder.demand("none", quantity, f.venue.witnessedIndex() + 20n, f.served(), f.signed, prove))
+        .rejects.toMatchObject({ code: "INVALID", message: expect.stringMatching(/invalid demand/) });
+    }
+    expect(f.holder.act("none")).toBeUndefined();
     const deadline = f.venue.witnessedIndex() + 20n;
     const demand = await f.holder.demand("pair", 10n, deadline, f.served(), f.signed, prove);
     expect(demand.inputs.length).toBe(2);

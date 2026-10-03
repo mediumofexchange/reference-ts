@@ -4,7 +4,7 @@ import { sha256 as packageSha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it, vi } from "vitest";
 import * as p from "../src/pool/v3/package.js";
 import { EncodingError } from "../src/bytes.js";
-import { directoryRoot, signCommitment, verifyCommitment, type SnapshotDigest } from "../src/commitment.js";
+import { directoryRoot, signCommitment, verifyCommitment, type SnapshotDigest } from "../src/venue-records.js";
 import { flipping, hiddenShared, hugeSparse, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 vi.mock("@noble/hashes/sha2.js", async importOriginal => {

@@ -396,4 +396,115 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
       expect(sign).toHaveBeenCalled();
     } finally { sign.mockRestore(); }
   }, 90_000);
+
+  // Ported from the transparent c2-the-book, c2-the-resume and c2-succession cases (P2).
+  it("lets a second heir take over the last carrying state past a link that never committed (C2.7)", async () => {
+    const f = await fundedFixture(), next = await f.replace();
+    // C is named at B's link before B is in force; B never commits.
+    const later = await f.replace(cSecret, next.link, next.effective + 10n); f.venue.advance(later.effective);
+    const heir = f.create(cSecret, "c"), opening = await heir.takeover("takeover", f.signed, f.held.package);
+    expect([opening.operator, opening.sequence]).toEqual([ed25519.getPublicKey(cSecret), 1n]);
+    await heir.publish(); await heir.adopt();
+    const ctx = await f.openingContext(heir);
+    expect(ctx.header.entries[0]!.link).toEqual(later.link);
+    expect(ctx.header.entries[0]!.opening).toMatchObject({ operator: aKey, sequence: 2n, root: f.held.selection.root });
+    await heir.submit(f.spend(ctx)); await heir.commit("spent"); await heir.publish();
+    const result = await f.read(await heir.package());
+    expect([result.state.issued, result.state.hasNullifier(f.input.note.nf)]).toEqual([10n, true]);
+  });
+
+  it("does not let a successor queued at B's link lock B out of its own term", async () => {
+    const f = await fundedFixture(), next = await f.replace();
+    const later = await f.replace(cSecret, next.link, next.effective + 10n); f.venue.advance(next.effective);
+    const successor = f.create(bSecret, "b");
+    expect((await successor.takeover("takeover", f.signed, f.held.package)).operator).toEqual(bKey);
+    await successor.publish(); await successor.adopt();
+    const ctx = await f.openingContext(successor);
+    expect(ctx.header.entries[0]!.link).toEqual(next.link);
+    expect(decodeReceipt(await successor.submit(f.spend(ctx))).position).toBe(1n);
+    await successor.commit("in-term"); await successor.publish();
+    f.venue.advance(later.effective - lag);
+    await expect(successor.submit(f.issue(ctx, 75))).rejects.toMatchObject({ code: "SCHEDULE" });
+    f.venue.advance(later.effective);
+    await expect(successor.commit("after-force")).rejects.toMatchObject({ code: "STALE", message: "the operator's term has ended" });
+  });
+
+  it("refuses a retired operator's takeover and a fresh journal for an heir that already committed", async () => {
+    const f = await transferred();
+    await f.successor.submit(f.spend(f.successorContext)); await f.successor.commit("spent"); await f.successor.publish();
+    const publicB = await f.successor.package();
+    // A fresh journal for B's key after B committed in its term is not handed B's book back empty or whole.
+    const fresh = f.create(bSecret, "b-fresh");
+    await expect(fresh.takeover("again", f.signed, publicB.package))
+      .rejects.toMatchObject({ code: "CONFLICT", message: "the venue contains a commitment this journal did not sign" });
+    const back = await f.replace(aSecret, f.next.link); f.venue.advance(back.effective);
+    // B, retired, cannot take the book back without being named again.
+    await expect(f.successor.takeover("again", f.signed, publicB.package))
+      .rejects.toMatchObject({ code: "STALE", message: "this key has no current successor term" });
+    expect((await f.a.takeover("back-to-a", f.signed, publicB.package)).sequence).toBe(3n);
+  });
+
+  it("keeps a re-appointed operator's old segment stale until its new takeover", async () => {
+    const f = await transferred(), back = await f.replace(aSecret, f.next.link), publicB = await f.successor.package();
+    f.venue.advance(back.effective);
+    await expect(f.a.submit(f.issue(f.context, 75))).rejects.toMatchObject({ code: "STALE", message: "the operator's term has ended" });
+    await expect(f.a.commit("old-seat")).rejects.toMatchObject({ code: "STALE", message: "the operator's term has ended" });
+    expect((await f.a.takeover("back-to-a", f.signed, publicB.package)).sequence).toBe(3n);
+    await f.a.publish(); await f.a.adopt();
+    await f.a.submit(f.issue(await f.openingContext(f.a), 75)); await f.a.commit("resumed"); await f.a.publish();
+    expect((await f.read(await f.a.package())).state.issued).toBe(20n);
+  });
+
+  it("drops an uncommitted tail across A-to-B-to-A: its receipt lapses and the act lands again as a fresh statement", async () => {
+    const f = await fundedFixture(), next = await f.replace();
+    const tailBytes = f.issue(f.context, 75), tail = await f.a.submit(tailBytes);
+    f.venue.advance(next.effective);
+    const successor = f.create(bSecret, "b");
+    await successor.takeover("takeover", f.signed, f.held.package); await successor.publish(); await successor.adopt();
+    const back = await f.replace(aSecret, next.link), publicB = await successor.package(); f.venue.advance(back.effective);
+    await f.a.takeover("back-to-a", f.signed, publicB.package); await f.a.publish(); await f.a.adopt();
+    await f.a.commit("resumed"); await f.a.publish();
+    const served = await f.a.package(), items = decodeEvidencePackage(served.package);
+    expect((await f.read(served)).state.issued).toBe(10n);
+    const verdict = async (receipt: Uint8Array) => (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+      { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
+    expect(await verdict(tail)).toMatchObject({ status: "lapsed" });
+    const again = await f.a.submit(f.issue(await f.openingContext(f.a), 75));
+    expect(decodeReceipt(again).segment).not.toEqual(decodeReceipt(tail).segment);
+    await f.a.commit("again"); await f.a.publish();
+    expect((await f.read(await f.a.package())).state.issued).toBe(20n);
+  });
+
+  it("takes the last carrying state when the predecessor's later commitment drops the backing", async () => {
+    const f = await fundedFixture(), next = await f.replace();
+    await f.venue.publishRecord(1, aKey, encodeCommitment(signCommitment(aSecret, 3n, directoryRoot([]))));
+    f.venue.advance(next.effective);
+    const items = decodeEvidencePackage(f.held.package);
+    const sorted = (list: typeof items) => encodeEvidencePackage([...list]
+      .sort((x, y) => x.kind - y.kind || Buffer.compare(sha256(x.payload), sha256(y.payload))));
+    const successor = f.create(bSecret, "b");
+    await expect(successor.takeover("takeover", f.signed, f.held.package)).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    await successor.takeover("takeover", f.signed, sorted([...items, { kind: 3, payload: encodeEvidenceDirectory([]) }]));
+    await successor.publish(); await successor.adopt();
+    expect((await f.openingContext(successor)).header.entries[0]!.opening)
+      .toMatchObject({ operator: aKey, sequence: 2n, root: f.held.selection.root });
+    expect((await f.read(await successor.package())).state.issued).toBe(10n);
+  });
+
+  it("refuses undecodable takeover evidence in its own voice without consuming the command", async () => {
+    const f = await fundedFixture(), next = await f.replace(); f.venue.advance(next.effective);
+    const successor = f.create(bSecret, "b");
+    await expect(successor.takeover("takeover", f.signed, Uint8Array.of(1, 2, 3)))
+      .rejects.toMatchObject({ code: "UNAVAILABLE", message: "the public evidence does not establish the takeover state" });
+    expect((await successor.takeover("takeover", f.signed, f.held.package)).sequence).toBe(1n);
+  });
+
+  it("answers a retired operator's exact repeat with its original receipt and refuses a new act", async () => {
+    const f = await fundedFixture(), original = await f.a.submit(f.issue());
+    const next = await f.replace(); f.venue.advance(next.effective);
+    const successor = f.create(bSecret, "b");
+    await successor.takeover("takeover", f.signed, f.held.package); await successor.publish(); await successor.adopt();
+    expect(await f.a.submit(f.issue())).toEqual(original);
+    await expect(f.a.submit(f.issue(f.context, 75))).rejects.toMatchObject({ code: "STALE", message: "the operator's term has ended" });
+  });
 });

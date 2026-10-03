@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
 import * as profile from "../src/ergo-profile.js";
 import * as range from "../src/record-range.js";
 import { EncodingError } from "../src/bytes.js";
-import { encodeCommitment, signCommitment } from "../src/commitment.js";
-import { encodeReplacement, replacementMessage, ROLE_OPERATOR } from "../src/replacement.js";
-import { encodeRevocation, signRevocation } from "../src/revocation.js";
+import {
+  encodeCommitment, encodeReplacement, encodeRevocation, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation,
+} from "../src/venue-records.js";
 
 // Synthetic block sections: real signed records inside register constants,
 // in transactions written here in the node's unsigned serialization, each

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as h from "../src/pool/v3/headers.js";
 import { snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
 import { ByteReader, EncodingError } from "../src/bytes.js";
-import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
+import { directoryRoot, signCommitment, verifyCommitment } from "../src/venue-records.js";
 import { flipping, iterating, lookAlikes, lyingLength, silentArray } from "./hostile-bytes.js";
 
 // Independent wire/hash oracle; domains, roots and links are synthetic.

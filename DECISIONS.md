@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-03` [Retire the pilot and the transparent path against a case map of their checks (slice 10 M10e1)](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)
 - `2026-10-02` [Run the wallet and relay commands over the library, with kept evidence, acceptance files and a status read (slice 10 M10c2b1)](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)
 - `2026-10-02` [Read a note as presented from saved demands and the record's tags, save which demands a re-demand repeats, and freshen into one note (slice 10 M10c2a)](decisions/2026-10.md#2026-10-02--read-a-note-as-presented-from-saved-demands-and-the-records-tags-save-which-demands-a-re-demand-repeats-and-freshen-into-one-note-slice-10-m10c2a)
 - `2026-10-02` [Close the code review of slices 9–10: the publisher's readiness race, a failed settlement's disclosure, serve's keep-alive window and verifier key sets](decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)

@@ -61,7 +61,8 @@
 //
 // Two binary magics open hashed preimages too, and are held to the same rule:
 // "MOEB" a backing's terms (its name is their hash) and "MOED" a directory
-// (its root). The frozen transparent path keeps its own copy of "MOEB".
+// (its root). The retired transparent path's tags above stay declared, so no
+// later message reuses them.
 
 const encoder = new TextEncoder();
 const tag = (s: string): Uint8Array => encoder.encode(s);

@@ -5,7 +5,7 @@ import * as f from "../src/pool/v3/fault-evidence.js";
 import * as c from "../src/pool/v3/commitments.js";
 import { deliveryHash, statementBytes, type EvidenceDigests, type Record as StatementRecord } from "../src/pool/v3/records.js";
 import { EncodingError } from "../src/bytes.js";
-import { directoryRoot, signCommitment, verifyCommitment } from "../src/commitment.js";
+import { directoryRoot, signCommitment, verifyCommitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { flipping, hugeSparse, lookAlikes, lyingLength } from "./hostile-bytes.js";
 

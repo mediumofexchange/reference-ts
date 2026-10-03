@@ -11,7 +11,6 @@ vi.mock("../src/keys.js", async importOriginal => {
     return actual.verifySignatureStrict(...args);
   } };
 });
-import { decodeBacking } from "../src/backing.js";
 import { EncodingError } from "../src/bytes.js";
 import { hiddenShared, lookAlikes } from "./hostile-bytes.js";
 
@@ -55,7 +54,7 @@ function all(): terms.RootTerms {
 }
 
 describe("v3 model constant-root terms", () => {
-  it("matches independent Buffer framing, node SHA256 and Ed25519; v2 refuses v3", () => {
+  it("matches independent Buffer framing, node SHA256 and Ed25519; v3 refuses v2", () => {
     for (const x of [fields(), all()]) {
       const bytes = raw(x), message = cat(Buffer.from("moe/backing-signature/v1"), hash(bytes));
       expect(Buffer.from(terms.encodeRootTerms(x))).toEqual(bytes);
@@ -65,7 +64,6 @@ describe("v3 model constant-root terms", () => {
       const signature = sign(null, message, sk(secret));
       expect(verify(null, message, createPublicKey(sk(secret)), signature)).toBe(true);
       expect(terms.verifyRootTermsSignature(bytes, signature)).toBe(true);
-      expect(() => decodeBacking(bytes)).toThrow("unsupported construction");
       const v2 = Buffer.from(bytes); v2[v2.indexOf("moe/pool/v3") + 10] = 0x32;
       expect(() => terms.decodeRootTerms(v2)).toThrow(EncodingError);
       expect(terms.verifyRootTermsSignature(v2, signature)).toBe(false);
@@ -104,6 +102,27 @@ describe("v3 model constant-root terms", () => {
       expect(() => terms.encodeRootTerms({ ...x, payout })).toThrow(EncodingError);
     }
     expect(terms.decodeRootTerms(raw({ ...fields(), payout: { thing: "x", quantumExponent: -128, perUnit: 1n } })).payout.quantumExponent).toBe(-128);
+  });
+
+  it("refuses out-of-range clause numbers and identifiers of the wrong length on encode, and decodes frozen terms", () => {
+    const refused = (x: terms.RootTerms, reason: string): void => {
+      expect(() => terms.encodeRootTerms(x)).toThrow(new EncodingError(reason));
+    };
+    refused({ ...fields(), nonService: { duration: 0n, count: 1n << 32n, window: 0n } }, "invalid non-service count");
+    refused({ ...fields(), nonService: { duration: 0n, count: -1n, window: 0n } }, "invalid non-service count");
+    refused({ ...fields(), nonService: { duration: 1n << 64n, count: 1n, window: 0n } }, "invalid non-service duration");
+    refused({ ...fields(), nonService: { duration: 0n, count: 1n, window: -1n } }, "invalid non-service window");
+    refused({ ...fields(), silence: { noCommitmentDuration: -1n, challengeWindow: 0n } }, "invalid no-commitment duration");
+    refused({ ...fields(), silence: { noCommitmentDuration: 0n, challengeWindow: 1n << 64n } }, "invalid challenge window");
+    refused({ ...fields(), interval: 1n << 64n }, "invalid witness interval");
+    for (const length of [31, 33]) {
+      refused({ ...fields(), venue: new Uint8Array(length) }, "invalid venue bytes");
+      refused({ ...fields(), configuration: new Uint8Array(length) }, "invalid configuration bytes");
+    }
+    const decoded = terms.decodeRootTerms(raw(all()));
+    expect([decoded, decoded.payout, decoded.silence, decoded.nonService].every(Object.isFrozen)).toBe(true);
+    // A fixed vector beside the independent framing, so neither can drift with the other.
+    expect(hash(terms.encodeRootTerms(all())).toString("hex")).toBe("1d70b1d6e358a42355cc1ab0cc36b763022d8812c07dce573d1d8fb8b6ca27d3");
   });
 
   it("refuses every truncation, trailing byte, unknown tag and malformed framing", () => {

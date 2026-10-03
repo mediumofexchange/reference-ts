@@ -73,9 +73,8 @@ receive, verify and redeem claims under public immutable terms, with **private
 payments and publicly verifiable supply both essential.** The claim layer is
 Construction's core, the shielded pool (§C1.2). A release that runs the
 transparent profile instead does not satisfy this contract; that profile is a
-priced choice for deployments that want a lit ledger, and this repository keeps
-its transparent path only as a differential oracle until the pool path passes
-its cases.
+priced choice for deployments that want a lit ledger; this repository's
+implementation of it is retired.
 
 The smallest supported profile: signed roots with a constant payout, no
 reliance graph, private transfers in one pool per operator, public issuance and
@@ -221,17 +220,18 @@ is not evidence.
 | Practical deployment | Repeatable measurements of proof creation, verification, resync, startup, storage growth, bandwidth and finality on declared target devices and network conditions, against budgets agreed before testing | Node proving and verification timings exist for v2 and the six v3 relations. The first [desktop browser baseline](pool-browser-verification.json) verifies nine spends: 4.28–9.30 s proving, 91–195 ms verification, 14,656-byte proofs. [Target-scale budgets](#target-scale-and-budgets) are declared; nothing is measured against them yet, and mobile, whole-browser peak memory and wallet resync are unmeasured. On Ergo, testnet publication and reassembly were [accepted on a node](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node), with mainnet [inclusion latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet), [chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor) and [replay cost](POOL_DEPLOYMENT_PROBES.md#replay-and-retention-cost) measured. The [Ergo profile](https://github.com/mediumofexchange/money-from-first-principles/blob/01d8db2/venue-ergo.md) is selected with a runtime default depth of 10, and its reader needs no decoder. |
 | Release assurance | Reproducible builds, installed-package interoperability, pinned dependencies and specification, migration by successor, independent security review and documented disposition of every material finding | Package checks and focused defensive review exist. |
 
-## What carries forward, what is frozen, what is retired
+## What carries forward and what is retired
 
-Maintain one production path. The transparent path is **frozen**: no new
-features, no review rounds, cases ported to the pool path as each rule lands,
-and the code deleted when the pool path passes them. The pilot is a harness for
-the durable-command layer; its transport and CLI go with a pool equivalent. The
-private-payment experiment is retired following the active case map in
+Maintain one production path. The transparent path and its pilot are retired
+against a [case map](../decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)
+of their checks, remaining at [8d207eb](https://github.com/mediumofexchange/reference-ts/tree/8d207eb);
+the `moe` commands took over the pilot's integration role. Its cases for rules
+the smallest profile leaves out (reliance, payout in claims, cross-operator
+presentation) are recovered from there when a later version takes them up.
+Two mechanisms it carried are retired by the specification — whole-served-state
+exhibits and the signed opening claim (Construction Appendix) — and are never
+ported. The private-payment experiment is retired following the active case map in
 the [retirement map](PRIVATE_PAYMENT_ARCHITECTURE.md#retained-evidence-and-retirement-conditions).
-Two mechanisms in the frozen code are retired by the
-specification — whole-served-state exhibits and the signed opening claim
-(Construction Appendix) — and are not ported.
 
 Reuse encoding, verification and persistence primitives only where they retain
 the same security meaning. Never reinterpret old signatures under new rules or

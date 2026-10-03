@@ -32,8 +32,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { sep } from 'node:path';
 import * as core from '@mediumofexchange/reference';
-import { makeBacking, encodeBacking, decodeBacking, signBacking, verifyBackingSignature } from '@mediumofexchange/reference/backing';
-import { PILOT_PROFILE } from '@mediumofexchange/reference/pilot-wire';
+import { encodeRootTerms, decodeRootTerms, rootTermsName, rootTermsSignatureMessage, verifyRootTermsSignature } from '@mediumofexchange/reference/pool/v3/terms';
 import { V3_SERVICE_PROFILE } from '@mediumofexchange/reference/pool/v3/service-wire';
 import { V3ServiceClient } from '@mediumofexchange/reference/pool/v3/service-client';
 import { commitmentOf } from '@mediumofexchange/reference/pool/notes';
@@ -45,13 +44,15 @@ for (const specifier of ['@mediumofexchange/reference', '@noble/curves/ed25519.j
   assert.ok(fileURLToPath(import.meta.resolve(specifier)).startsWith(process.cwd() + sep), 'dependency escaped installed consumer: ' + specifier);
 }
 const secret = new Uint8Array(32).fill(1), key = ed25519.getPublicKey(secret);
-const backing = makeBacking({ obligor: key, payout: { thing: 'test', quantumExponent: 0, perUnit: 1n }, reliance: [], evidence: { setting: 'transparent', operator: key } });
-assert.equal(decodeBacking(encodeBacking(backing)).nameHex, backing.nameHex);
-assert.ok(verifyBackingSignature(backing, signBacking(secret, backing)));
-assert.equal(typeof core.makeBacking, 'function');
+const terms = encodeRootTerms({ obligor: key, operator: key, configuration: new Uint8Array(32), venue: new Uint8Array(32), interval: 1n,
+  payout: { thing: 'test', quantumExponent: 0, perUnit: 1n } });
+assert.deepEqual(encodeRootTerms(decodeRootTerms(terms)), terms);
+assert.equal(rootTermsName(terms).length, 32);
+assert.ok(verifyRootTermsSignature(terms, ed25519.sign(rootTermsSignatureMessage(terms), secret)));
+assert.equal(typeof core.verifySignatureStrict, 'function');
+assert.equal(core.makeBacking, undefined);
 assert.equal(core.commitmentOf, commitmentOf);
 assert.equal(core.proofVerifier, undefined);
-assert.equal(PILOT_PROFILE, 'transparent-pilot/v0-directory-v1');
 assert.equal(V3_SERVICE_PROFILE, 'pool-store/v3');
 assert.equal(typeof V3ServiceClient, 'function');
 assert.equal(core.V3ServiceClient, undefined);
@@ -66,7 +67,6 @@ assert.equal(core.ErgoVenue, undefined);
   const replay = new ReplayStore();
   assert.equal(replay.namespaces(new Uint8Array(32)).length, 0);
   replay.close();
-  const { PilotStore } = await import('@mediumofexchange/reference/pilot-store');
   const { V3OperatorJournal, V3StoreError } = await import('@mediumofexchange/reference/pool/v3/store');
   const { V3Wallet } = await import('@mediumofexchange/reference/pool/v3/wallet-store');
   const { createV3Service } = await import('@mediumofexchange/reference/pool/v3/service-http');
@@ -74,12 +74,9 @@ assert.equal(core.ErgoVenue, undefined);
   assert.equal(core.createV3Service, undefined);
   assert.equal(typeof V3Wallet, 'function');
   assert.equal(core.V3Wallet, undefined);
-  const { createPilotServer } = await import('@mediumofexchange/reference/pilot-http');
-  assert.equal(typeof PilotStore, 'function');
   assert.equal(typeof V3OperatorJournal, 'function');
   assert.equal(typeof V3StoreError, 'function');
   assert.equal(core.V3OperatorJournal, undefined);
-  assert.equal(typeof createPilotServer, 'function');
 }
 {
   // The installed package carries the six compiled relations and checks them against its manifest, with no

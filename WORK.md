@@ -11,20 +11,18 @@ harness's second package reader (Next 7) and, against a case map, the transparen
 Earlier: slice 9 (PRs #69–#77), [visibility matrix](docs/POOL_V3_VISIBILITY.md) (PR #78). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
-- **M10a–M10c2a done** (PRs #79–#86; decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a),
-  [M10b](decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b),
-  [M10c1](decisions/2026-10.md#2026-10-02--read-through-each-directorys-own-view-gate-venue-creation-on-the-nodes-network-and-queue-serves-journal-calls-with-the-services-slice-10-m10c1),
-  [M10c2a](decisions/2026-10.md#2026-10-02--read-a-note-as-presented-from-saved-demands-and-the-records-tags-save-which-demands-a-re-demand-repeats-and-freshen-into-one-note-slice-10-m10c2a)):
-  shipped relations, the `moe` bin with `reader` and `operator`, the synthetic node, presented notes and `freshen`.
-- **M10c2 done** (PR #87 and this branch, `claude/m10c2b2-packed-drill`; [decision](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)):
-  `moe wallet` (holder, `--backer`) and `moe relay` ([commands](docs/POOL_V3_WALLET.md#commands)), reviewed and read back.
-  `command-drill.mjs` runs every command from an `npm pack` install over the synthetic node with real proofs: issue → pay → commit
-  on admission → fulfill → demand → relayed acceptance → settle → burn, freshen, restores, 70 issues past the old 67-statement
-  ceiling, a gap redemption through the relay, the operator's return/adopt and a lapsed payment re-proved; no `@noir-lang` in a
-  process that proves nothing; peak RSS up to about 470 MB. Re-recorded here: recovery, succession, scope, history, redemption (local,
-  Ergo); still drifting: conformance, local replay, local journal (their checks write to scratch) and older probe reports.
-  **Next: M10e** (retire the pilot CLI, the harness's second package reader (Next 7) and, against a case map, the transparent path),
-  which the cloud can do; M10d (live testnet drill) needs the local machine (Open questions).
+- **M10a–M10c2 done** (PRs #79–#88; decisions from [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
+  to [M10c2b1](decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)):
+  the `moe` bin's wallet (holder, `--backer`), operator, reader and relay commands ([commands](docs/POOL_V3_WALLET.md#commands));
+  `command-drill.mjs` runs them all from an `npm pack` install with real proofs on the synthetic node, past the old 67-statement
+  ceiling and through an offline operator's return. Reports still drifting: conformance, local replay, local journal, older probes.
+  M10d (live testnet drill) needs the local machine (Open questions).
+- **M10e1 done** (PR #89; [case map](decisions/2026-10.md#2026-10-03--retire-the-pilot-and-the-transparent-path-against-a-case-map-of-their-checks-slice-10-m10e1)):
+  the pilot and transparent path retired (kept at `8d207eb`) after four inventories mapped every case by behaviour and about forty
+  gaps were ported as v3 tests; `keys.ts` now answers false for look-alike or resizing bytes. One fresh review: no blocker or major,
+  minors fixed. Local: `npm run check`, local replay (224 groups), store reports re-recorded; CI green incl. real-proof jobs.
+  **Next: M10e2**, the harness's second package reader (Next 7), with the map's one owed runtime case: a held non-carrying
+  checkpoint leaves a dropped backing's no-commitment clock open (C2b.6.1; model only today).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md) (its durable view: Next 5).
