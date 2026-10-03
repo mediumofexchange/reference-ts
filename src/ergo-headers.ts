@@ -363,6 +363,9 @@ export interface ErgoHeaderStore {
   forkHeight(id: Uint8Array): bigint | undefined;
   /** The height of an accepted header; undefined for one the store has not accepted. */
   heightOf(id: Uint8Array): bigint | undefined;
+  /** An accepted header above the anchor and its ancestors off the best chain, from it down; empty for a header on
+   * the best chain or not accepted. Linear in the distance to the best chain. */
+  offBest(id: Uint8Array): readonly Uint8Array[];
   /** Drop complete inferior side subtrees below a final header, except
    * those containing a protected incomplete supplier pass. */
   prune(witnessed: Uint8Array, protectedIds: readonly Uint8Array[]): void;
@@ -563,7 +566,9 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
         parent = at;
       }
       for (const id of rows.sides()) {
-        const at = stored(id), why = at === undefined ? "its row is missing" : at.above && onBest(at) ? "it is on the best chain" : fault(at, work);
+        // The best chain is the heaviest accepted, the first accepted of equal scores keeping it.
+        const at = stored(id), why = at === undefined ? "its row is missing" : at.above && onBest(at) ? "it is on the best chain"
+          : at.score > best.score ? "it outscores the best chain" : fault(at, work);
         if (why !== undefined) throw new Error(`side header ${bytesToHex(id)}: ${why}`);
         checked++;
       }
@@ -609,6 +614,12 @@ export function ergoHeaderStore(anchorId: Uint8Array, context: readonly Uint8Arr
     forkHeight(id: Uint8Array): bigint | undefined {
       const owned = ownBytes(id), at = owned === undefined || owned.length !== 32 ? undefined : stored(owned);
       return at === undefined ? undefined : fork(at).height;
+    },
+    offBest(id: Uint8Array): readonly Uint8Array[] {
+      const owned = ownBytes(id), path: Uint8Array[] = [];
+      let at = owned === undefined || owned.length !== 32 ? undefined : stored(owned);
+      while (at !== undefined && !onBest(at)) { path.push(copyBytes(at.id)); at = parentOf(at); }
+      return path;
     },
     heightOf(id: Uint8Array): bigint | undefined {
       const owned = ownBytes(id);

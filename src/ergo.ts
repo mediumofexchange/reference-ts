@@ -117,6 +117,8 @@ export const DEFAULT_ERGO_READER_POLICY: ErgoReaderPolicy = Object.freeze({
 });
 /** Heights of best-chain advance that forgive one header charged to a supplier's side-branch quota. */
 const SIDE_HEADER_HEIGHTS = 16n;
+/** The protected paths one supplier name keeps. */
+const PROTECTED_PER_SUPPLIER = 4;
 /** What a retained object costs beside its record and subject. */
 const OBJECT_OVERHEAD = 64;
 /** The longest timer the runtime keeps: a longer one fires at once. */
@@ -222,16 +224,17 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     this.publisher = publisher;
     this.profile = ownErgoProfile(profile);
     this.venueId = ergoProfileIdentity(this.profile);
-    this.durable = journal !== undefined;
-    this.journal = journal ?? ErgoVenueJournal.memory(this.venueId);
-    const { rows, state } = this.journal.attach(this.venueId);
-    let store: ErgoHeaderStore | undefined;
-    try { store = ergoHeaderStore(this.profile.anchor, anchorContext, this.profile.reference === ERGO_TESTNET_REFERENCE ? "testnet" : "mainnet", rows); } catch (error) {
-      // The store reads its best tip from the rows; a row it cannot read is stored evidence that reproduces nothing.
-      if (error instanceof VenueError) throw error;
-      throw new VenueError("stored Ergo evidence does not reproduce its witnessed view");
+    // The caller's policy is read once; an unknown or impossible value is the caller's error.
+    const owned = { ...DEFAULT_ERGO_READER_POLICY, ...policy };
+    if (Object.keys(owned).length !== Object.keys(DEFAULT_ERGO_READER_POLICY).length ||
+        !Object.values(owned).every(n => Number.isSafeInteger(n) && n > 0) || owned.supplierTimeoutMs > MAX_TIMEOUT_MS) {
+      throw new TypeError("invalid Ergo reader policy");
     }
-    if (store === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
+    this.policy = Object.freeze(owned);
+    // The context is read once, and every argument is judged before a journal is attached, which it can be only once.
+    const context: readonly Uint8Array[] = Array.isArray(anchorContext) ? [...anchorContext] : anchorContext;
+    const rules = this.profile.reference === ERGO_TESTNET_REFERENCE ? "testnet" : "mainnet";
+    if (ergoHeaderStore(this.profile.anchor, context, rules) === undefined) throw new VenueError("the anchor context does not authenticate the profile's anchor");
     // Each context selects its header rules, and a header id names no network, so each reference context also
     // bounds its anchor's difficulty; a header id commits to its ancestry, so the bound keeps a profile naming either
     // context off the mainnet. The synthetic context reads the mainnet rules only above an anchor of difficulty 1,
@@ -241,7 +244,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     // No mainnet header sampled to date is below it (the newest about 51 times above); a mainnet hashrate collapse
     // past that margin would reopen the 127-header exposure, and testnet hashrate past it would refuse real anchors.
     if (this.profile.reference !== undefined) {
-      const last: unknown = anchorContext[anchorContext.length - 1];
+      const last: unknown = context[context.length - 1];
       const anchor = last instanceof Uint8Array ? parseErgoHeader(copyBytes(last)) : undefined;
       const difficulty = anchor !== undefined && compareBytes(anchor.id, this.profile.anchor) === 0 ? decodeCompactBits(anchor.nBits) : undefined;
       if (this.profile.reference === ERGO_SYNTHETIC_REFERENCE && difficulty !== 1n) {
@@ -251,14 +254,17 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
         throw new VenueError("the testnet reference context reads only a chain whose anchor is below mainnet's initial difficulty");
       }
     }
-    this.store = store;
-    // The caller's policy is read once; an unknown or impossible value is the caller's error.
-    const owned = { ...DEFAULT_ERGO_READER_POLICY, ...policy };
-    if (Object.keys(owned).length !== Object.keys(DEFAULT_ERGO_READER_POLICY).length ||
-        !Object.values(owned).every(n => Number.isSafeInteger(n) && n > 0) || owned.supplierTimeoutMs > MAX_TIMEOUT_MS) {
-      throw new TypeError("invalid Ergo reader policy");
+    this.durable = journal !== undefined;
+    this.journal = journal ?? ErgoVenueJournal.memory(this.venueId);
+    const { rows, state } = this.journal.attach(this.venueId);
+    let store: ErgoHeaderStore | undefined;
+    try { store = ergoHeaderStore(this.profile.anchor, context, rules, rows); } catch (error) {
+      // The store reads its best tip from the rows; a row it cannot read is stored evidence that reproduces nothing.
+      if (error instanceof VenueError) throw error;
+      throw new VenueError("stored Ergo evidence does not reproduce its witnessed view");
     }
-    this.policy = Object.freeze(owned);
+    if (store === undefined) throw new Error("the anchor context authenticated once and not again");
+    this.store = store;
     this.restore(state);
   }
 
@@ -353,17 +359,25 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     // The caller's list is read once, before the sync starts, so a list that is not one is the caller's error alone;
     // each supplier's name once, for its report.
     const sources = Array.from(suppliers, supplier => ({ supplier, name: nameOf(supplier) }));
+    // A supplier's name keys its quota and protection in the rows, so it must store as itself.
+    for (const { name } of sources) {
+      try { encodeURIComponent(name); } catch { throw new TypeError("a supplier's name is not well-formed text"); }
+    }
     this.syncing = true;
     try {
       this.journal?.assertOwner();
       const passes: { supplier: ErgoSupplier; name: string; pass: HeaderPass }[] = [];
       for (const source of sources) passes.push({ ...source, pass: await this.syncHeaders(source.supplier, source.name) });
-      // A supplier whose passes reached a header keeps only what they reached under its name, whatever ended them; one
-      // that reached none (down, or refused at once) keeps what it had.
-      for (const { name, pass } of passes) if (pass.protect !== undefined) this.protectedHeaders.delete(name);
+      // Each supplier keeps the last header each of its passes reached, whatever ended the pass, up to
+      // `PROTECTED_PER_SUPPLIER` paths under its name: a header replaces any it extends, and past the bound the oldest
+      // goes. So a fork one supplier left still stands for another that serves it later, without its headers being
+      // read and charged again.
       for (const { name, pass } of passes) if (pass.protect !== undefined) {
         const id = blake2b(pass.protect, { dkLen: 32 }), kept = this.protectedHeaders.get(name) ?? new Map<string, Uint8Array>();
-        kept.set(bytesToHex(id), id); this.protectedHeaders.set(name, kept);
+        for (const below of this.store.offBest(id)) kept.delete(bytesToHex(below));
+        kept.set(bytesToHex(id), id);
+        while (kept.size > PROTECTED_PER_SUPPLIER) kept.delete(kept.keys().next().value!);
+        this.protectedHeaders.set(name, kept);
       }
       const best = this.store.tip(), anchorHeight = best.anchorHeight, depth = this.profile.depth;
       // Each supplier is charged, whatever ended its pass, exactly the headers it added that are not on the best
@@ -473,12 +487,18 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   private async syncHeaders(supplier: ErgoSupplier, name: string): Promise<HeaderPass> {
     let added = 0, fetched = 0, last: Uint8Array | undefined;
     const ids: Uint8Array[] = [];
+    // A supplier past its side-branch quota is read only for headers that extend the best tip: those cost no quota,
+    // and only the best chain's advance forgives one, so a quota every supplier spent would otherwise stop the clock
+    // for good. Anything else it serves stops its pass, as withholding.
+    const restricted = this.sideQuotaSpent(name);
     // Every pass protects the last header it reached above the anchor, whatever ended it.
-    const done = (stopped?: string): HeaderPass => ({ added: ids, ...(last === undefined ? {} : { protect: last }),
-      report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) });
+    const done = (reason?: string): HeaderPass => {
+      const stopped = reason ?? (restricted ? "side-branch quota" : undefined);
+      return { added: ids, ...(last === undefined ? {} : { protect: last }),
+        report: Object.freeze(stopped === undefined ? { name, headersAdded: added } : { name, headersAdded: added, stopped }) };
+    };
     const unfinished = (): HeaderPass => last === undefined ? done("header budget") : { ...done("header budget"), last };
     const { headersPerSupplier: budget, supplierTimeoutMs: timeout } = this.policy;
-    if (this.sideQuotaSpent(name)) return done("side-branch quota");
     const fetchBudget = 4 * budget + 2 * ANCHOR_CONTEXT, perRequest = BigInt(this.policy.headersPerRequest);
     const anchorHeight = this.store.tip().anchorHeight, depth = this.profile.depth;
     const tip = await supplied(() => supplier.tipHeight(), timeout);
@@ -500,6 +520,12 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       for (const bytes of batch) {
         if (added >= budget) return unfinished();
         fetched++;
+        if (restricted && bytes !== undefined) {
+          const header = parseErgoHeader(bytes);
+          if (header !== undefined && this.store.heightOf(header.id) === undefined && compareBytes(header.parentId, this.store.tip().id) !== 0) {
+            return done("side-branch quota");
+          }
+        }
         const outcome = bytes === undefined ? "malformed" : this.store.add(bytes);
         if (outcome === "added" || outcome === "known") {
           const id = blake2b(bytes!, { dkLen: 32 });
@@ -585,6 +611,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     }
     if (next !== snapshot.witnessed + 1n) refuse("the sections do not reach the clock");
     if (this.journal.objectCount() !== objects) refuse("objects are kept beyond the sections");
+    if (this.journal.headerCount() !== headers) refuse("header rows are kept on neither the best chain nor a side branch");
     if (retained !== this.retained) refuse("the retained bytes are not the objects'");
     return Object.freeze({ headers, sections: next, objects });
   }
@@ -670,7 +697,9 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   /** The first index this view witnessed the exact record at, under its kind and subject, or undefined where its
    * witnessed index holds none. */
   witnessedAt(kind: RecordKind, subject: Uint8Array, record: Uint8Array): bigint | undefined {
-    const snapshot = this.requireSnapshot(), first = this.journal.firstIndex(objectKey(kind, copyUnshared(subject), copyUnshared(record)));
+    const snapshot = this.requireSnapshot(), owned = copyUnshared(subject);
+    if (owned.length !== 32) return undefined;
+    const first = this.journal.firstIndex(objectKey(kind, owned, copyUnshared(record)));
     return first !== undefined && first <= snapshot.witnessed ? first : undefined;
   }
 

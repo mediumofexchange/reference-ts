@@ -29,8 +29,10 @@ const blob = (value: unknown, width?: number): Uint8Array => { requireStored(isB
 const integer = (value: unknown, max: bigint): bigint => { requireStored(typeof value === "bigint" && value >= 0n && value <= max); return value; };
 const decimal = (value: unknown): bigint => { requireStored(typeof value === "string" && /^(0|[1-9][0-9]{0,99})$/.test(value)); return BigInt(value); };
 
-/** One object's identity in the view's index: its kind, subject and exact record bytes. */
+/** One object's identity in the view's index: its kind, its 32-byte subject and its exact record bytes, each
+ * fixed in width but the last, so no two objects share one. */
 export function objectKey(kind: RecordKind, subject: Uint8Array, record: Uint8Array): Uint8Array {
+  if (subject.length !== 32) throw new Error("an object's subject is 32 bytes");
   const bytes = new Uint8Array(1 + subject.length + record.length);
   bytes[0] = kind; bytes.set(subject, 1); bytes.set(record, 1 + subject.length);
   return blake2b(bytes, { dkLen: 32 });
@@ -355,6 +357,10 @@ export class ErgoVenueJournal {
       yield { index, header: blob(row.header, 32), views: decodeViews(blob(row.views)), objects: objects.all(index).map(o => ({
         kind: Number(integer(o.kind, 4n)) as RecordKind, subject: blob(o.subject), ordinal: integer(o.ordinal, 1n << 62n), record: blob(o.record), key: blob(o.key, 32) })) };
     }
+  }
+  /** How many header rows are stored, for an audit. */
+  headerCount(): number {
+    return Number(this.db.prepare("SELECT count(*) AS n FROM headers").get()!.n);
   }
   /** How many objects are stored, for an audit. */
   objectCount(): bigint {

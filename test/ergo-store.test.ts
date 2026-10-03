@@ -134,11 +134,16 @@ describe("durable independently replayed Ergo view", () => {
     const path = file(), main = chain.extend(chain.anchor, 10), old = opened(path);
     await old.venue.sync([supplier(main)]);
     const fork = chain.extend(main[0]!, 3, () => [], 31);
-    // The branch is kept while it is the last its supplier reached, and pruned once that supplier reaches another.
-    await old.venue.sync([supplier(fork)]); await old.venue.sync([supplier(main)]); old.journal.close();
+    // The branch is kept while it is among the last four paths its supplier reached, and pruned once four others
+    // displace it; a path its supplier extends replaces the one it extends.
+    await old.venue.sync([supplier(fork)]);
+    await old.venue.sync([supplier(chain.extend(fork.at(-1)!, 1, () => [], 31))]);
+    const others = [32, 33, 34, 35].map(salt => chain.extend(main[0]!, 1, () => [], salt));
+    for (const other of others) await old.venue.sync([supplier(other)]);
+    old.journal.close();
     const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path);
-    expect(db.prepare("SELECT count(*) AS n FROM headers").get()!.n).toBe(main.length);
-    expect(db.prepare("SELECT count(*) AS n FROM side").get()!.n).toBe(0); db.close();
+    expect(db.prepare("SELECT count(*) AS n FROM headers").get()!.n).toBe(main.length + others.length);
+    expect(db.prepare("SELECT count(*) AS n FROM protected").get()!.n).toBe(4); db.close();
     const next = opened(path), extension = chain.extend(fork.at(-1)!, 10, () => [], 31);
     await expect(next.venue.sync([supplier(extension)])).rejects.toThrow(/best chain left/);
   });
@@ -283,5 +288,46 @@ describe("durable independently replayed Ergo view", () => {
     old.journal.close();
     const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path); db.exec("UPDATE meta SET rules='moe/ergo-view-rules/0'"); db.close();
     expect(() => opened(path)).toThrow("other view rules");
+  });
+
+  it("reads a supplier past its quota for headers extending the best tip, so its charge is forgiven and the clock moves, across a restart", async () => {
+    const path = file(), policy = { sideHeadersPerSupplier: 2 }, main = chain.extend(chain.anchor, 12);
+    const old = opened(path, policy), only = new BranchSupplier("only", main.at(-1)!, chain);
+    await old.venue.sync([only]);
+    only.tip = chain.extend(main[0]!, 3, () => [], 64).at(-1)!;
+    await old.venue.sync([only]); old.journal.close();
+    // Its stale branch spent the quota; its next answers extend the best tip and are read, the side branch still is not.
+    const next = opened(path, policy); only.tip = chain.extend(main.at(-1)!, 40).at(-1)!;
+    let report = await next.venue.sync([only]);
+    expect(report.suppliers[0]).toEqual({ name: "only", headersAdded: 40, stopped: "side-branch quota" });
+    report = await next.venue.sync([only]);
+    expect(report.suppliers[0]).toEqual({ name: "only", headersAdded: 0 });
+    expect(next.venue.witnessedIndex()).toBe(49n);
+  });
+
+  it("audits chain selection and stray header rows, keys objects by a 32-byte subject, and refuses a malformed supplier name", async () => {
+    const blocks = records();
+    for (const [name, sql, refusal] of [
+      ["selection", "UPDATE headers SET score='999999' WHERE id=(SELECT id FROM headers WHERE height=(SELECT min(height) FROM best))", /score is wrong|outscores/],
+      ["stray", "INSERT INTO headers SELECT zeroblob(32), height, parent, score, bytes FROM headers LIMIT 1", /neither the best chain nor a side branch/],
+    ] as const) {
+      const path = file(), old = opened(path); await old.venue.sync([supplier(blocks)]); old.journal.close();
+      const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(path); db.exec(sql); db.close();
+      expect(() => opened(path).venue.audit(), name).toThrow(refusal);
+    }
+    const view = opened(file()).venue; await view.sync([supplier(blocks)]);
+    const record = encodeCommitment(first);
+    expect(view.witnessedAt(1, first.operator, record)).toBe(0n);
+    expect(view.witnessedAt(1, Uint8Array.of(...first.operator, record[0]!), record.subarray(1))).toBeUndefined();
+    expect(view.witnessedAt(1, new Uint8Array(0), Uint8Array.of(...first.operator, ...record))).toBeUndefined();
+    await expect(view.sync([new BranchSupplier("\ud800", blocks.at(-1)!, chain)])).rejects.toThrow(TypeError);
+    expect(view.witnessedIndex()).toBe(7n);
+  });
+
+  it("judges every argument before attaching its journal, so a corrected retry opens it", () => {
+    const journal = new ErgoVenueJournal(file(), id); journals.push(journal);
+    expect(() => new ErgoVenue(profile, chain.context, { headersPerSupplier: 0 }, undefined, journal)).toThrow(TypeError);
+    expect(() => new ErgoVenue(profile, chain.context.slice(1), {}, undefined, journal)).toThrow(/does not authenticate/);
+    expect(() => new ErgoVenue(profile, chain.context, {}, undefined, journal)).not.toThrow();
   });
 });
