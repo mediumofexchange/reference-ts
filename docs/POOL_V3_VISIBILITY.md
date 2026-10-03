@@ -99,6 +99,7 @@ bytes and at least one honest Ignition participant; privacy rests on the prover'
 | Exchanging a payment request | whoever carries the 246-byte frame | the requested backing, value and commitment, linked to the receiver | the frame travels any private way, its digest over the channel that authenticates the receiver ([request exchange](POOL_V3_WALLET.md#request-exchange)); it carries no endpoint or identity key |
 | Reading the venue | header and section suppliers | the venue (by the anchor its reads start from) | `ErgoVenue` fetches every header and every section from the anchor's child from suppliers the reader chooses; it never asks for a subject, an address or a box |
 | Publishing at the venue | the witness, every chain reader | the funding key and its coin history, joined to the record; the broadcast address to the receiving node; the funding key to the node asked for its boxes | the operator's publisher holds one funding key, which links its commitments (public and signed anyway). A holder's gap demand, release and withdrawal and a backer's acceptance are published through whatever `RecordPublisher` the caller passes to `publish` or `publishAcceptance` (the wallet files no requests); on Ergo one funding key links every gap act it funds, across demands whose presenter keys are unlinkable. A holder funds each demand from coins with no history it minds, or has a relay publish: a demand carries its proof (C3.3a), a release and a withdrawal the presenter's signature and a request its proof (C2b.5.2), so anyone can publish each unchanged |
+| Relaying a publication | the relay; the channel the file travels | the publication file (venue, backing and the exact record: a demand's tags and presenter key, a release's output, an acceptance), when it was handed over and, for a third party's relay, the channel that handed it | `moe wallet publish` and `publish-acceptance` write the file; `moe relay publish` checks it against its own venue and publishes it with the relay directory's funding key. A relay of the holder's own links every gap act it funds to the others and to its funding; a third party's relay learns the holder's channel and can delay or withhold the publication (a holder may hand the same file to several) |
 | Payout at redemption | **K**, the payout channel | whatever identity the payout needs | outside the record (C3.3a): the protocol neither needs nor proves it |
 | Timing | the operator exactly; the public by statement order and checkpoint index | pairing of statements that are alone in an interval (§C1.5) | the operator chooses its checkpoint batching and sees arrival times regardless of it |
 
@@ -146,12 +147,14 @@ These are wallet and deployment duties the rules above assume; each is listed in
 1. Spend a note named in a request to a fresh one before any reuse (§C1.5, C3.1), should the wallet file
    requests; presented notes are freshened (above).
 2. Keep gap-publication funding apart from any identified coins: a funding key per demand, or a relay. The
-   plan's relay command publishes a holder's act from a funding directory apart from the wallet; a relay of
-   the holder's own still links its gap acts to each other and to its funding, and a third party's relay
-   learns the holder's channel, so it joins the traffic table as an observer when it lands.
+   relay command (`moe relay publish`) publishes a holder's act from a funding directory apart from the wallet;
+   a relay of the holder's own still links its gap acts to each other and to its funding, and a third party's
+   relay learns the holder's channel (the traffic table's relay row). Funding that links nothing stays open.
 3. A network transport for submissions and syncs that does not identify the holder, a service credential that
    is not per holder, and syncs that do not tie an address to the backing it then spends (a replica, every
    scoped backing, or an unlinkable transport).
-4. The user-facing explanations above, in the installable wallet (slice 10).
+4. The user-facing explanations above: `moe wallet` shows the request channel, thin intervals and publication
+   funding with a wallet's first request or payment, and what a demand's tags link at each demand and `freshen`;
+   longer texts, and what the operator learns from a fee, stay in this guide.
 </content>
 </invoke>

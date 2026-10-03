@@ -482,6 +482,39 @@ Activating two restores of one backup, or keeping a seed-restored wallet beside
 the original, breaks the one-active-copy precondition. Freezing cannot recall
 a submission already sent, so quiesce operations before exporting.
 
+## Commands
+
+`moe wallet` wraps this library as one process per operation over a wallet directory
+([M10b decision](../decisions/2026-10.md#2026-10-02--install-one-moe-command-over-role-directories-on-ergo-venues-only-with-keys-in-files-and-funding-apart-from-the-wallet-slice-10-m10b),
+[M10c2b1](../decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)).
+The directory binds one venue and holds `wallet.db` (with the seed), its evidence and replay files, the kept terms,
+a service file per operator and the package of its last sync per backing. `init --venue <file>` creates it with a
+fresh seed; with `--backer` it also holds K (`backer.key`), and `venue create`, `terms create`, `issue`, `accept`,
+`burn` and `publish-acceptance` are enabled. Only `init`, a backer's `venue create`, `restore-seed` and `restore`
+create a wallet database, so a lost one never comes back as a fresh seed. The directory holds no funding key.
+
+| Command | Does |
+|---|---|
+| `request <alias> <backing> <value> [--out f]` | the exact request: its 246-byte frame (hex, and the file) and digest to hand on |
+| `pay <alias> <backing> --request f --digest d --value n` | authenticates the frame by the digest, prepares the payment and submits it |
+| `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records |
+| `fulfill <alias> <backing>` / `fulfillment <alias>` | the request found paid; never replayed: a rerun exits 4 printing the saved fulfillment |
+| `demand`, `withdraw`, `settle --acceptance f`, `freshen` | the acts above; `freshen` submits as `pay` does |
+| `submit <alias> <backing>`, `status <alias>`, `reprove` | submits a saved record (a rerun prints the kept receipt); reads a saved record as the last sync resolved it; re-proves a payment in the canonical segment |
+| `presentation <backing> <demand>` | C3.8's reading from public evidence |
+| `publish <alias> <backing> --out f` | a demand, withdrawal or release as a publication file for `moe relay publish`; refused unless the read shows the gap open |
+| backer: `issue`, `accept <alias> <backing> <demand> --deadline n --out f`, `burn`, `publish-acceptance` | `accept` writes the acceptance as its canonical publication bytes, which the holder's `settle --acceptance` reads |
+| `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files outside the directory); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
+
+Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact
+retry and prints the saved result; a deadline is a witnessed index, absolute or `+n` from the read, and a saved
+demand prints its absolute deadline so a rerun can name it. Evidence comes from the operator's service, synced into
+the evidence file, or from `--package f`; where the service does not answer, a read uses the package the last sync
+kept and says so (`evidence: "kept"`), as a holder does in a gap. The first request or payment shows the request
+channel, thin-interval and publication-funding explanations; each demand and `freshen` says what its tags link.
+Output, refusals and exit codes follow the M10b decision (one JSON object on stdout; refusals exit 1, usage 2,
+unexpected failures 3 with their stack).
+
 ## Acceptance and remaining work
 
 `test/pool-v3-wallet.test.ts` ports receiver cases with oracle proofs, including
@@ -536,6 +569,12 @@ and a gap release taken by another demand's settlement under an acceptance namin
 releases the holder's acceptance and leaves the backer's dishonour. Not covered: a release of the demand in another
 segment, a gap across several backings, an ended term or a return, and a venue that witnesses an exact republication
 again.
+`command-drill.mjs` (in `check:pool:v3`; `npm run check:pool:v3-commands` alone) runs the commands with real proofs in
+fresh processes on separate directories over the synthetic Ergo node: a backer's terms, issue, payment, serve committing
+on admission, fulfillment and its exit-4 rerun, a demand, the acceptance relayed, settlement and burn read final by sync
+and the reader's supply, a withdrawn demand's notes refused to a payment and freshened, restore-seed and a handoff
+restore, and, with the operator offline past silence, a demand and settlement published through the relay and read
+final by force; it records each process's peak RSS.
 `redemption-store-check.mjs` (in `check:pool:v3`; `npm run check:pool:v3-redemption` alone) runs the same path with real
 proofs, each wallet operation in a fresh process that opens its database, proves with its own prover and syncs its kept
 evidence from the operator's HTTP service: issue, payment and fulfillment, a demand, the backer's published acceptance,

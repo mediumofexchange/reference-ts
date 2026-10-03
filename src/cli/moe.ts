@@ -9,20 +9,26 @@
 // prover.
 import { EncodingError } from "../bytes.js";
 import { VenueError } from "../venue-error.js";
-import { CommandError, UsageError } from "./common.js";
+import { CommandError, print, Replayed, UsageError } from "./common.js";
 
 const USAGE = `usage: moe <role> <command> --dir <directory> ...
-roles: reader (init, terms add|show, service add, supply, presentation)
-       operator (init, venue create, open, serve, return, adopt)`;
+roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show, service add, request, pay, freshen,
+              reprove, submit, status, sync, fulfill, fulfillment, demand, withdraw, settle, presentation, publish;
+              with --backer at init: venue create, terms create, issue, accept, burn, publish-acceptance)
+       operator (init, venue create, open, serve, return, adopt)
+       reader (init, terms add|show, service add, supply, presentation)
+       relay (init, publish)`;
 
 /** The fields a refusal prints, or undefined for an unexpected failure. */
 async function refusal(error: unknown): Promise<{ code: string; check?: string; message: string } | undefined> {
   if (!(error instanceof Error)) return undefined;
-  const [{ V3StoreError }, { V3ServiceClientError }, { ReferenceVenueError }, { ProgramError }, { ParameterError }, { EvidenceRefusal, ReplayRefusal }] =
+  const [{ V3StoreError }, { V3ServiceClientError }, { ReferenceVenueError }, { ProgramError }, { ParameterError }, { EvidenceRefusal, ReplayRefusal },
+    { V3WalletError }] =
     await Promise.all([import("../pool/v3/store.js"), import("../pool/v3/service-client.js"), import("../pool/v3/guard.js"),
-      import("../pool/v3/programs.js"), import("../pool/proof-verifier.js"), import("../pool/v3/refusals.js")]);
+      import("../pool/v3/programs.js"), import("../pool/proof-verifier.js"), import("../pool/v3/refusals.js"), import("../pool/v3/wallet-store.js")]);
   const coded = error as Error & { code?: string; check?: string };
-  if (error instanceof CommandError || error instanceof V3StoreError || error instanceof ProgramError || error instanceof ParameterError) {
+  if (error instanceof CommandError || error instanceof V3StoreError || error instanceof ProgramError || error instanceof ParameterError ||
+      error instanceof V3WalletError) {
     return { code: coded.code!, ...(coded.check === undefined ? {} : { check: coded.check }), message: error.message };
   }
   if (error instanceof V3ServiceClientError) return { code: error.code, check: String(error.status), message: error.message };
@@ -35,14 +41,19 @@ async function refusal(error: unknown): Promise<{ code: string; check?: string; 
 }
 
 export async function main(argv: readonly string[]): Promise<number> {
+  // stdout carries the command's one JSON object: what a library logs (bb.js reports each proof it makes) goes to stderr.
+  console.log = console.info = (...parts: unknown[]) => console.error(...parts);
   const [role, ...rest] = argv;
   try {
     if (role === "reader") await (await import("./reader.js")).reader(rest);
     else if (role === "operator") await (await import("./operator.js")).operator(rest);
+    else if (role === "wallet") await (await import("./wallet.js")).wallet(rest);
+    else if (role === "relay") await (await import("./relay.js")).relay(rest);
     else throw new UsageError(USAGE);
     return 0;
   } catch (error) {
     if (error instanceof UsageError) { process.stderr.write(`${error.message}\n`); return 2; }
+    if (error instanceof Replayed) { print(error.value); return 4; }
     const refused = await refusal(error).catch(() => undefined);
     if (refused !== undefined) { process.stderr.write(`${JSON.stringify(refused)}\n`); return 1; }
     process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);

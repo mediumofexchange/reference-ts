@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CommandError, integer, hex32, parseArguments, UsageError, writeExclusive, writeReplace } from '../src/cli/common.js';
+import { CommandError, integer, hex32, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
+import { outside } from '../src/cli/wallet.js';
+import { parsePublicationFile } from '../src/cli/relay.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
 import { V3StoreError } from '../src/pool/v3/store.js';
-import { parseVenue, venueText } from '../src/cli/venue.js';
+import { parseVenue, publisherStore, venueText } from '../src/cli/venue.js';
 import { ERGO_SYNTHETIC_REFERENCE, ownErgoProfile } from '../src/ergo-profile.js';
 import { SYNTHETIC_SCRIPTS } from '../src/ergo-synthetic.js';
 
@@ -85,5 +87,59 @@ describe('moe files', () => {
       expect(readFileSync(join(directory, 'service.json'), 'utf8')).toBe('b');
       expect(readdirSync(directory).sort()).toEqual(['key', 'service.json']);
     } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+});
+
+describe('moe wallet and relay files', () => {
+  it('accepts a rerun writing the same bytes and refuses other bytes at the path', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'moe-same-')), path = join(dir, 'out');
+    try {
+      writeSame(path, 'one');
+      writeSame(path, 'one');
+      expect(() => writeSame(path, 'two')).toThrow(expect.objectContaining({ code: 'EXISTS' }));
+      expect(readFileSync(path, 'utf8')).toBe('one');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('keeps a handoff outside the data directory, refusing a path inside it or two equal paths', () => {
+    const directory = { path: join(tmpdir(), 'moe-data') };
+    expect(outside(directory, join(tmpdir(), 'key'), join(tmpdir(), 'out'))).toHaveLength(2);
+    expect(outside(directory, join(tmpdir(), 'moe-data-other', 'key'))).toHaveLength(1);
+    for (const inside of [directory.path, join(directory.path, 'key'), join(directory.path, '..key')]) {
+      expect(() => outside(directory, inside)).toThrow(/inside the data directory/);
+    }
+    expect(() => outside(directory, join(tmpdir(), 'k'), join(tmpdir(), 'k'))).toThrow(/must differ/);
+  });
+  it('follows links to the data directory when it judges a handoff path', () => {
+    const base = mkdtempSync(join(tmpdir(), 'moe-link-')), data = join(base, 'data'), link = join(base, 'alias');
+    try {
+      mkdirSync(data); symlinkSync(data, link, 'junction');
+      expect(() => outside({ path: data }, join(link, 'handoff.key'))).toThrow(expect.objectContaining({ code: 'PATH' }));
+      expect(() => outside({ path: link }, join(data, 'new', 'handoff.key'))).toThrow(expect.objectContaining({ code: 'PATH' }));
+      expect(() => outside({ path: data }, join(base, 'key'), join(link, '..', 'key'))).toThrow(/must differ/);
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+  it('fences a second publisher store that saves after the first loaded the outbox', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'moe-relay-'));
+    try {
+      const a = publisherStore(join(dir, 'relay.db')), b = publisherStore(join(dir, 'relay.db'));
+      expect(a.persistence.load()).toBeUndefined();
+      expect(b.persistence.load()).toBeUndefined();
+      a.persistence.save('first');
+      expect(() => b.persistence.save('second')).toThrow(/another publisher/);
+      expect(() => b.persistence.guard()).toThrow(/another publisher/);
+      a.persistence.guard();
+      a.close(); b.close();
+      const c = publisherStore(join(dir, 'relay.db'));
+      expect(c.persistence.load()).toBe('first');
+      c.close();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('reads a publication file of exactly its fields, at kind 4 only', () => {
+    const file = { schema: 'moe-publication-1', venue: '01'.repeat(32), backing: '02'.repeat(32), kind: '4', subject: '02'.repeat(32), record: 'abcd' };
+    expect(parsePublicationFile(file).record).toEqual(new Uint8Array([0xab, 0xcd]));
+    for (const bad of [{ ...file, kind: '1' }, { ...file, extra: '1' }, { ...file, venue: '01'.repeat(31) }, { ...file, record: 'ABCD' },
+      { ...file, schema: 'other' }, [file], null]) {
+      expect(() => parsePublicationFile(bad)).toThrow(expect.objectContaining({ code: 'INVALID' }));
+    }
   });
 });
