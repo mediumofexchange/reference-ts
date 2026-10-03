@@ -1260,12 +1260,18 @@ one-output witnessed records, on a 4-core cloud container on 2026-10-03:
 | 1,000 | 162.0 ms | 17.3 ms |
 | 4,000 | not finished in 15 min | 18.1 ms |
 
-- *Result:* about 0.15 ms per kept witness per record before; flat after, the
-  note tree's root being the cost. A wallet holding 1,000 notes through the
-  design point's 10⁶ records would have spent about 45 h on witnesses alone.
+- *Result:* about 0.15 ms per kept witness per record before; flat on average
+  after, the note tree's root being the cost. A wallet holding 1,000 notes
+  through the design point's 10⁶ records would have spent about 45 h on
+  witnesses alone.
+- *Bound:* each witness is rewritten at most 31 times over its life, so the
+  average is flat; one record that completes a block of height h rewrites the
+  witnesses among the 2^h leaves left of it (a review's probe: 2,048
+  witnesses, 309 ms for the record completing height 11, against 16 ms).
 - *Limits:* the store alone, with no proof, scan or journal; one run per
-  point. A spent note's witness is still kept and rewritten at most 32 times,
-  and a holdings read still scans every witnessed output once.
+  point. A spent note's witness is still kept, and a holdings read still
+  scans every witnessed output once. The kept file's layout moved to 6, so a
+  wallet's earlier kept file is replayed once.
 
 ## Invalid-checkpoint evidence
 
