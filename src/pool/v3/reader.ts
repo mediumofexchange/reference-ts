@@ -268,8 +268,8 @@ export interface ValidCheckpoint extends LastValid {
 /** A predecessor's replayed state or merged finalized prefixes, as imported by a new segment. */
 export type ImportedFrontier = ReplayResult | (MergedImport & { readonly adoptionIndices: ReadonlyMap<string, bigint> });
 export interface TrailOptions {
-  /** The checkpoint's witnessed index; undefined for a read without venue answers. */
-  readonly index?: bigint | undefined;
+  /** The checkpoint's witnessed index. */
+  readonly index: bigint;
   readonly revokedAt?: bigint | undefined;
   readonly revocations?: ReadonlyMap<string, bigint | undefined> | undefined;
   readonly lastValid?: ValidCheckpoint | undefined;
@@ -290,8 +290,7 @@ export function lastValidOf(state: ReplayResult, snapshot: Pick<Snapshot, "histo
 
 /** One checkpoint's trail under the segment's scope and terms, through the
  * state machine. A deterministic failure, a kind-7 record included, throws
- * ReplayRefusal with its check; an unindexed recovery record throws
- * EvidenceRefusal; the verifier's own failures propagate. `lastValid` is the segment's last valid checkpoint
+ * ReplayRefusal with its check; the verifier's own failures propagate. `lastValid` is the segment's last valid checkpoint
  * before this one: the trail must reach its length and reproduce its evidence
  * and history hashes there (C2.10.12, pool-v3 §7.1), the evidence before any
  * verification. The replay runs in one savepoint of the store: a refusal

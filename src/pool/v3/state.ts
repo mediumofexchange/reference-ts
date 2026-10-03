@@ -308,8 +308,8 @@ export interface SegmentReplay {
   readonly terms: RootTerms;
   readonly scopedTerms?: ReadonlyMap<string, RootTerms | undefined> | undefined;
   readonly verifier: ProofCheck;
-  /** The checkpoint's witnessed index; undefined for a read without venue answers. In admission, the horizon. */
-  readonly index?: bigint | undefined;
+  /** The checkpoint's witnessed index; in admission, the horizon. */
+  readonly index: bigint;
   /** The operator's admission (store.ts) rather than a reader's replay. */
   readonly admission?: boolean | undefined;
   /** The actual venue lag, required for recovery admission's door checks. */
@@ -334,7 +334,7 @@ export interface Judged {
   readonly bytes: Uint8Array;
   readonly record: Record;
   readonly identity: Uint8Array;
-  readonly at: bigint | undefined;
+  readonly at: bigint;
   readonly evidence: Uint8Array;
   readonly digests: EvidenceDigests;
   readonly backing: string;
@@ -346,8 +346,8 @@ export interface Judged {
 /**
  * Judge the record at `state.position` (C2.10.12, pool-v3 §§5, 7): every
  * guard reads the same pre-state and nothing is written. A deterministic
- * failure throws ReplayRefusal with its check, an unindexed recovery record
- * EvidenceRefusal; the verifier's own failures propagate.
+ * failure throws ReplayRefusal with its check; the verifier's own failures
+ * propagate.
  */
 export async function judgeRecord(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Promise<Judged> {
   const judgment = judgmentOf(state, bytes, replay);
@@ -374,10 +374,7 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
   requireReplay([1, 2, 3, 4, 5, 6].includes(kind), "KIND");
   // §7: advancing past 2^64 − 1 refuses before any state is read or the u64 position framed.
   requireReplay(position + 1n < VALUE_BOUND, "CAPACITY");
-  if (mode === "admission") {
-    if (replay.index === undefined) throw new TypeError("admission is judged at the horizon");
-    if (kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
-  }
+  if (mode === "admission" && kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
   const demandId = kind === 5 || kind === 6 ? hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!)) : undefined;
   const demand = demandId === undefined ? undefined : state.demand(demandId);
   const backing = kind === 5 ? demand?.backing ?? replay.backing : kind !== 2 ? identifierOf(p[5]!, p[6]!) : replay.backing;
@@ -395,14 +392,13 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
   if (kind === 5) requireReplay(demand !== undefined && (scoped || same(backing, replay.backing)), "DEMAND");
   const lastValid = replay.lastValid;
   const at = adopted?.index ?? (lastValid !== undefined && position < lastValid.position ? lastValid.judgedIndex?.(position + 1n) : undefined) ?? replay.index;
-  if (kind >= 4 && at === undefined) throw new EvidenceRefusal("unsupported-scope");
   const identity = statementHash(record);
   requireReplay(!state.hasStatement(identity), "REPEATED_STATEMENT");
   const digests = evidenceHashes(record), evidence = nextEvidenceHash(state.evidence, digests, position + 1n);
   if (lastValid !== undefined && position + 1n === lastValid.position) requireReplay(same(evidence, lastValid.evidenceHash), "CONTINUITY");
   // Issuance witnessed at or after K's revocation is void (C2b.1). A position
   // the last valid checkpoint finalized was witnessed at its index, not here.
-  if (kind === 1 && replay.index !== undefined && (lastValid === undefined || position + 1n > lastValid.position)) {
+  if (kind === 1 && (lastValid === undefined || position + 1n > lastValid.position)) {
     const cutoff = replay.revocations === undefined ? replay.revokedAt : replay.revocations.get(hex(backing));
     requireReplay(cutoff === undefined || cutoff > replay.index, "REVOKED");
   }

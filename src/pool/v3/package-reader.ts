@@ -9,11 +9,12 @@ import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
 import { decodeSnapshot } from "./commitments.js";
 import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration } from "./configuration.js";
-import { faultObserver, type FaultResult } from "./fault-observer.js";
+import { faultObserver, type FaultResult, type ReportingFaultObserver } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
 import type { ReaderSelection, SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
+import type { ReceiptFact } from "./receipt-state.js";
 import { checkpointScope } from "./scope-evidence.js";
 import { classifyScopeFrontier, classifyScopes, type FrontierContext, type FrontierResult, type ImportContext,
   type ScopeResult } from "./scope-reader.js";
@@ -95,9 +96,29 @@ export async function readPackage(source: PackageSource, selected: ReaderSelecti
   const owned = ownPackageRead(selected, options);
   return withEvidence(source, options, batch => keptOrAgain(options, async () => {
     const { context, faults, venue } = openPackage(batch, owned, options);
-    const result = await classifyScopes(context, venue, batch);
-    return { ...result, ...faults.result() };
+    try {
+      const result = await classifyScopes(context, venue, batch);
+      return { ...result, ...faults.result() };
+    } catch (error) { throw withFacts(error, faults, context); }
   }));
+}
+
+/** What a package read had established when it refused: the observational fault facts (pool-v3 §9) and a
+ * receipt walk's contradictions (C2.10.9b). Neither changes the refusal; a caller may report them beside it. */
+export interface RefusalFacts extends FaultResult {
+  readonly receiptEvidence?: { readonly contradictedAt: readonly ReceiptFact[] };
+}
+const established = new WeakMap<object, RefusalFacts>();
+/** The facts a package read established before it threw `error` (WORK.md Next 4(h)); undefined for an error
+ * thrown before the walk began. */
+export function refusalFacts(error: unknown): RefusalFacts | undefined {
+  return error !== null && typeof error === "object" ? established.get(error) : undefined;
+}
+function withFacts(error: unknown, faults: ReportingFaultObserver, context: Pick<ImportContext, "receiptWalk">): unknown {
+  if (error !== null && typeof error === "object") {
+    established.set(error, { ...faults.result(), ...(context.receiptWalk === undefined ? {} : { receiptEvidence: context.receiptWalk.evidence() }) });
+  }
+  return error;
 }
 
 /** §14: kept state that fails a check before reuse is discarded, and the read classifies again from the evidence.
@@ -163,8 +184,10 @@ export async function readFrontier(source: PackageSource, signed: SignedTerms, j
   const owned = ownFrontierRead(signed, judgingIndex, options);
   return withEvidence(source, options, batch => keptOrAgain(options, async () => {
     const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
-    const result = await classifyScopeFrontier(context, venue, batch);
-    return { ...result, ...faults.result() };
+    try {
+      const result = await classifyScopeFrontier(context, venue, batch);
+      return { ...result, ...faults.result() };
+    } catch (error) { throw withFacts(error, faults, {}); }
   }));
 }
 

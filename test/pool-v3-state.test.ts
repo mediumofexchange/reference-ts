@@ -151,10 +151,6 @@ describe("the v3 state machine in replay mode", () => {
     expect(await refusal(state, burn(5n, [root, root], [301n, 302n], 120n), context)).toBe("LOCKED");
     await applyRecord(state, spend([root, root], [301n, 302n], [110n, 111n, 112n, 113n]), replay({ index: 10n }));
     expect(state.hasSpentTag(locked)).toBe(true);
-    const unindexed = await applyRecord(fresh(), demand([EMPTY_NOTE_ROOT, EMPTY_NOTE_ROOT], [locked, 0n], 9n), replay({ index: undefined }))
-      .then(() => undefined, (e: unknown) => e);
-    expect(unindexed).toBeInstanceOf(EvidenceRefusal);
-    expect((unindexed as EvidenceRefusal).status).toBe("unsupported-scope");
   });
 });
 
@@ -288,7 +284,6 @@ describe("the v3 state machine in admission mode", () => {
     const root = state.noteRoot();
     const kind4 = await applyRecord(state, demand([root, root], [1n, 2n], 20n), context).then(() => undefined, (e: unknown) => e);
     expect(kind4).toBeInstanceOf(TypeError);
-    await expect(applyRecord(state, issue(1n, 110n), replay({ admission: true, index: undefined }))).rejects.toThrow(TypeError);
     expect(state.position).toBe(1n);
   });
 });
