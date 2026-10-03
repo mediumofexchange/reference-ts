@@ -23,8 +23,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   M11b2 (PR #94, 014a038), (l): one index past the reader's 4,096-entry/1 MiB budget is asked again under the venue's `indexLimits`, capped at
   `INDEX_LIMITS` (2^18, 32 MiB; [view](docs/ERGO_VENUE_PROFILE.md)). M11b3 (`claude/m11b-trail-forward`), (m): a served trail is read forward
   by position (index `chain(segment, position)`; evidence layout 4, journal `pool-store/v3/5`), so no walk precedes its first byte; a fork
-  falls back to the walk back ([service](docs/POOL_V3_SERVICE.md)). Each had one fresh adversarial review, findings fixed and read back.
-  **Next: (k)**, then (s); M11c.
+  falls back to the walk back ([service](docs/POOL_V3_SERVICE.md)); PR #95, reports: CI run 37151741994. Each had one fresh adversarial
+  review, findings fixed and read back. **Next: (k)**, then (s); M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
