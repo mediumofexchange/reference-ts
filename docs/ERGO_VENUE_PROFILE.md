@@ -288,9 +288,11 @@ until the journal is reopened.
   budget. A refused header stops that supplier for the sync. Every new
   header a supplier added that is off the best chain at the end of that
   sync counts against its `sideHeadersPerSupplier` (20,000 outstanding, per
-  supplier object, so callers reuse their suppliers), and every 16 heights
+  supplier name and kept with the view's rows, so a restart grants no fresh
+  quota and suppliers need distinct, well-formed names), and every 16 heights
   the best chain advances forgive one; past it the supplier is not read and
-  is withholding until forgiven. This bounds what a cheap future-timestamp
+  is withholding until forgiven, except for headers that extend the best tip,
+  which cost no quota and let the chain's advance forgive it. This bounds what a cheap future-timestamp
   side branch can cost in work and memory to the quota plus one sync's
   budget plus one header per 16 heights of the network's own advance, while
   a branch that briefly leads charges an honest supplier only its headers
@@ -318,13 +320,16 @@ until the journal is reopened.
   that misses one section is not asked again in that sync, and the one that
   supplied the last section is asked first. A section answer is read by
   index over its own length, at most 2^20 transactions and 64 MiB.
-  `sectionBytesPerSync` (256 MiB) ends a sync's
+  `sectionBytesPerSync` (32 MiB; what one sync holds before its commit is this
+  plus one section of up to 64 MiB and the objects attributed from them) ends a sync's
   section reading once that many bytes were received, matching or not;
-  `retainedBytes` (256 MiB, each object's record, subject and a fixed
-  overhead) stops the clock where it would be exceeded, reported as
+  `retainedBytes` (8 GiB of stored objects, each object's record, subject and
+  a fixed overhead) stops the clock where it would be exceeded, reported as
   `unresolvedReason: "retained budget"`, until the budget is raised. Shaped
   objects at the locations fill it at the network's box minimum, about
-  97 ERG for the default at 360 nanoERG a byte. A policy key the view does
+  3,100 ERG for the default at 360 nanoERG a byte (the holder of a location's
+  key recovers box values, so for it the cost is fees); the design point's
+  venue objects are a fraction of its 4.2 GB of sections. A policy key the view does
   not know, or a timeout above 2^31 − 1 ms, is the caller's `TypeError`.
 - **Failure**: if the best chain leaves the block the clock stands on, the
   reorganization passed the depth (§13.2): every read and later sync
@@ -414,20 +419,45 @@ until the journal is reopened.
 
 ### Durable reference view and publisher
 
-`ErgoVenueJournal` (`src/ergo-store.ts`, Node 24) is an optional fifth
-`ErgoVenue` constructor argument, created with a persistent path and the caller's
-`ergoProfileIdentity(profile)`. It stores complete lossless section evidence,
-accepted headers in insertion order, a witnessed pin and terminal failure in an
-atomic fenced SQLite WAL/FULL checkpoint. Reopen verifies header work and roots
-and reattributes every object before answering; a local checksum is not a
-replacement for those checks. The caller still supplies the profile and anchor
-context. Close the journal handle when the view is retired.
+The view keeps everything above the anchor in SQLite rows (`src/ergo-store.ts`,
+Node 24, format `moe/ergo-view/2`, [decision](../decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
+every accepted header with its parent and chain score, the best chain by
+height, the headers off it, each supplier's side-branch charge and protected
+header, each read index's raw section, and the objects attributed from it,
+indexed by kind and subject and by record. `ErgoVenueJournal`, an optional
+fifth `ErgoVenue` constructor argument created with a persistent path and the
+caller's `ergoProfileIdentity(profile)`, keeps them in a fenced WAL/FULL file;
+a view without one keeps the same rows in a private in-memory database. Memory
+holds the anchor's context and one sync's reads, never the chain. The header
+store reads ancestry from the rows (best-chain headers by height, side headers
+by parent) and parses a stored header only where a rule reads it. A sync
+commits its rows once, before its snapshot is exposed. A range reads the
+subject's objects between its indices and refuses (`RangeLimitError`) as soon
+as they pass the answer's budget.
 
-The durable view prunes inferior deep side paths, preserving ancestry to each
-header/fetch-budget stopped pass across restarts. Otherwise a competing chain
-longer than one sync budget could never accumulate enough accepted work to reveal
-a finality failure. Newly supplied heavier ancestry still fails the persistent
-pin. Per-supplier side quotas remain object-local and reset with a new process.
+A reopen re-checks no work and no root: each header's work is checked once
+(venue-ergo §10) and the rows are the party's own. It checks the format, the
+view rules (`ERGO_VIEW_RULES`: a release that changes header or attribution
+rules names new ones, and a view kept under other rules is refused; remove
+it and sync again), the fence, the venue, that the sections run from zero to the
+clock and end at the pin, that the pin is on the stored best chain, and that a
+kept header at least the depth above it descends from it. `audit({ work })`
+re-checks every row as a reader that never trusted them would: header linkage,
+difficulty and score (work where asked), chain selection, stray header rows,
+every section's root against its header, every object attributed again, and
+the retained bytes. Run it on a view
+restored from a backup, copied from elsewhere or after a disk fault. The caller
+still supplies the profile and anchor context. Close the journal handle when
+the view is retired. A file in the old checkpoint format is refused; sync again.
+
+The view prunes complete inferior side paths that meet the best chain below
+the clock, keeping each supplier's protected paths: the last header each pass
+reached, whatever ended it (budget, failure or tip), at most four paths per
+supplier name, a header replacing any it extends. A competing chain longer than
+one sync's budget, or served by a failing supplier, accumulates across syncs and
+restarts while its suppliers keep reaching it, until it reveals a finality
+failure. Newly supplied heavier
+ancestry still fails the persistent pin.
 
 To connect the publisher, restore/sync the venue, open `V3OperatorJournal`, create
 `ErgoPublisher` with `persistence: journal.publisherPersistence()`, then call the
@@ -449,12 +479,10 @@ range, retry identical signed transaction bytes/id, and preserve terminal failur
 Focused tests add corrupted evidence, non-held twins, equal-work precedence,
 owner fencing, pending-change dependencies and budget continuation.
 
-This stores and rewrites complete checkpoints and revalidates retained history
-on startup; raw sections remain in memory beside objects. `retainedBytes` still
-bounds objects only. Reopen with an insufficient budget refuses, and a larger
-budget resumes the retained stop. Disk streaming and a complete-index cursor
-retaining non-held records are the next scalability design, described in the
-[decision](../decisions/2026-09.md#2026-09-27--persist-reproducing-venue-evidence-and-the-owning-journals-publication-outbox).
+`retainedBytes` bounds stored objects only. Reopen with an insufficient budget
+refuses, and a larger budget resumes the retained stop. The scale of the rows
+(memory, sync work and reopen time over a long synthetic chain with a hostile
+side branch) is measured in the decision above.
 Evidence is synthetic process recovery, not physical power-loss, malicious
 rollback, wallet custody or live deployment. An uncertain commit poisons the
 instance; reopen can find the previous committed state, including when a newly

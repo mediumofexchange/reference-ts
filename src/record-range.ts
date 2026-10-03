@@ -45,7 +45,8 @@ function bytes(value: unknown, width?: number): Uint8Array {
   return own;
 }
 /** The caller's budget, read once. */
-function limits(value: RangeLimits): RangeLimits {
+/** An owned copy of a range budget; `EncodingError` for one that is not two 64-bit counts. */
+export function copyLimits(value: RangeLimits): RangeLimits {
   if (value === null || typeof value !== "object") throw new EncodingError("invalid range budget");
   const { maxBytes, maxEntries } = value;
   if (!u64(maxBytes) || !u64(maxEntries)) throw new EncodingError("invalid range budget");
@@ -125,7 +126,7 @@ function validEntries(answer: RangeAnswer, bound?: RangeLimits): { request: Rang
 
 /** Shape, order and budgets before any output allocation. */
 function requireAnswer(answer: RangeAnswer, bound: RangeLimits): { size: bigint; request: RangeRequest; entries: readonly Position[] } {
-  const { request, entries, size } = validEntries(answer, limits(bound));
+  const { request, entries, size } = validEntries(answer, copyLimits(bound));
   if (size > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeLimitError("range allocation range exceeded");
   return { size, request, entries };
 }
@@ -150,7 +151,7 @@ export function encodeRangeAnswer(answer: RangeAnswer, bound: RangeLimits): Uint
  * refused before any entry is read. Two passes bound and scan the whole frame
  * before copying records; exact inner bytes are owned, never decoded here. */
 export function decodeRangeAnswer(bytesIn: Uint8Array, expectedIn: RangeRequest, boundIn: RangeLimits): RangeAnswer {
-  const bound = limits(boundIn);
+  const bound = copyLimits(boundIn);
   budget(BigInt(byteLength(bytesIn)), 0n, bound);
   const input = bytes(bytesIn), expected = copyRequest(expectedIn);
   if (input.length < FIXED_BYTES) throw new EncodingError("truncated range answer");

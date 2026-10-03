@@ -567,9 +567,9 @@ describe("no supplier is trusted", () => {
     expect(v.witnessedIndex()).toBe(2n);
     // An unexpected failure of the view's own after it read a section past its clock.
     let reads = 0;
-    const own = v as unknown as { hold: (index: bigint, objects: unknown) => void };
-    const hold = own.hold.bind(v);
-    own.hold = (index, objects) => { if (reads++ > 0) throw new RangeError("out of memory"); hold(index, objects); };
+    const own = v as unknown as { readSection: (...args: unknown[]) => Promise<unknown> };
+    const readSection = own.readSection.bind(v);
+    own.readSection = async (...args) => { const read = await readSection(...args); if (reads++ > 0) throw new RangeError("out of memory"); return read; };
     await expect(v.sync([serving(blocks)])).rejects.toThrow(RangeError);
     const failed = new VenueError("Ergo sync failed; open a new view");
     expect(() => v.witnessedIndex()).toThrow(failed);
