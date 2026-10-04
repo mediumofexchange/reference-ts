@@ -1445,6 +1445,114 @@ Runs of 2026-10-04 on a 4-core cloud container, one run per point:
 - *Limits:* the after-run shared the container with M11c2's 10⁵ run, the before-run did not; one run per
   point. Process start-up (about 3.5 s, the verifier's and view's opening) is outside these read times.
 
+### The runtime at depth (M11c2)
+
+M11c's second part runs the runtime over 10⁴ and 10⁵ statements with stand-in records under real verification
+load, with venue ranges
+([method](../decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)).
+`runtime-depth-probe.mjs`
+([at its revision](https://github.com/mediumofexchange/reference-ts/blob/ee822c4/scripts/pool/v3/runtime-depth-probe.mjs))
+works on the synthetic Ergo node.
+- *Operator:* the journal runs in the probe's process over its own view and publisher, as `moe operator serve`
+  opens it. It commits on `serve`'s schedule (interval 2) under a silence clause, so every admission reads its
+  own checkpoint. A block is mined every 14 statements, the design point's peak.
+- *Records:* eight real issues to a holder's seed come first, and their proofs are kept. Every later statement
+  is a stand-in spend: real-size records (14,656-byte proofs of random bytes), two nullifiers and four
+  outputs. Every second spend pays the seed one output with a genuine capsule, and every fourth spends one of
+  those again, so the wallet holds about a quarter of the spends' count.
+- *Verification load:* every verifier (journal, reader, wallet) checks a real record's own proof, and in
+  place of each stand-in proof it verifies the next kept real proof: real verification load and memory, not
+  the stand-ins' verdicts.
+- *Reads:* at each mark, child processes over directories made by the `moe` commands, each with its own Ergo
+  view, read through counting proxies. They take a fresh reader's first read of the frontier, a seed-restored
+  wallet's first sync, each one's read 200 statements later, and one with nothing new.
+
+Runs of 2026-10-04 at `a4752a9`'s runtime on a 4-core cloud container (Xeon 2.1 GHz, 16 GB), one run per point:
+a 10⁴ run (marks 10³ and 4·10³) and a 10⁵ run (marks 10⁴ and 10⁵). Parts of the 10⁵ run shared the container
+with tests and M11b8's measurement.
+
+*First sync* (read time after the view's sync; start-up and view sync add 3.5–12 s):
+
+| Statements | Reader | Wallet (holdings) | Reader's peak; quarter means | Served | Kept by the reader |
+|---:|---|---|---|---:|---:|
+| 10³ | 27.3 s, 58 CPU-s | 29.5 s (265) | 515 MB; 258–492 MB | 15.6 MB | 21.7 MB |
+| 4·10³ | 104 s, 204 CPU-s | 111 s (1,015) | 550 MB; 416–518 MB | 62.3 MB | 78.1 MB |
+| 10⁴ | 277 s, 490 CPU-s | 293 s (2,515) | 543 MB; 452–508 MB | 156 MB | 191 MB |
+| 10⁵, judged at 13,440 (below) | 385 s, 704 CPU-s | not run | 615 MB; 414–573 MB | 1,558 MB | 1,684 MB |
+
+*Admission* by depth (`journal.submit` in the process; the first admission after each block reads at a new
+venue index, WORK.md Next 4(v)):
+
+| Through | Median, others | Median (p95), first after a block | Checkpoints | Journal | Process memory |
+|---:|---:|---:|---:|---:|---:|
+| 10,000 | 83 ms | 91 ms (123) | 239 | 0.22 GB | 671 MB |
+| 20,000 | 88 ms | 118 ms (149) | 480 | 0.44 GB | 663 MB |
+| 30,000 | 91 ms | 143 ms (174) | 718 | 0.65 GB | 680 MB |
+| 40,000 | 98 ms | 173 ms (206) | 956 | 0.86 GB | 690 MB |
+| 50,000 | 107 ms | 198 ms (237) | 1,194 | 1.07 GB | 739 MB |
+| 60,000 | 115 ms | 228 ms (271) | 1,432 | 1.28 GB | 745 MB |
+| 70,000 | 122 ms | 254 ms (297) | 1,670 | 1.50 GB | 745 MB |
+| 80,000 | 127 ms | 285 ms (330) | 1,908 | 1.71 GB | 770 MB |
+| 90,000 | 132 ms | 313 ms (356) | 2,146 | 1.92 GB | 771 MB |
+| 100,000 | 140 ms | 343 ms (395) | 2,384 | 2.13 GB | 814 MB |
+
+*Steady state* at each mark: 200 more statements, then nothing new (read time):
+
+| Statements | Reader, 200 new | Wallet, 200 new | Reader, nothing new | Wallet, nothing new (holdings) |
+|---:|---:|---:|---:|---:|
+| 10³ | 5.8 s | 6.7 s | 85 ms | 351 ms (315) |
+| 4·10³ | 6.2 s | 7.9 s | 89 ms | 984 ms (1,065) |
+| 10⁴ | 6.6 s | 9.3 s | 117 ms | 2,294 ms (2,565) |
+
+Findings:
+- *First sync is flat per statement:* 27–29 ms and about 49 CPU-ms a statement from 10³ to 10⁴, and 28.7 ms
+  over the 13,440 statements read at 10⁵ depth. The reader's process levels off at 500–575 MB, with a peak of
+  615 MB at 10⁵. Served evidence is 15.6 KB a statement, kept evidence and state about 17–21 KB, and node
+  bytes about 0.2 KB a statement here (synthetic blocks of about 14 statements). Linear at this rate, 10⁶
+  statements take about 8 h on these 4 cores, against 24 h on the declared 8.
+- *A fresh view reaches the tip only over several commands.* At 10⁵ (about 7,300 blocks), a fresh reader's
+  view stopped at index 997 after one sync's budget (2,000 headers a supplier). `reader supply` then judged
+  the checkpoint held there (13,440 statements) and reported it final at that index, as its `sync` fields
+  show. The commands sync the view once per run, so a fresh reader or wallet at the design point (about
+  788,000 blocks) would need hundreds of runs to reach the tip. The lever is that a command keeps syncing
+  while a pass advances its clock. Each pass stays bounded as now. The wallet's 10⁵ reads, the steady state
+  there and the reopening were not reached.
+- *Ordinary admissions grew with history*, from 83 ms at 10⁴ to 140 ms at 10⁵ (median). A CPU profile of the
+  live journal at 5.5·10⁴ statements (60 s, through its inspector) put about 15% of its time, about 22 ms an
+  admission, in the reader's listing of the backing's carrying checkpoints. The journal's own read before
+  each admission returns that listing but never uses it, and it costs one row per checkpoint ever held.
+  M11b10 leaves the listing out of the journal's reads; the rest of the growth is measured again after it.
+  The same profile shows the operator verifying each proof twice: at admission, and when its own read judges
+  the checkpoint carrying it.
+- *The first admission after each block grows with the journal's read file* (Next 4(v)): 91 ms at 10⁴, 343 ms
+  at 10⁵, about 2.8 ms per 10³ statements. A read at a new venue index changes kept answers, so its keep point
+  hashes the whole read file (227 MB at 10⁵). Extrapolated, that is about 2–3 s at 10⁶, past the ≤ 1 s
+  admission budget. The lever is a digest that does not reread the file: an incremental root, or the rows that
+  change at every index kept in a file of their own.
+- *A wallet's read grew with the notes it holds*, about 0.84 ms a holding beyond a reader's (three Poseidon2
+  tag hashes per note). M11b8 keeps each note's tag with its mark: about 0.14 ms a holding
+  ([above](#a-wallets-tags-kept-with-its-marks-m11b8)).
+- *A fresh view's first sync at 10⁴ refused.* At 742 blocks above the anchor, the reader's and the wallet's
+  first view sync added every header but read no section. The node had closed the pooled connection as idle
+  (5 s) while the view judged a header batch, and the next request met the closed socket. The command refused
+  `UNAVAILABLE` ("the venue has witnessed nothing yet") until it was run again. M11b9 sends such a GET once
+  more.
+- *Journal size:* 2.04 GB at 10⁵ statements, about 20 KB a statement, so about 20 GB at 10⁶, as the budget's
+  storage column assumes.
+- *Against the budgets:*
+  - First sync time and memory hold and stay flat per statement, once the view is caught up.
+  - The reader's steady state holds. The wallet's holds after M11b8 for the holdings measured.
+  - Admission fails at the design point through Next 4(v); its lever is named above.
+  - A fresh party's first command fails to reach the tip at depth; its lever is named above.
+  - M11c3 re-measures both, with the 10⁵ reads, once their levers land.
+- *Limits:*
+  - stand-in records verified against eight real issue proofs, not their own;
+  - one backing and segment;
+  - synthetic blocks, so node bytes are not the real chain's;
+  - the probe's process also holds the synthetic node, the service and the record generator, so its memory
+    (814 MB at 10⁵) bounds the operator's from above;
+  - one run per point.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing
