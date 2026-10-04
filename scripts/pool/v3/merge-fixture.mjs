@@ -39,7 +39,7 @@ export function mergeFixture() {
       store.append(ns, { identity, kind, index: 1n, record: encodeRecord(record), proofHash, signatureHash, evidence: new Uint8Array(32),
         supply: backing === undefined ? undefined : { backing, issued: kind === 1 ? p[7] : 0n, burned: kind === 3 ? p[7] : 0n },
         nullifiers: nfs.map(nf => ({ nf, tag: tagOf(nf) })),
-        outputs: outputs.map((cm, i) => ({ cm, capsule: kind === 6 ? undefined : record.capsules[i], settlement: kind === 6, witness: false })),
+        outputs: outputs.map((cm, i) => ({ cm, capsule: kind === 6 ? undefined : record.capsules[i], settlement: kind === 6, witness: undefined })),
         demand, ended, keys: keys ? [...tags.map(tag => `tag:${tag}`), ...(touched === undefined ? [] : [`demand:${touched}`])] : [],
         history: (noteRoot, spentRoot) => nextHistoryHash(tip.history, identity, noteRoot, spentRoot, tip.position + 1n) });
     }

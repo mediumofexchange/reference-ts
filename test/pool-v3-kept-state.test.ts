@@ -13,7 +13,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { compareBytes } from "../src/bytes.js";
 import { FixtureVenue, LOCAL_REFERENCE, type RecordVenue } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, signCommitment, type Commitment } from "../src/venue-records.js";
-import { limbsOf } from "../src/pool/field.js";
+import { fieldToBytes, limbsOf } from "../src/pool/field.js";
+import { ownedNotes } from "../src/pool/v3/holdings.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { decodeSnapshot, encodeReceipt, genesisEvidenceHash, nextEvidenceHash, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, adoptedConfiguration, type Configuration } from "../src/pool/v3/configuration.js";
@@ -30,6 +31,11 @@ import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
+/** A witness predicate's mark for every output but 108: a nullifier, and an opening of `backing` worth one unit
+ * whose owner and rho are the output's commitment, as `ownedNotes` decodes it. */
+const opening = (cm: bigint, backing: Uint8Array) => Uint8Array.from([...backing, ...fieldToBytes(cm), ...fieldToBytes(cm), 0, 0, 0, 0, 0, 0, 0, 1]);
+const marked = (output: { cm: bigint }, backing: Uint8Array = b(0)) =>
+  (output.cm === 108n ? undefined : { nf: output.cm + 1_000_000n, note: opening(output.cm, backing) });
 const issuerSecret = b(3), operatorSecret = b(4), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), label = b(2), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -329,8 +335,8 @@ describe("pool-v3 §14 kept classes across reads", () => {
   it("keeps witnesses at the tips: a later read extends them to a fresh read's paths and scans only new outputs", async () => {
     const f = fixture(), kept = files();
     const scanned: bigint[] = [];
-    const witness: WitnessPredicate = Object.assign((output: { cm: bigint }) => { scanned.push(output.cm); return output.cm !== 108n; }, { identity: b(77) });
-    const every: WitnessPredicate = Object.assign((output: { cm: bigint }) => output.cm !== 108n, { identity: b(77) });
+    const witness: WitnessPredicate = Object.assign((output: { cm: bigint }) => { scanned.push(output.cm); return marked(output, f.backing); }, { identity: b(77) });
+    const every: WitnessPredicate = Object.assign((output: { cm: bigint }) => marked(output, f.backing), { identity: b(77) });
     await f.first();
     let store = opened(kept.path, kept);
     const first = await f.read(counting(), store, { witness }), fresh = await f.read(counting(), undefined, { witness: every });
@@ -352,12 +358,17 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(state.path(107n)!.anchor).toBe(state.noteRoot());
     // An output the predicate passed over has no witness, kept or fresh.
     expect(state.path(108n)).toBeUndefined(); expect(again.canonical!.state.path(108n)).toBeUndefined();
-    expect([...state.store.witnessedOutputs(state.ns, state.position)].map(output => output.cm)).toEqual([101n, 106n, 107n]);
+    expect([...state.store.unspentWitnessed(state.ns, state.position)].map(output => [output.cm, output.mark.nf, output.mark.note]))
+      .toEqual([101n, 106n, 107n].map(cm => [cm, cm + 1_000_000n, opening(cm, f.backing)]));
+    expect(ownedNotes(b(1), domain, f.backing, state).map(note => [note.cm, note.nf, note.opening.value, note.anchor]))
+      .toEqual([101n, 106n, 107n].map(cm => [cm, cm + 1_000_000n, 1n, state.noteRoot()]));
 
     // A read below the tips cannot answer paths from kept witnesses: that is kept state to discard (§14).
     const earlier = await f.read(counting(), store, { witness, at: 10n });
     expect(earlier.canonical!.commitment.sequence).toBe(5n);
     expect(() => earlier.canonical!.state.path(101n)).toThrow(KeptStateMismatch);
+    // A wallet's read of its notes meets it there too, not at a later spend: one path per namespace is read at once.
+    expect(() => ownedNotes(b(1), domain, f.backing, earlier.canonical!.state)).toThrow(KeptStateMismatch);
     store.discardKept();
     const replayed = await f.read(counting(), store, { witness, at: 10n });
     expect(replayed.canonical!.state.path(101n)).toEqual(fresh.canonical!.state.path(101n));
@@ -368,10 +379,15 @@ describe("pool-v3 §14 kept classes across reads", () => {
     const f = fixture(), kept = files();
     await f.first();
     const store = opened(kept.path, kept);
-    await expect(f.read(counting(), store, { witness: () => true })).rejects.toThrow("a kept store needs a witness predicate that declares its identity");
-    await f.read(counting(), store, { witness: Object.assign(() => true, { identity: b(77) }) });
+    await expect(f.read(counting(), store, { witness: (output: { cm: bigint }) => marked(output) })).rejects.toThrow("a kept store needs a witness predicate that declares its identity");
+    // A predicate returns a mark or nothing: anything else is the caller's error, never a verdict.
+    for (const result of [true, { nf: -1n, note: b(1) }, { nf: 1n }]) {
+      await expect(f.read(counting(), undefined, { witness: (() => result) as unknown as WitnessPredicate }))
+        .rejects.toThrow(new TypeError("a witness predicate returns a mark { nf, note } or undefined"));
+    }
+    await f.read(counting(), store, { witness: Object.assign((output: { cm: bigint }) => marked(output), { identity: b(77) }) });
     // Another predicate witnesses other outputs, so nothing replayed under the first is reused.
-    const other = counting(), read = await f.read(other, store, { witness: Object.assign(() => false, { identity: b(78) }) });
+    const other = counting(), read = await f.read(other, store, { witness: Object.assign(() => undefined, { identity: b(78) }) });
     expect(other.checks).toBe(4);
     expect(read.canonical!.state.path(106n)).toBeUndefined();
     store.close();

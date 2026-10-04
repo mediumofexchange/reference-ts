@@ -19,17 +19,17 @@
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
 import { verifySignatureStrict } from "../../keys.js";
-import { identifierOf, VALUE_BOUND } from "../field.js";
+import { identifierOf, isField, VALUE_BOUND } from "../field.js";
 import { EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY, type NotePath } from "../note-tree.js";
 import { genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash } from "./commitments.js";
 import { decodeRecord, evidenceHashes, statementBytes, statementHash, type EvidenceDigests, type Record } from "./records.js";
 import { checkRecovery, effectOf, recoveryEffect, tagOf, type Demand, type RecoveryView } from "./recovery.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
-import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals } from "./replay-store.js";
+import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals, WitnessMark } from "./replay-store.js";
 import type { VerifierIdentities } from "./configuration.js";
 import type { RootTerms } from "./terms.js";
 
-export type { Totals } from "./replay-store.js";
+export type { Totals, WitnessMark } from "./replay-store.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
@@ -61,9 +61,10 @@ export interface StateView extends RecoveryView {
 
 /** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
 export interface ScanOutput { readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record }
-/** Which outputs a replay keeps incremental witnesses for (a wallet's own). The identity it declares names it in kept
- * state (§14), so it must fix exactly which outputs the predicate accepts; an undeclared one is named per object. */
-export type WitnessPredicate = ((output: ScanOutput) => boolean) & { readonly identity?: Uint8Array | undefined };
+/** Which outputs a replay keeps incremental witnesses for (a wallet's own), and the mark kept with each: undefined
+ * for an output it passes over. The identity it declares names it in kept state (§14), so it must fix exactly which
+ * outputs the predicate accepts and their marks; an undeclared one is named per object. */
+export type WitnessPredicate = ((output: ScanOutput) => WitnessMark | undefined) & { readonly identity?: Uint8Array | undefined };
 /** The receipt's event, for a receipt read naming this segment and position (C2.10.9a). */
 export interface ReceiptEvent extends EvidenceDigests {
   readonly position: bigint;
@@ -437,6 +438,13 @@ export function applyJudged(state: SegmentState, judged: Judged, replay: Segment
     kind === 5 ? judged.demand?.tags.filter(tag => tag !== 0n) ?? [] : nfs.map(tagOf);
   const touched = kind === 4 ? hex(identity) : judged.demandId;
   const scan = outputs.map((cm, i): ScanOutput => (kind === 6 ? { cm, settlement: record } : { cm, capsule: record.capsules[i] }));
+  const markOf = (output: ScanOutput): WitnessMark | undefined => {
+    const mark: unknown = replay.witness?.(output);
+    if (mark !== undefined && !(typeof mark === "object" && mark !== null && isField((mark as WitnessMark).nf) && (mark as WitnessMark).note instanceof Uint8Array)) {
+      throw new TypeError("a witness predicate returns a mark { nf, note } or undefined");
+    }
+    return mark as WitnessMark | undefined;
+  };
   const previous = state.history, lastValid = replay.lastValid;
   state.store.atomic(() => {
     const tip = state.store.append(state.ns, {
@@ -445,7 +453,7 @@ export function applyJudged(state: SegmentState, judged: Judged, replay: Segment
       supply: kind === 1 ? { backing: judged.backing, issued: p[7]!, burned: 0n } : kind === 3 ? { backing: judged.backing, issued: 0n, burned: p[7]! } : undefined,
       nullifiers: nfs.map(nf => ({ nf, tag: tagOf(nf) })),
       outputs: scan.map(output => ({ cm: output.cm, capsule: output.capsule, settlement: output.settlement !== undefined,
-        witness: replay.witness?.(output) === true })),
+        witness: markOf(output) })),
       demand, ended, keys: [...tags.map(tag => `tag:${tag}`), ...(touched === undefined ? [] : [`demand:${touched}`])],
       history: (noteRoot, spentRoot) => nextHistoryHash(previous, identity, noteRoot, spentRoot, next),
     });

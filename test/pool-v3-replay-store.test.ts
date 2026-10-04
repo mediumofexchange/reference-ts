@@ -15,11 +15,13 @@ import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 
 const genesis = { history: new Uint8Array(32), evidence: new Uint8Array(32) };
 let counter = 1000n;
+/** A witnessed output's mark in these cases: its nullifier is the commitment plus 10⁶. */
+const mark = (cm: bigint) => ({ nf: cm + 1_000_000n, note: fieldToBytes(cm) });
 const next = (): bigint => counter++;
 function append(outputs: bigint[], nfs: bigint[], witness: (cm: bigint) => boolean = () => false, extra: Partial<Append> = {}): Append {
   return { identity: fieldToBytes(next()), kind: 2, index: 5n, record: new Uint8Array([1]), proofHash: new Uint8Array(32), signatureHash: new Uint8Array(32),
     evidence: new Uint8Array(32), supply: undefined,
-    nullifiers: nfs.map(nf => ({ nf, tag: nf + 1n })), outputs: outputs.map(cm => ({ cm, capsule: undefined, settlement: false, witness: witness(cm) })),
+    nullifiers: nfs.map(nf => ({ nf, tag: nf + 1n })), outputs: outputs.map(cm => ({ cm, capsule: undefined, settlement: false, witness: witness(cm) ? mark(cm) : undefined })),
     demand: undefined, ended: undefined, keys: [], history: () => new Uint8Array(32), ...extra };
 }
 
@@ -99,6 +101,22 @@ describe("replay storage", () => {
     expect(store.tip(b).noteRoot).toBe(EMPTY_NOTE_ROOT);
     store.collect([b]);
     expect(store.hasOutput(b, 0n, 1n)).toBe(true);
+  });
+
+  it("leaves out a witnessed output once its kept nullifier is visible, imports included, and keeps its mark's bytes", () => {
+    const store = new ReplayStore(), a = store.open(new Uint8Array(32).fill(1), new Uint8Array(32), undefined, genesis);
+    const unspent = (ns: number, p: bigint) => [...store.unspentWitnessed(ns, p)].map(output => [output.cm, output.mark.nf, output.mark.note]);
+    store.append(a, append([1n, 2n, 3n], [], cm => cm !== 2n));
+    store.append(a, append([4n], [mark(1n).nf], () => true));
+    expect(unspent(a, 1n)).toEqual([[1n, mark(1n).nf, fieldToBytes(1n)], [3n, mark(3n).nf, fieldToBytes(3n)]]);
+    expect(unspent(a, 2n).map(([cm]) => cm)).toEqual([3n, 4n]);
+    // A successor spending a predecessor's witnessed output leaves it out there, and not in the predecessor.
+    const b = store.open(new Uint8Array(32).fill(2), new Uint8Array(32).fill(2),
+      { segments: new Map([[Buffer.from(new Uint8Array(32).fill(1)).toString("hex"), { ns: a, upto: 2n }]]), totals: new Map() }, genesis);
+    expect(unspent(b, 0n).map(([cm]) => cm)).toEqual([3n, 4n]);
+    store.append(b, append([5n], [mark(3n).nf], () => true));
+    expect(unspent(b, 1n).map(([cm]) => cm)).toEqual([4n, 5n]);
+    expect(unspent(a, 2n).map(([cm]) => cm)).toEqual([3n, 4n]);
   });
 
   it("lives in a host's database: writes join the host's transaction, and an imported frontier is copied in once", () => {

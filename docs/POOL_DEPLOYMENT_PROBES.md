@@ -1371,7 +1371,8 @@ Run of 2026-10-04 at `fa8384d` on a 4-core cloud container (Xeon 2.1 GHz,
   steady-state budget. The lever is to keep each output's recovered
   opening and nullifier with its witness, so that a read recovers only
   new outputs. Dropping a spent output's witness would also help (WORK.md
-  Next 4(x)).
+  Next 4(x)). M11b7 took the first lever and leaves spent outputs out of a
+  read ([below](#a-wallet-read-from-kept-marks-m11b7)).
 - *Against the budgets:* at 10³ statements every budget holds. Admission is
   under 1 s, and every process stays under 1 GiB. Restart does not
   re-verify. The first sync rate extrapolates within 24 h, and the steady
@@ -1387,6 +1388,39 @@ Run of 2026-10-04 at `fa8384d` on a 4-core cloud container (Xeon 2.1 GHz,
 - *Limits:* one run per point on one container; one backing and segment;
   the probe's own proving shares the cores with `serve` between
   submissions.
+
+### A wallet read from kept marks (M11b7)
+
+M11b7 keeps each witnessed output's nullifier and opening with its witness
+and leaves spent outputs out of a read
+([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x)).
+`owned-notes-probe.mjs`
+([at its revision](https://github.com/mediumofexchange/reference-ts/blob/9616784/scripts/pool/v3/owned-notes-probe.mjs))
+writes one seed's outputs, four a record, into an in-memory replay store
+through the seed's witness predicate, then spends every second one. It
+times `ownedNotes` at the tip, then reading two notes' secrets and paths as
+a spend does. No proof or record is involved: it isolates the read M11c1
+attributed the growth to.
+
+Run of 2026-10-04 on the M11c1 container (4 cores, Xeon 2.1 GHz), one run
+per point, `npm run build` output of each revision:
+
+| Outputs (half spent) | Before (`4a1b0b5`) | After (`0f32190`) | Two inputs completed |
+|---|---|---|---|
+| 2,000 | 3.14 s, 1.57 ms an output | 39 ms, 0.020 ms an output | 3.2 ms |
+| 20,000 | 32.8 s, 1.64 ms an output | 214 ms, 0.011 ms an output | 3.2 ms |
+| 100,000 | not run (about 2.7 min at this rate) | 1.54 s, 0.015 ms an output | 17.6 ms |
+
+- *Result:* a read no longer recovers outputs. What remains is one indexed
+  row a witnessed output, read from the witness rows, and the spent check in
+  SQL; spent outputs cost their row only. The shop of M11c1 with 10⁵ outputs reads in about 1.5 s
+  instead of about 2 minutes. Ten syncs a day then spend about 15 CPU-s on
+  it, against the ≤ 10 CPU-minute budget. Spending recovers its one or two inputs
+  (about 1.6 ms each) and folds their paths.
+- *Limits:* the store is in memory and holds only this seed's records; a kept
+  file on disk and a long shared history add page reads, which M11c2
+  measures with the runtime at depth. `holdingsOf`'s per-note demand checks
+  are not timed here.
 
 ## Invalid-checkpoint evidence
 

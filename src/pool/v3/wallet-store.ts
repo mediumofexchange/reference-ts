@@ -15,9 +15,10 @@
 //   `supply` runs the caller's transport into it, and a read's package then
 //   carries only that read's own items;
 // - `<path>.replay` with its digest, the kept classes, replay state and venue
-//   answers of its reads (replay-store.ts), with an incremental witness for
-//   each of this seed's notes, named by the verifier's circuits.
-//   It shows which outputs are this seed's, so it needs the database's protection.
+//   answers of its reads (replay-store.ts), with an incremental witness,
+//   nullifier and opening for each of this seed's notes (no spend secret),
+//   named by the verifier's circuits. It shows which outputs are this seed's
+//   and what they hold, so it needs the database's protection.
 import { randomBytes, randomInt } from "node:crypto";
 import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -35,7 +36,7 @@ import { adoptedDomain, requireConfigurationVerifier } from "./configuration.js"
 import { requireReferenceVenue } from "./guard.js";
 import { EvidenceStore } from "./evidence-store.js";
 import type { SegmentHeader } from "./headers.js";
-import { ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
+import { inputOf, ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { readFrontier, type PackageReader } from "./package-reader.js";
 import type { SignedTerms } from "./reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeRecord, evidenceHashes, settlementAuthorization,
@@ -501,21 +502,30 @@ export class V3Wallet {
     const bytes = copyUnshared(packageBytes), terms = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
     const backing = rootTermsName(terms.terms);
     return this.inTurn(async () => {
-      let view: Frontier;
-      try {
-        this.mutable();
-        view = await this.frontier(bytes, terms, backing, answers);
-      } catch (error) {
-        // A replaced or exported handle says so, whatever its read met once another handle held the files.
-        if (!(error instanceof V3WalletError)) this.mutable();
-        if (error instanceof FileInUse) {
-          throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
+      for (let again = false; ; again = true) {
+        let view: Frontier;
+        try {
+          this.mutable();
+          view = await this.frontier(bytes, terms, backing, answers);
+        } catch (error) {
+          // A replaced or exported handle says so, whatever its read met once another handle held the files.
+          if (!(error instanceof V3WalletError)) this.mutable();
+          if (error instanceof FileInUse) {
+            throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
+          }
+          throw error;
         }
-        throw error;
+        // The read awaited: a handle replaced or exported meanwhile answers nothing from it.
+        this.mutable();
+        try {
+          return use(view);
+        } catch (error) {
+          // §14: a kept mark its output does not recover, found as a note is completed to spend (`inputOf`), is kept
+          // state to discard; the read replays once and `use` runs again on what that replay finds.
+          if (!(error instanceof KeptStateMismatch) || again) throw error;
+          this.kept().discardKept();
+        }
       }
-      // The read awaited: a handle replaced or exported meanwhile answers nothing from it.
-      this.mutable();
-      return use(view);
     });
   }
   private async frontier(bytes: Uint8Array, terms: SignedTerms, backing: Uint8Array, answers: boolean) {
@@ -538,7 +548,7 @@ export class V3Wallet {
             if (publication.index > (adoption.get(publication.backing) ?? 0n)) applyForceEffects(force, publication.record);
           }
           const spent = force;
-          // The scan ran inside the replay, once per output: only this seed's witnessed outputs are read here.
+          // The scan ran inside the replay, once per output: this seed's unspent outputs are read from their kept marks.
           notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));
         }
         return { terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
@@ -1081,7 +1091,7 @@ export class V3Wallet {
   /** A spend of `selected` (one note with a fresh zero input, or two) into `outputs`, padded with fresh zero outputs
    * to four and shuffled: public order labels no position (C1.2.3), and the saved record fixes it for retries. */
   private spendPlan(backing: Uint8Array, selected: OwnedNote[], outputs: OutputNote[]) {
-    const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
+    const inputs: NoteInput[] = selected.map(inputOf);
     // A zero input names the same backing and needs no membership (C1.2.3).
     const zero = inputs.length === 1 ? this.fresh(backing, 0n) : undefined;
     if (zero !== undefined) inputs.push({ ...inputs[0]!, note: zero });
@@ -1200,7 +1210,7 @@ export class V3Wallet {
       const positive = saved.inputs.map(nf => notes.find(note => note.nf === nf));
       requireThat(positive.every(note => note !== undefined), "ABSENT", "a reserved input is not in canonical history");
       requireThat(!positive.some(note => locked(force, tagOf(note.nf), at)), "LOCKED", "a reserved input is locked by a standing demand");
-      const placed = positive.map(note => ({ note, anchor: note.anchor, path: note.path }));
+      const placed = positive.map(note => inputOf(note!));
       const inputs: NoteInput[] = p.slice(7, 9).map(nf => {
         if (zero !== undefined && nf === zero.nf) return { ...placed[0]!, note: zero };
         const input = placed.find(i => i.note.nf === nf);
@@ -1337,7 +1347,7 @@ export class V3Wallet {
       const { selected, repeats } = demandSelection(notes.filter((_, i) => available[i]),
         holdings.filter((_, i) => available[i]).map(h => h.presented.map(id => hex(id))), quantity);
       observed.check();
-      const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
+      const inputs: NoteInput[] = selected.map(inputOf);
       if (inputs.length === 1) {
         inputs.push({ ...inputs[0]!, note: prepareExactOutput(this.seed, this.domain, paddingRequestId(this.seed, this.domain,
           selected[0]!.nf), backing, 0n) });
@@ -1427,7 +1437,7 @@ export class V3Wallet {
       const { header } = this.route(view);
       const real = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(note => tagOf(note.nf) === tag));
       requireThat(real.every(note => note !== undefined), "ABSENT", "a demanded note is not unspent in canonical history");
-      const placed = real.map(note => ({ note: note!, anchor: note!.anchor, path: note!.path }));
+      const placed = real.map(note => inputOf(note!));
       const inputs: NoteInput[] = demand.tags.map(tag => tag !== 0n ? placed.find(i => tagOf(i.note.nf) === tag)! :
         { ...placed[0]!, note: prepareExactOutput(this.seed, this.domain, paddingRequestId(this.seed, this.domain, placed[0]!.note.nf),
           backing, 0n) });
@@ -1496,7 +1506,7 @@ export class V3Wallet {
       const holdings = this.holdingsOf(notes, force, at);
       const selected = select(notes.filter((_, i) => holdings[i]!.status === "available" && holdings[i]!.presented.length === 0), quantity);
       observed.check();
-      const inputs: NoteInput[] = selected.map(note => ({ note, anchor: note.anchor, path: note.path }));
+      const inputs: NoteInput[] = selected.map(inputOf);
       if (inputs.length === 1) inputs.push({ ...inputs[0]!, note: this.fresh(backing, 0n) });
       const change = this.fresh(backing, selected.reduce((n, note) => n + note.opening.value, 0n) - quantity);
       return { header, inputs, change, nfs: selected.map(note => note.nf), at };

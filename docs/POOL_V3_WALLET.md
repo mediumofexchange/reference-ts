@@ -86,9 +86,11 @@ files, so it costs what is new, not the history
   the file holds is authenticated when a read uses it and selects nothing.
 - `<path>.replay`, with its digest `<path>.replay.sha256`, keeps the classes,
   replay state and venue answers of the wallet's reads, and an incremental
-  witness for each positive output of this seed. A later read verifies and
-  scans only records it has not replayed, asks the venue only for indices past
-  the last read's, and takes its notes' paths from the kept witnesses. The
+  witness for each positive output of this seed, with its nullifier and
+  opening. A later read verifies and scans only records it has not replayed,
+  asks the venue only for indices past the last read's, and reads its unspent
+  notes from the kept witnesses; it recovers a note from its output again only
+  to spend it ([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x)). The
   verifier's circuit identities, which the wallet requires to be the adopted
   configuration's, name the kept state.
 
@@ -106,7 +108,8 @@ A file a hostile supplier grew is replaced, never removed first: sync a new
 file from another supplier, check that its reads resolve, then swap the
 files. A read left `unresolved-evidence` over what the file holds is
 answered by supplying again in full (`{ full: true }`). The replay file shows
-which outputs are this seed's, so it needs the database's protection; during a
+which outputs are this seed's and each one's opening and nullifier (never its
+spend secret), so it needs the database's protection; during a
 read, SQLite's temporary files for it (savepoint journals past the page cache)
 go to the system temporary directory and are deleted on close. Reads and
 supplies of one wallet take turns. The holder remains responsible for retaining
