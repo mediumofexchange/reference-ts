@@ -314,6 +314,9 @@ describe("pool-v3 §14 kept walk: scope changes", () => {
     // x's own checkpoints only: Sy@2 scopes y alone, whichever read classified it.
     expect(fresh2.carrying.map(c => c.sequence)).toEqual(["1", "3"]);
     expect(kept2).toEqual(fresh2);
+    // A kept read asking for no listing reads the same frontier and lists nothing (M11b10).
+    const unlisted = outcome(await readFrontier(pack(items), x.signed, venue.witnessedIndex(), { verifier: counting(), reference, venue, store, evidence, carrying: false }));
+    expect(unlisted).toEqual({ ...kept2, carrying: [] });
   });
 
   it("lists what a fresh read lists where a backing's excluded checkpoint was passed around the canonical checkpoint", async () => {

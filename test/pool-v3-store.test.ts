@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -14,6 +14,7 @@ import { decodeReceipt, decodeSnapshot, verifyReceipt } from "../src/pool/v3/com
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
+import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import { ReferenceVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
@@ -784,6 +785,9 @@ describe("the v3 operator journal", () => {
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
     const issued = (n: number): Uint8Array =>
       encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
+    // Its reads never list the backing's carrying checkpoints, one row per checkpoint ever held (M11b10).
+    const carried = vi.spyOn(ReplayStore.prototype, "carried");
+    onTestFinished(() => carried.mockRestore());
     let j = open();
     await j.open("genesis", silent); await j.publish();
     await j.submit(issued(0)); await j.submit(issued(1)); await j.commit("c2"); await j.publish();
@@ -797,6 +801,8 @@ describe("the v3 operator journal", () => {
     venue.advance(venue.witnessedIndex() + lag);
     // Another process with the same declared verifier resumes the kept classes and replays.
     await j.submit(issued(5)); expect(verified).toBe(10);
+    await j.audit();
+    expect(carried).not.toHaveBeenCalled();
   });
 
   it("holds no transaction on its database while it reads its own history", async () => {

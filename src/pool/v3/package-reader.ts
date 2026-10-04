@@ -38,6 +38,9 @@ export interface PackageReader {
   readonly evidence?: EvidenceStore | undefined;
   /** Outputs to keep incremental witnesses for (a wallet's own), so their paths can be read from the result. */
   readonly witness?: WitnessPredicate | undefined;
+  /** False leaves the result's `carrying` listing empty: it reads one row per checkpoint ever held, which a party that
+   * uses none of them (the operator's own reads before each admission) need not pay. */
+  readonly carrying?: boolean | undefined;
 }
 /** A frontier read's options: `answers` also lists the acceptances and releases the venue witnessed for the backing
  * (a holder settling reads its disclosure count from them, C3.5, and C3.8's reading its outcome); other reads leave
@@ -191,7 +194,7 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   const terms = scope.rootTerms[header.entries.findIndex(scoped => same(scoped.backing, selection.backing))]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
   const faults = faultObserver(payloads(7), selection, verifier);
-  const context: ImportContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, header, verifier, reference, faults,
+  const context: ImportContext = { store: options.store ?? new ReplayStore(), witness: options.witness, carrying: options.carrying, selection, terms, header, verifier, reference, faults,
     ...(batch.count(10) === 0 ? {} : { receiptBytes: payloads(10)[0]! }) };
   return { context, faults, venue };
 }
@@ -240,7 +243,7 @@ function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontier
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
   const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
   const faults = faultObserver(payloads(7), selection, verifier);
-  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, selection, terms, verifier, reference, faults,
+  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, carrying: options.carrying, selection, terms, verifier, reference, faults,
     answers: options.answers === true };
   return { context, faults, venue };
 }
