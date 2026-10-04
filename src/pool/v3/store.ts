@@ -772,12 +772,17 @@ export class V3OperatorJournal {
    * a newly read window is verified before it counts as a conflict, including old twins. */
   private foreign(window: RangeAnswer): RangeEntry | undefined {
     return window.entries.find(entry => {
-      let c: Commitment;
+      let c: Commitment, own: Signed | undefined;
       try { c = decodeCommitment(entry.record); }
       catch (error) { if (error instanceof EncodingError) return false; throw error; }
-      const own = this.signedAt(c.sequence);
+      try { own = this.signedAt(c.sequence); }
+      catch (error) { if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "a signed row does not decode"); throw error; }
       if (own !== undefined && same(encodeCommitment(own.commitment), entry.record)) return false;
-      return same(c.operator, this.operator) && verifyCommitment(c);
+      if (!same(c.operator, this.operator) || !verifyCommitment(c)) return false;
+      // This journal's own row at that sequence that no longer verifies as its commitment is damage, not another signer's.
+      requireThat(own === undefined || (same(own.commitment.operator, this.operator) && verifyCommitment(own.commitment)), "STORAGE",
+        "a signed row is damaged");
+      return true;
     });
   }
   /**
@@ -1378,15 +1383,15 @@ export class V3OperatorJournal {
    * kept through it already, they are read after a fence check that writes nothing. */
   private servingView(): { readonly now: bigint; readonly latest: HeldCommitment | undefined; readonly conflict: boolean } {
     const now = this.clock();
-    // Before any answer is kept: a damaged row must not be read as another signer's commitment (`foreign`).
-    this.latestSignedHolds();
-    if (this.replays.keptAnswer(1, this.operator)?.through !== now) return this.keeping(() => this.viewed(undefined));
+    // Under the fence and before any answer is kept: a damaged row must not be read as another signer's commitment
+    // (`foreign`).
+    if (this.replays.keptAnswer(1, this.operator)?.through !== now) return this.keeping(() => { this.latestSignedHolds(); return this.viewed(undefined); });
     // One read snapshot, which takes no write lock: another owner's commit cannot fall between the checks.
     this.db.exec("BEGIN");
     try {
       const meta = this.metadata();
       requireThat(meta?.owner === this.owner, "FENCED", "another process owns this journal");
-      this.identity(meta);
+      this.identity(meta); this.latestSignedHolds();
       return { now, latest: this.heldBelow(now), conflict: this.db.prepare("SELECT 1 FROM journal_conflict WHERE id=1").get() !== undefined };
     } finally { this.db.exec("COMMIT"); }
   }
