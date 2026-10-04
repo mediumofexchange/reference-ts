@@ -305,7 +305,7 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
           { ...f.reader, evidence, witness: altered })).canonical!.state);
         expect(kept.every(note => wrong.some(held => held.cm === note.cm))).toBe(true);
         if (spentHeld) expect(wrong.length).toBeGreaterThan(kept.length); else expect(wrong).toHaveLength(kept.length);
-        for (const note of wrong) expect(() => note.secret).toThrow(KeptStateMismatch);
+        for (const note of wrong) expect(() => note.secret).toThrow(new KeptStateMismatch("a witnessed output's mark is not what its output recovers"));
       }
     } finally { keptStore.close(); evidence.close(); }
   }, 60_000);

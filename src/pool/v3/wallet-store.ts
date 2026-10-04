@@ -1435,8 +1435,13 @@ export class V3Wallet {
       requireThat(own.deadline <= demand.deadline, "INVALID", "the acceptance is due after the demand");
       requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
       const { header } = this.route(view);
-      // Found by the kept tag; inputOf then refuses a mark whose tag is not its nullifier's.
+      // Found by the kept tag; inputOf then refuses a mark whose tag is not its nullifier's. A demanded note missed
+      // where some kept tag is not its nullifier's is that kept state to discard (§14), not an absent note: the read
+      // replays. Only a miss pays these hashes.
       const real = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(note => note.tag === tag));
+      if (real.some(note => note === undefined) && notes.some(note => note.tag !== tagOf(note.nf))) {
+        throw new KeptStateMismatch("a witnessed output's mark is not what its output recovers");
+      }
       requireThat(real.every(note => note !== undefined), "ABSENT", "a demanded note is not unspent in canonical history");
       const placed = real.map(note => inputOf(note!));
       const inputs: NoteInput[] = demand.tags.map(tag => tag !== 0n ? placed.find(i => tagOf(i.note.nf) === tag)! :

@@ -1,13 +1,16 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { identifierOf, limbsOf } from "../src/pool/field.js";
+import { bytesToField, fieldToBytes, identifierOf, limbsOf } from "../src/pool/field.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeSettlementAuthorization, releaseBytes, settlementAuthorization,
   statementHash, type Acceptance, type Record } from "../src/pool/v3/records.js";
+import { tagOf } from "../src/pool/v3/recovery.js";
 import { presenterSecret, settlementRho } from "../src/pool/v3/redemption.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -856,6 +859,42 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(reading.acceptances.map(a => [a.timely, a.taken])).toEqual([[true, true]]);
     expect([reading.ended, reading.overdue?.reading]).toEqual([undefined, "dishonour"]);
     expect((await f.holder.presentation(id, f.served(), f.signed)).ended?.by).toBe("settlement");
+  });
+
+  /** Rewrite the holder's kept mark of its note worth `value` so its tag (bytes 104–135, M11b8) is `tag`, under a
+   * re-recorded digest: kept state §14's check cannot see. Returns each note's value and nullifier. */
+  function tamperTag(directory: string, value: bigint, tag: (notes: readonly { readonly value: bigint; readonly nf: bigint }[]) => bigint) {
+    const path = join(directory, "holder.db.replay"), db = new DatabaseSync(path, { readBigInts: true });
+    const rows = (db.prepare("SELECT ns, leaf, nf, note FROM witness").all() as { ns: bigint; leaf: bigint; nf: Uint8Array; note: Uint8Array }[])
+      .map(row => ({ ...row, value: new DataView(new Uint8Array(row.note).buffer).getBigUint64(96), nfValue: bytesToField(new Uint8Array(row.nf)) }));
+    const notes = rows.map(row => ({ value: row.value, nf: row.nfValue })), target = rows.find(row => row.value === value)!;
+    const note = new Uint8Array(target.note); note.set(fieldToBytes(tag(notes)), 104);
+    db.prepare("UPDATE witness SET note = ? WHERE ns = ? AND leaf = ?").run(note, target.ns, target.leaf); db.close();
+    writeFileSync(`${path}.sha256`, createHash("sha256").update(readFileSync(path)).digest("hex"));
+    return notes;
+  }
+
+  it("settles a demand over its own notes when a kept tag is damaged or forged: the wallet discards its kept state and replays", async () => {
+    for (const [demanded, damaged, forge] of [
+      // The demanded note's own tag damaged: missed by its tag, the miss finds a tag that is not its nullifier's.
+      [10n, 10n, (notes: readonly { value: bigint; nf: bigint }[]) => tagOf(notes.find(n => n.value === 10n)!.nf) ^ 1n],
+      // Another note's tag forged equal to the demanded note's: found first, refused when completed.
+      [5n, 10n, (notes: readonly { value: bigint; nf: bigint }[]) => tagOf(notes.find(n => n.value === 5n)!.nf)],
+    ] as const) {
+      const f = await fixture([10n, 5n]);
+      await f.holder.sync(f.served(), f.signed);
+      const deadline = f.venue.witnessedIndex() + 20n;
+      const demand = await f.holder.demand("redeem", demanded, deadline, f.served(), f.signed, prove);
+      await f.holder.submit("redeem", f.service); await f.publish();
+      const acceptance = await f.backer.accept("answer", demand.demand!, deadline - 5n, f.served(), f.signed, sign);
+      f.holder.close();
+      const notes = tamperTag(f.directory, damaged, forge), holder = f.open("holder");
+      const settled = await holder.settle("settle", acceptance, f.served(), f.signed, prove);
+      // The settlement spends exactly the demanded note's nullifier, never the other's.
+      const nfs = decodeRecord(settled.record).publicInputs.slice(12, 14);
+      expect(nfs).toContain(notes.find(n => n.value === demanded)!.nf);
+      expect(nfs).not.toContain(notes.find(n => n.value !== demanded)!.nf);
+    }
   });
 });
 
