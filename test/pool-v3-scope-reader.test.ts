@@ -97,9 +97,9 @@ async function twoBackings() {
   }
   const selection = (backing: Uint8Array, commitment: Commitment) => ({ mode: "current-fixture" as const, domain, venue: venue.id,
     backing, operator, sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
-  const read = (backing: Uint8Array, commitment: Commitment, extra: readonly EvidenceItem[] = []) => readPackage(pack([...items, ...extra,
+  const read = (backing: Uint8Array, commitment: Commitment, extra: readonly EvidenceItem[] = [], carrying?: boolean) => readPackage(pack([...items, ...extra,
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
-  selection(backing, commitment), { verifier, reference, venue });
+  selection(backing, commitment), { verifier, reference, venue, ...(carrying === undefined ? {} : { carrying }) });
   /** The operator's receipt for the current segment's latest record, given after sequence `after`. */
   function receipt(after: bigint): Uint8Array {
     const bytes = current.records.at(-1)!, digests = evidenceHashes(decodeRecord(bytes));
@@ -123,6 +123,10 @@ describe("multi-backing scope reader", () => {
     expect(readX.state.history).toEqual(readY.state.history);
     expect(readX.carrying.map(item => [item.sequence, item.class])).toEqual([["1", "valid"], ["2", "valid"]]);
     expect(readX.ranges.heldBefore).toBe(1);
+    // A read asking for no listing (the journal's own, M11b10) judges the same state, clock and ranges and lists nothing.
+    const unlisted = stateOf(await f.read(f.x.name, latest, [], false));
+    expect({ ...unlisted, carrying: readX.carrying }).toEqual(readX);
+    expect(unlisted.carrying).toEqual([]);
     await expect(f.read(f.x.name, opening)).rejects.toMatchObject({ status: "superseded-selection" });
   });
 

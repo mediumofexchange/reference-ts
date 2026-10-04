@@ -37,6 +37,9 @@ import { decodeRootTerms, type RootTerms } from "./terms.js";
 
 export interface ImportContext extends ReplayContext {
   readonly reference: VenueReference;
+  /** Unless false, the result lists the selected backing's carrying checkpoints through the judging index
+   * (`carrying`): one row for every checkpoint ever held, so a party that reads none of them leaves them out. */
+  readonly carrying?: boolean | undefined;
   readonly faults?: FaultObserver | undefined;
   readonly receiptBytes?: Uint8Array | undefined;
   /** Receipt evidence remains available to the caller after a later refusal. */
@@ -458,7 +461,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
   const current = await latest(selection.backing, context.terms);
   if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
   const { clock, publications, force, nonService } = await walk.around(selected, context.terms, view);
-  return { state: selected.state, carrying: walk.carrying(), clock, canonical: canonicalOf(selected), force, ranges: {
+  return { state: selected.state, carrying: context.carrying === false ? [] : walk.carrying(), clock, canonical: canonicalOf(selected), force, ranges: {
     judgingIndex: view.t, lag: view.lag, checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
     heldBefore, heldAfter, publications, ...(nonService === undefined ? {} : { nonService }) } };
 }
@@ -495,7 +498,7 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
         throw error;
       }
     }
-    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains, answers,
+    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: context.carrying === false ? [] : walk.carrying(), scopeChains, answers,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
         chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
   } catch (error) {
