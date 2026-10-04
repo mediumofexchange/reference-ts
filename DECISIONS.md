@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-04` [Serve evidence without the journal's turn, and refuse the journal's own damage by name (slice 11 M11b5, Next 4(s))](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)
 - `2026-10-04` [Resume a kept walk, so a later read judges only new checkpoints (slice 11 M11b4, Next 4(k))](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)
 - `2026-10-03` [Measure the design point at sizes a run can prove, and give the holder's transport and funding a slice before release assurance](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)
 - `2026-10-03` [Keep the Ergo view in append-only SQLite rows and reopen it without re-verifying (slice 11 M11a)](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)
