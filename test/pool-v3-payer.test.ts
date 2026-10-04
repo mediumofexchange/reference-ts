@@ -305,6 +305,23 @@ describe("v3 payer custody over restored holdings", () => {
     await expect(f.payer.publish("shop", f.venue)).rejects.toMatchObject({ code: "UNKNOWN" });
   });
 
+  it("fails a payment one of whose outputs another statement created first, and frees its input (audit 29)", async () => {
+    const f = await fixture([10n, 6n]);
+    const payment = await f.payer.prepare("shop", { request: f.invoice, value: 7n }, f.served, f.signed, prove);
+    // Whoever holds the request's opening creates that exact output first: here the backer issues to it.
+    await f.j.submit(encodeRecord(authorizeIssue(record(issueTask(f.context, f.invoice)), issuerSecret)));
+    const served = await f.publish();
+    await expect(f.payer.submit("shop", f.service)).rejects.toMatchObject({ code: "REFUSED", check: "OUTPUT" });
+    // A reproof request resolves the failure from evidence without proving: no record of it can be admitted.
+    expect(await f.payer.reprove("shop", served, f.signed, async () => { throw new Error("not called"); }))
+      .toMatchObject({ status: "failed", final: undefined, inputs: payment.inputs });
+    const view = await f.payer.sync(served, f.signed);
+    expect(view.holdings.map(h => [h.value, h.status])).toEqual([[10n, "available"], [6n, "available"]]);
+    // The freed note pays again.
+    const other = f.receiver.request("other", f.backing, 8n);
+    expect((await f.payer.prepare("other", { request: other, value: 8n }, served, f.signed, prove)).inputs).toEqual(payment.inputs);
+  });
+
   it("reads a payment judged failed final once evidence shows all four of its outputs", async () => {
     const f = await fixture([10n]);
     await f.payer.prepare("shop", f.order, f.served, f.signed, prove);

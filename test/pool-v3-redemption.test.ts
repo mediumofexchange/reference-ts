@@ -228,6 +228,35 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(f.backer.act("late-issue")!.status).toBe("failed");
   });
 
+  it("fails no receipted demand or settlement by the door's times while its checkpoint is pending (C3.8, audit 29)", async () => {
+    const f = await fixture();
+    await f.holder.sync(f.served(), f.signed);
+    const at = f.venue.witnessedIndex();
+    const demand = await f.holder.demand("redeem", 10n, at + 40n, f.served(), f.signed, prove);
+    await f.holder.submit("redeem", f.service);
+    // Past C3.3's window with no checkpoint yet: the operator admitted the demand inside it.
+    f.venue.advance(at + 2n * lag + 1n);
+    await f.holder.sync((await f.j.package()).package, f.signed);
+    expect(f.holder.act("redeem")!.status).toBe("prepared");
+    await f.publish();
+    await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("redeem")!.status).toBe("final");
+    const first = await f.backer.accept("a1", demand.demand!, f.venue.witnessedIndex() + lag + 3n, f.served(), f.signed, sign);
+    await f.holder.settle("s1", first, f.served(), f.signed, prove);
+    await f.holder.submit("s1", f.service);
+    // Past the acceptance deadline with no checkpoint yet: still pending, so no second settlement at its disclosure count.
+    f.venue.advance(first.deadline + 1n);
+    const pending = (await f.j.package()).package;
+    await f.holder.sync(pending, f.signed);
+    expect(f.holder.act("s1")!.status).toBe("prepared");
+    const second = await f.backer.accept("a2", demand.demand!, f.venue.witnessedIndex() + 20n, pending, f.signed, sign);
+    await expect(f.holder.settle("s2", second, pending, f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT",
+      message: expect.stringContaining("prepared at this disclosure count") });
+    await f.publish();
+    expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
+    expect(f.holder.act("s1")!.status).toBe("final");
+  });
+
   it("keeps acts across an offline backup and refuses a payment alias for an act", async () => {
     const f = await fixture();
     await f.holder.sync(f.served(), f.signed);
