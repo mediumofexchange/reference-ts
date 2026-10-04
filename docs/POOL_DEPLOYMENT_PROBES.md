@@ -1287,17 +1287,17 @@ A throwaway vitest probe committed and published H empty checkpoints of one
 backing with a silence clause on the fixture venue, with stand-in proofs,
 then timed `submit` of an issue, on a 4-core cloud container on 2026-10-03/04:
 
-| Held checkpoints | Before (`6d0fdf9`), 3 admissions | After (`ea2d09f`), 5 admissions |
+| Held checkpoints | Before (`6d0fdf9`), 3 admissions | After (`c889aac`), 5 admissions |
 |---|---|---|
-| 5 | 96–122 ms | 76–107 ms |
-| 20 | 344–401 ms | 89–138 ms |
-| 80 | 1,099–1,194 ms | 91–142 ms |
-| 320 | not run | 103–154 ms |
+| 5 | 96–122 ms | 74–112 ms |
+| 20 | 344–401 ms | 123–154 ms |
+| 80 | 1,099–1,194 ms | 112–138 ms |
+| 320 | not run | 121–178 ms |
 
 - *Result:* about 14 ms per held checkpoint per admission before (with the
-  trails these checkpoints carried); flat after, apart from about 0.1 ms per
-  checkpoint for the counts and listings a read still returns whole. The
-  admission's own state transition is most of the rest.
+  trails these checkpoints carried); flat within the runs' spread after. The
+  first admission after each commit is the highest: it judges the new
+  checkpoint. The admission's own state transition is most of the rest.
 - *Limits:* stand-in proofs, the fixture venue and one backing; one run per
   point. The replay file here is small: a read at a new venue index still
   hashes the whole file (WORK.md Next 4(v)), about 7 s at 10⁶ statements by
