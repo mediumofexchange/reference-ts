@@ -14,10 +14,10 @@
 import type { Barretenberg } from "@aztec/bb.js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
-import { copyBytes, EncodingError } from "../../bytes.js";
+import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { identifierOf } from "../field.js";
 import { PROOF_OPTIONS, type VerifierOptions, type ProofVerifier } from "../proof-verifier.js";
-import { RELATION_KINDS, RELATIONS } from "./configuration.js";
+import { adoptedDomain, RELATION_KINDS, RELATIONS } from "./configuration.js";
 import type { Record } from "./records.js";
 import { adoptedPrograms } from "./programs.js";
 import { openV3Verifier } from "./verifier.js";
@@ -47,7 +47,7 @@ export interface V3Prover {
  * verification on the verifier's own.
  */
 export async function openV3Prover(api: Barretenberg, options: VerifierOptions = {}): Promise<V3Prover> {
-  const programs = adoptedPrograms(), verifier = await openV3Verifier(api, options);
+  const programs = adoptedPrograms(), domain = adoptedDomain(), verifier = await openV3Verifier(api, options);
   const circuits = new Map<number, { readonly noir: Noir; readonly backend: UltraHonkBackend }>();
   for (const name of RELATIONS) {
     // Witness generation reads the ABI and bytecode; the debug fields only enrich an execution failure's message.
@@ -60,6 +60,10 @@ export async function openV3Prover(api: Barretenberg, options: VerifierOptions =
       const kind = task?.kind, circuit = circuits.get(kind);
       if (circuit === undefined) throw new EncodingError("the prover proves kinds 1–4, 6 and 7");
       const expected = [...task.publicInputs], capsules = task.capsules.map(copyBytes);
+      // A record names its configuration in its first two inputs (§4): the prover proves under the adopted one only.
+      if (expected.length < 2 || compareBytes(identifierOf(expected[0]!, expected[1]!), domain) !== 0) {
+        throw new EncodingError("the task names another configuration");
+      }
       const { witness } = await circuit.noir.execute(task.witness as InputMap);
       const proof = await circuit.backend.generateProof(witness, PROOF_OPTIONS);
       const carried = proof.publicInputs.map(BigInt);

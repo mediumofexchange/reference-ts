@@ -1004,7 +1004,13 @@ export class V3OperatorJournal {
         admission: false, block };
       const receipts = this.transaction(() => {
         this.stable(view); this.signingSchedule(view, true);
-        const signed = block.map(event => this.admit(engine, judgeAdopted(state, event.bytes, replay), replay));
+        let signed: Uint8Array[];
+        // The reader forced each record at its own index; one the opening's state refuses leaves the block unadopted,
+        // named by its check like any admission refusal, and nothing of it is kept.
+        try { signed = block.map(event => this.admit(engine, judgeAdopted(state, event.bytes, replay), replay)); } catch (error) {
+          if (error instanceof ReplayRefusal) throw new V3StoreError("REFUSED", `adoption refused: ${error.check}`, error.check);
+          throw error;
+        }
         this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(signed.map(bytesToHex)));
         return signed;
       });
@@ -1254,13 +1260,16 @@ export class V3OperatorJournal {
         batch.clear(); held = 0;
         return { package: encodeEvidencePackage(items) };
       };
-      // A snapshot names the furthest record of its segment that a reader of it needs.
-      const snapshot = (payload: Uint8Array): void => {
+      // A snapshot names the furthest record of its segment that a reader of it needs. Every segment this journal
+      // signed keeps its trail, so an own snapshot without one is damage, never a shorter package; a taken snapshot
+      // is served as it was taken, with its trail where that came too.
+      const snapshot = (payload: Uint8Array, own: boolean): void => {
         let named: Snapshot;
-        try { named = decodeSnapshot(payload); } catch (error) { if (error instanceof EncodingError) return; throw error; }
+        try { named = decodeSnapshot(payload); } catch (error) { if (error instanceof EncodingError && !own) return; throw error; }
         const key = bytesToHex(named.segment), top = tops.get(key);
         if (top !== undefined && same(top.evidence, named.evidenceHash)) return;
         const length = this.retained.trail(named.segment, named.evidenceHash)?.length;
+        requireThat(length !== undefined || !own, "STORAGE", "a signed segment's trail is missing");
         if (length !== undefined && (top === undefined || top.position < length)) tops.set(key, { segment: named.segment, position: length, evidence: named.evidenceHash });
       };
       for (let cursor = from; cursor < through;) {
@@ -1273,7 +1282,7 @@ export class V3OperatorJournal {
           for (const entry of decodeEvidenceDirectory(directory)) {
             const payload = this.retained.snapshot(entry.digest);
             requireThat(payload !== undefined, "STORAGE", "a signed snapshot is missing");
-            add(4, payload); snapshot(payload);
+            add(4, payload); snapshot(payload, true);
             if (full()) yield packed();
           }
           cursor = row.sequence as bigint;
@@ -1289,7 +1298,7 @@ export class V3OperatorJournal {
           const kind = row.kind === 3n ? 3 : 4, payload = this.retained.object(kind, mark[2]);
           if (payload === undefined) continue;
           add(kind, payload);
-          if (kind === 4) snapshot(payload);
+          if (kind === 4) snapshot(payload, false);
           if (full()) yield packed();
         }
       }
@@ -1318,33 +1327,53 @@ export class V3OperatorJournal {
    * (by default the scope's first); a reader selects its own. `after` is the selection's sequence of an earlier
    * call whose parts the reader kept; it authenticates nothing, and a reader that lacks what it implies asks
    * again from 0. The parts are read after this call returns, while other commands run.
+   *
+   * Serving reads signed rows that no command changes, so it takes no journal turn: it neither waits for a
+   * command nor makes one BUSY. It writes only where the venue's clock has passed the index this key's held
+   * commitments are kept through, keeping them through the clock as a command's view would (with any conflict
+   * their windows show); otherwise it checks the fence and identity and reads.
    */
   async serve(backing?: Uint8Array, after = 0n): Promise<ServedEvidence> {
     const named = backing === undefined ? undefined : copyBytes(backing);
     requireThat(typeof after === "bigint" && after >= 0n && after < U64, "REFUSED", "the served sequence is not a u64", "SEQUENCE");
-    return this.run(async engine => {
-      const view = this.view(engine);
-      // A published commitment the venue has not shown is served while it is in flight (C2.4.4); once the lag
-      // from its signing has passed without it, the operator can no longer assume it (C2.4.3), and the latest
-      // held one is served instead.
-      let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
-      if (selected !== undefined && view.now >= decimal(selected.at) + view.lag) selected = undefined;
-      for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
-        if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
-        if (this.ownHeld(held) === undefined) continue;
-        selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);
-        break;
-      }
-      requireThat(engine.opened !== undefined && selected !== undefined, "STALE", "no published commitment to serve");
-      const signed = this.signedOf(selected), directory = this.directoryOf(signed);
-      // The selection names `backing`, by default the scope's first; its directory must carry it.
-      const name = named ?? directory[0]!.name;
-      requireThat(directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
-      const own = encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 2, payload: encodeCommitment(signed.commitment) }]);
-      return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
-        operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) },
-        package: own, parts: this.parts(signed, after) };
-    });
+    requireThat(!this.closed, "STORAGE", "store is closed");
+    // Everything from the clock to the selection runs without an await, so no command's transaction falls between.
+    const view = this.servingView();
+    // A published commitment the venue has not shown is served while it is in flight (C2.4.4); once the lag
+    // from its signing has passed without it, the operator can no longer assume it (C2.4.3), and the latest
+    // held one is served instead.
+    let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
+    if (selected !== undefined && view.now >= decimal(selected.at) + this.lag) selected = undefined;
+    for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
+      if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
+      if (this.ownHeld(held) === undefined) continue;
+      selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);
+      break;
+    }
+    requireThat(selected !== undefined, "STALE", "no published commitment to serve");
+    let signed: Signed;
+    try { signed = this.signedOf(selected); } catch (error) {
+      if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "a signed row does not decode");
+      throw error;
+    }
+    const directory = this.directoryOf(signed);
+    // The selection names `backing`, by default the scope's first; its directory must carry it.
+    const name = named ?? directory[0]!.name;
+    requireThat(directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
+    const own = encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 2, payload: encodeCommitment(signed.commitment) }]);
+    return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
+      operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) },
+      package: own, parts: this.parts(signed, after) };
+  }
+  /** The venue as a serve reads it: the clock, and this key's latest commitment held by it. The held commitments
+   * are kept through the clock first where they are behind it, in a transaction of their own under the fence;
+   * kept through it already, they are read after a fence check that writes nothing. */
+  private servingView(): { readonly now: bigint; readonly latest: HeldCommitment | undefined } {
+    const now = this.clock();
+    if (this.replays.keptAnswer(1, this.operator)?.through !== now) return this.keeping(() => this.viewed(undefined));
+    const meta = this.metadata(); this.identity(meta);
+    requireThat(meta!.owner === this.owner, "FENCED", "another process owns this journal");
+    return { now, latest: this.heldBelow(now) };
   }
 
   /** `serve` from nothing as one §12 package held in memory, for a caller that reads a whole package. */

@@ -192,11 +192,13 @@ async function serve(argv: readonly string[]): Promise<void> {
   const port = Number(integer(flag(args, "port") ?? "0", "--port", 0n, 65535n)), ms = pollMs(args);
   const op = await openOperator(directory, args), journal = op.journal;
   const silence = servedSilence(directory, op.operator), lag = op.view.venue.lag(), queue = serialized();
-  // The service's journal calls take their turn with the schedule's, so neither meets the other's BUSY or a
-  // view that moved under it.
+  // The service's journal commands take their turn with the schedule's, so neither meets the other's BUSY or a
+  // view that moved under it. Serving evidence takes no journal turn and reads the view's settled snapshot, so a
+  // holder's sync neither waits for the schedule nor holds it up.
   const queued = new Proxy(journal, { get(target, property) {
     const value: unknown = Reflect.get(target, property, target);
     if (typeof value !== "function") return value;
+    if (property === "serve") return (value as (...a: unknown[]) => unknown).bind(target);
     return (...parameters: unknown[]) => queue(async () => (value as (...a: unknown[]) => unknown).apply(target, parameters));
   } });
   const walletToken = readToken(directory, "wallet.token");

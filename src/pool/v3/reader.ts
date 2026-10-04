@@ -20,6 +20,7 @@ import type { Commitment, SnapshotDigest } from "../../venue-records.js";
 import { EMPTY_NOTE_ROOT, EMPTY_NOTE_SUBTREE, NOTE_TREE_DEPTH, noteNode } from "../note-tree.js";
 import { ScopeTree } from "../scope.js";
 import { genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, type Snapshot } from "./commitments.js";
+import { adoptedDomain } from "./configuration.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { ReplayRefusal, EvidenceRefusal, requireReplay } from "./refusals.js";
@@ -314,6 +315,8 @@ export function lastValidOf(state: ReplayResult, snapshot: Pick<Snapshot, "histo
  * leaves nothing behind, and a new namespace it opened disappears. */
 export async function replayTrail(context: ReplayContext, snapshot: Snapshot, trail: StoredTrail, options: TrailOptions): Promise<ReplayResult> {
   const { store, selection, terms, scopedTerms, header, verifier, witness } = context;
+  // Exported: a selection under another configuration is refused here, not trusted from a caller.
+  requireReplay(same(selection.domain, adoptedDomain()), "CONFIGURATION");
   const { index, revokedAt, revocations, lastValid, imported, block = [], openingIndex, isOpening = false } = options;
   const scope = new ScopeTree(header.entries).root();
   // §7.1, §14 non-extension without replay: a continuation's authenticated trail extends the last valid
