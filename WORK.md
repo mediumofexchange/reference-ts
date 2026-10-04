@@ -26,7 +26,12 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   restart 3.1 s without re-verifying), but a wallet read re-recovered every output its seed ever received (Next 4(x)).
 - **M11b7** (PR #102; [decision](decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x),
   [probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallet-read-from-kept-marks-m11b7)): (x) fixed, a read 1.6 → ~0.02 ms an output; deep review done, findings fixed.
-  **Next: M11c2** (M5b.6 read mode from `6c7d8f2`'s `replay-store-probe.mjs`, venue ranges, a journal at depth for (v)), then M11c3.
+- **M11c2 in progress** (branch `claude/m11c2-runtime-depth`): `runtime-depth-probe.mjs` runs the journal (in-process, `serve`'s schedule,
+  silence clause), a reader's and a wallet's first, next and idle reads (child processes over `moe`-made directories and Ergo views) on the
+  synthetic node, stand-in spends under real verification load (real issues' proofs re-verified per stand-in), a quarter of spends' outputs
+  the wallet's seed's, half of them spent. Acceptance: at 10⁴ and 10⁵ statements, admission by depth band (first after a block = Next 4(v)),
+  first-sync time/CPU/memory per statement, steady and idle reads, reopening; recorded in the probes doc with a verdict per budget and a
+  lever for any that fails. Stop: recorded results (10⁵ if one run fits the container; otherwise its limit stated). Then M11c3.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
