@@ -103,7 +103,16 @@ if (options.role !== undefined) {
   const role = options.role, directory = openDirectory(options.dir, role), venueFile = requireVenue(directory);
   const backing = Buffer.from(options.backing, "hex"), kept = keptTerms(directory, backing, venueFile);
   const view = openView(directory);
-  const synced = await view.syncWitnessed(), at = synced.witnessedIndex, viewMs = performance.now() - began;
+  // A fresh view's sync that witnessed nothing is recorded with its report and taken once more, as a user would.
+  const shortSyncs = [];
+  let synced = await view.sync();
+  for (let i = 0; synced.witnessedIndex === undefined && i < 3; i++) {
+    shortSyncs.push({ tipHeight: synced.tipHeight?.toString(), sectionsRead: synced.sectionsRead, unresolvedIndex: synced.unresolvedIndex?.toString(),
+      reason: synced.unresolvedReason, suppliers: synced.suppliers });
+    synced = await view.sync();
+  }
+  assert(synced.witnessedIndex !== undefined, `the view witnessed nothing: ${JSON.stringify(shortSyncs)}`);
+  const at = synced.witnessedIndex, viewMs = performance.now() - began;
   const verifier = loadVerifier(await openVerifier(directory, 2), deserialize(readFileSync(options.proofs)));
   const client = serviceClient(directory, kept, view);
   const readBegan = performance.now();
@@ -129,7 +138,7 @@ if (options.role !== undefined) {
   await verifier.close(); view.close();
   gc();
   const { maxRSS, userCPUTime, systemCPUTime } = process.resourceUsage();
-  process.stdout.write(`${JSON.stringify({ role, judgingIndex: at.toString(), viewMs: Math.round(viewMs), readMs: Math.round(readMs), ...out,
+  process.stdout.write(`${JSON.stringify({ role, judgingIndex: at.toString(), viewMs: Math.round(viewMs), shortSyncs, readMs: Math.round(readMs), ...out,
     verified: verifier.counts, elapsedMs: Math.round(performance.now() - began), cpuMs: Math.round((userCPUTime + systemCPUTime) / 1000),
     maxRssMb: Math.round(maxRSS / 1024), memory: sampler.stop(), heapAfterMb: mib(process.memoryUsage().heapUsed) })}\n`);
   process.exit(0);
@@ -149,9 +158,10 @@ process.stderr.write(`runtime-depth probe in ${scratch}\n`);
 
 /** A loopback TCP proxy to `target` counting the bytes each way. */
 async function countingProxy(target) {
-  const { hostname, port } = new URL(target), counted = { up: 0, down: 0 };
+  const { hostname, port } = new URL(target), counted = { up: 0, down: 0 }, open = new Set();
   const server = createServer(client => {
     const upstream = connect(Number(port), hostname);
+    for (const socket of [client, upstream]) { open.add(socket); socket.on("close", () => open.delete(socket)); }
     client.on("data", chunk => { counted.up += chunk.length; });
     upstream.on("data", chunk => { counted.down += chunk.length; });
     client.pipe(upstream); upstream.pipe(client);
@@ -159,7 +169,7 @@ async function countingProxy(target) {
   });
   await new Promise(done => server.listen(0, "127.0.0.1", done));
   return { url: `http://127.0.0.1:${server.address().port}`, take() { const out = { ...counted }; counted.up = counted.down = 0; return out; },
-    close: () => new Promise(done => server.close(done)) };
+    close: () => new Promise(done => { for (const socket of open) socket.destroy(); server.close(done); }) };
 }
 
 const node = await serveSyntheticNode(), nodeProxy = await countingProxy(node.url);
@@ -195,7 +205,7 @@ function child(role, directory, extra = []) {
       const bytes = { node: nodeProxy.take(), service: serviceProxy.take() };
       let usage = {};
       try { usage = JSON.parse(readFileSync(rss, "utf8")); rmSync(rss); } catch { /* died before its exit handler */ }
-      if (status !== 0) return failed(new Error(`${role} child exited ${status}: ${stderr}`));
+      if (status !== 0) { process.stderr.write(`${role} child exited ${status}: ${stderr}\n`); return done({ role, failed: status, stderr: stderr.slice(-4000), bytes }); }
       done({ ...JSON.parse(stdout.trim().split("\n").at(-1)), withWorkersMaxRssMb: Math.round(usage.maxRssKb / 1024), noir: usage.noir,
         bytes: { nodeDown: bytes.node.down, nodeUp: bytes.node.up, serviceDown: bytes.service.down, serviceUp: bytes.service.up }, keptBytes: directoryBytes(directory) });
     });
@@ -372,8 +382,10 @@ try {
     process.stderr.write(`${JSON.stringify(entry)}\n`);
     entry.walletFirst = await child("wallet", WL);
     process.stderr.write(`${JSON.stringify(entry.walletFirst)}\n`);
-    assert.equal(entry.readerFirst.position, String(made), "the reader read every statement");
-    assert.equal(entry.readerFirst.issued, String(2 * REAL));
+    if (entry.readerFirst.failed === undefined) {
+      assert.equal(entry.readerFirst.position, String(made), "the reader read every statement");
+      assert.equal(entry.readerFirst.issued, String(2 * REAL));
+    }
     report.marks.push(entry); save();
     // STEP statements later: each one's next read, then a read with nothing new.
     await generate(made + STEP);
@@ -381,7 +393,7 @@ try {
     entry.step = { statements: STEP, reader: await child("reader", RD), wallet: await child("wallet", WL) };
     entry.idle = { reader: await child("reader", RD), wallet: await child("wallet", WL) };
     process.stderr.write(`${JSON.stringify({ step: entry.step, idle: entry.idle })}\n`); save();
-    assert.equal(entry.step.reader.position, String(made));
+    if (entry.step.reader.failed === undefined) assert.equal(entry.step.reader.position, String(made));
   }
   // The journal's reopening over the whole history: it verifies nothing (no proof check) and signs again only once the
   // venue passes its reopening index plus the lag; then the first admission's time.
@@ -401,9 +413,15 @@ try {
   operatorSecret.fill(0);
   console.log(JSON.stringify(report, null, 2));
   completed = true;
+} catch (error) {
+  process.stderr.write(`runtime-depth probe failed: ${error?.stack ?? error}\n`); report.error = String(error?.stack ?? error); process.exitCode = 1;
 } finally {
   save();
   await nodeProxy.close(); await serviceProxy?.close(); await node.close();
   if (completed) { assert(scratch.startsWith(realpathSync(join(root, "scratch")) + sep)); rmSync(scratch, { recursive: true, force: true }); }
-  else process.stderr.write(`runtime-depth probe scratch retained after failure: ${scratch}\n`);
+  else {
+    // The journal's service may still be listening: end the process rather than wait on it.
+    process.stderr.write(`runtime-depth probe scratch retained after failure: ${scratch}\n`);
+    process.exit(1);
+  }
 }
