@@ -10,11 +10,10 @@ that resume without re-verifying retained history; Next 4 (k)–(n), (s), (w) cl
 SQLite rows (flat heap and per-sync work over a long synthetic chain, reopen without PoW/root re-checks, same verdicts and answers);
 M11b the scale findings; M11c the measurements and report: **M11c1** commands with real proofs at ~10³ statements; **M11c2** the runtime
 (reader, wallet, Ergo view, journal at depth) with stand-in records under real verification load at 10⁴/10⁵; **M11c3** the commands'
-overhead at matched size and the design-point report (10⁶ local only; no stand-in path in the product). Stop: all three; a failing budget names its lever.
-Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices 9–10 (PRs #69–#91). pool-v3 adopted (spec e7f7f24, §11.4).
+overhead at matched size and the design-point report (10⁶ local only; no stand-in path in the product). Stop: all three; a failing budget names its lever. pool-v3 adopted (e7f7f24).
 
 ## Status
-- **Slice 10 done but M10d** (PRs #79–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
+- **Slice 10 done but M10d** (PRs #69–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
   run from an `npm pack` install with real proofs on the synthetic node; pilot, transparent path, second reader retired. M10d needs the local machine.
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)): flat heap, reopen 192 ms (was 74 s).
 - **M11b done** (PRs #93–#99): (n) record cost flat in notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) an index past the answer
@@ -22,12 +21,13 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   (s) `serve` takes no journal turn ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)); (w) `moe reader` keeps `replay.db` as the wallet does.
 - **M11c1 done** (PR #101, `design-point-probe.mjs`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements
   every budget holds (admission ~85 ms, first sync ~26 ms a statement, ≈1 CPU-min and 14 MB a day, <600 MB, restart 3.1 s); M11b7 fixed its wallet read.
-- **M11b7–10** (PRs #102–#104, M11b10 on `claude/m11b10-journal-read`; [M11b7](decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x),
+- **M11b7–10** (PRs #102–#105; [M11b7](decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x),
   [M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)): marks keep nullifier, opening, tag
   (layout 9): a read 1.6 → ~0.02 ms an output, ~0.84 → ~0.14 ms a holding; M11b9 resends a node GET met by a closed idle connection;
   M11b10 leaves the carrying listing (a row per checkpoint, ~22 ms an admission at 5·10⁴) out of the journal's reads. All reviewed.
-- **M11c2 in progress** (`claude/m11c2-runtime-depth`, `runtime-depth-probe.mjs`; 10⁴ done, 10⁵ under way): admission by depth, first sync,
-  step and idle reads, reopening at 10⁴/10⁵; a verdict per budget, a lever for any failing (Next 4(v) fails). Then M11c3.
+- **M11c2 done** (PR on `claude/m11c2-runtime-depth`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB);
+  (v) fails admission at 10⁶ (343 ms at 10⁵); a fresh view reaches the tip one command per sync budget (10⁵ reads stopped at 13,440).
+  **Next: M11b11** commands sync until the view's clock stops advancing; then (v)'s lever; then M11c3 (10⁵ reads again, overhead, report).
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
