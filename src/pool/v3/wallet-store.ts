@@ -676,12 +676,15 @@ export class V3Wallet {
    * exists from another statement (a settlement's also from one with force), a reserved input was spent otherwise,
    * a withdrawal's or a settlement's demand no longer stands (ended by an act of another copy too), or a
    * settlement's acceptance deadline has passed (no door admits it after). Those two times are the door's (C3.8): an
-   * act whose operator receipt the wallet holds was admitted inside them, and a replayer does not re-judge an
-   * admitted statement's instant or deadlines, so they fail no receipted act; its checkpoint makes it final, or its
-   * segment ending fails it. Demands are judged after the acts that end them. A view older than the one a
+   * act whose operator receipt is still pending was admitted inside them, and a replayer does not re-judge an
+   * admitted statement's instant or deadlines, so they fail no such act. A receipt is pending while no checkpoint of
+   * its segment reaches its position and no silence boundary is proven through the read (C2.10.9b, C2b.4.1); a
+   * checkpoint past it without the statement contradicts it, and a boundary lapses it, so the times judge the act
+   * again. Demands are judged after the acts that end them. A view older than the one a
    * record was built from decides no failure for it. A failure read from one view is local accounting: an operator
    * reading behind this wallet may still admit the record, which then goes final. */
-  private resolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint):
+  private resolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint,
+    clock: Frontier["clock"]):
     { alias: string; status: "final" | "failed" }[] {
     const rows = this.db.prepare("SELECT alias,kind,record,demand,status,judged,receipt FROM saved_records WHERE status!='final' AND backing=? ORDER BY kind='4'").all(backing);
     const decided = new Map<string, "final" | "failed">(), spent = (name: string) => this.spent(name, force);
@@ -698,7 +701,8 @@ export class V3Wallet {
         continue;
       }
       const admitted = canonical.state.hasEvent(statement) || (record.kind >= 4 && force.isEffective(hex(statement)));
-      const dead = !same(identifierOf(p[2]!, p[3]!), canonical.segment), receipted = row.receipt !== null;
+      const dead = !same(identifierOf(p[2]!, p[3]!), canonical.segment), pending = row.receipt !== null &&
+        decodeReceipt(row.receipt as Uint8Array).position > canonical.state.position && (clock == null || clock.boundary === null);
       let status: "final" | "failed" | undefined;
       if (admitted) status = "final";
       else if (row.status === "failed" || stale) continue;
@@ -706,14 +710,14 @@ export class V3Wallet {
         // A relayed publication is witnessed at an index w ≥ at, so C3.3's window (w − 2·lag ≤ instant) is closed
         // for good once at > instant + 2·lag. An operator reading behind the venue is covered by failed → final.
         status = ended(demand!, "5") || ended(demand!, "6") ? "final" :
-          dead || (!receipted && at > p[14]! + 2n * lag) || spent(name) ? "failed" : undefined;
+          dead || (!pending && at > p[14]! + 2n * lag) || spent(name) ? "failed" : undefined;
       } else if (dead) status = "failed";
       else switch (record.kind) {
         case 1: status = canonical.state.hasOutput(p[8]!) ? "failed" : undefined; break;
         case 3: status = spent(name) ? "failed" : undefined; break;
         case 5: status = ended(demand!, "6") || force.demand(demand!) === undefined ? "failed" : undefined; break;
         case 6: status = force.demand(demand!) === undefined || force.hasOutput(p[14]!) || spent(name) ||
-          (!receipted && at > settlementAuthorization(record).acceptance.deadline) ? "failed" : undefined; break;
+          (!pending && at > settlementAuthorization(record).acceptance.deadline) ? "failed" : undefined; break;
       }
       if (status !== undefined) decided.set(name, status);
     }
@@ -1030,7 +1034,7 @@ export class V3Wallet {
     this.mutable();
     return this.read(packageBytes, signed, view => {
       const { backing, at, lag, observed, canonical, force, notes } = view;
-      const decided = canonical !== undefined && force !== undefined ? this.resolutions(backing, canonical, force, at, lag) : [];
+      const decided = canonical !== undefined && force !== undefined ? this.resolutions(backing, canonical, force, at, lag, view.clock) : [];
       observed.check();
       if (canonical !== undefined) this.resolve(decided, encodeCommitment(canonical.commitment), at);
       return { backing, judgingIndex: at, checkpoint: canonical?.commitment, gap: gapOpen(view), holdings: this.holdingsOf(notes, force, at),

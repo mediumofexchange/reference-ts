@@ -29,7 +29,7 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
   (v) fails admission at 10⁶ (343 ms at 10⁵); a fresh view reaches the tip one command per sync budget (10⁵ reads stopped at 13,440).
   **Next: M11b11** commands sync until the view's clock stops advancing; then (v)'s lever; then M11c3 (10⁵ reads again, overhead, report).
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
-  Area 29 (wallet): a payment whose output another statement made fails; no receipted act fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-receipted-act-by-the-doors-times-audit-area-29)).
+  Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md).

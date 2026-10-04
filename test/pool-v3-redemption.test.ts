@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToField, fieldToBytes, identifierOf, limbsOf } from "../src/pool/field.js";
-import { decodeReceipt } from "../src/pool/v3/commitments.js";
+import { decodeReceipt, encodeReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeSettlementAuthorization, releaseBytes, settlementAuthorization,
@@ -257,6 +257,20 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(f.holder.act("s1")!.status).toBe("final");
   });
 
+  it("judges a receipted demand by the door's window again once a checkpoint at its position omits it (C2.10.9b, audit 29)", async () => {
+    const f = await fixture([10n, 3n]);
+    await f.holder.sync(f.served(), f.signed);
+    const at = f.venue.witnessedIndex();
+    const receipt = (await f.holder.demand("d1", 10n, at + 40n, f.served(), f.signed, prove), await f.holder.submit("d1", f.service));
+    // A receipt naming a position the canonical checkpoint already holds, written directly: an operator that committed
+    // other statements there contradicted it, which no honest journal in this fixture does.
+    const db = new DatabaseSync(join(f.directory, "holder.db"));
+    db.prepare("UPDATE saved_records SET receipt=? WHERE alias='d1'").run(encodeReceipt({ ...receipt, position: 1n })); db.close();
+    f.venue.advance(at + 2n * lag + 1n);
+    const view = await f.holder.sync(f.served(), f.signed);
+    expect([f.holder.act("d1")!.status, view.holdings.map(h => h.status)]).toEqual(["failed", ["available", "available"]]);
+  });
+
   it("keeps acts across an offline backup and refuses a payment alias for an act", async () => {
     const f = await fixture();
     await f.holder.sync(f.served(), f.signed);
@@ -499,6 +513,25 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // Both copies read the notes as presented by the ended demand: the restored one from its forced publication alone.
     expect(after.holdings.map(h => h.presented)).toEqual([[demand.demand], [demand.demand]]);
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.presented)).toEqual([[demand.demand], [demand.demand]]);
+  });
+
+  it("judges a receipted demand by the door's window again once a silence boundary lapses its receipt (C2b.4.1, audit 29)", async () => {
+    const f = await fixture([10n], SILENCE), checkpoint = f.venue.witnessedIndex();
+    await f.holder.sync(f.served(), f.signed);
+    const at = f.venue.witnessedIndex();
+    await f.holder.demand("d1", 10n, at + 40n, f.served(), f.signed, prove);
+    await f.holder.submit("d1", f.service);
+    // The operator goes silent after the receipt. Past C3.3's window, but before a boundary is proven, the receipt is pending.
+    f.venue.advance(at + 2n * lag + 1n);
+    expect(at + 2n * lag + 1n - checkpoint).toBeLessThanOrEqual(SILENCE);
+    await f.holder.sync(f.served(), f.signed);
+    expect(f.holder.act("d1")!.status).toBe("prepared");
+    // Once the boundary is proven the unwitnessed tail is discarded: the demand fails and its note is demanded in the gap.
+    f.venue.advance(checkpoint + SILENCE + 1n);
+    const view = await f.holder.sync(f.served(), f.signed);
+    expect([f.holder.act("d1")!.status, view.gap, view.holdings.map(h => h.status)]).toEqual(["failed", true, ["available"]]);
+    const now = f.venue.witnessedIndex();
+    expect((await f.holder.demand("d2", 10n, now + 30n, f.served(), f.signed, prove)).status).toBe("prepared");
   });
 
   it("pays and burns no presented note, presents again one earlier demand's notes only, and freshens them (M10b item 9)", async () => {
