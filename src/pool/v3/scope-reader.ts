@@ -573,14 +573,16 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     recheck(row);
     try { return loaded(row, backing); } catch (error) {
       // A row that does not decode, or whose segment's scope is missing, is kept state to discard (§14).
-      if (error instanceof EncodingError || error instanceof SyntaxError || error instanceof TypeError || error instanceof RangeError) {
+      if (error instanceof EncodingError || error instanceof SyntaxError) {
         throw new KeptStateMismatch("a kept walk's class");
       }
       throw error;
     }
   };
   const loaded = (row: WalkVerdict, backing: Uint8Array): ScopeVerdict => {
-    const scope = store.scope(row.segment)!, header = decodeSegmentHeader(scope.header);
+    const scope = store.scope(row.segment);
+    if (scope === undefined) throw new KeptStateMismatch("a kept walk's scope");
+    const header = decodeSegmentHeader(scope.header);
     const base: Classified = { commitment: { operator: row.operator, sequence: row.sequence, root: row.root, signature: row.signature },
       index: row.index, segment: row.segment, header, snapshot: decodeSnapshot(row.snapshot) };
     if (row.class === "excluded") return { ...base, class: "excluded", check: row.detail! };
@@ -591,16 +593,24 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       scopedTerms: new Map(header.entries.map((scoped, i) => [hex(scoped.backing), decodeRootTerms(scope.terms[i]!.terms)])),
       state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }) };
   };
-  // Classes the read's classification reaches are listed in `carrying`; what it reads around the canonical checkpoint
-  // (every scoped backing's clock and publications) depends on that checkpoint's scope, so it is classified unlisted.
+  // `carrying` lists what the read's classification reaches: each class it reaches directly, and everything the judgment
+  // of a listed class reached, by the edges kept with the walk. What it reads around the canonical checkpoint (every
+  // scoped backing's clock and publications) depends on that checkpoint's scope, so it is reached unlisted. The listed
+  // set is the same whichever earlier read first judged a class, so a resumed walk lists what a fresh one does.
   let aroundCanonical = false;
+  const judging: Uint8Array[] = [];
+  const reach = (key: Uint8Array): void => {
+    const parent = judging.at(-1);
+    if (parent !== undefined) store.reach(walk, parent, key);
+    else if (!aroundCanonical) store.list(walk, key);
+  };
   const keep = (held: HeldCommitment, verdict: ScopeVerdict): void => {
     const c = held.commitment, state = verdict.class === "valid" ? verdict.state : undefined;
     store.putVerdict(walk, { key: rowKey(c), operator: c.operator, sequence: c.sequence, root: c.root, signature: c.signature, index: held.index,
       class: verdict.class, segment: verdict.segment, snapshot: snapshotBytes(verdict.snapshot),
       detail: verdict.class === "excluded" ? verdict.check : verdict.class === "lapsed" && verdict.clock !== undefined ? JSON.stringify(verdict.clock) : undefined,
       state: state === undefined || verdict.class !== "valid" ? undefined : { ns: state.ns, position: state.position, identity: state.identity,
-        issued: state.issued, burned: state.burned, adoption: state.adoptionIndices, opening: verdict.openingIndex } }, !aroundCanonical);
+        issued: state.issued, burned: state.burned, adoption: state.adoptionIndices, opening: verdict.openingIndex } }, false);
   };
   // Each backing's held checkpoints within its terms, carrying it, classified in rank order up to a bound.
   // A classification in progress reads only earlier checkpoints of any backing, so a nested advance of
@@ -640,7 +650,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     await advance(backing, terms, child);
     const key = store.latestValid(walk, backing, child === undefined ? undefined : child.strict ? { index: child.index, strict: true } :
       { index: child.index, operator: child.commitment.operator, sequence: child.commitment.sequence });
-    return key === undefined ? undefined : load(candidate(key), backing) as ValidScope;
+    if (key === undefined) return undefined;
+    const row = candidate(key);
+    reach(key);
+    return load(row, backing) as ValidScope;
   };
   // A valid candidate's class: a kept walk's row missing its class is kept state to discard.
   const candidate = (key: Uint8Array): WalkVerdict => {
@@ -653,7 +666,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const key = store.latestValid(walk, backing, { index, strict: true });
     if (key === undefined) return 0n;
     const row = candidate(key);
-    recheck(row);
+    recheck(row); reach(key);
     return row.index;
   };
   const recovery = scopeRecovery(context, walk, viewFor, latest, snapshotIndexAt);
@@ -685,7 +698,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
     const id = keyOf(held.commitment), key = rowKey(held.commitment), classified = store.verdict(walk, key);
     if (classified !== undefined) {
-      if (!aroundCanonical) store.list(walk, key);
+      reach(key);
       return Promise.resolve(load(classified, backing));
     }
     if (running.has(id)) return running.get(id)!;
@@ -698,11 +711,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (kept !== undefined && (kept.index !== held.index || !same(kept.signature, held.commitment.signature))) {
       return Promise.reject(new KeptStateMismatch("a kept class's commitment"));
     }
-    const pending = judge(held, backing, kept).then(verdict => {
+    const judged = (async () => { judging.push(key); try { return await judge(held, backing, kept); } finally { judging.pop(); } })();
+    const pending = judged.then(verdict => {
       // Every check before replay ran afresh, so a kept class is the one it gives.
       if (kept !== undefined && verdict.class !== kept.class) throw new KeptStateMismatch("a kept class");
       // The row is written again from this judgment, so what later reads load comes from this read's evidence.
-      keep(held, verdict); judgedHere.add(hex(key));
+      keep(held, verdict); judgedHere.add(hex(key)); reach(key);
       store.keepPoint();
       return verdict;
     });

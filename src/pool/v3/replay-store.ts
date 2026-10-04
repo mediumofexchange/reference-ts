@@ -176,6 +176,7 @@ const SCHEMA = `
   CREATE INDEX walk_verdict_order ON walk_verdict(walk, idx, seq, operator, root);
   CREATE TABLE walk_valid (walk INTEGER, backing BLOB, idx BLOB, seq BLOB, operator BLOB NOT NULL, key BLOB NOT NULL,
     PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;
+  CREATE TABLE walk_dep (walk INTEGER, parent BLOB, child BLOB, PRIMARY KEY(walk, parent, child)) WITHOUT ROWID;
   CREATE TABLE walk_cursor (walk INTEGER, backing BLOB, term INTEGER NOT NULL, link BLOB NOT NULL, after BLOB, PRIMARY KEY(walk, backing)) WITHOUT ROWID;
   CREATE TABLE walk_clock (walk INTEGER, backing BLOB, opening BLOB, upto BLOB NOT NULL, boundary BLOB,
     PRIMARY KEY(walk, backing, opening)) WITHOUT ROWID;
@@ -184,7 +185,7 @@ const SCHEMA = `
     WITHOUT ROWID;`;
 /** Rows one read keeps for itself: what it classified (a verdict it judged or reused), each backing's valid candidates,
  * how far it has classified each backing's checkpoints and publications, and each silence clock's running state. */
-const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_cursor", "walk_clock", "walk_progress"];
+const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_dep", "walk_cursor", "walk_clock", "walk_progress"];
 /** Rows kept across reads (pool-v3 §14 kept classes and kept walk): each is a function of authenticated bytes and the
  * record before its index. A kept walk's own rows stay under its walk; forgetting it orphans them. */
 const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication", "kept_walk",
@@ -460,6 +461,13 @@ export class ReplayStore {
     if (changes !== this.#digestedAt) replaceFile(this.#kept!.digest, fileDigest(this.#kept!.path));
     this.#digestedAt = changes; this.#sinceKeep = 0;
   }
+  /** Move a resumed kept walk's mark to this read's where the walk changed a row since it opened. */
+  #moveMark(walk: number): void {
+    const marked = this.#keptMark;
+    if (marked === undefined || marked.walk !== walk || this.#changes() <= marked.changes) return;
+    this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE selected = ? AND walk = ?").run(marked.mark, marked.selected, walk);
+    this.#keptMark = { ...marked, changes: this.#changes() };
+  }
   /** Rows this connection has inserted, updated or deleted since it opened. */
   #changes(): bigint { return BigInt((this.#db.prepare("SELECT total_changes() AS c").get() as { c: bigint | number }).c); }
   /** A keep point inside a walk where one is due: only between checkpoints (no savepoint or replay open),
@@ -473,6 +481,8 @@ export class ReplayStore {
     // A store that wrote in the moment between is found by the file's data version, and this walk stops.
     // Read inside the transaction: this connection's own commit leaves the version as it is.
     const version = this.#dataVersion();
+    // What a keep point commits was kept from this read's evidence too.
+    if (this.#keptMark !== undefined) this.#moveMark(this.#keptMark.walk);
     this.#db.exec("COMMIT");
     try { this.#recordDigest(); } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
@@ -953,11 +963,8 @@ export class ReplayStore {
     try {
       // A resumed walk that kept anything kept it from this read's evidence: its mark moves to this read's, so a store
       // restored to before it no longer resumes the walk. A read that changed nothing leaves the mark, and the file.
-      const marked = this.#keptMark;
+      this.#moveMark(walk);
       this.#keptMark = undefined;
-      if (marked !== undefined && marked.walk === walk && this.#changes() > marked.changes) {
-        this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE selected = ? AND walk = ?").run(marked.mark, marked.selected, walk);
-      }
       if (this.#db.prepare("SELECT 1 FROM kept_walk WHERE walk = ?").get(walk) === undefined) {
         for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
         this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);
@@ -1028,9 +1035,16 @@ export class ReplayStore {
     this.#db.prepare(`INSERT INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(walk, key) DO UPDATE SET listed = 1
       WHERE excluded.listed = 1 AND listed = 0`).run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root, listed ? 1 : 0);
   }
-  /** List a class the walk classified (a read's classification reached it); no change where it is listed. */
+  /** Record that judging `parent` reached `child`. */
+  reach(walk: number, parent: Uint8Array, child: Uint8Array): void {
+    this.#db.prepare("INSERT OR IGNORE INTO walk_dep VALUES (?, ?, ?)").run(walk, parent, child);
+  }
+  /** List a class the walk classified and everything its judgment reached. A listed class's closure is listed, so the
+   * walk stops at listed classes and a read lists only what is new. */
   list(walk: number, key: Uint8Array): void {
-    this.#db.prepare("UPDATE walk_verdict SET listed = 1 WHERE walk = ? AND key = ? AND listed = 0").run(walk, key);
+    this.#db.prepare(`WITH RECURSIVE r(k) AS (SELECT ? UNION SELECT d.child FROM walk_dep d JOIN r ON d.parent = r.k
+        JOIN walk_verdict w ON w.walk = d.walk AND w.key = d.child WHERE d.walk = ? AND w.listed = 0)
+      UPDATE walk_verdict SET listed = 1 WHERE walk = ? AND listed = 0 AND key IN (SELECT k FROM r)`).run(key, walk, walk);
   }
   #verdict(row: Record<string, unknown>): WalkVerdict {
     const state = row["ns"] === null ? undefined : { ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint),

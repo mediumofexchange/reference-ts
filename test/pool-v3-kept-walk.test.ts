@@ -125,6 +125,33 @@ describe("pool-v3 §14 kept walk: evidence lineage", () => {
     expect(fresh).toEqual({ refused: expect.any(String) });
     expect(resumed).toEqual(fresh);
   });
+
+  it("begins again on evidence restored to before a read interrupted after a keep point", async () => {
+    const f = fixture(), k = files();
+    await f.first();
+    f.venue.advance(12n); await f.issue(107n, b(97)); f.checkpoint(f.segment, 6n, 11n);
+    const dir4 = f.items.filter(i => i.kind === 3)[3]!, without4 = f.items.filter(i => i !== dir4);
+    let store = new ReplayStore(k.path, { digest: k.digest, every: 1 }); closers.push(store);
+    let ev = evidenceAt(k.evidence);
+    expect(await settled(f.read(counting(), store, { evidence: ev, items: without4 }))).toHaveProperty("refused");
+    ev.close(); copyFileSync(k.evidence, k.evidence + ".backup"); ev = evidenceAt(k.evidence);
+    const crash = join(k.dir, "crash"); fs.mkdirSync(crash); let copied = false;
+    const v = { identities: configuration.circuits, verify(_k: number, _i: bigint[], proof: Uint8Array) {
+      if (proof[0] === 97 && !copied) { for (const n of ["replay.sqlite", "replay.sqlite-journal", "replay.sha256"]) { const fr = join(k.dir, n); if (fs.existsSync(fr)) copyFileSync(fr, join(crash, n)); } copied = true; }
+      return proof[0] !== 99; } };
+    expect(await settled(f.read(v, store, { evidence: ev }))).toHaveProperty("read");
+    expect(copied).toBe(true);
+    // The process "crashed" at the copy; the evidence file is then restored to before read 2.
+    copyFileSync(k.evidence + ".backup", join(crash, "evidence.sqlite"));
+    const s2 = new ReplayStore(join(crash, "replay.sqlite"), { digest: join(crash, "replay.sha256") }); closers.push(s2);
+    const e2 = evidenceAt(join(crash, "evidence.sqlite"));
+    const resumed = await settled(f.read(counting(), s2, { evidence: e2, items: without4 }));
+    copyFileSync(k.evidence + ".backup", join(k.dir, "fresh.sqlite"));
+    const fresh = await settled(f.read(counting(), undefined, { evidence: evidenceAt(join(k.dir, "fresh.sqlite")), items: without4 }));
+    expect(s2.keptRows()).toBeGreaterThan(0);
+    expect(fresh).toEqual({ refused: expect.stringContaining("unresolved-evidence") });
+    expect(resumed).toEqual(fresh);
+  });
 });
 
 describe("pool-v3 §14 kept walk: publications", () => {
@@ -237,7 +264,7 @@ describe("pool-v3 §14 kept walk: interrupted and damaged", () => {
 });
 
 describe("pool-v3 §14 kept walk: scope changes", () => {
-  it("lists what a fresh read lists after the selected backing leaves a scope it shared", async () => {
+  for (const next of ["x leaves the joint scope", "the joint segment continues"] as const) it(`lists what a fresh read lists where ${next} after a read around it`, async () => {
     const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
     const silence = { noCommitmentDuration: 50n, challengeWindow: 5n };
     const backings = ["walk x", "walk y"].map(thing => {
@@ -277,11 +304,14 @@ describe("pool-v3 §14 kept walk: scope changes", () => {
     const evidence = new EvidenceStore(join(dir, "e.sqlite")); closers.push(evidence);
     const fresh1 = outcome(await read()), kept1 = outcome(await read(store, evidence));
     expect(kept1).toEqual(fresh1);
-    // Sx scopes x alone (opening at 11, importing S0's x): x's canonical leaves the joint scope.
-    const sx = seg(3n, [x], new Map([[hex(x.name), c1]]), s0);
-    venue.advance(12n); checkpoint(sx, 3n, 11n); venue.advance(13n);
+    // Either Sx scopes x alone (opening at 11, importing S0's x), so x's canonical leaves the joint scope; or S0
+    // continues at 11, whose judgment reads y's latest valid checkpoint before it (Sy@2), which the earlier read
+    // reached only around its canonical checkpoint.
+    venue.advance(12n);
+    if (next === "x leaves the joint scope") checkpoint(seg(3n, [x], new Map([[hex(x.name), c1]]), s0), 3n, 11n); else checkpoint(s0, 3n, 11n);
+    venue.advance(13n);
     const fresh2 = outcome(await read()), kept2 = outcome(await read(store, evidence));
-    expect(fresh2.carrying.map(c => c.sequence)).toEqual(["1", "3"]);
+    expect(fresh2.carrying.map(c => c.sequence)).toEqual(next === "x leaves the joint scope" ? ["1", "3"] : ["1", "2", "3"]);
     expect(kept2).toEqual(fresh2);
   });
 });
