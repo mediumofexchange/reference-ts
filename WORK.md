@@ -62,7 +62,7 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
    sync, about 0.9 s at a hostile 20,000-header quota); sections asked of several suppliers at once (first-sync time, if M11c shows
    the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch
-   budget on known headers; pre-existing); `moe venue audit` for restored views (release assurance's backup drills). Levers
+   budget on known headers; pre-existing); a node POST (`unspentBoxes`, `submit`) on a connection the node closed as idle is not sent again (M11b9 sends GETs once more; availability only, the publisher resends exact bytes); `moe venue audit` for restored views (release assurance's backup drills). Levers
    (Poseidon2 on Barretenberg at 0.12 against 1.14 ms a node hash, a 10⁶ first-sync run) only if a budget fails.
 6. **Slice 13**, release assurance, after 12 (Next 4's open correctness findings close in it at the latest): reproducible builds of the
    package and its artifacts, installed-package interoperability, backup and restore drills within the standing authority. Security reviews
