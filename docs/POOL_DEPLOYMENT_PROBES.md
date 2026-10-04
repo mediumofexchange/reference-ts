@@ -1422,6 +1422,29 @@ per point, `npm run build` output of each revision:
   measures with the runtime at depth. `holdingsOf`'s per-note demand checks
   are not timed here.
 
+### A wallet's tags kept with its marks (M11b8)
+
+M11c2's runtime probe (`runtime-depth-probe.mjs`,
+[at its revision](https://github.com/mediumofexchange/reference-ts/blob/ee822c4/scripts/pool/v3/runtime-depth-probe.mjs);
+its method and results are M11c2's section) reads a wallet restored from a seed that receives one output in
+every second stand-in spend and spends half of them. Its read with nothing new grew with the notes held, while a
+reader's of the same history stayed flat. Each unspent note cost three `tagOf` hashes (0.21 ms each in
+JavaScript Poseidon2) in `holdingsOf`, `presentedBy` and `demandsOf`. M11b8 keeps the tag in the note's mark
+([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)).
+Runs of 2026-10-04 on a 4-core cloud container, one run per point:
+
+| Statements (holdings) | Reader, nothing new | Wallet, nothing new: before (`a4752a9`) | After (`fb7ec95`) |
+|---:|---:|---:|---:|
+| 1,200 (315) | 79–85 ms | 351 ms | 302 ms |
+| 4,200 (1,065) | 89–93 ms | 984 ms | 235 ms |
+
+- *Result:* the wallet's read beyond the reader's went from about 0.84 ms a holding to about 0.14 ms. What
+  remains is each note's witness row and its per-note lookups (reservations, saved demands, demand tags). First
+  syncs and reads of 200 new statements are unchanged within the runs' spread (wallet first sync 29.5 s and
+  31.9 s at 10³, 111 s and 118 s at 4·10³).
+- *Limits:* the after-run shared the container with M11c2's 10⁵ run, the before-run did not; one run per
+  point. Process start-up (about 3.5 s, the verifier's and view's opening) is outside these read times.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

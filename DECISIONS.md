@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-04` [Keep each witnessed note's tag with its mark, so a wallet's read hashes none (slice 11 M11b8)](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)
 - `2026-10-04` [Keep each witnessed output's nullifier and opening with its witness, and leave spent ones out of a wallet's read (slice 11 M11b7, Next 4(x))](decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x)
 - `2026-10-04` [Serve evidence without the journal's turn, and refuse the journal's own damage by name (slice 11 M11b5, Next 4(s))](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)
 - `2026-10-04` [Resume a kept walk, so a later read judges only new checkpoints (slice 11 M11b4, Next 4(k))](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)
