@@ -609,9 +609,9 @@ export class V3Wallet {
     const { force, notes, backing } = view, found = new Map<string, StandingDemand>();
     if (force === undefined) return [];
     for (const note of notes) {
-      for (const [id, demand] of force.demandsWithTag(tagOf(note.nf))) {
+      for (const [id, demand] of force.demandsWithTag(note.tag)) {
         if (found.has(id) || !same(demand.backing, backing) || !this.presents(demand)) continue;
-        const holdings = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(n => tagOf(n.nf) === tag)?.cm);
+        const holdings = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(n => n.tag === tag)?.cm);
         if (holdings.some(cm => cm === undefined)) continue;
         found.set(id, Object.freeze({ id: hexToBytes(id), quantity: demand.quantity, instant: demand.instant, deadline: demand.deadline,
           holdings: Object.freeze(holdings as bigint[]) }));
@@ -766,7 +766,7 @@ export class V3Wallet {
    * only into a segment the canonical one did not import (the wallet guide says so). */
   private presentedBy(note: OwnedNote, force: ForceState | undefined): string[] {
     const ids = new Set(this.savedPresenters(note.nf));
-    for (const [id, demand] of force?.presentedWithTag(tagOf(note.nf)) ?? []) {
+    for (const [id, demand] of force?.presentedWithTag(note.tag) ?? []) {
       if (!ids.has(id) && same(demand.backing, note.opening.backing) && this.presents(demand)) ids.add(id);
     }
     return [...ids].sort();
@@ -786,7 +786,7 @@ export class V3Wallet {
   private holdingsOf(notes: readonly OwnedNote[], force: ForceState | undefined, at: bigint): Holding[] {
     return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
       status: this.reserved(note.nf) ? "reserved" as const :
-        force !== undefined && locked(force, tagOf(note.nf), at) ? "locked" as const : "available" as const,
+        force !== undefined && locked(force, note.tag, at) ? "locked" as const : "available" as const,
       presented: Object.freeze(this.presentedBy(note, force).map(id => hexToBytes(id))) }));
   }
 
@@ -1435,7 +1435,13 @@ export class V3Wallet {
       requireThat(own.deadline <= demand.deadline, "INVALID", "the acceptance is due after the demand");
       requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
       const { header } = this.route(view);
-      const real = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(note => tagOf(note.nf) === tag));
+      // Found by the kept tag; inputOf then refuses a mark whose tag is not its nullifier's. A demanded note missed
+      // where some kept tag is not its nullifier's is that kept state to discard (§14), not an absent note: the read
+      // replays. Only a miss pays these hashes.
+      const real = demand.tags.filter(tag => tag !== 0n).map(tag => notes.find(note => note.tag === tag));
+      if (real.some(note => note === undefined) && notes.some(note => note.tag !== tagOf(note.nf))) {
+        throw new KeptStateMismatch("a witnessed output's mark is not what its output recovers");
+      }
       requireThat(real.every(note => note !== undefined), "ABSENT", "a demanded note is not unspent in canonical history");
       const placed = real.map(note => inputOf(note!));
       const inputs: NoteInput[] = demand.tags.map(tag => tag !== 0n ? placed.find(i => tagOf(i.note.nf) === tag)! :
