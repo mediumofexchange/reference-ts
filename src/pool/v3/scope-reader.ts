@@ -506,8 +506,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
   // A read from the party's retained evidence, with no fault items or receipt of its own, resumes the selected
   // backing's kept walk (§14 kept walk): what it classified stands, and this read classifies what is new.
+  // A read past the venue's witnessed index is refused when its view is read; it does not raise the kept index.
+  const witnessed = ((): bigint | undefined => { try { const now: unknown = record.witnessedIndex(); return typeof now === "bigint" ? now : undefined; } catch { return undefined; } })();
   const retained = evidence.retained, keptWalk = retained !== undefined && context.receiptBytes === undefined &&
-    faults.holdsEvidence?.() !== true ? { selected: selection.backing, evidence: retained.identity, mark: retained.mark,
+    faults.holdsEvidence?.() !== true && witnessed !== undefined && selection.judgingIndex <= witnessed ? { selected: selection.backing, evidence: retained.identity, mark: retained.mark,
       holds: (mark: Uint8Array) => retained.holds(mark), through: selection.judgingIndex } : undefined;
   const { trails } = evidence, { walk, resumed } = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
     verifier: { verify: context.verifier.verify, identities }, witness: context.witness }), keptWalk);
@@ -538,7 +540,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (held === undefined || held.index !== row.index || !same(held.commitment.root, row.root) || !same(held.commitment.signature, row.signature)) {
       throw new KeptStateMismatch("a kept walk's commitment");
     }
-    const snapshot = decodeSnapshot(row.snapshot), directory = evidence.directory(row.root);
+    let snapshot: Snapshot;
+    try { snapshot = decodeSnapshot(row.snapshot); } catch (error) {
+      if (error instanceof EncodingError) throw new KeptStateMismatch("a kept walk's snapshot");
+      throw error;
+    }
+    const directory = evidence.directory(row.root);
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const entry = directory.find(item => same(item.name, snapshot.backing));
     if (entry === undefined || !same(entry.digest, snapshotDigest(snapshot))) throw new KeptStateMismatch("a kept walk's snapshot");
@@ -548,6 +555,14 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (row.class === "valid") {
       scope.fullTrail();
       if (s === undefined || !keptStateHolds(store, s.ns, s.position, s.identity, snapshot)) throw new KeptStateMismatch("a kept walk's state");
+      // Every scoped sibling's snapshot is the same state's, with that backing's totals at its position.
+      for (const sibling of directory) {
+        const bytes = evidence.snapshot(sibling.digest);
+        if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
+        const other = decodeSnapshot(bytes), total = store.total(s.ns, s.position, hex(other.backing));
+        if (!same(other.segment, snapshot.segment) || !same(other.historyHash, snapshot.historyHash) || !same(other.evidenceHash, snapshot.evidenceHash) ||
+            total.issued !== other.issued || total.burned !== other.burned) throw new KeptStateMismatch("a kept walk's sibling");
+      }
     }
     rechecked.add(id);
   };
@@ -556,6 +571,15 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
    * another backing writes it again with its own. */
   const load = (row: WalkVerdict, backing: Uint8Array): ScopeVerdict => {
     recheck(row);
+    try { return loaded(row, backing); } catch (error) {
+      // A row that does not decode, or whose segment's scope is missing, is kept state to discard (§14).
+      if (error instanceof EncodingError || error instanceof SyntaxError || error instanceof TypeError || error instanceof RangeError) {
+        throw new KeptStateMismatch("a kept walk's class");
+      }
+      throw error;
+    }
+  };
+  const loaded = (row: WalkVerdict, backing: Uint8Array): ScopeVerdict => {
     const scope = store.scope(row.segment)!, header = decodeSegmentHeader(scope.header);
     const base: Classified = { commitment: { operator: row.operator, sequence: row.sequence, root: row.root, signature: row.signature },
       index: row.index, segment: row.segment, header, snapshot: decodeSnapshot(row.snapshot) };
@@ -567,13 +591,16 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       scopedTerms: new Map(header.entries.map((scoped, i) => [hex(scoped.backing), decodeRootTerms(scope.terms[i]!.terms)])),
       state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }) };
   };
+  // Classes the read's classification reaches are listed in `carrying`; what it reads around the canonical checkpoint
+  // (every scoped backing's clock and publications) depends on that checkpoint's scope, so it is classified unlisted.
+  let aroundCanonical = false;
   const keep = (held: HeldCommitment, verdict: ScopeVerdict): void => {
     const c = held.commitment, state = verdict.class === "valid" ? verdict.state : undefined;
     store.putVerdict(walk, { key: rowKey(c), operator: c.operator, sequence: c.sequence, root: c.root, signature: c.signature, index: held.index,
       class: verdict.class, segment: verdict.segment, snapshot: snapshotBytes(verdict.snapshot),
       detail: verdict.class === "excluded" ? verdict.check : verdict.class === "lapsed" && verdict.clock !== undefined ? JSON.stringify(verdict.clock) : undefined,
       state: state === undefined || verdict.class !== "valid" ? undefined : { ns: state.ns, position: state.position, identity: state.identity,
-        issued: state.issued, burned: state.burned, adoption: state.adoptionIndices, opening: verdict.openingIndex } });
+        issued: state.issued, burned: state.burned, adoption: state.adoptionIndices, opening: verdict.openingIndex } }, !aroundCanonical);
   };
   // Each backing's held checkpoints within its terms, carrying it, classified in rank order up to a bound.
   // A classification in progress reads only earlier checkpoints of any backing, so a nested advance of
@@ -613,12 +640,21 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     await advance(backing, terms, child);
     const key = store.latestValid(walk, backing, child === undefined ? undefined : child.strict ? { index: child.index, strict: true } :
       { index: child.index, operator: child.commitment.operator, sequence: child.commitment.sequence });
-    return key === undefined ? undefined : load(store.verdict(walk, key)!, backing) as ValidScope;
+    return key === undefined ? undefined : load(candidate(key), backing) as ValidScope;
+  };
+  // A valid candidate's class: a kept walk's row missing its class is kept state to discard.
+  const candidate = (key: Uint8Array): WalkVerdict => {
+    const row = store.verdict(walk, key);
+    if (row === undefined) throw new KeptStateMismatch("a kept walk's candidate");
+    return row;
   };
   const snapshotIndexAt = async (backing: Uint8Array, terms: RootTerms, index: bigint): Promise<bigint> => {
     await advance(backing, terms, { index, strict: true });
     const key = store.latestValid(walk, backing, { index, strict: true });
-    return key === undefined ? 0n : store.verdict(walk, key)!.index;
+    if (key === undefined) return 0n;
+    const row = candidate(key);
+    recheck(row);
+    return row.index;
   };
   const recovery = scopeRecovery(context, walk, viewFor, latest, snapshotIndexAt);
   // Every scoped backing's clock from a segment's opening through an index, and one
@@ -648,7 +684,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   };
   const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
     const id = keyOf(held.commitment), key = rowKey(held.commitment), classified = store.verdict(walk, key);
-    if (classified !== undefined) return Promise.resolve(load(classified, backing));
+    if (classified !== undefined) {
+      if (!aroundCanonical) store.list(walk, key);
+      return Promise.resolve(load(classified, backing));
+    }
     if (running.has(id)) return running.get(id)!;
     let kept: WalkVerdict | undefined;
     try { kept = store.keptVerdict(key); } catch (error) {
@@ -833,6 +872,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   // t, the clock from its segment's opening with the scope's earliest boundary,
   // and the selected backing's non-service count strictly before t.
   const around = async (valid: ValidScope | undefined, terms: RootTerms, view: RecordView) => {
+    aroundCanonical = true;
+    try { return await aroundOf(valid, terms, view); } finally { aroundCanonical = false; }
+  };
+  const aroundOf = async (valid: ValidScope | undefined, terms: RootTerms, view: RecordView) => {
     const publications: ScopePublicationVerdict[] = [], force: ScopeForce[] = [];
     for (const scoped of valid?.header.entries ?? [{ backing: selection.backing }]) {
       const scopedTerms = valid?.scopedTerms.get(hex(scoped.backing)) ?? terms;

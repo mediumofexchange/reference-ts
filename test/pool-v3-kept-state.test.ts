@@ -696,7 +696,6 @@ describe("pool-v3 §14 kept walk", () => {
     expect(p.store.walkRows()).toBe(0);
     // Reopened, the kept walk resumes: nothing is judged again.
     p.store.close(); p.evidence.close();
-    const q = party(); Object.assign(q, { kept: p.kept });
     const reopened = opened(p.kept.path, p.kept), evidence = retained(p.kept.evidence), judged = vi.spyOn(reopened, "putVerdict");
     expect(outcome(await f.read(counting(), reopened, { evidence }))).toEqual(outcome(await f.read(counting())));
     expect(judged.mock.calls.length).toBe(0);

@@ -172,7 +172,7 @@ const SCHEMA = `
   CREATE UNIQUE INDEX answer_publication_position ON answer_publication(idx, ordinal);
   CREATE TABLE walk (id INTEGER PRIMARY KEY AUTOINCREMENT);
   CREATE TABLE walk_verdict (walk INTEGER, key BLOB, idx BLOB NOT NULL, seq BLOB NOT NULL, operator BLOB NOT NULL, root BLOB NOT NULL,
-    PRIMARY KEY(walk, key)) WITHOUT ROWID;
+    listed INTEGER NOT NULL, PRIMARY KEY(walk, key)) WITHOUT ROWID;
   CREATE INDEX walk_verdict_order ON walk_verdict(walk, idx, seq, operator, root);
   CREATE TABLE walk_valid (walk INTEGER, backing BLOB, idx BLOB, seq BLOB, operator BLOB NOT NULL, key BLOB NOT NULL,
     PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;
@@ -350,6 +350,8 @@ export class ReplayStore {
   /** The connection's count of changed rows when the file's digest was last recorded: a read that changed nothing
    * leaves the digest as it is. */
   #digestedAt: bigint | undefined;
+  /** A resumed kept walk's mark for this read, moved at its close where the walk changed a row. */
+  #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
   #lost = false;
   /** The last frontier `witness` folded, by its namespace, leaf count and root: the paths of one tip share it. */
@@ -923,13 +925,13 @@ export class ReplayStore {
         if (fromBe(resumed.through) > keep.through) return { walk: this.#newWalk(), resumed: false };
         // Raised in the walk's transaction before any row it writes, so rows a refused or interrupted read kept stay
         // within the index the kept walk names.
-        if (fromBe(resumed.through) < keep.through) {
-          this.#db.prepare("UPDATE kept_walk SET through = ?, mark = ? WHERE selected = ?").run(be(keep.through), keep.mark, keep.selected);
-        }
+        if (fromBe(resumed.through) < keep.through) this.#db.prepare("UPDATE kept_walk SET through = ? WHERE selected = ?").run(be(keep.through), keep.selected);
+        this.#keptMark = { walk: Number(resumed.walk), selected: keep.selected, mark: keep.mark, changes: this.#changes() };
         return { walk: Number(resumed.walk), resumed: true };
       }
       const walk = this.#newWalk();
       if (keep !== undefined) this.#db.prepare("INSERT INTO kept_walk VALUES (?, ?, ?, ?, ?)").run(keep.selected, walk, be(keep.through), keep.evidence, keep.mark);
+      this.#keptMark = undefined;
       return { walk, resumed: false };
     } catch (error) {
       // A walk that did not open leaves no transaction behind.
@@ -949,6 +951,13 @@ export class ReplayStore {
       return;
     }
     try {
+      // A resumed walk that kept anything kept it from this read's evidence: its mark moves to this read's, so a store
+      // restored to before it no longer resumes the walk. A read that changed nothing leaves the mark, and the file.
+      const marked = this.#keptMark;
+      this.#keptMark = undefined;
+      if (marked !== undefined && marked.walk === walk && this.#changes() > marked.changes) {
+        this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE selected = ? AND walk = ?").run(marked.mark, marked.selected, walk);
+      }
       if (this.#db.prepare("SELECT 1 FROM kept_walk WHERE walk = ?").get(walk) === undefined) {
         for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
         this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);
@@ -1004,18 +1013,24 @@ export class ReplayStore {
     return rows;
   }
 
-  /** Keep a class the walk judged, and count it as classified by the walk. */
-  putVerdict(walk: number, v: WalkVerdict): void {
+  /** Keep a class the walk judged, and count it as classified by the walk; `listed` where its classification, not only
+   * what it read around the canonical checkpoint, reached it. */
+  putVerdict(walk: number, v: WalkVerdict, listed = true): void {
     const s = v.state;
     this.#db.prepare("INSERT OR REPLACE INTO verdict VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(v.key, v.operator,
       be(v.sequence), v.root, v.signature, be(v.index), v.class, v.detail ?? null, v.segment, v.snapshot, s?.ns ?? null, s?.position ?? null,
       s?.identity ?? null, s === undefined ? null : u64(s.issued), s === undefined ? null : u64(s.burned),
       s === undefined ? null : mapJson(s.adoption), s === undefined ? null : be(s.opening));
-    this.touch(walk, v);
+    this.touch(walk, v, listed);
   }
-  /** Count a kept class as classified by the walk. */
-  touch(walk: number, v: Pick<WalkVerdict, "key" | "index" | "sequence" | "operator" | "root">): void {
-    this.#db.prepare("INSERT INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?)").run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root);
+  /** Count a kept class as classified by the walk, listed once anything lists it. */
+  touch(walk: number, v: Pick<WalkVerdict, "key" | "index" | "sequence" | "operator" | "root">, listed = true): void {
+    this.#db.prepare(`INSERT INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(walk, key) DO UPDATE SET listed = 1
+      WHERE excluded.listed = 1 AND listed = 0`).run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root, listed ? 1 : 0);
+  }
+  /** List a class the walk classified (a read's classification reached it); no change where it is listed. */
+  list(walk: number, key: Uint8Array): void {
+    this.#db.prepare("UPDATE walk_verdict SET listed = 1 WHERE walk = ? AND key = ? AND listed = 0").run(walk, key);
   }
   #verdict(row: Record<string, unknown>): WalkVerdict {
     const state = row["ns"] === null ? undefined : { ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint),
@@ -1036,9 +1051,9 @@ export class ReplayStore {
     const row = this.#db.prepare("SELECT * FROM verdict WHERE key = ?").get(key) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#verdict(row);
   }
-  /** Every class the walk classified, by index, sequence, then operator and root bytes. */
+  /** Every class the walk's classification reached (listed), by index, sequence, then operator and root bytes. */
   *verdicts(walk: number): Generator<WalkVerdict> {
-    for (const row of this.#db.prepare(`SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ?
+    for (const row of this.#db.prepare(`SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ? AND w.listed = 1
         ORDER BY w.idx, w.seq, w.operator, w.root`).iterate(walk)) {
       yield this.#verdict(row as Record<string, unknown>);
     }
