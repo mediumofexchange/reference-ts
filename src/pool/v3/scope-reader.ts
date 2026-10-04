@@ -80,6 +80,8 @@ export interface FrontierContext extends Omit<ImportContext, "selection" | "head
 export interface FrontierResult {
   readonly canonical: CanonicalCheckpoint | undefined;
   readonly force: readonly ScopeForcedPublication[];
+  /** The selected backing's carrying checkpoints through the judging index; empty, not listed, where the read
+   * asked for none (`carrying: false`). */
   readonly carrying: readonly ImportCarryingVerdict[];
   readonly clock: ClockRecord | null | undefined;
   readonly ranges: Omit<ScopeRanges, "checkpointIndex" | "heldBefore" | "heldAfter">;
@@ -198,7 +200,9 @@ export type ScopeResult = {
   readonly receipt: ReceiptVerdict; readonly state?: undefined; readonly carrying?: undefined; readonly clock?: undefined;
   readonly ranges?: undefined; readonly canonical?: undefined; readonly force?: undefined;
 } | {
-  readonly receipt?: undefined; readonly state: ReplayResult; readonly carrying: readonly ImportCarryingVerdict[];
+  readonly receipt?: undefined; readonly state: ReplayResult;
+  /** As `FrontierResult.carrying`: empty, not listed, where the read asked for none (`carrying: false`). */
+  readonly carrying: readonly ImportCarryingVerdict[];
   readonly clock: ClockRecord | null; readonly ranges: ScopeRanges;
   /** The selected checkpoint, which a successful read establishes as the backing's canonical one. */
   readonly canonical: CanonicalCheckpoint;

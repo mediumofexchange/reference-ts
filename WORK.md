@@ -22,12 +22,12 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   (s) `serve` takes no journal turn ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)); (w) `moe reader` keeps `replay.db` as the wallet does.
 - **M11c1 done** (PR #101, `design-point-probe.mjs`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements
   every budget holds (admission ~85 ms, first sync ~26 ms a statement, ≈1 CPU-min and 14 MB a day, <600 MB, restart 3.1 s); M11b7 fixed its wallet read.
-- **M11b7–8** (PR #102; [M11b7](decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x),
-  [M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8), PR on `claude/m11b8-holding-tags`): marks keep nullifier,
-  opening and tag (layout 9); a read 1.6 → ~0.02 ms an output, ~0.84 → ~0.14 ms a holding. Both reviewed; findings fixed.
-- **M11c2 in progress** (`claude/m11c2-runtime-depth`, `runtime-depth-probe.mjs`; 10⁴ run done, 10⁵ run under way): admission by depth band
-  (first after a block = Next 4(v)), first sync time/CPU/memory, step and idle reads, reopening, at 10⁴ and 10⁵; a verdict per budget
-  and a lever for any that fails. Then M11c3.
+- **M11b7–10** (PRs #102–#104, M11b10 on `claude/m11b10-journal-read`; [M11b7](decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x),
+  [M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)): marks keep nullifier, opening, tag
+  (layout 9): a read 1.6 → ~0.02 ms an output, ~0.84 → ~0.14 ms a holding; M11b9 resends a node GET met by a closed idle connection;
+  M11b10 leaves the carrying listing (a row per checkpoint, ~22 ms an admission at 5·10⁴) out of the journal's reads. All reviewed.
+- **M11c2 in progress** (`claude/m11c2-runtime-depth`, `runtime-depth-probe.mjs`; 10⁴ done, 10⁵ under way): admission by depth, first sync,
+  step and idle reads, reopening at 10⁴/10⁵; a verdict per budget, a lever for any failing (Next 4(v) fails). Then M11c3.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -57,8 +57,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged
    before silence lapse (label, or an answer where lapse is unresolved). (s) closed in M11b5 (Status). (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
-   (v) A read at a new venue index changes kept answers, so its close hashes the whole replay file (≈7 s at 10⁶): the operator's first
-   admission per block; M11c measures it, then an incremental root or the hot rows in a file of their own. (w) closed in M11b6.
+   (v) A read at a new venue index changes kept answers, so its close hashes the whole replay file: the operator's first admission per
+   block grows ~2.6 ms per 10³ statements (M11c2), ~2.6 s at 10⁶, past the 1 s budget; lever: an incremental root or the hot rows apart. (w) closed in M11b6.
 5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
    sync, about 0.9 s at a hostile 20,000-header quota); sections asked of several suppliers at once (first-sync time, if M11c shows
    the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch
