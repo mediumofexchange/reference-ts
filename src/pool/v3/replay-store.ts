@@ -176,6 +176,9 @@ const SCHEMA = `
   CREATE INDEX walk_verdict_order ON walk_verdict(walk, idx, seq, operator, root);
   CREATE TABLE walk_valid (walk INTEGER, backing BLOB, idx BLOB, seq BLOB, operator BLOB NOT NULL, key BLOB NOT NULL,
     PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;
+  CREATE TABLE walk_carry (walk INTEGER, backing BLOB, key BLOB, idx BLOB NOT NULL, seq BLOB NOT NULL, operator BLOB NOT NULL, root BLOB NOT NULL,
+    PRIMARY KEY(walk, backing, key)) WITHOUT ROWID;
+  CREATE INDEX walk_carry_order ON walk_carry(walk, backing, idx, seq, operator, root);
   CREATE TABLE walk_cursor (walk INTEGER, backing BLOB, term INTEGER NOT NULL, link BLOB NOT NULL, after BLOB, PRIMARY KEY(walk, backing)) WITHOUT ROWID;
   CREATE TABLE walk_clock (walk INTEGER, backing BLOB, opening BLOB, upto BLOB NOT NULL, boundary BLOB,
     PRIMARY KEY(walk, backing, opening)) WITHOUT ROWID;
@@ -184,7 +187,7 @@ const SCHEMA = `
     WITHOUT ROWID;`;
 /** Rows one read keeps for itself: what it classified (a verdict it judged or reused), each backing's valid candidates,
  * how far it has classified each backing's checkpoints and publications, and each silence clock's running state. */
-const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_cursor", "walk_clock", "walk_progress"];
+const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_carry", "walk_cursor", "walk_clock", "walk_progress"];
 /** Rows kept across reads (pool-v3 §14 kept classes and kept walk): each is a function of authenticated bytes and the
  * record before its index. A kept walk's own rows stay under its walk; forgetting it orphans them. */
 const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication", "kept_walk",
@@ -1051,10 +1054,14 @@ export class ReplayStore {
     const row = this.#db.prepare("SELECT * FROM verdict WHERE key = ?").get(key) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#verdict(row);
   }
-  /** Every class the walk classified, by index, sequence, then operator and root bytes. */
-  *verdicts(walk: number): Generator<WalkVerdict> {
-    for (const row of this.#db.prepare(`SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ?
-        ORDER BY w.idx, w.seq, w.operator, w.root`).iterate(walk)) {
+  /** Tag a class the walk's cursor classified as one of `backing`'s carrying checkpoints within its terms. */
+  carry(walk: number, backing: Uint8Array, key: Uint8Array, index: bigint, sequence: bigint, operator: Uint8Array, root: Uint8Array): void {
+    this.#db.prepare("INSERT OR IGNORE INTO walk_carry VALUES (?, ?, ?, ?, ?, ?, ?)").run(walk, backing, key, be(index), be(sequence), operator, root);
+  }
+  /** `backing`'s tagged carrying checkpoints through index `t`, by index, sequence, then operator and root bytes. */
+  *carried(walk: number, backing: Uint8Array, t: bigint): Generator<WalkVerdict> {
+    for (const row of this.#db.prepare(`SELECT v.* FROM walk_carry c JOIN verdict v ON v.key = c.key WHERE c.walk = ? AND c.backing = ? AND c.idx <= ?
+        ORDER BY c.idx, c.seq, c.operator, c.root`).iterate(walk, backing, be(t))) {
       yield this.#verdict(row as Record<string, unknown>);
     }
   }

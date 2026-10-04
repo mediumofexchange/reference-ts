@@ -439,7 +439,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
   const current = await latest(selection.backing, context.terms);
   if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
   const { clock, publications, force, nonService } = await walk.around(selected, context.terms, view);
-  return { state: selected.state, carrying: await walk.carrying(), clock, canonical: canonicalOf(selected), force, ranges: {
+  return { state: selected.state, carrying: walk.carrying(), clock, canonical: canonicalOf(selected), force, ranges: {
     judgingIndex: view.t, lag: view.lag, checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
     heldBefore, heldAfter, publications, ...(nonService === undefined ? {} : { nonService }) } };
 }
@@ -476,7 +476,7 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
         throw error;
       }
     }
-    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: await walk.carrying(), scopeChains, answers,
+    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains, answers,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
         chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
   } catch (error) {
@@ -627,8 +627,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       if (cursor.busy) throw new Error("candidate order");
       cursor.busy = true;
       try {
-        if (view.carries(next) !== undefined && (await classify(next, backing)).class === "valid") {
-          store.putValid(walk, backing, next.index, next.commitment.operator, next.commitment.sequence, rowKey(next.commitment));
+        if (view.carries(next) !== undefined) {
+          const c = next.commitment, key = rowKey(c), verdict = await classify(next, backing);
+          store.carry(walk, backing, key, next.index, c.sequence, c.operator, c.root);
+          if (verdict.class === "valid") store.putValid(walk, backing, next.index, c.operator, c.sequence, key);
         }
       } finally { cursor.busy = false; }
       cursor.after = next.commitment.sequence; store.putCursor(walk, backing, cursor.term, term.link, cursor.after);
@@ -918,17 +920,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   // The selected backing's own carrying checkpoints within its terms through the judging index: every read classifies
   // each of them, so the listing is the same whichever earlier reads of a kept walk classified them. A dependency of
   // another backing is classified but not listed.
-  const carrying = async (): Promise<ImportCarryingVerdict[]> => {
-    const view = await viewFor(selection.backing, context.terms), listed: ImportCarryingVerdict[] = [];
-    for (const item of store.verdicts(walk)) {
-      if (item.index > view.t || !same(linkInForce(view.chain, item.index).operator, item.operator)) continue;
-      const held: HeldCommitment = { index: item.index, commitment: { operator: item.operator, sequence: item.sequence, root: item.root, signature: item.signature } };
-      if (view.carries(held) === undefined) continue;
-      listed.push({ operator: hex(item.operator), sequence: item.sequence.toString(), index: item.index.toString(), class: item.class,
-        ...(item.class === "excluded" ? { check: item.detail! } : {}) });
-    }
-    return listed;
-  };
+  // Each is tagged once, when the cursor classifies it.
+  const carrying = (): ImportCarryingVerdict[] => [...store.carried(walk, selection.backing, selection.judgingIndex)].map(item => ({
+    operator: hex(item.operator), sequence: item.sequence.toString(), index: item.index.toString(), class: item.class,
+    ...(item.class === "excluded" ? { check: item.detail! } : {}) }));
   const refusedBelow = (held: HeldCommitment | undefined): void => { below = held; };
   return { viewFor, latest, recovery, classify, around, carrying, inspectRefused, refusedBelow, close: (): void => { store.closeWalk(walk); } };
 }
