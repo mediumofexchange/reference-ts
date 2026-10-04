@@ -119,7 +119,7 @@ function serve(directory) {
 let serviceProxy, completed = false;
 const report = { host: { cores: cpus().length, model: cpus()[0]?.model, memoryGb: Math.round(totalmem() / 2 ** 30), node: process.version, platform: process.platform },
   shape: { statements: STATEMENTS, round: ROUND, perBlock: PER_BLOCK, serveInterval: 2, silence: Number(SILENCE), depth: Number(DEPTH) },
-  rounds: [], marks: [], steady: undefined, restart: undefined };
+  rounds: [], marks: [], steady: undefined, waits: undefined, restart: undefined };
 try {
   const common = ["--parameters", PARAMETER_DIRECTORY], measured = ["--node", nodeProxy.url, ...common], direct = ["--node", node.url, ...common];
   const OP = join(scratch, "operator"), BK = join(scratch, "backer"), HD = join(scratch, "holder"), SH = join(scratch, "shop");
@@ -158,12 +158,16 @@ try {
   let backer = open(BK), holder = open(HD), shop = open(SH);
   const backerKey = readFileSync(join(BK, "backer.key")), domain = adoptedDomain();
   let made = 0, issued = 0;
+  const waits = { SCHEDULE: 0, STALE: 0 };
+  /** The successful submission's time. A refusal while the service is closed (SCHEDULE: the reopening lag; STALE: a
+   * signed checkpoint not yet witnessed past the lag) is the venue wait the budget excludes: counted, a block mined,
+   * submitted again. On a real chain blocks come on their own; here they come with the probe's statements. */
   const admitted = async (party, name) => {
     for (let attempt = 0; ; attempt++) {
       const began = performance.now();
       try { await party.held.submit(name, party.client); return performance.now() - began; } catch (error) {
-        if (attempt >= 20 || error?.code !== "SCHEDULE") throw error;
-        await mine(1); await pause(300);
+        if (attempt >= 20 || !(error?.code in waits)) throw error;
+        waits[error.code]++; await mine(1); await pause(300);
       }
     }
   };
@@ -210,7 +214,7 @@ try {
     await moe(["reader", "terms", "add", "--dir", RD, backing, ...termsArgs]);
     await moe(["reader", "service", "add", "--dir", RD, backing, proxiedService]);
     const read = await moe(["reader", "supply", "--dir", RD, backing]);
-    assert.equal(read.json.issued, String(issued));
+    assert.equal(read.json.issued, String(2 * issued), "two units an issue");
     const restore = await moe(["wallet", "restore-seed", "--dir", WL, "--venue", venueFile, ...measured], { input: `${seed}\n` });
     await moe(wallet("terms add", WL, backing, ...termsArgs));
     await moe(wallet("service add", WL, backing, proxiedService));
@@ -241,6 +245,7 @@ try {
   await serving.stop();
   serving = serve(OP);
   const listening = await serving.listening;
+  report.waits = waits;
   report.restart = { statements: made, startMs: listening.startMs, servedBefore: before, after: serving.rssMb(), journalBytes: directoryBytes(OP) };
   await serving.stop();
   backerKey.fill(0); await prover.close(); await api.destroy();
