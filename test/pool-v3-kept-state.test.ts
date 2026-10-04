@@ -27,15 +27,17 @@ import { withdrawalRecord } from "../src/pool/v3/witness.js";
 import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
+import { tagOf } from "../src/pool/v3/recovery.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
 /** A witness predicate's mark for every output but 108: a nullifier, and an opening of `backing` worth one unit
- * whose owner and rho are the output's commitment, as `ownedNotes` decodes it. */
-const opening = (cm: bigint, backing: Uint8Array) => Uint8Array.from([...backing, ...fieldToBytes(cm), ...fieldToBytes(cm), 0, 0, 0, 0, 0, 0, 0, 1]);
+ * whose owner and rho are the output's commitment, with the nullifier's tag, as `ownedNotes` decodes it. */
+const opening = (cm: bigint, backing: Uint8Array, nf: bigint) =>
+  Uint8Array.from([...backing, ...fieldToBytes(cm), ...fieldToBytes(cm), 0, 0, 0, 0, 0, 0, 0, 1, ...fieldToBytes(tagOf(nf))]);
 const marked = (output: { cm: bigint }, backing: Uint8Array = b(0)) =>
-  (output.cm === 108n ? undefined : { nf: output.cm + 1_000_000n, note: opening(output.cm, backing) });
+  (output.cm === 108n ? undefined : { nf: output.cm + 1_000_000n, note: opening(output.cm, backing, output.cm + 1_000_000n) });
 const issuerSecret = b(3), operatorSecret = b(4), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const configuration = adoptedConfiguration();
 const domain = configurationHash(configuration), label = b(2), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
@@ -359,7 +361,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     // An output the predicate passed over has no witness, kept or fresh.
     expect(state.path(108n)).toBeUndefined(); expect(again.canonical!.state.path(108n)).toBeUndefined();
     expect([...state.store.unspentWitnessed(state.ns, state.position)].map(output => [output.cm, output.mark.nf, output.mark.note]))
-      .toEqual([101n, 106n, 107n].map(cm => [cm, cm + 1_000_000n, opening(cm, f.backing)]));
+      .toEqual([101n, 106n, 107n].map(cm => [cm, cm + 1_000_000n, opening(cm, f.backing, cm + 1_000_000n)]));
     expect(ownedNotes(b(1), domain, f.backing, state).map(note => [note.cm, note.nf, note.opening.value, note.anchor]))
       .toEqual([101n, 106n, 107n].map(cm => [cm, cm + 1_000_000n, 1n, state.noteRoot()]));
 
