@@ -203,8 +203,8 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. 6: a witness row holds an
  * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk.
- * 8: a witness row holds its output's mark. */
-const SCHEMA_VERSION = 8;
+ * 8: a witness row holds its output's mark. 9: a mark keeps its nullifier's tag. */
+const SCHEMA_VERSION = 9;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
