@@ -25,8 +25,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   (s) M11b5 #98 ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)):
   `serve` takes no journal turn and refuses the journal's own damage by name.
   (w) M11b6 #99: `moe reader` keeps `replay.db` (+ digest) as the wallet does, discarding kept state read through a later index
-  than the view's; the drill compares kept and full reads after the bulk issues (2.8 against 5.4 s at 78 statements locally),
-  a return and a `presentation`. One review, nothing blocking, four low findings fixed. No verdict code changed. Next: M11c.
+  than the view's; the drill compares kept and full reads' answers after the bulk issues, a return and a `presentation`, and checks that
+  the kept read leaves `replay.db` and its digest unwritten (wall time recorded only: it failed main's Windows CI at 1915d5d). Next: M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence

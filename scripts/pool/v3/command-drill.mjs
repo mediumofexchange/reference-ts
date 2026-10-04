@@ -509,6 +509,9 @@ try {
     // verified on reopening is pool-v3-kept-state.test.ts's.
     assert.deepEqual(keptFile(), vouched, "the kept read rested on the kept replay file: it neither discarded nor rewrote it");
     same(await full(["reader", "supply", ...reader, backing2]));
+    // The full read discarded the file its digest no longer vouched for, replayed and vouched for the rebuilt file.
+    const rebuilt = keptFile();
+    assert.equal(rebuilt.digest, rebuilt.file, "the full read rebuilt and vouched for its replay file");
     // Wall time is recorded, not asserted: at 78 statements process and verifier startup dominate, and a runner's
     // other processes (serve's own reads) shift either read (2.8 s against 5.1 s on Windows CI at 1915d5d's PR).
     readerReplay = { position: read.position, keptMs, fullMs: processes.at(-1).elapsedMs };

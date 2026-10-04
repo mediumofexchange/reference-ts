@@ -206,7 +206,7 @@ export class EvidenceStore {
         else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
       } catch (error) {
         this.#db.close();
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("the evidence file");
+        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("evidence file");
         throw error;
       }
     }

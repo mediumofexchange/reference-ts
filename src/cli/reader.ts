@@ -127,9 +127,9 @@ export function keptReplay(directory: Directory, at: bigint): ReplayStore {
   return store;
 }
 
-/** The kept file held by a process outside the directory's lock (another tool, a scanner): a refusal, not a failure. */
+/** A file held by a process outside the directory's lock (another tool, a scanner): a refusal, not a failure. */
 const inUse = (error: unknown): unknown => error instanceof FileInUse ?
-  new CommandError("STORAGE", "another process holds this reader's kept replay file") : error;
+  new CommandError("STORAGE", `another process holds this reader's ${error.file}`) : error;
 
 /** Sync the view, then read the backing's frontier at its witnessed index over the package `--package` names or
  * the operator's service supplies into `evidence.db`, resting on what earlier reads kept in `replay.db`. `use` takes
@@ -142,7 +142,7 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
     const verifier = await openVerifier(directory, verifierCount(args));
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined;
     try {
-      evidence = new EvidenceStore(directory.file("evidence.db"));
+      try { evidence = new EvidenceStore(directory.file("evidence.db")); } catch (error) { throw inUse(error); }
       store = keptReplay(directory, at);
       const file = flag(args, "package");
       const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);
