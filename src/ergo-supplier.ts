@@ -292,13 +292,24 @@ export interface NodeRequestInit {
   readonly body?: string;
 }
 
+/** Whether a request failed because the connection it went out on was closed under it before any answer: a pooled
+ * connection the node closed as idle (its keep-alive timeout) just as this request reused it. A view's work between
+ * requests (a long header batch) outlasts a node's idle timeout, so its next request meets this. */
+const closedUnder = (error: unknown): boolean => error instanceof TypeError &&
+  ["UND_ERR_SOCKET", "ECONNRESET", "EPIPE"].includes((error.cause as { code?: unknown } | undefined)?.code as string);
+
 /** One node answer's body as text, or undefined where the node answers 404.
  * At most `maxBytes` of body are read, whatever length the node declares: a
  * node is untrusted and may stream without end, so a longer body is
- * cancelled and throws. Every node request here goes through this. */
+ * cancelled and throws. Every node request here goes through this. A GET whose
+ * connection was closed under it is sent once more; a POST never is. */
 export async function nodeText(fetcher: (url: string, init: NodeRequestInit) => Promise<Response>, url: string, path: string,
   init: NodeRequestInit, maxBytes: number): Promise<string | undefined> {
-  const response = await fetcher(url, init);
+  let response: Response;
+  try { response = await fetcher(url, init); } catch (error) {
+    if (init.body !== undefined || (init.method ?? "GET") !== "GET" || init.signal.aborted || !closedUnder(error)) throw error;
+    response = await fetcher(url, init);
+  }
   // A body left unread is cancelled, so the connection is not held open until the request's timeout.
   const discard = async (): Promise<void> => { await response.body?.cancel().catch(() => {}); };
   if (response.status === 404) { await discard(); return undefined; }

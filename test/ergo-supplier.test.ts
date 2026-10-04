@@ -4,7 +4,7 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import { describe, expect, it } from "vitest";
 import { sectionMatchesRoot } from "../src/ergo-profile.js";
 import {
-  copyTransaction, ergoNodeSupplier, parseNodeJson, supplyBlock, supplyHeader, supplyTransaction, type NodeJson,
+  copyTransaction, ergoNodeSupplier, nodeText, parseNodeJson, supplyBlock, supplyHeader, supplyTransaction, type NodeJson,
 } from "../src/ergo-supplier.js";
 
 // The supplier's copy over the experiment's hash-pinned mainnet fixtures: every
@@ -195,5 +195,28 @@ describe("the node supplier over HTTP", () => {
     await expect(big.tipHeight()).rejects.toThrow(/over 10 bytes/);
     const failing = ergoNodeSupplier("http://node", { fetch: served({ "/info": 503 }) });
     await expect(failing.tipHeight()).rejects.toThrow(/503/);
+  });
+
+  it("sends a GET once more, and only once, where its connection was closed under it; never a POST or another failure", async () => {
+    // What undici throws where a node closed an idle keep-alive connection just as a request reused it: a view busy
+    // judging a header batch for longer than a node's idle timeout met it at its next request.
+    const closed = () => Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }) });
+    const failingFirst = (times: number) => { let calls = 0; return { get calls() { return calls; },
+      fetch: async () => { if (calls++ < times) throw closed(); return new Response("ok"); } }; };
+    const get = failingFirst(1);
+    expect(await nodeText(get.fetch, "http://node/info", "/info", { signal: AbortSignal.timeout(1000) }, 100)).toBe("ok");
+    expect(get.calls).toBe(2);
+    const twice = failingFirst(2);
+    await expect(nodeText(twice.fetch, "http://node/info", "/info", { signal: AbortSignal.timeout(1000) }, 100)).rejects.toThrow("fetch failed");
+    expect(twice.calls).toBe(2);
+    const post = failingFirst(1);
+    await expect(nodeText(post.fetch, "http://node/transactions/bytes", "/transactions/bytes",
+      { signal: AbortSignal.timeout(1000), method: "POST", body: "\"00\"" }, 100)).rejects.toThrow("fetch failed");
+    expect(post.calls).toBe(1);
+    // Another failure (a refused connection) is not sent again.
+    let refusedCalls = 0;
+    const refused = async () => { refusedCalls++; throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("refused"), { code: "ECONNREFUSED" }) }); };
+    await expect(nodeText(refused, "http://node/info", "/info", { signal: AbortSignal.timeout(1000) }, 100)).rejects.toThrow("fetch failed");
+    expect(refusedCalls).toBe(1);
   });
 });
