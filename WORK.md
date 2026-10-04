@@ -22,10 +22,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 - **M11b in progress**. M11b1 (PR #93), (n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)).
   M11b2 (PR #94), (l): an index past the reader's answer budget is asked again under the venue's `indexLimits`, capped at `INDEX_LIMITS`.
   M11b3 (PR #95), (m): a served trail is read forward by position, falling back to the walk back at a fork; reports: CI run 37151741994.
-  **M11b4 in progress** (branch `claude/m11b4-kept-walk`), (k): an admission under a silence clause costs ~14 ms per held checkpoint
-  (probe: 5 → 0.1 s, 80 → 1.1 s): each read re-judges every checkpoint, re-walks clock and publications, re-digests the replay file.
-  Acceptance: a kept walk later reads resume (§14 paragraph, reviewed first); admission flat in held checkpoints; resumed reads equal
-  fresh ones (exclusion, lapse, successor, two backings, force, non-service, lower index); stop: merged with review. Then (s); M11c.
+  **M11b4 in review** (branch `claude/m11b4-kept-walk`, spec branch of the same name), (k): later reads resume a kept walk
+  ([probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission flat, 0.1 s at 320 checkpoints, was 1.1 s at 80).
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -46,8 +44,7 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) closed in M10e2. (j) Verify-only parties could take
-   identity-checked key bytes, needing no G1 file. (k) A read under a silence or non-service clause judges every held checkpoint again at each
-   admission (persisting the walk's cursors would bound it). (l) closed (M11b2; a fixture venue declares no
+   identity-checked key bytes, needing no G1 file. (k) closed (M11b4, kept walk). (l) closed (M11b2; a fixture venue declares no
    index bound, its records being its owner's).
    (m) closed (M11b3; `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError). `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
    (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
@@ -59,6 +56,9 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
    exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
+   (v) A read at a new venue index changes kept answers, so its close hashes the whole replay file (≈7 s at 10⁶): the operator's first
+   admission per block; M11c measures it, then an incremental root or the hot rows in a file of their own. (w) `moe reader` reads with an
+   in-memory replay store, so each command replays all history (no kept file, no kept walk); fix before M11c's reader steady state.
 5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
    sync, about 0.9 s at a hostile 20,000-header quota); sections asked of several suppliers at once (first-sync time, if M11c shows
    the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch
