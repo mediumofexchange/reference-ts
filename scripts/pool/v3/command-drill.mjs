@@ -479,11 +479,21 @@ try {
   }
 
   const BULK = 70;
-  await check(`past the old 67-statement ceiling: ${BULK} real-proof issues to the holder's seed, synced by the holder and the reader`, async () => {
+  let readerReplay;
+  await check(`past the old 67-statement ceiling: ${BULK} real-proof issues to the holder's seed, synced by the holder and the reader; ` +
+      "the reader's next process rests on its kept replay file, and one whose file fails its digest replays in full to the same answer", async () => {
     const { seed } = await ok(wallet("seed", H3, "--show"));
     await bulkIssue(BULK, Buffer.from(seed, "hex"));
     const read = await supplyUntil(read => read.issued === String(10 + BULK), 12, backing2);
     assert(BigInt(read.position) > 67n, `position ${read.position}`);
+    // Nothing is mined between these reads, so each judges at the same index (item (w), M11b6).
+    const same = answer => assert.deepEqual({ ...answer, sync: undefined }, { ...read, sync: undefined });
+    for (const file of ["replay.db", "replay.db.sha256"]) assert(statSync(join(RD, file)).isFile(), `the reader keeps ${file}`);
+    same(await ok(["reader", "supply", ...reader, backing2]));
+    const keptMs = processes.at(-1).elapsedMs;
+    writeFileSync(join(RD, "replay.db.sha256"), "00".repeat(32));
+    same(await ok(["reader", "supply", ...reader, backing2]));
+    readerReplay = { position: read.position, keptMs, fullMs: processes.at(-1).elapsedMs };
     const view = await settled(wallet("sync", H3, backing2), view => view.holdings.length === BULK + 1);
     assert.equal(view.available, String(7 + BULK));
   });
@@ -599,7 +609,7 @@ console.log(JSON.stringify(open.filter(path => path.includes("etilqs_"))));`);
     }
   });
 
-  console.log(JSON.stringify({ status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files }, checks, processes }, null, 2));
+  console.log(JSON.stringify({ status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files }, checks, readerReplay, processes }, null, 2));
   completed = true;
 } finally {
   await node.close();
