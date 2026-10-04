@@ -592,8 +592,10 @@ export class V3OperatorJournal {
    * owner reads and keeps nothing. */
   private readerOptions(store?: ReplayStore, evidence: EvidenceStore = this.evidence) {
     this.transaction(() => {});
+    // The journal reads its own state, clock and force, never the listing of its carrying checkpoints, which grows
+    // by one row per checkpoint and would otherwise be read before every admission (M11c2).
     return { verifier: this.verifier, venue: this.venue, reference: this.reference,
-      store: store ?? this.reads(), evidence };
+      store: store ?? this.reads(), evidence, carrying: false };
   }
   /** One read through the public reader. A kept file another handle is writing leaves the operation BUSY. */
   private async whileReading<T>(read: () => Promise<T>): Promise<T> {
