@@ -9,7 +9,8 @@
 //   earlier position of a segment that has moved on stays readable.
 // - Tip structures update in place and are read only at the tip: the spent
 //   set's nodes, the note tree's frontier and the incremental witnesses of the
-//   outputs a replay chose to witness. No note-tree interior node is kept.
+//   outputs a replay chose to witness, each with the nullifier that spends it
+//   and what the choosing predicate read of it. No note-tree interior node is kept.
 // - A refused checkpoint rolls back a savepoint; nothing is copied to undo.
 // - Classes, scopes, bases, publication verdicts and the venue answers they were read
 //   from are kept across reads under one context (pool-v3 §§13.2, 14). A party's kept
@@ -58,6 +59,9 @@ export interface Tip {
   readonly noteRoot: bigint;
   readonly spentRoot: Uint8Array;
 }
+/** What a witness predicate read of an output it chose, kept with the output's witness: the nullifier that spends
+ * it, so a read leaves spent outputs out, and the predicate's own bytes, so a read need not scan the output again. */
+export interface WitnessMark { readonly nf: bigint; readonly note: Uint8Array }
 /** One output as a receiver scans it: its capsule, or for a settlement the event holding its record. */
 export interface StoredOutput {
   readonly cm: bigint;
@@ -67,6 +71,8 @@ export interface StoredOutput {
   readonly capsule: Uint8Array | undefined;
   readonly settlement: boolean;
 }
+/** A witnessed output with its kept mark. */
+export interface WitnessedOutput extends StoredOutput { readonly mark: WitnessMark }
 /** One replayed record: its identity and evidence digests, the index it was judged at and the chain values after it.
  * Record bytes stay in the evidence they came from; only a settlement keeps its record, which names its outputs' owner. */
 export interface StoredEvent {
@@ -96,7 +102,7 @@ export interface Append {
   readonly evidence: Uint8Array;
   readonly supply: { readonly backing: string; readonly issued: bigint; readonly burned: bigint } | undefined;
   readonly nullifiers: readonly { readonly nf: bigint; readonly tag: bigint }[];
-  readonly outputs: readonly { readonly cm: bigint; readonly capsule: Uint8Array | undefined; readonly settlement: boolean; readonly witness: boolean }[];
+  readonly outputs: readonly { readonly cm: bigint; readonly capsule: Uint8Array | undefined; readonly settlement: boolean; readonly witness: WitnessMark | undefined }[];
   readonly demand: { readonly id: string; readonly value: Demand } | undefined;
   readonly ended: string | undefined;
   /** The tags and demand this event touches, for C2.10.6's ordering check. */
@@ -149,7 +155,8 @@ const SCHEMA = `
     PRIMARY KEY(ns, backing, position)) WITHOUT ROWID;
   CREATE TABLE spent (ns INTEGER, id INTEGER, key BLOB NOT NULL, bit INTEGER, l INTEGER, r INTEGER, hash BLOB NOT NULL,
     PRIMARY KEY(ns, id)) WITHOUT ROWID;
-  CREATE TABLE witness (ns INTEGER, leaf INTEGER, cm BLOB NOT NULL, siblings BLOB NOT NULL, PRIMARY KEY(ns, leaf)) WITHOUT ROWID;
+  CREATE TABLE witness (ns INTEGER, leaf INTEGER, cm BLOB NOT NULL, nf BLOB NOT NULL, note BLOB NOT NULL, siblings BLOB NOT NULL,
+    PRIMARY KEY(ns, leaf)) WITHOUT ROWID;
   CREATE TABLE kept_context (id INTEGER PRIMARY KEY CHECK (id = 1), key BLOB NOT NULL);
   CREATE TABLE verdict (key BLOB PRIMARY KEY, operator BLOB NOT NULL, seq BLOB NOT NULL, root BLOB NOT NULL, signature BLOB NOT NULL,
     idx BLOB NOT NULL, class TEXT NOT NULL, detail TEXT, segment BLOB NOT NULL, snapshot BLOB NOT NULL, ns INTEGER, position INTEGER,
@@ -195,8 +202,9 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 /** Kept venue answers refer to no namespace, so collection keeps them. */
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. 6: a witness row holds an
- * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk. */
-const SCHEMA_VERSION = 7;
+ * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk.
+ * 8: a witness row holds its output's mark. */
+const SCHEMA_VERSION = 8;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -445,14 +453,15 @@ export class ReplayStore {
       insertDemandEnd: "INSERT INTO demand_end VALUES (?, ?, ?)",
       outputs: `SELECT x.* FROM output x WHERE ${v} ORDER BY x.ns, x.leaf`,
       outputOf: `SELECT x.* FROM output x WHERE x.cm = :key AND ${v}`,
-      witnessed: `SELECT x.* FROM output x JOIN witness w ON w.ns = x.ns AND w.leaf = x.leaf WHERE ${v} ORDER BY x.ns, x.leaf`,
+      unspentWitnessed: `SELECT x.*, w.nf AS mark_nf, w.note AS mark_note FROM output x JOIN witness w ON w.ns = x.ns AND w.leaf = x.leaf
+        WHERE ${v} AND NOT EXISTS (SELECT 1 FROM nullifier y WHERE y.nf = w.nf AND ${visible("y")}) ORDER BY x.ns, x.leaf`,
       nullifiers: `SELECT x.nf FROM nullifier x WHERE ${v} ORDER BY x.ns, x.position`,
       importedNullifiers: "SELECT nf FROM nullifier WHERE ns = ? AND position <= ?",
       spentGet: "SELECT key, bit, l, r, hash FROM spent WHERE ns = ? AND id = ?",
       spentPut: "INSERT OR REPLACE INTO spent VALUES (?, ?, ?, ?, ?, ?, ?)",
       witnessesIn: "SELECT leaf, siblings FROM witness WHERE ns = ? AND leaf >= ? AND leaf < ?",
       witness: "SELECT siblings FROM witness WHERE ns = ? AND leaf = ?",
-      putWitness: "INSERT INTO witness VALUES (?, ?, ?, ?)",
+      putWitness: "INSERT INTO witness VALUES (?, ?, ?, ?, ?, ?)",
       moveWitness: "UPDATE witness SET siblings = ? WHERE ns = ? AND leaf = ?",
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
   }
@@ -821,9 +830,12 @@ export class ReplayStore {
   *outputs(ns: number, p: bigint): Generator<StoredOutput> {
     for (const row of this.#q.outputs!.iterate({ ns, p })) yield this.#output(row as Record<string, unknown>);
   }
-  /** The visible outputs the replay kept a witness for, in scan order. */
-  *witnessedOutputs(ns: number, p: bigint): Generator<StoredOutput> {
-    for (const row of this.#q.witnessed!.iterate({ ns, p })) yield this.#output(row as Record<string, unknown>);
+  /** The visible outputs the replay kept a witness for whose kept nullifier is not visibly spent, in scan order. */
+  *unspentWitnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
+    for (const row of this.#q.unspentWitnessed!.iterate({ ns, p })) {
+      const r = row as Record<string, unknown>;
+      yield { ...this.#output(r), mark: { nf: field(r["mark_nf"]), note: bytes(r["mark_note"]) } };
+    }
   }
   output(ns: number, p: bigint, cm: bigint): StoredOutput | undefined {
     const row = this.#q.outputOf!.get({ ns, p, key: fieldToBytes(cm) }) as Record<string, unknown> | undefined;
@@ -1312,7 +1324,10 @@ export class ReplayStore {
         // Only the witnesses beside a block completed here are rewritten, each at most once per height over its
         // life (31 times), so the work per record does not grow with the outputs ever witnessed on average; a
         // record completing a block of height h rewrites the witnesses among the 2^h leaves left of it.
-        for (const w of born) this.#q.putWitness!.run(ns, w.leaf, fieldToBytes(record.outputs[Number(w.leaf - first)]!.cm), encodeSiblings(w.siblings));
+        for (const w of born) {
+          const output = record.outputs[Number(w.leaf - first)]!;
+          this.#q.putWitness!.run(ns, w.leaf, fieldToBytes(output.cm), fieldToBytes(output.witness!.nf), output.witness!.note, encodeSiblings(w.siblings));
+        }
         const moved = new Map<bigint, bigint[]>();
         for (const [key, value] of completed) {
           const [h, block] = key.split(":").map(BigInt) as [bigint, bigint];

@@ -12,7 +12,7 @@ import { hexToBytes } from "@noble/hashes/utils.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
-import { ownedNotes, seedWitness } from "../src/pool/v3/holdings.js";
+import { ownedNotes, seedScanner, seedWitness } from "../src/pool/v3/holdings.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -254,6 +254,24 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
       expect(kept).toHaveLength(5);
       expect(kept.some(note => note.leaf >= 5n)).toBe(true);
       expect(kept).toEqual(fresh);
+
+      // Each note read from its kept mark is the one a scan of its output recovers, spend secret included,
+      // and the secret is recovered only when read.
+      const read = await readFrontier(served.package, f.signed, at, { ...f.reader, evidence, witness: seedWitness(seed, domain) });
+      const state = read.canonical!.state, scan = seedScanner(seed, domain);
+      for (const note of ownedNotes(seed, domain, f.backing, state)) {
+        const scanned = scan(state.output(note.cm)!)!;
+        expect({ opening: note.opening, nf: note.nf, secret: note.secret }).toEqual({ opening: scanned.opening, nf: scanned.nf, secret: scanned.secret });
+      }
+      // A mark its output does not recover (here, another rho) reads as held, but its secret is refused.
+      const witness = seedWitness(seed, domain), altered = Object.assign((output: Parameters<typeof witness>[0]) => {
+        const mark = witness(output);
+        return mark === undefined ? undefined : { nf: mark.nf, note: mark.note.map((byte, i) => (i === 95 ? byte ^ 1 : byte)) };
+      }, { identity: witness.identity });
+      const wrong = ownedNotes(seed, domain, f.backing, (await readFrontier(served.package, f.signed, at,
+        { ...f.reader, evidence, witness: altered })).canonical!.state);
+      expect(wrong.map(note => note.cm)).toEqual(kept.map(note => note.cm));
+      expect(() => wrong[0]!.secret).toThrow(expect.objectContaining({ check: "OUTPUT" }));
     } finally { keptStore.close(); evidence.close(); }
   }, 60_000);
 

@@ -41,7 +41,7 @@ async function issue(target: Segment, output?: { readonly cm: bigint; readonly c
   const record: Record = { domain, kind: 1, publicInputs: [...limbsOf(domain), ...limbsOf(target.id), scope, ...limbsOf(backing),
     5n, ...outputs, ...limbsOf(deliveryHash(domain, outputs, capsules))], proof: b(7), authorization: new Uint8Array(64), capsules };
   const bytes = encodeRecord({ ...record, authorization: ed25519.sign(statementBytes(record), issuerSecret) });
-  await applyRecord(target.state, bytes, { domain, backing, segment: target.id, scope, terms, verifier, index: 2n, block: [], witness: () => true });
+  await applyRecord(target.state, bytes, { domain, backing, segment: target.id, scope, terms, verifier, index: 2n, block: [], witness: output => ({ nf: output.cm + 1_000_000n, note: b(1) }) });
   target.records.push(bytes);
 }
 /** A payment spending `nfs` under `anchor` into four fresh outputs. */

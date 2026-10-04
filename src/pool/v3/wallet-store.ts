@@ -15,9 +15,10 @@
 //   `supply` runs the caller's transport into it, and a read's package then
 //   carries only that read's own items;
 // - `<path>.replay` with its digest, the kept classes, replay state and venue
-//   answers of its reads (replay-store.ts), with an incremental witness for
-//   each of this seed's notes, named by the verifier's circuits.
-//   It shows which outputs are this seed's, so it needs the database's protection.
+//   answers of its reads (replay-store.ts), with an incremental witness,
+//   nullifier and opening for each of this seed's notes (no spend secret),
+//   named by the verifier's circuits. It shows which outputs are this seed's
+//   and what they hold, so it needs the database's protection.
 import { randomBytes, randomInt } from "node:crypto";
 import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -538,7 +539,7 @@ export class V3Wallet {
             if (publication.index > (adoption.get(publication.backing) ?? 0n)) applyForceEffects(force, publication.record);
           }
           const spent = force;
-          // The scan ran inside the replay, once per output: only this seed's witnessed outputs are read here.
+          // The scan ran inside the replay, once per output: this seed's unspent outputs are read from their kept marks.
           notes = ownedNotes(this.seed, this.domain, backing, canonical.state).filter(note => !spent.hasNullifier(note.nf));
         }
         return { terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,

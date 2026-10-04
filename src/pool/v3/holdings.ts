@@ -2,21 +2,24 @@
 // positive notes of one backing that the state has not spent. It trusts the
 // state it is given; completeness, finality, force effects and locks belong to
 // the caller's independent frontier read. No output is fetched or asked about.
-// The scan runs inside the replay: its predicate marks this seed's outputs, the
-// replay keeps an incremental witness for each, and the notes are read back
-// from those witnessed outputs with their paths.
+// The scan runs inside the replay, once per output: its predicate marks this
+// seed's outputs with their nullifiers and openings, the replay keeps an
+// incremental witness for each, and the notes are read back from those marks
+// with their paths. A read recovers an output again only to spend it.
 import { hkdfSync } from "node:crypto";
 import { compareBytes, copyBytes } from "../../bytes.js";
-import { identifierOf } from "../field.js";
+import { bytesToField, fieldToBytes, identifierOf } from "../field.js";
 import type { NotePath } from "../note-tree.js";
 import { commitmentOf, nullifierOf, ownerOf, type NoteOpening } from "../notes.js";
 import { createCapsuleScanner, deriveSettlementOwnerSecret } from "./capsules.js";
 import { settlementAuthorization } from "./records.js";
 import { requireReplay } from "./refusals.js";
-import type { ScanOutput, StateHandle, WitnessPredicate } from "./state.js";
+import type { OutputPath, ScanOutput, StateHandle, WitnessMark, WitnessPredicate } from "./state.js";
 import type { SpendableNote } from "./witness.js";
 
-/** A restored note, its leaf, its path to `anchor`, and whether its segment is the replayed one itself. */
+/** A restored note, its leaf, its path to `anchor`, and whether its segment is the replayed one itself. Its spend
+ * secret, anchor and path are found when first read, so a read that spends nothing scans no output again and
+ * folds no path. */
 export interface OwnedNote extends SpendableNote {
   readonly leaf: bigint;
   readonly anchor: bigint;
@@ -44,11 +47,28 @@ export function seedScanner(seed: Uint8Array, domain: Uint8Array): (output: Scan
   };
 }
 
+/** A witnessed note's opening as its mark keeps it: backing, owner and rho, then the value as a big-endian u64. No
+ * spend secret is kept, so the replay file stays without one (wallet-store.ts). */
+const NOTE_BYTES = 104;
+function encodeOpening(opening: NoteOpening): Uint8Array {
+  const out = new Uint8Array(NOTE_BYTES);
+  out.set(opening.backing, 0); out.set(fieldToBytes(opening.owner), 32); out.set(fieldToBytes(opening.rho), 64);
+  new DataView(out.buffer).setBigUint64(96, opening.value);
+  return out;
+}
+function decodeOpening(note: Uint8Array): NoteOpening {
+  requireReplay(note.length === NOTE_BYTES, "OUTPUT");
+  return Object.freeze({ backing: note.slice(0, 32), owner: bytesToField(note.slice(32, 64)), rho: bytesToField(note.slice(64, 96)),
+    value: new DataView(note.buffer, note.byteOffset).getBigUint64(96) });
+}
+const sameOpening = (a: NoteOpening, b: NoteOpening): boolean =>
+  compareBytes(a.backing, b.backing) === 0 && a.value === b.value && a.owner === b.owner && a.rho === b.rho;
+
 /** A local name only: it labels the kept replay state of one seed under one configuration and enters no protocol message. */
 const WITNESS_INFO = new TextEncoder().encode("moe/wallet/v3/kept-witness");
 
 /** The replay's witness predicate for this seed: every positive output it
- * owns. A zero note is never a holding and spends without membership
+ * owns, marked with its nullifier and opening. A zero note is never a holding and spends without membership
  * (pool-fees C1.2.3), so it needs no path and no witness is kept for it. It
  * never throws, so a seed's reading cannot change a checkpoint's verdict; an
  * output it cannot read (a settlement whose opening does not give its
@@ -59,24 +79,45 @@ const WITNESS_INFO = new TextEncoder().encode("moe/wallet/v3/kept-witness");
 export function seedWitness(seed: Uint8Array, domain: Uint8Array): WitnessPredicate {
   const scan = seedScanner(seed, domain);
   const identity = new Uint8Array(hkdfSync("sha256", copyBytes(seed), copyBytes(domain), WITNESS_INFO, 32));
-  return Object.assign((output: ScanOutput): boolean => {
-    try { const note = scan(output); return note !== undefined && note.opening.value > 0n; } catch { return false; }
+  return Object.assign((output: ScanOutput): WitnessMark | undefined => {
+    try {
+      const note = scan(output);
+      return note === undefined || note.opening.value === 0n ? undefined : { nf: note.nf, note: encodeOpening(note.opening) };
+    } catch { return undefined; }
   }, { identity });
 }
 
 /** This seed's unspent positive notes of `backing` in a state replayed with
- * `seedWitness(seed, domain)`. Zero and already spent notes are not holdings. */
+ * `seedWitness(seed, domain)`, read from the witnesses' marks: the state
+ * leaves spent ones out. A note's spend secret is recovered from its output
+ * when first read, and that recovery must give the kept nullifier and opening.
+ * Its path is read from `state` when first read, so a note is spent from the
+ * state it was read in; one path per namespace is read here, so a kept witness
+ * past the read position (§14) refuses this read rather than a later spend. */
 export function ownedNotes(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle): OwnedNote[] {
-  const scan = seedScanner(seed, domain), found: OwnedNote[] = [];
-  for (const stored of state.store.witnessedOutputs(state.ns, state.position)) {
-    const note = scan(state.scanOutput(stored));
-    if (note === undefined) continue;
+  const scan = seedScanner(seed, domain), found: OwnedNote[] = [], checked = new Set<number>();
+  for (const stored of state.store.unspentWitnessed(state.ns, state.position)) {
+    const opening = decodeOpening(stored.mark.note), nf = stored.mark.nf, cm = stored.cm;
     // Shared history can hold the same seed's notes of other scoped backings.
-    if (compareBytes(note.opening.backing, backing) !== 0 || note.opening.value === 0n) continue;
-    if (state.hasNullifier(note.nf)) continue;
-    const placed = state.path(note.cm);
-    requireReplay(placed !== undefined, "OUTPUT");
-    found.push(Object.freeze({ ...note, leaf: placed.leaf, anchor: placed.anchor, path: placed.path, local: placed.local }));
+    if (compareBytes(opening.backing, backing) !== 0) continue;
+    requireReplay(opening.value > 0n, "OUTPUT");
+    const place = (): OutputPath => { const placed = state.path(cm); requireReplay(placed !== undefined, "OUTPUT"); return placed; };
+    let placed = checked.has(stored.ns) ? undefined : place();
+    checked.add(stored.ns);
+    // The output as scanned, fixed now: the secret's recovery reads nothing of the state later.
+    const output = state.scanOutput(stored);
+    let secret: bigint | undefined;
+    found.push(Object.freeze({ opening, cm, nf, leaf: stored.leaf, local: stored.ns === state.ns,
+      get anchor(): bigint { return (placed ??= place()).anchor; },
+      get path(): NotePath { return (placed ??= place()).path; },
+      get secret(): bigint {
+        if (secret === undefined) {
+          const note = scan(output);
+          requireReplay(note !== undefined && note.cm === cm && note.nf === nf && sameOpening(note.opening, opening), "OUTPUT");
+          secret = note.secret;
+        }
+        return secret;
+      } }));
   }
   return found;
 }

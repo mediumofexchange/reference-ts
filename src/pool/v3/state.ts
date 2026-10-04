@@ -25,11 +25,11 @@ import { genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryH
 import { decodeRecord, evidenceHashes, statementBytes, statementHash, type EvidenceDigests, type Record } from "./records.js";
 import { checkRecovery, effectOf, recoveryEffect, tagOf, type Demand, type RecoveryView } from "./recovery.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
-import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals } from "./replay-store.js";
+import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals, WitnessMark } from "./replay-store.js";
 import type { VerifierIdentities } from "./configuration.js";
 import type { RootTerms } from "./terms.js";
 
-export type { Totals } from "./replay-store.js";
+export type { Totals, WitnessMark } from "./replay-store.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
@@ -61,9 +61,10 @@ export interface StateView extends RecoveryView {
 
 /** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
 export interface ScanOutput { readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record }
-/** Which outputs a replay keeps incremental witnesses for (a wallet's own). The identity it declares names it in kept
- * state (§14), so it must fix exactly which outputs the predicate accepts; an undeclared one is named per object. */
-export type WitnessPredicate = ((output: ScanOutput) => boolean) & { readonly identity?: Uint8Array | undefined };
+/** Which outputs a replay keeps incremental witnesses for (a wallet's own), and the mark kept with each: undefined
+ * for an output it passes over. The identity it declares names it in kept state (§14), so it must fix exactly which
+ * outputs the predicate accepts and their marks; an undeclared one is named per object. */
+export type WitnessPredicate = ((output: ScanOutput) => WitnessMark | undefined) & { readonly identity?: Uint8Array | undefined };
 /** The receipt's event, for a receipt read naming this segment and position (C2.10.9a). */
 export interface ReceiptEvent extends EvidenceDigests {
   readonly position: bigint;
@@ -445,7 +446,7 @@ export function applyJudged(state: SegmentState, judged: Judged, replay: Segment
       supply: kind === 1 ? { backing: judged.backing, issued: p[7]!, burned: 0n } : kind === 3 ? { backing: judged.backing, issued: 0n, burned: p[7]! } : undefined,
       nullifiers: nfs.map(nf => ({ nf, tag: tagOf(nf) })),
       outputs: scan.map(output => ({ cm: output.cm, capsule: output.capsule, settlement: output.settlement !== undefined,
-        witness: replay.witness?.(output) === true })),
+        witness: replay.witness?.(output) })),
       demand, ended, keys: [...tags.map(tag => `tag:${tag}`), ...(touched === undefined ? [] : [`demand:${touched}`])],
       history: (noteRoot, spentRoot) => nextHistoryHash(previous, identity, noteRoot, spentRoot, next),
     });
