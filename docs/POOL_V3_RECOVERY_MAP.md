@@ -246,8 +246,8 @@ identity gate, new signature, in-circuit digest or cipher is introduced.
 **Retained conformance.** `npm run check:pool:v3` now provides the combined
 six-source/shared-helper build, exact ABI orders, genuine D-bearing issue/burn
 proofs, all-input binding, and equal-count spend/burn key substitution in both
-directions. The older [F3](pool-delivery-verification.json) and
-[F4](pool-fees-verification.json) reports cover only added spend fields; the
+directions. The older [F3](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-delivery-verification.json) and
+[F4](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-fees-verification.json) reports cover only added spend fields; the
 new suite also tests the full prefix under each amended key. It tests ranges
 below the ABI encoder, recomputes dependent note hashes/paths/sums for hostile
 witnesses, and keeps distinct-anchor positive controls so equal fixture values
