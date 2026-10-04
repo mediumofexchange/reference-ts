@@ -21,9 +21,10 @@ jobs:
   pool-v3:
     runs-on: ${{ matrix.os }}
     # The --ergo pass replays every local group a second time from synthetic Ergo block sections through the
-    # profile's own framer, and the history acceptance proves some eighty statements; the budget leaves headroom
-    # over the baseline (20 minutes on Windows at ae342b1, before the history acceptance).
-    timeout-minutes: 45
+    # profile's own framer, the history acceptance proves some eighty statements, and the command drill runs every
+    # moe command from a packed install; the budget leaves headroom over the baseline (Windows took 36 minutes at
+    # c618f4f and finished every check at 45 minutes, the old limit, in run 37197846501).
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

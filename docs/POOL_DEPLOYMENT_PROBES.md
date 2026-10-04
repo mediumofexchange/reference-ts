@@ -1303,6 +1303,91 @@ then timed `submit` of an issue, on a 4-core cloud container on 2026-10-03/04:
   hashes the whole file (WORK.md Next 4(v)), about 7 s at 10⁶ statements by
   M5b.6's figure, which this probe cannot show.
 
+### The commands over a thousand statements (M11c1)
+
+M11c's first part measures the `moe` commands with real proofs against the
+[declared budgets](PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets), at
+a history a run can prove
+([method](../decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)).
+`design-point-probe.mjs`
+([at its revision](https://github.com/mediumofexchange/reference-ts/blob/fa8384d/scripts/pool/v3/design-point-probe.mjs))
+runs `moe operator serve` on the synthetic Ergo node. In rounds of 50, a
+backer issues two units to a holder's seed, then the holder pays one unit
+to a shop, keeping one change note per payment. The statements are proved
+through the wallet library in the probe's process. A block is mined every 14
+statements, the design point's peak per two-minute block. At 200, 500 and
+1,000 statements, a fresh reader runs `reader supply`, and a fresh wallet runs
+`restore-seed` from the holder's seed and then `sync`. Both read through
+counting proxies in front of the node and the service. One further round
+measures the steady state.
+
+Run of 2026-10-04 at `fa8384d` on a 4-core cloud container (Xeon 2.1 GHz,
+16 GB), one checkpoint about every 16 statements:
+
+| Statements | Reader first sync | Wallet first sync (250 notes at 1,000) | Served bytes |
+|---:|---|---|---:|
+| 200 | 8.8 s, 13.8 CPU-s, peak 442 MB | 9.6 s, 15.0 CPU-s, peak 457 MB | 3.09 MB |
+| 500 | 17.3 s, 28.2 CPU-s, peak 490 MB | 18.9 s, 29.7 CPU-s, peak 499 MB | 7.71 MB |
+| 1,000 | 29.4 s, 49.4 CPU-s, peak 498 MB | 34.2 s, 54.6 CPU-s, peak 550 MB | 15.43 MB |
+
+- *Operator:* over 1,100 admissions, the submitter saw median 76–90 ms per
+  round, p95 at most 116 ms and a maximum of 614 ms, flat across rounds.
+  `serve` held
+  459–554 MB, with a peak of 572 MB. Stopped and started again over 1,100
+  statements, it listened after 3.1 s at 197 MB, without re-verifying its
+  journal. The journal directory held 26.7 MB, about 24 KB a statement.
+  Three submissions met the reopening lag (`SCHEDULE`). An earlier run met
+  `STALE` once: the service refuses while its signed checkpoint is not
+  witnessed past the lag. Both are venue waits, which the budget excludes.
+  On the synthetic chain, blocks come only with statements.
+- *First sync:* 25.7 ms and 44 CPU-ms a statement from 200 to 1,000
+  statements, over about 3.7 s of start-up. Linear at that rate, 10⁶
+  statements take about 7.1 h on these 4 cores, against 24 h on the
+  declared 8. Served evidence is 15.4 KB a statement, and the node's venue
+  ranges are 0.68 KB a statement at this block rate. A reader keeps 21 KB a
+  statement (21.1 MB at 1,000). The wallet's first sync costs about as much
+  as the reader's, because it replays the same history and also scans its
+  outputs. `restore-seed` itself took 3.2–3.6 s and read 1.06 MB from the
+  node at every mark.
+- *Steady state:* over the further 100 statements, the reader's `supply`
+  took 6.1 s and 9.5 CPU-s, moving 1.54 MB served and 0.07 MB from the
+  node. With nothing new, it took 3.0 s and 3.6 CPU-s and moved 5 KB. The
+  wallet's `sync` took 8.2 s and 11.6 CPU-s, and 4.7 s and 5.5 CPU-s with
+  nothing new. That is about 60 CPU-ms a statement past a fixed 3.6–5.5 CPU-s,
+  so a day of 900 statements in one sync is about 1 CPU-minute and 14 MB
+  served, within the ≤ 10 CPU-minute and ≤ 50 MB budgets.
+- *Payment preparation* grows with the outputs a seed has ever received.
+  Issue proving held at about 1.05 s a statement. The holder's `prepare`
+  (its read and its proof) rose from 3.2 s to 4.4 s over 1,100
+  statements. Over those statements the holder received about 1,100
+  outputs. A profiled 400-statement run (`--cpu-prof`) attributes this
+  rise to `ownedNotes`: each wallet read recovers every witnessed output
+  of the seed again from its capsule, spent outputs included, using
+  JavaScript Poseidon2 and HMAC. The cost is about 1.2 ms an output a read,
+  and `holdingsOf`'s tags add to it. The holder's `sync` exceeds the
+  reader's `supply` by the same amount. A shop that receives 100 payments
+  a day would hold about 10⁵ outputs after three years. Each of its reads
+  would then take about 2 minutes, so ten syncs a day would exceed the
+  steady-state budget. The lever is to keep each output's recovered
+  opening and nullifier with its witness, so that a read recovers only
+  new outputs. Dropping a spent output's witness would also help (WORK.md
+  Next 4(x)).
+- *Against the budgets:* at 10³ statements every budget holds. Admission is
+  under 1 s, and every process stays under 1 GiB. Restart does not
+  re-verify. The first sync rate extrapolates within 24 h, and the steady
+  state is within budget. Two costs grow. A wallet read's cost per output
+  received fails beyond these sizes (above). Peak memory also rose from
+  200 to 1,000 statements, by 93 MB for the wallet and 56 MB for the
+  reader; M5b.6 saw a rise like this level off. What 10³ statements cannot
+  show:
+  - whether these rates and memory stay flat at 10⁴–10⁵ (M11c2);
+  - the whole-file hash at a new venue index (Next 4(v)), about 7 s at 10⁶;
+  - real-chain block sizes. Node bytes here follow synthetic blocks, not
+    720 real blocks a day.
+- *Limits:* one run per point on one container; one backing and segment;
+  the probe's own proving shares the cores with `serve` between
+  submissions.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing
