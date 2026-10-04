@@ -8,25 +8,24 @@ Acceptance: through the `moe` commands on the synthetic node, measured against t
 operator admission at peak, reader first sync and wallet steady state, with memory independent of history length and restarts
 that resume without re-verifying retained history; Next 4 (k)–(n), (s), (w) closed. Milestones: **M11a** the Ergo view on append-only
 SQLite rows (flat heap and per-sync work over a long synthetic chain, reopen without PoW/root re-checks, same verdicts and answers);
-M11b the scale findings; M11c the measurements and report: commands with real proofs at ~10³ statements, the runtime with stand-in
-records under real verification load at 10⁴/10⁵ (10⁶ local only; no stand-in path in the product). Stop: all three; a failing budget names its lever.
+M11b the scale findings; M11c the measurements and report: **M11c1** commands with real proofs at ~10³ statements; **M11c2** the runtime
+(reader, wallet, Ergo view, journal at depth) with stand-in records under real verification load at 10⁴/10⁵; **M11c3** the commands'
+overhead at matched size and the design-point report (10⁶ local only; no stand-in path in the product). Stop: all three; a failing budget names its lever.
 Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices 9–10 (PRs #69–#91). pool-v3 adopted (spec e7f7f24, §11.4).
 
 ## Status
-- **Slice 10 done but M10d** (PRs #79–#91; decisions from [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
-  to [M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)):
-  the `moe` wallet, operator, reader and relay [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack` install with real proofs
-  on the synthetic node; pilot, transparent path (`8d207eb`), second reader retired. M10d (live drill) needs the local machine.
+- **Slice 10 done but M10d** (PRs #79–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
+  run from an `npm pack` install with real proofs on the synthetic node; pilot, transparent path, second reader retired. M10d needs the local machine.
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
-- **M11b done** (PR #99, M11b6): (n) M11b1 #93 (record cost flat in notes, [probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) M11b2 #94
-  (an index past the answer budget asked again under `indexLimits`); (m) M11b3 #95 (trails served forward); (k) M11b4 #97, spec `dc51baf`
-  (kept walk, [decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k), [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission ≤0.18 s at 320 checkpoints).
-  (s) M11b5 #98 ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)):
-  `serve` takes no journal turn and refuses the journal's own damage by name.
-  (w) M11b6 #99: `moe reader` keeps `replay.db` (+ digest) as the wallet does, discarding kept state read through a later index
-  than the view's; the drill compares kept and full reads' answers after the bulk issues, a return and a `presentation`, and checks that
-  the kept read leaves `replay.db` and its digest unwritten (wall time recorded only: it failed main's Windows CI at 1915d5d). Next: M11c.
+- **M11b done** (PRs #93–#99): (n) record cost flat in notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) an index past the answer
+  budget asked again; (m) trails served forward; (k) kept walk, spec `dc51baf` ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k), [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4));
+  (s) `serve` takes no journal turn ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)); (w) `moe reader` keeps `replay.db` as the wallet does.
+- **M11c1 done** (this branch, `design-point-probe.mjs`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements
+  every budget holds (admission median ~85 ms, first sync ~26 ms a statement, ≈1 CPU-min and 14 MB a day, all processes <600 MB,
+  restart 3.1 s without re-verifying), but a wallet read re-recovers every output its seed ever received (new Next 4(x)).
+  **Next: M11b7, fix (x)** (it needs no measurement, as (k) and (s) did not), then M11c2 (recover the M5b.6 read mode from
+  `6c7d8f2`'s `replay-store-probe.mjs`, add venue ranges and a journal grown to depth, which shows (v)), then M11c3.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -50,6 +49,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    identity-checked key bytes, needing no G1 file. (k) closed (M11b4, kept walk). (l) closed (M11b2; a fixture venue declares no
    index bound, its records being its owner's).
    (m) closed (M11b3; `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError). `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
+   (x) Each wallet read (`ownedNotes`, `holdingsOf`) recovers every witnessed output of its seed from its capsule again, spent ones too: ~1.2 ms
+   an output a read (M11c1); a shop with 10⁵ outputs ≈2 min a read. Keep each output's opening and nullifier with its witness; drop spent ones.
    (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
    predecessor segment whose snapshots lie on two forks serves only the longer trail (a fix needs an ancestor test without a walk per snapshot).
    (p) `package-reader.ts` reads the selection through its own backing's entry before the walk, so a malformed selection's refusal reason
