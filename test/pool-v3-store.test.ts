@@ -756,10 +756,21 @@ describe("the v3 operator journal", () => {
     db.exec("UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 1; DELETE FROM answer_held; DELETE FROM answer WHERE kind = 1;");
     db.close();
     const reopened = journal(file, venue);
-    expect(await refusal(reopened.status())).toEqual(["STORAGE", undefined]);
-    expect(await refusal(reopened.package())).toEqual(["STORAGE", undefined]);
+    await expect(reopened.status()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is damaged" });
+    await expect(reopened.package()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is damaged" });
     const check = new DatabaseSync(file);
     try { expect(check.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 0 }); } finally { check.close(); }
+    // A row holding another sequence's valid commitment is damage too, never this key's equivocation.
+    const copied = await opened();
+    await copied.j.submit(issue()); await copied.j.commit("c2"); await copied.j.publish();
+    await copied.j.submit(payment()); await copied.j.commit("c3"); await copied.j.status(); copied.j.close();
+    const rows = new DatabaseSync(copied.file);
+    rows.exec("UPDATE journal_signed SET commitment = (SELECT commitment FROM journal_signed WHERE sequence = 1) WHERE sequence = 2; DELETE FROM answer_held; DELETE FROM answer WHERE kind = 1;");
+    rows.close();
+    const restored = journal(copied.file, copied.venue);
+    await expect(restored.status()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is damaged" });
+    const after = new DatabaseSync(copied.file);
+    try { expect(after.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 0 }); } finally { after.close(); }
   });
 
   it("verifies each record of its own history once across its reads", async () => {

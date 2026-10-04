@@ -477,11 +477,14 @@ export class V3OperatorJournal {
     return { commitment: decodeCommitment(bytes(row.commitment)), segment: bytes(row.segment), length: row.length as bigint,
       at: decimal(row.at), observed: row.observed as string | null, published: row.published === 1n };
   }
-  /** The commitment this journal signed at `sequence`, if any. */
+  /** The commitment this journal signed at `sequence`, if any. A row holding another sequence's commitment is damage. */
   private signedAt(sequence: bigint): Signed | undefined {
     if (sequence > SQLITE_LIMIT) return undefined;
     const row = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(sequence);
-    return row === undefined ? undefined : this.signedOf(row);
+    if (row === undefined) return undefined;
+    const signed = this.signedOf(row);
+    requireThat(signed.commitment.sequence === sequence, "STORAGE", "a signed row is damaged");
+    return signed;
   }
   /** A signed commitment's directory, from the evidence the journal serves. */
   private directoryOf(signed: Signed): readonly SnapshotDigest[] {
