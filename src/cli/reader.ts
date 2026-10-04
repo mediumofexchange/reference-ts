@@ -121,7 +121,8 @@ async function served(client: V3ServiceClient, backing: Uint8Array, evidence: Ev
  * witnessed index than `at`, the view's own now (a view restored from an older copy), is not this view's, so it is
  * discarded and the read asks the venue for everything. */
 export function keptReplay(directory: Directory, at: bigint): ReplayStore {
-  const store = new ReplayStore(directory.file("replay.db"), { digest: directory.file("replay.db.sha256") });
+  let store: ReplayStore;
+  try { store = new ReplayStore(directory.file("replay.db"), { digest: directory.file("replay.db.sha256") }); } catch (error) { throw inUse(error); }
   try {
     const seen = store.answersThrough();
     if (seen !== undefined && at < seen) store.discardKept();
@@ -129,11 +130,15 @@ export function keptReplay(directory: Directory, at: bigint): ReplayStore {
   return store;
 }
 
+/** The kept file held by a process outside the directory's lock (another tool, a scanner): a refusal, not a failure. */
+const inUse = (error: unknown): unknown => error instanceof Error && error.message === "the kept replay file is in use" ?
+  new CommandError("STORAGE", "another process holds this reader's kept replay file") : error;
+
 /** Sync the view, then read the backing's frontier at its witnessed index over the package `--package` names or
  * the operator's service supplies into `evidence.db`, resting on what earlier reads kept in `replay.db`. `use` takes
  * the read while the kept file is open: the canonical state is read from it. */
-async function frontier<T>(directory: Directory, args: Arguments, kept: KeptTerms, answers: boolean,
-  use: (at: bigint, read: FrontierResult & FaultResult, sync: object) => T): Promise<T> {
+async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, answers: boolean,
+  use: (at: bigint, read: FrontierResult & FaultResult, sync: object) => void): Promise<void> {
   const view = openView(directory);
   try {
     const synced = await view.sync(), at = synced.witnessedIndex;
@@ -145,10 +150,13 @@ async function frontier<T>(directory: Directory, args: Arguments, kept: KeptTerm
       store = keptReplay(directory, at);
       const file = flag(args, "package");
       const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);
-      const read = await readFrontier(source, kept.signed, at, { verifier, venue: view.venue, reference: view.file.reference, evidence, store, answers });
+      let read;
+      try { read = await readFrontier(source, kept.signed, at, { verifier, venue: view.venue, reference: view.file.reference, evidence, store, answers }); } catch (error) {
+        throw inUse(error);
+      }
       // A read is final at its judging index; where the view could not read further, the output says so.
       const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
-      return use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled });
+      use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled });
     } finally { store?.close(); evidence?.close(); await verifier.close(); }
   } finally { view.close(); }
 }

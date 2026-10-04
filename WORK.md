@@ -6,7 +6,7 @@ Updated: 2026-10-04
 **Slice 11: the design point** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 4; [M11c's method](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)).
 Acceptance: through the `moe` commands on the synthetic node, measured against the [declared budgets](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets):
 operator admission at peak, reader first sync and wallet steady state, with memory independent of history length and restarts
-that resume without re-verifying retained history; Next 4 (k)–(n), (s) closed. Milestones: **M11a** the Ergo view on append-only
+that resume without re-verifying retained history; Next 4 (k)–(n), (s), (w) closed. Milestones: **M11a** the Ergo view on append-only
 SQLite rows (flat heap and per-sync work over a long synthetic chain, reopen without PoW/root re-checks, same verdicts and answers);
 M11b the scale findings; M11c the measurements and report: commands with real proofs at ~10³ statements, the runtime with stand-in
 records under real verification load at 10⁴/10⁵ (10⁶ local only; no stand-in path in the product). Stop: all three; a failing budget names its lever.
@@ -19,15 +19,14 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   on the synthetic node; pilot, transparent path (`8d207eb`), second reader retired. M10d (live drill) needs the local machine.
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
-- **M11b done but review** (M11b6): (n) M11b1 #93 (record cost flat in notes, [probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) M11b2 #94
+- **M11b done** (PR #99, M11b6): (n) M11b1 #93 (record cost flat in notes, [probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) M11b2 #94
   (an index past the answer budget asked again under `indexLimits`); (m) M11b3 #95 (trails served forward); (k) M11b4 #97, spec `dc51baf`
   (kept walk, [decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k), [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission ≤0.18 s at 320 checkpoints).
   (s) M11b5 #98 ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)):
   `serve` takes no journal turn and refuses the journal's own damage by name.
-  **M11b6** (branch `claude/m11b6-reader-kept-replay`), (w): `moe reader` keeps `replay.db` (+ `.sha256`) beside `evidence.db`,
-  as the wallet does: a later process rests on kept classes, walks and answers; kept state read through a later index than
-  the view's is discarded (`keptReplay`, cli test); the drill checks a repeated read and a full replay agree after the bulk
-  issues and records both times (`readerReplay`). No verdict code changed. Owed: one fresh review (kept state); then M11c.
+  (w) M11b6 #99: `moe reader` keeps `replay.db` (+ digest) as the wallet does, discarding kept state read through a later index
+  than the view's; the drill compares kept and full reads after the bulk issues (2.8 against 5.4 s at 78 statements locally),
+  a return and a `presentation`. One review, nothing blocking, four low findings fixed. No verdict code changed. Next: M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
