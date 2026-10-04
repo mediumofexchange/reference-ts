@@ -1,16 +1,17 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, signCommitment, type Commitment, type SnapshotDigest } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
-import { adoptedConfiguration } from "../src/pool/v3/configuration.js";
+import { adoptedConfiguration, adoptedDomain } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
+import { replayTrail } from "../src/pool/v3/reader.js";
 import { classifyScopes } from "../src/pool/v3/scope-reader.js";
 import { deliveryHash, encodePublication, encodeRecord, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -20,7 +21,8 @@ import { encodeTrail } from "../src/pool/v3/trail.js";
 import { requestTask } from "../src/pool/v3/witness.js";
 
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
-const domain = b(1), label = b(2), lag = 2n, venueId = localVenueIdentity(label, lag);
+// The walk is exported, so it reads only the adopted configuration's selections.
+const domain = adoptedDomain(), label = b(2), lag = 2n, venueId = localVenueIdentity(label, lag);
 const issuerSecret = b(3), operatorSecret = b(4), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const terms: RootTerms = { configuration: domain, venue: venueId, obligor: issuer, operator, interval: 10n,
   payout: { thing: "budget test", quantumExponent: 0, perUnit: 1n }, nonService: { duration: 2n, count: 1n, window: 10n } };
@@ -66,10 +68,10 @@ function fixture(proofVerifier: DeclaredVerifier = verifier) {
     if (!trailIds.has(hex(encodedTrail))) { trailIds.add(hex(encodedTrail)); trails.push(encodedTrail); }
     venue.witness(1, operator, index, encodeCommitment(commitment)); return commitment;
   }
-  const read = (target: Segment, selected: Commitment) => {
+  const read = (target: Segment, selected: Commitment, selectionDomain = domain) => {
     const stored = new EvidenceStore().importTrails(trails);
     return classifyScopes({ store: new ReplayStore(),
-      selection: { mode: "current-fixture", domain, venue: venueId, backing, operator, sequence: selected.sequence,
+      selection: { mode: "current-fixture", domain: selectionDomain, venue: venueId, backing, operator, sequence: selected.sequence,
         root: selected.root, judgingIndex: venue.witnessedIndex() }, terms, header: target.header, verifier: proofVerifier,
       reference: { context: LOCAL_REFERENCE, label, lag },
     }, venue, { directory: root => directories.get(hex(root)), snapshot: digest => snapshots.find(s => hex(sha256(s)) === hex(digest)),
@@ -151,4 +153,24 @@ describe("the single-backing reader walk", () => {
     expect(result.carrying!.length).toBe(129);
     expect(result.carrying!.every(item => item.class === "valid")).toBe(true);
   }, 90_000); // A complete 129-checkpoint signature walk, including on slower CI hosts.
+
+  it("keeps a read's refusal when its walk then fails to close, and reports a failed close after a read that succeeds", async () => {
+    const f = fixture(), original = segment(1n), selected = f.checkpoint(original, 1n);
+    const close = vi.spyOn(ReplayStore.prototype, "closeWalk").mockImplementation(() => { throw new Error("disk I/O error"); });
+    try {
+      // A selection the venue does not hold is refused; the walk's failed close does not replace that refusal.
+      await expect(f.read(original, { ...selected, sequence: 2n })).rejects.toMatchObject({ status: "selection-mismatch", cause: { message: "disk I/O error" } });
+      // After a read that succeeded, what it kept did not commit: the caller sees that.
+      await expect(f.read(original, selected)).rejects.toThrow("disk I/O error");
+    } finally { close.mockRestore(); }
+    expect((await f.read(original, selected)).state!.position).toBe(0n);
+  });
+
+  it("refuses a selection under another configuration before walking or replaying anything", async () => {
+    const f = fixture(), original = segment(1n), selected = f.checkpoint(original, 1n);
+    await expect(f.read(original, selected, b(1))).rejects.toMatchObject({ check: "CONFIGURATION" });
+    const context = { store: new ReplayStore(), terms, header: original.header, verifier, selection: { mode: "current-fixture" as const, domain: b(1),
+      venue: venueId, backing, operator, sequence: selected.sequence, root: selected.root, judgingIndex: f.venue.witnessedIndex() } };
+    await expect(replayTrail(context, {} as never, {} as never, {} as never)).rejects.toMatchObject({ check: "CONFIGURATION" });
+  });
 });

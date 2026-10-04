@@ -543,9 +543,12 @@ describe("the v3 operator journal", () => {
       expect(request.fromIndex, key).toBe((asked.get(key) ?? -1n) + 1n);
       asked.set(key, request.toIndex);
     }
-    expect([...asked].sort()).toEqual([[`1:${bytesToHex(operator)}`, venue.witnessedIndex()], [`2:${bytesToHex(backing)}`, venue.witnessedIndex()],
-      [`3:${bytesToHex(issuer)}`, venue.witnessedIndex()]].sort());
-    // While the clock stands, a command asks the venue nothing; nor does a restarted journal, which reads its rows.
+    // A command keeps every answer through the clock it read; the serve after the last publication, which moved the
+    // clock, keeps only this key's held commitments.
+    const now = venue.witnessedIndex();
+    expect([...asked].sort()).toEqual([[`1:${bytesToHex(operator)}`, now], [`2:${bytesToHex(backing)}`, now - 1n],
+      [`3:${bytesToHex(issuer)}`, now - 1n]].sort());
+    // While the clock stands, a serve asks the venue nothing; nor does a restarted journal, which reads its rows.
     answered.length = 0;
     const served = await j.package();
     j.close(); j = journal(file, narrow);
@@ -708,7 +711,26 @@ describe("the v3 operator journal", () => {
       "DELETE FROM journal_signed WHERE sequence = (SELECT MAX(sequence) FROM journal_signed)",
       "DELETE FROM journal_signed WHERE sequence = 1",
       "UPDATE events SET response = (SELECT response FROM events WHERE seq = 1) WHERE request = 'commit'",
+    ]) expect(await refusal((async () => (await tampered(tamper)).status())()), tamper).toEqual(["STORAGE", undefined]);
+    // Serving loads no admission state; what it serves is checked as it is read: a lost directory or trail of a
+    // signed checkpoint, a signed row lost, changed or out of step with what the venue holds of this key, refuses it
+    // as storage too, never a shorter or older package.
+    for (const tamper of [
+      "DELETE FROM object WHERE kind = 3",
+      "DELETE FROM chain WHERE position = 1",
+      "UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 2",
+      "DELETE FROM journal_signed WHERE sequence = (SELECT MAX(sequence) FROM journal_signed)",
+      "DELETE FROM journal_signed WHERE sequence = 1",
     ]) expect(await refusal((async () => (await tampered(tamper)).package())()), tamper).toEqual(["STORAGE", undefined]);
+    // A changed row is refused as well once its publication is no longer in flight, where the held commitment selects.
+    {
+      const { file, venue: v, j } = await opened();
+      await j.submit(issue()); await j.commit("c2"); await j.publish(); j.close();
+      const db = new DatabaseSync(file);
+      expect(Number(db.prepare("UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 2").run().changes)).toBe(1); db.close();
+      v.advance(v.witnessedIndex() + lag);
+      expect(await refusal(journal(file, v).package())).toEqual(["STORAGE", undefined]);
+    }
     // What reopening does not read, the audit does: a record, a receipt, an earlier reply or publication, a fact row.
     for (const tamper of [
       "UPDATE chain SET bytes = zeroblob(length(bytes)) WHERE position = 1",
@@ -724,6 +746,31 @@ describe("the v3 operator journal", () => {
       expect(error, tamper).toBeInstanceOf(V3StoreError);
     }
     await (await tampered("UPDATE identity SET observed = observed")).audit();
+  });
+
+  it("refuses a damaged older signed row as storage where a window shows its commitment, never as another signer's", async () => {
+    const { file, venue, j } = await opened();
+    await j.submit(issue()); await j.commit("c2"); await j.publish(); await j.status(); j.close();
+    // The first row no longer verifies, and its held commitment's window is read again from the venue.
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(file);
+    db.exec("UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 1; DELETE FROM answer_held; DELETE FROM answer WHERE kind = 1;");
+    db.close();
+    const reopened = journal(file, venue);
+    await expect(reopened.status()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is damaged" });
+    await expect(reopened.package()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is damaged" });
+    const check = new DatabaseSync(file);
+    try { expect(check.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 0 }); } finally { check.close(); }
+    // A row holding another sequence's valid commitment is damage too, never this key's equivocation.
+    const copied = await opened();
+    await copied.j.submit(issue()); await copied.j.commit("c2"); await copied.j.publish();
+    await copied.j.submit(payment()); await copied.j.commit("c3"); await copied.j.status(); copied.j.close();
+    const rows = new DatabaseSync(copied.file);
+    rows.exec("UPDATE journal_signed SET commitment = (SELECT commitment FROM journal_signed WHERE sequence = 1) WHERE sequence = 2; DELETE FROM answer_held; DELETE FROM answer WHERE kind = 1;");
+    rows.close();
+    const restored = journal(copied.file, copied.venue);
+    await expect(restored.status()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is damaged" });
+    const after = new DatabaseSync(copied.file);
+    try { expect(after.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 0 }); } finally { after.close(); }
   });
 
   it("verifies each record of its own history once across its reads", async () => {
@@ -845,6 +892,38 @@ describe("the v3 operator journal", () => {
     const served = await j.package(), copy = structuredClone(served);
     served.package.fill(0); served.selection.root.fill(0); served.selection.backing.fill(0);
     expect(await j.package()).toEqual(copy);
+  });
+
+  it("serves while a command verifies, without its turn, and writes nothing where its kept answers reach the clock", async () => {
+    const venue = FixtureVenue.reference(label, lag), file = path();
+    let entered = () => {}, release = () => {};
+    const verifying = new Promise<void>(done => { entered = done; }), gate = new Promise<void>(done => { release = done; });
+    let held = false;
+    const hooked = { identities: configuration.circuits, verify: async (...args: Parameters<typeof verifier.verify>) => {
+      if (held) { entered(); await gate; }
+      return verifier.verify(...args);
+    } };
+    const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
+    await j.open("genesis", signed); await j.publish();
+    await j.submit(issue()); await j.commit("c2"); await j.publish();
+    // A submission holds the journal's turn while its proof is verified; serving neither waits for it nor answers BUSY.
+    held = true;
+    const pending = j.submit(payment());
+    await verifying;
+    expect(await refusal(j.commit("during"))).toEqual(["BUSY", undefined]);
+    expect((await j.package()).selection.sequence).toBe(2n);
+    release(); expect(decodeReceipt(await pending).position).toBe(2n);
+    // Its kept answers reach the clock, so a serve writes nothing: another handle holding the database's write lock
+    // does not hold it up.
+    const { DatabaseSync } = await import("node:sqlite"), writer = new DatabaseSync(file);
+    writer.exec("BEGIN IMMEDIATE");
+    try { expect((await j.package()).selection.sequence).toBe(2n); } finally { writer.exec("ROLLBACK"); writer.close(); }
+    // Once the clock moves past them, the serve keeps this key's held commitments through it, under the fence.
+    venue.advance(venue.witnessedIndex() + 1n);
+    expect((await j.package()).selection.sequence).toBe(2n);
+    const replaced = journal(file, venue);
+    expect(await refusal(j.package())).toEqual(["FENCED", undefined]);
+    expect((await replaced.package()).selection.sequence).toBe(2n);
   });
 
   it("refuses a genesis opening where this key already has commitments on the venue", async () => {

@@ -24,6 +24,17 @@ import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, i
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { encodeCommitment, signCommitment } from "../src/venue-records.js";
 
+// An adopted block the opening's state refuses: no input reaches one (the reader forced each record against the
+// state the opening imports), so the test refuses through the state machine's own judgment.
+const adoption = vi.hoisted(() => ({ refuse: undefined as string | undefined }));
+vi.mock("../src/pool/v3/state.js", async importOriginal => {
+  const actual = await importOriginal<typeof import("../src/pool/v3/state.js")>(), { ReplayRefusal } = await import("../src/pool/v3/refusals.js");
+  return { ...actual, judgeAdopted: (...args: Parameters<typeof actual.judgeAdopted>) => {
+    if (adoption.refuse !== undefined) throw new ReplayRefusal(adoption.refuse);
+    return actual.judgeAdopted(...args);
+  } };
+});
+
 // Journal and reader integration with explicit stand-in proofs. The companion
 // recovery-store-check.mjs runs these recovery builders under all real keys.
 const b = (n: number) => new Uint8Array(32).fill(n);
@@ -58,7 +69,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const funded = prepareExactOutput(b(21), domain, b(31), backing, 10n), pad = prepareExactOutput(b(21), domain, b(32), backing, 0n);
     const tree = new NoteTree(); tree.append(funded.cm);
     const input = { note: funded, anchor: tree.root(), path: tree.path(0n) }, inputs = [input, { ...input, note: pad }];
-    const j = new V3OperatorJournal(join(directory, "journal.db"), { secret: operatorSecret, venue, reference,
+    const file = join(directory, "journal.db"), j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference,
       verifier }); journals.push(j);
     await j.open("genesis", signed); await j.publish();
     await j.submit(encodeRecord(authorizeIssue(record(issueTask(context, funded)), issuerSecret)));
@@ -79,7 +90,7 @@ describe("v3 recovery journal and independent package reader", () => {
       return authorizeSettlement(record(settleTask(context, inputs, output, id)), acceptance, secret);
     };
     const publication = (kind: 1 | 3 | 4 | 5, r: Record) => encodePublication({ domain, backing, kind, record: r });
-    return { j, venue, context, inputs, input, backing, held, read, demand, settle, publication };
+    return { j, file, venue, context, inputs, input, backing, held, read, demand, settle, publication };
   }
 
   it("serves holder demand, authorized withdrawal and inclusive-deadline settlement with unchanged supply", async () => {
@@ -223,6 +234,36 @@ describe("v3 recovery journal and independent package reader", () => {
     const old = items.findIndex(item => item.kind === 4);
     await expect(f.read({ ...served, package: encodeEvidencePackage(items.filter((_, i) => i !== old)) }))
       .rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("names an adopted block the opening's state refuses, and keeps none of it (C2b.4.2)", async () => {
+    const f = await fixture(); f.venue.advance(7n);
+    await f.venue.publishRecord(4, f.backing, f.publication(1, f.demand(6n)));
+    await f.j.return("return"); await f.j.publish();
+    adoption.refuse = "DEADLINE";
+    try { await expect(f.j.adopt()).rejects.toMatchObject({ name: "V3StoreError", code: "REFUSED", check: "DEADLINE" }); } finally { adoption.refuse = undefined; }
+    // Nothing of the refused block was kept: the adoption judged again takes it whole.
+    expect((await f.j.adopt()).map(bytes => decodeReceipt(bytes).position)).toEqual([1n]);
+  });
+
+  it("keeps a package read's refusal when its evidence then fails to close, with that failure as its cause", async () => {
+    const f = await fixture(), selection = { ...f.held.selection, root: new Uint8Array(32), judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" as const };
+    const close = vi.spyOn(EvidenceStore.prototype, "close").mockImplementation(() => { throw new Error("disk I/O error"); });
+    let error: unknown;
+    try { error = await readPackage(f.held.package, selection, { verifier, venue: f.venue, reference }).then(() => undefined, (e: unknown) => e); }
+    finally { close.mockRestore(); }
+    expect(error).toMatchObject({ status: "selection-mismatch", cause: { message: "disk I/O error" } });
+  });
+
+  it("refuses to serve an older segment of its own whose trail storage lost, as storage", async () => {
+    const f = await fixture(); f.venue.advance(7n);
+    await f.j.return("return"); await f.j.publish(); await f.j.adopt();
+    await f.j.commit("adopted"); await f.j.publish();
+    expect((await f.j.package()).selection.sequence).toBe(4n);
+    // The genesis segment's one record is lost; its head stays, so its opening checkpoint is still served.
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(f.file);
+    try { expect(Number(db.prepare("DELETE FROM chain WHERE segment = ?").run(segmentIdentity(f.context.header)).changes)).toBe(1); } finally { db.close(); }
+    await expect(f.j.package()).rejects.toMatchObject({ code: "STORAGE", message: "a signed segment's trail is missing" });
   });
 
   it("answers a statement adopted from the gap with the adopting segment's receipt, not its discarded tail's (C2b.4.2, §7.2)", async () => {

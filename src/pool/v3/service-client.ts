@@ -176,8 +176,9 @@ export class V3ServiceClient {
     return result.served;
   }
 
-  /** `sync` from nothing into one §12 package held in memory, for a caller that reads a whole package:
-   * bounded only by `maxBytes` (by default an in-memory store's quota), so it does not serve a long history. */
+  /** `sync` from nothing into one §12 package held in memory, for a caller that reads a whole package. The
+   * response is bounded by `maxBytes` (by default an in-memory store's quota), so it does not serve a long history;
+   * assembling it holds about three times what was received at its peak (`wholePackage`). */
   async package(backing: Uint8Array, maxBytes: bigint = EVIDENCE_QUOTA.memory): Promise<ServedPackage> {
     const result = await this.served(identifier(backing), 0n, maxBytes, (served, parts) => wholePackage(served.package, parts));
     return { selection: result.served.selection, package: result.taken };

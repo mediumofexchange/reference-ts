@@ -784,7 +784,9 @@ export async function trailPart(trail: StoredTrail, after?: TrailTip): Promise<E
 }
 
 /** One §12 package of a read's own items and a supplier's parts served from nothing, for a caller that holds a
- * whole package in memory. A trail served after a position is refused: it is no §10 frame by itself. */
+ * whole package in memory. A trail served after a position is refused: it is no §10 frame by itself. At its peak it
+ * holds about three times the package: its items, the encoder's own copy of them and the encoded package. A party
+ * that keeps evidence takes the parts into a store instead (`EvidenceStore.take`), one part at a time. */
 export async function wholePackage(own: Uint8Array, parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>): Promise<Uint8Array> {
   const items = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
   const add = (kind: number, payload: Uint8Array): void => {

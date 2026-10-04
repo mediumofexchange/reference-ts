@@ -477,11 +477,14 @@ export class V3OperatorJournal {
     return { commitment: decodeCommitment(bytes(row.commitment)), segment: bytes(row.segment), length: row.length as bigint,
       at: decimal(row.at), observed: row.observed as string | null, published: row.published === 1n };
   }
-  /** The commitment this journal signed at `sequence`, if any. */
+  /** The commitment this journal signed at `sequence`, if any. A row holding another sequence's commitment is damage. */
   private signedAt(sequence: bigint): Signed | undefined {
     if (sequence > SQLITE_LIMIT) return undefined;
     const row = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(sequence);
-    return row === undefined ? undefined : this.signedOf(row);
+    if (row === undefined) return undefined;
+    const signed = this.signedOf(row);
+    requireThat(signed.commitment.sequence === sequence, "STORAGE", "a signed row is damaged");
+    return signed;
   }
   /** A signed commitment's directory, from the evidence the journal serves. */
   private directoryOf(signed: Signed): readonly SnapshotDigest[] {
@@ -772,12 +775,17 @@ export class V3OperatorJournal {
    * a newly read window is verified before it counts as a conflict, including old twins. */
   private foreign(window: RangeAnswer): RangeEntry | undefined {
     return window.entries.find(entry => {
-      let c: Commitment;
+      let c: Commitment, own: Signed | undefined;
       try { c = decodeCommitment(entry.record); }
       catch (error) { if (error instanceof EncodingError) return false; throw error; }
-      const own = this.signedAt(c.sequence);
+      try { own = this.signedAt(c.sequence); }
+      catch (error) { if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "a signed row does not decode"); throw error; }
       if (own !== undefined && same(encodeCommitment(own.commitment), entry.record)) return false;
-      return same(c.operator, this.operator) && verifyCommitment(c);
+      if (!same(c.operator, this.operator) || !verifyCommitment(c)) return false;
+      // This journal's own row at that sequence that no longer verifies as its commitment is damage, not another signer's.
+      requireThat(own === undefined || (same(own.commitment.operator, this.operator) && verifyCommitment(own.commitment)), "STORAGE",
+        "a signed row is damaged");
+      return true;
     });
   }
   /**
@@ -1004,7 +1012,13 @@ export class V3OperatorJournal {
         admission: false, block };
       const receipts = this.transaction(() => {
         this.stable(view); this.signingSchedule(view, true);
-        const signed = block.map(event => this.admit(engine, judgeAdopted(state, event.bytes, replay), replay));
+        let signed: Uint8Array[];
+        // The reader forced each record at its own index; one the opening's state refuses leaves the block unadopted,
+        // named by its check like any admission refusal, and nothing of it is kept.
+        try { signed = block.map(event => this.admit(engine, judgeAdopted(state, event.bytes, replay), replay)); } catch (error) {
+          if (error instanceof ReplayRefusal) throw new V3StoreError("REFUSED", `adoption refused: ${error.check}`, error.check);
+          throw error;
+        }
         this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(signed.map(bytesToHex)));
         return signed;
       });
@@ -1254,26 +1268,31 @@ export class V3OperatorJournal {
         batch.clear(); held = 0;
         return { package: encodeEvidencePackage(items) };
       };
-      // A snapshot names the furthest record of its segment that a reader of it needs.
-      const snapshot = (payload: Uint8Array): void => {
+      // A snapshot names the furthest record of its segment that a reader of it needs. Every segment this journal
+      // signed keeps its trail, so an own snapshot without one is damage, never a shorter package; a taken snapshot
+      // is served as it was taken, with its trail where that came too.
+      const snapshot = (payload: Uint8Array, own: boolean): void => {
         let named: Snapshot;
-        try { named = decodeSnapshot(payload); } catch (error) { if (error instanceof EncodingError) return; throw error; }
+        try { named = decodeSnapshot(payload); } catch (error) { if (error instanceof EncodingError && !own) return; throw error; }
         const key = bytesToHex(named.segment), top = tops.get(key);
         if (top !== undefined && same(top.evidence, named.evidenceHash)) return;
         const length = this.retained.trail(named.segment, named.evidenceHash)?.length;
+        requireThat(length !== undefined || !own, "STORAGE", "a signed segment's trail is missing");
         if (length !== undefined && (top === undefined || top.position < length)) tops.set(key, { segment: named.segment, position: length, evidence: named.evidenceHash });
       };
       for (let cursor = from; cursor < through;) {
         const rows = this.db.prepare("SELECT sequence,commitment FROM journal_signed WHERE sequence>? AND sequence<=? ORDER BY sequence LIMIT ?").all(cursor, through, SERVE_PAGE);
         if (rows.length === 0) break;
         for (const row of rows) {
+          // Every signed sequence keeps its row: a gap is damage, never a checkpoint left out.
+          requireThat(row.sequence === cursor + 1n, "STORAGE", "a signed row is missing");
           const directory = this.retained.object(3, decodeCommitment(bytes(row.commitment)).root);
           requireThat(directory !== undefined, "STORAGE", "a signed directory is missing");
           add(3, directory);
           for (const entry of decodeEvidenceDirectory(directory)) {
             const payload = this.retained.snapshot(entry.digest);
             requireThat(payload !== undefined, "STORAGE", "a signed snapshot is missing");
-            add(4, payload); snapshot(payload);
+            add(4, payload); snapshot(payload, true);
             if (full()) yield packed();
           }
           cursor = row.sequence as bigint;
@@ -1289,7 +1308,7 @@ export class V3OperatorJournal {
           const kind = row.kind === 3n ? 3 : 4, payload = this.retained.object(kind, mark[2]);
           if (payload === undefined) continue;
           add(kind, payload);
-          if (kind === 4) snapshot(payload);
+          if (kind === 4) snapshot(payload, false);
           if (full()) yield packed();
         }
       }
@@ -1318,33 +1337,76 @@ export class V3OperatorJournal {
    * (by default the scope's first); a reader selects its own. `after` is the selection's sequence of an earlier
    * call whose parts the reader kept; it authenticates nothing, and a reader that lacks what it implies asks
    * again from 0. The parts are read after this call returns, while other commands run.
+   *
+   * Serving reads signed rows, which a command changes only inside one synchronous transaction (a publication
+   * marks its row), so it takes no journal turn: it neither waits for a
+   * command nor makes one BUSY. It writes only where the venue's clock has passed the index this key's held
+   * commitments are kept through, keeping them through the clock as a command's view would (with any conflict
+   * their windows show); otherwise it checks the fence and identity and reads.
    */
   async serve(backing?: Uint8Array, after = 0n): Promise<ServedEvidence> {
     const named = backing === undefined ? undefined : copyBytes(backing);
     requireThat(typeof after === "bigint" && after >= 0n && after < U64, "REFUSED", "the served sequence is not a u64", "SEQUENCE");
-    return this.run(async engine => {
-      const view = this.view(engine);
-      // A published commitment the venue has not shown is served while it is in flight (C2.4.4); once the lag
-      // from its signing has passed without it, the operator can no longer assume it (C2.4.3), and the latest
-      // held one is served instead.
-      let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
-      if (selected !== undefined && view.now >= decimal(selected.at) + view.lag) selected = undefined;
-      for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
-        if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
-        if (this.ownHeld(held) === undefined) continue;
-        selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);
-        break;
+    requireThat(!this.closed, "STORAGE", "store is closed");
+    // Everything from the clock to the selection runs without an await, so no command's transaction falls between.
+    const view = this.servingView();
+    // A published commitment the venue has not shown is served while it is in flight (C2.4.4); once the lag
+    // from its signing has passed without it, the operator can no longer assume it (C2.4.3), and the latest
+    // held one is served instead.
+    let selected = this.db.prepare("SELECT * FROM journal_signed WHERE published=1 ORDER BY sequence DESC LIMIT 1").get();
+    if (selected !== undefined && view.now >= decimal(selected.at) + this.lag) selected = undefined;
+    for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
+      if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
+      if (this.ownHeld(held) === undefined) {
+        // Each held commitment of this key without its signed row was recorded as a conflict when its window was
+        // read (`foreign`); with none recorded, the row was lost or changed since: damage, not another signer's.
+        requireThat(view.conflict, "STORAGE", "a held commitment's signed row is missing");
+        continue;
       }
-      requireThat(engine.opened !== undefined && selected !== undefined, "STALE", "no published commitment to serve");
-      const signed = this.signedOf(selected), directory = this.directoryOf(signed);
-      // The selection names `backing`, by default the scope's first; its directory must carry it.
-      const name = named ?? directory[0]!.name;
-      requireThat(directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
-      const own = encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 2, payload: encodeCommitment(signed.commitment) }]);
-      return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
-        operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) },
-        package: own, parts: this.parts(signed, after) };
-    });
+      selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);
+      break;
+    }
+    requireThat(selected !== undefined, "STALE", "no published commitment to serve");
+    let signed: Signed;
+    try { signed = this.signedOf(selected); } catch (error) {
+      if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "a signed row does not decode");
+      throw error;
+    }
+    const directory = this.directoryOf(signed);
+    // The selection names `backing`, by default the scope's first; its directory must carry it.
+    const name = named ?? directory[0]!.name;
+    requireThat(directory.some(entry => same(entry.name, name)), "REFUSED", "the served commitment does not carry the backing", "SCOPE");
+    const own = encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 2, payload: encodeCommitment(signed.commitment) }]);
+    return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
+      operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) },
+      package: own, parts: this.parts(signed, after) };
+  }
+  /** The venue as a serve reads it: the clock, and this key's latest commitment held by it. The held commitments
+   * are kept through the clock first where they are behind it, in a transaction of their own under the fence;
+   * kept through it already, they are read after a fence check that writes nothing. */
+  private servingView(): { readonly now: bigint; readonly latest: HeldCommitment | undefined; readonly conflict: boolean } {
+    const now = this.clock();
+    // Under the fence and before any answer is kept: a damaged row must not be read as another signer's commitment
+    // (`foreign`).
+    if (this.replays.keptAnswer(1, this.operator)?.through !== now) return this.keeping(() => { this.latestSignedHolds(); return this.viewed(undefined); });
+    // One read snapshot, which takes no write lock: another owner's commit cannot fall between the checks.
+    this.db.exec("BEGIN");
+    try {
+      const meta = this.metadata();
+      requireThat(meta?.owner === this.owner, "FENCED", "another process owns this journal");
+      this.identity(meta); this.latestSignedHolds();
+      return { now, latest: this.heldBelow(now), conflict: this.db.prepare("SELECT 1 FROM journal_conflict WHERE id=1").get() !== undefined };
+    } finally { this.db.exec("COMMIT"); }
+  }
+
+  /** As reopening checks (`stored`): the latest signed row is the log's latest signing reply, byte for byte, so a
+   * lost or changed row is damage that serving refuses, never an older selection. The rows below it are checked as
+   * they are served (`parts`). */
+  private latestSignedHolds(): void {
+    const found = this.db.prepare("SELECT commitment FROM journal_signed ORDER BY sequence DESC LIMIT 1").get();
+    const reply = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq DESC LIMIT 1").get()?.response;
+    requireThat(found === undefined ? reply === undefined : reply === bytesToHex(bytes(found.commitment)), "STORAGE",
+      "the signed commitments disagree with the command log");
   }
 
   /** `serve` from nothing as one §12 package held in memory, for a caller that reads a whole package. */

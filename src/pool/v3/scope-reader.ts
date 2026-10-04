@@ -19,7 +19,7 @@ import { VenueError } from "../../venue-error.js";
 import type { Commitment } from "../../venue-records.js";
 import { identifierOf, VALUE_BOUND } from "../field.js";
 import { ScopeTree } from "../scope.js";
-import { requireConfigurationVerifier } from "./configuration.js";
+import { adoptedDomain, requireConfigurationVerifier } from "./configuration.js";
 import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest, type Snapshot } from "./commitments.js";
 import { decodeSegmentHeader, segmentBytes, type SegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
@@ -360,10 +360,29 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
  * A receipt instead returns its verdict at the deciding checkpoint or boundary. */
 export async function classifyScopes(context: ImportContext, record: RecordVenue, evidence: WalkEvidence): Promise<ScopeResult> {
   const walk = scopeWalk(context, record, evidence);
-  try { return await selectedRead(context, evidence, walk); } catch (error) {
-    if (error instanceof EvidenceRefusal && context.receiptBytes === undefined) await walk.inspectRefused(context.selection.backing, context.terms);
+  return closing(walk, async () => {
+    try { return await selectedRead(context, evidence, walk); } catch (error) {
+      if (error instanceof EvidenceRefusal && context.receiptBytes === undefined) await walk.inspectRefused(context.selection.backing, context.terms);
+      throw error;
+    }
+  });
+}
+
+/** Run `read` over `walk`, then close the walk. A read's own failure is what its caller sees: a walk that then fails
+ * to close does not replace the read's refusal, and goes with it as its `cause` where it has none. After a read
+ * that succeeded, a failed close is the caller's to see: what the read kept did not commit. */
+async function closing<T>(walk: { close(): void }, read: () => Promise<T>): Promise<T> {
+  let result: T;
+  try { result = await read(); } catch (error) {
+    try { walk.close(); } catch (closed) { withCause(error, closed); }
     throw error;
-  } finally { walk.close(); }
+  }
+  walk.close();
+  return result;
+}
+/** A cleanup's failure kept beside the failure it followed, which stands. */
+export function withCause(error: unknown, cause: unknown): void {
+  if (error instanceof Error && error.cause === undefined) error.cause = cause;
 }
 
 async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk: ReturnType<typeof scopeWalk>): Promise<ScopeResult> {
@@ -449,7 +468,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
  * backing's forced publications and the clock. */
 export async function classifyScopeFrontier(context: FrontierContext, record: RecordVenue, evidence: WalkEvidence): Promise<FrontierResult> {
   const { selection, terms } = context, walk = scopeWalk(context, record, evidence);
-  try {
+  return closing(walk, async () => { try {
     const view = await walk.viewFor(selection.backing, terms), canonical = await walk.latest(selection.backing, terms);
     const around = await walk.around(canonical, terms, view);
     const scopeChains = new Map<string, RecordView["chain"]>();
@@ -482,7 +501,7 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
   } catch (error) {
     if (error instanceof EvidenceRefusal) await walk.inspectRefused(selection.backing, terms);
     throw error;
-  } finally { walk.close(); }
+  } });
 }
 
 const canonicalOf = (valid: ValidScope): CanonicalCheckpoint => ({ commitment: valid.commitment, index: valid.index, segment: valid.segment,
@@ -495,6 +514,8 @@ type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
  * checkpoint is classified once, into the walk's rows; close() drops them. */
 function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvidence) {
   const { selection, store } = context, faults = context.faults ?? NO_FAULTS;
+  // These walks are exported: a selection under another configuration is refused here, not trusted from a caller.
+  requireReplay(same(selection.domain, adoptedDomain()), "CONFIGURATION");
   // The verifier's circuits name every replay and kept class (§14), so they must be the configuration's. A kept
   // store keeps state across processes, so where the read witnesses outputs, the predicate's identity must be
   // declared too, not named per object. Witnesses stay only at a namespace's tip; a path read below it discards

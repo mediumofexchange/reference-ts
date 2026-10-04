@@ -15,6 +15,7 @@ import { once } from "node:events";
 import { serialize } from "node:v8";
 import { Barretenberg, BackendType, UltraHonkBackend } from "@aztec/bb.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { EncodingError } from "../../../dist/bytes.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../../../dist/record-venue.js";
 import { ErgoVenue } from "../../../dist/ergo.js";
 import { ERGO_SYNTHETIC_REFERENCE } from "../../../dist/ergo-profile.js";
@@ -202,6 +203,10 @@ try {
       await assert.rejects(openV3Prover(unchecked),
         { name: "ParameterError", code: "UNCHECKED", message: "the backend instance was not started from checked parameters" });
     } finally { await unchecked.destroy(); }
+  });
+  await test("the prover proves under the adopted configuration only, refusing another before any witness (pool-v3 §4)", async () => {
+    await assert.rejects(prover.prove({ kind: 1, publicInputs: [0n, 0n], witness: {}, capsules: [] }),
+      error => error instanceof EncodingError && error.message === "the task names another configuration");
   });
   await test("the journal runs only on a venue whose identity recomputes from its reference preimage", () => {
     assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, venue: new FixtureVenue(b(12), 0n, lag) }), ReferenceVenueError);

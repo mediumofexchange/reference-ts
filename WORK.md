@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-03
+Updated: 2026-10-04
 
 ## Goal
 **Slice 11: the design point** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 4; [M11c's method](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)).
@@ -19,11 +19,13 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   on the synthetic node; pilot, transparent path (`8d207eb`), second reader retired. M10d (live drill) needs the local machine.
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
-- **M11b in progress**. M11b1 (PR #93), (n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)).
-  M11b2 (PR #94), (l): an index past the reader's answer budget is asked again under the venue's `indexLimits`, capped at `INDEX_LIMITS`.
-  M11b3 (PR #95), (m): a served trail is read forward by position, falling back to the walk back at a fork.
-  M11b4 (branch `claude/m11b4-kept-walk`; spec `dc51baf`), (k): later reads resume a kept walk ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k),
-  [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission flat, ≤0.18 s at 320 checkpoints, was 1.1 s at 80); reports: CI run 37167992004. **Next: (s)**, then M11c.
+- **M11b in progress**: (n) M11b1 #93 (record cost flat in notes, [probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) M11b2 #94
+  (an index past the answer budget asked again under `indexLimits`); (m) M11b3 #95 (trails served forward); (k) M11b4 #97, spec `dc51baf`
+  (kept walk, [decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k), [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission ≤0.18 s at 320 checkpoints).
+  **M11b5** (PR #98, branch `claude/m11b5-journal-findings`), (s) ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)):
+  `serve` takes no journal turn (CLI queue bypassed) and refuses the journal's own damage by name; `adopt` names a refused
+  block; cleanup failures go as a `cause`; prover and exported walks refuse another domain. One review and three read-backs;
+  reports: CI run 37176841154. Then (w), M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -51,10 +53,7 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    predecessor segment whose snapshots lie on two forks serves only the longer trail (a fix needs an ancestor test without a walk per snapshot).
    (p) `package-reader.ts` reads the selection through its own backing's entry before the walk, so a malformed selection's refusal reason
    differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged
-   before silence lapse (label, or an answer where lapse is unresolved). (s) Journal: an older own segment's lost trail is skipped silently when serving; each wallet GET `/evidence` takes the
-   journal's turn and a write transaction (commands answer BUSY); `adopt` lets a ReplayRefusal escape unnamed; `client.package()` peaks near
-   3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
-   exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
+   before silence lapse (label, or an answer where lapse is unresolved). (s) closed in M11b5 (Status). (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
    (v) A read at a new venue index changes kept answers, so its close hashes the whole replay file (≈7 s at 10⁶): the operator's first
    admission per block; M11c measures it, then an incremental root or the hot rows in a file of their own. (w) `moe reader` reads with an
