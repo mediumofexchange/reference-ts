@@ -4,13 +4,17 @@
 // own view's witnessed index: issued, burned, position, the canonical
 // checkpoint and the publications with force (`supply`), or one demand's
 // outcome under C3.8 (`presentation`). Evidence comes from the operator's
-// service or from a package file. Each read replays from the evidence with
-// nothing kept between processes, so every proof is verified again.
+// service or from a package file. Reads keep their classes, walks, replay
+// state and venue answers in `replay.db` (pool-v3 §14), so a later process
+// verifies only what is new.
 import { mkdirSync } from "node:fs";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { readPresentation, type Presentation } from "../pool/v3/dishonour.js";
 import { EvidenceStore } from "../pool/v3/evidence-store.js";
+import type { FaultResult } from "../pool/v3/fault-observer.js";
 import { readFrontier } from "../pool/v3/package-reader.js";
+import { ReplayStore } from "../pool/v3/replay-store.js";
+import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { V3ServiceClient } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import { CommandError, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print, readJson, readRequired,
@@ -112,23 +116,48 @@ async function served(client: V3ServiceClient, backing: Uint8Array, evidence: Ev
   }
 }
 
+/** The directory's kept replay file (pool-v3 §14), vouched for by `replay.db.sha256`: one that fails its digest is
+ * discarded on opening. Kept answers stand only while the view's finality does: kept state read through a later
+ * witnessed index than `at`, the view's own now (a view restored from an older copy), is not this view's, so it is
+ * discarded and the read asks the venue for everything. */
+export function keptReplay(directory: Directory, at: bigint): ReplayStore {
+  let store: ReplayStore;
+  try { store = new ReplayStore(directory.file("replay.db"), { digest: directory.file("replay.db.sha256") }); } catch (error) { throw inUse(error); }
+  try {
+    const seen = store.answersThrough();
+    if (seen !== undefined && at < seen) store.discardKept();
+  } catch (error) { store.close(); throw error; }
+  return store;
+}
+
+/** The kept file held by a process outside the directory's lock (another tool, a scanner): a refusal, not a failure. */
+const inUse = (error: unknown): unknown => error instanceof Error && error.message === "the kept replay file is in use" ?
+  new CommandError("STORAGE", "another process holds this reader's kept replay file") : error;
+
 /** Sync the view, then read the backing's frontier at its witnessed index over the package `--package` names or
- * the operator's service supplies into `evidence.db`. */
-async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, answers: boolean) {
+ * the operator's service supplies into `evidence.db`, resting on what earlier reads kept in `replay.db`. `use` takes
+ * the read while the kept file is open: the canonical state is read from it. */
+async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, answers: boolean,
+  use: (at: bigint, read: FrontierResult & FaultResult, sync: object) => void): Promise<void> {
   const view = openView(directory);
   try {
     const synced = await view.sync(), at = synced.witnessedIndex;
     if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
     const verifier = await openVerifier(directory, verifierCount(args));
-    const evidence = new EvidenceStore(directory.file("evidence.db"));
+    let evidence: EvidenceStore | undefined, store: ReplayStore | undefined;
     try {
+      evidence = new EvidenceStore(directory.file("evidence.db"));
+      store = keptReplay(directory, at);
       const file = flag(args, "package");
       const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);
-      const read = await readFrontier(source, kept.signed, at, { verifier, venue: view.venue, reference: view.file.reference, evidence, answers });
+      let read;
+      try { read = await readFrontier(source, kept.signed, at, { verifier, venue: view.venue, reference: view.file.reference, evidence, store, answers }); } catch (error) {
+        throw inUse(error);
+      }
       // A read is final at its judging index; where the view could not read further, the output says so.
       const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
-      return { at, read, sync: { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled } };
-    } finally { evidence.close(); await verifier.close(); }
+      use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled });
+    } finally { store?.close(); evidence?.close(); await verifier.close(); }
   } finally { view.close(); }
 }
 
@@ -138,13 +167,15 @@ export async function supplyCommand(argv: readonly string[], role: Role): Promis
   const args = parseArguments(argv, READ_FLAGS, 1);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue);
-  const { at, read, sync } = await frontier(directory, args, kept, false), canonical = read.canonical;
-  print({ status: canonical === undefined ? "unavailable" : "final", backing: kept.backing, judgingIndex: at, sync,
-    ...(canonical === undefined ? {} : { issued: canonical.state.issued, burned: canonical.state.burned,
-      supply: canonical.state.issued - canonical.state.burned, position: canonical.state.position,
-      checkpoint: { operator: canonical.commitment.operator, sequence: canonical.commitment.sequence, root: canonical.commitment.root, index: canonical.index } }),
-    force: read.force.map(f => ({ index: f.index, kind: f.record.kind, sha256: sha256(f.bytes) })),
-    faults: (read.faultEvidence ?? []).length });
+  await frontier(directory, args, kept, false, (at, read, sync) => {
+    const canonical = read.canonical;
+    print({ status: canonical === undefined ? "unavailable" : "final", backing: kept.backing, judgingIndex: at, sync,
+      ...(canonical === undefined ? {} : { issued: canonical.state.issued, burned: canonical.state.burned,
+        supply: canonical.state.issued - canonical.state.burned, position: canonical.state.position,
+        checkpoint: { operator: canonical.commitment.operator, sequence: canonical.commitment.sequence, root: canonical.commitment.root, index: canonical.index } }),
+      force: read.force.map(f => ({ index: f.index, kind: f.record.kind, sha256: sha256(f.bytes) })),
+      faults: (read.faultEvidence ?? []).length });
+  });
 }
 
 /** A demand's reading under C3.8 at its judging index: final once ended or overdue, pending while it stands. */
@@ -156,10 +187,11 @@ export async function presentationCommand(argv: readonly string[], role: Role): 
   const args = parseArguments(argv, READ_FLAGS, 2);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), demand = hex32(args.positional[1]!, "the demand");
-  const { at, read, sync } = await frontier(directory, args, kept, true);
-  const reading = readPresentation(read, kept.backing, kept.terms.obligor, demand);
-  if (reading === undefined) throw new CommandError("ABSENT", "the demand is not in this backing's record");
-  print({ ...presentationOf(reading, at), sync });
+  await frontier(directory, args, kept, true, (at, read, sync) => {
+    const reading = readPresentation(read, kept.backing, kept.terms.obligor, demand);
+    if (reading === undefined) throw new CommandError("ABSENT", "the demand is not in this backing's record");
+    print({ ...presentationOf(reading, at), sync });
+  });
 }
 
 export async function reader(argv: readonly string[]): Promise<void> {

@@ -197,6 +197,8 @@ try {
   });
 
   const reader = ["--dir", RD];
+  /** A reader command whose kept replay file fails its digest, so it is discarded and the read replays in full. */
+  const full = args => { writeFileSync(join(RD, "replay.db.sha256"), "00".repeat(32)); return ok(args); };
   /** Serve publishes on its own poll after it commits: mine past the depth and read until `until` holds, a few
    * rounds at most, so the drill does not race serve's publication on a slow runner. */
   const supplyUntil = async (until, rounds = 8, which = backing) => {
@@ -258,6 +260,8 @@ try {
     await ok(["reader", "service", "add", ...reader, backing, join(OP, "service.json")]);
     const after = await supplyUntil(read => BigInt(read.checkpoint.sequence) >= BigInt(returned.commitment.sequence));
     assert.equal(after.supply, "0");
+    // Kept across the return's new term: a read replaying in full at the same index answers the same.
+    assert.deepEqual({ ...(await full(["reader", "supply", ...reader, backing])), sync: undefined }, { ...after, sync: undefined });
     await again.stop();
   });
 
@@ -408,6 +412,10 @@ try {
     await ok(["reader", "service", "add", ...reader, backing2, join(OW, "service.json")]);
     const read = await supplyUntil(read => read.burned === "3", 8, backing2);
     assert.deepEqual([read.issued, read.burned, read.supply], ["10", "3", "7"]);
+    // The reader's C3.8 reading of the settled demand, on its kept file and replayed in full at the same index.
+    const presented = await ok(["reader", "presentation", ...reader, backing2, demanded.demand]);
+    assert.deepEqual([presented.status, presented.ended.by, presented.acceptances.length], ["final", "settlement", 1]);
+    assert.deepEqual({ ...(await full(["reader", "presentation", ...reader, backing2, demanded.demand])), sync: undefined }, { ...presented, sync: undefined });
   });
 
   let withdrawn;
@@ -479,11 +487,22 @@ try {
   }
 
   const BULK = 70;
-  await check(`past the old 67-statement ceiling: ${BULK} real-proof issues to the holder's seed, synced by the holder and the reader`, async () => {
+  let readerReplay;
+  await check(`past the old 67-statement ceiling: ${BULK} real-proof issues to the holder's seed, synced by the holder and the reader; ` +
+      "the reader's next process rests on its kept replay file, and one whose file fails its digest replays in full to the same answer", async () => {
     const { seed } = await ok(wallet("seed", H3, "--show"));
     await bulkIssue(BULK, Buffer.from(seed, "hex"));
     const read = await supplyUntil(read => read.issued === String(10 + BULK), 12, backing2);
     assert(BigInt(read.position) > 67n, `position ${read.position}`);
+    // Nothing is mined between these reads, so each judges at the same index (item (w), M11b6).
+    const same = answer => assert.deepEqual({ ...answer, sync: undefined }, { ...read, sync: undefined });
+    for (const file of ["replay.db", "replay.db.sha256"]) assert(statSync(join(RD, file)).isFile(), `the reader keeps ${file}`);
+    same(await ok(["reader", "supply", ...reader, backing2]));
+    const keptMs = processes.at(-1).elapsedMs;
+    same(await full(["reader", "supply", ...reader, backing2]));
+    readerReplay = { position: read.position, keptMs, fullMs: processes.at(-1).elapsedMs };
+    // The full replay verifies every statement's proof again, the kept read none (2.8 s against 5.4 s locally at 78).
+    assert(readerReplay.keptMs < readerReplay.fullMs, `the kept read was not faster: ${JSON.stringify(readerReplay)}`);
     const view = await settled(wallet("sync", H3, backing2), view => view.holdings.length === BULK + 1);
     assert.equal(view.available, String(7 + BULK));
   });
@@ -599,7 +618,7 @@ console.log(JSON.stringify(open.filter(path => path.includes("etilqs_"))));`);
     }
   });
 
-  console.log(JSON.stringify({ status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files }, checks, processes }, null, 2));
+  console.log(JSON.stringify({ status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files }, checks, readerReplay, processes }, null, 2));
   completed = true;
 } finally {
   await node.close();

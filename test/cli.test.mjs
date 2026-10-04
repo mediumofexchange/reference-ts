@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CommandError, integer, hex32, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
 import { outside } from '../src/cli/wallet.js';
 import { parsePublicationFile } from '../src/cli/relay.js';
+import { keptReplay } from '../src/cli/reader.js';
+import { ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
 import { V3StoreError } from '../src/pool/v3/store.js';
 import { parseVenue, publisherStore, venueText } from '../src/cli/venue.js';
@@ -141,5 +144,32 @@ describe('moe wallet and relay files', () => {
       { ...file, schema: 'other' }, [file], null]) {
       expect(() => parsePublicationFile(bad)).toThrow(expect.objectContaining({ code: 'INVALID' }));
     }
+  });
+});
+
+describe('moe reader kept replay file', () => {
+  /** A kept file in `dir` whose answers were read through index 10, vouched for by its digest as a keep point records it. */
+  const keptThrough10 = dir => {
+    const path = join(dir, 'replay.db'), store = new ReplayStore(path, { digest: join(dir, 'replay.db.sha256') });
+    store.keepAnswer(1, new Uint8Array(32).fill(1), () => ({ through: 10n, value: 3n }));
+    store.close();
+    writeFileSync(join(dir, 'replay.db.sha256'), createHash('sha256').update(readFileSync(path)).digest('hex'));
+  };
+  const directory = dir => ({ path: dir, file: name => join(dir, name) });
+  it('keeps what earlier reads kept at the view\'s own index or later, and discards it below (a restored view) or under a wrong digest', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'moe-reader-'));
+    try {
+      keptThrough10(dir);
+      for (const at of [10n, 11n]) {
+        const store = keptReplay(directory(dir), at);
+        try { expect(store.kept).toBe(true); expect(store.answersThrough()).toBe(10n); } finally { store.close(); }
+      }
+      const behind = keptReplay(directory(dir), 9n);
+      try { expect(behind.answersThrough()).toBeUndefined(); } finally { behind.close(); }
+      keptThrough10(dir);
+      writeFileSync(join(dir, 'replay.db.sha256'), '00'.repeat(32));
+      const tampered = keptReplay(directory(dir), 10n);
+      try { expect(tampered.answersThrough()).toBeUndefined(); } finally { tampered.close(); }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
