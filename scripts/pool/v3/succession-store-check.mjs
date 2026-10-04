@@ -46,7 +46,8 @@ async function acceptance(mode) {
       { secret, venue, reference, verifier: drill.verifier }); journals.push(journal); return journal; };
     const a = create("a", aSecret), successor = create("b", bSecret);
     const served = async journal => drill.served(await journal.package());
-    const read = input => readPackage(input.package, input.selection, { verifier: drill.verifier, venue, reference, witness: () => true });
+    const read = input => readPackage(input.package, input.selection, { verifier: drill.verifier, venue, reference,
+      witness: () => ({ nf: 0n, note: new Uint8Array() }) });
     const contextOf = input => {
       const trail = decodeEvidencePackage(input.package).filter(item => item.kind === 6).map(item => decodeTrail(item.payload))
         .find(item => { const header = decodeSegmentHeader(item.header); return hex(header.operator) === hex(input.selection.operator) && header.sequence === input.selection.sequence; });

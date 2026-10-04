@@ -3,6 +3,7 @@
 // witnesses, and a later sync fetches, verifies and scans only what is new. Stand-in proofs of real proof
 // size; the real-proof acceptance is scripts/pool/v3/store-check.mjs.
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { DatabaseSync } from "node:sqlite";
@@ -15,7 +16,7 @@ import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { ownedNotes, seedScanner, seedWitness } from "../src/pool/v3/holdings.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
-import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { encodeRecord, type Record } from "../src/pool/v3/records.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
@@ -223,6 +224,29 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     expect(f.requests.at(-1)!.url.endsWith("&after=0")).toBe(true);
   }, 120_000);
 
+  it("discards a kept mark its output does not recover when a spend completes it, and replays once", async () => {
+    const f = await fixture(3);
+    const first = await f.synced(f.payer);
+    expect(first.view.holdings.map(h => h.value)).toEqual([1n, 1n, 1n]);
+    // One kept mark now says five units, under a digest re-recorded for it: §14's check cannot see it.
+    const replay = `${f.path("payer")}.replay`;
+    f.payer.close();
+    const db = new DatabaseSync(replay, { readBigInts: true });
+    const row = db.prepare("SELECT ns, leaf, note FROM witness ORDER BY ns, leaf LIMIT 1").get() as { ns: bigint; leaf: bigint; note: Uint8Array };
+    const note = new Uint8Array(row.note); note[103] = 5;
+    db.prepare("UPDATE witness SET note = ? WHERE ns = ? AND leaf = ?").run(note, row.ns, row.leaf); db.close();
+    writeFileSync(`${replay}.sha256`, createHash("sha256").update(readFileSync(replay)).digest("hex"));
+    f.payer = f.open("payer"); f.counts.verified = 0;
+    expect((await f.payer.sync(first.served.package, f.signed)).holdings.map(h => h.value)).toEqual([5n, 1n, 1n]);
+    expect(f.counts.verified).toBe(0);
+    // A payment of five selects it; completing it to spend finds the mismatch, the read replays, and the replayed
+    // notes cannot pay five.
+    await expect(f.payer.prepare("five", { request: f.receiver.request("five", f.backing, 5n), value: 5n }, first.served.package, f.signed, prove))
+      .rejects.toMatchObject({ code: "FUNDS" });
+    expect(f.counts.verified).toBeGreaterThan(0);
+    expect((await f.payer.sync(first.served.package, f.signed)).holdings.map(h => h.value)).toEqual([1n, 1n, 1n]);
+  }, 120_000);
+
   it("keeps the witnesses a fresh replay of the same evidence computes, across payments both ways and later reads", async () => {
     const f = await fixture(5);
     let { served } = await f.synced(f.payer);
@@ -263,15 +287,22 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
         const scanned = scan(state.output(note.cm)!)!;
         expect({ opening: note.opening, nf: note.nf, secret: note.secret }).toEqual({ opening: scanned.opening, nf: scanned.nf, secret: scanned.secret });
       }
-      // A mark its output does not recover (here, another rho) reads as held, but its secret is refused.
-      const witness = seedWitness(seed, domain), altered = Object.assign((output: Parameters<typeof witness>[0]) => {
-        const mark = witness(output);
-        return mark === undefined ? undefined : { nf: mark.nf, note: mark.note.map((byte, i) => (i === 95 ? byte ^ 1 : byte)) };
-      }, { identity: witness.identity });
-      const wrong = ownedNotes(seed, domain, f.backing, (await readFrontier(served.package, f.signed, at,
-        { ...f.reader, evidence, witness: altered })).canonical!.state);
-      expect(wrong.map(note => note.cm)).toEqual(kept.map(note => note.cm));
-      expect(() => wrong[0]!.secret).toThrow(expect.objectContaining({ check: "OUTPUT" }));
+      // A mark its output does not recover reads as held, but completing it to spend refuses it as kept state to
+      // discard. With another rho the held notes are the same; with another nullifier, a spent one is held too.
+      const witness = seedWitness(seed, domain);
+      type Mark = { nf: bigint; note: Uint8Array };
+      for (const [alter, spentHeld] of [[(mark: Mark) => ({ nf: mark.nf, note: mark.note.map((byte, i) => (i === 95 ? byte ^ 1 : byte)) }), false],
+        [(mark: Mark) => ({ nf: mark.nf ^ 1n, note: mark.note }), true]] as const) {
+        const altered = Object.assign((output: Parameters<typeof witness>[0]) => {
+          const mark = witness(output);
+          return mark === undefined ? undefined : alter(mark);
+        }, { identity: witness.identity });
+        const wrong = ownedNotes(seed, domain, f.backing, (await readFrontier(served.package, f.signed, at,
+          { ...f.reader, evidence, witness: altered })).canonical!.state);
+        expect(kept.every(note => wrong.some(held => held.cm === note.cm))).toBe(true);
+        if (spentHeld) expect(wrong.length).toBeGreaterThan(kept.length); else expect(wrong).toHaveLength(kept.length);
+        for (const note of wrong) expect(() => note.secret).toThrow(KeptStateMismatch);
+      }
     } finally { keptStore.close(); evidence.close(); }
   }, 60_000);
 

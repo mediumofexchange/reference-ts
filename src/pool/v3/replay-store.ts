@@ -453,7 +453,8 @@ export class ReplayStore {
       insertDemandEnd: "INSERT INTO demand_end VALUES (?, ?, ?)",
       outputs: `SELECT x.* FROM output x WHERE ${v} ORDER BY x.ns, x.leaf`,
       outputOf: `SELECT x.* FROM output x WHERE x.cm = :key AND ${v}`,
-      unspentWitnessed: `SELECT x.*, w.nf AS mark_nf, w.note AS mark_note FROM output x JOIN witness w ON w.ns = x.ns AND w.leaf = x.leaf
+      // Driven from the witness rows, so a read visits this predicate's outputs only, not every output in the store.
+      unspentWitnessed: `SELECT x.*, w.nf AS mark_nf, w.note AS mark_note FROM witness w CROSS JOIN output x ON x.ns = w.ns AND x.leaf = w.leaf
         WHERE ${v} AND NOT EXISTS (SELECT 1 FROM nullifier y WHERE y.nf = w.nf AND ${visible("y")}) ORDER BY x.ns, x.leaf`,
       nullifiers: `SELECT x.nf FROM nullifier x WHERE ${v} ORDER BY x.ns, x.position`,
       importedNullifiers: "SELECT nf FROM nullifier WHERE ns = ? AND position <= ?",
@@ -1301,7 +1302,7 @@ export class ReplayStore {
         for (const output of record.outputs) {
           const leaf = leaves++;
           before = [...ommers];
-          if (output.witness) born.push({ leaf, siblings: Array.from({ length: NOTE_TREE_DEPTH }, (_, h) =>
+          if (output.witness !== undefined) born.push({ leaf, siblings: Array.from({ length: NOTE_TREE_DEPTH }, (_, h) =>
             ((leaf >> BigInt(h)) & 1n) === 1n ? before[h]! : EMPTY_NOTE_SUBTREE[h]!) });
           let node = output.cm, h = 0;
           completed.set(`0:${leaf}`, node);

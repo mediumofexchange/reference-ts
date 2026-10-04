@@ -14,8 +14,9 @@ import { commitmentOf, nullifierOf, ownerOf, type NoteOpening } from "../notes.j
 import { createCapsuleScanner, deriveSettlementOwnerSecret } from "./capsules.js";
 import { settlementAuthorization } from "./records.js";
 import { requireReplay } from "./refusals.js";
+import { KeptStateMismatch } from "./replay-store.js";
 import type { OutputPath, ScanOutput, StateHandle, WitnessMark, WitnessPredicate } from "./state.js";
-import type { SpendableNote } from "./witness.js";
+import type { NoteInput, SpendableNote } from "./witness.js";
 
 /** A restored note, its leaf, its path to `anchor`, and whether its segment is the replayed one itself. Its spend
  * secret, anchor and path are found when first read, so a read that spends nothing scans no output again and
@@ -48,7 +49,8 @@ export function seedScanner(seed: Uint8Array, domain: Uint8Array): (output: Scan
 }
 
 /** A witnessed note's opening as its mark keeps it: backing, owner and rho, then the value as a big-endian u64. No
- * spend secret is kept, so the replay file stays without one (wallet-store.ts). */
+ * spend secret is kept, so the replay file stays without one (wallet-store.ts). The layout is the kept file's: a
+ * change to it changes `SCHEMA_VERSION` in replay-store.ts, so no file of another layout is read. */
 const NOTE_BYTES = 104;
 function encodeOpening(opening: NoteOpening): Uint8Array {
   const out = new Uint8Array(NOTE_BYTES);
@@ -56,10 +58,15 @@ function encodeOpening(opening: NoteOpening): Uint8Array {
   new DataView(out.buffer).setBigUint64(96, opening.value);
   return out;
 }
+/** A mark's opening; one this predicate could not have written is kept state to discard (§14). */
 function decodeOpening(note: Uint8Array): NoteOpening {
-  requireReplay(note.length === NOTE_BYTES, "OUTPUT");
-  return Object.freeze({ backing: note.slice(0, 32), owner: bytesToField(note.slice(32, 64)), rho: bytesToField(note.slice(64, 96)),
-    value: new DataView(note.buffer, note.byteOffset).getBigUint64(96) });
+  try {
+    if (note.length !== NOTE_BYTES) throw new RangeError("length");
+    const opening = Object.freeze({ backing: note.slice(0, 32), owner: bytesToField(note.slice(32, 64)), rho: bytesToField(note.slice(64, 96)),
+      value: new DataView(note.buffer, note.byteOffset).getBigUint64(96) });
+    if (opening.value === 0n) throw new RangeError("value");
+    return opening;
+  } catch { throw new KeptStateMismatch("a witnessed output's mark"); }
 }
 const sameOpening = (a: NoteOpening, b: NoteOpening): boolean =>
   compareBytes(a.backing, b.backing) === 0 && a.value === b.value && a.owner === b.owner && a.rho === b.rho;
@@ -90,7 +97,8 @@ export function seedWitness(seed: Uint8Array, domain: Uint8Array): WitnessPredic
 /** This seed's unspent positive notes of `backing` in a state replayed with
  * `seedWitness(seed, domain)`, read from the witnesses' marks: the state
  * leaves spent ones out. A note's spend secret is recovered from its output
- * when first read, and that recovery must give the kept nullifier and opening.
+ * when first read, and that recovery must give the kept nullifier and opening,
+ * or the kept state is discarded (KeptStateMismatch, §14).
  * Its path is read from `state` when first read, so a note is spent from the
  * state it was read in; one path per namespace is read here, so a kept witness
  * past the read position (§14) refuses this read rather than a later spend. */
@@ -100,7 +108,6 @@ export function ownedNotes(seed: Uint8Array, domain: Uint8Array, backing: Uint8A
     const opening = decodeOpening(stored.mark.note), nf = stored.mark.nf, cm = stored.cm;
     // Shared history can hold the same seed's notes of other scoped backings.
     if (compareBytes(opening.backing, backing) !== 0) continue;
-    requireReplay(opening.value > 0n, "OUTPUT");
     const place = (): OutputPath => { const placed = state.path(cm); requireReplay(placed !== undefined, "OUTPUT"); return placed; };
     let placed = checked.has(stored.ns) ? undefined : place();
     checked.add(stored.ns);
@@ -113,11 +120,20 @@ export function ownedNotes(seed: Uint8Array, domain: Uint8Array, backing: Uint8A
       get secret(): bigint {
         if (secret === undefined) {
           const note = scan(output);
-          requireReplay(note !== undefined && note.cm === cm && note.nf === nf && sameOpening(note.opening, opening), "OUTPUT");
+          if (note === undefined || note.cm !== cm || note.nf !== nf || !sameOpening(note.opening, opening)) {
+            throw new KeptStateMismatch("a witnessed output's mark is not what its output recovers");
+          }
           secret = note.secret;
         }
         return secret;
       } }));
   }
   return found;
+}
+
+/** A note completed to spend: its secret recovered (refusing a mark its output does not give) and its path read,
+ * both from the read it came from. */
+export function inputOf(note: OwnedNote): NoteInput {
+  void note.secret;
+  return { note, anchor: note.anchor, path: note.path };
 }
