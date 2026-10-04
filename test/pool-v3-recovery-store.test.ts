@@ -246,6 +246,15 @@ describe("v3 recovery journal and independent package reader", () => {
     expect((await f.j.adopt()).map(bytes => decodeReceipt(bytes).position)).toEqual([1n]);
   });
 
+  it("keeps a package read's refusal when its evidence then fails to close, with that failure as its cause", async () => {
+    const f = await fixture(), selection = { ...f.held.selection, root: new Uint8Array(32), judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" as const };
+    const close = vi.spyOn(EvidenceStore.prototype, "close").mockImplementation(() => { throw new Error("disk I/O error"); });
+    let error: unknown;
+    try { error = await readPackage(f.held.package, selection, { verifier, venue: f.venue, reference }).then(() => undefined, (e: unknown) => e); }
+    finally { close.mockRestore(); }
+    expect(error).toMatchObject({ status: "selection-mismatch", cause: { message: "disk I/O error" } });
+  });
+
   it("refuses to serve an older segment of its own whose trail storage lost, as storage", async () => {
     const f = await fixture(); f.venue.advance(7n);
     await f.j.return("return"); await f.j.publish(); await f.j.adopt();

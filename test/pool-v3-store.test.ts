@@ -548,7 +548,7 @@ describe("the v3 operator journal", () => {
     const now = venue.witnessedIndex();
     expect([...asked].sort()).toEqual([[`1:${bytesToHex(operator)}`, now], [`2:${bytesToHex(backing)}`, now - 1n],
       [`3:${bytesToHex(issuer)}`, now - 1n]].sort());
-    // While the clock stands, a command asks the venue nothing; nor does a restarted journal, which reads its rows.
+    // While the clock stands, a serve asks the venue nothing; nor does a restarted journal, which reads its rows.
     answered.length = 0;
     const served = await j.package();
     j.close(); j = journal(file, narrow);
@@ -713,12 +713,24 @@ describe("the v3 operator journal", () => {
       "UPDATE events SET response = (SELECT response FROM events WHERE seq = 1) WHERE request = 'commit'",
     ]) expect(await refusal((async () => (await tampered(tamper)).status())()), tamper).toEqual(["STORAGE", undefined]);
     // Serving loads no admission state; what it serves is checked as it is read: a lost directory or trail of a
-    // signed checkpoint, or a signed row that does not decode, refuses it as storage too.
+    // signed checkpoint, a signed row lost, changed or out of step with what the venue holds of this key, refuses it
+    // as storage too, never a shorter or older package.
     for (const tamper of [
       "DELETE FROM object WHERE kind = 3",
       "DELETE FROM chain WHERE position = 1",
       "UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 2",
+      "DELETE FROM journal_signed WHERE sequence = (SELECT MAX(sequence) FROM journal_signed)",
+      "DELETE FROM journal_signed WHERE sequence = 1",
     ]) expect(await refusal((async () => (await tampered(tamper)).package())()), tamper).toEqual(["STORAGE", undefined]);
+    // A changed row is refused as well once its publication is no longer in flight, where the held commitment selects.
+    {
+      const { file, venue: v, j } = await opened();
+      await j.submit(issue()); await j.commit("c2"); await j.publish(); j.close();
+      const db = new DatabaseSync(file);
+      expect(Number(db.prepare("UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 2").run().changes)).toBe(1); db.close();
+      v.advance(v.witnessedIndex() + lag);
+      expect(await refusal(journal(file, v).package())).toEqual(["STORAGE", undefined]);
+    }
     // What reopening does not read, the audit does: a record, a receipt, an earlier reply or publication, a fact row.
     for (const tamper of [
       "UPDATE chain SET bytes = zeroblob(length(bytes)) WHERE position = 1",

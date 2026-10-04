@@ -369,16 +369,20 @@ export async function classifyScopes(context: ImportContext, record: RecordVenue
 }
 
 /** Run `read` over `walk`, then close the walk. A read's own failure is what its caller sees: a walk that then fails
- * to close has rolled back what it could not commit (`closeWalk`), so that failure does not replace the read's
- * refusal. After a read that succeeded, a failed close is the caller's to see: what the read kept did not commit. */
+ * to close does not replace the read's refusal, and goes with it as its `cause` where it has none. After a read
+ * that succeeded, a failed close is the caller's to see: what the read kept did not commit. */
 async function closing<T>(walk: { close(): void }, read: () => Promise<T>): Promise<T> {
   let result: T;
   try { result = await read(); } catch (error) {
-    try { walk.close(); } catch { /* the read's failure stands */ }
+    try { walk.close(); } catch (closed) { withCause(error, closed); }
     throw error;
   }
   walk.close();
   return result;
+}
+/** A cleanup's failure kept beside the failure it followed, which stands. */
+export function withCause(error: unknown, cause: unknown): void {
+  if (error instanceof Error && error.cause === undefined) error.cause = cause;
 }
 
 async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk: ReturnType<typeof scopeWalk>): Promise<ScopeResult> {

@@ -159,7 +159,7 @@ describe("the single-backing reader walk", () => {
     const close = vi.spyOn(ReplayStore.prototype, "closeWalk").mockImplementation(() => { throw new Error("disk I/O error"); });
     try {
       // A selection the venue does not hold is refused; the walk's failed close does not replace that refusal.
-      await expect(f.read(original, { ...selected, sequence: 2n })).rejects.toMatchObject({ status: "selection-mismatch" });
+      await expect(f.read(original, { ...selected, sequence: 2n })).rejects.toMatchObject({ status: "selection-mismatch", cause: { message: "disk I/O error" } });
       // After a read that succeeded, what it kept did not commit: the caller sees that.
       await expect(f.read(original, selected)).rejects.toThrow("disk I/O error");
     } finally { close.mockRestore(); }

@@ -1276,6 +1276,8 @@ export class V3OperatorJournal {
         const rows = this.db.prepare("SELECT sequence,commitment FROM journal_signed WHERE sequence>? AND sequence<=? ORDER BY sequence LIMIT ?").all(cursor, through, SERVE_PAGE);
         if (rows.length === 0) break;
         for (const row of rows) {
+          // Every signed sequence keeps its row: a gap is damage, never a checkpoint left out.
+          requireThat(row.sequence === cursor + 1n, "STORAGE", "a signed row is missing");
           const directory = this.retained.object(3, decodeCommitment(bytes(row.commitment)).root);
           requireThat(directory !== undefined, "STORAGE", "a signed directory is missing");
           add(3, directory);
@@ -1328,7 +1330,8 @@ export class V3OperatorJournal {
    * call whose parts the reader kept; it authenticates nothing, and a reader that lacks what it implies asks
    * again from 0. The parts are read after this call returns, while other commands run.
    *
-   * Serving reads signed rows that no command changes, so it takes no journal turn: it neither waits for a
+   * Serving reads signed rows, which a command changes only inside one synchronous transaction (a publication
+   * marks its row), so it takes no journal turn: it neither waits for a
    * command nor makes one BUSY. It writes only where the venue's clock has passed the index this key's held
    * commitments are kept through, keeping them through the clock as a command's view would (with any conflict
    * their windows show); otherwise it checks the fence and identity and reads.
@@ -1346,7 +1349,12 @@ export class V3OperatorJournal {
     if (selected !== undefined && view.now >= decimal(selected.at) + this.lag) selected = undefined;
     for (let held = view.latest; held !== undefined; held = this.heldBelow(view.now, held.commitment.sequence)) {
       if (selected !== undefined && held.commitment.sequence <= (selected.sequence as bigint)) break;
-      if (this.ownHeld(held) === undefined) continue;
+      if (this.ownHeld(held) === undefined) {
+        // Each held commitment of this key without its signed row was recorded as a conflict when its window was
+        // read (`foreign`); with none recorded, the row was lost or changed since: damage, not another signer's.
+        requireThat(view.conflict, "STORAGE", "a held commitment's signed row is missing");
+        continue;
+      }
       selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);
       break;
     }
@@ -1368,12 +1376,29 @@ export class V3OperatorJournal {
   /** The venue as a serve reads it: the clock, and this key's latest commitment held by it. The held commitments
    * are kept through the clock first where they are behind it, in a transaction of their own under the fence;
    * kept through it already, they are read after a fence check that writes nothing. */
-  private servingView(): { readonly now: bigint; readonly latest: HeldCommitment | undefined } {
+  private servingView(): { readonly now: bigint; readonly latest: HeldCommitment | undefined; readonly conflict: boolean } {
     const now = this.clock();
+    // Before any answer is kept: a damaged row must not be read as another signer's commitment (`foreign`).
+    this.latestSignedHolds();
     if (this.replays.keptAnswer(1, this.operator)?.through !== now) return this.keeping(() => this.viewed(undefined));
-    const meta = this.metadata(); this.identity(meta);
-    requireThat(meta!.owner === this.owner, "FENCED", "another process owns this journal");
-    return { now, latest: this.heldBelow(now) };
+    // One read snapshot, which takes no write lock: another owner's commit cannot fall between the checks.
+    this.db.exec("BEGIN");
+    try {
+      const meta = this.metadata();
+      requireThat(meta?.owner === this.owner, "FENCED", "another process owns this journal");
+      this.identity(meta);
+      return { now, latest: this.heldBelow(now), conflict: this.db.prepare("SELECT 1 FROM journal_conflict WHERE id=1").get() !== undefined };
+    } finally { this.db.exec("COMMIT"); }
+  }
+
+  /** As reopening checks (`stored`): the latest signed row is the log's latest signing reply, byte for byte, so a
+   * lost or changed row is damage that serving refuses, never an older selection. The rows below it are checked as
+   * they are served (`parts`). */
+  private latestSignedHolds(): void {
+    const found = this.db.prepare("SELECT commitment FROM journal_signed ORDER BY sequence DESC LIMIT 1").get();
+    const reply = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq DESC LIMIT 1").get()?.response;
+    requireThat(found === undefined ? reply === undefined : reply === bytesToHex(bytes(found.commitment)), "STORAGE",
+      "the signed commitments disagree with the command log");
   }
 
   /** `serve` from nothing as one §12 package held in memory, for a caller that reads a whole package. */

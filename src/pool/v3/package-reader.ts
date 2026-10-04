@@ -16,7 +16,7 @@ import type { ReaderSelection, SignedTerms } from "./reader.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import type { ReceiptFact } from "./receipt-state.js";
 import { checkpointScope } from "./scope-evidence.js";
-import { classifyScopeFrontier, classifyScopes, type FrontierContext, type FrontierResult, type ImportContext,
+import { classifyScopeFrontier, classifyScopes, withCause, type FrontierContext, type FrontierResult, type ImportContext,
   type ScopeResult } from "./scope-reader.js";
 import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import type { DeclaredVerifier, WitnessPredicate } from "./state.js";
@@ -72,13 +72,20 @@ function ownVerifier(verifierIn: DeclaredVerifier, verify: DeclaredVerifier["ver
  * when the read ends. */
 async function withEvidence<T>(source: PackageSource, options: PackageReader, read: (batch: EvidenceBatch) => Promise<T>): Promise<T> {
   const own = options.evidence === undefined, store = options.evidence ?? new EvidenceStore();
-  let batch: EvidenceBatch | undefined;
+  let batch: EvidenceBatch | undefined, result: T;
+  const done = (): void => { if (own) store.close(); else batch?.release(); };
   try {
     const streamed = source !== null && typeof source === "object" &&
       typeof (source as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function";
     batch = streamed ? await store.importStream(source as AsyncIterable<Uint8Array>) : store.importBytes(source as Uint8Array);
-    return await read(batch);
-  } finally { if (own) store.close(); else batch?.release(); }
+    result = await read(batch);
+  } catch (error) {
+    // A failed cleanup does not replace the read's own failure (as `closing` in scope-reader.ts).
+    try { done(); } catch (cleanup) { withCause(error, cleanup); }
+    throw error;
+  }
+  done();
+  return result;
 }
 
 /** Each of kinds 1, 2 and 10 at most once in the package; the import refused kinds a v3 reader does not read. */
