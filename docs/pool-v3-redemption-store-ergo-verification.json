@@ -22,133 +22,133 @@
       "name": "backer: sync undefined, issue issue, submit issue",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1273
+      "elapsedMs": 1115
     },
     {
       "name": "holder: sync undefined, prepare pay, submit pay",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3272
+      "elapsedMs": 2796
     },
     {
       "name": "shop: sync undefined, demand redeem, submit redeem",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2940
+      "elapsedMs": 2523
     },
     {
       "name": "shop: sync undefined, settle settle, submit settle",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2982
+      "elapsedMs": 2512
     },
     {
       "name": "backer: sync undefined, burn retire, submit retire",
       "kind": 3,
       "bytes": 14656,
-      "elapsedMs": 2803
+      "elapsedMs": 2371
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1279
+      "elapsedMs": 1106
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1012
+      "elapsedMs": 874
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1023
+      "elapsedMs": 876
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1003
+      "elapsedMs": 872
     },
     {
       "name": "holder: sync undefined, demand four, submit four, demand five, submit five",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2770
+      "elapsedMs": 2359
     },
     {
       "name": "holder: sync undefined, demand four, submit four, demand five, submit five",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2626
+      "elapsedMs": 2242
     },
     {
       "name": "restored: sync undefined, settle settle-4, submit settle-4, withdraw back-5, submit back-5",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2930
+      "elapsedMs": 2541
     },
     {
       "name": "holder: sync undefined, settle lost-4",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2754
+      "elapsedMs": 2372
     },
     {
       "name": "holder: demand gap, publish gap",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2953
+      "elapsedMs": 2519
     },
     {
       "name": "holder: settle gap-settle, publish gap-settle",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2963
+      "elapsedMs": 2546
     },
     {
       "name": "holder: demand hostile, publish hostile",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2924
+      "elapsedMs": 2547
     },
     {
       "name": "holder: sync undefined, settle late",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2736
+      "elapsedMs": 2382
     },
     {
       "name": "holder: sync undefined, settle again",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2974
+      "elapsedMs": 2544
     },
     {
       "name": "taker demand 0",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2740
+      "elapsedMs": 2383
     },
     {
       "name": "taker demand 1",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2603
+      "elapsedMs": 2263
     },
     {
       "name": "taken release",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2592
+      "elapsedMs": 2235
     },
     {
       "name": "taking settlement",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2581
+      "elapsedMs": 2242
     }
   ],
   "processes": [
@@ -156,289 +156,289 @@
       "role": "holder",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3302
+      "elapsedMs": 2823
     },
     {
       "role": "backer",
       "steps": "sync,issue,submit",
       "retry": false,
-      "elapsedMs": 5052
+      "elapsedMs": 4517
     },
     {
       "role": "backer",
       "steps": "issue,act",
       "retry": true,
-      "elapsedMs": 3220
+      "elapsedMs": 2770
     },
     {
       "role": "shop",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3291
+      "elapsedMs": 2833
     },
     {
       "role": "holder",
       "steps": "sync,prepare,submit",
       "retry": false,
-      "elapsedMs": 7163
+      "elapsedMs": 6190
     },
     {
       "role": "shop",
       "steps": "fulfill,sync",
       "retry": false,
-      "elapsedMs": 3775
+      "elapsedMs": 3300
     },
     {
       "role": "holder",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3638
+      "elapsedMs": 3112
     },
     {
       "role": "backer",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3686
+      "elapsedMs": 3146
     },
     {
       "role": "shop",
       "steps": "sync,demand,submit",
       "retry": false,
-      "elapsedMs": 6566
+      "elapsedMs": 5584
     },
     {
       "role": "shop",
       "steps": "demand,act",
       "retry": true,
-      "elapsedMs": 3279
+      "elapsedMs": 2763
     },
     {
       "role": "shop",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3700
+      "elapsedMs": 3125
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 3692
+      "elapsedMs": 3117
     },
     {
       "role": "backer",
       "steps": "accept",
       "retry": true,
-      "elapsedMs": 3301
+      "elapsedMs": 2785
     },
     {
       "role": "shop",
       "steps": "sync,settle,submit",
       "retry": false,
-      "elapsedMs": 6699
+      "elapsedMs": 5620
     },
     {
       "role": "shop",
       "steps": "settle,act",
       "retry": true,
-      "elapsedMs": 3374
+      "elapsedMs": 2775
     },
     {
       "role": "shop",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3690
+      "elapsedMs": 3089
     },
     {
       "role": "holder",
       "steps": "sync,presentation",
       "retry": false,
-      "elapsedMs": 3802
+      "elapsedMs": 3269
     },
     {
       "role": "backer",
       "steps": "sync,burn,submit",
       "retry": false,
-      "elapsedMs": 6790
+      "elapsedMs": 5700
     },
     {
       "role": "backer",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3699
+      "elapsedMs": 3165
     },
     {
       "role": "holder",
       "steps": "request,request",
       "retry": false,
-      "elapsedMs": 3409
+      "elapsedMs": 2879
     },
     {
       "role": "backer",
       "steps": "sync,issue,submit,issue,submit,issue,submit,issue,submit",
       "retry": false,
-      "elapsedMs": 8598
+      "elapsedMs": 7260
     },
     {
       "role": "holder",
       "steps": "sync,demand,submit,demand,submit",
       "retry": false,
-      "elapsedMs": 9856
+      "elapsedMs": 8363
     },
     {
       "role": "restored",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 4295
+      "elapsedMs": 3728
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 4008
+      "elapsedMs": 3380
     },
     {
       "role": "restored",
       "steps": "sync,settle,submit,withdraw,submit",
       "retry": false,
-      "elapsedMs": 7162
+      "elapsedMs": 5855
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6668
+      "elapsedMs": 5652
     },
     {
       "role": "restored",
       "steps": "sync,act,act",
       "retry": false,
-      "elapsedMs": 3810
+      "elapsedMs": 3196
     },
     {
       "role": "holder",
       "steps": "sync,act,act,presentation",
       "retry": false,
-      "elapsedMs": 3905
+      "elapsedMs": 3235
     },
     {
       "role": "holder",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3539
+      "elapsedMs": 2982
     },
     {
       "role": "backer",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3788
+      "elapsedMs": 3209
     },
     {
       "role": "holder",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3610
+      "elapsedMs": 2985
     },
     {
       "role": "backer",
       "steps": "issue",
       "retry": false,
-      "elapsedMs": 3650
+      "elapsedMs": 3009
     },
     {
       "role": "holder",
       "steps": "demand,publish",
       "retry": false,
-      "elapsedMs": 6673
+      "elapsedMs": 5562
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3850
+      "elapsedMs": 3223
     },
     {
       "role": "backer",
       "steps": "sync,accept",
       "retry": false,
-      "elapsedMs": 3929
+      "elapsedMs": 3269
     },
     {
       "role": "holder",
       "steps": "settle,publish",
       "retry": false,
-      "elapsedMs": 6662
+      "elapsedMs": 5623
     },
     {
       "role": "holder",
       "steps": "sync,act,presentation",
       "retry": false,
-      "elapsedMs": 3980
+      "elapsedMs": 3285
     },
     {
       "role": "backer",
       "steps": "burn",
       "retry": false,
-      "elapsedMs": 3900
+      "elapsedMs": 3230
     },
     {
       "role": "holder",
       "steps": "demand,publish",
       "retry": false,
-      "elapsedMs": 6611
+      "elapsedMs": 5635
     },
     {
       "role": "backer",
       "steps": "sync,accept",
       "retry": false,
-      "elapsedMs": 3972
+      "elapsedMs": 3325
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6749
+      "elapsedMs": 5757
     },
     {
       "role": "holder",
       "steps": "publish",
       "retry": false,
-      "elapsedMs": 3686
+      "elapsedMs": 3001
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3952
+      "elapsedMs": 3302
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 4027
+      "elapsedMs": 3349
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6934
+      "elapsedMs": 5756
     },
     {
       "role": "holder",
       "steps": "publish",
       "retry": false,
-      "elapsedMs": 3659
+      "elapsedMs": 3056
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 4068
+      "elapsedMs": 3381
     },
     {
       "role": "backer",
       "steps": "sync,presentation,presentation",
       "retry": false,
-      "elapsedMs": 4689
+      "elapsedMs": 3855
     }
   ],
   "transactions": [
@@ -513,7 +513,7 @@
     }
   ],
   "maxPackageBytes": 79489,
-  "elapsedMs": 258279,
+  "elapsedMs": 217757,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "72694438fc22bc25bc517ce1a310f94ca45171c6a46b50b1bb6dd31c98ef6322",
@@ -539,7 +539,7 @@
     "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
     "dist/pool/v3/configuration.js": "7af6147f90d70c7c03372751ae6f7be172c836adcf9d7197c8daac36d7caabc5",
     "dist/pool/v3/dishonour.js": "c20c81bb0bb98cca5f4ee7d029e84b932748f20545bd63a8a30f996eb3553bc4",
-    "dist/pool/v3/evidence-store.js": "cd169d589c50e5783155ac9cb53c38917c02b1a2112551e2ded03d98d2d90842",
+    "dist/pool/v3/evidence-store.js": "bd8a8183ccb1a00570ad081a7b70e8e743820333765f637dc8c3643d9132fd82",
     "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
     "dist/pool/v3/fault-observer.js": "e67dcc0954c558e2432593c3478db0aaf183f2d1381e7581c334676144958ae5",
     "dist/pool/v3/guard.js": "2f5a954e2f702a477dee85e51956d0fbd1ff279b4813b9ae2131b03a7f8c4306",
@@ -550,15 +550,15 @@
     "dist/pool/v3/package.js": "198b0665b94820324a131698b4c86ae4f6d7a1c8c3dbf28b7b5c849f682bd775",
     "dist/pool/v3/programs.js": "7f3fc7114320498c51795f287effcbd4a482a00aa64fd32f46dfe33c89a2f4f2",
     "dist/pool/v3/prover.js": "bc264e9e09d7874ef535ff917073eb2d59b83e8db41e2bcfe535ef9779edb11f",
-    "dist/pool/v3/reader.js": "c6ac2fb38ebe8443b64f7a713886d9f5d874ffb93b58d854382d7000aa86262f",
+    "dist/pool/v3/reader.js": "acf9d29a24ca94527e80ad0f5c3e72d65d82ccf7a00f378f5735ab5d1ed626ea",
     "dist/pool/v3/receipt-state.js": "81df63a73005dfb59c5aec6212ea06bab356725dc072e423e1b3b720c322cacd",
     "dist/pool/v3/records.js": "93adfd8958036966e071e376b94baf6c676312e5f39cac4cacb478e2cad33898",
     "dist/pool/v3/recovery.js": "9be92e726068fce7aac63a2454d1d5af6d83cd5b9987f14a2c71e3defd7d5dd5",
     "dist/pool/v3/redemption.js": "23a5cc869d6a0eb5ff687a4ff6c96f8d5682500565db40dec22228ffffb18abd",
     "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
-    "dist/pool/v3/replay-store.js": "238b3cbb305612015839a79f6cefc124910f0b6a71c9d4c85227f98ad15f0e7c",
+    "dist/pool/v3/replay-store.js": "35b5c7faf28de625f93a739866d0cc6c6a474ce880d52174e4860a464fbeadb0",
     "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
-    "dist/pool/v3/scope-reader.js": "0ca3010f34d69ce53ff9c995eed50bf8f06807fa39ab3be60722d5538c938186",
+    "dist/pool/v3/scope-reader.js": "ac75545b9cd1809c4a47e5c6c6dfd3c2ec76baae9a8c343c6460d30e5c2665c0",
     "dist/pool/v3/service-client.js": "795304d36b92d1f2054a10a8dbab95da268d62fe57ca00e4dd7dc4107cb162be",
     "dist/pool/v3/service-http.js": "7a9eff7a46070a2a165077e6bf9a83229f7da4b621b4c5af8382eadd61e5a955",
     "dist/pool/v3/service-wire.js": "b9928faffde6a4477c502584a3732765fdaea293ed5f45d4ba1d9a7361ce69ca",
@@ -623,7 +623,7 @@
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
     "src/pool/v3/dishonour.ts": "7484d25993dba1247c1f4c6343046307b9811ee07fbf2fa5c3db33c203ccbee3",
-    "src/pool/v3/evidence-store.ts": "201aaa3e452c100b7d20d942cc56ae669633492292f38447d0078f4bf7f8d70e",
+    "src/pool/v3/evidence-store.ts": "ddd19248e62338548f98cc259376db55f59f2e29aae079b69b940f02e79e1cc1",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
     "src/pool/v3/fault-observer.ts": "0891d5e2c6fccba206aeeab342b605de80a58bb182bb955189e52749bfe2b307",
     "src/pool/v3/guard.ts": "5639df996a29ae215380e39739e0bbce82241d9ab1bec0f4746eff48a481b7cf",
@@ -635,15 +635,15 @@
     "src/pool/v3/programs.json": "b129fcfca83a4b48cb725d839fda7957491948ff15362b3c29c8014b7e77a2ec",
     "src/pool/v3/programs.ts": "90bcb494e6d71242a52d4612246f62ed7e6eb2a1c1f1b183232c6a15fba53bac",
     "src/pool/v3/prover.ts": "32be137041338971421d031cd840b8995c8b61410c790105da2a793d2c5e3b22",
-    "src/pool/v3/reader.ts": "7c28accc7e558f6dfdcfc46a47ec472178fa9a2e1d0d412e3ae70bf6f7dbc9f1",
+    "src/pool/v3/reader.ts": "86d60256c0d5f0186bbd756e99b403a5779addd9af8be819e2020712f2074e15",
     "src/pool/v3/receipt-state.ts": "80f38f6e8338fc5fd91668f9189825e2e0bcf987500f9911cad0b65ef9e7e99b",
     "src/pool/v3/records.ts": "0b46e880f05c6776cda9f8918a8383cc0a8b4b4eb81beddf29331a1749108c32",
     "src/pool/v3/recovery.ts": "c025d9f2d2d75a9f6cdc8fcaf5e6fefabb199e85bb486200ba16f1aa7f63079d",
     "src/pool/v3/redemption.ts": "7445c3db89a2263d720a2fdb552ae9c8991fdf3ddf086bcc3dc7507e89f26899",
     "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
-    "src/pool/v3/replay-store.ts": "699ac9a247c2e16e9c421022072399ae43683b8808ab32bd6397daf716264ecb",
+    "src/pool/v3/replay-store.ts": "c5fec177dfe0c29ca7103ebebe7998933e17d72a120c6622f3ada4cd3aad0ca8",
     "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
-    "src/pool/v3/scope-reader.ts": "6f77966837f4327ed4dc36e11cd1f7f52c42837d2800b6c5ec65e0249dccb66f",
+    "src/pool/v3/scope-reader.ts": "6a9758b064fcfee2c3c52baa5cdd737bd3f7ca1b348327e657dd4ca20b1a24a8",
     "src/pool/v3/service-client.ts": "13158b97e1b974fb57cfedde7daac2cdd28d98ca64fb7ec420ded21f95a86790",
     "src/pool/v3/service-http.ts": "c0fb983594ae5903f349ebb7ca5f3d0e601ee4b57f45a1cabe376fe86f517b0d",
     "src/pool/v3/service-wire.ts": "ad23b26d4183db467906e05c192dbdffee696217721e3dbd9c57923c2ca7315a",

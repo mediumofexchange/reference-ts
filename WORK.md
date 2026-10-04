@@ -15,17 +15,15 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 ## Status
 - **Slice 10 done but M10d** (PRs #79–#91; decisions from [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)
   to [M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)):
-  the `moe` bin's wallet (holder, `--backer`), operator, reader and relay commands ([commands](docs/POOL_V3_WALLET.md#commands)) run from an
-  `npm pack` install with real proofs on the synthetic node (`command-drill.mjs`); the pilot, transparent path (kept at `8d207eb`) and the
-  harness's second reader retired. M10d (live testnet drill) needs the local machine (Open questions).
+  the `moe` wallet, operator, reader and relay [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack` install with real proofs
+  on the synthetic node; pilot, transparent path (`8d207eb`), second reader retired. M10d (live drill) needs the local machine.
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)):
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
-- **M11b in progress**. M11b1 (PR #93), (n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); kept layout 6.
-  M11b2 (PR #94, 014a038), (l): one index past the reader's 4,096-entry/1 MiB budget is asked again under the venue's `indexLimits`, capped at
-  `INDEX_LIMITS` (2^18, 32 MiB; [view](docs/ERGO_VENUE_PROFILE.md)). M11b3 (PR #95, e2c503d), (m): a served trail is read forward
-  by position (index `chain(segment, position)`; evidence layout 4, journal `pool-store/v3/5`), so no walk precedes its first byte; a fork
-  falls back to the walk back ([service](docs/POOL_V3_SERVICE.md)); reports: CI run 37151741994. Each had one fresh adversarial
-  review, findings fixed and read back. **Next: (k)**, then (s); M11c.
+- **M11b in progress**. M11b1 (PR #93), (n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)).
+  M11b2 (PR #94), (l): an index past the reader's answer budget is asked again under the venue's `indexLimits`, capped at `INDEX_LIMITS`.
+  M11b3 (PR #95), (m): a served trail is read forward by position, falling back to the walk back at a fork.
+  M11b4 (branch `claude/m11b4-kept-walk`; spec `dc51baf`), (k): later reads resume a kept walk ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k),
+  [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission flat, ≤0.18 s at 320 checkpoints, was 1.1 s at 80); reports: CI run 37167992004. **Next: (s)**, then M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -46,8 +44,7 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
    `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
    transaction. (h) closed in M10e2. (j) Verify-only parties could take
-   identity-checked key bytes, needing no G1 file. (k) A read under a silence or non-service clause judges every held checkpoint again at each
-   admission (persisting the walk's cursors would bound it). (l) closed (M11b2; a fixture venue declares no
+   identity-checked key bytes, needing no G1 file. (k) closed (M11b4, kept walk). (l) closed (M11b2; a fixture venue declares no
    index bound, its records being its owner's).
    (m) closed (M11b3; `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError). `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
    (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
@@ -59,6 +56,9 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    3× `maxBytes`; `closeWalk` errors in a `finally` can replace a read's result. M8a minor: `openV3Prover` proves under any domain, and the
    exported walks (`classifyScopes`, `replayTrail`) trust `selection.domain`. (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
+   (v) A read at a new venue index changes kept answers, so its close hashes the whole replay file (≈7 s at 10⁶): the operator's first
+   admission per block; M11c measures it, then an incremental root or the hot rows in a file of their own. (w) `moe reader` reads with an
+   in-memory replay store, so each command replays all history (no kept file, no kept walk); fix before M11c's reader steady state.
 5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
    sync, about 0.9 s at a hostile 20,000-header quota); sections asked of several suppliers at once (first-sync time, if M11c shows
    the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch

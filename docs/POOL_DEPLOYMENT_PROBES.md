@@ -1274,6 +1274,35 @@ one-output witnessed records, on a 4-core cloud container on 2026-10-03:
   scans every witnessed output once. The kept file's layout moved to 6, so a
   wallet's earlier kept file is replayed once.
 
+### An admission under a silence clause (M11b4)
+
+Under a silence or non-service clause the operator's journal reads its own
+canonical checkpoint through the public reader before each admission. Each
+read judged every held checkpoint again (a kept class skipped only the
+replay), walked the silence clock from the segment's opening and hashed the
+kept replay file whole. A read now resumes the selected backing's kept walk
+and judges only new checkpoints
+([decision](../decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)).
+A throwaway vitest probe committed and published H empty checkpoints of one
+backing with a silence clause on the fixture venue, with stand-in proofs,
+then timed `submit` of an issue, on a 4-core cloud container on 2026-10-03/04:
+
+| Held checkpoints | Before (`6d0fdf9`), 3 admissions | After (`c889aac`), 5 admissions |
+|---|---|---|
+| 5 | 96–122 ms | 74–112 ms |
+| 20 | 344–401 ms | 123–154 ms |
+| 80 | 1,099–1,194 ms | 112–138 ms |
+| 320 | not run | 121–178 ms |
+
+- *Result:* about 14 ms per held checkpoint per admission before (with the
+  trails these checkpoints carried); flat within the runs' spread after. The
+  first admission after each commit is the highest: it judges the new
+  checkpoint. The admission's own state transition is most of the rest.
+- *Limits:* stand-in proofs, the fixture venue and one backing; one run per
+  point. The replay file here is small: a read at a new venue index still
+  hashes the whole file (WORK.md Next 4(v)), about 7 s at 10⁶ statements by
+  M5b.6's figure, which this probe cannot show.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` contains nine cases using the existing

@@ -175,17 +175,28 @@ const SCHEMA = `
     PRIMARY KEY(walk, key)) WITHOUT ROWID;
   CREATE INDEX walk_verdict_order ON walk_verdict(walk, idx, seq, operator, root);
   CREATE TABLE walk_valid (walk INTEGER, backing BLOB, idx BLOB, seq BLOB, operator BLOB NOT NULL, key BLOB NOT NULL,
-    PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;`;
-/** Rows one read keeps for itself: what it classified (a verdict it judged or reused) and each backing's valid candidates. */
-const WALK_TABLES = ["walk_verdict", "walk_valid"];
-/** Rows kept across reads (pool-v3 §14 kept classes): each is a function of authenticated bytes and the record before its index. */
-const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication",
+    PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;
+  CREATE TABLE walk_carry (walk INTEGER, backing BLOB, key BLOB, idx BLOB NOT NULL, seq BLOB NOT NULL, operator BLOB NOT NULL, root BLOB NOT NULL,
+    PRIMARY KEY(walk, backing, key)) WITHOUT ROWID;
+  CREATE INDEX walk_carry_order ON walk_carry(walk, backing, idx, seq, operator, root);
+  CREATE TABLE walk_cursor (walk INTEGER, backing BLOB, term INTEGER NOT NULL, link BLOB NOT NULL, after BLOB, PRIMARY KEY(walk, backing)) WITHOUT ROWID;
+  CREATE TABLE walk_clock (walk INTEGER, backing BLOB, opening BLOB, upto BLOB NOT NULL, boundary BLOB,
+    PRIMARY KEY(walk, backing, opening)) WITHOUT ROWID;
+  CREATE TABLE walk_progress (walk INTEGER, backing BLOB, idx BLOB NOT NULL, ordinal BLOB NOT NULL, PRIMARY KEY(walk, backing)) WITHOUT ROWID;
+  CREATE TABLE kept_walk (selected BLOB PRIMARY KEY, walk INTEGER NOT NULL, through BLOB NOT NULL, evidence BLOB NOT NULL, mark BLOB NOT NULL)
+    WITHOUT ROWID;`;
+/** Rows one read keeps for itself: what it classified (a verdict it judged or reused), each backing's valid candidates,
+ * how far it has classified each backing's checkpoints and publications, and each silence clock's running state. */
+const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_carry", "walk_cursor", "walk_clock", "walk_progress"];
+/** Rows kept across reads (pool-v3 §14 kept classes and kept walk): each is a function of authenticated bytes and the
+ * record before its index. A kept walk's own rows stay under its walk; forgetting it orphans them. */
+const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication", "kept_walk",
   "answer", "answer_held", "answer_replacement", "answer_publication"];
 /** Kept venue answers refer to no namespace, so collection keeps them. */
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. 6: a witness row holds an
- * incomplete right block as the empty subtree, which an earlier build would return as its path. */
-const SCHEMA_VERSION = 6;
+ * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk. */
+const SCHEMA_VERSION = 7;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -226,6 +237,18 @@ export interface WalkBase {
   readonly adoption: ReadonlyMap<string, bigint>;
   readonly block: readonly WalkForce[];
 }
+/** What names a kept walk (pool-v3 §14 kept walk): the backing a read selects, the retained evidence it reads from,
+ * and the judging index it reads through. */
+export interface KeptWalkKey {
+  readonly selected: Uint8Array;
+  /** The retained evidence's identity, its lineage mark at this read, and whether its lineage passes a kept mark. */
+  readonly evidence: Uint8Array;
+  readonly mark: Uint8Array;
+  holds(mark: Uint8Array): boolean;
+  readonly through: bigint;
+}
+/** An open walk, and whether it resumed a kept walk's rows. */
+export interface OpenedWalk { readonly walk: number; readonly resumed: boolean }
 /** A forced publication's inner record, by its backing (hex) and venue position. */
 export interface WalkForce { readonly backing: string; readonly index: bigint; readonly ordinal: bigint; readonly bytes: Uint8Array }
 /** A classified publication: forced, or not with the check that refused it (none where it was not a candidate). */
@@ -327,6 +350,11 @@ export class ReplayStore {
   #savepoints = 0;
   #replaying = false;
   #sinceKeep = 0;
+  /** The connection's count of changed rows when the file's digest was last recorded: a read that changed nothing
+   * leaves the digest as it is. */
+  #digestedAt: bigint | undefined;
+  /** A resumed kept walk's mark for this read, moved at its close where the walk changed a row. */
+  #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
   #lost = false;
   /** The last frontier `witness` folded, by its namespace, leaf count and root: the paths of one tip share it. */
@@ -369,6 +397,8 @@ export class ReplayStore {
     }
     // C2.10.6's union is a working set of one connection: it never changes the file, so a kept file's digest stands.
     this.#db.exec("CREATE TEMP TABLE IF NOT EXISTS merging (ns INTEGER PRIMARY KEY, upto INTEGER NOT NULL)");
+    // A reopened kept file passed the digest check: its recorded digest is the file's until a row changes.
+    if (this.#kept !== undefined && existsSync(this.#kept.digest)) this.#digestedAt = this.#changes();
     const v = visible("x");
     this.#q = Object.fromEntries(Object.entries({
       tip: "SELECT * FROM namespace WHERE ns = ?",
@@ -429,9 +459,19 @@ export class ReplayStore {
   /** Record the committed file's digest (a keep point's second half). A crash before this leaves an old
    * digest, so the next open discards the file and replays in full (storage decision item 6). */
   #recordDigest(): void {
-    replaceFile(this.#kept!.digest, fileDigest(this.#kept!.path));
-    this.#sinceKeep = 0;
+    const changes = this.#changes();
+    if (changes !== this.#digestedAt) replaceFile(this.#kept!.digest, fileDigest(this.#kept!.path));
+    this.#digestedAt = changes; this.#sinceKeep = 0;
   }
+  /** Move a resumed kept walk's mark to this read's where the walk changed a row since it opened. */
+  #moveMark(walk: number): void {
+    const marked = this.#keptMark;
+    if (marked === undefined || marked.walk !== walk || this.#changes() <= marked.changes) return;
+    this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE selected = ? AND walk = ?").run(marked.mark, marked.selected, walk);
+    this.#keptMark = { ...marked, changes: this.#changes() };
+  }
+  /** Rows this connection has inserted, updated or deleted since it opened. */
+  #changes(): bigint { return BigInt((this.#db.prepare("SELECT total_changes() AS c").get() as { c: bigint | number }).c); }
   /** A keep point inside a walk where one is due: only between checkpoints (no savepoint or replay open),
    * once `every` records have replayed since the last, so a killed long read keeps its progress. */
   keepPoint(): void {
@@ -443,6 +483,8 @@ export class ReplayStore {
     // A store that wrote in the moment between is found by the file's data version, and this walk stops.
     // Read inside the transaction: this connection's own commit leaves the version as it is.
     const version = this.#dataVersion();
+    // What a keep point commits was kept from this read's evidence too.
+    if (this.#keptMark !== undefined) this.#moveMark(this.#keptMark.walk);
     this.#db.exec("COMMIT");
     try { this.#recordDigest(); } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
@@ -845,14 +887,20 @@ export class ReplayStore {
   // class, scope, base or publication verdict is depends only on authenticated bytes and the record
   // before its index (C2.10.11), so those rows are kept across reads under one context (pool-v3 §14
   // kept classes): the configuration, venue, lag, verifier and witness predicate the reader names.
-  // A walk keeps for itself only what it classified and each backing's valid candidates, which are
-  // bounded by its own judging index; those go when it closes.
+  // A walk keeps for itself what it classified, each backing's valid candidates, how far it has classified
+  // each backing's checkpoints and publications, and each silence clock's running state, all bounded by its
+  // own judging index. A temporary walk's rows go when it closes. A kept walk (§14 kept walk) stays for the
+  // next read of the same selected backing from the same retained evidence at the same or a later judging
+  // index, which resumes it and classifies only what is new.
 
   // A walk runs in one transaction: its rows and replays commit once, when it closes, or at a keep point.
   // A walk that overflows the page cache spills to the file, so memory stays bounded. One walk at a time:
   // a second open while one is open is the caller's error. Another context than the kept one discards the
-  // kept rows: a store keeps one context.
-  openWalk(context: Uint8Array): number {
+  // kept rows, kept walks included: a store keeps one context.
+  /** Open a walk. With `keep`, the kept walk of `keep.selected` is resumed where it was read from the same retained
+   * evidence through no later index than `keep.through`, or one is begun where there is none or it was read from
+   * other retained evidence; a kept walk read past `keep.through` stays as it is and this read's walk is temporary. */
+  openWalk(context: Uint8Array, keep?: KeptWalkKey): OpenedWalk {
     // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
     if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
@@ -863,8 +911,6 @@ export class ReplayStore {
       throw error;
     }
     try {
-      // No walk is open, so any walk rows are a crashed read's: they are no one's.
-      for (const table of ["walk", ...WALK_TABLES]) this.#db.prepare(`DELETE FROM ${table}`).run();
       const kept = this.#db.prepare("SELECT key FROM kept_context WHERE id = 1").get() as { key: unknown } | undefined;
       if (kept === undefined || !equal(bytes(kept.key), context)) {
         for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
@@ -872,16 +918,43 @@ export class ReplayStore {
         if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
         this.#db.prepare("INSERT OR REPLACE INTO kept_context VALUES (1, ?)").run(context);
       }
-      return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id);
+      let resumed: { walk: bigint; through: Uint8Array; evidence: Uint8Array; mark: Uint8Array } | undefined;
+      if (keep !== undefined) {
+        resumed = this.#db.prepare("SELECT walk, through, evidence, mark FROM kept_walk WHERE selected = ?").get(keep.selected) as typeof resumed;
+        // Read from other retained evidence, or from this evidence restored to before the kept walk's last read: its
+        // classes were grounded on evidence this read may not hold, so it is begun again (§14: a class is reused only
+        // while its evidence is retained).
+        if (resumed !== undefined && (!equal(bytes(resumed.evidence), keep.evidence) || !keep.holds(bytes(resumed.mark)))) {
+          this.#db.prepare("DELETE FROM kept_walk WHERE selected = ?").run(keep.selected);
+          resumed = undefined;
+        }
+      }
+      // No walk is open, so the rows of any walk that is not kept are a crashed read's or a forgotten kept walk's.
+      this.#db.prepare("DELETE FROM walk WHERE id NOT IN (SELECT walk FROM kept_walk)").run();
+      for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk NOT IN (SELECT walk FROM kept_walk)`).run();
+      if (keep !== undefined && resumed !== undefined) {
+        // A kept walk read past this read's index keeps candidates this read must not see: this read's is temporary.
+        if (fromBe(resumed.through) > keep.through) return { walk: this.#newWalk(), resumed: false };
+        // Raised in the walk's transaction before any row it writes, so rows a refused or interrupted read kept stay
+        // within the index the kept walk names.
+        if (fromBe(resumed.through) < keep.through) this.#db.prepare("UPDATE kept_walk SET through = ? WHERE selected = ?").run(be(keep.through), keep.selected);
+        this.#keptMark = { walk: Number(resumed.walk), selected: keep.selected, mark: keep.mark, changes: this.#changes() };
+        return { walk: Number(resumed.walk), resumed: true };
+      }
+      const walk = this.#newWalk();
+      if (keep !== undefined) this.#db.prepare("INSERT INTO kept_walk VALUES (?, ?, ?, ?, ?)").run(keep.selected, walk, be(keep.through), keep.evidence, keep.mark);
+      this.#keptMark = undefined;
+      return { walk, resumed: false };
     } catch (error) {
       // A walk that did not open leaves no transaction behind.
       if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
       throw error;
     }
   }
-  /** Drop the walk's own rows and commit what it kept, refused read or not; a kept file records its digest
-   * (a keep point). If the commit fails, what the walk wrote since its last keep point is rolled back and no
-   * transaction stays open. */
+  #newWalk(): number { return Number((this.#db.prepare("INSERT INTO walk VALUES (NULL) RETURNING id").get() as { id: bigint }).id); }
+  /** Drop a temporary walk's own rows (a kept walk keeps them) and commit what it kept, refused read or not; a kept
+   * file records its digest where a row changed (a keep point). If the commit fails, what the walk wrote since its
+   * last keep point is rolled back and no transaction stays open. */
   closeWalk(walk: number): void {
     // A walk that lost its file at a keep point leaves it to the store that took it: nothing to drop or digest here.
     if (this.#lost) {
@@ -890,8 +963,14 @@ export class ReplayStore {
       return;
     }
     try {
-      for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
-      this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);
+      // A resumed walk that kept anything kept it from this read's evidence: its mark moves to this read's, so a store
+      // restored to before it no longer resumes the walk. A read that changed nothing leaves the mark, and the file.
+      this.#moveMark(walk);
+      this.#keptMark = undefined;
+      if (this.#db.prepare("SELECT 1 FROM kept_walk WHERE walk = ?").get(walk) === undefined) {
+        for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
+        this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);
+      }
       if (this.#db.isTransaction) this.#db.exec("COMMIT");
     } catch (error) {
       if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
@@ -899,11 +978,42 @@ export class ReplayStore {
     }
     if (this.#kept !== undefined) this.#recordDigest();
   }
-  /** Rows held for walks still open: none once every read has closed its walk. */
+  /** Rows held for walks still open, kept walks aside: none once every read has closed its walk. */
   walkRows(): number {
     let rows = 0;
-    for (const table of ["walk", ...WALK_TABLES]) rows += Number((this.#db.prepare(`SELECT count(*) AS c FROM ${table}`).get() as { c: bigint }).c);
+    for (const table of ["walk", ...WALK_TABLES]) {
+      const column = table === "walk" ? "id" : "walk";
+      rows += Number((this.#db.prepare(`SELECT count(*) AS c FROM ${table} WHERE ${column} NOT IN (SELECT walk FROM kept_walk)`).get() as { c: bigint }).c);
+    }
     return rows;
+  }
+  /** How far a walk has classified `backing`'s held checkpoints: the term (its position in the chain and its link)
+   * and the last sequence classified within it. */
+  cursor(walk: number, backing: Uint8Array): { term: number; link: Uint8Array; after: bigint | undefined } | undefined {
+    const row = this.#db.prepare("SELECT term, link, after FROM walk_cursor WHERE walk = ? AND backing = ?").get(walk, backing) as
+      { term: bigint; link: unknown; after: unknown } | undefined;
+    return row === undefined ? undefined : { term: Number(row.term), link: bytes(row.link), after: row.after === null ? undefined : fromBe(row.after) };
+  }
+  putCursor(walk: number, backing: Uint8Array, term: number, link: Uint8Array, after: bigint | undefined): void {
+    this.#db.prepare("INSERT OR REPLACE INTO walk_cursor VALUES (?, ?, ?, ?, ?)").run(walk, backing, term, link, after === undefined ? null : be(after));
+  }
+  /** A silence clock's running state for `backing` from an opening index: read through `upto`, with its boundary if found. */
+  clockState(walk: number, backing: Uint8Array, opening: bigint): { upto: bigint; boundary: bigint | undefined } | undefined {
+    const row = this.#db.prepare("SELECT upto, boundary FROM walk_clock WHERE walk = ? AND backing = ? AND opening = ?").get(walk, backing, be(opening)) as
+      { upto: unknown; boundary: unknown } | undefined;
+    return row === undefined ? undefined : { upto: fromBe(row.upto), boundary: row.boundary === null ? undefined : fromBe(row.boundary) };
+  }
+  putClockState(walk: number, backing: Uint8Array, opening: bigint, upto: bigint, boundary: bigint | undefined): void {
+    this.#db.prepare("INSERT OR REPLACE INTO walk_clock VALUES (?, ?, ?, ?, ?)").run(walk, backing, be(opening), be(upto), boundary === undefined ? null : be(boundary));
+  }
+  /** The venue position of the last of `backing`'s publications a walk classified. */
+  progress(walk: number, backing: Uint8Array): { index: bigint; ordinal: bigint } | undefined {
+    const row = this.#db.prepare("SELECT idx, ordinal FROM walk_progress WHERE walk = ? AND backing = ?").get(walk, backing) as
+      { idx: unknown; ordinal: unknown } | undefined;
+    return row === undefined ? undefined : { index: fromBe(row.idx), ordinal: fromBe(row.ordinal) };
+  }
+  putProgress(walk: number, backing: Uint8Array, index: bigint, ordinal: bigint): void {
+    this.#db.prepare("INSERT OR REPLACE INTO walk_progress VALUES (?, ?, ?, ?)").run(walk, backing, be(index), be(ordinal));
   }
   /** Rows kept across reads. */
   keptRows(): number {
@@ -921,9 +1031,9 @@ export class ReplayStore {
       s === undefined ? null : mapJson(s.adoption), s === undefined ? null : be(s.opening));
     this.touch(walk, v);
   }
-  /** Count a kept class as classified by the walk. */
+  /** Count a kept class as classified by the walk (once). */
   touch(walk: number, v: Pick<WalkVerdict, "key" | "index" | "sequence" | "operator" | "root">): void {
-    this.#db.prepare("INSERT INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?)").run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root);
+    this.#db.prepare("INSERT OR IGNORE INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?)").run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root);
   }
   #verdict(row: Record<string, unknown>): WalkVerdict {
     const state = row["ns"] === null ? undefined : { ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint),
@@ -944,16 +1054,20 @@ export class ReplayStore {
     const row = this.#db.prepare("SELECT * FROM verdict WHERE key = ?").get(key) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#verdict(row);
   }
-  /** Every class the walk classified, by index, sequence, then operator and root bytes. */
-  *verdicts(walk: number): Generator<WalkVerdict> {
-    for (const row of this.#db.prepare(`SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ?
-        ORDER BY w.idx, w.seq, w.operator, w.root`).iterate(walk)) {
+  /** Tag a class the walk's cursor classified as one of `backing`'s carrying checkpoints within its terms. */
+  carry(walk: number, backing: Uint8Array, key: Uint8Array, index: bigint, sequence: bigint, operator: Uint8Array, root: Uint8Array): void {
+    this.#db.prepare("INSERT OR IGNORE INTO walk_carry VALUES (?, ?, ?, ?, ?, ?, ?)").run(walk, backing, key, be(index), be(sequence), operator, root);
+  }
+  /** `backing`'s tagged carrying checkpoints through index `t`, by index, sequence, then operator and root bytes. */
+  *carried(walk: number, backing: Uint8Array, t: bigint): Generator<WalkVerdict> {
+    for (const row of this.#db.prepare(`SELECT v.* FROM walk_carry c JOIN verdict v ON v.key = c.key WHERE c.walk = ? AND c.backing = ? AND c.idx <= ?
+        ORDER BY c.idx, c.seq, c.operator, c.root`).iterate(walk, backing, be(t))) {
       yield this.#verdict(row as Record<string, unknown>);
     }
   }
   /** A valid carrying candidate of `backing` (hex) within its term, for the latest-valid reads. */
   putValid(walk: number, backing: Uint8Array, index: bigint, operator: Uint8Array, sequence: bigint, key: Uint8Array): void {
-    this.#db.prepare("INSERT INTO walk_valid VALUES (?, ?, ?, ?, ?, ?)").run(walk, backing, be(index), be(sequence), operator, key);
+    this.#db.prepare("INSERT OR REPLACE INTO walk_valid VALUES (?, ?, ?, ?, ?, ?)").run(walk, backing, be(index), be(sequence), operator, key);
   }
   /** The key of `backing`'s latest valid candidate strictly before an index, or before a held checkpoint in rank
    * order (at its index, only the same operator's lower sequences), or of all. */
@@ -1111,6 +1225,15 @@ export class ReplayStore {
     return this.#held(operator, before === undefined ?
       this.#heldRow("operator = ? AND idx <= ? ORDER BY idx DESC, seq DESC LIMIT 1", operator, bound) :
       this.#heldRow("operator = ? AND seq < ? AND idx <= ? ORDER BY seq DESC LIMIT 1", operator, be(before), bound));
+  }
+  /** How many kept held commitments of `operator` lie in [from, to], below sequence `before` if given. */
+  heldCount(operator: Uint8Array, from: bigint, to: bigint, before?: bigint): number {
+    if (from > to) return 0;
+    const row = (before === undefined ?
+      this.#db.prepare("SELECT count(*) AS c FROM answer_held WHERE operator = ? AND idx >= ? AND idx <= ?").get(operator, be(from), be(to)) :
+      this.#db.prepare("SELECT count(*) AS c FROM answer_held WHERE operator = ? AND idx >= ? AND idx <= ? AND seq < ?").get(operator, be(from), be(to), be(before))) as
+      { c: bigint | number };
+    return Number(row.c);
   }
   /** The least index of a kept held commitment of `operator` in [from, to]. */
   firstHeldIndex(operator: Uint8Array, from: bigint, to: bigint): bigint | undefined {
