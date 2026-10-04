@@ -14,8 +14,8 @@ const PIECE = 65536;
 export class PackageLimitError extends Error {}
 /** A caller's budget for one package held in memory: its bytes and items. */
 export interface PackageLimits { readonly maxBytes: bigint; readonly maxItems: bigint }
-/** 1 config, 2 commitment, 3 directory, 4 snapshot, 5 header, 6 trail,
- * 7 fault, 8 signed terms, 9 publication, 10 receipt record, 11 venue evidence. */
+/** 1 config, 2 commitment, 3 directory, 4 snapshot, 6 trail, 7 fault, 10 receipt record; 5, 8, 9 and 11 are
+ * unassigned within v3 (pool-v3 §12). */
 export interface EvidenceItem { readonly kind: number; readonly payload: Uint8Array }
 
 /** Where a package reader delivers its items, in frame order. */

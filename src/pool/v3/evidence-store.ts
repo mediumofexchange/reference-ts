@@ -41,6 +41,7 @@ import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidencePackage, 
   type PayloadSink } from "./package.js";
 import { decodeRecord, evidenceHashes } from "./records.js";
 import { EvidenceRefusal } from "./refusals.js";
+import { FileInUse } from "./replay-store.js";
 import { verifyRootTermsSignature } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, trailHead, trailReader, type TrailSink } from "./trail.js";
 
@@ -77,9 +78,8 @@ export interface StoredTrail extends TrailHead {
   readonly bytes: bigint;
   /** The frame bytes of the records through `position`, where the cut's chain passes through `evidence` there
    * (at 0, the seed). Read from the kept rows' links without checking a record: `records(position)` then
-   * checks each later one. Undefined where it does not pass, or a link is missing. */
-  through(position: bigint, evidence: Uint8Array): bigint | undefined;
-  /** `through`, giving up the process's turn after each page of links walked. */
+   * checks each later one. Undefined where it does not pass, or a link is missing. Gives up the process's
+   * turn after each page of links walked. */
   reaches(position: bigint, evidence: Uint8Array): Promise<bigint | undefined>;
   /** The records after position `after` through `length`, in order, read from storage one at a time,
    * each checked against the chain value at its position before it is given. */
@@ -139,9 +139,6 @@ const FORWARD_TURN = 256n;
 const TURN: unique symbol = Symbol("turn");
 type Walk<T> = Generator<typeof TURN, T, void>;
 const turn = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
-function walked<T>(walk: Walk<T>): T {
-  for (;;) { const step = walk.next(); if (step.done === true) return step.value; }
-}
 async function walkedAsync<T>(walk: Walk<T>): Promise<T> {
   for (;;) { const step = walk.next(); if (step.done === true) return step.value; await turn(); }
 }
@@ -209,7 +206,7 @@ export class EvidenceStore {
         else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
       } catch (error) {
         this.#db.close();
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the evidence file is in use");
+        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("the evidence file");
         throw error;
       }
     }
@@ -741,7 +738,6 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       if (!same(previous, top!)) broken();
     }
     return Object.freeze({ header: head.header, segment, term: head.term, length, bytes: size,
-      through: (position: bigint, evidence: Uint8Array): bigint | undefined => walked(reach(position, evidence)),
       reaches: (position: bigint, evidence: Uint8Array): Promise<bigint | undefined> => walkedAsync(reach(position, evidence)),
       *records(after = 0n): Iterable<Uint8Array> {
         for (const step of walk(after)) if (step !== TURN) yield step;

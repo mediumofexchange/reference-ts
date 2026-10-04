@@ -17,7 +17,7 @@
 // section under this profile.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { hexToBytes } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
 import { utf8Encoder } from "./contexts.js";
 import { MAX_RANGE_RECORD_BYTES, PUBLICATION_RANGE, type RangeEntry, type RangeRequest, type RecordKind } from "./record-range.js";

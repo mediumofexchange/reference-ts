@@ -526,8 +526,7 @@ describe("v3 evidence store", () => {
     expect([before, turns >= 16]).toEqual([0, true]);
     expect([first.value as Uint8Array, ...rest]).toEqual([...full.records()]);
     expect(await collected(full.stream(4096n))).toEqual(long.slice(4096));
-    // `reaches` is `through`, giving up the turn on its walk.
-    expect([await full.reaches(5n, values[5]!), await full.reaches(5n, values[4]!)]).toEqual([full.through(5n, values[5]!), undefined]);
+    expect(await full.reaches(5n, values[4]!)).toBeUndefined();
     expect(await full.reaches(5n, values[5]!)).toBe(BigInt(long.slice(0, 5).reduce((n, r) => n + 4 + r.length, 0)));
     // A kept value lost in the middle: read forward, the records before it are given and the read is then unresolved.
     db.prepare("DELETE FROM chain WHERE evidence = ?").run(values[2000]!);
@@ -547,10 +546,10 @@ describe("v3 evidence store", () => {
     supplier.importTrails([trail(6), trail(0, { records: forked })]);
     const held = supplier.retained(), full = held.trail(segment, chain[6]!)!, sizes = (n: number) => BigInt(records.slice(0, n).reduce((sum, r) => sum + 4 + r.length, 0));
     expect(full.bytes).toBe(sizes(6));
-    for (let p = 0; p <= 6; p++) expect(full.through(BigInt(p), chain[p]!)).toBe(sizes(p));
+    for (let p = 0; p <= 6; p++) expect(await full.reaches(BigInt(p), chain[p]!)).toBe(sizes(p));
     // Not at that position, never kept, past the cut, and kept at that position on another chain.
-    expect([full.through(3n, chain[2]!), full.through(2n, b(1)), full.through(7n, chain[6]!), held.trail(segment, chain[3]!)!.through(4n, chain[4]!),
-      full.through(5n, fork[5]!), held.trail(segment, fork[5]!)!.through(5n, chain[5]!), held.trail(segment, fork[5]!)!.through(3n, chain[3]!)])
+    expect(await Promise.all([full.reaches(3n, chain[2]!), full.reaches(2n, b(1)), full.reaches(7n, chain[6]!), held.trail(segment, chain[3]!)!.reaches(4n, chain[4]!),
+      full.reaches(5n, fork[5]!), held.trail(segment, fork[5]!)!.reaches(5n, chain[5]!), held.trail(segment, fork[5]!)!.reaches(3n, chain[3]!)]))
       .toEqual([undefined, undefined, undefined, undefined, undefined, undefined, sizes(3)]);
     const bytesOf = async (part: EvidencePart | undefined): Promise<Uint8Array> => {
       if (part === undefined || !("trail" in part)) throw new Error("not a trail part");

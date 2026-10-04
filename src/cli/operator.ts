@@ -20,14 +20,13 @@ import type { Commitment } from "../venue-records.js";
 import { createV3Service } from "../pool/v3/service-http.js";
 import { V3OperatorJournal, V3StoreError } from "../pool/v3/store.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArguments, print, readRequired, readSecret, required, UsageError,
+import { CommandError, event, flag, has, hex, hex32, integer, openDirectory, parseArguments, pause, pollMs, print, readRequired, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Arguments, type Directory } from "./common.js";
 import { openVerifier, verifierCount } from "./backend.js";
 import { initRole } from "./reader.js";
 import { authenticate, keepTerms, keptTerms } from "./terms.js";
 import { createVenue, fresh, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
 
-const log = (event: object): void => { process.stderr.write(`${JSON.stringify(event, (_k, v: unknown) => typeof v === "bigint" ? v.toString() : v instanceof Uint8Array ? bytesToHex(v) : v)}\n`); };
 const commitmentOf = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
 const readToken = (directory: Directory, name: string): string => {
   const text = new TextDecoder().decode(readRequired(directory.file(name), name)).trim();
@@ -49,9 +48,7 @@ async function openOperator(directory: Directory, args: Arguments): Promise<Oper
   let verifier: ProofVerifier | undefined, journal: V3OperatorJournal | undefined, budget: SpendBudget | undefined;
   try {
     // The journal reads the venue's clock as it opens: the view is brought up to date first.
-    if ((await view.sync()).witnessedIndex === undefined) {
-      throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
-    }
+    await view.syncWitnessed();
     verifier = await openVerifier(directory, verifierCount(args));
     const secret = readSecret(directory.file("operator.key"), "operator.key");
     try {
@@ -78,9 +75,7 @@ async function budgeted<T>(op: Operator, act: () => Promise<T>): Promise<T> {
   }
 }
 
-const pause = (ms: number) => new Promise(done => setTimeout(done, ms));
 const POLL = { dir: "value", verifiers: "value", "poll-ms": "value" } as const;
-const pollMs = (args: Arguments): number => Number(integer(flag(args, "poll-ms") ?? "5000", "--poll-ms", 10n, 600_000n));
 
 /** Sync and try `act` until the journal takes it, while it refuses with one of `waiting` codes; at most
  * `indices` witnessed indices past where it started. */
@@ -89,7 +84,7 @@ async function untilTaken<T>(op: Operator, args: Arguments, indices: bigint, wai
   for (;;) {
     try { return await act(); } catch (error) {
       if (!(error instanceof V3StoreError) || !waiting.includes(error.code) || op.view.venue.witnessedIndex() > start + indices) throw error;
-      log({ event: "waiting", code: error.code, message: error.message, witnessedIndex: op.view.venue.witnessedIndex() });
+      event({ event: "waiting", code: error.code, message: error.message, witnessedIndex: op.view.venue.witnessedIndex() });
     }
     await pause(ms);
     await op.view.sync();
@@ -219,7 +214,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   const tick = async (): Promise<void> => {
     const synced = await op.view.sync(), stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined);
     if (synced.unresolvedIndex !== undefined || stalled.length > 0) {
-      log({ event: "sync", witnessedIndex: synced.witnessedIndex, unresolvedIndex: synced.unresolvedIndex, reason: synced.unresolvedReason,
+      event({ event: "sync", witnessedIndex: synced.witnessedIndex, unresolvedIndex: synced.unresolvedIndex, reason: synced.unresolvedReason,
         stopped: stalled.map(supplier => ({ name: supplier.name, stopped: supplier.stopped })) });
     }
     const s = await journal.status(), signed = s.signed;
@@ -227,11 +222,11 @@ async function serve(argv: readonly string[]): Promise<void> {
     // The latest signed commitment, a pending return's opening included, is published until the venue holds it.
     if (!signed.held) {
       const published = await budgeted(op, () => journal.publish());
-      if (!signed.published) log({ event: "published", at: s.now, commitment: commitmentOf(published) });
+      if (!signed.published) event({ event: "published", at: s.now, commitment: commitmentOf(published) });
       return;
     }
     if (s.pendingReturn) {
-      if (!pendingNoted) log({ event: "return held", message: "stop serve and run moe operator adopt" });
+      if (!pendingNoted) event({ event: "return held", message: "stop serve and run moe operator adopt" });
       pendingNoted = true;
       return;
     }
@@ -239,15 +234,15 @@ async function serve(argv: readonly string[]): Promise<void> {
     const keepAlive = keepAliveDue(s.now, s.heldIndex, silence, lag);
     if (!admitted && !keepAlive) return;
     const commitment = await journal.commit(`serve:${s.now}`);
-    log({ event: "committed", at: s.now, admitted: signed.admitted, commitment: commitmentOf(commitment) });
+    event({ event: "committed", at: s.now, admitted: signed.admitted, commitment: commitmentOf(commitment) });
     await budgeted(op, () => journal.publish());
-    log({ event: "published", at: s.now, commitment: commitmentOf(commitment) });
+    event({ event: "published", at: s.now, commitment: commitmentOf(commitment) });
   };
   try {
     while (!stopping) {
       try { await queue(tick); } catch (error) {
         if (!servePollsOn(error)) throw error;
-        log({ event: "refused", code: error.code, message: error.message });
+        event({ event: "refused", code: error.code, message: error.message });
       }
       if (!stopping) await new Promise<void>(done => { wake = done; setTimeout(done, ms); });
     }

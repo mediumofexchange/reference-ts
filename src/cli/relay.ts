@@ -17,8 +17,8 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../bytes.js";
 import { adoptedDomain } from "../pool/v3/configuration.js";
 import { decodePublication } from "../pool/v3/records.js";
-import { CommandError, flag, integer, openDirectory, parseArguments, print, readJson, required, UsageError, writeExclusive,
-  type Arguments } from "./common.js";
+import { CommandError, event, flag, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, required, UsageError,
+  writeExclusive } from "./common.js";
 import { initRole } from "./reader.js";
 import { freshFunding, fundingTree, openPublisher, openView, publisherStore, requireVenue } from "./venue.js";
 
@@ -46,9 +46,6 @@ export function parsePublicationFile(value: unknown): PublicationFile {
   return { venue: bytes(v.venue, 32), backing: bytes(v.backing, 32), kind: 4, subject: bytes(v.subject, 32), record: bytes(v.record) };
 }
 
-const pollMs = (args: Arguments): number => Number(integer(flag(args, "poll-ms") ?? "5000", "--poll-ms", 10n, 600_000n));
-const pause = (ms: number) => new Promise(done => setTimeout(done, ms));
-
 /** `publish <file> [--wait <indices>]`: publish the file's record; with `--wait`, sync until the view witnesses it,
  * at most that many witnessed indices past the publication. */
 async function publish(argv: readonly string[]): Promise<void> {
@@ -72,8 +69,7 @@ async function publish(argv: readonly string[]): Promise<void> {
     try {
       // Attached before the sync, so the sync settles what the publisher kept pending.
       view.venue.attachPublisher(publisher);
-      const at = (await view.sync()).witnessedIndex;
-      if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
+      const at = (await view.syncWitnessed()).witnessedIndex;
       const record = sha256(file.record), witnessed = () => view.venue.witnessedAt(4, file.subject, file.record);
       const held = witnessed();
       if (held !== undefined) { print({ status: "final", record, index: held }); return; }
@@ -93,7 +89,7 @@ async function publish(argv: readonly string[]): Promise<void> {
           if (view.venue.witnessedIndex() > start + wait || polls >= 120 * Number(wait)) {
             throw new CommandError("UNWITNESSED", `the view has not witnessed the record within ${wait} indices; rerun to publish again`);
           }
-          process.stderr.write(`${JSON.stringify({ event: "waiting", witnessedIndex: view.venue.witnessedIndex().toString() })}\n`);
+          event({ event: "waiting", witnessedIndex: view.venue.witnessedIndex() });
           await pause(ms);
           await view.sync();
         }

@@ -79,11 +79,16 @@ export function hex32(text: string, what: string): Uint8Array {
 }
 export const hex = (bytes: Uint8Array): string => bytesToHex(bytes);
 
+const json = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) => typeof v === "bigint" ? v.toString()
+  : v instanceof Uint8Array ? bytesToHex(v) : v);
 /** One JSON object on stdout: bytes as lowercase hex, integers as decimal strings. */
-export function print(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, (_key, v: unknown) => typeof v === "bigint" ? v.toString()
-    : v instanceof Uint8Array ? bytesToHex(v) : v)}\n`);
-}
+export function print(value: unknown): void { process.stdout.write(`${json(value)}\n`); }
+/** One progress event on stderr, written as `print` writes. */
+export function event(value: object): void { process.stderr.write(`${json(value)}\n`); }
+
+/** `--poll-ms`: how long a waiting command sleeps between syncs. */
+export const pollMs = (args: Arguments): number => Number(integer(flag(args, "poll-ms") ?? "5000", "--poll-ms", 10n, 600_000n));
+export const pause = (ms: number): Promise<void> => new Promise(done => setTimeout(done, ms));
 
 /** The directory's fixed role and its own node endpoints, written last by `init`, so a directory without it is
  * an interrupted `init`. */

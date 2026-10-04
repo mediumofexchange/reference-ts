@@ -113,8 +113,7 @@ async function openWallet(directory: Directory, args: Arguments, options: { read
   try {
     let at: bigint | undefined;
     if (options.sync) {
-      at = (await view.sync()).witnessedIndex;
-      if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
+      at = (await view.syncWitnessed()).witnessedIndex;
     }
     let prove: LocalProver | undefined;
     if (options.prove) {
@@ -145,8 +144,11 @@ async function withWallet<T>(directory: Directory, args: Arguments, options: { r
 }
 
 /** The evidence a read takes: `--package <file>`, or the operator's service synced into the wallet's evidence file;
- * where the service does not answer, the package its last sync kept. */
-async function evidence(opened: Opened, args: Arguments, kept: KeptTerms): Promise<{ readonly bytes: Uint8Array; readonly source: "file" | "served" | "kept" }> {
+ * where the service does not answer, the package its last sync kept. A `saved` payment or act needs none: its rerun
+ * is the library's exact retry. */
+async function evidence(opened: Opened, args: Arguments, kept: KeptTerms, saved = false):
+  Promise<{ readonly bytes: Uint8Array; readonly source: "saved" | "file" | "served" | "kept" }> {
+  if (saved) return { bytes: new Uint8Array(), source: "saved" };
   const file = flag(args, "package");
   if (file !== undefined) return { bytes: readRequired(file, "package file"), source: "file" };
   const last = opened.directory.file(`packages/${hex(kept.backing)}`), client = serviceClient(opened.directory, kept, opened.view);
@@ -454,12 +456,11 @@ async function pay(argv: readonly string[]): Promise<void> {
   const fee = flag(args, "fee-request") === undefined ? undefined
     : { request: requestOf(args, "fee-"), value: integer(required(args, "fee-value"), "--fee-value", 1n, (1n << 64n) - 1n) };
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
-    const saved = opened.wallet.payment(alias) !== undefined;
-    const source = saved ? undefined : await evidence(opened, args, kept);
+    const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
     const prepared = await opened.wallet.prepare(alias, { request: payee, value, ...(fee === undefined ? {} : { fee }) },
-      source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!);
+      source.bytes, kept.signed, opened.prove!);
     if (prepared.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
-    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source?.source ?? "saved", ...firstNotes(directory) });
+    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source, ...firstNotes(directory) });
   });
 }
 
@@ -468,10 +469,10 @@ async function freshen(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 3);
   const demand = hex32(args.positional[2]!, "the demand");
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
-    const saved = opened.wallet.payment(alias) !== undefined, source = saved ? undefined : await evidence(opened, args, kept);
-    const payment = await opened.wallet.freshen(alias, demand, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!);
+    const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
+    const payment = await opened.wallet.freshen(alias, demand, source.bytes, kept.signed, opened.prove!);
     if (payment.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
-    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source?.source ?? "saved",
+    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source,
       notes: [`This payment spends the notes demand ${hex(demand)} presented into one fresh note: it shows it came from that demand's notes and links no two demands.`] });
   });
 }
@@ -551,10 +552,9 @@ async function demand(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { deadline: "value" }, 3);
   const quantity = integer(args.positional[2]!, "the quantity", 1n, (1n << 64n) - 1n);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
-    const deadline = deadlineOf(args, opened.at!), saved = opened.wallet.act(alias) !== undefined;
-    const source = saved ? undefined : await evidence(opened, args, kept);
-    const act = await opened.wallet.demand(alias, quantity, deadline, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!);
-    print({ ...actOut(act), evidence: source?.source ?? "saved", notes: demandNotes(act) });
+    const deadline = deadlineOf(args, opened.at!), source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
+    const act = await opened.wallet.demand(alias, quantity, deadline, source.bytes, kept.signed, opened.prove!);
+    print({ ...actOut(act), evidence: source.source, notes: demandNotes(act) });
   });
 }
 
@@ -563,8 +563,8 @@ async function withdraw(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 3);
   const id = hex32(args.positional[2]!, "the demand");
   await withWallet(directory, args, { sync: true }, async opened => {
-    const saved = opened.wallet.act(alias) !== undefined, source = saved ? undefined : await evidence(opened, args, kept);
-    print({ ...actOut(await opened.wallet.withdraw(alias, id, source?.bytes ?? new Uint8Array(), kept.signed)), evidence: source?.source ?? "saved" });
+    const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
+    print({ ...actOut(await opened.wallet.withdraw(alias, id, source.bytes, kept.signed)), evidence: source.source });
   });
 }
 
@@ -586,9 +586,9 @@ async function settle(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { acceptance: "value" }, 2);
   const acceptance = acceptanceOf(required(args, "acceptance"), kept);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
-    const saved = opened.wallet.act(alias) !== undefined, source = saved ? undefined : await evidence(opened, args, kept);
-    print({ ...actOut(await opened.wallet.settle(alias, acceptance, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!)),
-      evidence: source?.source ?? "saved" });
+    const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
+    print({ ...actOut(await opened.wallet.settle(alias, acceptance, source.bytes, kept.signed, opened.prove!)),
+      evidence: source.source });
   });
 }
 
@@ -648,9 +648,9 @@ async function issue(argv: readonly string[]): Promise<void> {
   const value = integer(required(args, "value"), "--value", 1n, (1n << 64n) - 1n), output = requestOf(args);
   requireBacker(directory);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
-    const saved = opened.wallet.act(alias) !== undefined, source = saved ? undefined : await evidence(opened, args, kept);
-    const act = await withSigner(directory, sign => opened.wallet.issue(alias, output, value, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!, sign));
-    print({ ...actOut(act), evidence: source?.source ?? "saved" });
+    const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
+    const act = await withSigner(directory, sign => opened.wallet.issue(alias, output, value, source.bytes, kept.signed, opened.prove!, sign));
+    print({ ...actOut(act), evidence: source.source });
   });
 }
 
@@ -676,9 +676,9 @@ async function burn(argv: readonly string[]): Promise<void> {
   const quantity = integer(args.positional[2]!, "the quantity", 1n, (1n << 64n) - 1n);
   requireBacker(directory);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
-    const saved = opened.wallet.act(alias) !== undefined, source = saved ? undefined : await evidence(opened, args, kept);
-    print({ ...actOut(await opened.wallet.burn(alias, quantity, source?.bytes ?? new Uint8Array(), kept.signed, opened.prove!)),
-      evidence: source?.source ?? "saved" });
+    const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
+    print({ ...actOut(await opened.wallet.burn(alias, quantity, source.bytes, kept.signed, opened.prove!)),
+      evidence: source.source });
   });
 }
 

@@ -264,6 +264,10 @@ export interface KeptFile {
 export class KeptStateMismatch extends Error {
   constructor(what: string) { super(`kept state does not match: ${what}`); this.name = "KeptStateMismatch"; }
 }
+/** A store's file that another connection holds: the caller's error (its handles overlap), never damage to discard. */
+export class FileInUse extends Error {
+  constructor(file: string) { super(`${file} is in use`); this.name = "FileInUse"; }
+}
 const mapJson = (map: ReadonlyMap<string, bigint>): string => JSON.stringify([...map].map(([k, v]) => [k, v.toString()]));
 const jsonMap = (text: unknown): Map<string, bigint> => new Map((JSON.parse(text as string) as [string, string][]).map(([k, v]) => [k, BigInt(v)]));
 
@@ -337,7 +341,7 @@ function keptFileHolds(path: string, digest: string): boolean {
     return version === BigInt(SCHEMA_VERSION) && existsSync(digest) && readFileSync(digest, "utf8") === fileDigest(path);
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.
-    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");
+    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("the kept replay file");
     return false;
   }
 }
@@ -382,7 +386,7 @@ export class ReplayStore {
         if (!keptFileHolds(path, kept.digest)) {
           try { for (const file of [path, `${path}-journal`, kept.digest]) rmSync(file, { force: true }); } catch (error) {
             // A file another store still holds cannot be removed (Windows): the caller's error, as above.
-            if (["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw new Error("the kept replay file is in use");
+            if (["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw new FileInUse("the kept replay file");
             throw error;
           }
         }
@@ -494,7 +498,7 @@ export class ReplayStore {
       }
     }
     if (!this.#lost && this.#dataVersion() !== version) this.#lost = true;
-    if (this.#lost) throw new Error("the kept replay file is in use");
+    if (this.#lost) throw new FileInUse("the kept replay file");
   }
   /** SQLite's count of commits other connections made to the file, as this connection sees it. */
   #dataVersion(): bigint {
@@ -907,7 +911,7 @@ export class ReplayStore {
     this.#lost = false;
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new Error("the kept replay file is in use");
+      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("the kept replay file");
       throw error;
     }
     try {
@@ -1166,6 +1170,13 @@ export class ReplayStore {
     const row = this.#db.prepare("SELECT through, value FROM answer WHERE kind = ? AND subject = ?").get(kind, subject) as
       { through: unknown; value: unknown } | undefined;
     return row === undefined ? undefined : { through: fromBe(row.through), value: row.value === null ? undefined : fromBe(row.value) };
+  }
+  /** Kept answers stand only while the venue's finality rule does (§13.2): a view whose clock `at` is behind what
+   * this state was read through is not the view it was read from, so every kept row is discarded and the read
+   * asks the venue for everything. (One replaced at the same clock is believed, as any venue's answers are.) */
+  discardKeptAfter(at: bigint): void {
+    const seen = this.answersThrough();
+    if (seen !== undefined && at < seen) this.discardKept();
   }
   /** The furthest index any kept answer was read through, if one is kept: the venue clock this state has seen. */
   answersThrough(): bigint | undefined {
