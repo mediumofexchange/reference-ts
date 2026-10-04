@@ -311,7 +311,59 @@ describe("pool-v3 §14 kept walk: scope changes", () => {
     if (next === "x leaves the joint scope") checkpoint(seg(3n, [x], new Map([[hex(x.name), c1]]), s0), 3n, 11n); else checkpoint(s0, 3n, 11n);
     venue.advance(13n);
     const fresh2 = outcome(await read()), kept2 = outcome(await read(store, evidence));
-    expect(fresh2.carrying.map(c => c.sequence)).toEqual(next === "x leaves the joint scope" ? ["1", "3"] : ["1", "2", "3"]);
+    // x's own checkpoints only: Sy@2 scopes y alone, whichever read classified it.
+    expect(fresh2.carrying.map(c => c.sequence)).toEqual(["1", "3"]);
     expect(kept2).toEqual(fresh2);
+  });
+
+  it("lists what a fresh read lists where a backing's excluded checkpoint was passed around the canonical checkpoint", async () => {
+    const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
+    const silence = { noCommitmentDuration: 50n, challengeWindow: 5n };
+    const backings = ["walk x", "walk y"].map(thing => {
+      const fields = { configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n, payout: { thing, quantumExponent: 0, perUnit: 1n }, silence };
+      const terms = encodeRootTerms(fields);
+      return { fields, name: rootTermsName(terms), signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) } };
+    }).sort((a, z) => compareBytes(a.name, z.name));
+    const [x, y] = backings as [typeof backings[0], typeof backings[0]];
+    const items: EvidenceItem[] = [];
+    const add = (kind: number, payload: Uint8Array) => { if (!items.some(i => i.kind === kind && compareBytes(i.payload, payload) === 0)) items.push({ kind, payload }); };
+    type Scoped = { header: SegmentHeader; id: Uint8Array; scoped: typeof backings; state: SegmentState; records: Uint8Array[] };
+    function checkpoint(seg: Scoped, sequence: bigint, index: bigint): Commitment {
+      const snapshots = seg.scoped.map(item => ({ backing: item.name, segment: seg.id, historyHash: seg.state.history, evidenceHash: seg.state.evidence, ...seg.state.total(hex(item.name)) }));
+      const directory = snapshots.map(s => ({ name: s.backing, digest: snapshotDigest(s) }));
+      for (const s of snapshots) add(4, snapshotBytes(s));
+      add(3, encodeEvidenceDirectory(directory));
+      add(6, encodeTrail({ header: segmentBytes(seg.header), terms: seg.scoped.map(item => item.signed), records: seg.records }));
+      const commitment = signCommitment(operatorSecret, sequence, directoryRoot(directory));
+      venue.witness(1, operator, index, encodeCommitment(commitment));
+      return commitment;
+    }
+    const seg = (sequence: bigint, scoped: typeof backings, openings: Map<string, Commitment>, from?: Scoped): Scoped => {
+      const header: SegmentHeader = { domain, venue: venue.id, operator, sequence, entries: scoped.map(item => ({ backing: item.name, link: item.name,
+        ...(openings.has(hex(item.name)) ? { opening: { operator, sequence: openings.get(hex(item.name))!.sequence, root: openings.get(hex(item.name))!.root } } : {}) })) };
+      const id = segmentIdentity(header);
+      return { header, id, scoped, state: openSegmentState(operatorStore, id, b(Number(90n + sequence)), from?.state), records: [] };
+    };
+    // S0 scopes x and y (opening at 1); Sy scopes y alone (opening at 2, importing S0's y).
+    const s0 = seg(1n, [x, y], new Map());
+    const c1 = checkpoint(s0, 1n, 1n);
+    const sy = seg(2n, [y], new Map([[hex(y.name), c1]]), s0);
+    checkpoint(sy, 2n, 2n);
+    // Sy2: a y-only opening importing C1 though Sy@2 is y's latest valid (excluded, IMPORT); then Sy continues at 4.
+    const sy2 = seg(3n, [y], new Map([[hex(y.name), c1]]), s0);
+    checkpoint(sy2, 3n, 3n);
+    checkpoint(sy, 4n, 4n);
+    const read = (store?: ReplayStore, evidence?: EvidenceStore) => readFrontier(pack(items), x.signed, venue.witnessedIndex(),
+      { verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }), ...(evidence === undefined ? {} : { evidence }) });
+    const dir = mkdtempSync(join(tmpdir(), "moe-kept-walk-")); dirs.push(dir);
+    const store = new ReplayStore(join(dir, "r.sqlite"), { digest: join(dir, "r.sha256") }); closers.push(store);
+    const evidence = new EvidenceStore(join(dir, "e.sqlite")); closers.push(evidence);
+    const fresh1 = outcome(await read()), kept1 = outcome(await read(store, evidence));
+    expect(kept1).toEqual(fresh1);
+    // S0 continues at 11: its judgment reads y's latest valid before it (Sy@2), which the earlier read reached only around C1.
+    venue.advance(12n); checkpoint(s0, 5n, 11n); venue.advance(13n);
+    const fresh2 = outcome(await read()), kept2 = outcome(await read(store, evidence));
+    expect(kept2).toEqual(fresh2);
+
   });
 });

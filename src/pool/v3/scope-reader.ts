@@ -439,7 +439,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
   const current = await latest(selection.backing, context.terms);
   if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
   const { clock, publications, force, nonService } = await walk.around(selected, context.terms, view);
-  return { state: selected.state, carrying: walk.carrying(), clock, canonical: canonicalOf(selected), force, ranges: {
+  return { state: selected.state, carrying: await walk.carrying(), clock, canonical: canonicalOf(selected), force, ranges: {
     judgingIndex: view.t, lag: view.lag, checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
     heldBefore, heldAfter, publications, ...(nonService === undefined ? {} : { nonService }) } };
 }
@@ -476,7 +476,7 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
         throw error;
       }
     }
-    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: walk.carrying(), scopeChains, answers,
+    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: await walk.carrying(), scopeChains, answers,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
         chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
   } catch (error) {
@@ -593,24 +593,13 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       scopedTerms: new Map(header.entries.map((scoped, i) => [hex(scoped.backing), decodeRootTerms(scope.terms[i]!.terms)])),
       state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }) };
   };
-  // `carrying` lists what the read's classification reaches: each class it reaches directly, and everything the judgment
-  // of a listed class reached, by the edges kept with the walk. What it reads around the canonical checkpoint (every
-  // scoped backing's clock and publications) depends on that checkpoint's scope, so it is reached unlisted. The listed
-  // set is the same whichever earlier read first judged a class, so a resumed walk lists what a fresh one does.
-  let aroundCanonical = false;
-  const judging: Uint8Array[] = [];
-  const reach = (key: Uint8Array): void => {
-    const parent = judging.at(-1);
-    if (parent !== undefined) store.reach(walk, parent, key);
-    else if (!aroundCanonical) store.list(walk, key);
-  };
   const keep = (held: HeldCommitment, verdict: ScopeVerdict): void => {
     const c = held.commitment, state = verdict.class === "valid" ? verdict.state : undefined;
     store.putVerdict(walk, { key: rowKey(c), operator: c.operator, sequence: c.sequence, root: c.root, signature: c.signature, index: held.index,
       class: verdict.class, segment: verdict.segment, snapshot: snapshotBytes(verdict.snapshot),
       detail: verdict.class === "excluded" ? verdict.check : verdict.class === "lapsed" && verdict.clock !== undefined ? JSON.stringify(verdict.clock) : undefined,
       state: state === undefined || verdict.class !== "valid" ? undefined : { ns: state.ns, position: state.position, identity: state.identity,
-        issued: state.issued, burned: state.burned, adoption: state.adoptionIndices, opening: verdict.openingIndex } }, false);
+        issued: state.issued, burned: state.burned, adoption: state.adoptionIndices, opening: verdict.openingIndex } });
   };
   // Each backing's held checkpoints within its terms, carrying it, classified in rank order up to a bound.
   // A classification in progress reads only earlier checkpoints of any backing, so a nested advance of
@@ -651,9 +640,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const key = store.latestValid(walk, backing, child === undefined ? undefined : child.strict ? { index: child.index, strict: true } :
       { index: child.index, operator: child.commitment.operator, sequence: child.commitment.sequence });
     if (key === undefined) return undefined;
-    const row = candidate(key);
-    reach(key);
-    return load(row, backing) as ValidScope;
+    return load(candidate(key), backing) as ValidScope;
   };
   // A valid candidate's class: a kept walk's row missing its class is kept state to discard.
   const candidate = (key: Uint8Array): WalkVerdict => {
@@ -666,7 +653,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const key = store.latestValid(walk, backing, { index, strict: true });
     if (key === undefined) return 0n;
     const row = candidate(key);
-    recheck(row); reach(key);
+    recheck(row);
     return row.index;
   };
   const recovery = scopeRecovery(context, walk, viewFor, latest, snapshotIndexAt);
@@ -697,10 +684,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   };
   const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
     const id = keyOf(held.commitment), key = rowKey(held.commitment), classified = store.verdict(walk, key);
-    if (classified !== undefined) {
-      reach(key);
-      return Promise.resolve(load(classified, backing));
-    }
+    if (classified !== undefined) return Promise.resolve(load(classified, backing));
     if (running.has(id)) return running.get(id)!;
     let kept: WalkVerdict | undefined;
     try { kept = store.keptVerdict(key); } catch (error) {
@@ -711,12 +695,11 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (kept !== undefined && (kept.index !== held.index || !same(kept.signature, held.commitment.signature))) {
       return Promise.reject(new KeptStateMismatch("a kept class's commitment"));
     }
-    const judged = (async () => { judging.push(key); try { return await judge(held, backing, kept); } finally { judging.pop(); } })();
-    const pending = judged.then(verdict => {
+    const pending = judge(held, backing, kept).then(verdict => {
       // Every check before replay ran afresh, so a kept class is the one it gives.
       if (kept !== undefined && verdict.class !== kept.class) throw new KeptStateMismatch("a kept class");
       // The row is written again from this judgment, so what later reads load comes from this read's evidence.
-      keep(held, verdict); judgedHere.add(hex(key)); reach(key);
+      keep(held, verdict); judgedHere.add(hex(key));
       store.keepPoint();
       return verdict;
     });
@@ -886,10 +869,6 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   // t, the clock from its segment's opening with the scope's earliest boundary,
   // and the selected backing's non-service count strictly before t.
   const around = async (valid: ValidScope | undefined, terms: RootTerms, view: RecordView) => {
-    aroundCanonical = true;
-    try { return await aroundOf(valid, terms, view); } finally { aroundCanonical = false; }
-  };
-  const aroundOf = async (valid: ValidScope | undefined, terms: RootTerms, view: RecordView) => {
     const publications: ScopePublicationVerdict[] = [], force: ScopeForce[] = [];
     for (const scoped of valid?.header.entries ?? [{ backing: selection.backing }]) {
       const scopedTerms = valid?.scopedTerms.get(hex(scoped.backing)) ?? terms;
@@ -936,8 +915,20 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       if (!(error instanceof EvidenceRefusal || error instanceof EncodingError || error instanceof RangeLimitError || error instanceof VenueError)) throw error;
     }
   };
-  const carrying = (): ImportCarryingVerdict[] => [...store.verdicts(walk)].map(item => ({ operator: hex(item.operator),
-    sequence: item.sequence.toString(), index: item.index.toString(), class: item.class, ...(item.class === "excluded" ? { check: item.detail! } : {}) }));
+  // The selected backing's own carrying checkpoints within its terms through the judging index: every read classifies
+  // each of them, so the listing is the same whichever earlier reads of a kept walk classified them. A dependency of
+  // another backing is classified but not listed.
+  const carrying = async (): Promise<ImportCarryingVerdict[]> => {
+    const view = await viewFor(selection.backing, context.terms), listed: ImportCarryingVerdict[] = [];
+    for (const item of store.verdicts(walk)) {
+      if (item.index > view.t || !same(linkInForce(view.chain, item.index).operator, item.operator)) continue;
+      const held: HeldCommitment = { index: item.index, commitment: { operator: item.operator, sequence: item.sequence, root: item.root, signature: item.signature } };
+      if (view.carries(held) === undefined) continue;
+      listed.push({ operator: hex(item.operator), sequence: item.sequence.toString(), index: item.index.toString(), class: item.class,
+        ...(item.class === "excluded" ? { check: item.detail! } : {}) });
+    }
+    return listed;
+  };
   const refusedBelow = (held: HeldCommitment | undefined): void => { below = held; };
   return { viewFor, latest, recovery, classify, around, carrying, inspectRefused, refusedBelow, close: (): void => { store.closeWalk(walk); } };
 }

@@ -168,9 +168,11 @@ describe("multi-backing scope reader", () => {
       f.checkpoint(1n, 1n, alter(f)); await f.issue(5n, 101n);
       const latest = f.checkpoint(2n, 3n);
       const [readX, readY] = [stateOf(await f.read(f.x.name, latest)), stateOf(await f.read(f.y.name, latest))];
-      for (const read of [readX, readY]) {
-        expect(read.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "excluded", check], ["2", "valid", undefined]]);
-      }
+      // Each read lists its own backing's carrying checkpoints: where the opening omits y, y's read classifies it
+      // (one class, the segment's opening) without listing it.
+      expect(readX.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["1", "excluded", check], ["2", "valid", undefined]]);
+      expect(readY.carrying.map(item => [item.sequence, item.class, item.check])).toEqual(check === "SCOPE" ?
+        [["2", "valid", undefined]] : [["1", "excluded", check], ["2", "valid", undefined]]);
       expect([readX.state.issued, readY.state.issued]).toEqual([5n, 0n]);
     }
   });

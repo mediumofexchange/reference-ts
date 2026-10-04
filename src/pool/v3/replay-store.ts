@@ -172,11 +172,10 @@ const SCHEMA = `
   CREATE UNIQUE INDEX answer_publication_position ON answer_publication(idx, ordinal);
   CREATE TABLE walk (id INTEGER PRIMARY KEY AUTOINCREMENT);
   CREATE TABLE walk_verdict (walk INTEGER, key BLOB, idx BLOB NOT NULL, seq BLOB NOT NULL, operator BLOB NOT NULL, root BLOB NOT NULL,
-    listed INTEGER NOT NULL, PRIMARY KEY(walk, key)) WITHOUT ROWID;
+    PRIMARY KEY(walk, key)) WITHOUT ROWID;
   CREATE INDEX walk_verdict_order ON walk_verdict(walk, idx, seq, operator, root);
   CREATE TABLE walk_valid (walk INTEGER, backing BLOB, idx BLOB, seq BLOB, operator BLOB NOT NULL, key BLOB NOT NULL,
     PRIMARY KEY(walk, backing, idx, seq)) WITHOUT ROWID;
-  CREATE TABLE walk_dep (walk INTEGER, parent BLOB, child BLOB, PRIMARY KEY(walk, parent, child)) WITHOUT ROWID;
   CREATE TABLE walk_cursor (walk INTEGER, backing BLOB, term INTEGER NOT NULL, link BLOB NOT NULL, after BLOB, PRIMARY KEY(walk, backing)) WITHOUT ROWID;
   CREATE TABLE walk_clock (walk INTEGER, backing BLOB, opening BLOB, upto BLOB NOT NULL, boundary BLOB,
     PRIMARY KEY(walk, backing, opening)) WITHOUT ROWID;
@@ -185,7 +184,7 @@ const SCHEMA = `
     WITHOUT ROWID;`;
 /** Rows one read keeps for itself: what it classified (a verdict it judged or reused), each backing's valid candidates,
  * how far it has classified each backing's checkpoints and publications, and each silence clock's running state. */
-const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_dep", "walk_cursor", "walk_clock", "walk_progress"];
+const WALK_TABLES = ["walk_verdict", "walk_valid", "walk_cursor", "walk_clock", "walk_progress"];
 /** Rows kept across reads (pool-v3 §14 kept classes and kept walk): each is a function of authenticated bytes and the
  * record before its index. A kept walk's own rows stay under its walk; forgetting it orphans them. */
 const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "publication", "kept_walk",
@@ -1020,31 +1019,18 @@ export class ReplayStore {
     return rows;
   }
 
-  /** Keep a class the walk judged, and count it as classified by the walk; `listed` where its classification, not only
-   * what it read around the canonical checkpoint, reached it. */
-  putVerdict(walk: number, v: WalkVerdict, listed = true): void {
+  /** Keep a class the walk judged, and count it as classified by the walk. */
+  putVerdict(walk: number, v: WalkVerdict): void {
     const s = v.state;
     this.#db.prepare("INSERT OR REPLACE INTO verdict VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(v.key, v.operator,
       be(v.sequence), v.root, v.signature, be(v.index), v.class, v.detail ?? null, v.segment, v.snapshot, s?.ns ?? null, s?.position ?? null,
       s?.identity ?? null, s === undefined ? null : u64(s.issued), s === undefined ? null : u64(s.burned),
       s === undefined ? null : mapJson(s.adoption), s === undefined ? null : be(s.opening));
-    this.touch(walk, v, listed);
+    this.touch(walk, v);
   }
-  /** Count a kept class as classified by the walk, listed once anything lists it. */
-  touch(walk: number, v: Pick<WalkVerdict, "key" | "index" | "sequence" | "operator" | "root">, listed = true): void {
-    this.#db.prepare(`INSERT INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(walk, key) DO UPDATE SET listed = 1
-      WHERE excluded.listed = 1 AND listed = 0`).run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root, listed ? 1 : 0);
-  }
-  /** Record that judging `parent` reached `child`. */
-  reach(walk: number, parent: Uint8Array, child: Uint8Array): void {
-    this.#db.prepare("INSERT OR IGNORE INTO walk_dep VALUES (?, ?, ?)").run(walk, parent, child);
-  }
-  /** List a class the walk classified and everything its judgment reached. A listed class's closure is listed, so the
-   * walk stops at listed classes and a read lists only what is new. */
-  list(walk: number, key: Uint8Array): void {
-    this.#db.prepare(`WITH RECURSIVE r(k) AS (SELECT ? UNION SELECT d.child FROM walk_dep d JOIN r ON d.parent = r.k
-        JOIN walk_verdict w ON w.walk = d.walk AND w.key = d.child WHERE d.walk = ? AND w.listed = 0)
-      UPDATE walk_verdict SET listed = 1 WHERE walk = ? AND listed = 0 AND key IN (SELECT k FROM r)`).run(key, walk, walk);
+  /** Count a kept class as classified by the walk (once). */
+  touch(walk: number, v: Pick<WalkVerdict, "key" | "index" | "sequence" | "operator" | "root">): void {
+    this.#db.prepare("INSERT OR IGNORE INTO walk_verdict VALUES (?, ?, ?, ?, ?, ?)").run(walk, v.key, be(v.index), be(v.sequence), v.operator, v.root);
   }
   #verdict(row: Record<string, unknown>): WalkVerdict {
     const state = row["ns"] === null ? undefined : { ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint),
@@ -1065,9 +1051,9 @@ export class ReplayStore {
     const row = this.#db.prepare("SELECT * FROM verdict WHERE key = ?").get(key) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#verdict(row);
   }
-  /** Every class the walk's classification reached (listed), by index, sequence, then operator and root bytes. */
+  /** Every class the walk classified, by index, sequence, then operator and root bytes. */
   *verdicts(walk: number): Generator<WalkVerdict> {
-    for (const row of this.#db.prepare(`SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ? AND w.listed = 1
+    for (const row of this.#db.prepare(`SELECT v.* FROM walk_verdict w JOIN verdict v ON v.key = w.key WHERE w.walk = ?
         ORDER BY w.idx, w.seq, w.operator, w.root`).iterate(walk)) {
       yield this.#verdict(row as Record<string, unknown>);
     }

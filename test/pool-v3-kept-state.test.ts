@@ -421,7 +421,8 @@ describe("pool-v3 §14 kept classes across reads", () => {
     const read = (store?: ReplayStore, evidence?: EvidenceStore, signed = x.signed) => readFrontier(pack(items), signed, venue.witnessedIndex(),
       { verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }), ...(evidence === undefined ? {} : { evidence }) });
     const kept = files(), store = opened(kept.path, kept), fresh = outcome(await read());
-    expect(fresh.carrying.map(item => item.sequence)).toEqual(["1", "2", "3"]);
+    // S0's opening (1) scopes y alone: x's read classifies it as S1's import but lists only x's own checkpoints.
+    expect(fresh.carrying.map(item => item.sequence)).toEqual(["2", "3"]);
     expect(outcome(await read(store))).toEqual(fresh);
     expect(outcome(await read(store))).toEqual(fresh);
     // From retained evidence, each selected backing keeps a walk of its own: reads of x and y alternate as fresh reads do.
