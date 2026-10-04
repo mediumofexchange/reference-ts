@@ -15,6 +15,7 @@ import { decodeReceipt } from "../src/pool/v3/commitments.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { ownedNotes, seedScanner, seedWitness } from "../src/pool/v3/holdings.js";
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
+import { tagOf } from "../src/pool/v3/recovery.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { encodeRecord, type Record } from "../src/pool/v3/records.js";
@@ -286,12 +287,15 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
       for (const note of ownedNotes(seed, domain, f.backing, state)) {
         const scanned = scan(state.output(note.cm)!)!;
         expect({ opening: note.opening, nf: note.nf, secret: note.secret }).toEqual({ opening: scanned.opening, nf: scanned.nf, secret: scanned.secret });
+        // The tag a demand locks it by is kept with the mark, the nullifier's own (M11b8).
+        expect(note.tag).toBe(tagOf(note.nf));
       }
       // A mark its output does not recover reads as held, but completing it to spend refuses it as kept state to
-      // discard. With another rho the held notes are the same; with another nullifier, a spent one is held too.
+      // discard. With another rho or tag the held notes are the same; with another nullifier, a spent one is held too.
       const witness = seedWitness(seed, domain);
       type Mark = { nf: bigint; note: Uint8Array };
       for (const [alter, spentHeld] of [[(mark: Mark) => ({ nf: mark.nf, note: mark.note.map((byte, i) => (i === 95 ? byte ^ 1 : byte)) }), false],
+        [(mark: Mark) => ({ nf: mark.nf, note: mark.note.map((byte, i) => (i === 135 ? byte ^ 1 : byte)) }), false],
         [(mark: Mark) => ({ nf: mark.nf ^ 1n, note: mark.note }), true]] as const) {
         const altered = Object.assign((output: Parameters<typeof witness>[0]) => {
           const mark = witness(output);
