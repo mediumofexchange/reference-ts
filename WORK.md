@@ -21,9 +21,9 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   flat heap, reopen in 192 ms (was 74 s at 10⁴ blocks). A vitest setup yields a turn per test (60 s worker RPC timeout on Windows).
 - **M11b in progress**. M11b1 (PR #93), (n): a wallet's record cost no longer grows with its notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)).
   M11b2 (PR #94), (l): an index past the reader's answer budget is asked again under the venue's `indexLimits`, capped at `INDEX_LIMITS`.
-  M11b3 (PR #95), (m): a served trail is read forward by position, falling back to the walk back at a fork; reports: CI run 37151741994.
+  M11b3 (PR #95), (m): a served trail is read forward by position, falling back to the walk back at a fork.
   M11b4 (branch `claude/m11b4-kept-walk`; spec `dc51baf`), (k): later reads resume a kept walk ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k),
-  [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission flat, ≤0.18 s at 320 checkpoints, was 1.1 s at 80). **Next: (s)**, then M11c.
+  [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission flat, ≤0.18 s at 320 checkpoints, was 1.1 s at 80); reports: CI run 37167992004. **Next: (s)**, then M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
