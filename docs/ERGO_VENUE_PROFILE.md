@@ -23,7 +23,7 @@ only under the profile: `ErgoVenue` in `src/ergo.ts` is the
 | §5 transaction grammar | `frameTransaction`, `frameTree`, `frameCollBytes` | [hostile framer probe](POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence) |
 | §6 attribution, reassembly, ordinal | `attributeOutput`, `attributeOwned`, `ergoOrdinal`, `collBytes` | `test/ergo-profile.test.ts`; [P2](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node) |
 | §7 answers | `rangeEntries` over `src/record-range.ts`, from `ErgoVenue.range` (a `RecordVenue`, `src/record-venue.ts`) | `test/ergo-profile.test.ts`, `test/ergo-venue.test.ts`; [local replay](#local-replay-through-the-venue) |
-| §8 publishing | [kind-4 capacity](ergo-range-profile-verification.json) | [decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction) |
+| §8 publishing | [kind-4 capacity](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-profile-verification.json) | [decision](../decisions/2026-09.md#2026-09-15--a-configurations-publications-fit-one-ergo-transaction) |
 
 `ErgoVenue` is the one Ergo reader: it answers only from headers its own store
 accepted and sections that reproduce their roots, including in the harnesses,
@@ -110,11 +110,11 @@ child, and the anchor already fixes the ancestry a proof would summarize.
 
 ## Costs and limits
 
-The reference-testnet header check is
-[`testnet-header-check.mjs`](../experiments/ergo-range/testnet-header-check.mjs).
+The reference-testnet header check was the retired
+`testnet-header-check.mjs` ([at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/experiments/ergo-range/testnet-header-check.mjs)).
 Its [historical source-bound report](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-testnet-header-verification.json) records a
 contiguous real window, every recalculation in that window and fresh own-node
-tip agreement. It takes an independently pinned anchor and applies the runtime
+tip agreement. It took an independently pinned anchor and applied the runtime
 store to every descendant. Terminal signed-Int arithmetic and activation reset
 are covered by hostile unit fixtures, rather than the current-height window.
 This is header evidence only; the [live journal report](pool-v3-testnet-verification.json)
@@ -212,7 +212,7 @@ check:ergo:range`) drove the profile over a synthetic chain whose bytes Fleet
 wrote and over the four mainnet fixture blocks, reading register constants
 beside sigma-rust's decoder. It retired on 2026-09-25: the unit tests above
 and the node's own parser cover what it checked. Its
-[report](ergo-range-profile-verification.json), with sources at
+[report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-profile-verification.json), with sources at
 [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range),
 keeps the kind-4 capacity measurement.
 
@@ -496,7 +496,7 @@ rollback, wallet custody or live deployment. An uncertain commit poisons the
 instance; reopen can find the previous committed state, including when a newly
 observed finality failure was not durably written.
 
-[`runtime-sync.mjs`](../experiments/ergo-range/runtime-sync.mjs) runs the
+The retired `runtime-sync.mjs` ([at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/experiments/ergo-range/runtime-sync.mjs)) ran the
 view on real mainnet headers and sections. The
 [historical report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-runtime-venue-verification.json) owns the anchor, ranges and
 measurements. It compares a view synced from the own node with an independent

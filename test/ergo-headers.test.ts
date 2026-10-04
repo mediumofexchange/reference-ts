@@ -6,9 +6,7 @@ import * as headers from "../src/ergo-headers.js";
 
 // Real mainnet headers pin the difficulty rule, proof of work, parsing and
 // ids; synthetic chains at difficulty 4 to 6, whose proof of work a test can
-// find in a few tries, drive the store's refusals and fork choice. The
-// experiment (experiments/ergo-range/header-verify.mjs) checks the same
-// rules over every EIP-37 recalculation and a contiguous mainnet window.
+// find in a few tries, drive the store's refusals and fork choice.
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/ergo-mainnet-recalculation.json", import.meta.url), "utf8")) as
   { headers: { height: number; id: string; bytes: string }[] };
 const real = fixture.headers.map(entry => ({ ...entry, bytes: Uint8Array.from(Buffer.from(entry.bytes, "hex")) }));

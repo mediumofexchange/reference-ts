@@ -25,8 +25,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   (s) M11b5 #98 ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)):
   `serve` takes no journal turn and refuses the journal's own damage by name.
   (w) M11b6 #99: `moe reader` keeps `replay.db` (+ digest) as the wallet does, discarding kept state read through a later index
-  than the view's; the drill compares kept and full reads after the bulk issues (2.8 against 5.4 s at 78 statements locally),
-  a return and a `presentation`. One review, nothing blocking, four low findings fixed. No verdict code changed. Next: M11c.
+  than the view's; the drill compares kept and full reads' answers after the bulk issues, a return and a `presentation`, and checks that
+  the kept read leaves `replay.db` and its digest unwritten (wall time recorded only: it failed main's Windows CI at 1915d5d). Next: M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
@@ -70,8 +70,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
    job only for ready PRs (CI time); narrow the still-optional stored event indices (`StoredEvent.index`, `judgedIndex`) when touched.
 8. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging;
    served-trail caller-object cache; drop the explicit `vite` dev pin at the next dependency change; test a second commit refused while one is in
-   flight (`store.ts` `ready`). Move `store-check.mjs`/`history-store-check.mjs` onto `drill.mjs` and one `receiptFields`; retire `header-verify`
-   and `testnet-header-check` unless a mainnet slice needs them. `package.ts`'s `EvidenceItem` comment still names kinds 5, 8, 9, 11.
+   flight (`store.ts` `ready`). Move `store-check.mjs`/`history-store-check.mjs` onto `drill.mjs` and one `receiptFields` (re-records two reports).
+   CLI: one `venue create` body, `READ` flags and `commitmentOf` shared; `openProver` refuses absent parameters as `PARAMETERS` (exits 3 now); one atomic writer.
 9. Only when a gate needs them: cancellation (also closes C3.5's late-witnessed release; pool-v4 could bind the acceptance in `rho_out`), batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, sponsored
    holder funding, operator fee quotes, a kind-4 fee by length (fee-per-byte nodes rank a long run last once a pool fills; C3 deadlines), a
    text/QR request frame, C4.5 pending-acceptance receipt handoff, same-segment rescoping; against hostile evidence growth (M4) a per-supply bound

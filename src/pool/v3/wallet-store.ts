@@ -41,7 +41,7 @@ import type { SignedTerms } from "./reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeRecord, evidenceHashes, settlementAuthorization,
   statementBytes, statementHash, type Record, type SignedAcceptance } from "./records.js";
 import { paddingRequestId, presenterSecret, settlementRho } from "./redemption.js";
-import { KeptStateMismatch, ReplayStore, type Demand } from "./replay-store.js";
+import { FileInUse, KeptStateMismatch, ReplayStore, type Demand } from "./replay-store.js";
 import type { CanonicalCheckpoint, FrontierResult } from "./scope-reader.js";
 import { locked, tagOf } from "./recovery.js";
 import { applyForceEffects, openForceState, type ForceState } from "./state.js";
@@ -462,14 +462,14 @@ export class V3Wallet {
     // A file of another layout, or one that is no database, is never replaced here: it may be the holder's
     // only copy of the evidence. The holder removes it to sync again from nothing.
     try { return this.retained ??= new EvidenceStore(`${this.path}.evidence`); } catch (error) {
-      if (error instanceof Error && /in use/.test(error.message)) throw new V3WalletError("STORAGE", "another handle holds this wallet's evidence file");
+      if (error instanceof FileInUse) throw new V3WalletError("STORAGE", "another handle holds this wallet's evidence file");
       throw new V3WalletError("STORAGE", "the wallet's evidence file cannot be read; remove it to sync again");
     }
   }
   /** The kept state of the wallet's reads (§14 kept classes), named by the verifier's circuits. */
   private kept(): ReplayStore {
     try { return this.replays ??= new ReplayStore(`${this.path}.replay`, { digest: `${this.path}.replay.sha256` }); } catch (error) {
-      if (error instanceof Error && /in use/.test(error.message)) throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
+      if (error instanceof FileInUse) throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
       throw error;
     }
   }
@@ -508,7 +508,7 @@ export class V3Wallet {
       } catch (error) {
         // A replaced or exported handle says so, whatever its read met once another handle held the files.
         if (!(error instanceof V3WalletError)) this.mutable();
-        if (error instanceof Error && error.message === "the kept replay file is in use") {
+        if (error instanceof FileInUse) {
           throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
         }
         throw error;
@@ -522,11 +522,7 @@ export class V3Wallet {
     const at = this.options.venue.witnessedIndex();
     requireThat(isValue(at), "INVALID", "invalid witnessed index");
     const observed = heldView(this.options.venue, this.venueId, at), store = this.kept();
-    // Kept answers stand only while the venue's finality rule does (§13.2). A venue whose clock is behind what
-    // the kept state was read through is not the view that state was read from: nothing kept is used, and
-    // the venue is asked for everything. (One replaced at the same clock is believed, as any venue's answers are.)
-    const seen = store.answersThrough();
-    if (seen !== undefined && at < seen) store.discardKept();
+    store.discardKeptAfter(at);
     // The scanner's keys live for this read only.
     const options = { ...this.options, venue: observed.venue, witness: seedWitness(this.seed, this.domain), evidence: this.evidence(), answers, store };
     for (let again = false; ; again = true) {

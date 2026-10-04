@@ -72,7 +72,7 @@ import { decodeRecord, encodeRecord, evidenceHashes, statementHash, type Record 
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
-import { ReplayStore } from "./replay-store.js";
+import { FileInUse, ReplayStore } from "./replay-store.js";
 import { declaredParallel } from "./verify-ahead.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
@@ -414,7 +414,7 @@ export class V3OperatorJournal {
   private reads(): ReplayStore {
     if (this.reading === undefined) {
       try { this.reading = new ReplayStore(`${this.path}.reads`, { digest: `${this.path}.reads.sha256` }); } catch (error) {
-        if (error instanceof Error && /in use/.test(error.message)) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
+        if (error instanceof FileInUse) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
         throw error;
       }
     }
@@ -598,7 +598,7 @@ export class V3OperatorJournal {
   /** One read through the public reader. A kept file another handle is writing leaves the operation BUSY. */
   private async whileReading<T>(read: () => Promise<T>): Promise<T> {
     try { return await read(); } catch (error) {
-      if (error instanceof Error && error.message === "the kept replay file is in use") throw new V3StoreError("BUSY", "another handle is reading this journal's history");
+      if (error instanceof FileInUse) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
       throw error;
     }
   }

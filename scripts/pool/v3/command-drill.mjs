@@ -21,6 +21,7 @@
 //
 // Usage: node scripts/pool/v3/command-drill.mjs  (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
@@ -496,13 +497,24 @@ try {
     assert(BigInt(read.position) > 67n, `position ${read.position}`);
     // Nothing is mined between these reads, so each judges at the same index (item (w), M11b6).
     const same = answer => assert.deepEqual({ ...answer, sync: undefined }, { ...read, sync: undefined });
-    for (const file of ["replay.db", "replay.db.sha256"]) assert(statSync(join(RD, file)).isFile(), `the reader keeps ${file}`);
+    // The last read left a keep point: the digest vouches for the file, so the next process opens it as kept.
+    const keptFile = () => ({ digest: readFileSync(join(RD, "replay.db.sha256"), "utf8"), digestMtimeMs: statSync(join(RD, "replay.db.sha256")).mtimeMs,
+      file: createHash("sha256").update(readFileSync(join(RD, "replay.db"))).digest("hex") });
+    const vouched = keptFile();
+    assert.equal(vouched.digest, vouched.file, "the reader's last read left its replay file vouched for by its digest");
     same(await ok(["reader", "supply", ...reader, backing2]));
     const keptMs = processes.at(-1).elapsedMs;
+    // At the same index with nothing new, a read resting on the kept state writes nothing; one that discarded it
+    // (a failed digest, a kept-state mismatch) rebuilds the file and records a new digest. A count of proofs
+    // verified on reopening is pool-v3-kept-state.test.ts's.
+    assert.deepEqual(keptFile(), vouched, "the kept read rested on the kept replay file: it neither discarded nor rewrote it");
     same(await full(["reader", "supply", ...reader, backing2]));
+    // The full read discarded the file its digest no longer vouched for, replayed and vouched for the rebuilt file.
+    const rebuilt = keptFile();
+    assert.equal(rebuilt.digest, rebuilt.file, "the full read rebuilt and vouched for its replay file");
+    // Wall time is recorded, not asserted: at 78 statements process and verifier startup dominate, and a runner's
+    // other processes (serve's own reads) shift either read (2.8 s against 5.1 s on Windows CI at 1915d5d's PR).
     readerReplay = { position: read.position, keptMs, fullMs: processes.at(-1).elapsedMs };
-    // The full replay verifies every statement's proof again, the kept read none (2.8 s against 5.4 s locally at 78).
-    assert(readerReplay.keptMs < readerReplay.fullMs, `the kept read was not faster: ${JSON.stringify(readerReplay)}`);
     const view = await settled(wallet("sync", H3, backing2), view => view.holdings.length === BULK + 1);
     assert.equal(view.available, String(7 + BULK));
   });

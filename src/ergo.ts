@@ -48,13 +48,13 @@
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { arrayLength, byteLength, compareBytes, copyBytes, copyUnshared, EncodingError } from "./bytes.js";
-import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, INITIAL_DIFFICULTY, type ErgoHeaderRows, type ErgoHeaderStore } from "./ergo-headers.js";
+import { decodeCompactBits, ergoHeaderStore, parseErgoHeader, ANCHOR_CONTEXT, INITIAL_DIFFICULTY, type ErgoHeaderStore } from "./ergo-headers.js";
 import {
   attributeSection, ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, orderedEntries, ownErgoProfile, type AttributedObject, type ErgoProfile, type ErgoTransactionView,
 } from "./ergo-profile.js";
 import type { ErgoPublication, ErgoPublisher, ErgoRecordRequest } from "./ergo-publisher.js";
 import type { ErgoSupplier } from "./ergo-supplier.js";
-import { ErgoVenueJournal, objectKey, type ErgoSectionRow, type ErgoViewState } from "./ergo-store.js";
+import { ErgoVenueJournal, FAILURE, objectKey, type ErgoSectionRow, type ErgoViewState } from "./ergo-store.js";
 import {
   copyLimits, copyRequest, encodeRangeAnswer, MAX_RANGE_RECORD_BYTES, RANGE_FRAME_BYTES, type RangeLimits, type RangeRequest, type RecordKind,
 } from "./record-range.js";
@@ -371,7 +371,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     }
     this.syncing = true;
     try {
-      this.journal?.assertOwner();
+      this.journal.assertOwner();
       const passes: { supplier: ErgoSupplier; name: string; pass: HeaderPass }[] = [];
       for (const source of sources) passes.push({ ...source, pass: await this.syncHeaders(source.supplier, source.name) });
       // Each supplier keeps the last header each of its passes reached, whatever ended the pass, up to
@@ -410,7 +410,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       if (previous !== undefined) {
         const kept = this.store.bestAt(anchorHeight + 1n + previous.witnessed);
         if (kept === undefined || compareBytes(kept.id, previous.witnessedHeaderId) !== 0) {
-          this.failure = "venue failure: the best chain left a block witnessed under the depth";
+          this.failure = FAILURE;
           this.persist(previous, []);
           throw new VenueError(this.failure);
         }

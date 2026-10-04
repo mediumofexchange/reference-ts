@@ -15,7 +15,8 @@ const FORMAT = "moe/ergo-view/2";
  * (`ergo-profile.ts`). A release that changes either names new rules here, and a view kept under other rules is
  * refused until it is synced again. */
 export const ERGO_VIEW_RULES = "moe/ergo-view-rules/1";
-const FAILURE = "venue failure: the best chain left a block witnessed under the depth";
+/** The one failure a view keeps: a stored failure is refused unless it is exactly this. */
+export const FAILURE = "venue failure: the best chain left a block witnessed under the depth";
 const MAX_INDEX = 0x7fff_ffffn, MAX_HEIGHT = (1n << 31n) - 1n;
 /** The token only `ErgoVenueJournal.memory` passes. */
 const IN_MEMORY: unique symbol = Symbol("in-memory Ergo view");

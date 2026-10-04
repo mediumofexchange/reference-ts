@@ -49,7 +49,7 @@ async function webCryptoEnvelope(cm: bigint, value: bigint): Promise<Uint8Array>
 
 describe("v3 capsules", () => {
   it("reproduces the recorded profile-1 vector byte for byte", () => {
-    // docs/pool-delivery-verification.json (2026-09-09), from the retired probe.
+    // docs/pool-delivery-verification.json (2026-09-09, kept at 1915d5d), from the retired probe.
     expect(base.attempts).toEqual({ spend: 2, rho: 1 });
     expect(fieldToHex(base.opening.owner)).toBe("0x22a467d1fa14a91a2802f16486f39f509c699fa00f3e5350a114792bec136a06");
     expect(fieldToHex(base.opening.rho)).toBe("0x0d2f2ac91326a35ce92a08860002daf808aedf293799fc09233c9d846d932375");

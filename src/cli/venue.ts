@@ -179,13 +179,21 @@ export interface View {
   readonly venue: ErgoVenue;
   readonly journal: ErgoVenueJournal;
   sync(): Promise<ErgoSyncReport>;
+  /** `sync`, refusing a venue that has witnessed nothing yet: its clock then stands on a block. */
+  syncWitnessed(): Promise<ErgoSyncReport & { readonly witnessedIndex: bigint }>;
   close(): void;
 }
 export function openView(directory: Directory): View {
   const file = requireVenue(directory), journal = new ErgoVenueJournal(directory.file("venue.db"), file.id);
   try {
     const venue = new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal), sources = suppliers(directory);
-    return { file, venue, journal, sync: () => venue.sync(sources), close: () => journal.close() };
+    const sync = () => venue.sync(sources);
+    const syncWitnessed = async () => {
+      const synced = await sync(), at = synced.witnessedIndex;
+      if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
+      return { ...synced, witnessedIndex: at };
+    };
+    return { file, venue, journal, sync, syncWitnessed, close: () => journal.close() };
   } catch (error) { journal.close(); throw error; }
 }
 

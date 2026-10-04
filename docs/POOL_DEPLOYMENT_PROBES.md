@@ -58,7 +58,7 @@ public-input order and values, proof bounds and all nine generated proofs.
 There are three raw samples for each of: one real input plus padding, two
 same-backing inputs, and two different backings. No warmup sample is discarded.
 
-The recorded [first browser result](pool-browser-verification.json) is Windows
+The recorded [first browser result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-browser-verification.json) is Windows
 desktop Chromium 152. All nine proofs verified. Proving ranged from 4.28 to
 6.29 seconds for same-backing cases and 6.79 to 9.30 seconds for mixed backings;
 verification ranged from 91 to 195 ms. Every proof was 14,656 bytes. The entire
@@ -103,7 +103,7 @@ Linux and Windows beside the then-pinned v2 proof checks. The v3 conformance sui
 relations.
 
 The first probe (retired at slice 1 M1; its
-[recorded result](pool-delivery-verification.json) and sources are at
+[recorded result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-delivery-verification.json) and sources are at
 [17a9f1e](https://github.com/mediumofexchange/reference-ts/tree/17a9f1e/scripts/pool/delivery))
 restored notes in a fresh process from a seed and a prevalidated synthetic
 view: public outputs and capsules, spent nullifiers and lit settlements, with
@@ -145,7 +145,7 @@ Device and full-history replay costs remain additional gates.
 `npm run check:pool:restoration` at a020215 connected the existing capsule
 scanner to the canonical v3 served-trail, record, snapshot and header codecs;
 Linux and Windows CI ran it. The
-[retained result](pool-restoration-evidence-verification.json) pins the sources.
+[retained result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-restoration-evidence-verification.json) pins the sources.
 
 A fresh child receives only a synthetic seed, an independently selected fixture
 identity and public package bytes. It verifies the operator signature, complete
@@ -588,7 +588,7 @@ venue record alongside the canonical package bytes.
 ## Transfer shape and ordinary fees
 
 The F4 probe generated candidates from the pinned v2 spend; its
-[recorded evidence](pool-fees-verification.json) pins their identities,
+[recorded evidence](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-fees-verification.json) pins their identities,
 inputs and measurement scope and is historical, recorded at
 [fcf532c](https://github.com/mediumofexchange/reference-ts/tree/fcf532c). It
 retired on 2026-09-25 (sources at
@@ -684,7 +684,7 @@ format or parser.
 
 `npm run bench:pool:spent` at a020215 regenerated
 `scratch/pool-spent-set/report.json`. The
-[recorded report](pool-spent-verification.json) pins the specification and
+[recorded report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-spent-verification.json) pins the specification and
 LF-normalized source hashes, environment and deterministic roots; it is
 historical, recorded at [c955798](https://github.com/mediumofexchange/reference-ts/tree/c955798)
 before the candidate moved into `src/pool/v3/`. Both shapes
@@ -716,7 +716,7 @@ the conditional local replay, with a checkpoint every K events and the last one
 selected. A counting stub stood in for proof verification; the
 [conformance report](pool-v3-conformance-verification.json) supplies real
 single-thread verification times. The
-[recorded report](pool-replay-cost-verification.json) binds LF-normalized source
+[recorded report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-replay-cost-verification.json) binds LF-normalized source
 hashes, environment and every case; it is historical, recorded at
 [6c6a80a](https://github.com/mediumofexchange/reference-ts/tree/6c6a80a), and its bound sources have since moved.
 
@@ -1388,7 +1388,7 @@ still has an internal parent. The
 fix those details. Secondary discovery material described a conflicting
 paired-leaf construction; the probe follows the pinned source instead.
 
-The retained [result](ergo-range-verification.json) has 414 passing assertions:
+The retained [result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-verification.json) has 414 passing assertions:
 four public mainnet block fixtures at heights 100000, 1000000, 1500000 and
 1876512, versions 1/3/3/4, 29 transactions and 77 outputs. Their raw JSON
 totals 191,382 bytes; reconstructed signed transactions total 19,380 bytes,
@@ -1443,7 +1443,7 @@ refused every Ergo 6.0 script on mainnet
 ([the decision](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes);
 [P4](#real-chain-exhaustion-cost-from-a-real-anchor)). npm associates it with
 sigma-rust [`2f840d3872367d6181d66d4a168194dbefad77f1`](https://github.com/ergoplatform/sigma-rust/tree/2f840d3872367d6181d66d4a168194dbefad77f1).
-The lockfile pins package integrity; the [retained report](ergo-decoder-verification.json)
+The lockfile pins package integrity; the [retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-verification.json)
 also hashes the installed WASM and corpus sources and checks the installed
 version. This is package metadata provenance of a pre-release, not an
 independently reproduced build or a maintenance guarantee.
@@ -1541,7 +1541,7 @@ judged.
 
 `experiments/ergo-range/profile-check.mjs` compiles the model and drives it
 through the pinned Fleet serializer and sigma-rust decoder. The
-[retained report](ergo-range-profile-verification.json) has 277 passing
+[retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-profile-verification.json) has 277 passing
 checks. The mainnet genesis header, pinned as a fixture (height 1, version
 1, a zero parent id, 279 wire bytes), is read as an anchor: alone it reaches
 no index, a synthetic child at height 2 is index 0 and needs its section,
@@ -1605,7 +1605,7 @@ copy hashes to its stated id and the header's transaction root holds through
 the model's root, checks every framed transaction against the node's
 statement of its outputs, then builds the model verifier from the real
 headers and the supplied sections under four throwaway locations, so every
-answer is empty by exhaustion. The [retained report](ergo-chain-cost-verification.json)
+answer is empty by exhaustion. The [retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-chain-cost-verification.json)
 records the window, the nodes' agreement, a digest of the cached responses,
 sizes and times. Until 2026-09-24 the run serialized the text with the
 pinned sigma-rust and decoded it with two builds
@@ -1770,7 +1770,7 @@ at most `depth + 2` blocks above that tip (A10), so these landed two
 blocks inside the bound at depth 2; the report's latency note states the
 bound one block stricter.
 
-**Testnet run, 2026-09-24** ([retained report](ergo-publication-verification.json)),
+**Testnet run, 2026-09-24** ([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-publication-verification.json)),
 through the reader that decodes nothing: the own testnet node (v6.0.6)
 accepted the same seven transactions, the six cases in block 561,774
 (positions 1–6) and the sweep in 561,779, each two blocks above the full
@@ -1802,7 +1802,7 @@ witnessed index, it has force when included at `T + k` with
 passively from 2026-09-22 19:22 to 2026-09-23 20:22 UTC. It read a public
 node's pool ids and blocks every 10 s (GET only; nothing submitted, no key).
 Each transaction's first sighting was timed as `k`, bracketed above by the
-height one round earlier. The [recorded report](ergo-latency-verification.json)
+height one round earlier. The [recorded report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-latency-verification.json)
 binds both states and the collector hash. It checks the window's 784 block
 headers: each links to its parent, they end at the node's tip, and all 784
 ids agree with a second public node. The own node ran a second observation
@@ -1870,7 +1870,7 @@ header chain from genesis rather than accept a NiPoPoW proof, so the node
 itself checked every header's proof of work and difficulty and chose the
 best chain. `experiments/ergo-range/header-check.mjs` then asked whether the
 retained evidence stands on that chain
-([retained report](ergo-own-node-verification.json)):
+([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-own-node-verification.json)):
 
 - the five pinned fixture headers (genesis, 100,000, 1,000,000, 1,500,000 and
   1,876,512) are on the node's best chain, equal in id, parent, height,
@@ -1909,7 +1909,7 @@ local browser page can read the node's key-free routes.
 The reader need not run a node to authenticate headers: the profile's
 [header store](ERGO_VENUE_PROFILE.md#header-source)
 (`src/ergo-headers.ts`) verifies header bytes itself from the
-pinned anchor. `experiments/ergo-range/header-verify.mjs` ran it on real
+pinned anchor. `experiments/ergo-range/header-verify.mjs` (retired 2026-10-04) ran it on real
 mainnet headers on 2026-09-24
 ([retained report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-header-verification.json), recorded offline from
 the run's cached responses):
@@ -1993,7 +1993,7 @@ reproducible ([decision](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-
 process, the least V8 `--stack-size` a build needs (found to 8 KB; 71 KB is
 the least Node runs with at all) and the deepest expression nesting it
 parses at the largest stack Node's 8 MB main thread holds
-([retained report](ergo-decoder-stack-verification.json)):
+([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-stack-verification.json)):
 
 | Input | Pinned release build | Debug alpha | 0.28.0 |
 |---|---|---|---|
@@ -2010,7 +2010,7 @@ it decodes the fixture; on a synthetic transaction whose output tree nests
 100,000 levels, which only a dishonest source could present, it traps and
 reports its instance poisoned, failing closed. Re-reading the P4 week
 offline from the cache with the release build pinned and the alpha as the
-alternate ([retained report](ergo-decoder-pin-verification.json)), both
+alternate ([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-pin-verification.json)), both
 builds answer all 28,196 transactions with an equal id, witness id, ErgoTree
 and register constants, neither refuses one, all 5,040 roots reproduce and
 no index is unresolved, with decoding about six times faster.
@@ -2040,7 +2040,7 @@ Wasmtime **48.0.0**, using the existing `ergo-lib-wasm-nodejs` 0.28.0 WASM hash.
 The Windows x64 wheel is
 [hash-pinned](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/metering-requirements.txt), with a native
 DLL hash and loaded-path checks before controls. The
-[report](ergo-metering-verification.json) records the Python/native engine and
+[report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-metering-verification.json) records the Python/native engine and
 harness hashes at `d446f83`; the cost probe below pins that report and verifies
 its deterministic results with the current observational hooks. Package
 integrity is not an independently reproduced build.
@@ -2107,7 +2107,7 @@ separate open gates.
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-The [profile](ergo-decoder-cost-verification.json) uses the same pinned artifacts
+The [profile](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-cost-verification.json) uses the same pinned artifacts
 and replays all 24 valid fixtures at the original 10-million-fuel budget. It
 checks IDs/order, status, input size, fuel, guest memory, JSON size, output
 counts and refusal phase against the hash-pinned baseline. Optional phase
@@ -2201,7 +2201,7 @@ release build needs a second table; the ceilings are an effectively
 unbounded fuel and wasm32's whole 4 GiB, for observation rather than as a
 budget. `--week` reserializes the cached node text of the P4 window with the
 pinned serializer and meters every transaction, checking each decoded id
-([report](ergo-metered-release-verification.json)).
+([report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-metered-release-verification.json)).
 
 | Input | Transactions | Decoded | Fuel per byte, median / max | Guest memory max |
 |---|---|---|---|---|
@@ -2239,7 +2239,7 @@ UTXO snapshot, heights 1,830,001–1,879,100 (49,100 blocks, 69 days), in five
 chunks; an offline pass then compared, for every transaction, what the
 vendored release decoder reads with the node's JSON fields
 ([guide](https://github.com/mediumofexchange/reference-ts/blob/1b4857a/experiments/ergo-range/README.md#real-chain-exhaustion-cost),
-[retained report](ergo-decoder-equivalence-verification.json)).
+[retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-equivalence-verification.json)).
 
 | Blocks | Transactions | Outputs | Registers | Roots reproduced | Refused | Differing fields |
 |---|---|---|---|---|---|---|
@@ -2270,7 +2270,7 @@ exercised, and no decoder or profile is selected; hostile inputs are compared
 The reader decodes through `experiments/ergo-range/contained-decoder.mjs`
 ([decision](../decisions/2026-09.md#2026-09-24--contain-the-readers-decoder-per-transaction-under-a-deterministic-metered-budget),
 [guide](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/README.md#contained-decoder),
-[retained report](ergo-decoder-containment-verification.json)). `wasm-meter.mjs`
+[retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-containment-verification.json)). `wasm-meter.mjs`
 derives from the vendored release build (WASM `0d200385…`) a module
 (`bd7cfbb5…`, 13,727 functions, 16,050 charged regions, 54,467 counted call
 sites, 5,211 helper calls) that charges fuel at every function entry and loop
@@ -2353,7 +2353,7 @@ deterministically into 159,397 distinct cases: every byte replaced by four
 values, deleted, and preceded by 0x00 and 0x80, every proper prefix, and 256
 seeded splices per transaction. Each case was read by the node and by the
 contained decoder
-([retained report](ergo-decoder-hostile-equivalence-verification.json)). The
+([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-hostile-equivalence-verification.json)). The
 node's reading is the pinned v6.0.6 JAR's own `BlockTransactionsSerializer`
 on a one-transaction version-4 section, in its bundled runtime; it states
 its id, witness id, and each output's tree and register constants as its

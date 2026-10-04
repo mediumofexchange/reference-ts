@@ -64,40 +64,6 @@ local browser can read the API and use its key-free routes. These are
 practical sources for the probes, not a hardened or process-contained
 deployment.
 
-## Reader-verified headers
-
-`header-verify.mjs` runs the reader's own header store
-(`src/ergo-headers.ts`) on real mainnet headers. Each header's
-bytes are copied from a node's JSON by `src/ergo-supplier.ts` (unsupplied
-unless the copy hashes to the stated id); the store builds from the 1,024
-headers below the pinned anchor by linkage, then verifies every header above
-it from each source in turn (own node, then two public nodes), and its best
-chain must be every source's chain. It also
-checks nine real-data mutations for their refusal reasons and, with
-`--recalculations`, the model's EIP-37 difficulty and proof of work at every
-recalculation since activation against the first source's accepted headers.
-Responses are cached under `scratch/ergo-headers/`, so `--offline` re-runs it
-from the cache ([historical retained report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-header-verification.json)):
-
-```powershell
-node experiments/ergo-range/header-verify.mjs --anchor 1873360 --to 1880300 --recalculations --out docs/ergo-header-verification.json
-```
-
-## Runtime venue on the mainnet
-
-`runtime-sync.mjs` runs the runtime's `ErgoVenue` (`src/ergo.ts`) on the
-real mainnet: anchored `--blocks` (default 300) below the own node's tip at
-the default depth, a view syncs from the own node and a public node, then a
-second view from the public node alone, and a supplier that substitutes one
-section and one that raises one header's difficulty are each set beside the
-own node. It needs the own mainnet node running, caches nothing and writes
-a fresh runtime report. The [retained report at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-runtime-venue-verification.json)
-predates persistence changes:
-
-```powershell
-node experiments/ergo-range/runtime-sync.mjs --out docs/ergo-runtime-venue-verification.json
-```
-
 ## Runtime publisher on the testnet
 
 `publisher-check.mjs` runs the runtime's `ErgoPublisher` on the own testnet
@@ -148,8 +114,8 @@ only they used: the block-root/Fleet experiment and the range-profile check
 (`check.mjs`, `profile-check.mjs`, formerly `npm run check:ergo:range`), P4's
 chain cost (`chain-cost.mjs`), P2's testnet publication (`publish.mjs`), A10's
 latency collector (`latency.mjs`) and the own-node standing check
-(`header-check.mjs`). Their reports stay in `docs/` as measured, and the
-scripts and this guide's sections for them are kept at the
+(`header-check.mjs`). Their reports and scripts, and this guide's sections
+for them, are kept at the
 [`1b4857a` revision](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range)
 ([decision](../../decisions/2026-09.md#2026-09-25--retire-probes-whose-questions-are-answered)).
 
@@ -157,10 +123,21 @@ The reader's decoder tooling (the unmetered `decoder.mjs` and its corpus,
 the contained and metered derivations with their Wasmtime probe, the stack
 check, the decoder-against-node equivalence driver over the own node's
 retained blocks, and the decoder side of the hostile probe) was retired on
-2026-09-24 when the supplier stopped decoding; its reports stay in
-`docs/ergo-decoder-*.json` and `docs/ergo-meter*.json` as history, and the
-scripts are kept at the
-[`0453955` revision](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).
+2026-09-24 when the supplier stopped decoding; the scripts are kept at the
+[`0453955` revision](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range),
+and the reports (`docs/ergo-decoder-*.json`, `docs/ergo-meter*.json`) at
+[`1915d5d`](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/docs).
+
+On 2026-10-04 three real-chain probes retired, their reports having been
+cited only as history since `6e4cea8`: the mainnet header check
+(`header-verify.mjs`), the reference-testnet header check
+(`testnet-header-check.mjs`) and the runtime venue on the mainnet
+(`runtime-sync.mjs`). `test/ergo-headers.test.ts` holds real mainnet and
+testnet recalculation windows for the header rules, and the live testnet
+drill (M10d) runs the runtime venue on a real chain; mainnet stays disabled.
+The scripts, this guide's sections for them and every report retired with
+them are kept at the
+[`1915d5d` revision](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/experiments/ergo-range).
 
 Earlier sessions (2026-09-10 through 2026-09-12) evaluated a Windows-hosted
 contained Ergo node: stable/maintained-Java stock storage, a native RocksDB

@@ -13,7 +13,7 @@ import { readPresentation, type Presentation } from "../pool/v3/dishonour.js";
 import { EvidenceStore } from "../pool/v3/evidence-store.js";
 import type { FaultResult } from "../pool/v3/fault-observer.js";
 import { readFrontier } from "../pool/v3/package-reader.js";
-import { ReplayStore } from "../pool/v3/replay-store.js";
+import { FileInUse, ReplayStore } from "../pool/v3/replay-store.js";
 import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { V3ServiceClient } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
@@ -123,16 +123,13 @@ async function served(client: V3ServiceClient, backing: Uint8Array, evidence: Ev
 export function keptReplay(directory: Directory, at: bigint): ReplayStore {
   let store: ReplayStore;
   try { store = new ReplayStore(directory.file("replay.db"), { digest: directory.file("replay.db.sha256") }); } catch (error) { throw inUse(error); }
-  try {
-    const seen = store.answersThrough();
-    if (seen !== undefined && at < seen) store.discardKept();
-  } catch (error) { store.close(); throw error; }
+  try { store.discardKeptAfter(at); } catch (error) { store.close(); throw error; }
   return store;
 }
 
-/** The kept file held by a process outside the directory's lock (another tool, a scanner): a refusal, not a failure. */
-const inUse = (error: unknown): unknown => error instanceof Error && error.message === "the kept replay file is in use" ?
-  new CommandError("STORAGE", "another process holds this reader's kept replay file") : error;
+/** A file held by a process outside the directory's lock (another tool, a scanner): a refusal, not a failure. */
+const inUse = (error: unknown): unknown => error instanceof FileInUse ?
+  new CommandError("STORAGE", `another process holds this reader's ${error.file}`) : error;
 
 /** Sync the view, then read the backing's frontier at its witnessed index over the package `--package` names or
  * the operator's service supplies into `evidence.db`, resting on what earlier reads kept in `replay.db`. `use` takes
@@ -141,12 +138,11 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
   use: (at: bigint, read: FrontierResult & FaultResult, sync: object) => void): Promise<void> {
   const view = openView(directory);
   try {
-    const synced = await view.sync(), at = synced.witnessedIndex;
-    if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
+    const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
     const verifier = await openVerifier(directory, verifierCount(args));
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined;
     try {
-      evidence = new EvidenceStore(directory.file("evidence.db"));
+      try { evidence = new EvidenceStore(directory.file("evidence.db")); } catch (error) { throw inUse(error); }
       store = keptReplay(directory, at);
       const file = flag(args, "package");
       const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);
