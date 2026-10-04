@@ -380,6 +380,11 @@ describe("pool-v3 §14 kept classes across reads", () => {
     await f.first();
     const store = opened(kept.path, kept);
     await expect(f.read(counting(), store, { witness: (output: { cm: bigint }) => marked(output) })).rejects.toThrow("a kept store needs a witness predicate that declares its identity");
+    // A predicate returns a mark or nothing: anything else is the caller's error, never a verdict.
+    for (const result of [true, { nf: -1n, note: b(1) }, { nf: 1n }]) {
+      await expect(f.read(counting(), undefined, { witness: (() => result) as unknown as WitnessPredicate }))
+        .rejects.toThrow(new TypeError("a witness predicate returns a mark { nf, note } or undefined"));
+    }
     await f.read(counting(), store, { witness: Object.assign((output: { cm: bigint }) => marked(output), { identity: b(77) }) });
     // Another predicate witnesses other outputs, so nothing replayed under the first is reused.
     const other = counting(), read = await f.read(other, store, { witness: Object.assign(() => undefined, { identity: b(78) }) });
