@@ -21,7 +21,7 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
 - **M11b done** (PRs #93–#99): (n) record cost flat in notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) an index past the answer
   budget asked again; (m) trails served forward; (k) kept walk, spec `dc51baf` ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k), [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4));
   (s) `serve` takes no journal turn ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)); (w) `moe reader` keeps `replay.db` as the wallet does.
-- **M11c1 done** (this branch, `design-point-probe.mjs`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements
+- **M11c1 done** (PR #101, `design-point-probe.mjs`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements
   every budget holds (admission median ~85 ms, first sync ~26 ms a statement, ≈1 CPU-min and 14 MB a day, all processes <600 MB,
   restart 3.1 s without re-verifying), but a wallet read re-recovers every output its seed ever received (new Next 4(x)).
   **Next: M11b7, fix (x)** (it needs no measurement, as (k) and (s) did not), then M11c2 (recover the M5b.6 read mode from
