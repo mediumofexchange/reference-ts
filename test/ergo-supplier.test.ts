@@ -213,6 +213,18 @@ describe("the node supplier over HTTP", () => {
     await expect(nodeText(post.fetch, "http://node/transactions/bytes", "/transactions/bytes",
       { signal: AbortSignal.timeout(1000), method: "POST", body: "\"00\"" }, 100)).rejects.toThrow("fetch failed");
     expect(post.calls).toBe(1);
+    // A POST without a body, and a request whose own deadline has passed, are not sent again either; a reset
+    // connection (ECONNRESET) is closed under the request like undici's socket error.
+    const bare = failingFirst(1);
+    await expect(nodeText(bare.fetch, "http://node/x", "/x", { signal: AbortSignal.timeout(1000), method: "POST" }, 100)).rejects.toThrow("fetch failed");
+    expect(bare.calls).toBe(1);
+    const late = failingFirst(1), aborted = new AbortController(); aborted.abort();
+    await expect(nodeText(late.fetch, "http://node/info", "/info", { signal: aborted.signal }, 100)).rejects.toThrow("fetch failed");
+    expect(late.calls).toBe(1);
+    let resetCalls = 0;
+    const reset = async () => { if (resetCalls++ === 0) throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) }); return new Response("ok"); };
+    expect(await nodeText(reset, "http://node/info", "/info", { signal: AbortSignal.timeout(1000) }, 100)).toBe("ok");
+    expect(resetCalls).toBe(2);
     // Another failure (a refused connection) is not sent again.
     let refusedCalls = 0;
     const refused = async () => { refusedCalls++; throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("refused"), { code: "ECONNREFUSED" }) }); };
