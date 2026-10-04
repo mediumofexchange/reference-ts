@@ -1395,7 +1395,7 @@ M11b7 keeps each witnessed output's nullifier and opening with its witness
 and leaves spent outputs out of a read
 ([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x)).
 `owned-notes-probe.mjs`
-([at its revision](https://github.com/mediumofexchange/reference-ts/blob/PROBE_REVISION/scripts/pool/v3/owned-notes-probe.mjs))
+([at its revision](https://github.com/mediumofexchange/reference-ts/blob/9616784/scripts/pool/v3/owned-notes-probe.mjs))
 writes one seed's outputs, four a record, into an in-memory replay store
 through the seed's witness predicate, then spends every second one. It
 times `ownedNotes` at the tip, then reading two notes' secrets and paths as
