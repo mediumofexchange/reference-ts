@@ -24,8 +24,8 @@ Slice 10 waits only on M10d (live testnet drill, local machine). Earlier: slices
   (kept walk, [decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k), [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4): admission ≤0.18 s at 320 checkpoints).
   **M11b5** (PR #98, branch `claude/m11b5-journal-findings`), (s) ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)):
   `serve` takes no journal turn (CLI queue bypassed) and refuses the journal's own damage by name; `adopt` names a refused
-  block; cleanup failures go as a `cause`; prover and exported walks refuse another domain. One review and two read-backs;
-  reports to re-record from the PR's CI before merge. Then (w), M11c.
+  block; cleanup failures go as a `cause`; prover and exported walks refuse another domain. One review and three read-backs;
+  reports: CI run 37176841154. Then (w), M11c.
 - **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
 
 ## Evidence
