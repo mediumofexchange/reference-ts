@@ -28,7 +28,8 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
 - **M11c2 done** (PR on `claude/m11c2-runtime-depth`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB);
   (v) fails admission at 10⁶ (343 ms at 10⁵); a fresh view reaches the tip one command per sync budget (10⁵ reads stopped at 13,440).
   **Next: M11b11** commands sync until the view's clock stops advancing; then (v)'s lever; then M11c3 (10⁵ reads again, overhead, report).
-- **Audit area 27 (state machine)**: the note tree's 2^32-th leaf and §7's position bound made verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet audited.
+- **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
+  Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md).
@@ -45,20 +46,17 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
    duties 2–3 (transport, a credential not per holder, syncs, gap funding); first probe: clients through a SOCKS5 proxy such as Tor.
 3. M10c2 leftovers: synthetic index lag knob; testnet context has no difficulty floor (M10d); read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
-4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2). (f) Wallet
-   `prepare`/`reprove` read `signed.terms` twice. (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a
-   transaction. (h) closed in M10e2. (j) Verify-only parties could take
-   identity-checked key bytes, needing no G1 file. (k) closed (M11b4, kept walk). (l) closed (M11b2; a fixture venue declares no
-   index bound, its records being its owner's).
-   (m) closed (M11b3; `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError). `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
-   (o) `store.ts` `parts()` keeps one trail top per segment, so a taken
-   predecessor segment whose snapshots lie on two forks serves only the longer trail (a fix needs an ancestor test without a walk per snapshot).
-   (p) `package-reader.ts` reads the selection through its own backing's entry before the walk, so a malformed selection's refusal reason
-   differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged
-   before silence lapse (label, or an answer where lapse is unresolved). (s) closed in M11b5 (Status). (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
+4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2; (f) in
+   audit 29). (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a transaction. (h) closed in M10e2.
+   (j) Verify-only parties could take identity-checked key bytes, needing no G1 file. (k) closed (M11b4). (l) closed (M11b2). (m) closed (M11b3; `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError). `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
+   (o) `store.ts` `parts()` keeps one trail top per segment, so a taken predecessor segment whose snapshots lie on two forks serves only
+   the longer trail (a fix needs an ancestor test without a walk per snapshot). (p) `package-reader.ts` reads the selection through its own
+   backing's entry before the walk, so a malformed selection's refusal reason differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged before silence lapse (label, or an answer where lapse is unresolved). (s) closed in M11b5 (Status). (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
    (v) A read at a new venue index changes kept answers, so its close hashes the whole replay file: the operator's first admission per
-   block grows ~2.6 ms per 10³ statements (M11c2), ~2.6 s at 10⁶, past the 1 s budget; lever: an incremental root or the hot rows apart. (w) closed in M11b6.
+   block grows ~2.6 ms per 10³ statements (M11c2), ~2.6 s at 10⁶, past the 1 s budget; lever: an incremental root or the hot rows apart. (w) closed in M11b6. Audit 29: (y) a restored handoff starts
+   `seen` at 0, so it may build from a view older than its source synced at (refusals, not loss; carry `seen` at the next profile change);
+   (z) pool-delivery C4.7's venue-created output awaiting adoption is not reported at all (only never as spendable).
 5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
    sync, about 0.9 s at a hostile 20,000-header quota); sections asked of several suppliers at once (first-sync time, if M11c shows
    the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch

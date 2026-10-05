@@ -638,10 +638,14 @@ export class V3Wallet {
   }
   /** A payment's fate. final: all four outputs are in canonical history, imports included (own change/zero outputs
    * are fresh, and a reproof spends the same nullifiers into the same commitments, so only this payment creates
-   * them in whichever segment admitted it); failed: a reserved input was spent otherwise. */
+   * them in whichever segment admitted it); failed: a reserved input was spent otherwise, or one of its outputs
+   * exists without the rest. A statement's outputs enter history together, so another statement created that one
+   * (a payee or fee recipient handing its request to two payers, or paying itself), and every door refuses an output
+   * already created: no record of this payment, reproved or not, can be admitted. */
   private paid(name: string, record: Record, canonical: CanonicalCheckpoint, force: ForceState) {
-    if (record.publicInputs.slice(9, 13).every(cm => canonical.state.hasOutput(cm))) return "final" as const;
-    return this.spent(name, force) ? "failed" as const : undefined;
+    const outputs = record.publicInputs.slice(9, 13);
+    if (outputs.every(cm => canonical.state.hasOutput(cm))) return "final" as const;
+    return outputs.some(cm => force.hasOutput(cm)) || this.spent(name, force) ? "failed" as const : undefined;
   }
   private spent(name: string, force: ForceState): boolean {
     return this.db.prepare("SELECT nf FROM saved_inputs WHERE alias=?").all(name).some(r => force.hasNullifier(BigInt(r.nf as string)));
@@ -671,12 +675,18 @@ export class V3Wallet {
    * demand's instant has left C3.3's window at every horizon from this read on, an issue's or settlement's output
    * exists from another statement (a settlement's also from one with force), a reserved input was spent otherwise,
    * a withdrawal's or a settlement's demand no longer stands (ended by an act of another copy too), or a
-   * settlement's acceptance deadline has passed (no door admits it after). Demands are judged after the acts that end them. A view older than the one a
+   * settlement's acceptance deadline has passed (no door admits it after). Those two times are the door's (C3.8): an
+   * act whose operator receipt is still pending was admitted inside them, and a replayer does not re-judge an
+   * admitted statement's instant or deadlines, so they fail no such act. A receipt is pending while no checkpoint of
+   * its segment reaches its position and no silence boundary is proven through the read (C2.10.9b, C2b.4.1); a
+   * checkpoint past it without the statement contradicts it, and a boundary lapses it, so the times judge the act
+   * again. Demands are judged after the acts that end them. A view older than the one a
    * record was built from decides no failure for it. A failure read from one view is local accounting: an operator
    * reading behind this wallet may still admit the record, which then goes final. */
-  private resolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint):
+  private resolutions(backing: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState, at: bigint, lag: bigint,
+    clock: Frontier["clock"]):
     { alias: string; status: "final" | "failed" }[] {
-    const rows = this.db.prepare("SELECT alias,kind,record,demand,status,judged FROM saved_records WHERE status!='final' AND backing=? ORDER BY kind='4'").all(backing);
+    const rows = this.db.prepare("SELECT alias,kind,record,demand,status,judged,receipt FROM saved_records WHERE status!='final' AND backing=? ORDER BY kind='4'").all(backing);
     const decided = new Map<string, "final" | "failed">(), spent = (name: string) => this.spent(name, force);
     const ended = (demand: string, kind: "5" | "6") => this.db.prepare("SELECT alias,status FROM saved_records WHERE demand=? AND kind=?").all(demand, kind)
       .some(r => r.status === "final" || decided.get(r.alias as string) === "final");
@@ -691,21 +701,23 @@ export class V3Wallet {
         continue;
       }
       const admitted = canonical.state.hasEvent(statement) || (record.kind >= 4 && force.isEffective(hex(statement)));
-      const dead = !same(identifierOf(p[2]!, p[3]!), canonical.segment);
+      const dead = !same(identifierOf(p[2]!, p[3]!), canonical.segment), pending = row.receipt !== null &&
+        decodeReceipt(row.receipt as Uint8Array).position > canonical.state.position && (clock == null || clock.boundary === null);
       let status: "final" | "failed" | undefined;
       if (admitted) status = "final";
       else if (row.status === "failed" || stale) continue;
       else if (record.kind === 4) {
         // A relayed publication is witnessed at an index w ≥ at, so C3.3's window (w − 2·lag ≤ instant) is closed
         // for good once at > instant + 2·lag. An operator reading behind the venue is covered by failed → final.
-        status = ended(demand!, "5") || ended(demand!, "6") ? "final" : dead || at > p[14]! + 2n * lag || spent(name) ? "failed" : undefined;
+        status = ended(demand!, "5") || ended(demand!, "6") ? "final" :
+          dead || (!pending && at > p[14]! + 2n * lag) || spent(name) ? "failed" : undefined;
       } else if (dead) status = "failed";
       else switch (record.kind) {
         case 1: status = canonical.state.hasOutput(p[8]!) ? "failed" : undefined; break;
         case 3: status = spent(name) ? "failed" : undefined; break;
         case 5: status = ended(demand!, "6") || force.demand(demand!) === undefined ? "failed" : undefined; break;
         case 6: status = force.demand(demand!) === undefined || force.hasOutput(p[14]!) || spent(name) ||
-          at > settlementAuthorization(record).acceptance.deadline ? "failed" : undefined; break;
+          (!pending && at > settlementAuthorization(record).acceptance.deadline) ? "failed" : undefined; break;
       }
       if (status !== undefined) decided.set(name, status);
     }
@@ -868,9 +880,10 @@ export class V3Wallet {
     try { snapshot = decodeWalletSnapshot(plaintext, TABLES.map(([, columns]) => columns.length)); }
     catch { throw new V3WalletError("INVALID", "invalid wallet snapshot"); }
     finally { plaintext.fill(0); }
-    requireThat(snapshot.profile === PROFILE, "INVALID", "wallet snapshot has another profile");
-    try { return V3Wallet.create(path, own, { seed: snapshot.seed, tables: snapshot.tables, digest: expectedDigest }); }
-    finally { snapshot.seed.fill(0); }
+    try {
+      requireThat(snapshot.profile === PROFILE, "INVALID", "wallet snapshot has another profile");
+      return V3Wallet.create(path, own, { seed: snapshot.seed, tables: snapshot.tables, digest: expectedDigest });
+    } finally { snapshot.seed.fill(0); }
   }
 
   /** C4.6: a new wallet from a backed-up seed alone. `sync` finds the same
@@ -959,9 +972,9 @@ export class V3Wallet {
     name = alias(name); this.mutable();
     const note = this.prepared(name);
     requireThat(this.fulfillment(name) === undefined, "CONFLICT", "request already fulfilled");
-    requireThat(same(rootTermsName(copyUnshared(signed.terms)), note.opening.backing), "INVALID", "terms do not name requested backing");
-    await this.read(packageBytes, signed, ({ terms, backing, at, observed, canonical, force }) => {
-      requireThat(same(backing, note.opening.backing), "INVALID", "terms do not name requested backing");
+    const { backing, own } = this.termsOf(signed);
+    requireThat(same(backing, note.opening.backing), "INVALID", "terms do not name requested backing");
+    await this.read(packageBytes, own, ({ terms, at, observed, canonical, force }) => {
       requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical payment");
       const paid = canonical.state.output(note.cm);
       requireThat(paid?.capsule !== undefined && same(paid.capsule, note.capsule),
@@ -1021,7 +1034,7 @@ export class V3Wallet {
     this.mutable();
     return this.read(packageBytes, signed, view => {
       const { backing, at, lag, observed, canonical, force, notes } = view;
-      const decided = canonical !== undefined && force !== undefined ? this.resolutions(backing, canonical, force, at, lag) : [];
+      const decided = canonical !== undefined && force !== undefined ? this.resolutions(backing, canonical, force, at, lag, view.clock) : [];
       observed.check();
       if (canonical !== undefined) this.resolve(decided, encodeCommitment(canonical.commitment), at);
       return { backing, judgingIndex: at, checkpoint: canonical?.commitment, gap: gapOpen(view), holdings: this.holdingsOf(notes, force, at),
@@ -1038,7 +1051,7 @@ export class V3Wallet {
   async prepare(name: string, order: PaymentOrder, packageBytes: Uint8Array, signed: SignedTerms,
     prove: LocalProver): Promise<Payment> {
     name = alias(name); this.mutable();
-    const backing = rootTermsName(copyUnshared(signed.terms));
+    const { backing, own } = this.termsOf(signed);
     // Each caller field is read once; the copies are what is checked and saved.
     const { request: requestIn, value, fee: feeIn } = order;
     const feeRequestIn = feeIn?.request, feeValue = feeIn?.value;
@@ -1049,30 +1062,17 @@ export class V3Wallet {
     requireThat(isValue(total) && (fee === undefined || fee.request.cm !== payee.cm), "INVALID", "invalid payment order");
     const intent = JSON.stringify([hex(backing), payee.cm.toString(), value.toString(), fee?.request.cm.toString() ?? null,
       fee?.value.toString() ?? null]);
-    const sameOrder = (): boolean | undefined => {
-      const row = this.db.prepare("SELECT kind,intent FROM saved_records WHERE alias=?").get(name);
-      if (row === undefined) return undefined;
-      requireThat(row.kind === "2", "CONFLICT", "alias names a saved act");
-      return row.intent === intent;
-    };
-    const existing = sameOrder();
-    if (existing !== undefined) {
-      requireThat(existing, "CONFLICT", "alias names another payment order");
-      return this.payment(name)!;
-    }
+    const existing = this.savedPayment(name, intent);
+    if (existing !== undefined) return existing;
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const theirs = [payee.cm, ...(fee === undefined ? [] : [fee.request.cm])];
     const taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE cm=?");
     requireThat(theirs.every(cm => taken.get(cm.toString()) === undefined), "CONFLICT", "request is already in a saved payment");
 
-    const planned = await this.read(packageBytes, signed, view => {
+    const planned = await this.read(packageBytes, own, view => {
       const { canonical, force, notes, at, observed } = view;
       // A concurrent exact call may have saved while this one read: answer it before selection.
-      const racing = sameOrder();
-      if (racing !== undefined) {
-        requireThat(racing, "CONFLICT", "alias names another payment order");
-        return undefined;
-      }
+      if (this.savedPayment(name, intent) !== undefined) return undefined;
       requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
       requireThat(theirs.every(cm => !canonical.state.hasOutput(cm)), "CONFLICT", "request is already paid");
       this.current(view.at);
@@ -1086,7 +1086,15 @@ export class V3Wallet {
         this.fresh(backing, sum - total)]), at };
     });
     if (planned === undefined) return this.payment(name)!;
-    return this.savePayment(name, intent, sameOrder, planned, prove);
+    return this.savePayment(name, intent, planned, prove);
+  }
+  /** The saved payment under `name` if it is this exact order; another order, or an act, under it refuses. */
+  private savedPayment(name: string, intent: string): Payment | undefined {
+    const row = this.db.prepare("SELECT kind,intent FROM saved_records WHERE alias=?").get(name);
+    if (row === undefined) return undefined;
+    requireThat(row.kind === "2", "CONFLICT", "alias names a saved act");
+    requireThat(row.intent === intent, "CONFLICT", "alias names another payment order");
+    return this.payment(name);
   }
   /** A spend of `selected` (one note with a fresh zero input, or two) into `outputs`, padded with fresh zero outputs
    * to four and shuffled: public order labels no position (C1.2.3), and the saved record fixes it for retries. */
@@ -1101,8 +1109,8 @@ export class V3Wallet {
     return { selected, inputs, zero, outputs };
   }
   /** Prove a planned spend and save it under `name` with its reservations; a concurrent exact call that saved
-   * first wins (`sameOrder`), and its record is kept, never this proof. */
-  private async savePayment(name: string, intent: string, sameOrder: () => boolean | undefined,
+   * first wins (`savedPayment`), and its record is kept, never this proof. */
+  private async savePayment(name: string, intent: string,
     planned: ReturnType<V3Wallet["spendPlan"]> & { readonly header: SegmentHeader; readonly at: bigint }, prove: LocalProver,
     freshen = false): Promise<Payment> {
     const { header, selected, inputs, zero, outputs, at } = planned, backing = selected[0]!.opening.backing;
@@ -1110,8 +1118,7 @@ export class V3Wallet {
     const statement = hex(statementHash(decodeRecord(bytes))), reserved = selected.map(note => note.nf.toString());
     const taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE cm=?");
     this.transaction(() => {
-      const winner = sameOrder();
-      if (winner !== undefined) { requireThat(winner, "CONFLICT", "alias names another payment order"); return; }
+      if (this.savedPayment(name, intent) !== undefined) return;
       requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
       // A freshen spends presented notes by design: another demand presenting one shares a tag already linked.
       if (!freshen) this.requireUnpresented(selected.map(note => note.nf));
@@ -1136,24 +1143,11 @@ export class V3Wallet {
     name = alias(name); this.mutable();
     const { backing, own } = this.termsOf(signed), key = hex(identifier(demand));
     const intent = JSON.stringify([hex(backing), "freshen", key]);
-    const sameOrder = (): boolean | undefined => {
-      const row = this.db.prepare("SELECT kind,intent FROM saved_records WHERE alias=?").get(name);
-      if (row === undefined) return undefined;
-      requireThat(row.kind === "2", "CONFLICT", "alias names a saved act");
-      return row.intent === intent;
-    };
-    const existing = sameOrder();
-    if (existing !== undefined) {
-      requireThat(existing, "CONFLICT", "alias names another payment order");
-      return this.payment(name)!;
-    }
+    const existing = this.savedPayment(name, intent);
+    if (existing !== undefined) return existing;
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const planned = await this.read(packageBytes, own, view => {
-      const racing = sameOrder();
-      if (racing !== undefined) {
-        requireThat(racing, "CONFLICT", "alias names another payment order");
-        return undefined;
-      }
+      if (this.savedPayment(name, intent) !== undefined) return undefined;
       const { force, notes, at, observed } = view;
       this.current(at);
       const header = this.admissible(view);
@@ -1167,7 +1161,7 @@ export class V3Wallet {
       return { header, ...this.spendPlan(backing, selected, [this.fresh(backing, selected.reduce((n, note) => n + note.opening.value, 0n))]), at };
     });
     if (planned === undefined) return this.payment(name)!;
-    return this.savePayment(name, intent, sameOrder, planned, prove, true);
+    return this.savePayment(name, intent, planned, prove, true);
   }
 
   /** pool-fees C1.2.5 and C4.4: once a prepared payment's segment is no longer
@@ -1189,10 +1183,11 @@ export class V3Wallet {
     if (saved.status !== "prepared") return saved;
     const row = this.db.prepare("SELECT backing,zero,judged FROM saved_records WHERE alias=?").get(name)!;
     const backing = copyUnshared(row.backing as Uint8Array);
-    requireThat(same(rootTermsName(copyUnshared(signed.terms)), backing), "INVALID", "terms do not name the payment's backing");
+    const terms = this.termsOf(signed);
+    requireThat(same(terms.backing, backing), "INVALID", "terms do not name the payment's backing");
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const old = decodeRecord(saved.record), p = old.publicInputs;
-    const planned = await this.read(packageBytes, signed, view => {
+    const planned = await this.read(packageBytes, terms.own, view => {
       const { canonical, force, notes, at, observed } = view;
       requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
       requireThat(at >= BigInt(row.judged as string), "CHANGED_VIEW", "the venue view is older than the saved record's");
