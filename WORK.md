@@ -87,7 +87,8 @@ probe needs a SOCKS5 proxy the cloud may not allow.
 
 ## Open questions
 - Non-blocking (2026-10-03): needs the local machine: M10d, the live testnet drill of the `moe` commands (own testnet node,
-  a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal. Also local: a 10⁶ design-point run.
+  a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal. Also local: a 10⁶ design-point run;
+  re-record `testnet-reader-check.mjs`'s readback from the retained bundle (its report binds sources retired since `2fd0f08`), or retire both.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
   mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 
