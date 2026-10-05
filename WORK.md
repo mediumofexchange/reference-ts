@@ -8,7 +8,7 @@ Updated: 2026-10-05
 Acceptance: the reference replays a lit trail through the shared seams (records, `state.ts`'s validity seam, frames, reader) with
 lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`.
 Stop boundary: adoption; wallet commands and venue drills for lit backings are later slices.
-- **M14a** (`claude/lit-records`): `src/lit/` bytes for §§2–5, 8–9 with oracle vectors; not §6's frames, terms or §7 validity.
+- **M14a done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–5, 8–9, oracle vectors; reviewed, read-back clean.
 - **M14b** next: §6's header, fault evidence, trail and package and the tag-6 terms, then the validity seam replaying a lit
   trail. Slice 12 (transport) follows or interleaves; its first probe needs a SOCKS5 proxy the cloud may not allow.
 

@@ -256,7 +256,8 @@ export function arithmeticHolds(statement: Statement): boolean {
     throw error;
   }
   if (s.kind !== 2 && s.kind !== 3 && s.kind !== 4) return true;
-  // Equal openings are the one way to equal nullifiers (§2): two inputs naming one note.
+  // Equal openings are the one way to equal nullifiers (§2): two inputs naming one note. Pairwise for MAX_INPUTS = 2;
+  // a successor with more inputs compares every pair.
   if (s.inputs.length === 2 && compareBytes(openingKey(s.inputs[0]!), openingKey(s.inputs[1]!)) === 0) return false;
   const sums = new Map<string, bigint>();
   const key = (b: Uint8Array): string => Buffer.from(b).toString("hex");
