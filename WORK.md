@@ -3,10 +3,13 @@
 Updated: 2026-10-05
 
 ## Goal
-**Slice 11 (the design point) is done**; the next slice is proposed, not begun. Proposed: the lit construction's layouts (Next 10):
-a `moe/lit/v1` document in the specification carrying the [design](decisions/2026-10.md#2026-10-05--make-the-transparent-profile-lit-notes-under-the-pools-rules-with-each-output-named-by-the-statement-that-creates-it-design-slice-next-10)'s
-item 2 requirements (records, terms, authorization encoding, output derivation as a validity rule), independently reviewed, before
-any lit code. Write its acceptance and stop boundary here when it starts. Slice 12 (transport) follows or interleaves; its first
+**The lit layouts (Next 10), in progress** (branches `claude/lit-v1-layouts` here and in the specification). Goal: a `lit-v1.md`
+document in the specification fixing every byte of the `moe/lit/v1` construction the [design](decisions/2026-10.md#2026-10-05--make-the-transparent-profile-lit-notes-under-the-pools-rules-with-each-output-named-by-the-statement-that-creates-it-design-slice-next-10)
+chose, so lit code can follow it. Acceptance: it states notes, the output derivation as a validity rule, the seven statement records
+and their signatures, signed objects and publications, history/evidence/snapshot/receipt, header, fault evidence, trail, package,
+configuration and terms, what it reads from pool-v3 and the contracts and what it replaces, and the wallet's key derivation; one fresh
+adversarial review's majors resolved; decision recorded; links checked; both PRs merged. Stop boundary: specification and decision only,
+status "draft until adopted" (adoption needs the implementation); no lit code. Slice 12 (transport) follows or interleaves; its first
 probe needs a SOCKS5 proxy the cloud may not allow.
 
 ## Status
