@@ -509,7 +509,8 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 | backer: `issue`, `accept <alias> <backing> <demand> --deadline n --out f`, `burn`, `publish-acceptance` | `accept` writes the acceptance as its canonical publication bytes, which the holder's `settle --acceptance` reads |
 | `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files outside the directory); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
 
-Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact
+Each command that reads syncs the directory's Ergo view first, in bounded passes until it is caught up, with a
+`syncing` event on stderr for each pass another follows. Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact
 retry and prints the saved result; a deadline is a witnessed index, absolute or `+n` from the read, and a saved
 demand prints its absolute deadline so a rerun can name it. Evidence comes from the operator's service, synced into
 the evidence file, or from `--package f`; where the service does not answer, a read uses the package the last sync

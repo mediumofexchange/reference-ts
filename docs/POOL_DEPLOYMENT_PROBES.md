@@ -1543,7 +1543,7 @@ Findings:
   - First sync time and memory hold and stay flat per statement, once the view is caught up.
   - The reader's steady state holds. The wallet's holds after M11b8 for the holdings measured.
   - Admission fails at the design point through Next 4(v); its lever is named above.
-  - A fresh party's first command fails to reach the tip at depth; its lever is named above.
+  - A fresh party's first command fails to reach the tip at depth; its lever is named above (landed in [M11b11](#a-commands-view-caught-up-m11b11)).
   - M11c3 re-measures both, with the 10⁵ reads, once their levers land.
 - *Limits:*
   - stand-in records verified against eight real issue proofs, not their own;
@@ -1552,6 +1552,28 @@ Findings:
   - the probe's process also holds the synthetic node, the service and the record generator, so its memory
     (814 MB at 10⁵) bounds the operator's from above;
   - one run per point.
+
+### A command's view caught up (M11b11)
+
+M11b11 syncs every command's view in bounded passes until it is caught up
+([decision](../decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)).
+`catch-up-probe.mjs`
+([at its revision](https://github.com/mediumofexchange/reference-ts/blob/c693fa9/scripts/pool/v3/catch-up-probe.mjs))
+creates an operator directory with a synthetic venue (depth 10), mines blocks
+on the synthetic node, and opens the directory's view as every command does.
+Runs of 2026-10-05 on a 4-core cloud container, one run per point, the
+10,000-block run beside a test run:
+
+| Blocks behind | Passes | Clock after the first pass | Clock reached | Time |
+|---:|---:|---:|---:|---:|
+| 4,500 | 3 | 1,989 | 4,499 (the tip less the depth) | 59 s |
+| 10,000 | 6 | 1,989 | 9,999 (the tip less the depth) | 154 s |
+
+- *Result:* one command reaches the tip; before, it answered at the first
+  pass's clock. The time is the header work, about 13–15 ms a synthetic
+  block here, and empty blocks read no section bytes.
+- *Limits:* empty synthetic blocks, so the section budget's passes are
+  covered by unit tests only; one supplier.
 
 ## Invalid-checkpoint evidence
 
