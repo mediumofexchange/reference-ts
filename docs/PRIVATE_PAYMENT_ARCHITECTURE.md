@@ -41,7 +41,8 @@ a draft until adopted), is built in `src/lit/` beside the pool, through the pool
 
 | Component | Implemented boundary | Still outside it |
 |---|---|---|
-| `lit/configuration.ts`, `lit/notes.ts`, `lit/records.ts`, `lit/commitments.ts`, `lit/wallet-keys.ts` | §§2–5, 8–9 bytes: notes and derived outputs, the seven statements and records, signature and arithmetic checks of one statement, acceptance, release and publications, the history and evidence chains, snapshot and receipt, wallet key derivation; [conformance vectors](../test/fixtures/lit-v1-vectors.json). | §6's header, fault evidence, trail and package; root terms with tag 6; §7 admission and replay at `state.ts`'s validity seam; a lit wallet and commands. |
+| `lit/configuration.ts`, `lit/notes.ts`, `lit/records.ts`, `lit/commitments.ts`, `lit/wallet-keys.ts` | §§2–5, 8–9 bytes: notes and derived outputs, the seven statements and records, signature and arithmetic checks of one statement, acceptance, release and publications, the history and evidence chains, snapshot and receipt, wallet key derivation; [conformance vectors](../test/fixtures/lit-v1-vectors.json). | §7 admission and replay; a lit wallet and commands. |
+| `lit/transport.ts`, `lit/fault-evidence.ts`, `lit/terms.ts` | §6's header, trail and package through pool-v3's codecs, each parameterized by construction (`segmentHeaderCodec`, `trailCodec`, `packageCodec`, `termsCodec`; pool-v3's exports bind its own profile); fault evidence with the evidence pair and compact intrinsic exclusion; §9's terms with the tag-6 silence clause. | Replay at `state.ts`'s validity seam, which needs its own design step. |
 
 ## Executable models
 

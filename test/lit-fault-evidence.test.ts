@@ -68,6 +68,12 @@ describe("lit-v1 §6 fault evidence", () => {
     expect(() => fault.decodeFaultEvidence(bytes, 0n)).toThrow(fault.FaultEvidenceLimitError);
     expect(reason(() => fault.encodeFaultEvidence({ ...evidence, suffix: [] }, 8n))).toBe("wrong evidence suffix length");
     expect(reason(() => fault.decodeFaultEvidence(Buffer.from(bytes).fill(0, 188, 196), 8n))).toBe("invalid evidence positions");
+    // The longest frame a budget admits decodes; one byte more is a local limit, refused before copying.
+    const full = fault.encodeFaultEvidence({ ...evidence, statement: new Uint8Array(4096), authorization: new Uint8Array(4096) }, 8n);
+    expect(full.length).toBe(244 + 2 * 4096 + 64);
+    expect(fault.decodeFaultEvidence(full, 1n).statement).toHaveLength(4096);
+    expect(() => fault.decodeFaultEvidence(join(full, new Uint8Array(1)), 1n)).toThrow(fault.FaultEvidenceLimitError);
+    expect(() => fault.decodeFaultEvidence(full, 0n)).toThrow(fault.FaultEvidenceLimitError);
   });
 });
 

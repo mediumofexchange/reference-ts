@@ -8,9 +8,10 @@ Updated: 2026-10-05
 Acceptance: the reference replays a lit trail through the shared seams (records, `state.ts`'s validity seam, frames, reader) with
 lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`.
 Stop boundary: adoption; wallet commands and venue drills for lit backings are later slices.
-- **M14a done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–5, 8–9, oracle vectors; reviewed, read-back clean.
-- **M14b** next: §6's header, fault evidence, trail and package and the tag-6 terms, then the validity seam replaying a lit
-  trail. Slice 12 (transport) follows or interleaves; its first probe needs a SOCKS5 proxy the cloud may not allow.
+- **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors;
+  §6 frames through pool-v3's codecs parameterized by construction (no v3 change, review differential); each reviewed, read-back clean.
+- **M14c next: the validity seam.** Design first, reviewed before code: `state.ts`/`replay-store.ts` generalized over a construction
+  (v3's field nf/cm and note tree versus lit's bytes, no tree) or a lit machine over one store; then a hostile lit trail replay.
 
 ## Status
 - **Slice 10 done but M10d** (PRs #69–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
