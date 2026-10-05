@@ -27,8 +27,8 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
   M11b10 leaves the carrying listing (a row per checkpoint, ~22 ms an admission at 5·10⁴) out of the journal's reads. All reviewed.
 - **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB);
   (v) fails admission at 10⁶ (343 ms at 10⁵); a fresh view reached the tip one command per sync budget (10⁵ reads stopped at 13,440).
-- **M11b11** (branch `claude/m11b11-view-catch-up`, [decision](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)):
-  every command's view syncs in bounded passes until caught up (`syncCaughtUp`); 10⁴ blocks behind reach the tip in one open.
+- **M11b11** (PR #108, [decision](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)):
+  every command's view syncs in bounded passes until caught up (`syncCaughtUp`); 10⁴ blocks behind reach the tip in one open. Reviewed.
   **Next:** (v)'s lever (a digest that does not reread the replay file); then M11c3 (10⁵ reads again, overhead, report).
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
   Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
