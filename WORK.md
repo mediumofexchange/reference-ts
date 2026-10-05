@@ -94,5 +94,5 @@ probe needs a SOCKS5 proxy the cloud may not allow.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
   mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 
-Roughly **62% done / 38% remaining** (range 52–72%), reassessed 2026-10-05: the design point's admission lever landed, and the transparent
-profile joins the release; the live drill, M11c3, the profile design, release assurance, holder transport, qualified storage and mainnet remain.
+Roughly **64% done / 36% remaining** (range 54–74%), reassessed 2026-10-05: the design point holds to 10⁵ and the profile design is
+settled; the live drill, the lit profile (layouts, code), release assurance, holder transport, qualified storage and mainnet remain.
