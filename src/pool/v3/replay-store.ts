@@ -620,8 +620,9 @@ export class ReplayStore {
     if (this.#keptMark !== undefined) this.#moveMark(this.#keptMark.walk);
     this.#db.exec("COMMIT");
     try { this.#recordDigest(); } catch (error) {
-      // Another connection kept the log from being moved in: it holds or changed the file, so the walk stops as below.
-      if (error instanceof FileInUse) this.#lost = true;
+      // Another connection kept the log from being moved in (it holds or changed the file), or the digest could not be
+      // recorded: the walk stops as below, and what it writes after commits nothing.
+      this.#lost = true;
       throw error;
     } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
