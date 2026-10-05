@@ -377,7 +377,8 @@ export async function classifyScopes(context: ImportContext, record: RecordVenue
 
 /** Run `read` over `walk`, then close the walk. A read's own failure is what its caller sees: a walk that then fails
  * to close does not replace the read's refusal, and goes with it as its `cause` where it has none. After a read
- * that succeeded, a failed close is the caller's to see: what the read kept did not commit. */
+ * that succeeded, a failed close is the caller's to see: what the read kept did not commit, or committed without its
+ * digest, so a later keep point records one or the next opening discards it. */
 async function closing<T>(walk: { close(): void }, read: () => Promise<T>): Promise<T> {
   let result: T;
   try { result = await read(); } catch (error) {

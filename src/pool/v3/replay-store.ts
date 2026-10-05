@@ -460,6 +460,8 @@ export class ReplayStore {
   #digestedAt: bigint | undefined;
   /** A kept file's page hashes as of its last recorded digest. */
   #pages: PageDigest | undefined;
+  /** Pages the log named that are not yet hashed again: a keep point whose log could not be moved in leaves them. */
+  readonly #unhashed = new Set<number>();
   /** A resumed kept walk's mark for this read, moved at its close where the walk changed a row. */
   #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
@@ -484,7 +486,9 @@ export class ReplayStore {
       const path = source;
       let held: PageDigest | undefined;
       if (kept !== undefined) {
-        if (path === ":memory:" || typeof kept.digest !== "string" || kept.digest === path) throw new TypeError("a kept store is a file with its own digest");
+        if (path === ":memory:" || typeof kept.digest !== "string" || [path, `${path}-wal`, `${path}-shm`, `${path}-journal`].includes(kept.digest)) {
+          throw new TypeError("a kept store is a file with its own digest");
+        }
         if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
         this.#kept = { ...kept, path };
         held = keptFileHolds(path, kept.digest);
@@ -581,11 +585,13 @@ export class ReplayStore {
     const changes = this.#changes(), path = this.#kept!.path;
     if (changes !== this.#digestedAt) {
       // The log names every page written since the last keep point; moved into the file whole, those pages are read
-      // from the file and hashed again. A log another connection keeps from being moved leaves the old digest.
-      const logged = loggedPages(`${path}-wal`);
+      // from the file and hashed again. A log another connection keeps from being moved leaves the old digest, and its
+      // pages stay pending: part of it may reach the file meanwhile and the log restart under new salts.
+      for (const page of loggedPages(`${path}-wal`)) this.#unhashed.add(page);
       const checkpoint = this.#db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: bigint; log: bigint; checkpointed: bigint };
       if (checkpoint.busy !== 0n || checkpoint.log !== checkpoint.checkpointed) throw new FileInUse("kept replay file");
-      this.#pages!.update(path, logged);
+      this.#pages!.update(path, this.#unhashed);
+      this.#unhashed.clear();
       replaceFile(this.#kept!.digest, this.#pages!.root());
     }
     this.#digestedAt = changes; this.#sinceKeep = 0;
@@ -613,7 +619,11 @@ export class ReplayStore {
     // What a keep point commits was kept from this read's evidence too.
     if (this.#keptMark !== undefined) this.#moveMark(this.#keptMark.walk);
     this.#db.exec("COMMIT");
-    try { this.#recordDigest(); } finally {
+    try { this.#recordDigest(); } catch (error) {
+      // Another connection kept the log from being moved in: it holds or changed the file, so the walk stops as below.
+      if (error instanceof FileInUse) this.#lost = true;
+      throw error;
+    } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
         if (!(error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message))) throw error;
         // Writes still in flight go into a transaction closeWalk rolls back, never into the file.

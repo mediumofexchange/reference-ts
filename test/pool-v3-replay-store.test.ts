@@ -248,6 +248,56 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it("stops a walk whose keep point another connection keeps from moving the log in: what it writes after commits nothing (M11b12 review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-busy-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const store = new ReplayStore(path, { digest, every: 1 }), context = new Uint8Array(32).fill(7);
+    try {
+      const { walk } = store.openWalk(context), ns = store.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
+      store.append(ns, append([next()], []));
+      store.keepPoint();
+      const reader = new DatabaseSync(path);
+      try {
+        reader.exec("BEGIN"); reader.prepare("SELECT count(*) FROM namespace").get();
+        store.append(ns, append([next()], []));
+        expect(() => store.keepPoint()).toThrow("the kept replay file is in use");
+        reader.exec("COMMIT");
+      } finally { reader.close(); }
+      // The keep point committed its own record; one written after it goes with the lost walk.
+      store.append(ns, append([next()], []));
+      store.closeWalk(walk);
+      expect(store.tip(ns).position).toBe(2n);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("hashes again at the next keep point the pages a refused one left, though the log restarted between (M11b12 review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-pending-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    let store = new ReplayStore(path, { digest });
+    try {
+      let { walk } = store.openWalk(context);
+      const ns = store.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
+      for (let i = 0; i < 30; i++) store.append(ns, append([next()], [next()]));
+      store.closeWalk(walk);
+      ({ walk } = store.openWalk(context));
+      for (let i = 0; i < 30; i++) store.append(ns, append([next()], [next()]));
+      const other = new DatabaseSync(path);
+      try {
+        other.exec("BEGIN"); other.prepare("SELECT count(*) FROM namespace").get();
+        expect(() => store.closeWalk(walk)).toThrow("the kept replay file is in use");
+        other.exec("COMMIT");
+        // Another connection moves the log into the file, so this store's next write restarts it under new salts.
+        other.prepare("PRAGMA wal_checkpoint(PASSIVE)").get();
+      } finally { other.close(); }
+      ({ walk } = store.openWalk(context));
+      store.append(ns, append([next()], []));
+      store.closeWalk(walk);
+      expect(vouched()).toBe(true);
+      store.close();
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(ns)).toBe(true);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it("keeps one object per venue position: a position answered for a second backing leaves the read unresolved (§13.1)", () => {
     const store = new ReplayStore(), backingA = new Uint8Array(32).fill(1), backingB = new Uint8Array(32).fill(2);
     try {
