@@ -53,8 +53,10 @@ export interface StatementView {
   issuerSigned(issuer: Uint8Array): boolean;
   /** A withdrawal's signature under its demand's presenter key. */
   withdrawalSigned(presenter: Uint8Array): boolean;
-  /** A settlement's acceptance deadline and its two signatures: the acceptance under K, the release under the presenter. */
-  readonly settlement: { readonly deadline: bigint; signed(issuer: Uint8Array, presenter: Uint8Array): boolean } | undefined;
+  /** A settlement's acceptance deadline and its two signatures (the acceptance under K, the release under the
+   * presenter), read only at recovery's settlement checks: building them may refuse bytes a decoder accepts (pool-v3's
+   * zero acceptance owner), which every earlier check must have the chance to refuse by name first. */
+  settlement(): { readonly deadline: bigint; signed(issuer: Uint8Array, presenter: Uint8Array): boolean };
 }
 
 /** A construction's record codec, view and chains, as the state machine and its store read them. */
@@ -87,12 +89,12 @@ function v3View(record: Record): StatementView {
     },
     issuerSigned: issuer => kind === 1 && verifySignatureStrict(record.authorization, statementBytes(record), issuer),
     withdrawalSigned: presenter => kind === 5 && verifySignatureStrict(record.authorization, withdrawalBytes(record), presenter),
-    settlement: kind !== 6 ? undefined : (() => {
+    settlement: () => {
       const auth = settlementAuthorization(record);
       return { deadline: auth.acceptance.deadline, signed: (issuer: Uint8Array, presenter: Uint8Array): boolean =>
         verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
         verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, presenter) };
-    })(),
+    },
   };
 }
 

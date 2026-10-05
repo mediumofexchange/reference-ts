@@ -87,9 +87,9 @@ export class StateHandle implements StateView {
   readonly ns: number;
   readonly construction: Construction;
   readonly #at: bigint | undefined;
-  /** A namespace is read through the construction it replays; another is the caller's error. */
+  /** A namespace is read through the construction it replays; another is the caller's error, at any position. */
   constructor(store: ReplayStore, ns: number, at?: bigint, construction: Construction = POOL_V3 as Construction) {
-    if (at === undefined && store.construction(ns).name !== construction.namespace.name) throw new TypeError("the namespace replays another construction");
+    if (store.construction(ns).name !== construction.namespace.name) throw new TypeError("the namespace replays another construction");
     this.store = store; this.ns = ns; this.#at = at; this.construction = construction;
   }
 

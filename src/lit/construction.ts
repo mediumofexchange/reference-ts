@@ -44,7 +44,7 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
     check: (): void => {},
     issuerSigned: (issuer: Uint8Array): boolean => kind === 1 && statementSignatureVerifies(record, issuer),
     withdrawalSigned: (presenter: Uint8Array): boolean => kind === 5 && statementSignatureVerifies(record, presenter),
-    settlement: undefined as StatementView["settlement"],
+    settlement: (): ReturnType<StatementView["settlement"]> => { throw new TypeError("not a settlement"); },
   };
   const created = (outputs: readonly Output[], rho: (output: Output, j: number) => Uint8Array): bigint[] =>
     outputs.map((output, j) => keyOf(noteCommitment(domain, { ...output, rho: rho(output, j) })));
@@ -70,10 +70,13 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
     }
     case 5: return { ...base, ended: hex(s.demand), needsDemand: true };
     case 6: {
-      const ended = hex(s.demand), demand = demandOf(ended), auth = settlementAuthorization(record);
-      const settlement = { deadline: auth.acceptance.deadline, signed: (issuer: Uint8Array, presenter: Uint8Array): boolean =>
-        verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
-        verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, presenter) };
+      const ended = hex(s.demand), demand = demandOf(ended);
+      const settlement = (): ReturnType<StatementView["settlement"]> => {
+        const auth = settlementAuthorization(record);
+        return { deadline: auth.acceptance.deadline, signed: (issuer: Uint8Array, presenter: Uint8Array): boolean =>
+          verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
+          verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, presenter) };
+      };
       if (demand?.nullifiers === undefined) return { ...base, ended, needsDemand: true, settlement };
       // §3: the demand's backing and quantity to the settlement's owner, over the demand's nullifiers in input order.
       const nfs = demand.nullifiers, rho = spendRho(nfs.map(bytesOf), 0);

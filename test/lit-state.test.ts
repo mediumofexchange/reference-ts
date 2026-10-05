@@ -287,4 +287,42 @@ describe("lit-v1 records at the one validity seam (M14c)", () => {
     await expect(applyForceRecord(openForceState(source), d.bytes, force({ segment: NEXT }), LIT)).rejects.toMatchObject({ check: "CONTEXT" });
     await expect(applyForceRecord(openForceState(source), settled.bytes, force(), LIT)).rejects.toMatchObject({ check: "DEMAND" });
   });
+  it("refuses a second settlement, an exact settlement again, swapped owner signatures, an imported lock and a scope root (review)", async () => {
+    const store = new ReplayStore(), state = fresh(store), context = replay();
+    const a = issue(10n, ALICE), c = issue(4n, BOB);
+    await applyRecord(state, a.bytes, context); await applyRecord(state, c.bytes, context);
+    // Two inputs signed in the wrong order: each signature is checked under its own input's owner.
+    const both = spend([a.note, c.note], [{ backing: BACKING, value: 14n, owner: pub(CAROL) }], [BOB, ALICE]);
+    expect(await refusal(state, both.bytes, context)).toBe("SIGNATURE");
+    expect(await refusal(state, issue(1n, ALICE).bytes, replay({ scope: 77n }))).toBe("SCOPE");
+    const d = demand([a.note], [ALICE]), first = settle(d, CAROL);
+    await applyRecord(state, d.bytes, context);
+    // A demand standing in the predecessor locks its note in the successor, and settles there.
+    const next = openSegmentState(store, NEXT, b(41), state, LIT), nextContext = replay({ segment: NEXT });
+    const moved = spend([a.note], [{ backing: BACKING, value: 10n, owner: pub(BOB) }], [ALICE], NEXT);
+    expect(await refusal(next, moved.bytes, nextContext)).toBe("LOCKED");
+    await applyRecord(state, first.bytes, context);
+    // The demand ends once: an exact settlement again and one to another owner both find no standing demand.
+    expect(await refusal(state, first.bytes, context)).toBe("DEMAND");
+    expect(await refusal(state, settle(d, BOB).bytes, context)).toBe("DEMAND");
+  });
+
+  it("forces only recovery kinds, by the presenter and before the acceptance deadline, leaving a refused overlay as it was", async () => {
+    const source = fresh(), context = replay(), a = issue(10n, ALICE);
+    await applyRecord(source, a.bytes, context);
+    const force = (extra: Partial<ForceContext> = {}): ForceContext =>
+      ({ mode: "force", domain: DOMAIN, segment: SEGMENT, backing: BACKING, scope: undefined, issuer: pub(K), index: 9n, lag: 2n, verifier: NO_PROOF, ...extra });
+    const state = openForceState(source), d = demand([a.note], [ALICE]);
+    await applyForceRecord(state, d.bytes, force(), LIT);
+    const overlay = (): unknown => [[...state.nullifiers], [...state.outputs], [...state.added.keys()], [...state.ended], [...state.effective], [...state.spentTags]];
+    const before = overlay();
+    await expect(applyForceRecord(state, spend([a.note], [{ backing: BACKING, value: 10n, owner: pub(BOB) }], [ALICE]).bytes, force(), LIT))
+      .rejects.toMatchObject({ status: "unsupported-scope" });
+    await expect(applyForceRecord(state, withdraw(d.id, MALLORY), force(), LIT)).rejects.toMatchObject({ check: "SIGNATURE" });
+    await expect(applyForceRecord(state, settle(d, CAROL, { deadline: 8n }).bytes, force(), LIT)).rejects.toMatchObject({ check: "DEADLINE" });
+    expect(overlay()).toEqual(before);
+    await applyForceRecord(state, withdraw(d.id), force(), LIT);
+    expect(state.demand(hex(d.id))).toBeUndefined();
+  });
 });
+

@@ -83,7 +83,7 @@ export function checkRecovery(view: StatementView, state: RecoveryView, { check,
       check(view.withdrawalSigned(demand!.presenter), "SIGNATURE");
     } else {
       check(view.quantity === demand!.quantity, "QUANTITY");
-      const settlement = view.settlement!;
+      const settlement = view.settlement();
       check(settlement.deadline <= demand!.deadline, "DEADLINE");
       check(settlement.signed(issuer, demand!.presenter), "SIGNATURE");
       // The demand's deadline is at or after the acceptance's, so this bounds both.
