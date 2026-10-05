@@ -1573,7 +1573,10 @@ Runs of 2026-10-05 on a 4-core cloud container, one run per point, the
   pass's clock. The time is the header work, about 13–15 ms a synthetic
   block here, and empty blocks read no section bytes.
 - *Limits:* empty synthetic blocks, so the section budget's passes are
-  covered by unit tests only; one supplier.
+  covered by unit tests only; one supplier. The runs used the first stop rule,
+  which the review replaced (decision); with one honest supplier both continue
+  on its header budget, and the 4,500-block point rerun on the final rule
+  gave the same passes and clock in 61 s.
 
 ## Invalid-checkpoint evidence
 

@@ -14,6 +14,7 @@ import {
 } from "../src/record-range.js";
 import { referenceVenue, requireReferenceVenue } from "../src/pool/v3/guard.js";
 import { VenueError } from "../src/venue-error.js";
+import type { ErgoSupplier } from "../src/ergo-supplier.js";
 import {
   ANCHOR_HEIGHT, BranchSupplier, Chain, hex, plainOutput, rawOutput, recordOutput, SCRIPTS, transaction, type Block, type Output,
 } from "./ergo-chain.js";
@@ -561,6 +562,48 @@ describe("no supplier is trusted", () => {
     const report = await syncCaughtUp(v, [serving(honest, "honest"), serving(side, "side")]);
     expect(report.suppliers.map(s => s.stopped)).toEqual([undefined, "side-branch quota"]);
     expect([report.witnessedIndex, report.passes]).toEqual([10n, 3]);
+  });
+
+  /** A supplier claiming a far tip that answers each header request with known headers (the anchor), after `fresh`
+   * headers once per pass: it stops on its fetch budget, which costs it nothing. */
+  const padding = (name: string, fresh?: () => Uint8Array[]): ErgoSupplier => {
+    let pass = false;
+    const supplier = {
+      name,
+      async tipHeight() { pass = true; return 10n ** 12n; },
+      async headers(from: bigint, to: bigint) {
+        const out = (pass ? fresh?.() : undefined) ?? [];
+        pass = false;
+        while (out.length < Number(to - from + 1n)) out.push(chain.anchor.bytes);
+        return out;
+      },
+      async section() { return undefined; },
+    };
+    return supplier;
+  };
+
+  it("a catch-up beside a supplier that pads to its fetch budget while the chain grows takes one pass", async () => {
+    // Without the rule, the honest supplier's one new block each pass and the padder's free fetch-budget stop
+    // kept the loop going for as long as the chain grew.
+    const honest = serving(branch(20, {}, chain.anchor, 11), "honest");
+    honest.before = async call => { if (call === "tip") honest.tip = chain.mine(honest.tip, [], 11); };
+    const v = venue();
+    await v.sync([honest]);
+    const pad = padding("padder"), report = await syncCaughtUp(v, [honest, pad]);
+    expect(report.suppliers.map(s => [s.headersAdded, s.stopped])).toEqual([[1, undefined], [0, "fetch budget"]]);
+    expect(report.passes).toBe(1);
+  });
+
+  it("a catch-up beside a supplier adding one side header a pass and padding the rest takes one pass", async () => {
+    // Without the rule, each pass charged the quota one header and cost the reader a fetch budget of padding.
+    const honest = serving(branch(20, {}, chain.anchor, 12), "honest"), tip = honest.tip;
+    const v = venue();
+    await v.sync([honest]);
+    let salt = 9_000;
+    const side = padding("side", () => [chain.mine(tip.parent!, [], salt++).bytes]);
+    const report = await syncCaughtUp(v, [honest, side]);
+    expect(report.suppliers.map(s => [s.headersAdded, s.stopped])).toEqual([[0, undefined], [1, "fetch budget"]]);
+    expect(report.passes).toBe(1);
   });
 
   it("a section over the sync's byte budget waits for the next sync, and a retained-bytes budget stops the clock", async () => {

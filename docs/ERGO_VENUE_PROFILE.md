@@ -285,10 +285,12 @@ until the journal is reopened.
   and adds at most `headersPerSupplier` (2,000, about 42 s of work checks)
   per sync; accepted headers are kept, so a longer heavier chain arrives
   over several syncs and one supplier's side branches never spend another's
-  budget. `syncCaughtUp` repeats the sync while a pass ended on one of these
-  budgets (header, fetch or section) and added a header or read a section;
-  every `moe` command syncs its view through it, so a view any distance
-  behind reaches the tip in one command, one bounded pass at a time. A refused header stops that supplier for the sync. Every new
+  budget. `syncCaughtUp` repeats the sync while a pass ended on progress that
+  cost its supplier: one stopped by its header budget, having added that many
+  headers, or a section-budget stop after a section was read (a fetch-budget
+  stop costs nothing and ends it). Every `moe` command syncs its view through
+  it, so a view any distance behind reaches the tip in one command, one
+  bounded pass at a time. A refused header stops that supplier for the sync. Every new
   header a supplier added that is off the best chain at the end of that
   sync counts against its `sideHeadersPerSupplier` (20,000 outstanding, per
   supplier name and kept with the view's rows, so a restart grants no fresh
