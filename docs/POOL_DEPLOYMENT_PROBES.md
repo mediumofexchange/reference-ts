@@ -1,9 +1,11 @@
 # Pool deployment probes
 
-These are provisional experiments to inform v3, authorized after the
+Measurements and acceptance evidence for the v3 deployment path, begun after the
 [design-review check](../decisions/archive/2026-09-08-whole-project-design-review-check.md).
-They do not change the construction or declare a production release usable.
-Production rules still land in the specification and adversarial model first.
+A probe retires once its decision is recorded or a runtime test covers it; its section then
+shrinks to a stub with the deciding figures and a permalink to its last full text.
+Nothing here changes the construction or declares a production release usable; production
+rules land in the specification and adversarial model first.
 
 ## The bounded integration target
 
@@ -29,153 +31,35 @@ replacement rights from the protocol.
 
 ## Browser proof baseline
 
-Use Node 24 for the tooling. Vite 7.3.6 is an explicit development dependency,
-already present in the lockfile before this probe; no new runtime dependency
-is added to the library.
-
-`npm run bench:pool:prepare` and `npm run bench:pool:browser` ran at a020215,
-opening `http://127.0.0.1:4173/` to record the device/browser, run the
-benchmark and download the JSON. The server was loopback-only and served
-synthetic benchmark assets and development modules. For an Android device with
-USB debugging and `adb` already configured, `adb reverse tcp:4173 tcp:4173`
-made that same URL reachable on the phone without exposing the repository to
-the LAN. Reverse forwarding is transport only; it does not emulate phone
-hardware on desktop.
-
-Preparation reused [`scripts/pool/compile.mjs`](https://github.com/mediumofexchange/reference-ts/blob/a020215/scripts/pool/compile.mjs)
-and the existing synthetic fixtures. It verified source, bytecode and key
-identities against the v2 manifest, required the cached parameters recorded in
-[`docs/pool-v2-verification.json`](https://github.com/mediumofexchange/reference-ts/blob/a020215/docs/pool-v2-verification.json),
-and published the completion manifest only after the assets existed. A failed
-preparation invalidated that marker. Scratch compiler files were removed on
-ordinary completion/failure; interrupted runs could leave disposable compiler
-directories in `scratch/`. No parameters were silently fetched by preparation
-or by the browser probe.
-
-The browser exercises only spend, with one worker and the pinned
-`noir-recursive` ZK target. It verifies the locally derived spend key, the
-public-input order and values, proof bounds and all nine generated proofs.
-There are three raw samples for each of: one real input plus padding, two
-same-backing inputs, and two different backings. No warmup sample is discarded.
-
-The recorded [first browser result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-browser-verification.json) is Windows
-desktop Chromium 152. All nine proofs verified. Proving ranged from 4.28 to
-6.29 seconds for same-backing cases and 6.79 to 9.30 seconds for mixed backings;
-verification ranged from 91 to 195 ms. Every proof was 14,656 bytes. The entire
-run, including initialization, took about 61.6 seconds. This is a small local
-sample, not a throughput estimate or an isolated hardware comparison with the
-earlier Node run. The result records the probe source hashes used for the run.
-
-Limitations:
-
-- This is not a cold device: code, WASM and operating-system caches may be warm.
-  Asset requests bypass HTTP cache; parameter fetch and initialization are timed.
-- Window JS heap sampling excludes worker/WASM allocations. Whole-browser peak
-  memory is explicitly unknown. Do not compare the sampled value to a phone's
-  memory budget or the old Node process RSS.
-- Window resource entries exclude worker fetches and are not total network cost.
-- The parameter hashes identify the local files; they do not authenticate the
-  trusted setup or establish reproducible dependency builds.
-- The synthetic proof inputs do not measure a wallet, restoration, note-tree
-  resync, encrypted delivery, publication fees, or witnessed payment latency.
+The retired v2 spend benchmark (`bench:pool:browser` at a020215: one worker, pinned `noir-recursive`
+target, three samples for each of three input shapes) proved and verified nine spends in Windows
+desktop Chromium 152 ([result at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-browser-verification.json)):
+proving 4.28–6.29 s for same-backing and 6.79–9.30 s for mixed-backing inputs, verification 91–195 ms,
+every proof 14,656 bytes, the whole run about 61.6 s. Warm caches, no whole-browser memory, synthetic
+inputs and no wallet, resync or latency: a small local sample, not a budget pass. Retired with pool-v2's
+spend (Git history at `a020215`). Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#browser-proof-baseline).
 
 ## Delivery and seed restoration
 
-F3 selects receiver-prepared exact output requests under
-[pool-delivery C4.1–8](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md).
-A receiver derives the requested note from its seed and a fresh durable request
-identifier and encrypts the identifier/backing/value to itself. The payer
-copies the exact opening and opaque capsule. There is no stable public scan
-key, new ownership algebra or payer-to-recipient key agreement. Arbitrary
-unsolicited amounts require a new receiver request; pending invoices and
-accounting labels still need a backup.
-
-The capsule library is candidate runtime code in
-[`src/pool/v3/capsules.ts`](../src/pool/v3/capsules.ts); the delivery digest
-is the record codec's. `npm test` checks the recorded profile-1 vector byte
-for byte, deterministic retries, key separation, u64 and width bounds,
-malformed/context-swapped/tampered capsules, authenticated wrong-commitment
-plaintext, the ordered delivery vector, the settlement owner secret and an
-independent WebCrypto envelope. On Node 24, `npm run check:pool:restoration`
-at a020215 added restoration from signed local evidence below; CI ran it on
-Linux and Windows beside the then-pinned v2 proof checks. The v3 conformance suite
-(`npm run check:pool:v3`) proves the digest's binding in all three successor
-relations.
-
-The first probe (retired at slice 1 M1; its
-[recorded result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-delivery-verification.json) and sources are at
-[17a9f1e](https://github.com/mediumofexchange/reference-ts/tree/17a9f1e/scripts/pool/delivery))
-restored notes in a fresh process from a seed and a prevalidated synthetic
-view: public outputs and capsules, spent nullifiers and lit settlements, with
-no request journal, payer secrets or operator callbacks. It kept unresolved
-coverage, separated force-created outputs awaiting adoption and generated a
-fresh request after journal loss. Restoration from exact signed evidence and
-the local replay's receivers now cover that path over authenticated bytes.
-
-Every capsule is 89 bytes. One aggregate digest adds two public field
-encodings, 64 bytes per issue/spend/burn before record framing: 242 extra
-bytes for two outputs, 331 for three. A real candidate spend with those two
-public `u128` limbs uses 19,050 gates versus 19,034 (+16); its subgroup
-remains 32,768 and proof remains 14,656 bytes. Mutating either limb rejects
-the original proof. Changing only the compiler ABI metadata to `Field`
-still rejects `2^128` in either limb over unchanged ACIR, establishing an
-actual circuit range constraint. This was a spend-binding measurement on a
-circuit derived from v2's spend; the v3 conformance suite now binds and
-range-checks the limbs in the successor relations themselves, so the binding
-probe retired on 2026-09-25 (sources at
-[1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/scripts/pool/delivery/binding)).
-
-The retired probe recorded, on this Windows desktop (Node 24.6.0, i7-5500U),
-that 1,000 / 10,000 / 100,000 failed capsule opens took 79 ms / 738 ms / 12.36 s. These samples repeat one
-foreign envelope while deriving its subkey each time; they measure trial
-cryptography, not traversal of distinct history records. Existing commitment
-plus nullifier hashing averaged 2.11 ms per pair over 250 samples, excluding
-owner derivation and the rest of successful recovery. The candidate spend
-proved in 4.38 s and verified in 92 ms. These are single local samples, not
-phone budgets or throughput guarantees.
-
-The production wallet must consume independently authenticated complete
-public packages, retain full evidence before payer/operator disappearance, and
-construct certified paths. Seed recovery does not discover unknown
-venues/backings, prove a complete balance or guarantee permanent availability.
-Device and full-history replay costs remain additional gates.
+F3's receiver-prepared exact output requests ([pool-delivery C4.1–8](https://github.com/mediumofexchange/money-from-first-principles/blob/02d911c/pool-delivery.md))
+and seed-encrypted capsules are runtime code in `src/pool/v3/capsules.ts`, covered by `npm test` (the
+recorded profile-1 vector, tamper and bound cases) and by the v3 conformance suite, which binds and
+range-checks the aggregate delivery digest in the successor relations. The retired probes measured
+89-byte capsules, 242 extra record bytes for two outputs (331 for three), +16 gates on a spend (19,050
+against 19,034; subgroup 32,768 and proof 14,656 bytes unchanged) and 1,000 / 10,000 / 100,000 failed
+capsule opens in 79 ms / 738 ms / 12.36 s on one desktop (Node 24.6.0, i7-5500U). Sources at
+[17a9f1e](https://github.com/mediumofexchange/reference-ts/tree/17a9f1e/scripts/pool/delivery) and
+[1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/scripts/pool/delivery/binding).
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#delivery-and-seed-restoration).
 
 ### Restoration from exact local evidence
 
-`npm run check:pool:restoration` at a020215 connected the existing capsule
-scanner to the canonical v3 served-trail, record, snapshot and header codecs;
-Linux and Windows CI ran it. The
-[retained result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-restoration-evidence-verification.json) pins the sources.
-
-A fresh child receives only a synthetic seed, an independently selected fixture
-identity and public package bytes. It verifies the operator signature, complete
-single-entry directory, snapshot preimage, segment context and ordered local
-evidence chain before scanning bound capsules. Output commitments and spent
-nullifiers come from those records, never a separately supplied replica list.
-No request journal, payer secrets or original operator callbacks enter the child.
-The fixture issues 10, pays 7 with change 3, then pays 5 with receiver change 2.
-Restoration finds the appropriate change and filters spent, zero and foreign
-outputs. A separate burn case exercises its nullifier/change layout.
-
-An old package yields historical candidates only when explicitly selected as
-historical. Against the current independently supplied fixture selection it
-refuses, including a validly signed alternative at the same sequence. Missing
-records/capsules, reordering, substitution and lost source copies are exercised.
-Current or stale request journals cannot override the public evidence: the IPC
-rejects journal fields. A retained independent copy restores the same candidates.
-Resource refusal is distinct from unresolved evidence; neither is operator fault.
-
-**These are candidate notes, never permission to spend.** The judging index and
-checkpoint selection are test inputs, not authenticated venue ranges. Proofs,
-history roots, backing terms and authority are synthetic; successful local
-authentication deliberately also accepts signed invalid totals and does not
-validate term signatures. All results retain unresolved coverage, no complete
-balance or full-finality claim, and `spendable=false`. The experiment supports
-one backing and one segment with an empty opening; imports and recovery records
-refuse. Complete replay, independently authenticated current ranges, certified
-paths, durable invoice restoration and network retention remain dependencies
-for the end-to-end restoration target. No v2 bytes, circuits, keys or runtime
-APIs change, and no v3 configuration is adopted.
+`check:pool:restoration` (a020215) restored candidate notes in a fresh process from a seed, an
+independently selected fixture identity and public package bytes (issue 10, pay 7 with change 3, pay 5
+with receiver change 2), never from a request journal, payer secrets or operator callbacks. Results
+stayed candidates: `spendable=false`, unresolved coverage, one backing and segment, empty opening.
+Retired once the v3 wallet took over its cases ([retained result at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-restoration-evidence-verification.json)).
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence).
 
 ### Reference operator journal
 
@@ -235,59 +119,20 @@ The [local](pool-v3-succession-store-verification.json) and
 [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) reports own the
 proof counts, package sizes, transaction bytes and source bindings.
 
-The live recovery command is
-`node scripts/pool/v3/recovery-store-check.mjs --testnet --authorized-testnet`.
-It requires separate authorization after local/synthetic acceptance and runner
-review. Its ten planned transactions are, in order: genesis opening, funded
-checkpoint, service-settled checkpoint, unanswered request, forced demand,
-withdrawal, second forced demand, settlement, empty return opening, and adopted
-continuation. Live settlement precedes return; the synthetic drill separately
-checks settlement at the opening's exact index.
-
-The pre-submission guard validates actual signed transactions and permits at
-most ten distinct attempts, 0.011 tERG total fees and 0.05 tERG total wallet
-spend, including record-output minimums. Uncertain attempts retain their
-reservations; exact signed retries do not consume another transaction slot.
-An exhausted budget halts the drill, including a partially completed drill.
-Reservations are held for one invocation; there is no automatic restart. A
-new process after any live submission requires a new transaction allowance.
-No extra funding transaction, real funds or mainnet publication is included.
-Silence lasts 16 witnessed blocks, deadlines have roughly 128-block margins,
-polling is every ten seconds, each wait is limited to twenty minutes and the
-whole live session to two hours. A stale demand proof aborts before publication.
-Actual inclusion can still occur too late; the independent reader then refuses
-its force, and the drill retains the fees and partial-run evidence limit.
-The public reader bundle retains package bytes, selection, verification keys,
-artifact identities and independently held venue profile/pin, without seeds or
-journal contents. Offline guard checks run with `testnet-budget.mjs --check`.
-
-The authorized 2026-09-27 [live testnet acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
-passed all four groups with nine real proofs and ten distinct transactions.
-Total spend was 0.03434168 tERG, including 0.011 tERG fees; the complete package
-was 126,037 bytes. The holder-only reader verified force, non-service count,
-unchanged supply of 20 and exact adoption of four recovery records at opening
-index 51; missing directories, snapshots and trails refused. A separate fresh
-process also verified the retained public bundle. This is single-backing testnet
-evidence under the candidate configuration, historical after subsequent journal
-changes; persistence, replacement service,
-custody, configuration adoption and mainnet remain outside the acceptance.
-
-The live two-backing drill (M8b) is
-`node scripts/pool/v3/scope-store-check.mjs --testnet --authorized-testnet`: the
-local/synthetic scope drill under the adopted configuration on the own testnet
-node, through the shared `drill.mjs` and the same pre-broadcast guard, capped at
-twelve transactions (four openings, two replacements, six checkpoints). Live
-replacements add eight indices of inclusion slack to the lead floor. The
-2026-10-01 [live scope report at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)
-passed all four groups in 69 minutes with seven real proofs and twelve distinct
-transactions spending 0.01434984 tERG (0.0132 tERG fees), equal to the synthetic
-run's spend: one segment over two backings, B's takeover of x beside A's split
-y segment, the elective rejoin after the witnessed tail with a mixed spend, and a
-wallet payment in the rejoined scope. Fresh processes read each backing from the
-node at every group, and the retained public bundle
-(`scratch/pool-v3-scope-testnet-reader/`, inputs `x.bin`, `y.bin`) re-reads to
-its `readback.json`. The anchor is a trust input; persistence, custody and
-mainnet remain outside the acceptance.
+The live testnet drills keep their commands (`recovery-store-check.mjs --testnet --authorized-testnet`,
+`scope-store-check.mjs --testnet --authorized-testnet`), each needing separate authorization after
+local/synthetic acceptance and run through `drill.mjs` and its pre-broadcast guard (`testnet-budget.mjs --check`
+runs the guard offline). The authorized 2026-09-27 [recovery acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
+passed with nine real proofs and ten distinct transactions (guard cap: ten transactions, 0.05 tERG
+spend), spending 0.03434168 tERG including 0.011 tERG fees; the complete package was 126,037 bytes, and
+the holder-only reader verified force, the non-service count, unchanged supply of 20 and exact adoption of
+four recovery records at opening index 51. It is historical after later journal changes. The 2026-10-01
+[two-backing scope drill (M8b) at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)
+passed in 69 minutes with seven real proofs and twelve distinct transactions (the cap) spending 0.01434984
+tERG (0.0132 tERG fees), equal to the synthetic run's spend; fresh processes read each backing from the
+node at every group, and the retained public bundle (`scratch/pool-v3-scope-testnet-reader/`) re-reads to
+its `readback.json`. The anchor is a trust input; persistence, custody and mainnet remain outside both.
+The planned transaction order, budgets and timing are in the full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal).
 
 The explicit `node scripts/pool/v3/store-check.mjs --testnet` path uses the own
 v6.0.6 testnet node and throwaway tERG funding. It selects the distinct
@@ -414,8 +259,8 @@ answer for another venue or request, an unwitnessed judging index, a silent
 or absent verifier and a missing directory all leave the read unresolved; a
 flood beyond the reader's entry budget is a resource refusal; an answer
 supplied inside the package is an unsupported kind, never evidence. Without a fixture venue the reader runs as before and claims
-no range. A venue profile and authenticated chain evidence behind such answers
-remain unimplemented; the fixture record is a trust input, not a venue.
+no range. The fixture record is a trust input, not a venue; `ErgoVenue` answers the
+same requests from authenticated chain evidence on the synthetic and testnet reference chains (below).
 
 Valid proofs against an unaccepted anchor, a spent input, a duplicate output,
 a different scope and overflowing aggregate issuance isolate the host checks.
@@ -447,7 +292,7 @@ same index, with the recovery obligations below where a silence clause is declar
 It caps total work at 128 held checkpoints and 8192 event operations,
 counting repeated checkpoint prefixes, publication classification, recovery
 folds and failed replays. The original-segment clock path retains the limits
-above, and the separate local-only restoration scanner still refuses imports.
+above.
 
 Multi-backing histories use a cached whole-checkpoint classifier under
 C2.10.3–7. Every scoped backing contributes signed terms, a record-derived
@@ -555,9 +400,9 @@ that a production reader must establish before returning spendable holdings.
 | Boundary | Experiment evidence | Still required |
 |---|---|---|
 | Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
-| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and per-backing issuance keys; header-derived scope root; fixture replacement/reappointment links and revocation checked across each complete scope | A venue profile and authenticated evidence behind the fixture answers |
-| Local state | Issue/spend/burn across deduplicated shared ancestry and every scoped snapshot, with per-backing totals, shared spent state and original-tree paths; single-backing demand/withdraw/settle and locks | Multi-backing recovery and runtime integration |
-| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; complete-scope receipts and independent backing non-service counts | A selected venue profile and authenticated chain evidence; runtime integration |
+| Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and per-backing issuance keys; header-derived scope root; fixture replacement/reappointment links and revocation checked across each complete scope | Authenticated evidence behind the fixture answers on a live chain: `ErgoVenue` supplies it on the synthetic and testnet reference chains; mainnet stays disabled |
+| Local state | Issue/spend/burn across deduplicated shared ancestry and every scoped snapshot, with per-backing totals, shared spent state and original-tree paths; single-backing demand/withdraw/settle and locks | Qualified deployment of the runtime reader; the multi-backing recovery cases above pass locally |
+| Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; complete-scope receipts and independent backing non-service counts | Authenticated mainnet chain evidence; the selected Ergo profile is read by `ErgoVenue` on the reference chains |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
 The candidate manifest, checkpoint selection and the fixture venue evidence
@@ -665,44 +510,14 @@ and deployment gates, not consequences of choosing an arity.
 
 ## Spent-set replay
 
-A22 selects [the successor spent-root contract](https://github.com/mediumofexchange/money-from-first-principles/blob/78f8a8c/pool-spent.md):
-a canonical compressed binary tree with full-key leaves and absolute split
-positions. [`src/pool/v3/spent-set.ts`](../src/pool/v3/spent-set.ts) holds the
-candidate and `test/pool-v3-spent-set.test.ts` an independent batch oracle;
-no v2 code, root, proof or configuration changes. `npm test` runs the checks
-in Linux Node 20/24 and Windows Node 24 CI.
-
-Ten check groups cover empty/singleton frames, all 120 insertion orders of a
-five-key boundary set, every prefix under four orders, every split position
-and a hostile 256-branch path, skipped prefixes, field boundaries,
-non-membership capability, imported-set grouping, duplicates, malformed
-typed arrays and input/output aliasing. Imported event/conflict validation
-and atomic multi-nullifier statement updates remain runtime obligations;
-the probe only accumulates an already validated set. The path algebra proves
-the retained non-membership capability, without selecting a published proof
-format or parser.
-
-`npm run bench:pool:spent` at a020215 regenerated
-`scratch/pool-spent-set/report.json`. The
-[recorded report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-spent-verification.json) pins the specification and
-LF-normalized source hashes, environment and deterministic roots; it is
-historical, recorded at [c955798](https://github.com/mediumofexchange/reference-ts/tree/c955798)
-before the candidate moved into `src/pool/v3/`. Both shapes
-use the same SHA-256 library, and the harness reads the root after **every
-insert**, including v2's lazy singleton hashing. Sizes are 128, 1,024, 8,192
-and 100,000 keys, with one measured run after a 128-key warmup; a reversed
-candidate replay checks the final root at every size. No timing threshold
-determines a pass. This measures accumulator replay, excluding proof checks,
-history bytes, import validation and transport; it is not end-to-end replay,
-memory-in-bytes, mobile or deployment evidence.
-
-The retained 100,000-key comparison took 157.29 s for v2 and 15.80 s
-for the candidate (9.96×), with 1,649,737 candidate hashes, or 16.50 per
-insert. Reverse candidate replay took 10.14 s; timings vary with the
-machine and load. An insertion needs at most one leaf hash and 256 branch
-hashes even for hostile keys, while uniform-key path lengths are approximately
-logarithmic. The selected representation stores N leaves and N−1 branches
-for N > 0. This closes the A22 shape decision, not v3 runtime integration.
+A22's canonical compressed spent root ([pool-spent.md](https://github.com/mediumofexchange/money-from-first-principles/blob/78f8a8c/pool-spent.md);
+`src/pool/v3/spent-set.ts`, `test/pool-v3-spent-set.test.ts`) was compared with pinned v2's sparse root
+before v2 retired ([report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-spent-verification.json),
+harness at [c955798](https://github.com/mediumofexchange/reference-ts/tree/c955798)). With the root read
+after every insert, 100,000 keys took 157.29 s for v2 and 15.80 s for the candidate (9.96×), with
+1,649,737 candidate hashes (16.50 per insert); reverse replay took 10.14 s. An insertion costs at most one
+leaf and 256 branch hashes even for hostile keys, and the tree stores N leaves and N−1 branches. This
+closed the A22 shape decision; the unit tests cover the ten check groups. Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#spent-set-replay).
 
 ## Replay and retention cost
 
@@ -872,38 +687,14 @@ Limits:
 
 ### The runtime reader streaming one long segment (M5b.3a)
 
-`replay-store-probe.mjs read <N>` measures the runtime reader, not a model of
-it ([M5b.3a](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-An operator replays the baseline shape (an issue, then spends of two
-nullifiers into four outputs) into a file store of its own. It writes one
-package file with an empty opening checkpoint and one checkpoint of all N
-records. `readPackage` then streams that file in 1 MiB chunks into an
-evidence file and replays into a state file, with a stub verifier and
-Poseidon2 note hashing. Memory is sampled after a forced collection while the
-stream is copied and every 5,000 verified records.
-
-Run of 2026-09-29 at commit `4b159c2`, 10⁵ statements, 938-byte records, one
-Windows desktop with 4 logical cores shared with other work:
-
-| Phase | Time | Heap | Process memory |
-|---|---:|---:|---:|
-| Copy the 89.8 MiB package into the evidence file | 40 s | 8.3 MB throughout | 259 → 263 MB |
-| Replay 10⁵ records from it | 37.1 ms per record | 8.6 → 8.7 MB, 1 byte per record | 262 → 262 MB, peaks 266 MB |
-
-- *Files:* the evidence file took 124.5 MiB and the state file 630.6 MiB.
-  The state file still holds each record's bytes in its event row
-  (M5b.3b removes them) and needs its per-record size attributed.
-- *Other costs:* process memory includes the operator's own replay earlier in
-  the same process; the peak was 283 MB. Generation ran at 92 ms per record.
-- *Later fixes:* the review fixes after `4b159c2` changed chunk buffering
-  and a copy's shared-memory test, not the reader's path. A 1 MiB chunk was
-  already one array.
-- *Limits:*
-  - one segment with two checkpoints, so this shows memory flat against a
-    segment's statements, not against checkpoints or venue age (M5b.3b);
-  - the reader's import limits were raised for the run;
-  - stand-in proofs, so the bytes per record are about a sixteenth of the
-    real size.
+`replay-store-probe.mjs read <N>` measured the runtime reader streaming one segment
+([M5b.3a](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
+an issue, then spends of two nullifiers into four outputs, as one package of an empty opening checkpoint
+and one checkpoint of all N records (the "M5b.3a shape" later sections reuse). At 10⁵ statements and
+938-byte records (`4b159c2`, stub verifier, Windows desktop) the 89.8 MiB package copied in 40 s at 8.3 MB
+heap and replayed at 37.1 ms per record, heap 8.6 → 8.7 MB and process memory flat near 262 MB (peak
+266 MB). Superseded by M5b.3b, which removes the per-record event bytes and measures against checkpoints.
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-streaming-one-long-segment-m5b3a).
 
 ### The runtime reader over many checkpoints (M5b.3b)
 
@@ -1742,291 +1533,67 @@ Findings:
 
 ## Invalid-checkpoint evidence
 
-`model/pool-fault-boundary.test.ts` contains nine cases using the existing
-authority/recovery models. The valid control finalizes the same public suffix
-that a forged ideal proof causes to fail. In the hostile case both scope
-backings lose readable snapshot, count and descent; independently replacing
-their operator does not make the invalid predecessor importable.
-
-Invalid publications at indices 4, 8, 12 and 16 keep resetting a five-index
-clock. At 22 the gap is open, but the snapshot still cannot be read. Even an
-ideal snapshot-only skipping reader cannot fix the clock or descent; the
-count reads the snapshot's state (C2b.5.2), so it follows the skip.
-Corrupt and withheld replica evidence never restore the consumed payer note
-from an older checkpoint. These are concrete failures of conditional progress,
-not demonstrations that the finalized payment has been reversed.
-
-The model uses ideal signed objects and proof tokens. It does not implement a
-fault-certificate byte format or prove that an interior history event can be
-authenticated cheaply. The proposed remedy must establish those facts and
-must also explain delayed fault evidence, a prior valid prefix, recovery
-publications at their own index, and descendant adoption.
-
-The [fault-recovery proposal](POOL_FAULT_RECOVERY.md) compares intrinsic
-exclusion, prospective fault publication and venue-side validation, and
-records what `model/pool-fault.ts` shows for the intrinsic candidate; no
-candidate has been selected as a normative rule.
+`model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the
+contracts before the fault rules were selected, that one forged-proof checkpoint cost both scope
+backings their readable snapshot, count and descent even after independent replacement, that invalid
+publications at indices 4, 8, 12 and 16 kept resetting a five-index clock, and that corrupt or withheld
+replica evidence never restored a consumed payer note from an older checkpoint. The case stays executable
+as the original failure in [fault recovery](POOL_FAULT_RECOVERY.md), which holds the selected remedy.
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#invalid-checkpoint-evidence).
 
 ## Venue publication sizes, offline
 
-An offline probe under `scratch/ergo-publication/` (Fleet SDK `@fleet-sdk/core`
-0.12.0 and `@fleet-sdk/serializer` 0.11.0, no node contacted, nothing signed)
-verified the venue constants against upstream source and measured serialized
-sizes. At ergo `v6.1.5` with sigmastate-interpreter `v6.0.6`: `MaxBoxSize` is
-4,096 bytes and `MinValuePerByte` defaults to 360 nanoERG, both checked against
-the full box bytes including the 32-byte transaction id and index; the mempool
-`maxTransactionSize` is 98,304 bytes. With one payload chunk per box in `R4` and
-a 36-byte object header in `R5`, the largest chunk that fits a box is 3,978
-bytes. A 20,000-byte release publication (the 14,656-byte proof plus about
-5,000 bytes of statement, signatures, acceptance and two non-membership proofs)
-needs 6 outputs in a 20,724-byte transaction carrying at least 0.00745 ERG at
-the minimum value per byte, plus the conventional 0.0011 ERG fee; a release and
-a demand together (35,000 bytes) need 9 outputs and 35,980 bytes. The
-non-membership proofs left the release on 2026-09-09 (C3.6), so a release is
-now about 15.5 KB in four chunks; the chunking arithmetic above is unchanged
-and still bounds the larger case. Every case is
-well under the mempool limit. Not established here: node acceptance, a real
-signature, fee policy, the votable parameter's current value, reassembly and
-authentication of chunks against forged or reordered boxes, and retrieval
-after the boxes are spent. The probe's script, notes and JSON stay in
-`scratch/` and are reproducible with `npm install` there. The signed sizes
-under the candidate profile's layout and the reassembly cases are now in the
-[publication experiment](#venue-publication-and-reassembly-on-a-node).
+Offline sizing (Fleet 0.12.0, nothing signed or sent) at ergo v6.1.5 / sigmastate v6.0.6: `MaxBoxSize`
+4,096 bytes and `MinValuePerByte` 360 nanoERG, both over full box bytes with the 32-byte transaction id
+and index; mempool `maxTransactionSize` 98,304 bytes; one chunk per box in `R4` with a 36-byte `R5` header
+leaves 3,978 bytes. A 20,000-byte release needed 6 outputs in a 20,724-byte transaction (at least 0.00745
+ERG plus the 0.0011 ERG fee); C3.6 later removed the non-membership proofs, so a release is about 15.5 KB
+in four chunks. Superseded by the [publication experiment](#venue-publication-and-reassembly-on-a-node)
+(signed sizes, node acceptance) and the runtime's `ergoRunCapacity`.
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#venue-publication-sizes-offline).
 
 ## Full-block commitment feasibility
 
 *Retired 2026-09-25 with its Fleet dependency: the range source is chosen and `test/ergo-supplier.test.ts` reproduces the fixture roots; the script (`check.mjs`, run by the former `npm run check:ergo:range`) is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range).*
 
-The private offline experiment checked
-complete block transaction commitments before choosing an A8/A9 range source.
-It added no library runtime dependency or exported verification API.
-
-The source baseline matches the publication probe: Ergo node v6.1.5 at
-[`c364664`](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/history/BlockTransactions.scala),
-sigma-state v6.0.6 at
-[`ab0b15c`](https://github.com/ergoplatform/sigmastate-interpreter/blob/ab0b15ceb9d34f2ccd6e68e3e2a8aa27cd16a042/data/shared/src/main/scala/org/ergoplatform/ErgoLikeTransaction.scala),
-and its scrypto v3.1.1 dependency at
-[`70b3610`](https://github.com/ergoplatform/scrypto/blob/70b36102b2ed8f7a443cfc92f9f135665d777a37/shared/src/main/scala/scorex/crypto/authds/merkle/MerkleTree.scala).
-Fleet serializer 0.11.0 is pinned to
-[`7d06847`](https://github.com/fleet-sdk/fleet/blob/7d06847afea124c5fdc71c0e8d813db0a1791978/packages/serializer/src/serializers/transactionSerializer.ts)
-and npm integrity hashes in the experiment lockfile. These are selected
-research baselines, not a claim to cover every node or future block version.
-
-Transaction IDs hash the canonical transaction with empty spending proofs.
-For block version 1, Merkle leaves are the transaction IDs alone. Later
-versions in the node use all transaction IDs followed by all witness IDs.
-Each witness ID is Blake2b-256 of the concatenated input proof bytes with its
-first byte removed: 31 bytes, as fixed by
-[the node transaction implementation](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/mempool/ErgoTransaction.scala).
-The leaves are neither pairs nor interleaved. Merkle leaf/internal prefixes
-are 0/1; a missing right sibling contributes zero bytes, and a single leaf
-still has an internal parent. The
-[node types](https://github.com/ergoplatform/scrypto/blob/70b36102b2ed8f7a443cfc92f9f135665d777a37/shared/src/main/scala/scorex/crypto/authds/merkle/Node.scala)
-fix those details. Secondary discovery material described a conflicting
-paired-leaf construction; the probe follows the pinned source instead.
-
-The retained [result](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-verification.json) has 414 passing assertions:
-four public mainnet block fixtures at heights 100000, 1000000, 1500000 and
-1876512, versions 1/3/3/4, 29 transactions and 77 outputs. Their raw JSON
-totals 191,382 bytes; reconstructed signed transactions total 19,380 bytes,
-excluding block section framing. The fixture manifest records source URLs and
-SHA-256 pins. These blocks are separated in height and were acquired from a
-public node; their headers have not been independently authenticated (the
-version-4 block, added 2026-09-22, agrees on every header field with the two
-nodes of [the P4 cache](#real-chain-exhaustion-cost-from-a-real-anchor)). No
-network request is needed to repeat the checks.
-
-All 29 computed transaction IDs and all four roots match the fixtures.
-Controls remove and duplicate every transaction, swap adjacent transactions,
-mutate every output value and input-proof evidence, and check competing root
-algorithms. Version 1 explicitly retains the same root after proof mutation.
-Node 24's JSON source-text reviver retains amounts above JavaScript's exact
-integer range without rounding.
-
-**Parser result:** only 13 of 29 transactions round-trip through Fleet's
-decoder. The other 16 fail on valid fixture scripts without a size flag;
-every sampled block contains at least one such transaction. Expected failure
-positions and messages are pinned so new failures cannot count as success.
-A small counterexample moves one creation-height byte into a claimed raw
-ErgoTree field: two different JSON field assignments serialize to identical
-unsigned bytes and transaction IDs. Thus serializing arbitrary node JSON and
-checking its root cannot authenticate the claimed output fields. Separate
-finite controls show a short byte read advances past the buffer and an empty
-integer read returns zero. The
-[SDK reader](https://github.com/fleet-sdk/fleet/blob/7d06847afea124c5fdc71c0e8d813db0a1791978/packages/serializer/src/coders/sigmaByteReader.ts)
-also allocates arrays from decoded counts. The probe only decodes hash-pinned
-fixtures; it is not a safe parser for hostile bytes.
-
-The next source gate is a complete, bounded canonical transaction decoder,
-then a contiguous-range reader against externally authenticated headers.
-The [binary decoder experiment](#full-binary-decoder-feasibility) below closes
-the observed fixture coverage gap but leaves resource isolation and supported
-node equivalence open. An unsupported transaction anywhere in the range
-prevents an absence verdict.
-Consensus, chain selection/finality, exact output extraction, resource refusal,
-same-height publication order and admission of held commitments remain open.
-No runtime source has been selected and no C2.10.13 completeness claim follows
-from this probe. Raw venue outputs would still need existing signature,
-sequence and authority checks before acquiring protocol force.
+Checked complete-block transaction commitments before the A8/A9 range source was chosen, against ergo
+v6.1.5 ([c364664](https://github.com/ergoplatform/ergo/blob/c36466405abc9a2ddda37e890635f00d593041f5/ergo-core/src/main/scala/org/ergoplatform/modifiers/history/BlockTransactions.scala)),
+sigma-state v6.0.6 ([ab0b15c](https://github.com/ergoplatform/sigmastate-interpreter/blob/ab0b15ceb9d34f2ccd6e68e3e2a8aa27cd16a042/data/shared/src/main/scala/org/ergoplatform/ErgoLikeTransaction.scala))
+and scrypto v3.1.1 ([70b3610](https://github.com/ergoplatform/scrypto/blob/70b36102b2ed8f7a443cfc92f9f135665d777a37/shared/src/main/scala/scorex/crypto/authds/merkle/MerkleTree.scala)):
+version-1 leaves are transaction ids, later versions append 31-byte witness ids, prefixes 0/1. The
+[result at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-verification.json)
+(414 assertions): four mainnet blocks (heights 100000, 1000000, 1500000, 1876512; 29 transactions, 77
+outputs) reproduced every id and root, but only 13 of 29 transactions round-trip through Fleet's decoder,
+and two different JSON field assignments serialize to identical unsigned bytes, so serializing node JSON
+and checking the root cannot authenticate claimed output fields. Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility).
 
 ## Full binary decoder feasibility
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-The same private experiment now evaluates `ergo-lib-wasm-nodejs`
-**0.29.0-alpha-2f840d3**, the npm alpha published 2025-08-13 and pinned on
-2026-09-22 in place of 0.28.0 (the npm stable of 2026-09-09) after 0.28.0
-refused every Ergo 6.0 script on mainnet
-([the decision](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes);
-[P4](#real-chain-exhaustion-cost-from-a-real-anchor)). npm associates it with
-sigma-rust [`2f840d3872367d6181d66d4a168194dbefad77f1`](https://github.com/ergoplatform/sigma-rust/tree/2f840d3872367d6181d66d4a168194dbefad77f1).
-The lockfile pins package integrity; the [retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-verification.json)
-also hashes the installed WASM and corpus sources and checks the installed
-version. This is package metadata provenance of a pre-release, not an
-independently reproduced build or a maintenance guarantee.
-
-Fleet serializes only the existing hash-pinned fixtures. Sigma-rust parses
-those signed binary transactions, reserializes them, and exposes fields only
-after exact byte equality. It recovers all **29 transaction IDs and 77 output
-IDs**, values, scripts, token order/amounts, registers, creation heights,
-transaction references and indices; input proofs/extensions and data inputs
-also match. This includes the 16 transactions Fleet cannot decode and the
-two carrying Ergo 6.0 trees (header version 3), which 0.28.0 refuses at the
-header byte. Numeric fixture ingestion remains lossless above `2^53`;
-comparisons use `bigint`.
-
-The report retains **20,050 assertions**, including rejection of all **19,380
-proper prefixes**. For each transaction, the raw parser accepts a trailing
-zero byte and an overlong input-count VLQ; the exact byte round trip rejects
-both. For each output position, moving a creation-height byte into the claimed
-JSON script produces identical signed bytes, but binary extraction recovers
-the original committed fields. Forged claimed transaction/output IDs are
-ignored and recomputed. For each of the five outputs whose tree carries the
-size flag, the header's version bits are rewritten to each of 0–7, with the
-real body and with the body zeroed under the same size: all 80 are read as
-the exact slice with every other committed field unchanged, so a script
-version or opcode the library does not know cannot refuse a transaction (the
-previous pin refused every version above 1 before reading the size). An
-unsized version-0 tree or a register constant the library cannot parse still
-refuses the whole transaction. These controls establish observed behavior,
-not a proof of parser equivalence with the node over every valid transaction.
-In particular, the pinned
-[ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergotree-ir/src/ergo_tree.rs)
-preserves a failed sized-tree parse as opaque `Unparsed` bytes that round-trip.
-Exact reserialization is therefore not evidence that every embedded script
-was structurally validated or that the transaction satisfies consensus.
-
-The fixed corpus runs in a separate process with a **120-second deadline**
-(raised from 30 s with the slower build; the corpus takes about 14 s on one
-desktop) and **1 MiB output cap**. It refuses fixture files above **256 KiB**
-before reading and transaction buffers above **64 KiB** before entering WASM;
-the largest fixture transaction is **2,576 bytes**. These are experiment
-budgets, not network consensus limits. A failed, timed-out or oversized run
-yields unresolved evidence, never a successful absence verdict. **There is no
-hard process/WASM memory limit** and no adversarial depth/allocation exhaustion
-test. Input size, reserialization and a process deadline do not establish
-bounded memory use; this slice does not pass that part of the source gate.
-
-The pinned [generic parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergotree-ir/src/serialization/serializable.rs)
-returns after `sigma_parse` without checking cursor exhaustion, explaining
-the accepted suffix. More consequentially, the
-[sized ErgoTree parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergotree-ir/src/ergo_tree.rs)
-allocates `vec![0u8; tree_size_bytes as usize]` from a decoded `u32` before
-reading that many bytes, without a local pre-allocation cap. A small input
-budget therefore does not bound this allocation. Per-field count bounds in
-the [transaction parser](https://github.com/ergoplatform/sigma-rust/blob/2f840d3872367d6181d66d4a168194dbefad77f1/ergo-lib/src/chain/transaction.rs)
-do not supply a parser-wide resource budget. The exhaustion case is source
-evidence only; the finite corpus deliberately does not execute that allocation.
-The [containment](#windows-process-containment-feasibility) and
-[metering](#metered-decoder-feasibility) evidence below was taken on the
-0.28.0 WASM and is not runnable as documented against the alpha: the
-containment probe's corpus case has a 10 s user-CPU quota that the slower
-build's larger corpus (about 13 s of CPU) exceeds, and the metering probe
-pins the 0.28.0 WASM hash and the 2026-09-09 manifest hash (stale since the
-2026-09-15 manifest). No containment evidence binds the pinned build.
-
-Next, compare an OS-contained decoder with a local validating-node boundary,
-including hard memory/CPU limits, hostile depth/counts, refusal semantics and
-compatibility with the selected node. Canonical round trips can conservatively
-refuse node-valid noncanonical encodings; they must not turn that refusal into
-an omission. Only then connect a complete contiguous range to independently
-authenticated headers and stable transaction/output order. A8/A9, chain
-selection/finality, build provenance and publication admission remain open.
-No runtime API, venue profile or protocol rule changes in this experiment.
+Evaluated `ergo-lib-wasm-nodejs` 0.29.0-alpha-2f840d3 (sigma-rust `2f840d3`, pinned over 0.28.0, which
+refused every Ergo 6.0 script: [decision](../decisions/2026-09.md#2026-09-22--pin-a-sigma-rust-build-that-keeps-every-sized-tree-as-exact-bytes)).
+The [report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-verification.json)
+(20,050 assertions): all 29 transaction ids and 77 outputs of the fixtures recovered, including the 16
+transactions Fleet cannot decode and two header-version-3 trees; all 19,380 proper prefixes rejected by
+the exact round trip; the five sized trees read as exact slices under header versions 0–7 (80 reads).
+Resource bounds were not established: the parser accepts trailing bytes, keeps a failed sized-tree parse
+as opaque `Unparsed` bytes and allocates `tree_size_bytes` from a decoded `u32` before reading (source
+evidence). Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility).
 
 ## Ergo venue-profile candidate and full-block range verifier
 
 *The profile experiment (`profile-check.mjs`) retired 2026-09-25 with the vendored sigma-rust build: the unit tests and the [node's own parser](#hostile-input-node-equivalence) cover it; it is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range) and its report below stays as measured there. `ergoRangeVerifier` retired later that day: `ErgoVenue`, which verifies its own headers, is the one Ergo reader.*
 
-The [candidate Ergo venue profile](ERGO_VENUE_PROFILE.md) fixes what pool-v3
-§13 leaves to a profile: an identity over a pinned anchor header, the
-finality depth and one exact ErgoTree per record kind; attribution by that
-tree with `R4` a 32-byte subject and `R5` the bytes; kinds 1–3 at exact
-length and kind 4 as one transaction's maximal run of adjacent same-subject
-outputs; the index as the number of blocks above the anchor's child, so a
-read from index zero begins at the deployment's anchor rather than the
-chain's genesis; and the ordinal as transaction position then output index.
-`ergoRangeVerifier` (`src/ergo-profile.ts`) answers a request by recomputing every
-block's transaction root from decoder-derived ids and scanning every output
-in the range, so an empty answer is proven by exhaustion; unwitnessed,
-gapped or unlinked evidence and headers without the anchor's child give no
-answer, and a block that is malformed, of another chain, a duplicate or one
-failing its root is passed over so that no supplied block can deny a read
-for an index whose section is present. The profile, every header, block and
-output, and each request are read once into owned copies before they are
-judged.
-
-`experiments/ergo-range/profile-check.mjs` compiles the model and drives it
-through the pinned Fleet serializer and sigma-rust decoder. The
-[retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-profile-verification.json) has 277 passing
-checks. The mainnet genesis header, pinned as a fixture (height 1, version
-1, a zero parent id, 279 wire bytes), is read as an anchor: alone it reaches
-no index, a synthetic child at height 2 is index 0 and needs its section,
-and with that section index 0 answers empty in 102 bytes. A twelve-height
-synthetic chain anchored at its first header, at depth 2 (witnessed index
-8) with 15 transactions and 11,896 serialized bytes, carries real signed commitments,
-a replacement, two revocation witnessings, single-piece publications for two
-backings, a three-piece run and a two-piece run of 3,900-byte pieces; every
-decoder id equals Fleet's unsigned-bytes hash, every block root equals an
-independent oracle, and the answers (1,038 commitment bytes with six
-carried objects of which five are held, 355 replacement bytes with the
-successor pending at the lead floor, 334 revocation bytes revoked at the
-first witnessing, 8,284 publication bytes merged in venue order) decode
-under the §13.3 reader rules. A flipped record byte decodes as another
-transaction and fails its block's root, leaving that height without a
-section while later ranges answer; a truncated transaction fails the strict
-decode; a root-failing twin, a stray block, a malformed block and a
-duplicate beside the true sections change no answer byte; a missing block,
-an unlinked header, another anchor, headers without the anchor's child, a
-range above the witnessed index and an exceeded budget give no answer, and a
-chain beginning at the anchor's child answers the same bytes. The four
-mainnet fixtures pass through the same verifier as one-block ranges at depth
-0, each index 0 under its own parent as the anchor: the model reproduces the real transaction roots
-of block versions 1, 3 and 4 from decoder-derived ids, scans all 77 outputs,
-decodes all 65 real register constants beside sigma-rust's constant decoder
-(43 `Coll[Byte]` equal byte for byte, 22 of other types refused), attributes
-nothing at four throwaway locations and answers empty in 102 bytes.
-
-Not established: header authentication (proof of work, chain selection and
-finality are the reader's header source), decoder containment and node
-equivalence, acceptance of the synthetic transactions by a node, and
-reassembly on a node after boxes are spent; the cost of exhaustion from a
-real anchor on a real chain is [measured below](#real-chain-exhaustion-cost-from-a-real-anchor).
-One limit is concrete: a transaction the reader's decoder
-refuses leaves its height without a section, so one node-valid transaction
-the decoder cannot read denies every range through it until the decoder is
-repaired. One is measured: a kind-4 run is one transaction's outputs, and
-under this layout a box carries a 3,981-byte piece and a transaction under
-the pinned 98,304-byte mempool policy carries 24 pieces, 95,544 bytes; the
-largest publication under the observed 14,656-byte proofs is a release of
-15,498 bytes in four pieces, and any proof up to 94,702 bytes fits, so the
-frame's 131,914-byte ceiling is a parser bound no configuration-conformant
-publication approaches. A configuration is publishable here only where its
-largest publication fits one transaction, which the selected profile makes
-normative ([venue-ergo.md §8](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md#8-publishing)).
-That count took the output index as two bytes; it is a one-byte VLQ, and the
-last piece can take the room left, so M7 replaced these numbers with the
-runtime's `ergoRunCapacity` and a [live capacity run](ergo-publisher-verification.json).
+The model `ergoRangeVerifier` over [the candidate profile](ERGO_VENUE_PROFILE.md), driven through Fleet and
+sigma-rust ([report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-range-profile-verification.json),
+277 checks), answered a twelve-height synthetic chain with real signed commitments and read the four
+mainnet fixtures as one-block ranges: real roots of block versions 1, 3 and 4 reproduced, all 77 outputs
+scanned. Capacity carried from it, counted with a two-byte output index (M7 replaced the counts with the
+runtime's `ergoRunCapacity` and a [live capacity run](ergo-publisher-verification.json)): a box holds a
+3,981-byte piece and a transaction under the 98,304-byte mempool policy 24 pieces (95,544 bytes), so a
+release of 15,498 bytes in four pieces fits, as does any proof up to 94,702 bytes; the frame's 131,914-byte
+ceiling is a parser bound. Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier).
 
 ## Real-chain exhaustion cost from a real anchor
 
@@ -2402,61 +1969,13 @@ run in pure JavaScript on one host.
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-Reading the own node's retained mainnet blocks through the chain-cost probe,
-the npm alpha `ergo-lib-wasm-nodejs@0.29.0-alpha-2f840d3`, then pinned,
-overflowed Node's default stack inside `Transaction.sigma_parse_bytes` on a
-node-valid 7,131-byte transaction (block 1,827,841, index 1, now the fixture
-`mainnet-1827841.json` from the own node), and every later call into the
-same WASM instance trapped; the probe crashed seconds later in unrelated
-calls, and whether it overflowed depended on the stack already in use. The
-decoder caught the overflow as an ordinary refusal, so every transaction
-after it would have read as unsupported evidence. Upstream builds its npm
-alphas with `wasm-pack build --dev` (the `build-nodejs-alpha` script): the
-alpha is a debug build, 16.7 MB of WASM with wasm-bindgen's debug assertions
-in its glue, which also explains its six-fold slowdown. Its WASM records
-rustc 1.87.0 and wasm-bindgen 0.2.100.
-
-Independent review then found that ErgoTree expression nesting
-(`BoolToSigmaProp` over `LogicalNot` nested d levels) traps the alpha from
-depth 50 at any V8 stack, consistent with exhausting the module's own
-linear-memory stack. The node's cap (sigmastate `MaxTreeDepth`, 110) covers
-expressions too by its source, so an output the node accepts could deny every
-range through its block. No such transaction was submitted to any node.
-
-The experiment now pins a release build of the same commit, vendored and
-reproducible ([decision](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3);
-[guide](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/README.md#decoder-build)).
-`experiments/ergo-range/stack-check.mjs` measures, each trial in a fresh
-process, the least V8 `--stack-size` a build needs (found to 8 KB; 71 KB is
-the least Node runs with at all) and the deepest expression nesting it
-parses at the largest stack Node's 8 MB main thread holds
-([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-stack-verification.json)):
-
-| Input | Pinned release build | Debug alpha | 0.28.0 |
-|---|---|---|---|
-| Fixture transaction | 71 KB | 1,173 KB | 71 KB |
-| An ordinary transaction of the block | 71 KB | 418 KB | 71 KB |
-| `Coll^d[Byte]` constant, d = 110 (the node's cap) / 150 | 79 / 101 KB | 1,339 / 1,816 KB | 71 / 71 KB |
-| Deepest `LogicalNot` expression nesting, default stack / 7,800 KB | 2,513 / 2,513 | 37 / 49 | 2,842 / 2,842 |
-
-At the default stack the fixture overflows the alpha and the next ordinary
-transaction traps. `decoder.mjs` treats a `RangeError` or
-`WebAssembly.RuntimeError` from the library as fatal: it rethrows it, marks
-its instance poisoned and throws on every later call. On the default stack
-it decodes the fixture; on a synthetic transaction whose output tree nests
-100,000 levels, which only a dishonest source could present, it traps and
-reports its instance poisoned, failing closed. Re-reading the P4 week
-offline from the cache with the release build pinned and the alpha as the
-alternate ([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-pin-verification.json)), both
-builds answer all 28,196 transactions with an equal id, witness id, ErgoTree
-and register constants, neither refuses one, all 5,040 roots reproduce and
-no index is unresolved, with decoding about six times faster.
-
-Not established: recursion paths other than collection nesting and
-`LogicalNot` expressions; reproduction of the bytes on a host other than
-Windows (panic locations keep the host's path separators). The reader now
-decodes [contained](#contained-decoder), where a depth ceiling refuses deep
-nesting before either stack.
+The npm alpha of sigma-rust (a debug build) overflowed Node's default stack on a node-valid 7,131-byte
+transaction (block 1,827,841) and trapped every later call; expression nesting traps it from depth 50.
+The vendored release build of the same commit ([decision](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3))
+needs 71 KB of V8 stack for the fixture (alpha 1,173 KB), parses expression nesting to 2,513 levels (alpha
+37) and read the 28,196-transaction P4 week identically about six times faster ([stack report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-stack-verification.json),
+[pin report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-pin-verification.json)).
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#decoder-stack-budget).
 
 ## Windows process containment feasibility
 
@@ -2472,298 +1991,64 @@ the immutable
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-The [baseline harness](https://github.com/mediumofexchange/reference-ts/blob/d446f83/experiments/ergo-range/metering-check.py) evaluates
-Wasmtime **48.0.0**, using the existing `ergo-lib-wasm-nodejs` 0.28.0 WASM hash.
-The Windows x64 wheel is
-[hash-pinned](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/metering-requirements.txt), with a native
-DLL hash and loaded-path checks before controls. The
-[report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-metering-verification.json) records the Python/native engine and
-harness hashes at `d446f83`; the cost probe below pins that report and verifies
-its deterministic results with the current observational hooks. Package
-integrity is not an independently reproduced build.
-This is a disposable experiment, not a production dependency selection.
-
-The trial contract is **10,000,000 fuel units per transaction**, **16 MiB**
-linear memory, one instance/memory/table and **4,096 table elements**. Input is
-at most 64 KiB; canonical bytes copied out are at most 64 KiB and JSON text at
-most 256 KiB. Limits are fixed before the run and never increased or refilled.
-Each transaction gets a fresh Store. Its single fuel budget covers guest
-allocation, parsing, exact reserialization and `transaction_to_json`; Store
-destruction discards allocations on success or refusal. No guest cleanup call
-receives fresh fuel. Shared memories, multiple memories and memory64 are disabled.
-
-All 56 wasm-bindgen function imports use a trap callback. The Python trampoline
-converts scalar arguments; the callback reads no guest memory and implements no
-JS object bridge, WASI, filesystem, network or randomness service. Successful
-fixture paths do not call imports. This deliberately refuses unsupported paths;
-it is not a general replacement for the library's JavaScript binding.
-
-| Control or fixture measurement | Result |
-|---|---|
-| Infinite guest loop with 0 / 1 / 1,000 / 100,000 fuel | `OUT_OF_FUEL`, zero remaining |
-| Memory growth to exactly two pages, then one page or a single 4,096-page growth beyond | Exact cap accepted; both overages return -1; remains 131,072 bytes |
-| Table growth to two elements, then one beyond | Exact cap accepted; overage returns -1; remains two elements |
-| Recursive guest call | `STACK_OVERFLOW` |
-| Valid transaction with one fuel unit | `OUT_OF_FUEL`; no accepted output |
-| Fixed valid corpus at the unchanged trial budget | 23 of 24 transactions, all 60 corresponding outputs and fields match |
-| Largest successful guest fuel / linear memory / JSON text | 6,739,774 units / 1,572,864 bytes / 3,891 bytes |
-
-The 2,163-byte transaction
-`745e19978f4bb6d1c0ebe4f083408f3e8474b4010a88ada07f3d1fbb7ee9ac1c`
-exhausts fuel during parsing; its five outputs remain **unresolved**. The
-runner exits **2**, carries explicit matched/refused totals and gives that
-transaction no accepted outputs. This is evidence of enforced refusal, not a
-usable complete-corpus budget. No hostile parser mutation ran.
-
-The [v48 limiter](https://github.com/bytecodealliance/wasmtime/blob/v48.0.0/crates/wasmtime/src/runtime/limits.rs)
-checks each memory/table separately; limiting their counts makes these guest
-caps aggregate here. The
-[memory implementation](https://github.com/bytecodealliance/wasmtime/blob/v48.0.0/crates/wasmtime/src/runtime/vm/memory.rs)
-consults `memory_growing` before the underlying growth allocation. The control
-observes the logical size and refusal; pre-allocation ordering comes from this
-pinned source inspection. Neither establishes a process-commit or RSS ceiling.
-
-[Fuel](https://github.com/bytecodealliance/wasmtime/blob/v48.0.0/crates/wasmtime/src/config.rs)
-meters guest execution using engine-specific accounting. It is not CPU seconds,
-an invariant instruction cost across engine versions, or a bound on compilation,
-bulk-operation cost, host callbacks, copies or JSON parsing. The fixed artifact
-is compiled once; only pinned valid fixture data reaches this harness. Its
-30-second launcher deadline and 1 MiB output cap are operational guards, with
-no whole-process/tree resource guarantee. Total host memory is unmeasured in
-this baseline.
-
-Metering is a better candidate for explicit guest-work refusal than periodic
-Windows CPU thresholds. A validating node supplies different consensus evidence;
-rewriting the parser would add compatibility work without removing host costs.
-The [cost probe](#decoder-cost-and-host-overhead) below explains the API's extra
-work and measures host overhead, without selecting a supported budget. Keep
-hard hostile-parser containment, node equivalence and authenticated ranges as
-separate open gates.
+Wasmtime 48.0.0 fuel metering of the 0.28.0 WASM under a fixed contract (10,000,000 fuel a transaction,
+16 MiB memory, 4,096 table elements, every import trapping) refused as designed on the fuel, memory,
+table and stack controls and decoded 23 of 24 fixture transactions with matching fields (largest
+6,739,774 fuel, 1,572,864 bytes of guest memory); a 2,163-byte transaction exhausted fuel while parsing
+and stayed unresolved ([report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-metering-verification.json)).
+It judged metering a better candidate than periodic Windows CPU thresholds, with fuel not CPU time and
+host memory unbounded; the contained decoder built on it. Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#metered-decoder-feasibility).
 
 ## Decoder cost and host overhead
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-The [profile](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-cost-verification.json) uses the same pinned artifacts
-and replays all 24 valid fixtures at the original 10-million-fuel budget. It
-checks IDs/order, status, input size, fuel, guest memory, JSON size, output
-counts and refusal phase against the hash-pinned baseline. Optional phase
-observation does not change guest calls or refill fuel. Phase fuel totals must
-equal the attempt total; success and trap paths both bracket Store destruction.
-
-A separate, predeclared **100-million-fuel diagnostic ceiling** applies once
-to the one refused transaction and once to each of its five original scripts.
-These six attempts keep 16 MiB guest memory and the old launcher limits. No
-mutation, retry or adaptive ceiling occurs; if a diagnostic refuses, that result
-remains unresolved and the remaining fixed cases still run. The ceiling permits
-cost measurement above the original refusal; it is not a proposed acceptance
-budget. The runner always exits **2** and preserves the original corpus refusal.
-
-| Work within the diagnostic transaction | Fuel |
-|---|---:|
-| Instantiation | 380,929 |
-| Stack-area reservation and input allocation | 437 |
-| `transaction_sigma_parse_bytes` | 12,830,008 |
-| Exact transaction reserialization | 2,599,805 |
-| Guest JSON construction | 5,714,147 |
-| Whole attempt | 21,525,326 |
-
-All fields of the five outputs match in this diagnostic, with an exact transaction byte
-round trip. The five original script lengths are 515, 948, 36, 36 and 105 bytes;
-their independent parse calls consume **2,322,785 fuel combined** and all five
-round-trip exactly. Script round trips still do not establish structural or
-consensus validation. Nor is their sum a decomposition of transaction parsing:
-the two API paths do different work.
-
-In the pinned
-[transaction source](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergo-lib/src/chain/transaction.rs),
-`sigma_parse` ends by constructing a transaction. The constructor clones
-candidates, builds outputs with a zero transaction ID, computes the transaction
-ID through serialization and hashing, then builds outputs again with that ID.
-Each [box construction](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/chain/ergo_box.rs)
-clones its tree/tokens/registers and serializes/hashes the box. The
-[tree serializer](https://github.com/ergoplatform/sigma-rust/blob/635bbaca55a27d6dd6b2c0ee2479b6ed60117780/ergotree-ir/src/ergo_tree.rs)
-rebuilds parsed trees from constants and the expression tree; opaque `Unparsed`
-trees retain their bytes. Thus the nominal parsing
-call includes repeated copying, serialization and identity computation.
-
-This source confirms additional work and supports the cost explanation; it
-does not assign the **10,507,223-fuel difference** to particular constructors,
-clones or hashes. A split wrapper or instrumented pinned-source build could
-falsify the proposed dominance of constructor work. Neither a parser defect nor
-an asymptotic bound follows from this finite measurement, and no upstream code
-was changed. The required real IDs and canonicality checks remain intact.
-
-Host snapshots cover loading the pinned Python engine package/native DLL,
-compilation, instantiation, guest
-calls, copies, JSON parsing and cleanup. They use
-[Windows process counters](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex)
-for current private commit and working set, plus process-lifetime peaks, and
-[process CPU time](https://docs.python.org/3/library/time.html#time.process_time).
-Before/after snapshots and phase totals are retained. These are measurements,
-not resource enforcement. Lifetime peaks cannot be attributed to the latest
-phase; process CPU is quantized, so a zero phase delta does not mean no CPU work.
-Initial Python startup/standard-library imports precede these snapshots.
-The Python counters omit fixture-preparation and launcher processes; wall
-timings include instrumentation. No guest-memory subtraction is used to claim
-a bound on host memory.
-
-The final sequential run after repository checks measured **2.377 s wall /
-7.719 s process CPU** for compilation. Python's lifetime peak commit reached
-**154,443,776 bytes**; current commit after engine closure was **28,057,600
-bytes**. Across the original 24 attempts (including the refusal), instantiation
-took **389.539 ms** combined versus **19.926 ms** in guest parse calls. The full
-diagnostic transaction attempt took **22.237 ms**. These are one host's samples,
-including measurement overhead, not statistical or supported-device bounds.
-
-The measured fixed compilation and fresh-instance setup costs argue for reusing
-a compiled module if this decoder is adopted, with fresh capped Stores and a
-separately bounded host interface. They do not justify a production fuel limit
-or clear total-process containment. Further parser optimization or a custom
-source build is deferred: the next source probe should exercise a dedicated
-keyless validating node, whose consensus/configuration/sync evidence is needed
-independently of binary parsing. Hostile alternate-parser cases remain gated
-on containment; they need not precede testing that independent node boundary.
+At a predeclared 100-million-fuel diagnostic ceiling the refused transaction took 21,525,326 fuel
+(12,830,008 in `transaction_sigma_parse_bytes`, 2,599,805 reserializing, 5,714,147 building JSON); the
+pinned source shows the parse constructor reserializing and hashing for ids and boxes, which explains the
+cost without bounding it. On one host compilation took 2.377 s wall and 7.719 s CPU, peak commit reached
+154,443,776 bytes and instantiation took 389.539 ms against 19.926 ms of guest parsing over the 24
+attempts, favouring a reused compiled module with fresh capped Stores ([report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-cost-verification.json)).
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#decoder-cost-and-host-overhead).
 
 ## Metered release decoder over the week
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-`experiments/ergo-range/metered-check.mjs` runs the vendored release build of
-sigma-rust 2f840d3 (WASM SHA-256 `0d200385…aa28a`) under the
-[baseline](#metered-decoder-feasibility)'s pinned Wasmtime 48 engine and
-import policy: a fresh Store per transaction, one fuel budget across parse,
-exact reserialization and JSON extraction, every import trapping. The
-release build needs a second table; the ceilings are an effectively
-unbounded fuel and wasm32's whole 4 GiB, for observation rather than as a
-budget. `--week` reserializes the cached node text of the P4 window with the
-pinned serializer and meters every transaction, checking each decoded id
-([report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-metered-release-verification.json)).
-
-| Input | Transactions | Decoded | Fuel per byte, median / max | Guest memory max |
-|---|---|---|---|---|
-| Corpus fixtures | 29 | 29 | 8,101 / 10,928 | 2.5 MB |
-| P4 window, heights 1,873,361–1,878,400 | 28,196 | 28,196 | 8,101 / 22,450 | 11.1 MB |
-
-The largest window transaction is 88,284 bytes; the costliest took 2.8 × 10⁸
-fuel. These are valid retained transactions, so no bound for adversarial bytes
-follows, and fuel is not CPU time; host memory is unmeasured here.
-
-The same probe checks whether the node's JSON could stand in for the parse.
-Rebuilding a transaction's bytes by copying the node's hex fields in order
-reproduces its id, but the id hashes only the concatenation: moving one byte
-from R5 to the end of R4 in fixture transaction `4987fc23…` (mainnet
-1,000,000) rebuilds the same bytes and id while both registers change. The
-root therefore authenticates the bytes, not the node's split of them into
-ErgoTree and registers. Checking a split is a parse: in the week, 102,292 of
-103,791 outputs (98.5%) carry version-0 trees without the size flag
-(45,293 of them P2PK), whose length only a parse of the whole expression
-gives; the other 56,999 use 160 distinct trees, one register holds a whole box, and
-34,063 context-extension values, like registers, are constants without a
-length prefix (a scratch count over the same cache). At the node's pinned
-sigmastate v6.0.6, 102 expression serializers apply and a method call's
-layout depends on the versioned method registry. The reader keeps its own
-decoder ([decision](../decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split));
-it runs [contained](#contained-decoder) under the reader's budget.
+`metered-check.mjs` ran the vendored release build under the same engine and import policy over the 29
+fixtures and the 28,196 transactions of the P4 window (heights 1,873,361–1,878,400; [report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-metered-release-verification.json)):
+all decoded, fuel per byte median 8,101 and maximum 22,450, guest memory at most 11.1 MB, largest
+transaction 88,284 bytes. The finding carried by the [framer decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)
+(first recorded [here](../decisions/2026-09.md#2026-09-23--keep-the-readers-own-decoder-the-transaction-root-does-not-authenticate-the-nodes-field-split)):
+the root authenticates the bytes, not the node's split into ErgoTree and registers (moving one byte from
+R5 to R4 of mainnet 1,000,000's `4987fc23…` keeps the id), and checking a split is a parse, since 98.5% of
+the week's outputs (102,292 of 103,791) carry unsized version-0 trees. Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#metered-release-decoder-over-the-week).
 
 ## Decoder node equivalence over the retained blocks
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-The [chain-cost probe](#real-chain-exhaustion-cost-from-a-real-anchor) ran over every full
-block the [own mainnet node](#own-node-as-the-header-source) keeps after its
-UTXO snapshot, heights 1,830,001–1,879,100 (49,100 blocks, 69 days), in five
-chunks; an offline pass then compared, for every transaction, what the
-vendored release decoder reads with the node's JSON fields
-([guide](https://github.com/mediumofexchange/reference-ts/blob/1b4857a/experiments/ergo-range/README.md#real-chain-exhaustion-cost),
-[retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-equivalence-verification.json)).
-
-| Blocks | Transactions | Outputs | Registers | Roots reproduced | Refused | Differing fields |
-|---|---|---|---|---|---|---|
-| 49,100 | 314,028 | 1,236,527 | 915,923 | 49,100 | 0 | 0 |
-
-Compared per transaction: id, witness id and output count, and per output
-the ErgoTree bytes, register names and register constants. In each chunk,
-mutating each of those fields in the node's statement of one real
-transaction shows as a difference, so the empty count is not a comparison
-that cannot fail. The pass recomputes each chunk's cache digest before
-comparing, links its headers by id, and binds the decoder's WASM and
-JavaScript glue against the vendored checksums; the summary joins chunks
-by header id and accepts only the driver's exact plan. The largest
-transaction is 91,842 bytes.
-
-The comparison is independent of the shared serializer only because each
-block's root, over ids equal to the node's, authenticates the bytes the
-decoder reads. Inputs, data inputs, values and tokens are not compared, since
-the verifier reads outputs only. These are valid transactions from one
-node's retention window: script versions only earlier blocks carry are not
-exercised, and no decoder or profile is selected; hostile inputs are compared
-[separately](#hostile-input-node-equivalence).
+Over every full block the own mainnet node keeps after its UTXO snapshot (heights 1,830,001–1,879,100:
+49,100 blocks, 314,028 transactions, 1,236,527 outputs, 915,923 registers) the vendored release decoder
+reproduced all 49,100 roots, refused none and differed from the node's JSON in no compared field (id,
+witness id, output count, ErgoTree, register names and constants); a mutation control per field shows
+the comparison can fail ([report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-equivalence-verification.json)).
+Valid retained transactions only; hostile inputs are compared [separately](#hostile-input-node-equivalence).
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#decoder-node-equivalence-over-the-retained-blocks).
 
 ## Contained decoder
 
 *Retired 2026-09-24: neither the reader nor its supplier decodes ([decision](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)); the scripts named below are kept at [0453955](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range).*
 
-The reader decodes through `experiments/ergo-range/contained-decoder.mjs`
-([decision](../decisions/2026-09.md#2026-09-24--contain-the-readers-decoder-per-transaction-under-a-deterministic-metered-budget),
-[guide](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/README.md#contained-decoder),
-[retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-containment-verification.json)). `wasm-meter.mjs`
-derives from the vendored release build (WASM `0d200385…`) a module
-(`bd7cfbb5…`, 13,727 functions, 16,050 charged regions, 54,467 counted call
-sites, 5,211 helper calls) that charges fuel at every function entry and loop
-head, charges and caps bulk memory, memory growth and table growth, and
-refuses a call depth past a ceiling. Each transaction runs in a fresh instance,
-every import trapping, under a budget linear in its length n: fuel
-2^26 + 2^21·n, linear memory 8 MiB + 1 KiB·n, 4,096 table elements and
-4,096 frames, inputs to 2 MiB (mainnet's voted `maxBlockSize` is 1,271,009
-bytes on the own node).
-
-| Input | Transactions | Decoded, fields equal to the node's | Least budget margin |
-|---|---|---|---|
-| Corpus fixtures | 29 | 29 | 4.45 |
-| P4 week, heights 1,873,361–1,878,400 | 28,196 | 28,196 | 3.69 |
-| Own node's retained blocks, heights 1,830,001–1,879,100 | 314,028 | 314,028 | 2.98 |
-
-Over all 342,253 transactions the budget is at least 5.4 times the fuel
-and 2.98 times the linear memory any of them took; the costliest, a
-52,030-byte transaction of block 1,867,680, took 18.4 × 10⁹ fuel and
-16.7 MB of memory, and none took more than 394,944 fuel per byte. The node's JSON fields are compared as in the
-[equivalence pass](#decoder-node-equivalence-over-the-retained-blocks), with a
-mutation control per set, so `decoder.mjs` and the contained decoder agree
-there transitively. On one desktop the derived module ran these transactions
-at about 3.4 × 10¹⁰ fuel a second, because a region's charge also covers
-code its branches skip; where every charged instruction runs, as in the
-control module's counted loop, it runs 2–9 × 10⁹ a second (the lower rate
-before the engine optimizes the loop). So the worst case for a 98,304-byte
-transaction's budget is about 23–100 seconds, and for a 2 MiB input's
-about 8–37 minutes. A read's transactions each get their own budget and the
-reader sets no total, so a read's worst case is their sum. A fresh
-instance costs 2.6–5 ms.
-
-`contained-check.mjs` counts by hand what each construct must cost on an
-assembled module and finds it exactly: straight code, a counted loop and
-nested loops with an outer-loop branch, `br_table` and `if`/`else`, every
-helper including a refused growth, direct and `call_indirect` recursion
-stopped at depth ceilings, and the depth back at zero after calls return. Growth past a ceiling returns −1 and sets its flag;
-tail calls, SIMD, `memory.init` and a start section make the rewriter throw.
-On the decoder, fuel and memory ceilings below a corpus transaction's need
-refuse it as `fuel` or `memory` and its exact need decodes it; an expression
-nested to the node's cap of 110 decodes within 361 frames, while nesting of
-2,000, 100,000 and 1,000,000 refuses as `depth` at frame 4,097 wherever the
-caller leaves 437 KB of V8's 984 KB default stack (measured on this unary
-nesting; review found other unary operators need no more, and other
-recursion paths are not measured); truncated, extended and
-pseudorandom bytes refuse; and the next transaction after every refusal
-decodes unchanged. Metering repeats exactly.
-
-Not established: that no node-valid transaction exceeds the budget (the
-node's rules bound neither a decoder's work nor its memory per byte, so the
-budget is the reader's and a costlier node-valid transaction is refused,
-denying the ranges through its block); a bound on the host's own memory
-(a dropped instance's memory stays until V8 collects it, and the
-per-transaction caps summed over the replay adapter's read limits reach
-16 GiB); CPU time, which fuel only approximates. Node equivalence on
-hostile inputs is measured [below](#hostile-input-node-equivalence).
+`wasm-meter.mjs` derived from the vendored release build a module that charges fuel at every function
+entry and loop head, caps bulk memory, growth and call depth (4,096 frames), run per transaction in a
+fresh instance under fuel 2^26 + 2^21·n, memory 8 MiB + 1 KiB·n and inputs to 2 MiB ([report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-containment-verification.json)).
+It decoded all 342,253 transactions of the fixtures, the P4 week and the own node's retained blocks with
+fields equal to the node's, at most 394,944 fuel per byte; the budget was at least 5.4 times the fuel and
+2.98 times the memory any took (costliest: 52,030 bytes, 18.4 × 10⁹ fuel, 16.7 MB), and expression nesting
+to the node's cap of 110 decodes within 361 frames while deeper refuses as `depth` at frame 4,097. Not
+established: that no node-valid transaction exceeds the budget, host memory bounds, CPU time.
+Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#contained-decoder).
 
 ## Hostile-input node equivalence
 
@@ -2783,77 +2068,20 @@ node accepts can hold, so no root can commit to them. Mutations reached ids,
 trees and register constants among readings both sides agree on, not output
 counts or register names. The node took 50 s for all cases; the framer 0.4 s (the decoder took 34 min in its run).
 
-**Decoder against node, 2026-09-24, retired with the decoder**
-([harness and report at 0453955](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/hostile-equivalence.mjs)).
-Offline, the 29 corpus transactions (19,380 bytes) were mutated
-deterministically into 159,397 distinct cases: every byte replaced by four
-values, deleted, and preceded by 0x00 and 0x80, every proper prefix, and 256
-seeded splices per transaction. Each case was read by the node and by the
-contained decoder
-([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-hostile-equivalence-verification.json)). The
-node's reading is the pinned v6.0.6 JAR's own `BlockTransactionsSerializer`
-on a one-transaction version-4 section, in its bundled runtime; it states
-its id, witness id, and each output's tree and register constants as its
-serializers write them. Where the node writes what it read as other bytes,
-it and the decoder read that rewrite again; all 2,845 distinct rewrites read
-back unchanged under the same ids and fields.
-
-| Node's reading | Readings | Node's ids and fields | Other ids | Node's ids, other fields | Decoder refuses |
-|---|---|---|---|---|---|
-| Whole case, written back unchanged | 50,754 | 49,613 | 0 | 0 | 1,141 |
-| Whole case, rewritten: the case | 3,127 | 0 | 392 | 0 | 2,735 |
-| Whole case, rewritten: the rewrite | 2,845 | 1,212 | 0 | 0 | 1,633 |
-| A proper prefix: the whole case | 227 | 0 | 0 | 0 | 227 |
-| A proper prefix: the prefix | 227 | 77 | 0 | 0 | 150 |
-
-The node refused the other 105,289 cases; the decoder read 10,171 of them,
-bytes that cannot be a transaction of a version-4 block. No case was left
-uncompared and no resource limit was reached on either side.
-
-The decoder never read a case under the node's ids with other output
-fields. The reader authenticates decoded transactions only by the header's
-transactions root over their ids and witness ids, so on these cases it
-either reads what the node committed to or leaves the block unresolved.
-Controls confirm that each compared field shows as a difference and that the
-verdicts separate equal, same-id and other-id readings. Mutations changed ids,
-witness ids, trees and registers in cases both sides read alike, but never
-the output count or register names.
-
-Refusals are the finding. Of the bytes the node reads and writes back
-unchanged, the decoder refuses 1,141, and all but 7 pass the node's
-stateless checks:
-
-- 624 are expressions sigma-rust's type check refuses while the node reads
-  them untyped.
-- 71 are opcodes or methods sigma-rust does not implement.
-- 359 are box values or token amounts outside sigma-rust's bounds.
-- 87 are bytes sigma-rust writes back differently.
-
-Of the node's own rewrites it refuses 1,633, of which 1,488 fail
-sigma-rust's type check. Both come from every corpus era, including 148 and
-307 respectively from block 1,876,512's transactions. If such a transaction is also valid against state, which this
-does not test, one placed in a block denies the reader that block's ranges
-for the price of a transaction. The rewrites add a second denial: the header
-commits to the ids of the node's rewrite, so a supplier serving a miner's
-original bytes is refused (392 cases read under other ids).
-
-These refusals no longer reach the reader, which since 2026-09-24 takes each
-transaction's unsigned bytes and frames them itself
-([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)).
-The 2026-09-24 rerun has the node also state its own unsigned bytes
-(`messageToSign`) for every transaction it reads: 56,953 readings (whole
-cases, prefixes and the 2,845 stable rewrites). Every one hashes to the
-node's id; the framer reads 18,382 of them, each with exactly the node's
-output count, trees, register names and constants, and leaves 38,571
-outside its grammar, which carry no record. The decoder's counts above are
-unchanged by the rerun. The run on unsigned seeds is the framer's section
-above.
-
-Not established: validity against state or proofs; version contexts other
-than a version-4 block's (the profile reads every block version); which
-bytes peers and node APIs serve for a rewritten transaction; inputs beyond
-single-byte mutations and splices of these 29 transactions. The stateless
-verdict uses the node's initial validation settings.
+**Decoder against node, 2026-09-24, retired with the decoder** ([harness at 0453955](https://github.com/mediumofexchange/reference-ts/blob/0453955/experiments/ergo-range/hostile-equivalence.mjs),
+[report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-decoder-hostile-equivalence-verification.json)).
+The 29 corpus transactions (19,380 bytes) were mutated into 159,397 distinct cases (every byte replaced by
+four values, deleted, and preceded by 0x00 and 0x80, every proper prefix, 256 seeded splices per
+transaction); the node's reading is the pinned v6.0.6 JAR's own `BlockTransactionsSerializer` on a
+one-transaction version-4 section, stating each transaction's id, witness id and each output's tree and
+register constants. The contained decoder never read a case under the node's ids with other output
+fields. It did refuse 1,141 of the bytes the node reads and writes back unchanged (624 type-check
+refusals of expressions the node reads untyped, 71 unimplemented opcodes or methods, 359 value or token
+bounds, 87 written back differently) and 1,633 of the node's own rewrites, so one such transaction in a
+block would deny the reader that block's ranges; the header commits to the rewrite's ids, so a supplier
+serving a miner's original bytes is refused (392 cases). These refusals no longer reach the reader, which
+frames unsigned bytes itself ([decision](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer));
+the framer's run is above. Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence).
 
 ## Proving parameters
 
@@ -2900,16 +2128,3 @@ rests on a disposable probe of bb.js 5.2.0, one desktop, one thread:
   0.24 s;
 - a verifier instance given `[1]_1` alone verifies the spend proof and refuses it
   under a changed public input; with no G1 point the loader refuses.
-
-## Venue and restoration work still required
-
-The [publication experiment](#venue-publication-and-reassembly-on-a-node)
-covers piece framing, canonical reassembly, duplicates, reordered, partial
-and merged runs and retrieval after boxes are spent, with node acceptance on
-the public testnet. Still required: an inclusion-latency distribution from
-repeated independent submissions, and mainnet acceptance.
-
-The restoration experiment must specify receiver-only spending authority,
-authenticated encrypted openings, deterministic retry, seed-based discovery
-and a complete independently retrievable evidence package. Merely adding
-ciphertexts or serving public inputs without proofs is not that package.
