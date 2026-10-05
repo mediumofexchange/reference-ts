@@ -78,7 +78,7 @@ import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, 
   type SegmentState } from "./state.js";
 import { decodeRootTerms, rootTermsName, verifyRootTermsSignature, type RootTerms } from "./terms.js";
 
-const PROFILE = "pool-store/v3/6";
+const PROFILE = "pool-store/v3/7";
 /** What one served package part holds before it is sent: a bound on the memory serving takes, not on what is served. */
 const PART_ITEMS = 1024, PART_BYTES = 1_048_576;
 /** Signed rows read at a time while serving. */

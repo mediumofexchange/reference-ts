@@ -16,14 +16,16 @@
 // 2026-09-29): a judgment reads the pre-state and returns the effects, and the
 // apply writes them synchronously, so a refusal writes nothing. Force keeps
 // the snapshot's anchors fixed; it is an in-memory overlay with no tree or history.
+//
+// A record is read through its construction's view (construction.ts, slice 14 M14c): pool-v3's records here,
+// lit-v1's beside them, judged by these same rules. A namespace replays one construction, which its handle carries.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
-import { verifySignatureStrict } from "../../keys.js";
-import { identifierOf, isField, VALUE_BOUND } from "../field.js";
-import { EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY, type NotePath } from "../note-tree.js";
-import { genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash } from "./commitments.js";
-import { decodeRecord, evidenceHashes, statementBytes, statementHash, type EvidenceDigests, type Record } from "./records.js";
-import { checkRecovery, effectOf, recoveryEffect, tagOf, type Demand, type RecoveryView } from "./recovery.js";
+import { isField, VALUE_BOUND } from "../field.js";
+import { EMPTY_NOTE_ROOT, type NotePath } from "../note-tree.js";
+import { POOL_V3, type Construction, type StatementView } from "./construction.js";
+import type { EvidenceDigests, Record } from "./records.js";
+import { checkRecovery, type Demand, type RecoveryView } from "./recovery.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals, WitnessMark } from "./replay-store.js";
 import type { VerifierIdentities } from "./configuration.js";
@@ -53,6 +55,8 @@ export interface StateView extends RecoveryView {
   hasNullifier(nf: bigint): boolean;
   hasOutput(cm: bigint): boolean;
   hasAnchor(root: bigint): boolean;
+  /** Whether an input opening `cm` reads a note of this state (lit-v1 §7 "live"; under force, of the snapshot's). */
+  isInput(cm: bigint): boolean;
   /** The demand (hex identity) whose settlement created output `cm`, where a settlement did (C3.8's taken release). */
   settledFor(cm: bigint): string | undefined;
   /** Every demand visible here naming `tag`, ended or not: the tag is presented (C3.1). */
@@ -81,8 +85,13 @@ export interface OutputPath { readonly leaf: bigint; readonly anchor: bigint; re
 export class StateHandle implements StateView {
   readonly store: ReplayStore;
   readonly ns: number;
+  readonly construction: Construction;
   readonly #at: bigint | undefined;
-  constructor(store: ReplayStore, ns: number, at?: bigint) { this.store = store; this.ns = ns; this.#at = at; }
+  /** A namespace is read through the construction it replays; another is the caller's error. */
+  constructor(store: ReplayStore, ns: number, at?: bigint, construction: Construction = POOL_V3 as Construction) {
+    if (at === undefined && store.construction(ns).name !== construction.namespace.name) throw new TypeError("the namespace replays another construction");
+    this.store = store; this.ns = ns; this.#at = at; this.construction = construction;
+  }
 
   get position(): bigint { return this.#at ?? this.store.tip(this.ns).position; }
   get segment(): Uint8Array { return this.store.tip(this.ns).segment; }
@@ -90,16 +99,16 @@ export class StateHandle implements StateView {
   at(position: bigint): StateHandle {
     // Unavailable history is not the genesis state (C2b.3.1): a position past the tip has no state to read.
     if (position < 0n || position > this.store.tip(this.ns).position) throw new RangeError("a state is read at or below its tip");
-    return new StateHandle(this.store, this.ns, position);
+    return new StateHandle(this.store, this.ns, position, this.construction);
   }
   #event(): StoredEvent | undefined { const p = this.position; return p === 0n ? undefined : this.store.event(this.ns, p); }
   get history(): Uint8Array {
     if (this.#at === undefined) return this.store.tip(this.ns).history;
-    return this.#event()?.history ?? genesisHistoryHash(this.segment);
+    return this.#event()?.history ?? this.construction.genesisHistory(this.segment);
   }
   get evidence(): Uint8Array {
     if (this.#at === undefined) return this.store.tip(this.ns).evidence;
-    return this.#event()?.evidence ?? genesisEvidenceHash(this.segment);
+    return this.#event()?.evidence ?? this.construction.genesisEvidence(this.segment);
   }
   noteRoot(): bigint {
     if (this.#at === undefined) return this.store.tip(this.ns).noteRoot;
@@ -115,9 +124,10 @@ export class StateHandle implements StateView {
   hasNullifier(nf: bigint): boolean { return this.store.hasNullifier(this.ns, this.position, nf); }
   hasOutput(cm: bigint): boolean { return this.store.hasOutput(this.ns, this.position, cm); }
   hasAnchor(root: bigint): boolean { return this.store.hasAnchor(this.ns, this.position, root); }
+  isInput(cm: bigint): boolean { return this.hasOutput(cm); }
   settledFor(cm: bigint): string | undefined {
     const stored = this.store.output(this.ns, this.position, cm);
-    return stored?.settlement === true ? recoveryEffect(decodeRecord(this.store.event(stored.ns, stored.position)!.settlement!)).ended : undefined;
+    return stored?.settlement === true ? this.construction.settledDemand(this.store.event(stored.ns, stored.position)!.settlement!) : undefined;
   }
   hasSpentTag(tag: bigint): boolean { return this.store.hasSpentTag(this.ns, this.position, tag); }
   isEffective(id: string): boolean { return this.store.isEffective(this.ns, this.position, id); }
@@ -161,8 +171,10 @@ export class StateHandle implements StateView {
     const stored = this.store.output(this.ns, this.position, cm);
     return stored === undefined ? undefined : this.scanOutput(stored);
   }
+  /** Pool-v3's scan (a capsule, or a settlement's record); a lit wallet reads outputs by their openings (M14e). */
   scanOutput(stored: StoredOutput): ScanOutput {
-    return stored.settlement ? { cm: stored.cm, settlement: decodeRecord(this.store.event(stored.ns, stored.position)!.settlement!) } :
+    if (this.construction !== POOL_V3) throw new TypeError("a capsule scan reads pool-v3 outputs");
+    return stored.settlement ? { cm: stored.cm, settlement: POOL_V3.decode(this.store.event(stored.ns, stored.position)!.settlement!) } :
       { cm: stored.cm, capsule: stored.capsule };
   }
   /** The path of an output the replay witnessed, against the root of the segment holding it. */
@@ -202,6 +214,8 @@ export class ForceState implements StateView {
   hasNullifier(nf: bigint): boolean { return this.nullifiers.has(nf) || this.base.hasNullifier(nf); }
   hasOutput(cm: bigint): boolean { return this.outputs.has(cm) || this.base.hasOutput(cm); }
   hasAnchor(root: bigint): boolean { return this.base.hasAnchor(root); }
+  /** Force reads inputs in the snapshot's state only, as it reads anchors (lit-v1 §7). */
+  isInput(cm: bigint): boolean { return this.base.isInput(cm); }
   settledFor(cm: bigint): string | undefined { return this.settled.get(cm) ?? this.base.settledFor(cm); }
   hasSpentTag(tag: bigint): boolean { return this.spentTags.has(tag) || this.base.hasSpentTag(tag); }
   isEffective(id: string): boolean { return this.effective.has(id) || this.base.isEffective(id); }
@@ -218,56 +232,63 @@ export interface ForceContext {
   readonly domain: Uint8Array;
   readonly backing: Uint8Array;
   readonly segment: Uint8Array;
-  readonly scope: bigint;
+  /** Pool-v3's scope root; undefined for a construction whose segment binds its scope. */
+  readonly scope: bigint | undefined;
   readonly issuer: Uint8Array;
   readonly index: bigint;
   readonly lag: bigint;
   readonly verifier: ProofCheck;
 }
 export function openForceState(source: StateView): ForceState { return new ForceState(source); }
-async function checkProof(record: Record, verifier: ProofCheck): Promise<void> {
-  if (record.kind !== 5) requireReplay(await verifier.verify(record.kind, [...record.publicInputs], new Uint8Array(record.proof)) === true, "PROOF");
-}
 function checkUniqueEffects(nfs: readonly bigint[], outputs: readonly bigint[], state: Pick<StateView, "hasNullifier" | "hasOutput">): void {
   requireReplay(new Set(nfs).size === nfs.length && nfs.every(nf => nf !== 0n && !state.hasNullifier(nf)), "SPENT");
   requireReplay(new Set(outputs).size === outputs.length && outputs.every(cm => cm !== 0n && !state.hasOutput(cm)), "OUTPUT");
 }
+/** The inputs a record reads: pool-v3's anchors, or a construction's input commitments (lit-v1 §7). */
+function checkInputs(view: StatementView, state: Pick<StateView, "hasAnchor" | "isInput">): void {
+  requireReplay(view.roots.every(root => state.hasAnchor(root)), "ANCHOR");
+  requireReplay(view.inputs.every(cm => state.isInput(cm)), "INPUT");
+}
 /** C3.8: a release whose every other condition holds is **taken** where its output already exists as the output of a
  * settlement of another demand, in the snapshot or forced earlier since its adoption index. It has no force either
- * way; a taken one releases its acceptance for the dishonour reading (dishonour.ts). */
-function checkTaken(record: Record, state: ForceState): void {
-  const { ended } = recoveryEffect(record), by = record.kind === 6 ? state.settledFor(record.publicInputs[14]!) : undefined;
-  requireReplay(by === undefined || by === ended, "TAKEN");
+ * way; a taken one releases its acceptance for the dishonour reading (dishonour.ts). Lit cannot reach it: equal
+ * settlement outputs need equal nullifiers, refused as `SPENT` first (lit-v1 §7). */
+function checkTaken(view: StatementView, state: ForceState): void {
+  const by = view.kind === 6 ? state.settledFor(view.outputs[0]!) : undefined;
+  requireReplay(by === undefined || by === view.ended, "TAKEN");
 }
-/** Apply only an already-verified forced publication's effects when rebuilding its prefix. */
-export function applyForceEffects(state: ForceState, record: Record): void {
-  if (record.kind !== 4 && record.kind !== 5 && record.kind !== 6) throw new EvidenceRefusal("unsupported-scope");
-  const { demand, ended } = recoveryEffect(record);
+function applyForceView(state: ForceState, view: StatementView): void {
+  const { demand, ended } = view;
   if (demand !== undefined) { state.added.set(demand.id, demand.value); state.forced.set(demand.id, demand.value); }
   if (ended !== undefined) { state.ended.add(ended); state.added.delete(ended); }
-  state.effective.add(hex(statementHash(record)));
-  const { nfs, outputs } = effectOf(record);
-  for (const nf of nfs) { state.nullifiers.add(nf); state.spentTags.add(tagOf(nf)); }
-  outputs.forEach(cm => state.outputs.add(cm));
-  if (record.kind === 6) state.settled.set(outputs[0]!, ended!);
+  state.effective.add(hex(view.identity));
+  view.nfs.forEach((nf, i) => { state.nullifiers.add(nf); state.spentTags.add(view.tags[i]!); });
+  view.outputs.forEach(cm => state.outputs.add(cm));
+  if (view.kind === 6) state.settled.set(view.outputs[0]!, ended!);
+}
+/** Apply only an already-verified forced publication's effects when rebuilding its prefix. */
+export function applyForceEffects<R = Record>(state: ForceState, record: R, construction: Construction<R> = POOL_V3 as Construction<R>): void {
+  const kind = construction.kind(record);
+  if (kind !== 4 && kind !== 5 && kind !== 6) throw new EvidenceRefusal("unsupported-scope");
+  applyForceView(state, construction.view(record, id => state.demand(id)));
 }
 /** The reader establishes routing, an open gap, the strictly earlier snapshot and venue order.
  * Every check precedes mutation; force never extends the snapshot's forest. The checks run in replay's order,
  * new nullifiers and outputs last, so a release refused only for its output is told apart (`checkTaken`). */
-export async function applyForceRecord(state: ForceState, bytes: Uint8Array, context: ForceContext): Promise<void> {
-  const record = decodeRecord(bytes), p = record.publicInputs;
-  if (context.mode !== "force" || ![4, 5, 6].includes(record.kind)) throw new EvidenceRefusal("unsupported-scope");
-  requireReplay(same(record.domain, context.domain) && same(identifierOf(p[2]!, p[3]!), context.segment) && p[4] === context.scope, "CONTEXT");
-  if (record.kind !== 5) requireReplay(same(identifierOf(p[5]!, p[6]!), context.backing), "BACKING");
-  await checkProof(record, context.verifier);
-  const { roots, nfs, outputs } = effectOf(record);
-  requireReplay(roots.every(root => state.hasAnchor(root)), "ANCHOR");
-  checkRecovery(record, state, { check: requireReplay, backing: context.backing, issuer: context.issuer,
+export async function applyForceRecord(state: ForceState, bytes: Uint8Array, context: ForceContext, construction: Construction = POOL_V3): Promise<void> {
+  const record = construction.decode(bytes), kind = construction.kind(record);
+  if (context.mode !== "force" || (kind !== 4 && kind !== 5 && kind !== 6)) throw new EvidenceRefusal("unsupported-scope");
+  const view = construction.view(record, id => state.demand(id));
+  requireReplay(same(view.domain, context.domain) && same(view.segment, context.segment) && view.scope === context.scope, "CONTEXT");
+  if (kind !== 5) requireReplay(view.backings.every(backing => same(backing, context.backing)), "BACKING");
+  await view.check(context.verifier);
+  checkInputs(view, state);
+  checkRecovery(view, state, { check: requireReplay, backing: context.backing, issuer: context.issuer,
     at: context.index, lag: context.lag, door: true });
-  checkUniqueEffects(nfs, [], state);
-  checkTaken(record, state);
-  checkUniqueEffects([], outputs, state);
-  applyForceEffects(state, record);
+  checkUniqueEffects(view.nfs, [], state);
+  checkTaken(view, state);
+  checkUniqueEffects([], view.outputs, state);
+  applyForceView(state, view);
 }
 
 /** The last valid checkpoint of a segment: the replay must reach it and reproduce its hashes (C2.10.12). */
@@ -290,11 +311,13 @@ export type ImportSource = StateHandle | MergedImport;
  * frontier or else the empty state. Its imports are read by reference;
  * building the successor's spent set reads each imported nullifier once.
  */
-export function openSegmentState(store: ReplayStore, segment: Uint8Array, identity: Uint8Array, imported: ImportSource | undefined): SegmentState {
+export function openSegmentState(store: ReplayStore, segment: Uint8Array, identity: Uint8Array, imported: ImportSource | undefined,
+  construction: Construction = POOL_V3 as Construction): SegmentState {
   if (imported !== undefined && imported.store !== store) throw new Error("an import is read from its own store");
   const frontier = imported === undefined ? undefined : imported instanceof StateHandle ? imported.frontier() : imported.frontier;
-  const ns = store.open(segment, identity, frontier, { history: genesisHistoryHash(segment), evidence: genesisEvidenceHash(segment) });
-  return new StateHandle(store, ns);
+  const ns = store.open(segment, identity, frontier, { history: construction.genesisHistory(segment), evidence: construction.genesisEvidence(segment) },
+    construction.namespace);
+  return new StateHandle(store, ns, undefined, construction);
 }
 
 /** What stays fixed while one segment's trail replays. */
@@ -302,9 +325,9 @@ export interface SegmentReplay {
   /** The configuration's domain and the selected backing. */
   readonly domain: Uint8Array;
   readonly backing: Uint8Array;
-  /** The segment's identity and its scope root. */
+  /** The segment's identity and its scope root (pool-v3; undefined for a construction whose segment binds its scope). */
   readonly segment: Uint8Array;
-  readonly scope: bigint;
+  readonly scope: bigint | undefined;
   /** The selected backing's terms, and for a multi-backing scope each scoped backing's by name. */
   readonly terms: RootTerms;
   readonly scopedTerms?: ReadonlyMap<string, RootTerms | undefined> | undefined;
@@ -330,10 +353,11 @@ export function modeAt(replay: SegmentReplay, position: bigint): Exclude<StepMod
   return replay.block[Number(position)] !== undefined ? "adoption" : replay.admission === true ? "admission" : "replay";
 }
 
-/** A judged record: its effects on the state it was judged against. */
-export interface Judged {
+/** A judged record: its effects on the state it was judged against. `record` is its construction's decoded record. */
+export interface Judged<R = Record> {
   readonly bytes: Uint8Array;
-  readonly record: Record;
+  readonly record: R;
+  readonly view: StatementView;
   readonly identity: Uint8Array;
   readonly at: bigint;
   readonly evidence: Uint8Array;
@@ -350,10 +374,10 @@ export interface Judged {
  * failure throws ReplayRefusal with its check; the verifier's own failures
  * propagate.
  */
-export async function judgeRecord(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Promise<Judged> {
+export async function judgeRecord<R = Record>(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Promise<Judged<R>> {
   const judgment = judgmentOf(state, bytes, replay);
-  if (judgment.proof) await checkProof(judgment.record, replay.verifier);
-  return judgment.finish();
+  if (judgment.check) await judgment.view.check(replay.verifier);
+  return judgment.finish() as Judged<R>;
 }
 
 /**
@@ -362,15 +386,17 @@ export async function judgeRecord(state: SegmentState, bytes: Uint8Array, replay
  * (mode table above), so an operator can judge and apply its whole block in
  * one transaction. A position outside the block is the caller's error.
  */
-export function judgeAdopted(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Judged {
+export function judgeAdopted<R = Record>(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Judged<R> {
   if (modeAt(replay, state.position) !== "adoption") throw new TypeError("the position is outside the adopted block");
-  return judgmentOf(state, bytes, replay).finish();
+  return judgmentOf(state, bytes, replay).finish() as Judged<R>;
 }
 
-/** The checks before the proof, whether the proof is checked, and the checks after it, in one order for every caller. */
-function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): { readonly proof: boolean; readonly record: Record; finish(): Judged } {
+/** The checks before the statement check, whether it runs, and the checks after it, in one order for every caller
+ * and construction. */
+function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): { readonly check: boolean; readonly view: StatementView; finish(): Judged<unknown> } {
+  const construction = state.construction;
   const position = state.position, mode = modeAt(replay, position), adopted = replay.block[Number(position)];
-  const record = decodeRecord(bytes), p = record.publicInputs, kind = record.kind;
+  const record = construction.decode(bytes), kind = construction.kind(record);
   // A request (kind 7) decodes but is never a history event (§7): a trail carrying one fails replay (§10.1).
   requireReplay([1, 2, 3, 4, 5, 6].includes(kind), "KIND");
   // §7: advancing past 2^64 − 1 refuses before any state is read or the u64 position framed.
@@ -378,50 +404,49 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
   // Every mode judges at a witnessed index (in admission, the horizon); an untyped caller cannot omit it.
   if (typeof replay.index !== "bigint") throw new TypeError("a record is judged at a witnessed index");
   if (mode === "admission" && kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
-  const demandId = kind === 5 || kind === 6 ? hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!)) : undefined;
-  const demand = demandId === undefined ? undefined : state.demand(demandId);
-  const backing = kind === 5 ? demand?.backing ?? replay.backing : kind !== 2 ? identifierOf(p[5]!, p[6]!) : replay.backing;
-  const ownTerms = replay.scopedTerms === undefined ? replay.terms : replay.scopedTerms.get(hex(backing));
-  const issuerKey = ownTerms?.obligor ?? replay.terms.obligor;
+  if (replay.witness !== undefined && !construction.namespace.tree) throw new TypeError("a construction without a note tree keeps no witness");
+  const view = construction.view(record, id => state.demand(id));
+  const demandId = view.ended, demand = demandId === undefined ? undefined : state.demand(demandId);
+  // The backing the record is judged under: its demand's where it reads one, else the first it names, else the selected.
+  const backing = view.needsDemand ? demand?.backing ?? replay.backing : view.backings[0] ?? replay.backing;
+  const termsOf = (name: Uint8Array): RootTerms | undefined => (replay.scopedTerms === undefined ? replay.terms : replay.scopedTerms.get(hex(name)));
+  const issuerKey = termsOf(backing)?.obligor ?? replay.terms.obligor;
   const key = hex(backing), total = state.total(key);
   const scoped = replay.scopedTerms !== undefined;
   // Exact admitted bytes, including proof and authorization, survive adoption.
   if (mode === "adoption") requireReplay(same(bytes, adopted!.bytes), "ADOPTION");
   else {
-    requireReplay(same(record.domain, replay.domain) && same(identifierOf(p[2]!, p[3]!), replay.segment), "CONTEXT");
-    requireReplay(p[4] === replay.scope, "SCOPE");
+    requireReplay(same(view.domain, replay.domain) && same(view.segment, replay.segment), "CONTEXT");
+    requireReplay(view.scope === replay.scope, "SCOPE");
   }
-  if (kind !== 2) requireReplay(ownTerms !== undefined, "BACKING");
-  if (kind === 5) requireReplay(demand !== undefined && (scoped || same(backing, replay.backing)), "DEMAND");
+  requireReplay((view.needsDemand ? [backing] : view.backings).every(name => termsOf(name) !== undefined), "BACKING");
+  if (view.needsDemand) requireReplay(demand !== undefined && (scoped || same(backing, replay.backing)), "DEMAND");
   const lastValid = replay.lastValid;
   const at = adopted?.index ?? (lastValid !== undefined && position < lastValid.position ? lastValid.judgedIndex?.(position + 1n) : undefined) ?? replay.index;
-  const identity = statementHash(record);
+  const identity = view.identity;
   requireReplay(!state.hasStatement(identity), "REPEATED_STATEMENT");
-  const digests = evidenceHashes(record), evidence = nextEvidenceHash(state.evidence, digests, position + 1n);
+  const digests = view.digests, evidence = construction.nextEvidence(state.evidence, digests, position + 1n);
   if (lastValid !== undefined && position + 1n === lastValid.position) requireReplay(same(evidence, lastValid.evidenceHash), "CONTINUITY");
   // Issuance witnessed at or after K's revocation is void (C2b.1). A position
   // the last valid checkpoint finalized was witnessed at its index, not here.
   if (kind === 1 && (lastValid === undefined || position + 1n > lastValid.position)) {
-    const cutoff = replay.revocations === undefined ? replay.revokedAt : replay.revocations.get(hex(backing));
+    const cutoff = replay.revocations === undefined ? replay.revokedAt : replay.revocations.get(key);
     requireReplay(cutoff === undefined || cutoff > replay.index, "REVOKED");
   }
-  return { proof: mode !== "adoption", record, finish: (): Judged => {
-    if (kind !== 2 && kind !== 5) {
-      requireReplay(scoped || same(backing, replay.backing), "BACKING");
-      if (kind === 1) {
-        requireReplay(verifySignatureStrict(record.authorization, statementBytes(record), issuerKey), "SIGNATURE");
-        requireReplay(total.issued + p[7]! < VALUE_BOUND, "SUPPLY");
-      } else if (kind === 3) requireReplay(p[7]! <= total.issued - total.burned, "SUPPLY");
-    }
-    const { nfs, roots, outputs } = effectOf(record);
+  return { check: mode !== "adoption", view, finish: (): Judged<unknown> => {
+    requireReplay(view.backings.every(name => scoped || same(name, replay.backing)), "BACKING");
+    if (kind === 1) {
+      requireReplay(view.issuerSigned(issuerKey), "SIGNATURE");
+      requireReplay(total.issued + view.quantity! < VALUE_BOUND, "SUPPLY");
+    } else if (kind === 3) requireReplay(view.quantity! <= total.issued - total.burned, "SUPPLY");
     if (mode !== "adoption") {
-      requireReplay(roots.every(root => state.hasAnchor(root)), "ANCHOR");
-      checkRecovery(record, state, { check: requireReplay, backing, issuer: issuerKey, at,
+      checkInputs(view, state);
+      checkRecovery(view, state, { check: requireReplay, backing, issuer: issuerKey, at,
         ...(replay.lag === undefined ? {} : { lag: replay.lag }), door: mode === "admission" && kind >= 4 });
     }
-    checkUniqueEffects(nfs, outputs, state);
-    requireReplay(state.leaves + BigInt(outputs.length) <= NOTE_TREE_CAPACITY, "CAPACITY");
-    return { bytes, record, identity, at, evidence, digests, backing: key, demand, demandId, position };
+    checkUniqueEffects(view.nfs, view.outputs, state);
+    if (construction.capacity !== undefined) requireReplay(state.leaves + BigInt(view.outputs.length) <= construction.capacity, "CAPACITY");
+    return { bytes, record, view, identity, at, evidence, digests, backing: key, demand, demandId, position };
   } };
 }
 
@@ -430,14 +455,14 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
  * valid checkpoint's position the new history hash must be its own, and a
  * mismatch undoes this record's writes before refusing.
  */
-export function applyJudged(state: SegmentState, judged: Judged, replay: SegmentReplay): void {
-  const { record, identity, position } = judged, p = record.publicInputs, kind = record.kind;
+export function applyJudged(state: SegmentState, judged: Judged<unknown>, replay: SegmentReplay): void {
+  const { view, identity, position } = judged, kind = view.kind, construction = state.construction;
   if (state.position !== position) throw new Error("the state moved since the record was judged");
-  const { nfs, outputs } = effectOf(record), next = position + 1n, { demand, ended } = recoveryEffect(record);
-  const tags = kind === 4 ? p.slice(10, 12).filter(tag => tag !== 0n) :
-    kind === 5 ? judged.demand?.tags.filter(tag => tag !== 0n) ?? [] : nfs.map(tagOf);
+  const next = position + 1n, { demand, ended } = view;
+  const tags = kind === 4 ? demand!.value.tags.filter(tag => tag !== 0n) :
+    kind === 5 ? judged.demand?.tags.filter(tag => tag !== 0n) ?? [] : view.tags;
   const touched = kind === 4 ? hex(identity) : judged.demandId;
-  const scan = outputs.map((cm, i): ScanOutput => (kind === 6 ? { cm, settlement: record } : { cm, capsule: record.capsules[i] }));
+  const scan = (cm: bigint, i: number): ScanOutput => (kind === 6 ? { cm, settlement: judged.record as Record } : { cm, capsule: view.capsules[i] });
   const markOf = (output: ScanOutput): WitnessMark | undefined => {
     const mark: unknown = replay.witness?.(output);
     if (mark !== undefined && !(typeof mark === "object" && mark !== null && isField((mark as WitnessMark).nf) && (mark as WitnessMark).note instanceof Uint8Array)) {
@@ -450,12 +475,13 @@ export function applyJudged(state: SegmentState, judged: Judged, replay: Segment
     const tip = state.store.append(state.ns, {
       identity, kind, index: judged.at, record: judged.bytes, proofHash: judged.digests.proofHash,
       signatureHash: judged.digests.signatureHash, evidence: judged.evidence,
-      supply: kind === 1 ? { backing: judged.backing, issued: p[7]!, burned: 0n } : kind === 3 ? { backing: judged.backing, issued: 0n, burned: p[7]! } : undefined,
-      nullifiers: nfs.map(nf => ({ nf, tag: tagOf(nf) })),
-      outputs: scan.map(output => ({ cm: output.cm, capsule: output.capsule, settlement: output.settlement !== undefined,
-        witness: markOf(output) })),
+      supply: kind === 1 ? { backing: judged.backing, issued: view.quantity!, burned: 0n } :
+        kind === 3 ? { backing: judged.backing, issued: 0n, burned: view.quantity! } : undefined,
+      nullifiers: view.nfs.map((nf, i) => ({ nf, tag: view.tags[i]! })),
+      outputs: view.outputs.map((cm, i) => ({ cm, capsule: view.capsules[i], settlement: kind === 6,
+        witness: replay.witness === undefined ? undefined : markOf(scan(cm, i)) })),
       demand, ended, keys: [...tags.map(tag => `tag:${tag}`), ...(touched === undefined ? [] : [`demand:${touched}`])],
-      history: (noteRoot, spentRoot) => nextHistoryHash(previous, identity, noteRoot, spentRoot, next),
+      history: (noteRoot, spentRoot) => construction.nextHistory(previous, identity, noteRoot, spentRoot, next),
     });
     if (lastValid !== undefined && next === lastValid.position) requireReplay(same(tip.history, lastValid.historyHash), "CONTINUITY");
   });
@@ -463,5 +489,5 @@ export function applyJudged(state: SegmentState, judged: Judged, replay: Segment
 
 /** Judge then apply the record at `state.position`; a refusal leaves the state as it was. */
 export async function applyRecord(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): Promise<void> {
-  applyJudged(state, await judgeRecord(state, bytes, replay), replay);
+  applyJudged(state, await judgeRecord<unknown>(state, bytes, replay), replay);
 }
