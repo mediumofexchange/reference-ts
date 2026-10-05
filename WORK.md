@@ -3,11 +3,12 @@
 Updated: 2026-10-05
 
 ## Goal
-**Slice 11 (the design point) is done**; the next slice is proposed, not begun. Proposed: the lit construction's layouts (Next 10):
-a `moe/lit/v1` document in the specification carrying the [design](decisions/2026-10.md#2026-10-05--make-the-transparent-profile-lit-notes-under-the-pools-rules-with-each-output-named-by-the-statement-that-creates-it-design-slice-next-10)'s
-item 2 requirements (records, terms, authorization encoding, output derivation as a validity rule), independently reviewed, before
-any lit code. Write its acceptance and stop boundary here when it starts. Slice 12 (transport) follows or interleaves; its first
-probe needs a SOCKS5 proxy the cloud may not allow.
+**The lit layouts are done** ([decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10),
+spec `lit-v1.md` at `0c2ac45`, a draft until adopted). Proposed next slice: the lit implementation (Next 10), before slice 13.
+First probe: lit records and conformance vectors (`src/lit/`), then the lit statement check at `state.ts`'s one validity seam
+(`ProofCheck`, the anchor checks becoming "live output") replaying a lit trail; adoption once the reference conforms. Write its
+acceptance and stop boundary here when it starts. Slice 12 (transport) follows or interleaves; its first probe needs a SOCKS5
+proxy the cloud may not allow.
 
 ## Status
 - **Slice 10 done but M10d** (PRs #69–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
@@ -16,6 +17,7 @@ probe needs a SOCKS5 proxy the cloud may not allow.
   (k)–(n), (s), (v), (w) closed, a view caught up in bounded passes; every budget holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)).
   Gaps: the operator's own memory at depth (Next 5); the wallet's 10⁵ points, lost to a container restart.
 - **Profile design done** (PR #110, spec `29fc585`): the transparent profile is lit notes; AGENTS.md states the approved order (Next 10).
+  **Lit layouts done** (spec PR #12, `0c2ac45`; one review, two majors resolved, read-back clean): no lit code yet.
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
   Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
 
@@ -72,8 +74,8 @@ probe needs a SOCKS5 proxy the cloud may not allow.
    spending several backings, adding an original-term backing to a live scope, single-backing openings' |E| over-reserve; a phone-first wallet
    (a venue range source proportional to the subject's records, a new venue identity, then a succinct relation).
 10. **Claim-layer profiles** beside the pool, chosen per backing ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)). Design done and reviewed
-   ([decision](decisions/2026-10.md#2026-10-05--make-the-transparent-profile-lit-notes-under-the-pools-rules-with-each-output-named-by-the-statement-that-creates-it-design-slice-next-10)): the transparent profile is lit notes under the pool's rules. Next, after slice 11: the `moe/lit/v1`
-   layouts in the specification (item 2's requirements), then the implementation through the shared seams, before slice 13; offline, accumulator, Chaumian after release.
+   ([decision](decisions/2026-10.md#2026-10-05--make-the-transparent-profile-lit-notes-under-the-pools-rules-with-each-output-named-by-the-statement-that-creates-it-design-slice-next-10)): the transparent profile is lit notes under the pool's rules. Layouts done
+   (`lit-v1.md`, draft until adopted); next the implementation through the shared seams, before slice 13; offline, accumulator, Chaumian after release.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
