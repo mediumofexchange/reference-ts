@@ -3,12 +3,16 @@
 Updated: 2026-10-05
 
 ## Goal
-**The lit layouts are done** ([decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10),
-spec `lit-v1.md` at `0c2ac45`, a draft until adopted). Proposed next slice: the lit implementation (Next 10), before slice 13.
-First probe: lit records and conformance vectors (`src/lit/`), then the lit statement check at `state.ts`'s one validity seam
-(`ProofCheck`, the anchor checks becoming "live output") replaying a lit trail; adoption once the reference conforms. Write its
-acceptance and stop boundary here when it starts. Slice 12 (transport) follows or interleaves; its first probe needs a SOCKS5
-proxy the cloud may not allow.
+**Slice 14: the lit implementation** (Next 10; spec `lit-v1.md` at `0c2ac45`, a draft until adopted;
+[layouts decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)).
+Acceptance: the reference replays a lit trail through the shared seams (records, `state.ts`'s validity seam, frames, reader) with
+lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`.
+Stop boundary: adoption; wallet commands and venue drills for lit backings are later slices.
+- **M14a (this branch, `claude/lit-records`)**: `src/lit/` byte layer: §2 notes and derived outputs, §3 statements and records,
+  §4 signed objects and publications, §5 history/evidence/snapshot/receipt frames, §8 key derivation, §9 configuration; vectors
+  checked against an independent byte oracle. Not in it: §6 header/fault/trail/package, §9 terms (tag 6), §7 validity.
+- **M14b** next: §6's frames and terms, then the validity seam replaying a lit trail. Slice 12 (transport) follows or interleaves;
+  its first probe needs a SOCKS5 proxy the cloud may not allow.
 
 ## Status
 - **Slice 10 done but M10d** (PRs #69–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
