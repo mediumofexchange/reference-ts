@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-04
+Updated: 2026-10-05
 
 ## Goal
 **Slice 11: the design point** ([direction](decisions/2026-10.md#2026-10-01--build-redemption-into-the-wallet-before-packaging-commands-and-give-the-design-point-and-release-assurance-slices-of-their-own) item 4; [M11c's method](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)).
@@ -25,9 +25,11 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
   [M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)): marks keep nullifier, opening, tag
   (layout 9): a read 1.6 → ~0.02 ms an output, ~0.84 → ~0.14 ms a holding; M11b9 resends a node GET met by a closed idle connection;
   M11b10 leaves the carrying listing (a row per checkpoint, ~22 ms an admission at 5·10⁴) out of the journal's reads. All reviewed.
-- **M11c2 done** (PR on `claude/m11c2-runtime-depth`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB);
-  (v) fails admission at 10⁶ (343 ms at 10⁵); a fresh view reaches the tip one command per sync budget (10⁵ reads stopped at 13,440).
-  **Next: M11b11** commands sync until the view's clock stops advancing; then (v)'s lever; then M11c3 (10⁵ reads again, overhead, report).
+- **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB);
+  (v) fails admission at 10⁶ (343 ms at 10⁵); a fresh view reached the tip one command per sync budget (10⁵ reads stopped at 13,440).
+- **M11b11** (PR #108, [decision](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)):
+  every command's view syncs in bounded passes until caught up (`syncCaughtUp`); 10⁴ blocks behind reach the tip in one open. Reviewed.
+  **Next:** (v)'s lever (a digest that does not reread the replay file); then M11c3 (10⁵ reads again, overhead, report).
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
   Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
 

@@ -14,7 +14,7 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { DatabaseSync } from "node:sqlite";
-import { DEFAULT_ERGO_DEPTH, ErgoVenue, ergoAnchorContext, type ErgoSyncReport } from "../ergo.js";
+import { DEFAULT_ERGO_DEPTH, ErgoVenue, ergoAnchorContext, syncCaughtUp, type ErgoCatchUpReport } from "../ergo.js";
 import { parseErgoHeader } from "../ergo-headers.js";
 import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, MINER_FEE_TREE_HEX, ownErgoProfile, type ErgoProfile,
   type ErgoReferenceContext } from "../ergo-profile.js";
@@ -25,7 +25,7 @@ import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "..
 import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
-import { CommandError, readJson, readOptional, readSecret, writeExclusive, writeReplace, type Directory } from "./common.js";
+import { CommandError, event, readJson, readOptional, readSecret, writeExclusive, writeReplace, type Directory } from "./common.js";
 
 const KINDS: readonly RecordKind[] = [1, 2, 3, 4];
 const NODE_TIMEOUT_MS = 30_000;
@@ -178,16 +178,18 @@ export interface View {
   readonly file: VenueFile;
   readonly venue: ErgoVenue;
   readonly journal: ErgoVenueJournal;
-  sync(): Promise<ErgoSyncReport>;
+  /** Sync until the view is caught up (`syncCaughtUp`), noting each pass another follows as a progress event. */
+  sync(): Promise<ErgoCatchUpReport>;
   /** `sync`, refusing a venue that has witnessed nothing yet: its clock then stands on a block. */
-  syncWitnessed(): Promise<ErgoSyncReport & { readonly witnessedIndex: bigint }>;
+  syncWitnessed(): Promise<ErgoCatchUpReport & { readonly witnessedIndex: bigint }>;
   close(): void;
 }
 export function openView(directory: Directory): View {
   const file = requireVenue(directory), journal = new ErgoVenueJournal(directory.file("venue.db"), file.id);
   try {
     const venue = new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal), sources = suppliers(directory);
-    const sync = () => venue.sync(sources);
+    const sync = () => syncCaughtUp(venue, sources, pass =>
+      event({ event: "syncing", witnessedIndex: pass.witnessedIndex, tipHeight: pass.tipHeight }));
     const syncWitnessed = async () => {
       const synced = await sync(), at = synced.witnessedIndex;
       if (at === undefined) throw new CommandError("UNAVAILABLE", "the venue has witnessed nothing yet: its first index is final once the depth is mined above it");
