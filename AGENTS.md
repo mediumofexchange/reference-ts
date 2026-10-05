@@ -31,16 +31,16 @@ one-clause summary, not numbers or dated status. `CLAUDE.md` contains exactly `@
 
 ## Direction and authority
 
-The shielded pool is the active claim layer (Construction C1.2). Develop v3 in `src/pool/v3/`:
+The shielded pool is the core claim layer (Construction C1.2). Develop v3 in `src/pool/v3/`:
 one moded state machine and one reader over the neutral core and the shared primitives in
 `src/pool/`, guarded to recomputed local/synthetic or testnet reference identities. Pool-v2 is
 retired (Git history at `a020215`); do not restore its mechanisms without a decision. V3 is
 adopted (pool-v3 §11.4, manifest in `v3/configuration.ts`); a byte, identity or verdict change is v4.
 
-The transparent path and its pilot are retired against a case map (Git history at `8d207eb`):
-recover their cases from there when a version takes up reliance, payout in claims or cross-operator
-presentation, and never port the retired exhibit walk/signed opening claim. Keep one production path
-and never reinterpret pinned versions. Develop wallet, transport and witness feasibility alongside the core.
+Extensions' profiles are built beside the pool, each declared per backing in E (WORK.md Next 10): lit notes
+(`moe/lit/v1`) before release assurance; offline, accumulator, Chaumian after. The old transparent path is retired
+(cases at `8d207eb`; never port its exhibit walk/signed opening claim). Keep one implementation per construction,
+never reinterpret pinned versions, and develop wallet, transport and witness feasibility alongside the core.
 
 Standing authorization effective 2026-09-08 covers development, protocol decisions and merge/push
 after verification until superseded; it excludes real funds, public releases, live deployment,

@@ -89,8 +89,6 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking (2026-10-05): AGENTS.md's direction paragraph still says one production path and the transparent path retired; the lit
-  profile (Next 10) needs it updated (the design reads it as one implementation per construction), an edit left to the maintainer.
 - Non-blocking (2026-10-03): needs the local machine: M10d, the live testnet drill of the `moe` commands (own testnet node,
   a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
