@@ -3,7 +3,6 @@
 // witnesses, and a later sync fetches, verifies and scans only what is new. Stand-in proofs of real proof
 // size; the real-proof acceptance is scripts/pool/v3/store-check.mjs.
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { DatabaseSync } from "node:sqlite";
@@ -17,7 +16,7 @@ import { ownedNotes, seedScanner, seedWitness } from "../src/pool/v3/holdings.js
 import { decodeEvidencePackage } from "../src/pool/v3/package.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
-import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
+import { keptFileDigest, KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { encodeRecord, type Record } from "../src/pool/v3/records.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
@@ -236,7 +235,7 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     const row = db.prepare("SELECT ns, leaf, note FROM witness ORDER BY ns, leaf LIMIT 1").get() as { ns: bigint; leaf: bigint; note: Uint8Array };
     const note = new Uint8Array(row.note); note[103] = 5;
     db.prepare("UPDATE witness SET note = ? WHERE ns = ? AND leaf = ?").run(note, row.ns, row.leaf); db.close();
-    writeFileSync(`${replay}.sha256`, createHash("sha256").update(readFileSync(replay)).digest("hex"));
+    writeFileSync(`${replay}.sha256`, keptFileDigest(replay)!);
     f.payer = f.open("payer"); f.counts.verified = 0;
     expect((await f.payer.sync(first.served.package, f.signed)).holdings.map(h => h.value)).toEqual([5n, 1n, 1n]);
     expect(f.counts.verified).toBe(0);

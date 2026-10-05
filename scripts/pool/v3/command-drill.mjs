@@ -21,7 +21,6 @@
 //
 // Usage: node scripts/pool/v3/command-drill.mjs  (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
@@ -31,6 +30,7 @@ import { readParameters } from "../../../dist/pool/parameter-files.js";
 import { startBackend } from "../../../dist/pool/proof-verifier.js";
 import { prepareExactOutput } from "../../../dist/pool/v3/capsules.js";
 import { openV3Prover } from "../../../dist/pool/v3/prover.js";
+import { keptFileDigest } from "../../../dist/pool/v3/replay-store.js";
 import { V3Wallet } from "../../../dist/pool/v3/wallet-store.js";
 import { adoptedDomain } from "../../../dist/pool/v3/configuration.js";
 import { V3ServiceClient } from "../../../dist/pool/v3/service-client.js";
@@ -499,7 +499,7 @@ try {
     const same = answer => assert.deepEqual({ ...answer, sync: undefined }, { ...read, sync: undefined });
     // The last read left a keep point: the digest vouches for the file, so the next process opens it as kept.
     const keptFile = () => ({ digest: readFileSync(join(RD, "replay.db.sha256"), "utf8"), digestMtimeMs: statSync(join(RD, "replay.db.sha256")).mtimeMs,
-      file: createHash("sha256").update(readFileSync(join(RD, "replay.db"))).digest("hex") });
+      file: keptFileDigest(join(RD, "replay.db")) });
     const vouched = keptFile();
     assert.equal(vouched.digest, vouched.file, "the reader's last read left its replay file vouched for by its digest");
     same(await ok(["reader", "supply", ...reader, backing2]));

@@ -4,7 +4,6 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
-import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
@@ -24,7 +23,7 @@ import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodePublication, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { withdrawalRecord } from "../src/pool/v3/witness.js";
-import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
+import { keptFileDigest, KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
@@ -229,7 +228,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
       expect(verifier.checks).toBe(4);
       reopened.close();
       // The read's keep point recorded a digest for the new file.
-      expect(readFileSync(kept.digest, "utf8")).toBe(createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
+      expect(readFileSync(kept.digest, "utf8")).toBe(keptFileDigest(kept.path)!);
     }
   });
 
@@ -237,7 +236,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     // A row changed in place and the digest recorded again, as a faulty writer would leave it.
     const tamper = (kept: { path: string; digest: string }, sql: string) => {
       const db = new DatabaseSync(kept.path); db.exec(sql); db.close();
-      writeFileSync(kept.digest, createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
+      writeFileSync(kept.digest, keptFileDigest(kept.path)!);
     };
     for (const sql of [
       // A valid class below its namespace's tip: its stored chain value is not its snapshot's.
@@ -267,7 +266,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     let store = opened(kept.path, kept);
     await f.read(counting(), store); store.close();
     const db = new DatabaseSync(kept.path); db.exec("UPDATE verdict SET snapshot = zeroblob(length(snapshot))"); db.close();
-    writeFileSync(kept.digest, createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
+    writeFileSync(kept.digest, keptFileDigest(kept.path)!);
     store = opened(kept.path, kept);
     const verifier = counting(), again = await f.read(verifier, store);
     expect(outcome(again)).toEqual(outcome(await f.read(counting())));
@@ -315,7 +314,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     const seen: boolean[] = [];
     const verifier = { ...counting(), verify() {
       // By the second checkpoint's records, the first checkpoint's keep point has recorded the file's digest.
-      seen.push(existsSync(kept.digest) && readFileSync(kept.digest, "utf8") === createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
+      seen.push(existsSync(kept.digest) && readFileSync(kept.digest, "utf8") === keptFileDigest(kept.path)!);
       return true;
     } };
     await f.read(verifier, store);
@@ -499,7 +498,7 @@ describe("pool-v3 §14 kept classes across reads", () => {
     // discarded: the read gives the fresh verdict.
     store.close();
     const db = new DatabaseSync(kept.path); db.exec("UPDATE publication SET force = 1"); db.close();
-    writeFileSync(kept.digest, createHash("sha256").update(readFileSync(kept.path)).digest("hex"));
+    writeFileSync(kept.digest, keptFileDigest(kept.path)!);
     const reopened = opened(kept.path, kept);
     expect(reopened.keptRows()).toBeGreaterThan(0);
     expect(outcome(await read(items, reopened))).toEqual(fresh);

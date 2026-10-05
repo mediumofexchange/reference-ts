@@ -3,7 +3,6 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
 import * as fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -23,7 +22,7 @@ import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodePublication, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { withdrawalRecord } from "../src/pool/v3/witness.js";
-import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { keptFileDigest, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { encodeTrail } from "../src/pool/v3/trail.js";
@@ -137,7 +136,7 @@ describe("pool-v3 §14 kept walk: evidence lineage", () => {
     ev.close(); copyFileSync(k.evidence, k.evidence + ".backup"); ev = evidenceAt(k.evidence);
     const crash = join(k.dir, "crash"); fs.mkdirSync(crash); let copied = false;
     const v = { identities: configuration.circuits, verify(_k: number, _i: bigint[], proof: Uint8Array) {
-      if (proof[0] === 97 && !copied) { for (const n of ["replay.sqlite", "replay.sqlite-journal", "replay.sha256"]) { const fr = join(k.dir, n); if (fs.existsSync(fr)) copyFileSync(fr, join(crash, n)); } copied = true; }
+      if (proof[0] === 97 && !copied) { for (const n of ["replay.sqlite", "replay.sqlite-wal", "replay.sha256"]) { const fr = join(k.dir, n); if (fs.existsSync(fr)) copyFileSync(fr, join(crash, n)); } copied = true; }
       return proof[0] !== 99; } };
     expect(await settled(f.read(v, store, { evidence: ev }))).toHaveProperty("read");
     expect(copied).toBe(true);
@@ -184,7 +183,7 @@ describe("pool-v3 §14 kept walk: interrupted and damaged", () => {
     const ev = evidenceAt(k.evidence);
     const crash = join(k.dir, "crash"); fs.mkdirSync(crash);
     let copied = false;
-    const snap = () => { for (const name of ["replay.sqlite", "replay.sqlite-journal", "replay.sha256", "evidence.sqlite"]) {
+    const snap = () => { for (const name of ["replay.sqlite", "replay.sqlite-wal", "replay.sha256", "evidence.sqlite"]) {
       const from = join(k.dir, name); if (fs.existsSync(from)) fs.copyFileSync(from, join(crash, name)); } copied = true; };
     const v = { identities: configuration.circuits, verify(_k: number, _i: bigint[], proof: Uint8Array) { if (proof[0] === 97 && !copied) snap(); return proof[0] !== 99; } };
     const kept = outcome(await f.read(v, store, { evidence: ev }));
@@ -208,7 +207,7 @@ describe("pool-v3 §14 kept walk: interrupted and damaged", () => {
       expect(await settled(f.read(counting(), store, { evidence: ev }))).toEqual(fresh);
       store.close();
       const db = new DatabaseSync(k.path); db.exec(sql); db.close();
-      writeFileSync(k.digest, createHash("sha256").update(readFileSync(k.path)).digest("hex"));
+      writeFileSync(k.digest, keptFileDigest(k.path)!);
       store = keptStore(k);
       const again = await settled(f.read(counting(), store, { evidence: ev }));
       expect(again).toEqual(fresh);
@@ -235,7 +234,7 @@ describe("pool-v3 §14 kept walk: interrupted and damaged", () => {
     await f.first();
     let store = keptStore(k); const ev = evidenceAt(k.evidence);
     await f.read(counting(), store, { evidence: ev });
-    const h = () => createHash("sha256").update(readFileSync(k.path)).digest("hex");
+    const h = () => keptFileDigest(k.path)!;
     const d0 = readFileSync(k.digest, "utf8"), m0 = fs.statSync(k.digest).mtimeMs;
     expect(d0).toBe(h());
     await f.read(counting(), store, { evidence: ev });
@@ -255,7 +254,7 @@ describe("pool-v3 §14 kept walk: interrupted and damaged", () => {
     let store = keptStore(k); const ev = evidenceAt(k.evidence);
     await f.read(counting(), store, { evidence: ev }); store.close();
     const db = new DatabaseSync(k.path); db.exec("UPDATE verdict SET snapshot = zeroblob(length(snapshot))"); db.close();
-    writeFileSync(k.digest, createHash("sha256").update(readFileSync(k.path)).digest("hex"));
+    writeFileSync(k.digest, keptFileDigest(k.path)!);
     store = keptStore(k);
     const fresh = await settled(f.read(counting()));
     for (let i = 0; i < 2; i++) expect(await settled(f.read(counting(), store, { evidence: ev }))).toEqual(fresh);
