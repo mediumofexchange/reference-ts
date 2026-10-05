@@ -1647,8 +1647,9 @@ depth on host A. On host B, before the restart, the first 400 statements' admiss
 against 78 ms in the process at 10³ (the A/B). `serve` held 400–486 MB, peaking at 525 MB. It restarted over 300
 statements in 3.8 s.
 
-*Host factor.* At 10³ the same reads took 39.9 ms a statement on host A and 27.1 ms on host B, and admissions about
-111 and 78 ms. The A/B on host B found the runtime before and after M11b12 equal:
+*Host factor.* At 10³ the same reads took 39.9 ms a statement on host A and 27.1 ms on host B. Admissions took a
+median of 111 ms over the 10⁵ run's first 10⁴ statements on host A, about 90 ms over the matched pair's 200 (after
+the second restart), and 78 ms over the A/B's 10³ on host B. The A/B on host B found the runtime before and after M11b12 equal:
 - a reader's first sync, 26.9 and 27.1 ms a statement;
 - a wallet's, 27.0 and 29.3 ms;
 - admission medians of 72–86 ms in both;
