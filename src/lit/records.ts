@@ -4,7 +4,7 @@
 // admission. The derived values and arithmetic below are state-free functions
 // of one statement (and, for a settlement, its demand).
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "../bytes.js";
+import { arrayLength, byteLength, ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError } from "../bytes.js";
 import {
   LIT_ACCEPTANCE_CONTEXT as ACCEPTANCE, LIT_PUBLICATION_CONTEXT as PUBLICATION, LIT_RELEASE_CONTEXT as RELEASE,
   LIT_STATEMENT_CONTEXT as STATEMENT,
@@ -56,11 +56,14 @@ function u64(value: unknown, what: string): bigint {
   if (typeof value !== "bigint" || value < 0n || value > MAX_U64) throw new EncodingError(`${what} outside u64`);
   return value;
 }
+/** Length read once and bounded before any element is read; elements read once each, never through an iterator. */
 function list<T>(value: unknown, min: number, max: number, own: (item: unknown) => T, what: string): readonly T[] {
   if (!Array.isArray(value)) throw new EncodingError(`invalid ${what}`);
-  const copy = Array.from(value as readonly unknown[]);
-  if (copy.length < min || copy.length > max) throw new EncodingError(`wrong ${what} count`);
-  return Object.freeze(copy.map(own));
+  const n = arrayLength(value);
+  if (n < min || n > max) throw new EncodingError(`wrong ${what} count`);
+  const copy = copyArray(value as readonly unknown[], own, max);
+  if (copy.length < min) throw new EncodingError(`wrong ${what} count`);
+  return Object.freeze(copy);
 }
 const inputs = (value: unknown): readonly Opening[] => list(value, 1, MAX_INPUTS, ownOpening, "input");
 
@@ -199,18 +202,22 @@ export function evidencePair(record: LitRecord): EvidencePair {
   return hashEvidenceFields(statementBytes(r.statement), r.authorization);
 }
 
-/** Each input's nullifier, in input order (§2). */
+/** Each input's nullifier, in input order (§2), of a spend, burn or demand. */
 export function inputNullifiers(s: Spend | Burn | Demand): readonly Uint8Array[] {
-  const own = ownStatement(s) as Spend | Burn | Demand;
+  const own = ownStatement(s);
+  if (own.kind !== 2 && own.kind !== 3 && own.kind !== 4) throw new EncodingError("not a spend, burn or demand");
   return Object.freeze(own.inputs.map(input => noteNullifier(noteCommitment(own.domain, input))));
 }
-/** A demand's derived backing and quantity (§3): its inputs' common backing and summed value; refuses mixed backings. */
+/** A demand's derived backing and quantity (§3): its inputs' common backing and summed value, a u64; refuses mixed
+ * backings and a sum past a u64. */
 export function demandClaim(demand: Demand): { readonly backing: Uint8Array; readonly quantity: bigint } {
   const d = ownStatement(demand);
   if (d.kind !== 4) throw new EncodingError("not a demand");
   const backing = d.inputs[0]!.backing;
   if (d.inputs.some(input => compareBytes(input.backing, backing) !== 0)) throw new EncodingError("demand inputs of several backings");
-  return Object.freeze({ backing: Uint8Array.from(backing), quantity: d.inputs.reduce((sum, input) => sum + input.value, 0n) });
+  const quantity = d.inputs.reduce((sum, input) => sum + input.value, 0n);
+  if (quantity > MAX_U64) throw new EncodingError("demand quantity outside u64");
+  return Object.freeze({ backing: Uint8Array.from(backing), quantity });
 }
 /** The outputs a statement creates, each with its derived rho (§2); a settlement's needs its demand, whose
  * identity must be the one the settlement names. Kinds 4, 5 and 7 create none. */
@@ -228,7 +235,9 @@ export function derivedOutputs(statement: Statement, demand?: Demand): readonly 
     case 6: {
       if (demand === undefined) throw new EncodingError("a settlement's output needs its demand");
       const d = ownStatement(demand);
-      if (d.kind !== 4 || compareBytes(statementHash(d), s.demand) !== 0) throw new EncodingError("not the settlement's demand");
+      if (d.kind !== 4 || compareBytes(d.domain, s.domain) !== 0 || compareBytes(statementHash(d), s.demand) !== 0) {
+        throw new EncodingError("not the settlement's demand");
+      }
       const { backing, quantity } = demandClaim(d);
       return Object.freeze([Object.freeze({ backing, value: quantity, owner: s.owner, rho: spendRho(inputNullifiers(d), 0) })]);
     }
@@ -236,16 +245,24 @@ export function derivedOutputs(statement: Statement, demand?: Demand): readonly 
   }
 }
 
-/** The statement's own arithmetic (§§6–7): a spend's outputs name input backings and balance per backing; a burn's
- * inputs share one backing that any output names, and sum to quantity plus change; a demand's inputs share a backing.
- * Widened sums never wrap. True for kinds with no arithmetic. */
+/** The statement's own arithmetic (§§6–7): its inputs are distinct notes; a spend's outputs name input backings and
+ * balance per backing; a burn's inputs share one backing that any output names, and sum to quantity plus change; a
+ * demand's inputs share a backing and sum to a u64. Widened sums never wrap. True for kinds with no arithmetic; false
+ * for a malformed statement. */
 export function arithmeticHolds(statement: Statement): boolean {
-  const s = ownStatement(statement);
+  let s: Statement;
+  try { s = ownStatement(statement); } catch (error) {
+    if (error instanceof EncodingError) return false;
+    throw error;
+  }
   if (s.kind !== 2 && s.kind !== 3 && s.kind !== 4) return true;
+  // Equal openings are the one way to equal nullifiers (§2): two inputs naming one note. Pairwise for MAX_INPUTS = 2;
+  // a successor with more inputs compares every pair.
+  if (s.inputs.length === 2 && compareBytes(openingKey(s.inputs[0]!), openingKey(s.inputs[1]!)) === 0) return false;
   const sums = new Map<string, bigint>();
   const key = (b: Uint8Array): string => Buffer.from(b).toString("hex");
   for (const input of s.inputs) sums.set(key(input.backing), (sums.get(key(input.backing)) ?? 0n) + input.value);
-  if (s.kind === 4) return sums.size === 1;
+  if (s.kind === 4) return sums.size === 1 && sums.values().next().value! <= MAX_U64;
   if (s.kind === 3) {
     if (sums.size !== 1) return false;
     const total = sums.values().next().value!, change = s.outputs[0];
@@ -258,6 +275,10 @@ export function arithmeticHolds(statement: Statement): boolean {
     sums.set(k, left - output.value);
   }
   return [...sums.values()].every(left => left === 0n);
+}
+
+function openingKey(o: Opening): Uint8Array {
+  const w = new ByteWriter(); writeOpening(w, o); return w.finish();
 }
 
 /** Strict verification of the owner signature of every input of a spend, burn, demand or request, each over the
@@ -395,6 +416,7 @@ export function publicationId(publication: Publication): Uint8Array { return sha
 /** Bounds the body by its kind's largest valid body before copying it. Kinds 2, 3 and 4 still need their demand
  * to check their routing. */
 export function decodePublication(bytes: Uint8Array): Publication {
+  if (byteLength(bytes) > MAX_PUBLICATION_BYTES) throw new EncodingError("publication too long");
   const r = new ByteReader(bytes);
   if (compareBytes(r.raw(PUBLICATION.length), PUBLICATION) !== 0) throw new EncodingError("wrong publication context");
   const domain = r.raw(32), backing = r.raw(32), kind = r.u8(); requireKind(kind);

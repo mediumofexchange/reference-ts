@@ -4,7 +4,7 @@
 // allocation, the look-ahead window and restoration are the wallet's.
 import { createHmac, hkdfSync } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { ByteWriter, EncodingError } from "../bytes.js";
+import { arrayLength, ByteWriter, copyArray, EncodingError } from "../bytes.js";
 import { utf8Encoder } from "../contexts.js";
 import { field32 } from "./notes.js";
 
@@ -36,12 +36,15 @@ export function acceptSecret(seed: Uint8Array, domain: Uint8Array, demand: Uint8
   const w = new ByteWriter(); w.key32(field32(demand, "demand"), "demand"); w.u64(u64(deadline, "acceptance deadline"));
   return hmac(root(seed, domain, SETTLEMENT_INFO), w.finish());
 }
-/** `presentSecret = HMAC-SHA256(presenterRoot, tag_1 || tag_2 || u64 instant || u64 deadline)`, `tag_2` 32 zero bytes
- * for a demand over one note: every field is public in the demand, so a restored wallet finds its standing demands. */
+/** `presentSecret = HMAC-SHA256(presenterRoot, tag_1 || tag_2 || u64 instant || u64 deadline)`, the tags in the demand's
+ * input order and `tag_2` 32 zero bytes for a demand over one note: every field is public in the demand, so a restored
+ * wallet finds its standing demands. */
 export function presentSecret(seed: Uint8Array, domain: Uint8Array, tags: readonly Uint8Array[], instant: bigint,
   deadline: bigint): Uint8Array {
-  if (!Array.isArray(tags) || tags.length < 1 || tags.length > 2) throw new EncodingError("wrong tag count");
-  const own = tags.map((tag, i) => field32(tag, `tag ${i + 1}`));
+  const n = Array.isArray(tags) ? arrayLength(tags) : 0;
+  if (n < 1 || n > 2) throw new EncodingError("wrong tag count");
+  const own = copyArray(tags, tag => field32(tag, "tag"), 2);
+  if (own.length < 1) throw new EncodingError("wrong tag count");
   const w = new ByteWriter();
   w.key32(own[0]!, "tag 1"); w.key32(own[1] ?? new Uint8Array(32), "tag 2");
   w.u64(u64(instant, "instant")); w.u64(u64(deadline, "deadline"));

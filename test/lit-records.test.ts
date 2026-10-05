@@ -84,9 +84,18 @@ const acceptance = oAcceptance(demandHash, settle.owner, ACCEPTANCE_DEADLINE);
 const acceptanceSig = sign(K, acceptance);
 const release = join(ascii("moe/lit/v1/release"), DOMAIN, demandHash, hash(acceptance), hash(oStatement(settle)));
 const settleAuthorization = join(u64(ACCEPTANCE_DEADLINE), acceptanceSig, sign(10, release));
+// The smallest shapes too: a one-input spend to one output, a burn with no change, a demand over one note and its settlement.
+const spendOne: codec.Spend = { domain: DOMAIN, kind: 2, segment: SEGMENT, inputs: [noteB], outputs: [{ backing: BACKING, value: 30n, owner: keyOf(8) }] };
+const burnAll: codec.Burn = { domain: DOMAIN, kind: 3, segment: SEGMENT, quantity: 70n, inputs: [noteA], outputs: [] };
+const demandOne: codec.Demand = { ...demand, inputs: [noteA], instant: 1001n };
+const settleOne: codec.Settle = { domain: DOMAIN, kind: 6, segment: SEGMENT, demand: hash(oStatement(demandOne)), owner: keyOf(11) };
+const acceptanceOne = oAcceptance(settleOne.demand, settleOne.owner, ACCEPTANCE_DEADLINE);
+const settleOneAuthorization = join(u64(ACCEPTANCE_DEADLINE), sign(K, acceptanceOne),
+  sign(10, join(ascii("moe/lit/v1/release"), DOMAIN, settleOne.demand, hash(acceptanceOne), hash(oStatement(settleOne)))));
 const records: [codec.Statement, Uint8Array][] = [
   [issueA, sign(K, oStatement(issueA))], [spend, ownerSigs(spend)], [burn, ownerSigs(burn)], [demand, ownerSigs(demand)],
   [withdraw, sign(10, oStatement(withdraw))], [settle, settleAuthorization], [request, ownerSigs(request)],
+  [spendOne, ownerSigs(spendOne)], [burnAll, ownerSigs(burnAll)], [demandOne, ownerSigs(demandOne)], [settleOne, settleOneAuthorization],
 ];
 const record = (i: number): codec.LitRecord => ({ statement: records[i]![0], authorization: records[i]![1] });
 const reason = (f: () => unknown): string => {
@@ -140,7 +149,7 @@ describe("lit-v1 §2 notes and derived outputs", () => {
 });
 
 describe("lit-v1 §3 statements and records", () => {
-  const bodies = [136, 34 + 208 + 288, 42 + 104 + 72, 81 + 208, 64, 96, 112];
+  const bodies = [136, 34 + 208 + 288, 42 + 104 + 72, 81 + 208, 64, 96, 112, 34 + 104 + 72, 42 + 104, 81 + 104, 96];
   it("encodes every kind as the oracle does, at 53 bytes plus §3's body length, and decodes it back", () => {
     records.forEach(([s, authorization], i) => {
       const bytes = codec.statementBytes(s);
@@ -367,19 +376,87 @@ describe("lit-v1 §8 key derivation", () => {
   });
 });
 
+describe("lit-v1 review cases", () => {
+  it("refuses kinds 3 and 4 with no or three inputs, a zero burn and a small-order issue owner", () => {
+    const at = (b: Buffer, offset: number, value: number): Buffer => { const c = Buffer.from(b); c[offset] = value; return c; };
+    expect(reason(() => codec.decodeStatement(at(oStatement(burn), 93, 0)))).toBe("wrong input or output count");
+    expect(reason(() => codec.decodeStatement(at(oStatement(burn), 93, 3)))).toBe("wrong input or output count");
+    expect(reason(() => codec.decodeStatement(at(oStatement(demand), 85, 0)))).toBe("wrong input or output count");
+    expect(reason(() => codec.decodeStatement(at(oStatement(demand), 85, 3)))).toBe("wrong input or output count");
+    expect(reason(() => codec.decodeStatement(oStatement({ ...burn, quantity: 0n })))).toBe("quantity is not a positive u64");
+    const smallOrder = Buffer.alloc(32); smallOrder[0] = 1;
+    expect(reason(() => codec.decodeStatement(oStatement({ ...issueA, owner: smallOrder })))).toBe("invalid owner key");
+    expect(reason(() => codec.encodeRecord({ statement: { ...spend, inputs: [noteA, noteB, noteA] }, authorization: new Uint8Array(192) })))
+      .toBe("wrong input count");
+  });
+
+  it("fails the arithmetic of two inputs naming one note, in a spend, burn or demand", () => {
+    const twice = { ...spend, inputs: [noteA, noteA], outputs: [{ backing: BACKING, value: 140n, owner: keyOf(4) }] };
+    expect(codec.ownerSignaturesVerify({ statement: twice, authorization: ownerSigs(twice) })).toBe(true);
+    expect(codec.arithmeticHolds(twice)).toBe(false);
+    expect(codec.arithmeticHolds({ ...burn, quantity: 140n, inputs: [noteA, noteA], outputs: [] })).toBe(false);
+    expect(codec.arithmeticHolds({ ...demand, inputs: [noteA, noteA] })).toBe(false);
+    expect(codec.arithmeticHolds({ ...spend, inputs: [noteA, { ...noteA, rho: id(1) }], outputs: [{ backing: BACKING, value: 140n, owner: keyOf(4) }] })).toBe(true);
+  });
+
+  it("bounds a demand's summed quantity to a u64", () => {
+    const over = { ...demand, inputs: [{ ...noteA, value: MAX }, { ...noteB, value: 5n }] };
+    expect(codec.arithmeticHolds(over)).toBe(false);
+    expect(reason(() => codec.demandClaim(over))).toBe("demand quantity outside u64");
+    const settleOver = { ...settle, demand: hash(oStatement(over)) };
+    expect(reason(() => codec.derivedOutputs(settleOver, over))).toBe("demand quantity outside u64");
+    expect(codec.arithmeticHolds({ ...demand, inputs: [{ ...noteA, value: MAX - 5n }, { ...noteB, value: 5n }] })).toBe(true);
+  });
+
+  it("answers false or refuses with a reason for hostile or misplaced arguments", () => {
+    expect(codec.arithmeticHolds({ kind: 2 } as never)).toBe(false);
+    expect(reason(() => codec.inputNullifiers(issueA as never))).toBe("not a spend, burn or demand");
+    expect(reason(() => codec.derivedOutputs(settle, { ...demand, domain: id(5) }))).toBe("not the settlement's demand");
+    const iterating = [nfA];
+    Object.defineProperty(iterating, Symbol.iterator, { value: function* () { yield nfA; yield nfB; yield nfA; } });
+    expect(hex(notes.spendRho(iterating, 0))).toBe(hex(oSpendRho([nfA], 0)));
+    expect(reason(() => notes.spendRho([nfA, nfB, nfA], 0))).toBe("wrong nullifier count");
+    expect(codec.ownerSignaturesVerify({ statement: "spend", authorization: null } as never)).toBe(false);
+    expect(codec.statementSignatureVerifies(record(0), "key" as never)).toBe(false);
+    expect(frames.verifyReceipt(null as never, null as never)).toBe(false);
+  });
+
+  it("refuses a publication's non-key acceptance owner, foreign domains and wrong body kinds, and an oversized input", () => {
+    const smallOrder = Buffer.alloc(32); smallOrder[0] = 1;
+    const accept = join(ascii("moe/lit/v1/acceptance"), DOMAIN, demandHash, smallOrder, u64(ACCEPTANCE_DEADLINE));
+    expect(reason(() => codec.decodePublication(oPublication(BACKING, 2, join(accept, acceptanceSig))))).toBe("invalid owner key");
+    const foreign = (kind: number, r: Buffer): Buffer => join(ascii("moe/lit/v1/publication"), id(5), BACKING, u8(kind), u32(r.length), r);
+    expect(reason(() => codec.decodePublication(foreign(3, oRecord(oStatement(settle), settleAuthorization))))).toBe("inconsistent domain");
+    expect(reason(() => codec.decodePublication(foreign(4, oRecord(oStatement(withdraw), records[4]![1]))))).toBe("inconsistent domain");
+    expect(reason(() => codec.decodePublication(foreign(5, oRecord(oStatement(request), ownerSigs(request)))))).toBe("inconsistent domain");
+    expect(reason(() => codec.decodePublication(oPublication(BACKING, 3, oRecord(oStatement(withdraw), records[4]![1])))))
+      .toBe("wrong publication body kind");
+    expect(reason(() => codec.decodePublication(oPublication(BACKING, 5, oRecord(oStatement(withdraw), records[4]![1])))))
+      .toBe("wrong publication body kind");
+    expect(reason(() => codec.decodePublication(new Uint8Array(570)))).toBe("publication too long");
+  });
+
+  it("reconstructs a release that no longer verifies when a settlement's deadline changes", () => {
+    const moved = Buffer.from(settleAuthorization); moved.writeBigUInt64BE(ACCEPTANCE_DEADLINE + 1n, 0);
+    const a = codec.settlementAuthorization({ statement: settle, authorization: moved });
+    expect(ed25519.verify(a.acceptance.signature, a.acceptanceMessage, keyOf(K))).toBe(false);
+    expect(ed25519.verify(a.releaseSignature, a.releaseMessage, demand.presenter)).toBe(false);
+  });
+});
+
 describe("lit-v1 conformance vectors", () => {
   // Every vector comes from the oracle above; the codec must reproduce each byte. LIT_VECTORS=write rewrites the file.
   const path = new URL("./fixtures/lit-v1-vectors.json", import.meta.url);
   const seed = id(71);
   const vectors = {
-    specification: "money-from-first-principles lit-v1.md at 0c2ac45 (draft until adopted)",
+    specification: "money-from-first-principles lit-v1.md at 1bf5bfc (draft until adopted)",
     configHash: hex(DOMAIN),
     keys: Object.fromEntries([K, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => [`secret${n}`, hex(secretOf(n))])),
     records: records.map(([s, authorization]) => {
       const statement = oStatement(s);
       const created = s.kind === 1 ? [issuedOpening(s)] : s.kind === 2 || s.kind === 3
         ? s.outputs.map((o, j) => ({ ...o, rho: oSpendRho(s.inputs.map(input => oNf(oCm(input))), j) }))
-        : s.kind === 6 ? [{ backing: BACKING, value: 50n, owner: s.owner, rho: oSpendRho(demand.inputs.map(input => oNf(oCm(input))), 0) }] : [];
+        : s.kind === 6 ? settled(s) : [];
       return { kind: s.kind, record: hex(oRecord(statement, authorization)), statementHash: hex(hash(statement)),
         signatureHash: hex(hash(authorization)),
         outputs: created.map(o => ({ opening: hex(oOpening(o)), cm: hex(oCm(o)), nf: hex(oNf(oCm(o))), tag: hex(oTag(oNf(oCm(o)))) })) };
@@ -393,6 +470,11 @@ describe("lit-v1 conformance vectors", () => {
     ],
     wallet: { seed: hex(seed), owner0: hex(hmac(seed)) },
   };
+  function settled(s: codec.Settle): notes.Opening[] {
+    const d = records.map(([statement]) => statement).find(t => t.kind === 4 && hex(hash(oStatement(t))) === hex(s.demand)) as codec.Demand;
+    const value = d.inputs.reduce((sum, input) => sum + input.value, 0n);
+    return [{ backing: BACKING, value, owner: s.owner, rho: oSpendRho(d.inputs.map(input => oNf(oCm(input))), 0) }];
+  }
   function hmac(s: Uint8Array): Buffer {
     return createHmac("sha256", Buffer.from(hkdfSync("sha256", s, DOMAIN, ascii("moe/wallet/lit/v1/owner"), 32))).update(u64(0n)).digest();
   }
