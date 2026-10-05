@@ -34,6 +34,15 @@ Record readers are tied to the captured view. Refresh after record changes,
 including same-index revocation; a previously valid snapshot is not current
 permission to serve. Validation owns external bytes before callbacks.
 
+## Lit construction (draft)
+
+The transparent profile's construction, `moe/lit/v1` ([lit-v1](https://github.com/mediumofexchange/money-from-first-principles/blob/1bf5bfc/lit-v1.md),
+a draft until adopted), is built in `src/lit/` beside the pool, through the pool's seams (WORK.md's slice 14).
+
+| Component | Implemented boundary | Still outside it |
+|---|---|---|
+| `lit/configuration.ts`, `lit/notes.ts`, `lit/records.ts`, `lit/commitments.ts`, `lit/wallet-keys.ts` | §§2–5, 8–9 bytes: notes and derived outputs, the seven statements and records, signature and arithmetic checks of one statement, acceptance, release and publications, the history and evidence chains, snapshot and receipt, wallet key derivation; [conformance vectors](../test/fixtures/lit-v1-vectors.json). | §6's header, fault evidence, trail and package; root terms with tag 6; §7 admission and replay at `state.ts`'s validity seam; a lit wallet and commands. |
+
 ## Executable models
 
 | Model | Role and limit |

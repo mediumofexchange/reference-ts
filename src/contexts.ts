@@ -59,6 +59,30 @@
 //   moe/pool/v3/spent/leaf     a spent-root leaf
 //   moe/pool/v3/spent/node     a spent-root node
 //
+// The lit construction (lit-v1, a draft until adopted) has its own family. Its
+// spent root keeps pool-spent's contexts above (lit-v1 §5):
+//
+//   moe/lit/v1/config          the configuration (§9)
+//   moe/lit/v1/note            a note's commitment (§2)
+//   moe/lit/v1/nullifier       a note's nullifier (§2)
+//   moe/lit/v1/tag             a note's public tag (§2)
+//   moe/lit/v1/rho/issue       an issued output's derived randomness (§2)
+//   moe/lit/v1/rho/spend       a spent-side output's derived randomness (§2)
+//   moe/lit/v1/statement       a statement, and every statement signature (§3)
+//   moe/lit/v1/acceptance      a backer's acceptance of a demand (§4)
+//   moe/lit/v1/release         a holder's release of an accepted demand (§4)
+//   moe/lit/v1/publication     a venue publication (§4)
+//   moe/lit/v1/genesis         historyHash_0 (§5)
+//   moe/lit/v1/history         historyHash_i (§5)
+//   moe/lit/v1/evidence-seed   evidenceHash_0 (§5)
+//   moe/lit/v1/evidence-link   evidenceHash_i (§5)
+//   moe/lit/v1/snapshot        a backing's snapshot (§5)
+//   moe/lit/v1/receipt         the operator's receipt (§5)
+//   moe/lit/v1/segment         a segment header (§6)
+//   moe/lit/v1/fault-evidence  a fault-evidence package (§6)
+//   moe/lit/v1/trail           a served trail (§6)
+//   moe/lit/v1/package         an evidence package (§6)
+//
 // Two binary magics open hashed preimages too, and are held to the same rule:
 // "MOEB" a backing's terms (its name is their hash) and "MOED" a directory
 // (its root). The retired transparent path's tags above stay declared, so no
@@ -103,6 +127,26 @@ export const V3_RANGE_CONTEXT = tag("moe/pool/v3/range");
 export const V3_SPENT_EMPTY_CONTEXT = tag("moe/pool/v3/spent/empty");
 export const V3_SPENT_LEAF_CONTEXT = tag("moe/pool/v3/spent/leaf");
 export const V3_SPENT_NODE_CONTEXT = tag("moe/pool/v3/spent/node");
+export const LIT_CONFIG_CONTEXT = tag("moe/lit/v1/config");
+export const LIT_NOTE_CONTEXT = tag("moe/lit/v1/note");
+export const LIT_NULLIFIER_CONTEXT = tag("moe/lit/v1/nullifier");
+export const LIT_TAG_CONTEXT = tag("moe/lit/v1/tag");
+export const LIT_RHO_ISSUE_CONTEXT = tag("moe/lit/v1/rho/issue");
+export const LIT_RHO_SPEND_CONTEXT = tag("moe/lit/v1/rho/spend");
+export const LIT_STATEMENT_CONTEXT = tag("moe/lit/v1/statement");
+export const LIT_ACCEPTANCE_CONTEXT = tag("moe/lit/v1/acceptance");
+export const LIT_RELEASE_CONTEXT = tag("moe/lit/v1/release");
+export const LIT_PUBLICATION_CONTEXT = tag("moe/lit/v1/publication");
+export const LIT_GENESIS_CONTEXT = tag("moe/lit/v1/genesis");
+export const LIT_HISTORY_CONTEXT = tag("moe/lit/v1/history");
+export const LIT_EVIDENCE_SEED_CONTEXT = tag("moe/lit/v1/evidence-seed");
+export const LIT_EVIDENCE_LINK_CONTEXT = tag("moe/lit/v1/evidence-link");
+export const LIT_SNAPSHOT_CONTEXT = tag("moe/lit/v1/snapshot");
+export const LIT_RECEIPT_CONTEXT = tag("moe/lit/v1/receipt");
+export const LIT_SEGMENT_CONTEXT = tag("moe/lit/v1/segment");
+export const LIT_FAULT_EVIDENCE_CONTEXT = tag("moe/lit/v1/fault-evidence");
+export const LIT_TRAIL_CONTEXT = tag("moe/lit/v1/trail");
+export const LIT_PACKAGE_CONTEXT = tag("moe/lit/v1/package");
 export const TERMS_MAGIC = tag("MOEB");
 export const DIRECTORY_MAGIC = tag("MOED");
 
@@ -154,6 +198,26 @@ const ALL_CONTEXTS = [
   V3_SPENT_EMPTY_CONTEXT,
   V3_SPENT_LEAF_CONTEXT,
   V3_SPENT_NODE_CONTEXT,
+  LIT_CONFIG_CONTEXT,
+  LIT_NOTE_CONTEXT,
+  LIT_NULLIFIER_CONTEXT,
+  LIT_TAG_CONTEXT,
+  LIT_RHO_ISSUE_CONTEXT,
+  LIT_RHO_SPEND_CONTEXT,
+  LIT_STATEMENT_CONTEXT,
+  LIT_ACCEPTANCE_CONTEXT,
+  LIT_RELEASE_CONTEXT,
+  LIT_PUBLICATION_CONTEXT,
+  LIT_GENESIS_CONTEXT,
+  LIT_HISTORY_CONTEXT,
+  LIT_EVIDENCE_SEED_CONTEXT,
+  LIT_EVIDENCE_LINK_CONTEXT,
+  LIT_SNAPSHOT_CONTEXT,
+  LIT_RECEIPT_CONTEXT,
+  LIT_SEGMENT_CONTEXT,
+  LIT_FAULT_EVIDENCE_CONTEXT,
+  LIT_TRAIL_CONTEXT,
+  LIT_PACKAGE_CONTEXT,
   TERMS_MAGIC,
   DIRECTORY_MAGIC,
 ];
