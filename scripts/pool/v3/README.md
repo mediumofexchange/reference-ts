@@ -114,9 +114,11 @@ The replay-state probe, retired after M5b.6 ([at its last revision](https://gith
 measured this state's memory against the storage layout M5b moved it to, the runtime
 reader, journal and wallet over long histories, and the first sync with real
 verification load ([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage)).
-`design-point-probe.mjs` (slice 11 M11c, retiring with it) measures the `moe` commands with real proofs
-over about 10³ statements on the synthetic node against the declared budgets
-([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)).
+The design-point probes, retired with slice 11 ([commands](https://github.com/mediumofexchange/reference-ts/blob/fa8384d/scripts/pool/v3/design-point-probe.mjs)
+and [runtime at depth](https://github.com/mediumofexchange/reference-ts/blob/1a3f76d/scripts/pool/v3/runtime-depth-probe.mjs)
+at their last revisions), measured the `moe` commands with real proofs and the runtime under real
+verification load to 10⁵ statements against the declared budgets
+([evidence](../../../docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)).
 Silence-bearing imports read the independently answered publication
 range, classify demand/withdrawal/release force against each original snapshot,
 and preserve retirement after another segment resets the clock. A returning
