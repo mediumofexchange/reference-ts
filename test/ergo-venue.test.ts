@@ -5,7 +5,7 @@ import {
   encodeCommitment, encodeReplacement, encodeRevocation, replacementMessage, ROLE_OPERATOR, signCommitment, signRevocation,
   type Commitment, type Replacement,
 } from "../src/venue-records.js";
-import { DEFAULT_ERGO_DEPTH, ERGO_INDEX_LIMITS, ergoAnchorContext, ergoProfile, ErgoVenue, type ErgoReaderPolicy } from "../src/ergo.js";
+import { DEFAULT_ERGO_DEPTH, ERGO_INDEX_LIMITS, ergoAnchorContext, ergoProfile, ErgoVenue, syncCaughtUp, type ErgoReaderPolicy } from "../src/ergo.js";
 import { decodeCompactBits, INITIAL_DIFFICULTY, parseErgoHeader } from "../src/ergo-headers.js";
 import { ERGO_TESTNET_REFERENCE, ergoProfileIdentity, type ErgoTransactionView } from "../src/ergo-profile.js";
 import {
@@ -522,6 +522,45 @@ describe("no supplier is trusted", () => {
     }
     expect(stopped).toEqual([undefined, undefined, undefined, undefined, "side-branch quota"]);
     expect(v.witnessedIndex()).toBe(36n);
+  });
+
+  it("a view behind by several budgets reaches the tip in one catch-up, which then takes one pass", async () => {
+    const blocks = branch(40, { 31: [[committed(commitment(1n, 0xaa))]] });
+    const v = venue({ headersPerSupplier: 5 }), heard: (bigint | undefined)[] = [];
+    const report = await syncCaughtUp(v, [serving(blocks)], pass => heard.push(pass.witnessedIndex));
+    expect([report.witnessedIndex, report.suppliers[0]!.stopped]).toEqual([36n, undefined]);
+    // Eight budgets of five headers, the last ending at the tip; each pass but the last was heard.
+    expect(report.passes).toBe(8);
+    expect(heard).toEqual([1n, 6n, 11n, 16n, 21n, 26n, 31n]);
+    expect(held(v, KEYS.operator).at(-1)?.index).toBe(31n);
+    const again = await syncCaughtUp(v, [serving(blocks)]);
+    expect([again.passes, again.witnessedIndex]).toEqual([1, 36n]);
+  });
+
+  it("a catch-up reads past the section budget and ends where no pass can advance", async () => {
+    const blocks = branch(10, { 2: [[committed(commitment(1n, 0xaa))]] });
+    const v = venue({ headersPerSupplier: 100, sectionBytesPerSync: 150, retainedBytes: 1 << 20 });
+    const report = await syncCaughtUp(v, [serving(blocks)]);
+    expect([report.witnessedIndex, report.unresolvedReason, v.witnessedIndex()]).toEqual([6n, undefined, 6n]);
+    expect(report.passes).toBeGreaterThan(1);
+    // A retained budget stops the clock for good: one pass, not a loop.
+    const full = venue({ headersPerSupplier: 100, sectionBytesPerSync: 1 << 20, retainedBytes: 100 });
+    const stopped = await syncCaughtUp(full, [serving(blocks)]);
+    expect([stopped.passes, stopped.unresolvedIndex, stopped.unresolvedReason]).toEqual([1, 2n, "retained budget"]);
+    // A withheld section holds the clock while headers still arrive; the catch-up ends when they do.
+    const missing = serving(branch(20), "missing");
+    missing.section = async () => { throw new Error("withheld"); };
+    const short = await syncCaughtUp(venue({ headersPerSupplier: 5 }), [missing]);
+    expect([short.passes, short.witnessedIndex, short.unresolvedIndex, short.unresolvedReason, short.tipHeight])
+      .toEqual([4, undefined, 0n, "no section", ANCHOR_HEIGHT + 20n]);
+  });
+
+  it("a catch-up beside a supplier serving a longer side branch ends once its quota is spent", async () => {
+    const honest = branch(14, { 9: [[committed(commitment(1n, 0xaa))]] }), side = branch(40, {}, chain.anchor, 3);
+    const v = venue({ headersPerSupplier: 5, sideHeadersPerSupplier: 9 });
+    const report = await syncCaughtUp(v, [serving(honest, "honest"), serving(side, "side")]);
+    expect(report.suppliers.map(s => s.stopped)).toEqual([undefined, "side-branch quota"]);
+    expect([report.witnessedIndex, report.passes]).toEqual([10n, 3]);
   });
 
   it("a section over the sync's byte budget waits for the next sync, and a retained-bytes budget stops the clock", async () => {

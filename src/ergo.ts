@@ -723,6 +723,30 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
   }
 }
 
+/** What `syncCaughtUp` did: its last pass's report, and how many passes it took. */
+export interface ErgoCatchUpReport extends ErgoSyncReport {
+  readonly passes: number;
+}
+
+/**
+ * Sync `venue` in passes until one ends on no budget of its own (a supplier's header or fetch budget, the section
+ * budget), or adds no header and reads no section, so a view behind by more than one sync's budget reaches the tip
+ * in one call. Each pass is one `sync`, bounded and committed as one, so an interrupted catch-up keeps what its
+ * passes read. A pass that leads to another added a header or read a section: the best chain bounds both, and a
+ * supplier's side-branch quota its headers off it, so the passes end. `onPass` hears each pass another follows.
+ */
+export async function syncCaughtUp(venue: ErgoVenue, suppliers: readonly ErgoSupplier[],
+  onPass?: (report: ErgoSyncReport) => void): Promise<ErgoCatchUpReport> {
+  for (let passes = 1; ; passes++) {
+    const report = await venue.sync(suppliers);
+    const budgeted = report.unresolvedReason === "section budget" ||
+      report.suppliers.some(supplier => supplier.stopped === "header budget" || supplier.stopped === "fetch budget");
+    const advanced = report.sectionsRead > 0 || report.suppliers.some(supplier => supplier.headersAdded > 0);
+    if (!budgeted || !advanced) return Object.freeze({ ...report, passes });
+    onPass?.(report);
+  }
+}
+
 
 /** A supplier's answer, or its failure: a supplier that throws, rejects or
  * does not settle within `timeoutMs` is one that did not supply. Only
