@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-05` [Make the transparent profile lit notes under the pool's rules, with each output named by the statement that creates it (design slice, Next 10)](decisions/2026-10.md#2026-10-05--make-the-transparent-profile-lit-notes-under-the-pools-rules-with-each-output-named-by-the-statement-that-creates-it-design-slice-next-10)
 - `2026-10-05` [Build Extensions' claim-layer profiles beside the shielded pool, each chosen per backing](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)
 - `2026-10-05` [Record a kept file's digest from the pages its keep point changed (slice 11 M11b12, Next 4(v))](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)
 - `2026-10-05` [Sync a command's view in bounded passes until it is caught up (slice 11 M11b11)](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)

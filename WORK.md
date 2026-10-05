@@ -74,8 +74,9 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
    tied to what the venue newly holds and serving a reader only the segments its checkpoints name. Past the smallest profile: statements
    spending several backings, adding an original-term backing to a live scope, single-backing openings' |E| over-reserve; a phone-first wallet
    (a venue range source proportional to the subject's records, a new venue identity, then a succinct relation).
-10. **Claim-layer profiles** beside the pool, chosen per backing ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)): after slice 11 a reviewed design slice
-   (invariants per profile, what they share with the pool's commands, Basis mapped); the transparent profile before slice 13; offline, accumulator, Chaumian after release.
+10. **Claim-layer profiles** beside the pool, chosen per backing ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)). Design done and reviewed
+   ([decision](decisions/2026-10.md#2026-10-05--make-the-transparent-profile-lit-notes-under-the-pools-rules-with-each-output-named-by-the-statement-that-creates-it-design-slice-next-10)): the transparent profile is lit notes under the pool's rules. Next, after slice 11: the `moe/lit/v1`
+   layouts in the specification (item 2's requirements), then the implementation through the shared seams, before slice 13; offline, accumulator, Chaumian after release.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
@@ -88,8 +89,6 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking (2026-10-05): AGENTS.md's direction paragraph still says one production path and the transparent path retired; the
-  profile direction (Next 10) needs it updated, an edit to the agent instructions left to the maintainer. Timing in Next 10 is proposed.
 - Non-blocking (2026-10-03): needs the local machine: M10d, the live testnet drill of the `moe` commands (own testnet node,
   a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
