@@ -2,7 +2,8 @@
 // §6: pool-v3 §9's frame with the evidence pair in place of the triple, and
 // §9.1 with lit's two intrinsic failures. This does not classify checkpoints
 // or establish finality.
-import { arrayLength, compareBytes, copyArray, copyBytes, EncodingError } from "../bytes.js";
+import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, EncodingError } from "../bytes.js";
+import { isValidPublicKey } from "../keys.js";
 import { LIT_FAULT_EVIDENCE_CONTEXT as CONTEXT, LIT_SNAPSHOT_CONTEXT as SNAPSHOT_CONTEXT } from "../contexts.js";
 import { decodeSnapshot, snapshotBytes, SNAPSHOT_BYTES, verifyEvidenceOpening, type Snapshot } from "./commitments.js";
 import { litConfigHash } from "./configuration.js";
@@ -100,8 +101,12 @@ function contextAt(input: Uint8Array, start: number, expected: Uint8Array): void
 /** Every boundary scanned before target or suffix data is copied; the suffix count is judged against the budget
  * before its bytes, and against the exact remaining length after. */
 export function decodeFaultEvidence(bytesIn: Uint8Array, maxSuffixEntries: bigint): FaultEvidence {
-  const input = bytes(bytesIn);
   if (!u64(maxSuffixEntries)) throw new EncodingError("invalid suffix budget");
+  // The longest frame the budget admits, judged before the input is copied.
+  if (BigInt(byteLength(bytesIn)) > BigInt(FIXED_BYTES + 2 * MAX_TARGET_FIELD_BYTES) + BigInt(PAIR_BYTES) * maxSuffixEntries) {
+    throw new FaultEvidenceLimitError("evidence exceeds reader budget");
+  }
+  const input = bytes(bytesIn);
   if (input.length < FIXED_BYTES) throw new EncodingError("truncated evidence");
   contextAt(input, 0, CONTEXT); contextAt(input, CONTEXT.length, SNAPSHOT_CONTEXT);
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
@@ -146,9 +151,10 @@ export function verifyFaultEvidence(expectedIn: ExpectedSnapshot, input: FaultEv
 
 /** Compact intrinsic exclusion (§6, pool-v3 §9.1): the authenticated target's statement decodes canonically under
  * the configuration's domain, its authorization has exactly its kind's length, and a signature under a key the
- * statement names (or, for an issue, the backing's K that `issuer` resolves from authenticated signed terms) fails,
- * or the statement's own arithmetic does. False for anything else, including a malformed target or a wrong
- * authorization length (malformed, not intrinsic) and a withdrawal or settlement (their keys need the demand). */
+ * statement names (an input's owner, kinds 2–4) or, for an issue, the backing's K that `issuer` resolves from
+ * authenticated signed terms fails, or the statement's own arithmetic does. False for anything else: a malformed
+ * target or a wrong authorization length (malformed, not intrinsic), an unresolved or invalid K, a withdrawal or
+ * settlement (their keys need the demand) and a request (§6 names kinds 2–4 only). */
 export function intrinsicallyInvalid(statementIn: Uint8Array, authorizationIn: Uint8Array,
   issuer: (backing: Uint8Array) => Uint8Array | undefined): boolean {
   let record: LitRecord;
@@ -161,10 +167,10 @@ export function intrinsicallyInvalid(statementIn: Uint8Array, authorizationIn: U
     throw error;
   }
   const s = record.statement;
-  if (s.kind === 5 || s.kind === 6) return false;
+  if (s.kind === 5 || s.kind === 6 || s.kind === 7) return false;
   if (s.kind === 1) {
     const key = issuer(Uint8Array.from(s.backing));
-    return key !== undefined && !statementSignatureVerifies(record, key);
+    return key !== undefined && isValidPublicKey(key) && !statementSignatureVerifies(record, key);
   }
   return !ownerSignaturesVerify(record) || !arithmeticHolds(s);
 }

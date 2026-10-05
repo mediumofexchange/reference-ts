@@ -81,6 +81,21 @@ describe("lit-v1 §6 compact intrinsic exclusion", () => {
     expect(fault.intrinsicallyInvalid(statement(spendRecord), sign(3, statement(spendRecord)), kOf)).toBe(true);
     const unbalanced = signed({ ...spend, outputs: [spend.outputs[0]!] }, 2);
     expect(fault.intrinsicallyInvalid(statement(unbalanced), unbalanced.authorization, kOf)).toBe(true);
+    // lit-v1 1bf5bfc: two inputs naming one note, and a demand summing past a u64, in otherwise valid signed statements.
+    const twice: codec.Spend = { ...spend, inputs: [note!, note!], outputs: [{ backing: BACKING, value: 200n, owner: keyOf(3) }] };
+    const twiceBytes = codec.statementBytes(twice), twiceSig = sign(2, twiceBytes);
+    expect(fault.intrinsicallyInvalid(twiceBytes, Uint8Array.of(...twiceSig, ...twiceSig), kOf)).toBe(true);
+    const demandOf = (inputs: typeof spend.inputs): codec.Demand =>
+      ({ domain: DOMAIN, kind: 4, segment: SEGMENT, inputs, presenter: keyOf(6), instant: 1n, deadline: 2n });
+    const big = { ...note!, value: (1n << 64n) - 1n }, other = { ...note!, value: 1n, rho: id(77) };
+    for (const [inputs, expected] of [[[big, other], true], [[{ ...big, value: (1n << 64n) - 2n }, other], false]] as const) {
+      const bytes = codec.statementBytes(demandOf(inputs)), sig = sign(2, bytes);
+      expect(fault.intrinsicallyInvalid(bytes, Uint8Array.of(...sig, ...sig), kOf)).toBe(expected);
+    }
+    const burn: codec.Burn = { domain: DOMAIN, kind: 3, segment: SEGMENT, quantity: 100n, inputs: [note!], outputs: [] };
+    const burnBytes = codec.statementBytes(burn);
+    expect(fault.intrinsicallyInvalid(burnBytes, sign(2, burnBytes), kOf)).toBe(false);
+    expect(fault.intrinsicallyInvalid(burnBytes, sign(3, burnBytes), kOf)).toBe(true);
   });
 
   it("is not intrinsic when the target is malformed, of another domain, of a wrong length, unresolved or needs the demand", () => {
@@ -91,5 +106,15 @@ describe("lit-v1 §6 compact intrinsic exclusion", () => {
     expect(fault.intrinsicallyInvalid(statement(issueRecord), sign(2, statement(issueRecord)), () => undefined)).toBe(false);
     const withdraw: codec.Withdraw = { domain: DOMAIN, kind: 5, segment: SEGMENT, demand: id(9) };
     expect(fault.intrinsicallyInvalid(codec.statementBytes(withdraw), new Uint8Array(64), kOf)).toBe(false);
+    const settle: codec.Settle = { domain: DOMAIN, kind: 6, segment: SEGMENT, demand: id(9), owner: keyOf(5) };
+    expect(fault.intrinsicallyInvalid(codec.statementBytes(settle), new Uint8Array(136), kOf)).toBe(false);
+    // A request is not among §6's kinds, whatever its signature.
+    const request: codec.Request = { domain: DOMAIN, kind: 7, input: note!, refresh: 1n };
+    expect(fault.intrinsicallyInvalid(codec.statementBytes(request), sign(3, codec.statementBytes(request)), kOf)).toBe(false);
+    // K resolved to something that is not a key is unresolved, not a failing signature.
+    const smallOrder = new Uint8Array(32); smallOrder[0] = 1;
+    for (const key of [smallOrder, keyOf(K).subarray(1)]) {
+      expect(fault.intrinsicallyInvalid(statement(issueRecord), issueRecord.authorization, () => key)).toBe(false);
+    }
   });
 });
