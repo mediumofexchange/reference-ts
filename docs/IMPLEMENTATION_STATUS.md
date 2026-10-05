@@ -37,7 +37,7 @@ processes over the operator's service issue, pay, demand, accept, settle and bur
 publication in a gap; a wallet restored from its seed settles and withdraws the standing demands it finds, and late,
 forged and taken gap releases have no force ([local](pool-v3-redemption-store-verification.json), [synthetic Ergo](pool-v3-redemption-store-ergo-verification.json); M9d1–M9d2).
 Each redemption act survives an abrupt exit at its commit (stand-in proofs).
-Cancellation/release, multi-backing payment, continuous backup and physical
+Cancellation/release, statements spending several backings, continuous backup and physical
 qualification remain open. Every read keeps its replay state in node:sqlite
 (`replay-store.ts`, [storage decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
 append-only facts read at a position, savepoints for refused checkpoints and
@@ -68,6 +68,7 @@ boundaries and retirement conditions, [production requirements](PRODUCTION_REQUI
 for release gates, and [fault recovery](POOL_FAULT_RECOVERY.md) for the
 selected rules and model limits of the companion's
 [fault contract](https://github.com/mediumofexchange/money-from-first-principles/blob/23af0f5/pool-fault.md).
+
 ## Proof and deployment probes
 
 `npm run check:pool:v3` exercises the real circuits and multi-segment replay
@@ -77,203 +78,66 @@ in the successor relations, which retired the earlier
 [Candidate restoration from exact signed local evidence](POOL_DEPLOYMENT_PROBES.md#restoration-from-exact-local-evidence)
 retired once the v3 wallet took over its cases; the wallet restores from its seed
 with full replay.
-The [conditional initial-segment replay](POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay)
-adds real successor proof/signature checks, replayed roots/totals and local note
-paths, with a fresh seedless audit process. It checks the configuration
-and all six artifact identities plus canonical signed root terms under
-[pool-v3 §11](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
-With [pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence)
-record-range answers from a harness-owned fixture venue, it establishes the
-replacement chain, the checkpoint's record prefix, currency, its operator's
-force and revocation absence against that fixture only, and classifies every
-carrying checkpoint of the segment from its own trail with
-[last-valid-prefix continuity](https://github.com/mediumofexchange/money-from-first-principles/blob/3ed1800/pool-v3.md#71-authentication-precedes-validity).
-Under a declared silence clause it reads the no-commitment clock from those
-classified checkpoints (C2b.6.1): the gap at the judging index, the segment's
-silence boundary after its opening checkpoint, and the lapse of any
-continuation witnessed past it (C2b.4.1). A selection with imports additionally
-validates the exact single-backing predecessor
-closure through replacement, reappointment and same-operator restart; it
-retains imported spent state, roots, totals and original-tree wallet paths.
-Two-backing histories additionally split and rejoin shared ancestry,
-deduplicate events, check every scoped snapshot and canonical predecessor,
-and preserve per-backing totals and original-tree paths through a later
-continuation. Distinct-event nullifier/output conflicts refuse the whole replay.
-Multi-backing recovery preserves each backing's inherited adoption index and
-unions owed publications in global venue order. Causal event frontiers preserve
-shared demand ancestry and refuse incomparable lock/settlement/spend conflicts.
-Original-prefix clocks retire the whole scope when any scoped backing is silent;
-scopes with mixed silence durations are invalid. The conditional fixtures cover
-exact adoption, unequal obligations, seedless audit, restored issuer notes and
-later payment. Non-service clauses remain independent per backing across scopes.
-Silence-bearing imports read an independently answered publication range.
-Demand, withdrawal and release force use the original snapshot and venue order;
-return adopts the exact complete block through its opening index. Standing
-demands and locks persist across imports, and lit settlement outputs restore
-from the seed and public evidence. The clock retains each segment's retirement
-after a fresh opening resets the gap. Same-index fresh openings import the
-canonical lower same-operator sequence under
-[C2b.4.1 at fb7dd07](https://github.com/mediumofexchange/money-from-first-principles/blob/fb7dd07/pool-recovery.md#6-return),
-preserving the inherited adoption index and exact block still owed.
-Import lapse authenticates the exact backing snapshot, header and scoped signed
-terms independently of event history. Existing bounded trail containers can
-carry that public evidence with records omitted. Term lapse reads the witnessed
-replacement chains; silence lapse retains the original opening and canonical
-clock dependencies. One carried snapshot binds the entire header even when the
-directory selectively omits a sibling; complete carriage and sibling-snapshot
-agreement remain finalization conditions after lapse. Live validity still needs
-full committed event evidence, and selected state retains its complete selection
-envelope. Compact §9 proof openings carried as §12 kind-7 items
-report authenticated committed bad proofs beside import results, including
-unresolved reads and lapsed shared scopes. The reader binds every scoped term to
-the adopted configuration and checks the target against its independently
-selected key. Individual reports establish no admission or state. Signature
-observations additionally cover issuance,
-withdrawal and both settlement roles. The target backing's scoped terms identify
-K; the exact named demand statement preimage identifies its presenter, without
-establishing demand standing or requiring its enclosing opening to authenticate.
-Missing presenter evidence cannot hide an independently failed K signature.
-Proof and signature checks remain separate. `fault-observer.ts` supplies the same
-observations to the runtime and harness. Both single-backing public package readers
-accept kind-7 evidence and apply the existing dependency-resolved exclusion gates.
-Successful runtime reads return optional `faultEvidence` observations; a refusal
-returns no partial state, and `refusalFacts` gives the observations and receipt
-contradictions established before it. Neither treats observations as state.
-The classifier applies
-[§9.1 at 183c09f](https://github.com/mediumofexchange/money-from-first-principles/blob/183c09f/pool-v3.md#91-compact-intrinsic-exclusion)
-to strict proof rejection or issue-K rejection for a single-backing or shared-scope
-continuation after resolving its valid opening, exact last valid state and complete
-record dependencies. Only its target event trail may be replaced; selected state
-and ancestor evidence remain complete. Full target evidence takes priority.
-Missing predecessors still refuse, held sequences remain consumed, and repairs
-extend the actual last valid prefix. Silence-bearing continuations retain complete
-canonical clock dependencies and lapse priority; compact exclusion never resets
-the clock. Missing publication evidence still blocks imported/returning segments.
-The original path proves an empty adopted block from its valid empty opening and
-absence of earlier carrying state. Shared-scope exclusion requires every sibling's
-snapshot, terms, canonical predecessor and clock; its snapshots must agree on the
-segment and shared history/evidence hashes. A fault opened through one sibling's
-snapshot can exclude the shared checkpoint, but issue K still comes from the
-statement's backing. Split/rejoin ancestry and spent state remain complete.
-A returned segment's compact target must lie after the adopted block its valid
-opening derived from the complete publication range (C2b.4.2); the fault cache
-retains each authenticated position for that test, and the original single-segment
-path keeps its empty block. Inside-block positions, opening checkpoints, other
-signature roles and admission/capsule faults retain their ordinary evidence or
-refuse; an inside-block record is ignored, never consumed, beside an after-block
-one. The original classifier now explicitly excludes nonempty opening checkpoints
-before establishing the compact path's valid-opening condition.
-Local limits bound compact bytes, items and suffix
-work, and verifier exceptions remain visible. Signed non-service terms drive single and multi-backing
-real-proof counts against each selected backing's strictly preceding canonical
-state, preserving first request indices, distinct tags and spent/lock status
-across scope changes and handover. Unadopted publications and checkpoints at
-judgment do not change that state; a missing clause produces no count.
-Receipt reads reuse the verified checkpoint walks across single and multiple
-backings: exact original/adopted event inclusion, liability precedence, repair
-and the complete original scope's earliest silence/term boundary. Transitions
-carrying any original backing count; held noncarrying/excluded sequences cannot
-create repair holes. Earlier finality survives unavailable later dependencies;
-refusals preserve already proven contradictions. There is no spendability claim.
+
+`npm run check:pool:local-replay` reads real-proof histories through the
+runtime's `readPackage` (and, for single-backing compact faults, `readFrontier`)
+under a harness-owned fixture venue: single- and two-backing imports, silence
+and its clock, return and adoption, force, compact §9 faults, non-service counts
+and receipts. The
+[conditional initial-segment replay](POOL_DEPLOYMENT_PROBES.md#conditional-initial-segment-replay)
+section owns the groups, fixtures, evidence and limits, and the
+[retained report](pool-v3-local-replay-verification.json) records the checks.
+`npm run check:pool:ergo-replay` repeats every group through `ErgoVenue` over
+the synthetic reference chain ([local replay through the venue](ERGO_VENUE_PROFILE.md#local-replay-through-the-venue)).
+Neither carries a live-chain claim, and neither establishes admission, spendability
+or a complete fault certificate.
 The successor's
 [transfer shapes and ordinary fees](POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees)
 were chosen with a retired probe; `npm run check:pool:v3` proves the chosen
-two-in, four-out spend. These probes do not implement a pool wallet or v3 finality.
-`npm test` checks the successor's
+two-in, four-out spend. `npm test` checks the successor's
 [canonical compressed spent root](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
-(`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys;
-its per-insert replay cost against pinned v2 was measured before v2 retired.
+(`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys.
 
-The [Ergo full-block probe](POOL_DEPLOYMENT_PROBES.md#full-block-commitment-feasibility)
-reproduces real transaction roots and retains serializer counterexamples.
-The [binary decoder corpus](POOL_DEPLOYMENT_PROBES.md#full-binary-decoder-feasibility)
-recovers all 77 fixture outputs, reads every sized tree as its exact bytes
-whatever its header version or body, and exposes permissive parsing, with
-strict round-trip rejection controls; the experiment pins a vendored,
-reproducible release build of sigma-rust `2f840d3`
-([decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3)) in place of the debug npm alpha, whose
-parser a node-valid output nested 50 deep could trap; it now only builds and
-signs the publication experiment's transactions and the fixtures' trees. The
-reader decodes nothing: it takes each transaction's unsigned bytes and
-witness id and frames the outputs itself
-([decided 2026-09-24](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer)),
-so no library's refusal withholds a section; a transaction outside the
-framer's grammar carries no record. The supplier decodes nothing either: it
-copies each transaction's unsigned bytes from the node's JSON and checks them
-against the stated id
-([decided 2026-09-24](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)),
-and the decoder's containment and metering harnesses are retired.
-Authenticated complete-range reads remain unimplemented.
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
-and `src/ergo-profile.ts` fix attribution by exact tree and `R4`/`R5`
-shape, run reassembly, transaction-then-output ordinals, an index space
-anchored at a pinned header (index 0 is the anchor's child, so reads from
-index zero are bounded by the deployment's age) and §13 answers by
-exhaustion over root-checked blocks, which `ErgoVenue`, the one Ergo reader,
-reads behind the header chain it verifies itself; the unit tests reproduce
-the four fixture roots and answer synthetic ranges (the
-[profile experiment](POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier)
-that also read them through Fleet and sigma-rust is retired). The [local replay](ERGO_VENUE_PROFILE.md#local-replay-through-the-venue)
-reads every real-proof local replay group (single-backing imports and
-silence, two-backing scopes and recovery, receipts, non-service counts,
-compact faults, returning segments) through `ErgoVenue` over the synthetic
-reference chain, its headers verified from the reader's own anchor and its
-sections by root, reproducing the fixture venue's results with kind-4
-ordinals as transaction positions. Fresh seedless and receiver readers verify
-the chain themselves. The retired P4 and P2 probes' results stand as measured at
-1b4857a. The [real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor)
-was measured over seven mainnet days from a real anchor against two agreeing
-public nodes: exact sections from the nodes' text reproduce every header
-root, the reader's framer reads every supplied transaction it frames with the
-node's outputs, and every index has its section. The
-[publication experiment](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)
-published the profile's four-piece release and its duplicate, reordered,
-partial, merged and separated cases on the public testnet at the node's
-minimum values, spent every piece box and read the cases back through the
-verifier from block sections, as the profile states; inclusion latency has
-two correlated observations, not a distribution. The reader's own mainnet
-node validated the header chain from genesis, and the fixtures and the
-measured week stand on its best chain
-([own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source)). The reader no longer
-needs a node for that: `src/ergo-headers.ts` verifies header bytes
-from any supplier from the pinned anchor (canonical parse and id, EIP-37
-difficulty, Autolykos v2 work, heaviest chain) and feeds the verifier its
-best chain, checked on real mainnet headers from three nodes and every
-EIP-37 recalculation
-([reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers));
-it rests on the work, so withholding a heavier chain remains a supplier's
-power. The [runtime venue](ERGO_VENUE_PROFILE.md#runtime-venue) reads Ergo only
-under the profile: `ErgoVenue` syncs headers and sections from untrusted
-node suppliers under a per-supplier header budget, answers §13 ranges for
-every subject from the synced sections, stops its
-clock before a missing section and fails on a reorganization past the depth;
-it replaced the view over a node's box index. On the mainnet it synced 300
-blocks from the own node and matched a public-node-only view. Given an
-`ErgoPublisher` it publishes kind 1–3 records from its own funding key,
-building and signing each transaction without an Ergo library; the own
-testnet node accepted three chained publications and they read back from
-their block ([publisher](ERGO_VENUE_PROFILE.md#runtime-venue)). The optional
-[durable reference view and outbox](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher)
-preserve reproducing evidence and exact publication retry. No mainnet publication
+is implemented in `src/ergo-profile.ts` (attribution, reassembly, ordinals, the
+anchored index space and §13 answers by exhaustion over root-checked blocks) and
+read by `ErgoVenue`, the one Ergo reader, behind the header chain it verifies
+itself (`src/ergo-headers.ts`). The reader and its supplier decode nothing: they
+take each transaction's unsigned bytes and frame the outputs themselves
+([reader](../decisions/2026-09.md#2026-09-24--read-venue-transactions-as-unsigned-bytes-through-the-profiles-own-framer),
+[supplier](../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)),
+so no library's refusal withholds a section. The decoder probes and
+containment harnesses are retired; sigma-rust (a vendored release build,
+[decided 2026-09-23](../decisions/2026-09.md#2026-09-23--pin-a-reproducible-release-build-of-sigma-rust-2f840d3))
+only builds and signs the publication experiment's transactions and the
+fixtures' trees. The profile guide maps each rule to code and tests and owns
+the [runtime venue](ERGO_VENUE_PROFILE.md#runtime-venue), the
+[durable view and publisher](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher)
+and the costs and limits. The measurements stand in the probes guide:
+[real-chain cost](POOL_DEPLOYMENT_PROBES.md#real-chain-exhaustion-cost-from-a-real-anchor),
+[publication on a node](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node),
+[inclusion latency](POOL_DEPLOYMENT_PROBES.md#inclusion-latency-on-the-mainnet),
+[own node](POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source) and
+[reader-verified headers](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers).
+Withholding a heavier chain remains a supplier's power. No mainnet publication
 or physical storage qualification is claimed.
 
 ## Successor record conformance
 
 The v3 codecs below, the spent root and the C4 capsule library live in
-`src/pool/v3/` as candidate runtime code (slice 1 M1 of the
+`src/pool/v3/` (slice 1 M1 of the
 [v3 runtime plan](../decisions/2026-09.md#2026-09-25--plan-the-v3-runtime-one-state-machine-and-one-reader-beside-a-frozen-v2));
-the v3 scripts, including the experimental local replay, read them from
-`dist/`. The candidate state machine, admission journal and reader use those
-same codecs on reference venues; nothing is adopted. V2-specific code is
-frozen until the v3 wallet and service pass its ported cases.
+the v3 scripts, including the local replay, read them from `dist/`. The state
+machine, admission journal and reader use those same codecs on reference venues,
+under the adopted configuration (pool-v3 §11.4). Pool-v2's code is retired
+(above).
 
 `src/pool/v3/records.ts` implements the successor's reviewed
 [canonical record layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
 `npm test` checks exact bytes, hostile parsing, delivery association and
-signature-message binding. The candidate journal admits ordinary and recovery
-statements through those records; configuration adoption and deployment
-acceptance remain open.
+signature-message binding. The journal admits ordinary and recovery
+statements through those records; deployment acceptance remains open.
 `src/pool/v3/commitments.ts` adds the reviewed history/evidence chains,
 snapshot and receipt frames from [pool-v3 §7](https://github.com/mediumofexchange/money-from-first-principles/blob/4a58fdc/pool-v3.md#7-history-evidence-snapshots-and-receipts).
 Its tests distinguish authenticated failing evidence from substituted bytes
@@ -331,17 +195,16 @@ C2.3.3 by ascending sequence within an index with lesser-bytes ties and
 reader-established priors, replacement identities, first-entry revocations,
 and C2.5's walk over admitted replacements (one identity at its first entry,
 lead floor from the venue's lag, supersession, revocation and the lesser
-identity at one index), checked against the answers the retired transparent
-walk gave for 135 scenarios. The
+identity at one index), first checked against the answers the retired transparent
+walk gave for 135 scenarios ([8d207eb](https://github.com/mediumofexchange/reference-ts/tree/8d207eb)). The
 reader orders several backings' publications by `venueOrder` in
 `src/pool/v3/scope-reader.ts`.
 The reader (`src/pool/v3/reader.ts`) reads them through a `RecordVenue`
 (`src/record-venue.ts`): `FixtureVenue` in the harness by default and
 `ErgoVenue` under `--ergo`. The local replay integrates these answers with the
 bounded clock and import checks described above. Ergo authenticates venue
-evidence from untrusted suppliers; the runtime recovery path below verifies single-backing force and
-adoption. Complete shared-scope runtime recovery and configuration adoption
-remain open.
+evidence from untrusted suppliers; the runtime recovery path below verifies force and
+adoption, for every scope through `scope-reader.ts`.
 
 The operator side runs in `src/pool/v3/` on reference venues only
 ([decision](../decisions/2026-09.md#2026-09-25--admit-commit-and-serve-v3-through-an-operator-journal-proving-in-the-runtime-on-reference-venues-only)):
@@ -395,10 +258,10 @@ It runs on the local reference venue at tens of statements: the target scale
 has stand-in-proof measurements only
 ([probes](POOL_DEPLOYMENT_PROBES.md#replay-state-storage)).
 [Measurements and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
-distinguish this single-backing candidate drill from deployment acceptance.
+distinguish this single-backing drill from deployment acceptance.
 Complete trails remain bounded; imports do not erase ancestry or reset the
-package budgets. No replacement service, wallet custody, persistence,
-live deployment or adopted configuration is supplied by this slice.
+package budgets. No replacement service, wallet custody, persistence or
+live deployment is supplied by this slice.
 
 Slice 4 adds public-evidence successor activation through `store.ts` `takeover`.
 The shared import walk exposes a canonical frontier without trusting a selected
@@ -409,7 +272,7 @@ service. Complete relevant venue ranges bind signing stability across asynchrono
 verification. The acceptance command is `npm run check:pool:v3-succession`, with
 `-- --ergo` for synthetic Ergo. The [local](pool-v3-succession-store-verification.json)
 and [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) real-proof
-drills passed; WORK.md tracks full CI and delivery.
+drills passed.
 Both runtime package readers now accept dependency-resolved single-backing compact
 fault evidence. Slice 7 M1 moves multi-backing reads to `scope-reader.ts`, read
 through `readPackage`; since the [one-walk decision](../decisions/2026-09.md#2026-09-29--read-every-scope-with-one-reader-walk)
@@ -429,7 +292,7 @@ Slice 5 adds the [durable venue and journal-owned publisher](ERGO_VENUE_PROFILE.
 Synthetic fresh-process crash checks reproduce ranges and exact publication retries;
 reopen authenticates retained evidence, preserves non-held records and deep-fork
 failure, and incomplete fork prefixes survive pruning. Full-history memory and
-checkpoint rewrite costs remain. No live deployment, configuration adoption,
+checkpoint rewrite costs remain. No live deployment,
 physical power-loss or wallet custody evidence is added.
 
 ## Runtime pin and recovery models
@@ -448,7 +311,8 @@ pool-v3's adoption (`e7f7f24`), whose manifest the runtime holds.
 `740adaa` (pool-recovery C3.4, C3.5 and C3.8) is in it; the wallet's disclosure
 count and the C3.8 reading (`dishonour.ts`) read it. Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding
-rule to its specification rule, code and test, and marks what is frozen.
+rule to its specification rule, code and test, and marks what is retired.
+Later specification revisions, such as the lit profile (`29fc585`), are not pinned until implemented.
 `pool-recovery.md` specifies presentation, the non-service count, snapshot
 redemption at the venue and the return from silence over the pool;
 `model/pool-recovery.ts` is its executable model with counterexamples.
@@ -465,15 +329,16 @@ authenticated exclusion, a clock read from the snapshot, and continuation of
 the last valid prefix. Rejected policies remain test-only historical controls.
 The model hashes exact admitted proof/signature bytes into a separate chain,
 compares receipt evidence and retains witnessed bytes through adoption. Proof
-and signature verification remain ideal oracles. Production v3 records/configuration,
-compact fault certificates and authenticated interval evidence remain open.
+and signature verification remain ideal oracles; its framed encoding is not v3's. The
+runtime implements v3's records, configuration, compact fault evidence and
+authenticated Ergo ranges (above), with real verification.
 
 The later [presentment clarification](https://github.com/mediumofexchange/money-from-first-principles/commit/923ee46)
 keeps pool demands authorized by their holding proofs. A fresh presenter key
 authorizes release/withdrawal; the demand does not establish that key's
 participation, its publisher's identity or a person's reputation. Focused
 model cases cover copied evidence, field rebinding and lock/retry behavior;
-they assume cryptographic authentication and do not implement v3 recovery.
+they assume cryptographic authentication; the runtime's recovery path is above.
 
 ## Successor proof layouts
 

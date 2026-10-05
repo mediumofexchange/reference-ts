@@ -36,7 +36,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Six successor proof relations, uninstantiated construction
+      - name: Pool-v3 relations, stores, history, command drill and replay, with the Ergo adapter
         run: npm run check:pool:v3 -- --ergo
       - name: Retain source-bound v3 acceptance reports
         uses: actions/upload-artifact@v4

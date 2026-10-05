@@ -10,8 +10,8 @@ semantic risks, and implement it with observable acceptance evidence. Order
 slices by dependencies and costly unknowns; bring wallet, service and witness
 integration alongside the core to expose constraints before formats are fixed.
 
-The approved [deployment probes](POOL_DEPLOYMENT_PROBES.md) bring provisional
-device/venue and recovery evidence forward before v3's layouts are frozen.
+The [deployment probes](POOL_DEPLOYMENT_PROBES.md) hold the device, venue and
+recovery measurements behind v3's adopted layouts and the design point.
 They do not change the specification-first rule for production implementation.
 The [Windows wallet custody boundary](https://github.com/mediumofexchange/reference-ts/blob/a020215/docs/POOL_WALLET_DEVICE.md)
 selected for the retired v2 wallet defined a read-only storage preflight and

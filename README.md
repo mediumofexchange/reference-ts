@@ -64,7 +64,6 @@ for proof setup and limits.
 | [Protocol rules](docs/PROTOCOL_RULES.md) | Specification rules mapped to code and tests. |
 | [Root terms](src/pool/v3/terms.ts) | Canonical v3 terms and the hash that names a backing. |
 | [Shielded pool](src/pool/) | Private notes, verification, history and durable operation. |
-| [Recovery design](docs/POOL_V3_RECOVERY_MAP.md) | Successor integration work and unresolved dependencies. |
 | [Who sees what](docs/POOL_V3_VISIBILITY.md) | What pool-v3 on Ergo discloses to each party, coalition and traffic observer. |
 | [Decisions](DECISIONS.md) | Dated choices, rationale, evidence and specification changes. |
 

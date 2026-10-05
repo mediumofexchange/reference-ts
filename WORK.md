@@ -12,17 +12,9 @@ probe needs a SOCKS5 proxy the cloud may not allow.
 ## Status
 - **Slice 10 done but M10d** (PRs #69–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
   run from an `npm pack` install with real proofs on the synthetic node; pilot, transparent path, second reader retired. M10d needs the local machine.
-- **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)): flat heap, reopen 192 ms (was 74 s).
-- **M11b done** (PRs #93–#99, #102–#105): (n) record cost flat in notes; (l) an index past the answer budget asked again; (m) trails
-  served forward; (k) kept walk, spec `dc51baf` ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)); (s) `serve` takes no journal turn; (w) `moe reader` keeps `replay.db`;
-  M11b7–8 marks keep nullifier, opening, tag ([M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)); M11b9 resends a GET on a closed idle connection; M11b10 drops the carrying listing from journal reads.
-- **M11c1 done** (PR #101, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements every budget holds (admission ~85 ms, restart 3.1 s).
-- **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB); admission failed at 10⁶ via (v),
-  fixed by **M11b12** (PR #109, [decision](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v), page-tree digest); a view reached the tip one budget a command, fixed by **M11b11** (PR #108, `syncCaughtUp`).
-- **M11c3 done** ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)): to 10⁵ admission is flat (first after a block = others, 125 ms on a
-  slow host; was 343), a fresh reader reaches the tip in one command and first sync stays flat (~8–12 h extrapolated to 10⁶ on 4 cores),
-  steady state and restart hold; the commands add a fixed ~2 s a first sync, <0.5 s a read, ≤ ~20 ms an admission. Gaps: the operator's own memory at depth (Next 5); the wallet's
-  10⁵ points, lost to a container restart. Probes retired. **Slice 11 closed.**
+- **Slice 11 done** (PRs #92–#95, #97–#99, #101–#106, #108, #109, #111; decisions M11a–M11b12 in [2026-10](decisions/2026-10.md)): the Ergo view in SQLite rows, Next 4's
+  (k)–(n), (s), (v), (w) closed, a view caught up in bounded passes; every budget holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)).
+  Gaps: the operator's own memory at depth (Next 5); the wallet's 10⁵ points, lost to a container restart.
 - **Profile design done** (PR #110, spec `29fc585`): the transparent profile is lit notes; AGENTS.md states the approved order (Next 10).
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
   Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
@@ -37,28 +29,33 @@ probe needs a SOCKS5 proxy the cloud may not allow.
   live journal `2c6b20c`, header/mainnet reader `6e4cea8`, pool-v2 [a020215](https://github.com/mediumofexchange/reference-ts/tree/a020215).
 
 ## Next
-1. Slice 9 done (Goal); the numbering below is kept for its references.
+1. (Item numbers and letters are stable: AGENTS.md and decisions cite them.)
 2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2). **Slice 12** ([direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)):
    duties 2–3 (transport, a credential not per holder, syncs, gap funding); first probe: clients through a SOCKS5 proxy such as Tor.
 3. M10c2 leftovers: synthetic index lag knob; testnet context has no difficulty floor (M10d); read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
-4. Review findings deferred; slice 11 takes (k)–(n), (s), the rest when their files are touched ((a)–(c), (e), (q) closed in M9c2; (f) in
-   audit 29). (g) `journal-crash.mjs` covers only open, submit and commit, and arms no failure inside a transaction. (h) closed in M10e2.
-   (j) Verify-only parties could take identity-checked key bytes, needing no G1 file. (k) closed (M11b4). (l) closed (M11b2). (m) closed (M11b3; `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError). `sync` takes no deadline or abort signal; the stream's minimum rate is untested. (n) closed (M11b1); a spent note's witness stays kept.
+4. Deferred review findings, taken when their files are touched (closed letters are in their decisions). (g) `journal-crash.mjs` covers
+   only open, submit and commit, and arms no failure inside a transaction. (j) Verify-only parties could take identity-checked key bytes,
+   needing no G1 file. (m) left: `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError; `sync` takes no
+   deadline or abort signal; the stream's minimum rate is untested. (n) left: a spent note's witness stays kept.
    (o) `store.ts` `parts()` keeps one trail top per segment, so a taken predecessor segment whose snapshots lie on two forks serves only
    the longer trail (a fix needs an ancestor test without a walk per snapshot). (p) `package-reader.ts` reads the selection through its own
-   backing's entry before the walk, so a malformed selection's refusal reason differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged before silence lapse (label, or an answer where lapse is unresolved). (s) closed in M11b5 (Status). (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
-   (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
-   (v) closed in M11b12 (Status); its review left the opening check's window (another process committing between the hash
-   and the store's connection; inherited): check under the store's own `BEGIN IMMEDIATE` and refuse a moved `data_version`. (w) closed in M11b6. Audit 29: (y) a restored handoff starts
-   `seen` at 0, so it may build from a view older than its source synced at (refusals, not loss; carry `seen` at the next profile change);
-   (z) pool-delivery C4.7's venue-created output awaiting adoption is not reported at all (only never as spendable).
-5. Slice 11 leftovers. Measure `moe operator serve` as its own process at 10⁵ (the depth probe's process, which held the synthetic
-   node's whole chain, grew 778 → 857 MB from 10⁴ to 10⁵; a line from there passes 1 GiB near 3·10⁵), and find the growth if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each
-   sync, about 0.9 s at a hostile 20,000-header quota); sections asked of several suppliers at once (first-sync time, if M11c shows
-   the need); a heavier fork more than about 10,000 headers below the tip is never reached (step-back doubling overruns the fetch
-   budget on known headers; pre-existing); a node POST (`unspentBoxes`, `submit`) on a connection the node closed as idle is not sent again (M11b9 sends GETs once more; availability only, the publisher resends exact bytes); `moe venue audit` for restored views (release assurance's backup drills). Levers
-   (Poseidon2 on Barretenberg at 0.12 against 1.14 ms a node hash, a 10⁶ first-sync run) only if a budget fails.
+   backing's entry before the walk, so a malformed selection's refusal reason differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE,
+   SILENCE_SCOPE are judged before silence lapse (label, or an answer where lapse is unresolved). (t) A settle or `presentation` read decodes
+   every acceptance and release of the backing; count inside the read if a budget needs it. (u) Each `readRecordView` and journal `chain()`
+   re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if a budget needs it. (v) left: the opening check's
+   window (another process committing between the hash and the store's connection; inherited): check under the store's own
+   `BEGIN IMMEDIATE` and refuse a moved `data_version`. Audit 29: (y) a restored handoff starts `seen` at 0, so it may build from a view
+   older than its source synced at (refusals, not loss; carry `seen` at the next profile change); (z) pool-delivery C4.7's venue-created
+   output awaiting adoption is not reported at all (only never as spendable).
+5. Slice 11 leftovers. Measure `moe operator serve` as its own process at 10⁵ (the depth probe's process, which also held the synthetic
+   node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
+   if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
+   asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
+   never reached (step-back doubling overruns the fetch budget on known headers; pre-existing); a node POST (`unspentBoxes`, `submit`) on
+   a connection the node closed as idle is not sent again (M11b9 sends GETs once more; availability only, the publisher resends exact
+   bytes); `moe venue audit` for restored views (release assurance's backup drills). Levers (Poseidon2 on Barretenberg, a 10⁶
+   first-sync run) only if a budget fails.
 6. **Slice 13**, release assurance, after 12 (Next 4's open correctness findings close in it at the latest): reproducible builds of the
    package and its artifacts, installed-package interoperability, backup and restore drills within the standing authority. Security reviews
    until then: separate AI instances (fresh reviewers, rolling audits); the external review once the product is complete (2026-10-01).
@@ -90,7 +87,8 @@ probe needs a SOCKS5 proxy the cloud may not allow.
 
 ## Open questions
 - Non-blocking (2026-10-03): needs the local machine: M10d, the live testnet drill of the `moe` commands (own testnet node,
-  a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal. Also local: a 10⁶ design-point run.
+  a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal. Also local: a 10⁶ design-point run;
+  re-record `testnet-reader-check.mjs`'s readback from the retained bundle (its report binds sources retired since `2fd0f08`), or retire both.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
   mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 

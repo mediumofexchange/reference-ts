@@ -75,7 +75,8 @@ the reader's six artifact/key identity checks. The retained [live report](../../
 records transaction acceptance at `acc1ab7`. Run
 `node scripts/pool/v3/testnet-reader-check.mjs` to check the completed bundle
 without transactions; its [readback report](../../../docs/pool-v3-testnet-reader-verification.json)
-binds current sources and bundle hashes. Current work belongs in WORK.md.
+binds the sources and bundle hashes of its revision (`2fd0f08`); later runtime changes retired some of those
+sources, so it is historical until a run on the machine holding the bundle re-records it. Current work belongs in WORK.md.
 
 The local replay command additionally checks, against the runtime manifest
 (`manifest.mjs`, pool-v3 §§11.1, 11.4), all six source/toolchain/bytecode/key
@@ -133,8 +134,7 @@ The scope classifier also handles two-backing split/rejoin histories, shared
 ancestry, per-backing adoption obligations and their exact publication union.
 Import lapse authenticates scope
 and terms independently of event history; live validity and exclusion retain
-their complete evidence requirements. The local-only restoration scanner
-continues to refuse imports.
+their complete evidence requirements.
 
 Kind-7 package items carry existing §9 compact fault openings. When a checkpoint
 is reached, the reader can authenticate its committed target proof without

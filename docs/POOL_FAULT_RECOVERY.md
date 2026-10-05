@@ -88,14 +88,8 @@ separate gates; cached verdicts cannot replace evidence or fresh snapshots.
 
 ## What real bytes establish
 
-On pool-v2 bytes, a retired test
-([at a020215](https://github.com/mediumofexchange/reference-ts/blob/a020215/model/pool-fault-evidence.test.ts))
-showed with real SHA-256 and Ed25519 that substituted failing proof/signature
-bytes reject replay while the original trail still validates the checkpoint;
-that a separate signed receipt does not attribute its bytes to that checkpoint;
-and that alternate valid proofs preserve semantic history while idempotent
-admission returns original receipts and evidence. The v3 frames below carry
-those distinctions.
+Real-byte tests of these distinctions (substituted proof or signature bytes, receipt attribution, idempotent admission) retired with pool-v2
+([at a020215](https://github.com/mediumofexchange/reference-ts/blob/a020215/model/pool-fault-evidence.test.ts)); the v3 frames below carry them.
 
 C2.10.10 selects a separate evidence chain beside semantic history. A linear
 chain needs later recurrence inputs for an interior-event certificate: three
@@ -154,9 +148,6 @@ evidence with otherwise valid alternate proofs.
 | `pool-evidence-reader.test.ts` | Substituted and committed bad bytes, valid-prefix immutability, both receipt readers, reader isolation, lapse attribution and future oracle outputs. |
 | `pool-adopted-evidence.test.ts` | Exact witnessed demand/release evidence through adoption and receipts, valid reproof rejection, repair and mutation resistance. |
 
-Next: the [v3 recovery map](POOL_V3_RECOVERY_MAP.md) lays out the candidate
-statement, recovery and evidence layouts, one trace, the record ranges and
-the probes that precede `pool-v3.md`.
-Measure retention/retrieval, authenticated note delivery/restoration, custody
-and pinned-node publication before fixing deployment budgets. Current verification belongs in
-[`WORK.md`](../WORK.md).
+Next: the [v3 layouts](https://github.com/mediumofexchange/money-from-first-principles/blob/main/pool-v3.md) are adopted (§11.4); the
+[historical design map](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_V3_RECOVERY_MAP.md) preceded them.
+Open work and current verification belong in [`WORK.md`](../WORK.md).
