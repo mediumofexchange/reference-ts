@@ -22,8 +22,8 @@
 //   runs there: the journal's reads use a store of their own, and what a new
 //   segment imports from a read is copied in (`copyFrontier`).
 import { sha256 } from "@noble/hashes/sha2.js";
-import { createHash, randomBytes } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, writeSync } from "node:fs";
+import { createHash, hash, randomBytes } from "node:crypto";
+import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
@@ -203,8 +203,8 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. 6: a witness row holds an
  * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk.
- * 8: a witness row holds its output's mark. 9: a mark keeps its nullifier's tag. */
-const SCHEMA_VERSION = 9;
+ * 8: a witness row holds its output's mark. 9: a mark keeps its nullifier's tag. 10: a write-ahead log and page digest. */
+const SCHEMA_VERSION = 10;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
@@ -328,11 +328,90 @@ const fillingNodes = (leaves: bigint, ommers: readonly (bigint | undefined)[]): 
   return nodes;
 };
 
-/** SHA256 of a closed file, read in pieces so memory stays flat. */
-function fileDigest(path: string): string {
-  const hash = createHash("sha256"), buffer = Buffer.alloc(1 << 20), fd = openSync(path, "r");
-  try { for (let n = readSync(fd, buffer); n > 0; n = readSync(fd, buffer)) hash.update(buffer.subarray(0, n)); } finally { closeSync(fd); }
-  return hash.digest("hex");
+/** Page hashes per group: a keep point rehashes the groups its changed pages fall in, not the whole list. */
+const GROUP = 256;
+/** A kept file's digest (pool-v3 §14's one SHA256 over the whole kept state): SHA256 over the page size, the page
+ * count and each group's SHA256 of its pages' SHA256s, a short last page hashed as it lies. Opening hashes every page
+ * of the closed file; a keep point rehashes only the pages the write-ahead log names (storage decision M11b12), so
+ * recording the digest costs what the read changed, not the file's length. */
+class PageDigest {
+  readonly #pageSize: number;
+  #pages = Buffer.alloc(0);
+  #groups = Buffer.alloc(0);
+  #length = 0;
+  constructor(pageSize: number) { this.#pageSize = pageSize; }
+  /** Every page of the closed file at `path`, read in pieces so memory stays flat. */
+  static of(path: string, pageSize: number): PageDigest {
+    const digest = new PageDigest(pageSize);
+    digest.update(path, []);
+    return digest;
+  }
+  /** Rehash `changed` pages (1-based, as SQLite numbers them) and every page past the last known length. */
+  update(path: string, changed: Iterable<number>): void {
+    const size = this.#pageSize, fd = openSync(path, "r");
+    try {
+      const length = fstatSync(fd).size, count = Math.ceil(length / size), known = this.#length;
+      // Grown by doubling, so a keep point copies no hash list that has room for its new pages.
+      if (32 * count > this.#pages.length) {
+        const grown = Buffer.alloc(Math.max(32 * count, 2 * this.#pages.length)); this.#pages.copy(grown); this.#pages = grown;
+      }
+      const pages = this.#pages, groups = new Set<number>(), page = Buffer.alloc(size * GROUP);
+      const rehash = (from: number, n: number): void => {
+        const read = readSync(fd, page, 0, Math.min(n * size, length - from * size), from * size);
+        for (let i = 0; i < n; i++) {
+          hash("sha256", page.subarray(i * size, Math.min((i + 1) * size, read)), "buffer").copy(pages, 32 * (from + i));
+          groups.add(Math.floor((from + i) / GROUP));
+        }
+      };
+      // Pages past the known length are new (or the file is new): hashed in runs of a group.
+      for (let p = Math.min(known, count); p < count; p += GROUP) rehash(p, Math.min(GROUP, count - p));
+      for (const n of changed) if (n >= 1 && n - 1 < Math.min(known, count)) rehash(n - 1, 1);
+      // A shorter file drops its last group's tail: that group is hashed again.
+      if (count < known && count > 0) groups.add(Math.floor((count - 1) / GROUP));
+      const groupHashes = Buffer.alloc(32 * Math.ceil(count / GROUP));
+      this.#groups.copy(groupHashes, 0, 0, Math.min(this.#groups.length, groupHashes.length));
+      for (const g of groups) {
+        if (g * GROUP >= count) continue;
+        createHash("sha256").update("v3-kept-page-group").update(pages.subarray(32 * g * GROUP, 32 * Math.min(count, (g + 1) * GROUP)))
+          .digest().copy(groupHashes, 32 * g);
+      }
+      this.#groups = groupHashes; this.#length = count;
+    } finally { closeSync(fd); }
+  }
+  /** The digest, as the party records it. */
+  root(): string {
+    const frame = Buffer.alloc(16); frame.writeBigUInt64BE(BigInt(this.#pageSize), 0); frame.writeBigUInt64BE(BigInt(this.#length), 8);
+    return createHash("sha256").update("v3-kept-file").update(frame).update(this.#groups).digest("hex");
+  }
+}
+/** The pages a write-ahead log's frames name, from the frames that carry its header's salts (SQLite's file format, §4.1):
+ * every page written since the log was last reset, committed or not, so a superset of what changed. */
+function loggedPages(wal: string): Set<number> {
+  const pages = new Set<number>();
+  if (!existsSync(wal)) return pages;
+  const fd = openSync(wal, "r");
+  try {
+    const length = fstatSync(fd).size, header = Buffer.alloc(32), frame = Buffer.alloc(24);
+    if (length < 32 || readSync(fd, header, 0, 32, 0) !== 32) return pages;
+    const raw = header.readUInt32BE(8), size = raw === 1 ? 65536 : raw, salt1 = header.readUInt32BE(16), salt2 = header.readUInt32BE(20);
+    for (let at = 32; at + 24 <= length; at += 24 + size) {
+      if (readSync(fd, frame, 0, 24, at) !== 24 || frame.readUInt32BE(8) !== salt1 || frame.readUInt32BE(12) !== salt2) break;
+      pages.add(frame.readUInt32BE(0));
+    }
+  } finally { closeSync(fd); }
+  return pages;
+}
+/** A closed database file's page size from its header (SQLite's file format, §1.3.2), or undefined where it names none. */
+function headerPageSize(path: string): number | undefined {
+  const header = Buffer.alloc(18), fd = openSync(path, "r");
+  try { if (readSync(fd, header, 0, 18, 0) !== 18) return undefined; } finally { closeSync(fd); }
+  const raw = header.readUInt16BE(16), size = raw === 1 ? 65536 : raw;
+  return size >= 512 && (size & (size - 1)) === 0 ? size : undefined;
+}
+/** The digest a closed kept file gives (§14's check on opening), or undefined where its header names no page size. */
+export function keptFileDigest(path: string): string | undefined {
+  const size = headerPageSize(path);
+  return size === undefined ? undefined : PageDigest.of(path, size).root();
 }
 /** Replace a small file durably: a crash leaves the old contents or the new, never a torn one. */
 function replaceFile(path: string, text: string): void {
@@ -340,19 +419,31 @@ function replaceFile(path: string, text: string): void {
   try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(partial, path);
 }
-/** Whether a kept file may be reused (§14's digest check): opening it rolls back a crashed transaction's
- * hot journal, and the closed file must then hash to the digest last recorded, at this layout. */
-function keptFileHolds(path: string, digest: string): boolean {
-  if (!existsSync(path)) return false;
+/** A kept file's page digest where it may be reused (§14's digest check): opening it recovers what its write-ahead
+ * log committed and drops what it did not, the log is moved into the file, and the closed file must then hash to the
+ * digest last recorded, at this layout. */
+function keptFileHolds(path: string, digest: string): PageDigest | undefined {
+  if (!existsSync(path)) return undefined;
   try {
     const db = new DatabaseSync(path, { readBigInts: true });
-    let version: bigint;
-    try { version = (db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version; } finally { db.close(); }
-    return version === BigInt(SCHEMA_VERSION) && existsSync(digest) && readFileSync(digest, "utf8") === fileDigest(path);
+    let version: bigint, moved: boolean;
+    try {
+      version = (db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
+      // The file alone must hold the state the digest is checked against: a log another connection keeps from being
+      // moved in whole leaves the file in use.
+      const checkpoint = db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: bigint; log: bigint; checkpointed: bigint };
+      moved = checkpoint.busy === 0n && checkpoint.log === checkpoint.checkpointed;
+    } finally { db.close(); }
+    if (!moved || (existsSync(`${path}-wal`) && statSync(`${path}-wal`).size !== 0)) throw new FileInUse("kept replay file");
+    const size = headerPageSize(path);
+    if (version !== BigInt(SCHEMA_VERSION) || size === undefined || !existsSync(digest)) return undefined;
+    const pages = PageDigest.of(path, size);
+    return readFileSync(digest, "utf8") === pages.root() ? pages : undefined;
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.
+    if (error instanceof FileInUse) throw error;
     if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
-    return false;
+    return undefined;
   }
 }
 
@@ -367,6 +458,8 @@ export class ReplayStore {
   /** The connection's count of changed rows when the file's digest was last recorded: a read that changed nothing
    * leaves the digest as it is. */
   #digestedAt: bigint | undefined;
+  /** A kept file's page hashes as of its last recorded digest. */
+  #pages: PageDigest | undefined;
   /** A resumed kept walk's mark for this read, moved at its close where the walk changed a row. */
   #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
@@ -389,12 +482,15 @@ export class ReplayStore {
       if (this.#db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'namespace'").get() === undefined) this.#db.exec(SCHEMA);
     } else {
       const path = source;
+      let held: PageDigest | undefined;
       if (kept !== undefined) {
         if (path === ":memory:" || typeof kept.digest !== "string" || kept.digest === path) throw new TypeError("a kept store is a file with its own digest");
         if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
         this.#kept = { ...kept, path };
-        if (!keptFileHolds(path, kept.digest)) {
-          try { for (const file of [path, `${path}-journal`, kept.digest]) rmSync(file, { force: true }); } catch (error) {
+        held = keptFileHolds(path, kept.digest);
+        if (held === undefined) {
+          // The log goes before the file: a log left beside a new file would be read into it.
+          try { for (const file of [`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]) rmSync(file, { force: true }); } catch (error) {
             // A file another store still holds cannot be removed (Windows): the caller's error, as above.
             if (["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw new FileInUse("kept replay file");
             throw error;
@@ -406,8 +502,15 @@ export class ReplayStore {
       this.#hosted = false;
       // Temporary storage in files: a replay's savepoint journals the pages the walk's transaction already
       // changed, and in memory that journal grows with every record until the walk commits.
-      this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL; PRAGMA temp_store=FILE;");
+      // A kept file writes ahead into a log, which names the pages each keep point changed, and moves it into the file
+      // only at keep points, so no page changes unnamed.
+      const mode = (this.#db.prepare(`PRAGMA journal_mode=${kept === undefined ? "TRUNCATE" : "WAL"}`).get() as { journal_mode: string }).journal_mode;
+      // SQLite keeps the old mode where it cannot keep a log (no shared memory): every later opening would then discard the file.
+      if (kept !== undefined && mode !== "wal") { this.#db.close(); throw new Error("the kept replay file cannot keep a write-ahead log here"); }
+      this.#db.exec("PRAGMA synchronous=FULL; PRAGMA temp_store=FILE;");
+      if (kept !== undefined) this.#db.exec("PRAGMA wal_autocheckpoint=0");
       if (!reopened) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
+      if (kept !== undefined) this.#pages = held ?? new PageDigest(Number((this.#db.prepare("PRAGMA page_size").get() as { page_size: bigint }).page_size));
     }
     // C2.10.6's union is a working set of one connection: it never changes the file, so a kept file's digest stands.
     this.#db.exec("CREATE TEMP TABLE IF NOT EXISTS merging (ns INTEGER PRIMARY KEY, upto INTEGER NOT NULL)");
@@ -475,8 +578,16 @@ export class ReplayStore {
   /** Record the committed file's digest (a keep point's second half). A crash before this leaves an old
    * digest, so the next open discards the file and replays in full (storage decision item 6). */
   #recordDigest(): void {
-    const changes = this.#changes();
-    if (changes !== this.#digestedAt) replaceFile(this.#kept!.digest, fileDigest(this.#kept!.path));
+    const changes = this.#changes(), path = this.#kept!.path;
+    if (changes !== this.#digestedAt) {
+      // The log names every page written since the last keep point; moved into the file whole, those pages are read
+      // from the file and hashed again. A log another connection keeps from being moved leaves the old digest.
+      const logged = loggedPages(`${path}-wal`);
+      const checkpoint = this.#db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: bigint; log: bigint; checkpointed: bigint };
+      if (checkpoint.busy !== 0n || checkpoint.log !== checkpoint.checkpointed) throw new FileInUse("kept replay file");
+      this.#pages!.update(path, logged);
+      replaceFile(this.#kept!.digest, this.#pages!.root());
+    }
     this.#digestedAt = changes; this.#sinceKeep = 0;
   }
   /** Move a resumed kept walk's mark to this read's where the walk changed a row since it opened. */
