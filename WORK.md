@@ -10,7 +10,7 @@ lit-v1's verdicts, hostile cases included, and conformance vectors bind every by
 Stop boundary: adoption; wallet commands and venue drills for lit backings are later slices.
 - **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors; §6 frames over pool-v3's codecs.
 - **M14c done in PR (branch `claude/lit-state`)** ([decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)):
-  `state.ts` judges lit records in every mode through a construction view (`pool/v3/construction.ts`, `lit/construction.ts`); `test/lit-state.test.ts` against an oracle. Design reviewed (four majors taken); integrated review and re-recorded reports owed before merge.
+  `state.ts` judges lit records in every mode through a construction view (`pool/v3/construction.ts`, `lit/construction.ts`); `test/lit-state.test.ts` against an oracle. Design and patch reviewed (one blocker fixed, read back); reports re-recorded from CI.
 - **M14d next: the readers over lit.** `reader.ts`/`package-reader.ts`/`scope-reader.ts` replay a lit package (lit header, trail,
   terms, `LIT` construction; snapshot check without a note root), hostile trail cases; then the adoption decision (Construction C0a).
 
