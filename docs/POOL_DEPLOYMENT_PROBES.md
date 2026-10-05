@@ -1542,7 +1542,7 @@ Findings:
 - *Against the budgets:*
   - First sync time and memory hold and stay flat per statement, once the view is caught up.
   - The reader's steady state holds. The wallet's holds after M11b8 for the holdings measured.
-  - Admission fails at the design point through Next 4(v); its lever is named above.
+  - Admission fails at the design point through Next 4(v); its lever is named above (landed in [M11b12](#a-kept-files-digest-from-its-changed-pages-m11b12)).
   - A fresh party's first command fails to reach the tip at depth; its lever is named above (landed in [M11b11](#a-commands-view-caught-up-m11b11)).
   - M11c3 re-measures both, with the 10⁵ reads, once their levers land.
 - *Limits:*
@@ -1577,6 +1577,37 @@ Runs of 2026-10-05 on a 4-core cloud container, one run per point, the
   which the review replaced (decision); with one honest supplier both continue
   on its header budget, and the 4,500-block point rerun on the final rule
   gave the same passes and clock in 61 s.
+
+### A kept file's digest from its changed pages (M11b12)
+
+M11b12 records a kept replay file's digest from the pages each keep point
+changed, read from SQLite's write-ahead log
+([decision](../decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)).
+`page-digest-probe.mjs`
+([at its revision](https://github.com/mediumofexchange/reference-ts/blob/e63f546/scripts/pool/v3/page-digest-probe.mjs))
+runs the runtime's `ReplayStore`. A kept file holds one namespace of 2,000
+spend-shaped records and is then padded with a filler table to each size.
+Each round is one block's read: a walk that appends 14 records and closes,
+committing and recording the digest. Runs of 2026-10-05 on a 4-core cloud
+container (Xeon 2.8 GHz, no SHA extensions, about 400 MB/s of SHA256), five
+rounds per size, one run:
+
+| Kept file | Walk close (median, max) | Whole-file SHA256 (before) | Opening |
+|---:|---:|---:|---:|
+| 66 MB | 23.6 ms, 111 ms | 187 ms | 225 ms |
+| 257 MB | 23.8 ms, 102 ms | 718 ms | 918 ms |
+| 1,020 MB | 23.2 ms, 131 ms | 2,900 ms | 3,529 ms |
+
+- *Result:* recording the digest no longer grows with the file. A block's
+  read cost a whole-file hash before, about 2.8 s a GB here. Opening still
+  hashes every page, about 1.2 times one whole-file hash.
+- *Limits:*
+  - padding stands in for a deep history, so the walk's rows lie in shallow
+    tables. A deep history's indices change more pages per record, and this
+    container's rehash costs about 40–70 µs a changed page with the log moved
+    into the file. A model of the mechanism changed about 1,400 random pages a
+    commit at 33 MB and at 1 GB, in 55 and 100 ms;
+  - the operator's admission at depth is M11c3's measurement.
 
 ## Invalid-checkpoint evidence
 

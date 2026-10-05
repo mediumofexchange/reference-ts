@@ -36,6 +36,8 @@ as current instructions.
 
 ## Index
 
+- `2026-10-05` [Build Extensions' claim-layer profiles beside the shielded pool, each chosen per backing](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)
+- `2026-10-05` [Record a kept file's digest from the pages its keep point changed (slice 11 M11b12, Next 4(v))](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)
 - `2026-10-05` [Sync a command's view in bounded passes until it is caught up (slice 11 M11b11)](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)
 - `2026-10-04` [Fail a payment whose output another statement created, and fail no act with a pending receipt by the door's times (audit, area 29)](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)
 - `2026-10-04` [Keep each witnessed note's tag with its mark, so a wallet's read hashes none (slice 11 M11b8)](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)

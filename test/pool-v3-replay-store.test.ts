@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fieldToBytes } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT, NoteTree, notePathProves } from "../src/pool/note-tree.js";
 import { EvidenceRefusal } from "../src/pool/v3/refusals.js";
-import { ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
+import { keptFileDigest, ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 
 // The storage module against the runtime's own structures: stored spent-set
@@ -194,12 +194,108 @@ describe("replay storage", () => {
       first.append(ns, append([next()], []));
       first.keepPoint();
       expect(existsSync(digest)).toBe(true);
-      // The digest recorded at the keep point holds, so the second store opens; its walk would take the first's rows.
-      const second = new ReplayStore(path, { digest });
-      try { expect(() => second.openWalk(context)).toThrow("the kept replay file is in use"); } finally { second.close(); }
+      // A second store would take the first's rows: it is refused, at its opening (its check cannot move the log in
+      // while the first holds the write lock) or at its walk.
+      expect(() => {
+        const second = new ReplayStore(path, { digest });
+        try { second.openWalk(context); } finally { second.close(); }
+      }).toThrow("the kept replay file is in use");
       expect(first.walkRows()).toBeGreaterThan(0);
       first.closeWalk(walk);
     } finally { first.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("records at each keep point the digest the whole file gives, through growth, freed pages and reopening (M11b12)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-page-digest-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    let store = new ReplayStore(path, { digest });
+    try {
+      const kept: number[] = [];
+      for (let round = 0; round < 5; round++) {
+        const { walk } = store.openWalk(context), ns = store.open(fieldToBytes(BigInt(round)), new Uint8Array(32).fill(2), undefined, genesis);
+        for (let i = 0; i < 60; i++) store.append(ns, append([next(), next()], [next()], cm => cm % 2n === 0n));
+        kept.push(ns);
+        store.closeWalk(walk);
+        expect(vouched()).toBe(true);
+        // Dropping namespaces frees pages inside the file; the next keep point's digest still covers every page.
+        if (round % 2 === 1) {
+          kept.shift(); store.collect(kept);
+          store.closeWalk(store.openWalk(context).walk);
+          expect(vouched()).toBe(true);
+        }
+      }
+      // Past one group of 256 pages, so a keep point rehashes some groups and not others.
+      expect(statSync(path).size).toBeGreaterThan(256 * 4096);
+      const tip = store.tip(kept[0]!);
+      store.close();
+      // The digest holds, so the file is reused as it was left.
+      store = new ReplayStore(path, { digest });
+      expect(store.tip(kept[0]!)).toEqual(tip);
+      // A commit whose digest was never recorded, left in the log by a process that stopped: the log is moved into the
+      // file on opening, which then no longer gives the digest, so the file is discarded.
+      store.close();
+      const crash = join(dir, "crash"), copy = join(crash, "replay.sqlite");
+      mkdirSync(crash);
+      const writer = new DatabaseSync(path);
+      try {
+        writer.exec("PRAGMA wal_autocheckpoint=0; DELETE FROM namespace WHERE ns = " + kept[0]);
+        for (const name of ["replay.sqlite", "replay.sqlite-wal", "replay.sha256"]) copyFileSync(join(dir, name), join(crash, name));
+      } finally { writer.close(); }
+      expect(statSync(`${copy}-wal`).size).toBeGreaterThan(0);
+      store = new ReplayStore(copy, { digest: join(crash, "replay.sha256") });
+      expect(store.hasNamespace(kept[0]!)).toBe(false);
+      expect(store.hasNamespace(kept[1]!)).toBe(false);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("stops a walk whose keep point another connection keeps from moving the log in: what it writes after commits nothing (M11b12 review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-busy-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const store = new ReplayStore(path, { digest, every: 1 }), context = new Uint8Array(32).fill(7);
+    try {
+      const { walk } = store.openWalk(context), ns = store.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
+      store.append(ns, append([next()], []));
+      store.keepPoint();
+      const reader = new DatabaseSync(path);
+      try {
+        reader.exec("BEGIN"); reader.prepare("SELECT count(*) FROM namespace").get();
+        store.append(ns, append([next()], []));
+        expect(() => store.keepPoint()).toThrow("the kept replay file is in use");
+        reader.exec("COMMIT");
+      } finally { reader.close(); }
+      // The keep point committed its own record; one written after it goes with the lost walk.
+      store.append(ns, append([next()], []));
+      store.closeWalk(walk);
+      expect(store.tip(ns).position).toBe(2n);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("hashes again at the next keep point the pages a refused one left, though the log restarted between (M11b12 review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-pending-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    let store = new ReplayStore(path, { digest });
+    try {
+      let { walk } = store.openWalk(context);
+      const ns = store.open(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), undefined, genesis);
+      for (let i = 0; i < 30; i++) store.append(ns, append([next()], [next()]));
+      store.closeWalk(walk);
+      ({ walk } = store.openWalk(context));
+      for (let i = 0; i < 30; i++) store.append(ns, append([next()], [next()]));
+      const other = new DatabaseSync(path);
+      try {
+        other.exec("BEGIN"); other.prepare("SELECT count(*) FROM namespace").get();
+        expect(() => store.closeWalk(walk)).toThrow("the kept replay file is in use");
+        other.exec("COMMIT");
+        // Another connection moves the log into the file, so this store's next write restarts it under new salts.
+        other.prepare("PRAGMA wal_checkpoint(PASSIVE)").get();
+      } finally { other.close(); }
+      ({ walk } = store.openWalk(context));
+      store.append(ns, append([next()], []));
+      store.closeWalk(walk);
+      expect(vouched()).toBe(true);
+      store.close();
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(ns)).toBe(true);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("keeps one object per venue position: a position answered for a second backing leaves the read unresolved (§13.1)", () => {

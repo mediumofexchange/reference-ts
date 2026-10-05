@@ -16,20 +16,15 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
 - **Slice 10 done but M10d** (PRs #69–#91, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10e2](decisions/2026-10.md#2026-10-03--read-every-replay-harness-package-through-the-runtime-reader-and-drop-the-no-venue-replay-slice-10-m10e2)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
   run from an `npm pack` install with real proofs on the synthetic node; pilot, transparent path, second reader retired. M10d needs the local machine.
 - **M11a done** (PR #92, be87544): the Ergo view in SQLite rows ([decision](decisions/2026-10.md#2026-10-03--keep-the-ergo-view-in-append-only-sqlite-rows-and-reopen-it-without-re-verifying-slice-11-m11a)): flat heap, reopen 192 ms (was 74 s).
-- **M11b done** (PRs #93–#99): (n) record cost flat in notes ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b)); (l) an index past the answer
-  budget asked again; (m) trails served forward; (k) kept walk, spec `dc51baf` ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k), [probe](docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4));
-  (s) `serve` takes no journal turn ([decision](decisions/2026-10.md#2026-10-04--serve-evidence-without-the-journals-turn-and-refuse-the-journals-own-damage-by-name-slice-11-m11b5-next-4s)); (w) `moe reader` keeps `replay.db` as the wallet does.
-- **M11c1 done** (PR #101, `design-point-probe.mjs`, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements
-  every budget holds (admission ~85 ms, first sync ~26 ms a statement, ≈1 CPU-min and 14 MB a day, <600 MB, restart 3.1 s); M11b7 fixed its wallet read.
-- **M11b7–10** (PRs #102–#105; [M11b7](decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x),
-  [M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)): marks keep nullifier, opening, tag
-  (layout 9): a read 1.6 → ~0.02 ms an output, ~0.84 → ~0.14 ms a holding; M11b9 resends a node GET met by a closed idle connection;
-  M11b10 leaves the carrying listing (a row per checkpoint, ~22 ms an admission at 5·10⁴) out of the journal's reads. All reviewed.
-- **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB);
-  (v) fails admission at 10⁶ (343 ms at 10⁵); a fresh view reached the tip one command per sync budget (10⁵ reads stopped at 13,440).
-- **M11b11** (PR #108, [decision](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)):
-  every command's view syncs in bounded passes until caught up (`syncCaughtUp`); 10⁴ blocks behind reach the tip in one open. Reviewed.
-  **Next:** (v)'s lever (a digest that does not reread the replay file); then M11c3 (10⁵ reads again, overhead, report).
+- **M11b done** (PRs #93–#99, #102–#105): (n) record cost flat in notes; (l) an index past the answer budget asked again; (m) trails
+  served forward; (k) kept walk, spec `dc51baf` ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)); (s) `serve` takes no journal turn; (w) `moe reader` keeps `replay.db`;
+  M11b7–8 marks keep nullifier, opening, tag ([M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)); M11b9 resends a GET on a closed idle connection; M11b10 drops the carrying listing from journal reads.
+- **M11c1 done** (PR #101, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements every budget holds (admission ~85 ms, restart 3.1 s).
+- **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB); (v) failed admission
+  at 10⁶; a view reached the tip one sync budget a command, fixed by **M11b11** (PR #108, [decision](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11), `syncCaughtUp`, reviewed).
+- **M11b12 done** (PR #109, [decision](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)): the §14 digest is a SHA256 tree over the kept file's pages;
+  keep points rehash only pages the write-ahead log names ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-kept-files-digest-from-its-changed-pages-m11b12): ~23 ms at 66 MB and 1 GB, was 0.19 → 2.9 s).
+  Reviewed (one material, one minor fixed; read-back clean); reports re-recorded from CI run 37257663317. **Next:** M11c3 (10⁵ reads, overhead, report).
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
   Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
 
@@ -55,8 +50,8 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
    the longer trail (a fix needs an ancestor test without a walk per snapshot). (p) `package-reader.ts` reads the selection through its own
    backing's entry before the walk, so a malformed selection's refusal reason differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged before silence lapse (label, or an answer where lapse is unresolved). (s) closed in M11b5 (Status). (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
-   (v) A read at a new venue index changes kept answers, so its close hashes the whole replay file: the operator's first admission per
-   block grows ~2.6 ms per 10³ statements (M11c2), ~2.6 s at 10⁶, past the 1 s budget; lever: an incremental root or the hot rows apart. (w) closed in M11b6. Audit 29: (y) a restored handoff starts
+   (v) closed in M11b12 (Status); its review left the opening check's window (another process committing between the hash
+   and the store's connection; inherited): check under the store's own `BEGIN IMMEDIATE` and refuse a moved `data_version`. (w) closed in M11b6. Audit 29: (y) a restored handoff starts
    `seen` at 0, so it may build from a view older than its source synced at (refusals, not loss; carry `seen` at the next profile change);
    (z) pool-delivery C4.7's venue-created output awaiting adoption is not reported at all (only never as spendable).
 5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
@@ -79,6 +74,8 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
    tied to what the venue newly holds and serving a reader only the segments its checkpoints name. Past the smallest profile: statements
    spending several backings, adding an original-term backing to a live scope, single-backing openings' |E| over-reserve; a phone-first wallet
    (a venue range source proportional to the subject's records, a new venue identity, then a succinct relation).
+10. **Claim-layer profiles** beside the pool, chosen per backing ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)): after slice 11 a reviewed design slice
+   (invariants per profile, what they share with the pool's commands, Basis mapped); the transparent profile before slice 13; offline, accumulator, Chaumian after release.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
@@ -91,10 +88,12 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
+- Non-blocking (2026-10-05): AGENTS.md's direction paragraph still says one production path and the transparent path retired; the
+  profile direction (Next 10) needs it updated, an edit to the agent instructions left to the maintainer. Timing in Next 10 is proposed.
 - Non-blocking (2026-10-03): needs the local machine: M10d, the live testnet drill of the `moe` commands (own testnet node,
   a funded testnet funding key under a spend budget); the synthetic drill (`command-drill.mjs`) is its rehearsal.
 - Non-blocking (2026-10-02): needs the local machine: M9c2 (a)'s testnet anchor bound rests on sampled mainnet headers. With the own
   mainnet node running, record the least mainnet difficulty from height 1,025 (lowest `nBits` per header) in the M9c2 decision; nothing waits on it.
 
-Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-03: every role runs as installable commands with real proofs on the
-synthetic node; the live drill, retirements, the design point, release assurance, a holder-private transport, qualified storage and mainnet remain.
+Roughly **62% done / 38% remaining** (range 52–72%), reassessed 2026-10-05: the design point's admission lever landed, and the transparent
+profile joins the release; the live drill, M11c3, the profile design, release assurance, holder transport, qualified storage and mainnet remain.

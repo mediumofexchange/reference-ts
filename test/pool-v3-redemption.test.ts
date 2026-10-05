@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
@@ -11,6 +10,7 @@ import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeSettlementAuthorization, releaseBytes, settlementAuthorization,
   statementHash, type Acceptance, type Record } from "../src/pool/v3/records.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
+import { keptFileDigest } from "../src/pool/v3/replay-store.js";
 import { presenterSecret, settlementRho } from "../src/pool/v3/redemption.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -932,7 +932,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const notes = rows.map(row => ({ value: row.value, nf: row.nfValue })), target = rows.find(row => row.value === value)!;
     const note = new Uint8Array(target.note); note.set(fieldToBytes(tag(notes)), 104);
     db.prepare("UPDATE witness SET note = ? WHERE ns = ? AND leaf = ?").run(note, target.ns, target.leaf); db.close();
-    writeFileSync(`${path}.sha256`, createHash("sha256").update(readFileSync(path)).digest("hex"));
+    writeFileSync(`${path}.sha256`, keptFileDigest(path)!);
     return notes;
   }
 
