@@ -1,4 +1,4 @@
-// Slice 11 M11c2 (probe; retires once M11c's design-point report records its measurements): the runtime at depth on
+// Slice 11 M11c2, M11c3 (probe; retires once M11c's design-point report records its measurements): the runtime at depth on
 // the synthetic node, by the method of the 2026-10-03 direction (M11c): the operator's journal, a reader's and a
 // wallet's stores and their Ergo views over 10⁴–10⁵ stand-in statements under real verification load, with venue ranges.
 //
@@ -138,7 +138,7 @@ if (options.role !== undefined) {
   await verifier.close(); view.close();
   gc();
   const { maxRSS, userCPUTime, systemCPUTime } = process.resourceUsage();
-  process.stdout.write(`${JSON.stringify({ role, judgingIndex: at.toString(), viewMs: Math.round(viewMs), shortSyncs, readMs: Math.round(readMs), ...out,
+  process.stdout.write(`${JSON.stringify({ role, judgingIndex: at.toString(), viewMs: Math.round(viewMs), viewPasses: synced.passes, shortSyncs, readMs: Math.round(readMs), ...out,
     verified: verifier.counts, elapsedMs: Math.round(performance.now() - began), cpuMs: Math.round((userCPUTime + systemCPUTime) / 1000),
     maxRssMb: Math.round(maxRSS / 1024), memory: sampler.stop(), heapAfterMb: mib(process.memoryUsage().heapUsed) })}\n`);
   process.exit(0);
