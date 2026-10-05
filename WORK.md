@@ -20,11 +20,11 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
   served forward; (k) kept walk, spec `dc51baf` ([decision](decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)); (s) `serve` takes no journal turn; (w) `moe reader` keeps `replay.db`;
   M11b7–8 marks keep nullifier, opening, tag ([M11b8](decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)); M11b9 resends a GET on a closed idle connection; M11b10 drops the carrying listing from journal reads.
 - **M11c1 done** (PR #101, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-commands-over-a-thousand-statements-m11c1)): at 10³ statements every budget holds (admission ~85 ms, restart 3.1 s).
-- **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB); (v) failed admission
-  at 10⁶; a view reached the tip one sync budget a command, fixed by **M11b11** (PR #108, [decision](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11), `syncCaughtUp`, reviewed).
-- **M11b12 done** (PR #109, [decision](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)): the §14 digest is a SHA256 tree over the kept file's pages;
-  keep points rehash only pages the write-ahead log names ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-kept-files-digest-from-its-changed-pages-m11b12): ~23 ms at 66 MB and 1 GB, was 0.19 → 2.9 s).
-  Reviewed (one material, one minor fixed; read-back clean); reports re-recorded from CI run 37257663317. **Next:** M11c3 (10⁵ reads, overhead, report).
+- **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB); admission failed at 10⁶ via (v),
+  fixed by **M11b12** (PR #109, [decision](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v), page-tree digest); a view reached the tip one budget a command, fixed by **M11b11** (PR #108, `syncCaughtUp`).
+- **M11c3 in progress** (branch `claude/m11c3-design-point`). Acceptance: `runtime-depth-probe.mjs` to 10⁵ (marks 10³, 10⁴, 10⁵) shows admission
+  after M11b10/M11b12 by depth, a fresh reader's and wallet's first sync, steady state and the journal's reopening at 10⁵; `design-point-probe.mjs`
+  at 10³ on the same revision bounds the commands' overhead; one design-point section, each budget held or its lever named; probes retired. Stop: merged, slice 11 closed.
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
   Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
 
