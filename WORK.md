@@ -21,7 +21,7 @@ probe needs a SOCKS5 proxy the cloud may not allow.
   fixed by **M11b12** (PR #109, [decision](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v), page-tree digest); a view reached the tip one budget a command, fixed by **M11b11** (PR #108, `syncCaughtUp`).
 - **M11c3 done** ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)): to 10⁵ admission is flat (first after a block = others, 125 ms on a
   slow host; was 343), a fresh reader reaches the tip in one command and first sync stays flat (~8–12 h extrapolated to 10⁶ on 4 cores),
-  steady state and restart hold. COMMANDS_PLACEHOLDER Gaps: the operator's own memory at depth (Next 5); the wallet's
+  steady state and restart hold; the commands add a fixed ~2 s a first sync, <0.5 s a read, ≤ ~20 ms an admission. Gaps: the operator's own memory at depth (Next 5); the wallet's
   10⁵ points, lost to a container restart. Probes retired. **Slice 11 closed.**
 - **Profile design done** (PR #110, spec `29fc585`): the transparent profile is lit notes; AGENTS.md states the approved order (Next 10).
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.

@@ -1618,14 +1618,34 @@ overhead at matched size, and extrapolates the design point from the curves
 method in [M11c2's section](#the-runtime-at-depth-m11c2)) ran to 10⁵ statements with marks at 10³, 10⁴ and 10⁵.
 `design-point-probe.mjs` ([at its last revision](https://github.com/mediumofexchange/reference-ts/blob/fa8384d/scripts/pool/v3/design-point-probe.mjs);
 method in [M11c1's section](#the-commands-over-a-thousand-statements-m11c1)) ran the `moe` commands with real proofs
-at 10³. Runs of 2026-10-05 at `d81079b`'s runtime, on two 4-core cloud hosts in turn, since the container restarted:
-- *Host A:* Xeon at 2.8 GHz without SHA or AVX-512 extensions. It ran the 10⁵ run, one run.
-- *Host B:* Xeon at 2.1 GHz with both, the class of M11c1's and M11c2's runs. It ran the commands at 10³, and an
-  A/B at 10³ against the runtime before M11b12 (`0734cda`).
+at matched size. Runs of 2026-10-05 at `d81079b`'s runtime, on two 4-core cloud hosts in turn, since the container
+restarted:
+- *Host A:* Xeon at 2.8 GHz without SHA or AVX-512 extensions. It ran the 10⁵ run and the matched pair at 200
+  statements, one run each.
+- *Host B:* Xeon at 2.1 GHz with both, the class of M11c1's and M11c2's runs. It ran an A/B at 10³ against the
+  runtime before M11b12 (`0734cda`) and the openings at 10⁵.
 
 The container restarted during the 10⁵ run, after the reader's 10⁵ read. The synthetic node lived in the probe's
 process, so the wallet's first sync at 10⁵, the steady state at 10⁵ and the first admission after reopening were
-lost. The journal's reopening and the kept files' opening were then measured on the run's files.
+lost. The journal's reopening and the kept files' opening were then measured on the run's files. A second restart
+stopped the commands' 10³ run at 400 statements, before its reads, so the matched comparison below ran at 200
+statements, both probes back to back on host A.
+
+*The commands against the runtime at 200 statements*, on host A. The runtime figure is the depth probe's child
+process over the same kind of directory; the command figure is `moe reader supply` or `moe wallet sync` as its own
+process, with real proofs:
+
+| Read | Runtime: time, CPU, peak | Command: time, CPU, peak |
+|---|---|---|
+| Reader's first sync | 11.9 s, 19.7 CPU-s, 427 MB | 14.4 s, 21.5 CPU-s, 424 MB |
+| Wallet's first sync | 11.6 s, 18.7 CPU-s, 427 MB | 13.5 s, 20.8 CPU-s, 441 MB (`restore-seed` before it: 4.8 s, once) |
+| Nothing new, reader / wallet | 3.7 s, 4.9 CPU-s / 3.7 s, 4.9 CPU-s | 4.0 s, 4.8 CPU-s / 4.2 s, 4.9 CPU-s |
+| New statements, beyond the read with nothing new | about 100 CPU-ms a statement (50 statements) | 80 CPU-ms a statement (100 statements) |
+
+Admission through `serve`'s HTTP took a median of 105–114 ms against about 90 ms in the probe's process at the same
+depth on host A. On host B, before the restart, the first 400 statements' admissions took a median of 75 ms over HTTP
+against 78 ms in the process at 10³ (the A/B). `serve` held 400–486 MB, peaking at 525 MB. It restarted over 300
+statements in 3.8 s.
 
 *Host factor.* At 10³ the same reads took 39.9 ms a statement on host A and 27.1 ms on host B, and admissions about
 111 and 78 ms. The A/B on host B found the runtime before and after M11b12 equal:
@@ -1701,6 +1721,9 @@ Findings:
 - **Restart stays cheap.** The journal reopens without re-verifying, in well under a second at 10⁵. The operator's
   directory held about 23 KB a statement, its read file and venue view included. That is about 23 GB at 10⁶, a
   little above the storage column's estimate of about 20 GB.
+- **The commands add a fixed cost.** At matched size they add about 2 s and 2 CPU-s to a first sync, under 0.5 s to
+  a read with nothing new, and up to about 20 ms to an admission through `serve`'s HTTP. None of these grows with
+  the statements read, so the runtime's curves above, plus this fixed cost, give the commands' figures at depth.
 - *Against the budgets:* at the measured depths, admission, first sync, steady state and restart hold and
   extrapolate within budget to 10⁶. Not established:
   - **the operator's own memory at depth.** The probe's process, which also holds the synthetic node with every
