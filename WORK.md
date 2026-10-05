@@ -27,10 +27,9 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
   M11b10 leaves the carrying listing (a row per checkpoint, ~22 ms an admission at 5·10⁴) out of the journal's reads. All reviewed.
 - **M11c2 done** (PR #106, [results](docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-at-depth-m11c2)): first sync flat (~28 ms a statement, <620 MB); (v) failed admission
   at 10⁶; a view reached the tip one sync budget a command, fixed by **M11b11** (PR #108, [decision](decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11), `syncCaughtUp`, reviewed).
-- **M11b12, in review** (PR #109, branch `claude/m11b12-page-digest`, [decision](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)), (v)'s lever:
-  the §14 digest is a SHA256 tree over the kept file's pages; keep points rehash only pages the write-ahead log names, opening hashes all.
-  [Probe](docs/POOL_DEPLOYMENT_PROBES.md#a-kept-files-digest-from-its-changed-pages-m11b12): a block's read closes in ~23 ms at 66 MB and 1 GB (whole-file hash 0.19 → 2.9 s).
-  Owed: deep-reviewer findings resolved, reports re-recorded from the PR's CI artifact, merge. **Next:** M11c3 (10⁵ reads again, overhead, report).
+- **M11b12** (PR #109, [decision](decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)): the §14 digest is a SHA256 tree over the kept file's pages;
+  keep points rehash only pages the write-ahead log names ([probe](docs/POOL_DEPLOYMENT_PROBES.md#a-kept-files-digest-from-its-changed-pages-m11b12): ~23 ms at 66 MB and 1 GB, was 0.19 → 2.9 s).
+  Reviewed, fixes taken; owed: reports re-recorded from the PR's CI, merge. **Next:** M11c3 (10⁵ reads again, overhead, report).
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet.
   Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
 
@@ -56,7 +55,8 @@ overhead at matched size and the design-point report (10⁶ local only; no stand
    the longer trail (a fix needs an ancestor test without a walk per snapshot). (p) `package-reader.ts` reads the selection through its own
    backing's entry before the walk, so a malformed selection's refusal reason differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE, SILENCE_SCOPE are judged before silence lapse (label, or an answer where lapse is unresolved). (s) closed in M11b5 (Status). (t) A settle or `presentation` read decodes every acceptance and release of the backing; count inside the read if slice 11 shows it.
    (u) Each `readRecordView` and journal `chain()` re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if slice 11 shows it.
-   (v) closed in M11b12 (Status). (w) closed in M11b6. Audit 29: (y) a restored handoff starts
+   (v) closed in M11b12 (Status); its review left the opening check's window (another process committing between the hash
+   and the store's connection; inherited): check under the store's own `BEGIN IMMEDIATE` and refuse a moved `data_version`. (w) closed in M11b6. Audit 29: (y) a restored handoff starts
    `seen` at 0, so it may build from a view older than its source synced at (refusals, not loss; carry `seen` at the next profile change);
    (z) pool-delivery C4.7's venue-created output awaiting adoption is not reported at all (only never as spendable).
 5. Slice 11 (Goal): M11a's view leaves for M11b/M11c: store each side row's meeting height (pruning re-judges protected side rows each
