@@ -167,6 +167,15 @@ describe("publication force over the snapshot forest", () => {
     expect(state.demand(Buffer.from(statementHash(decodeRecord(held))).toString("hex"))).toBeDefined();
   });
 
+  it("refuses a settlement with a zero acceptance owner by its first failing check, never by a codec throw (M14c review)", async () => {
+    // The codec accepts the owner input 0, which no proof can hold; its acceptance bytes are built only at recovery's slot.
+    const owner0 = alter(settle(demand()), 8, 0n), refusing = { verify: (): boolean => false };
+    await refuses(openForceState(fresh()), owner0, "PROOF", context({ verifier: refusing }));
+    await refuses(openForceState(fresh()), owner0, "CONTEXT", context({ domain: b(9) }));
+    await expect(applyRecord(fresh(), owner0, replay({ verifier: refusing }))).rejects.toMatchObject({ check: "PROOF" });
+    await expect(applyRecord(fresh(), owner0, replay({ segment: b(9) }))).rejects.toMatchObject({ check: "CONTEXT" });
+  });
+
   it("uses inclusive instant/settlement boundaries and a strict demand deadline", async () => {
     for (const instant of [5n, 7n]) await applyForceRecord(openForceState(fresh()), demand(instant), context());
     for (const instant of [4n, 8n]) await refuses(openForceState(fresh()), demand(instant), "DEADLINE");

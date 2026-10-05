@@ -41,7 +41,14 @@ export interface Demand {
   readonly presenter: Uint8Array;
   readonly instant: bigint;
   readonly deadline: bigint;
+  /** The input nullifiers in input order, where the construction's settlement consumes them without naming them
+   * (lit-v1 §3); absent where the settlement names its own (pool-v3). */
+  readonly nullifiers?: readonly bigint[];
 }
+/** A namespace's construction: its name, and whether it keeps a note tree with anchors and witnesses. */
+export interface NamespaceConstruction { readonly name: string; readonly tree: boolean }
+/** Pool-v3's namespaces: a note tree with anchors and witnesses. */
+export const POOL_V3_NAMESPACE: NamespaceConstruction = Object.freeze({ name: "moe/pool/v3", tree: true });
 /** The namespace and position an imported segment's rows are read to. */
 export interface ImportEntry { readonly ns: number; readonly upto: bigint }
 /** A new namespace's imported frontier: one namespace per imported segment (hex), and the totals it starts from. */
@@ -119,6 +126,19 @@ const unhex = (text: string): Uint8Array => new Uint8Array(Buffer.from(text, "he
 const equal = (a: Uint8Array, b: Uint8Array): boolean => Buffer.from(a.buffer, a.byteOffset, a.length).equals(b);
 const bytes = (value: unknown): Uint8Array => new Uint8Array(value as Uint8Array);
 const field = (value: unknown): bigint => bytesToField(bytes(value));
+const U256 = 1n << 256n;
+/** A nullifier, commitment or tag key: 32 big-endian bytes of a 256-bit value. A field element's bytes are its
+ * `fieldToBytes` bytes, so a pool row is stored as before, and a construction whose keys are SHA-256 digests
+ * (lit-v1 §2) is stored the same way. */
+const keyBytes = (value: bigint): Uint8Array => {
+  if (typeof value !== "bigint" || value < 0n || value >= U256) throw new TypeError("a stored key is a 256-bit value");
+  return Uint8Array.from(Buffer.from(value.toString(16).padStart(64, "0"), "hex"));
+};
+const key = (value: unknown): bigint => {
+  const b = bytes(value);
+  if (b.length !== 32) throw new Error("a stored key is 32 bytes");
+  return BigInt(`0x${hex(b)}`);
+};
 const optional = (value: unknown): bigint | undefined => (value === null || value === undefined ? undefined : BigInt(value as bigint));
 const u64 = (value: bigint): string => value.toString();
 
@@ -151,6 +171,8 @@ const SCHEMA = `
     tag0 BLOB NOT NULL, tag1 BLOB NOT NULL, presenter BLOB NOT NULL, instant TEXT NOT NULL, deadline TEXT NOT NULL, PRIMARY KEY(id, ns)) WITHOUT ROWID;
   CREATE TABLE demand_tag (tag BLOB, id TEXT, ns INTEGER, PRIMARY KEY(tag, id, ns)) WITHOUT ROWID;
   CREATE TABLE demand_end (id TEXT, ns INTEGER, position INTEGER NOT NULL, PRIMARY KEY(id, ns)) WITHOUT ROWID;
+  CREATE TABLE demand_nullifier (id TEXT, ns INTEGER, i INTEGER, nf BLOB NOT NULL, PRIMARY KEY(id, ns, i)) WITHOUT ROWID;
+  CREATE TABLE namespace_construction (ns INTEGER PRIMARY KEY, construction TEXT NOT NULL, tree INTEGER NOT NULL);
   CREATE TABLE total (ns INTEGER, backing BLOB, position INTEGER, issued TEXT NOT NULL, burned TEXT NOT NULL,
     PRIMARY KEY(ns, backing, position)) WITHOUT ROWID;
   CREATE TABLE spent (ns INTEGER, id INTEGER, key BLOB NOT NULL, bit INTEGER, l INTEGER, r INTEGER, hash BLOB NOT NULL,
@@ -203,13 +225,14 @@ const KEPT_TABLES = ["verdict", "scope", "base", "base_import", "base_block", "p
 const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_publication"];
 /** The kept file's layout: another layout's file is discarded rather than read. 6: a witness row holds an
  * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk.
- * 8: a witness row holds its output's mark. 9: a mark keeps its nullifier's tag. 10: a write-ahead log and page digest. */
-const SCHEMA_VERSION = 10;
+ * 8: a witness row holds its output's mark. 9: a mark keeps its nullifier's tag. 10: a write-ahead log and page digest.
+ * 11: a namespace's construction, and a demand's nullifiers where its construction names them (lit-v1). */
+const SCHEMA_VERSION = 11;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Every table holding a namespace's rows. */
 const NAMESPACE_TABLES = ["namespace", "import", "event", "event_key", "nullifier", "output", "anchor", "demand", "demand_tag", "demand_end",
-  "total", "spent", "witness"];
+  "demand_nullifier", "namespace_construction", "total", "spent", "witness"];
 
 /** A u64 as eight big-endian bytes, so stored order is numeric order. */
 const be = (value: bigint): Uint8Array => { const out = new Uint8Array(8); new DataView(out.buffer).setBigUint64(0, value); return out; };
@@ -560,6 +583,10 @@ export class ReplayStore {
       insertDemandEnd: "INSERT INTO demand_end VALUES (?, ?, ?)",
       outputs: `SELECT x.* FROM output x WHERE ${v} ORDER BY x.ns, x.leaf`,
       outputOf: `SELECT x.* FROM output x WHERE x.cm = :key AND ${v}`,
+      construction: "SELECT construction, tree FROM namespace_construction WHERE ns = ?",
+      insertConstruction: "INSERT INTO namespace_construction VALUES (?, ?, ?)",
+      demandNullifiers: "SELECT nf FROM demand_nullifier WHERE id = ? AND ns = ? ORDER BY i",
+      insertDemandNullifier: "INSERT INTO demand_nullifier VALUES (?, ?, ?, ?)",
       // Driven from the witness rows, so a read visits this predicate's outputs only, not every output in the store.
       unspentWitnessed: `SELECT x.*, w.nf AS mark_nf, w.note AS mark_note FROM witness w CROSS JOIN output x ON x.ns = w.ns AND x.leaf = w.leaf
         WHERE ${v} AND NOT EXISTS (SELECT 1 FROM nullifier y WHERE y.nf = w.nf AND ${visible("y")}) ORDER BY x.ns, x.leaf`,
@@ -666,13 +693,20 @@ export class ReplayStore {
   /** A fresh namespace for `segment` under `identity`: the empty tree and anchor, the
    * imported frontier's rows by reference, its spent set built from them (C1.2.8), and
    * the totals it starts from. */
-  open(segment: Uint8Array, identity: Uint8Array, imports: Imports | undefined, genesis: { history: Uint8Array; evidence: Uint8Array }): number {
+  open(segment: Uint8Array, identity: Uint8Array, imports: Imports | undefined, genesis: { history: Uint8Array; evidence: Uint8Array },
+    construction: NamespaceConstruction = POOL_V3_NAMESPACE): number {
+    // A scope holds backings of one construction (C1.2), so a segment imports only segments of its own.
+    for (const entry of imports?.segments.values() ?? []) {
+      const source = this.construction(entry.ns);
+      if (source.name !== construction.name || source.tree !== construction.tree) throw new TypeError("an import is of another construction");
+    }
     return this.#atomic(() => {
       const row = this.#q.insertNamespace!.get(segment, identity, genesis.history, genesis.evidence, fieldToBytes(EMPTY_NOTE_ROOT),
         encodeOmmers([]), EMPTY_SPENT) as { ns: bigint };
       const ns = Number(row.ns);
+      this.#q.insertConstruction!.run(ns, construction.name, construction.tree ? 1 : 0);
       for (const [name, entry] of imports?.segments ?? []) this.#q.insertImport!.run(ns, unhex(name), entry.ns, entry.upto);
-      this.#q.insertAnchor!.run(fieldToBytes(EMPTY_NOTE_ROOT), ns, 0n);
+      if (construction.tree) this.#q.insertAnchor!.run(fieldToBytes(EMPTY_NOTE_ROOT), ns, 0n);
       for (const [backing, total] of imports?.totals ?? []) this.#q.insertTotal!.run(ns, unhex(backing), 0n, u64(total.issued), u64(total.burned));
       // The successor's spent set holds every imported nullifier.
       const spent = this.#spent(ns);
@@ -686,6 +720,13 @@ export class ReplayStore {
   }
 
   hasNamespace(ns: number): boolean { return this.#q.tip!.get(ns) !== undefined; }
+
+  /** The construction a namespace replays. */
+  construction(ns: number): NamespaceConstruction {
+    const row = this.#q.construction!.get(ns) as { construction: string; tree: bigint } | undefined;
+    if (row === undefined) throw new Error("unknown replay namespace");
+    return { name: row.construction, tree: row.tree === 1n };
+  }
 
   identity(ns: number): Uint8Array {
     return bytes((this.#db.prepare("SELECT identity FROM namespace WHERE ns = ?").get(ns) as { identity: unknown }).identity);
@@ -807,6 +848,8 @@ export class ReplayStore {
         const ns = Number((this.#q.insertNamespace!.get(tip.segment, name_, at?.history ?? new Uint8Array(32), at?.evidence ?? new Uint8Array(32),
           fieldToBytes(at?.noteRoot ?? EMPTY_NOTE_ROOT), encodeOmmers([]), EMPTY_SPENT) as { ns: bigint }).ns);
         this.#db.prepare("UPDATE namespace SET position = ? WHERE ns = ?").run(entry.upto, ns);
+        const construction = source.construction(entry.ns);
+        this.#q.insertConstruction!.run(ns, construction.name, construction.tree ? 1 : 0);
         const copy = (table: string, rows: Iterable<unknown>): void => {
           let put: StatementSync | undefined;
           for (const item of rows) {
@@ -817,6 +860,8 @@ export class ReplayStore {
         };
         for (const table of facts) copy(table, from.prepare(`SELECT * FROM ${table} WHERE ns = ? AND position <= ?`).iterate(entry.ns, entry.upto));
         copy("demand_tag", from.prepare("SELECT t.* FROM demand_tag t JOIN demand d ON d.id = t.id AND d.ns = t.ns WHERE t.ns = ? AND d.position <= ?")
+          .iterate(entry.ns, entry.upto));
+        copy("demand_nullifier", from.prepare("SELECT t.* FROM demand_nullifier t JOIN demand d ON d.id = t.id AND d.ns = t.ns WHERE t.ns = ? AND d.position <= ?")
           .iterate(entry.ns, entry.upto));
         segments.set(name, { ns, upto: entry.upto });
       }
@@ -839,10 +884,10 @@ export class ReplayStore {
   #has(query: string, ns: number, p: bigint, key: Uint8Array | string): boolean {
     return this.#q[query]!.get({ ns, p, key }) !== undefined;
   }
-  hasNullifier(ns: number, p: bigint, nf: bigint): boolean { return this.#has("nullifier", ns, p, fieldToBytes(nf)); }
-  hasOutput(ns: number, p: bigint, cm: bigint): boolean { return this.#has("output", ns, p, fieldToBytes(cm)); }
+  hasNullifier(ns: number, p: bigint, nf: bigint): boolean { return this.#has("nullifier", ns, p, keyBytes(nf)); }
+  hasOutput(ns: number, p: bigint, cm: bigint): boolean { return this.#has("output", ns, p, keyBytes(cm)); }
   hasAnchor(ns: number, p: bigint, root: bigint): boolean { return this.#has("anchor", ns, p, fieldToBytes(root)); }
-  hasSpentTag(ns: number, p: bigint, tag: bigint): boolean { return this.#has("spentTag", ns, p, fieldToBytes(tag)); }
+  hasSpentTag(ns: number, p: bigint, tag: bigint): boolean { return this.#has("spentTag", ns, p, keyBytes(tag)); }
   /** A recovery statement (kind 4–6) already effective in the visible history. */
   isEffective(ns: number, p: bigint, id: string): boolean { return this.#has("effective", ns, p, unhex(id)); }
   /** A statement of any kind in the visible history, imports included. */
@@ -876,20 +921,22 @@ export class ReplayStore {
   }
 
   #demand(row: Record<string, unknown>): [string, Demand] {
-    return [row["id"] as string, { backing: bytes(row["backing"]), quantity: BigInt(row["quantity"] as string),
-      tags: [field(row["tag0"]), field(row["tag1"])], presenter: bytes(row["presenter"]), instant: BigInt(row["instant"] as string),
-      deadline: BigInt(row["deadline"] as string) }];
+    const id = row["id"] as string;
+    const nullifiers = this.#q.demandNullifiers!.all(id, row["ns"] as bigint).map(r => key((r as { nf: unknown }).nf));
+    return [id, { backing: bytes(row["backing"]), quantity: BigInt(row["quantity"] as string),
+      tags: [key(row["tag0"]), key(row["tag1"])], presenter: bytes(row["presenter"]), instant: BigInt(row["instant"] as string),
+      deadline: BigInt(row["deadline"] as string), ...(nullifiers.length === 0 ? {} : { nullifiers }) }];
   }
   demand(ns: number, p: bigint, id: string): Demand | undefined {
     const row = this.#q.demand!.get({ ns, p, key: id }) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#demand(row)[1];
   }
   demandsWithTag(ns: number, p: bigint, tag: bigint): [string, Demand][] {
-    return this.#q.demandsWithTag!.all({ ns, p, key: fieldToBytes(tag) }).map(row => this.#demand(row as Record<string, unknown>));
+    return this.#q.demandsWithTag!.all({ ns, p, key: keyBytes(tag) }).map(row => this.#demand(row as Record<string, unknown>));
   }
   /** Every demand visible from (ns, p) naming `tag`, ended or not. */
   presentedWithTag(ns: number, p: bigint, tag: bigint): [string, Demand][] {
-    return this.#q.presentedWithTag!.all({ ns, p, key: fieldToBytes(tag) }).map(row => this.#demand(row as Record<string, unknown>));
+    return this.#q.presentedWithTag!.all({ ns, p, key: keyBytes(tag) }).map(row => this.#demand(row as Record<string, unknown>));
   }
   demands(ns: number, p: bigint): [string, Demand][] {
     return this.#q.demands!.all({ ns, p }).map(row => this.#demand(row as Record<string, unknown>));
@@ -904,7 +951,7 @@ export class ReplayStore {
   }
   /** The visible events that spent a nullifier of tag `tag`, in namespace and position order. */
   tagSpends(ns: number, p: bigint, tag: bigint): StoredEvent[] {
-    return this.#q.tagSpends!.all({ ns, p, key: fieldToBytes(tag) }).map(row => {
+    return this.#q.tagSpends!.all({ ns, p, key: keyBytes(tag) }).map(row => {
       const { ns: at, position } = row as { ns: bigint; position: bigint };
       return this.event(Number(at), BigInt(position))!;
     });
@@ -946,7 +993,7 @@ export class ReplayStore {
   }
 
   #output(row: Record<string, unknown>): StoredOutput {
-    return { cm: field(row["cm"]), ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint), leaf: BigInt(row["leaf"] as bigint),
+    return { cm: key(row["cm"]), ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint), leaf: BigInt(row["leaf"] as bigint),
       capsule: row["capsule"] === null ? undefined : bytes(row["capsule"]), settlement: row["settlement"] === 1n };
   }
   /** Every visible output, in namespace then leaf order. */
@@ -961,11 +1008,11 @@ export class ReplayStore {
     }
   }
   output(ns: number, p: bigint, cm: bigint): StoredOutput | undefined {
-    const row = this.#q.outputOf!.get({ ns, p, key: fieldToBytes(cm) }) as Record<string, unknown> | undefined;
+    const row = this.#q.outputOf!.get({ ns, p, key: keyBytes(cm) }) as Record<string, unknown> | undefined;
     return row === undefined ? undefined : this.#output(row);
   }
   *nullifiers(ns: number, p: bigint): Generator<bigint> {
-    for (const row of this.#q.nullifiers!.iterate({ ns, p })) yield field((row as { nf: unknown }).nf);
+    for (const row of this.#q.nullifiers!.iterate({ ns, p })) yield key((row as { nf: unknown }).nf);
   }
 
   /** The path of a witnessed output at `ns`'s tip, which must be at `position`. Witnesses are kept only at the
@@ -1417,8 +1464,15 @@ export class ReplayStore {
       const position = BigInt(row["position"] as bigint) + 1n;
       let leaves = BigInt(row["leaves"] as bigint), noteRoot = field(row["note_root"]);
       const ommers = decodeOmmers(bytes(row["ommers"]));
+      const { tree } = this.construction(ns);
+      // A construction without a note tree (lit-v1 §5) numbers its outputs in scan order and keeps no root or witness.
+      if (!tree) {
+        for (const output of record.outputs) {
+          if (output.witness !== undefined) throw new TypeError("a construction without a note tree keeps no witness");
+          this.#q.insertOutput!.run(keyBytes(output.cm), ns, position, leaves++, output.capsule ?? null, output.settlement ? 1 : 0);
+        }
       // Note tree: append each output, recording blocks completed on the way, then fold from the last leaf.
-      if (record.outputs.length > 0) {
+      } else if (record.outputs.length > 0) {
         const first = leaves, completed = new Map<string, bigint>(), born: { leaf: bigint; siblings: bigint[] }[] = [];
         let before: (bigint | undefined)[] = ommers;
         for (const output of record.outputs) {
@@ -1466,17 +1520,18 @@ export class ReplayStore {
       }
       const spent = this.#spent(ns);
       for (const { nf, tag } of record.nullifiers) {
-        spent.insert(fieldToBytes(nf));
-        this.#q.insertNullifier!.run(fieldToBytes(nf), ns, position, fieldToBytes(tag));
+        spent.insert(keyBytes(nf));
+        this.#q.insertNullifier!.run(keyBytes(nf), ns, position, keyBytes(tag));
       }
       spent.save();
       const spentRoot = spent.root();
-      this.#q.insertAnchor!.run(fieldToBytes(noteRoot), ns, position);
+      if (tree) this.#q.insertAnchor!.run(fieldToBytes(noteRoot), ns, position);
       if (record.demand !== undefined) {
         const { id, value } = record.demand;
-        this.#q.insertDemand!.run(id, ns, position, value.backing, u64(value.quantity), fieldToBytes(value.tags[0]!), fieldToBytes(value.tags[1]!),
+        this.#q.insertDemand!.run(id, ns, position, value.backing, u64(value.quantity), keyBytes(value.tags[0]!), keyBytes(value.tags[1]!),
           value.presenter, u64(value.instant), u64(value.deadline));
-        for (const tag of value.tags) this.#q.insertDemandTag!.run(fieldToBytes(tag), id, ns);
+        for (const tag of value.tags) this.#q.insertDemandTag!.run(keyBytes(tag), id, ns);
+        value.nullifiers?.forEach((nf, i) => this.#q.insertDemandNullifier!.run(id, ns, i, keyBytes(nf)));
       }
       if (record.ended !== undefined) this.#q.insertDemandEnd!.run(record.ended, ns, position);
       if (record.supply !== undefined) {

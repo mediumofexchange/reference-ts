@@ -1,8 +1,7 @@
 # reference-ts
 
 Executable reference for the Medium of Exchange Protocol. Build a working, auditable protocol with
-private payments and public supply verification. Security and correctness precede speed or brevity;
-there is no release deadline.
+private payments and public supply verification. Security and correctness precede speed or brevity; there is no release deadline.
 
 ## Start and navigate
 
@@ -40,7 +39,8 @@ adopted (pool-v3 §11.4, manifest in `v3/configuration.ts`); a byte, identity or
 Extensions' profiles are built beside the pool, each declared per backing in E (WORK.md Next 10): lit notes
 (`moe/lit/v1`) before release assurance; offline, accumulator, Chaumian after. The old transparent path is retired
 (cases at `8d207eb`; never port its exhibit walk/signed opening claim). Keep one implementation per construction,
-never reinterpret pinned versions, and develop wallet, transport and witness feasibility alongside the core.
+never reinterpret pinned versions, and develop wallet, transport and witness feasibility alongside the core. Design every
+user-facing surface (commands, wallet, service) for agents as well as people, for holders and backers who manage them through agents and for autonomous AIs acting directly: machine-readable output, named refusals, no interactive step, idempotent retries.
 
 Standing authorization effective 2026-09-08 covers development, protocol decisions and merge/push
 after verification until superseded; it excludes real funds, public releases, live deployment,

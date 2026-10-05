@@ -4,10 +4,10 @@
 // finality authority.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
-import { verifySignatureStrict } from "../../keys.js";
 import { identifierOf } from "../field.js";
 import { poseidon2Hash } from "../poseidon2.js";
-import { settlementAuthorization, statementHash, withdrawalBytes, type Record } from "./records.js";
+import { statementHash, type Record } from "./records.js";
+import type { StatementView } from "./construction.js";
 import type { Demand } from "./replay-store.js";
 
 export type { Demand } from "./replay-store.js";
@@ -64,37 +64,35 @@ export interface RecoveryCheck {
   readonly door?: boolean;
 }
 
-/** Pure guards, before any mutation. The caller verifies proofs, context and
- * roots. Door deadlines are checked at admission and force, never in replay. */
-export function checkRecovery(record: Record, view: RecoveryView, { check, backing, issuer, at, lag, door = false }: RecoveryCheck): void {
-  const p = record.publicInputs, kind = record.kind, id = hex(statementHash(record));
-  const { nfs } = effectOf(record);
+/** Pure guards, before any mutation, over a record's view (construction.ts) in every construction. The caller
+ * verifies the statement check, context and inputs. Door deadlines are checked at admission and force, never in
+ * replay. A demand's notes are unspent through their tags (C3.7): a spent tag refuses as `LOCKED`. */
+export function checkRecovery(view: StatementView, state: RecoveryView, { check, backing, issuer, at, lag, door = false }: RecoveryCheck): void {
+  const kind = view.kind, id = hex(view.identity), { nfs, tags: nfTags } = view;
   if (door && lag === undefined) throw new TypeError("a door is judged at an index under the venue's lag");
-  if (kind >= 4) check(!view.isEffective(id), "REPEATED_STATEMENT");
+  if (kind >= 4) check(!state.isEffective(id), "REPEATED_STATEMENT");
   if (kind === 4) {
-    const tags = p.slice(10, 12).filter(tag => tag !== 0n);
+    const stood = view.demand!.value, tags = stood.tags.filter(tag => tag !== 0n);
     check(tags.length > 0 && new Set(tags).size === tags.length, "TAGS");
-    check(tags.every(tag => !view.hasSpentTag(tag) && !locked(view, tag, at)), "LOCKED");
-    if (door) check(p[14]! >= at - 2n * lag! && p[14]! <= at - lag! && p[15]! > at, "DEADLINE");
+    check(tags.every(tag => !state.hasSpentTag(tag) && !locked(state, tag, at)), "LOCKED");
+    if (door) check(stood.instant >= at - 2n * lag! && stood.instant <= at - lag! && stood.deadline > at, "DEADLINE");
   } else if (kind === 5 || kind === 6) {
-    const demandId = hex(identifierOf(p[kind === 5 ? 5 : 15]!, p[kind === 5 ? 6 : 16]!));
-    const demand = view.demand(demandId);
+    const demandId = view.ended!, demand = state.demand(demandId);
     check(demand !== undefined && same(demand.backing, backing), "DEMAND");
     if (kind === 5) {
-      check(verifySignatureStrict(record.authorization, withdrawalBytes(record), demand!.presenter), "SIGNATURE");
+      check(view.withdrawalSigned(demand!.presenter), "SIGNATURE");
     } else {
-      check(p[7] === demand!.quantity, "QUANTITY");
-      const auth = settlementAuthorization(record);
-      check(auth.acceptance.deadline <= demand!.deadline, "DEADLINE");
-      check(verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
-        verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, demand!.presenter), "SIGNATURE");
+      check(view.quantity === demand!.quantity, "QUANTITY");
+      const settlement = view.settlement();
+      check(settlement.deadline <= demand!.deadline, "DEADLINE");
+      check(settlement.signed(issuer, demand!.presenter), "SIGNATURE");
       // The demand's deadline is at or after the acceptance's, so this bounds both.
-      if (door) check(auth.acceptance.deadline >= at, "DEADLINE");
-      check(nfs.every((nf, i) => demand!.tags[i] === 0n || demand!.tags[i] === tagOf(nf)), "TAGS");
-      check(nfs.every(nf => !locked(view, tagOf(nf), at, demandId)), "LOCKED");
+      if (door) check(settlement.deadline >= at, "DEADLINE");
+      check(nfs.every((_, i) => demand!.tags[i] === 0n || demand!.tags[i] === nfTags[i]), "TAGS");
+      check(nfTags.every(tag => !locked(state, tag, at, demandId)), "LOCKED");
     }
   } else if (kind === 2 || kind === 3) {
-    check(nfs.every(nf => !locked(view, tagOf(nf), at)), "LOCKED");
+    check(nfTags.every(tag => !locked(state, tag, at)), "LOCKED");
   }
 }
 
