@@ -134,8 +134,7 @@ The scope classifier also handles two-backing split/rejoin histories, shared
 ancestry, per-backing adoption obligations and their exact publication union.
 Import lapse authenticates scope
 and terms independently of event history; live validity and exclusion retain
-their complete evidence requirements. The local-only restoration scanner
-continues to refuse imports.
+their complete evidence requirements.
 
 Kind-7 package items carry existing §9 compact fault openings. When a checkpoint
 is reached, the reader can authenticate its committed target proof without
