@@ -17,7 +17,7 @@ integration accompanies the runtime.
 
 ## Active runtime
 
-V3 is the only pool runtime, a guarded candidate over shared primitives.
+V3 is the only pool runtime, adopted (pool-v3 §11.4) and guarded to reference venues, over shared primitives.
 
 | Component | Implemented boundary | Still outside it |
 |---|---|---|
@@ -28,7 +28,7 @@ V3 is the only pool runtime, a guarded candidate over shared primitives.
 | `bytes.ts`, `keys.ts`, `contexts.ts` | Canonical encoding, strict signatures and every domain tag, including the retired transparent profile's, kept declared so no later message reuses them. | New construction versions must not reinterpret existing names or signatures. |
 | Neutral core: `venue-records.ts`, `venue-error.ts`, `record-venue.ts`, `pool/proof-verifier.ts` with the shared primitives and Ergo modules | Kind 1–3 record bytes, signatures and the directory root; the venue refusal; `RecordVenue`, the §13 read side a v3 reader reads (`ErgoVenue`, and `FixtureVenue` answering from records its owner witnessed), and `RecordPublisher`, its publishing side (`FixtureVenue` witnesses each new record at the next index; its reference identity is `localVenueIdentity` under `moe/venue/local/reference`); proof verification over a construction's circuit table given as data; `ergo-synthetic.ts`, the synthetic reference chain and branch supplier for tests and the local replay. `test/neutral-core.test.ts` pins that its import closure stays inside the core. | `ergo.ts` implements only `RecordVenue` and `RecordPublisher`. |
 | `ergo.ts`, `ergo-headers.ts`, `ergo-profile.ts`, `ergo-supplier.ts`, `ergo-publisher.ts`, `ergo-store.ts`, `record-range.ts` | The [selected Ergo venue profile](ERGO_VENUE_PROFILE.md#runtime-venue) supplies the one verifying reader and kinds 1–4 publisher. Headers and section roots establish complete ranges and one atomic witnessed snapshot; missing sections stop the clock and deep reorganization fails the view. Optional [durable reference storage](ERGO_VENUE_PROFILE.md#durable-reference-view-and-publisher) revalidates lossless evidence, preserves pin/failure, prunes completed deep side paths and protects incomplete fork continuation. The publisher saves exact signed retries, reservations and change in its owning journal's fenced outbox. | Full-history checkpoint rewrite/revalidation and memory; disk streaming, persistent supplier quotas, physical storage qualification and rollback protection remain. Not exported from the root barrel. |
-| `pool/v3/` | Codecs, commitments, trails, terms, evidence packages, note recovery and compressed spent root. Shared state transitions, complete single- and multi-backing ancestry (`scope-reader.ts`: whole-scope imports, per-backing adoption), silence, force/adoption, receipts and request count use independent §13 answers. Both package readers accept dependency-resolved compact faults. Six candidate relations provide witnesses/proofs. The journal serves one- or multi-backing scopes and preserves admission, witnessed return/adoption, exact-link succession, scope changes at committed boundaries and the publisher outbox under one owner; imported evidence stays separate from its signed counter. Its database holds its admission state, records and served evidence, committed with each command, and it reopens from rows. The guard recomputes reference venue identities. Replay state lives in `replay-store.ts` (node:sqlite): namespaces by replay identity with append-only facts read at a position, imports by reference, savepoint rollback and incremental witnesses for the outputs a wallet scans as its own. See [acceptance and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal). | [Live recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json) is historical at `a72888b`; prior live kinds 1–3 at `2c6b20c`. Succession, compact orchestration and process persistence have local/synthetic evidence. No adopted configuration, wallet custody or qualified physical storage. Ancestry can exhaust limits. Not exported from the root barrel. |
+| `pool/v3/` | Codecs, commitments, trails, terms, evidence packages, note recovery and compressed spent root. Shared state transitions, complete single- and multi-backing ancestry (`scope-reader.ts`: whole-scope imports, per-backing adoption), silence, force/adoption, receipts and request count use independent §13 answers. Both package readers accept dependency-resolved compact faults. Six relations provide witnesses/proofs. The journal serves one- or multi-backing scopes and preserves admission, witnessed return/adoption, exact-link succession, scope changes at committed boundaries and the publisher outbox under one owner; imported evidence stays separate from its signed counter. Its database holds its admission state, records and served evidence, committed with each command, and it reopens from rows. The guard recomputes reference venue identities. Replay state lives in `replay-store.ts` (node:sqlite): namespaces by replay identity with append-only facts read at a position, imports by reference, savepoint rollback and incremental witnesses for the outputs a wallet scans as its own. See [acceptance and limits](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal). | [Live recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json) is historical at `a72888b`; prior live kinds 1–3 at `2c6b20c`. Succession, compact orchestration and process persistence have local/synthetic evidence. No wallet custody or qualified physical storage. Ancestry can exhaust limits. Not exported from the root barrel. |
 
 Record readers are tied to the captured view. Refresh after record changes,
 including same-index revocation; a previously valid snapshot is not current
@@ -50,7 +50,7 @@ continuation and unfinished receipts,
 even after an unrelated reset. Earlier finality and liability survive; new
 adoption into a retired segment refuses, while historical replay and exact
 receipt retry remain available. A fresh return adopts through its own index.
-Production still needs durable evidence availability and configuration adoption;
+Production still needs durable evidence availability;
 reference Ergo readers authenticate complete venue intervals within their budgets.
 
 ## Retained evidence and retirement conditions
@@ -94,7 +94,7 @@ another product mechanism. The shared proving-parameter cache keeps its existing
 ## Where to read next
 
 - [Protocol rules](PROTOCOL_RULES.md): binding rules, code and tests.
-- [Fault recovery](POOL_FAULT_RECOVERY.md): current unresolved protocol work.
-- [v3 recovery map](POOL_V3_RECOVERY_MAP.md): candidate v3 objects, one complete trace, record ranges, resource assumptions and probes.
+- [Fault recovery](POOL_FAULT_RECOVERY.md): the fault contract, its model and v3 evidence frames.
+- [Historical v3 recovery map](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_V3_RECOVERY_MAP.md): the pre-adoption design map; pool-v3 adopted its outcomes.
 - [Deployment probes](POOL_DEPLOYMENT_PROBES.md): device, venue and restoration evidence.
 - [Wallet direction](WALLET_DIRECTION.md): product direction and unselected fixed-creditor proposal.
