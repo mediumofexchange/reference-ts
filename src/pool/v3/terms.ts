@@ -1,4 +1,5 @@
-// Root-terms bytes for pool-v3 §§11.2–11.3.
+// Root-terms bytes for pool-v3 §§11.2–11.3, and for lit-v1 §9, which reads the
+// same frame with its own construction and a tag-6 silence clause (`termsCodec`).
 // Identity/signature evidence supplies no registration, currentness or adoption.
 import { sha256 } from "@noble/hashes/sha2.js";
 import {
@@ -9,8 +10,28 @@ import { BACKING_SIGNATURE_CONTEXT, TERMS_MAGIC as MAGIC, utf8Decoder, utf8Encod
 import { isValidPublicKey, verifySignatureStrict } from "../../keys.js";
 
 export const MAX_ROOT_TERMS_BYTES = 1305;
-const CONSTRUCTION = utf8Encoder.encode("moe/pool/v3");
 const MAX_U64 = (1n << 64n) - 1n;
+
+/** A construction's terms: its tag-5 name, and its silence clause, pool-v3's tag 1 (a duration and a challenge
+ * window) or lit-v1's tag 6 (the duration alone). Each tag has one payload whatever the construction. */
+export interface TermsProfile {
+  readonly construction: string;
+  readonly silenceTag: 1 | 6;
+}
+/** Root terms under a profile; `challengeWindow` is present exactly under a tag-1 profile. */
+export interface ConstructionTerms extends Omit<RootTerms, "silence"> {
+  readonly silence?: { readonly noCommitmentDuration: bigint; readonly challengeWindow?: bigint };
+}
+interface Profile { readonly construction: Uint8Array; readonly silenceTag: 1 | 6; readonly maxBytes: number }
+function profileOf(p: TermsProfile): Profile {
+  const construction = utf8Encoder.encode(p.construction);
+  if (construction.length === 0 || construction.length > 255 || (p.silenceTag !== 1 && p.silenceTag !== 6)) {
+    throw new RangeError("invalid terms profile");
+  }
+  // The pool's 1305 bytes hold an 11-byte name and a 16-byte silence payload.
+  return Object.freeze({ construction, silenceTag: p.silenceTag,
+    maxBytes: 1305 - 11 + construction.length - (p.silenceTag === 1 ? 0 : 8) });
+}
 
 export interface RootTerms {
   readonly obligor: Uint8Array;
@@ -48,8 +69,8 @@ function unsigned(value: bigint, max: bigint, what: string): void {
   if (typeof value !== "bigint" || value < 0n || value > max) throw new EncodingError(`invalid ${what}`);
 }
 
-/** Emits only the constant-payout, empty-reliance v3 profile. */
-export function encodeRootTerms(fields: RootTerms): Uint8Array {
+/** Emits only the constant-payout, empty-reliance profile. */
+function encodeTerms(p: Profile, fields: ConstructionTerms): Uint8Array {
   // Every field is read once; the checks and the writes below use those reads.
   object(fields, "root terms");
   const payout = fields.payout;
@@ -72,13 +93,18 @@ export function encodeRootTerms(fields: RootTerms): Uint8Array {
   const interval = fields.interval;
   unsigned(interval, MAX_U64, "witness interval");
   const { silence: silenceField, nonService: nonServiceField, replacementRule: ruleField } = fields;
-  let silence: { noCommitmentDuration: bigint; challengeWindow: bigint } | undefined;
+  let silence: { noCommitmentDuration: bigint; challengeWindow?: bigint } | undefined;
   if (silenceField !== undefined) {
     object(silenceField, "silence clause");
     const { noCommitmentDuration, challengeWindow } = silenceField;
     unsigned(noCommitmentDuration, MAX_U64, "no-commitment duration");
-    unsigned(challengeWindow, MAX_U64, "challenge window");
-    silence = { noCommitmentDuration, challengeWindow };
+    if (p.silenceTag === 1) {
+      unsigned(challengeWindow!, MAX_U64, "challenge window");
+      silence = { noCommitmentDuration, challengeWindow: challengeWindow! };
+    } else {
+      if (challengeWindow !== undefined) throw new EncodingError("invalid challenge window");
+      silence = { noCommitmentDuration };
+    }
   }
   const replacementRule = ruleField === undefined ? undefined : key(ruleField, "replacement");
   let nonService: { duration: bigint; count: bigint; window: bigint } | undefined;
@@ -96,17 +122,18 @@ export function encodeRootTerms(fields: RootTerms): Uint8Array {
   w.lengthPrefixed(bigintToMinimalBytes(perUnit)); w.u32(0);
   w.u8(5); w.key32(operator, "operator");
   w.u32(2 + Number(silence !== undefined) + Number(replacementRule !== undefined) + Number(nonService !== undefined));
-  if (silence !== undefined) { w.u8(1); w.u64(silence.noCommitmentDuration); w.u64(silence.challengeWindow); }
+  if (silence !== undefined && p.silenceTag === 1) { w.u8(1); w.u64(silence.noCommitmentDuration); w.u64(silence.challengeWindow!); }
   w.u8(2); w.key32(venue, "venue"); w.u64(interval);
   if (replacementRule !== undefined) { w.u8(3); w.key32(replacementRule, "replacement"); }
   if (nonService !== undefined) { w.u8(4); w.u64(nonService.duration); w.u32(Number(nonService.count)); w.u64(nonService.window); }
-  w.u8(5); w.lengthPrefixed(CONSTRUCTION); w.key32(configuration, "configuration");
+  w.u8(5); w.lengthPrefixed(p.construction); w.key32(configuration, "configuration");
+  if (silence !== undefined && p.silenceTag === 6) { w.u8(6); w.u64(silence.noCommitmentDuration); }
   return w.finish();
 }
 
 /** Strict, bounded decoding; every returned byte field owns its buffer. */
-export function decodeRootTerms(bytes: Uint8Array): RootTerms {
-  const r = new ByteReader(own(bytes, MAX_ROOT_TERMS_BYTES, "root terms"));
+function decodeTerms(p: Profile, bytes: Uint8Array): ConstructionTerms {
+  const r = new ByteReader(own(bytes, p.maxBytes, "root terms"));
   if (compareBytes(r.raw(4), MAGIC) !== 0 || r.u8() !== 1 || r.u8() !== 1) {
     throw new EncodingError("unsupported root terms prefix");
   }
@@ -123,40 +150,45 @@ export function decodeRootTerms(bytes: Uint8Array): RootTerms {
   if (count < 2 || count > 5) throw new EncodingError("invalid clause count");
   let previous = 0;
   let venue: Uint8Array | undefined, interval: bigint | undefined, configuration: Uint8Array | undefined;
-  let silence: RootTerms["silence"], replacementRule: Uint8Array | undefined, nonService: RootTerms["nonService"];
+  let silence: ConstructionTerms["silence"], replacementRule: Uint8Array | undefined, nonService: RootTerms["nonService"];
   for (let i = 0; i < count; i++) {
     const tag = r.u8();
     if (tag <= previous) throw new EncodingError("noncanonical clause order");
     previous = tag;
     switch (tag) {
-      case 1: silence = { noCommitmentDuration: r.u64(), challengeWindow: r.u64() }; break;
+      case 1:
+        if (p.silenceTag !== 1) throw new EncodingError("unsupported clause");
+        silence = { noCommitmentDuration: r.u64(), challengeWindow: r.u64() }; break;
       case 2: venue = r.raw(32); interval = r.u64(); break;
       case 3: replacementRule = r.raw(32); break;
       case 4: nonService = { duration: r.u64(), count: BigInt(r.u32()), window: r.u64() }; break;
       case 5:
-        if (compareBytes(r.lengthPrefixed(CONSTRUCTION.length), CONSTRUCTION) !== 0) {
+        if (compareBytes(r.lengthPrefixed(p.construction.length), p.construction) !== 0) {
           throw new EncodingError("unsupported construction");
         }
         configuration = r.raw(32); break;
+      case 6:
+        if (p.silenceTag !== 6) throw new EncodingError("unsupported clause");
+        silence = { noCommitmentDuration: r.u64() }; break;
       default: throw new EncodingError("unsupported clause");
     }
   }
   r.expectEnd();
   if (venue === undefined || interval === undefined || configuration === undefined) throw new EncodingError("missing required clause");
-  const fields: RootTerms = {
+  const fields: ConstructionTerms = {
     obligor, payout: Object.freeze(payout), operator, configuration, venue, interval,
     ...(silence === undefined ? {} : { silence: Object.freeze(silence) }),
     ...(replacementRule === undefined ? {} : { replacementRule }),
     ...(nonService === undefined ? {} : { nonService: Object.freeze(nonService) }),
   };
   // Reuse constructor validation for key, quantity and field semantics.
-  encodeRootTerms(fields);
+  encodeTerms(p, fields);
   return Object.freeze(fields);
 }
 
-export function rootTermsName(bytes: Uint8Array): Uint8Array {
-  const snapshot = own(bytes, MAX_ROOT_TERMS_BYTES, "root terms");
-  decodeRootTerms(snapshot);
+function termsName(p: Profile, bytes: Uint8Array): Uint8Array {
+  const snapshot = own(bytes, p.maxBytes, "root terms");
+  decodeTerms(p, snapshot);
   return sha256(snapshot);
 }
 function signatureMessage(name: Uint8Array): Uint8Array {
@@ -164,16 +196,40 @@ function signatureMessage(name: Uint8Array): Uint8Array {
   w.context(BACKING_SIGNATURE_CONTEXT); w.key32(name, "backing name");
   return w.finish();
 }
-export function rootTermsSignatureMessage(bytes: Uint8Array): Uint8Array { return signatureMessage(rootTermsName(bytes)); }
 /** A true result authenticates terms only; no current authority is inferred. */
-export function verifyRootTermsSignature(bytes: Uint8Array, signature: Uint8Array): boolean {
+function verifyTermsSignature(p: Profile, bytes: Uint8Array, signature: Uint8Array): boolean {
   try {
-    const snapshot = own(bytes, MAX_ROOT_TERMS_BYTES, "root terms");
+    const snapshot = own(bytes, p.maxBytes, "root terms");
     const sig = own(signature, 64, "signature", true);
-    const fields = decodeRootTerms(snapshot);
+    const fields = decodeTerms(p, snapshot);
     return verifySignatureStrict(sig, signatureMessage(sha256(snapshot)), fields.obligor);
   } catch (error) {
     if (error instanceof EncodingError) return false;
     throw error;
   }
 }
+
+/** A construction's root-terms codec: pool-v3 §11.2's frame under the profile's construction and silence clause. */
+export interface TermsCodec<T> {
+  readonly maxBytes: number;
+  encodeRootTerms(fields: T): Uint8Array;
+  decodeRootTerms(bytes: Uint8Array): T;
+  rootTermsName(bytes: Uint8Array): Uint8Array;
+  rootTermsSignatureMessage(bytes: Uint8Array): Uint8Array;
+  verifyRootTermsSignature(bytes: Uint8Array, signature: Uint8Array): boolean;
+}
+export function termsCodec<T extends ConstructionTerms = ConstructionTerms>(profile: TermsProfile): TermsCodec<T> {
+  const p = profileOf(profile);
+  return Object.freeze({
+    maxBytes: p.maxBytes,
+    encodeRootTerms: (fields: T) => encodeTerms(p, fields),
+    decodeRootTerms: (bytes: Uint8Array) => decodeTerms(p, bytes) as T,
+    rootTermsName: (bytes: Uint8Array) => termsName(p, bytes),
+    rootTermsSignatureMessage: (bytes: Uint8Array) => signatureMessage(termsName(p, bytes)),
+    verifyRootTermsSignature: (bytes: Uint8Array, signature: Uint8Array) => verifyTermsSignature(p, bytes, signature),
+  });
+}
+const V3 = termsCodec<RootTerms>({ construction: "moe/pool/v3", silenceTag: 1 });
+if (V3.maxBytes !== MAX_ROOT_TERMS_BYTES) throw new Error("pool-v3 terms bound");
+export const encodeRootTerms = V3.encodeRootTerms, decodeRootTerms = V3.decodeRootTerms, rootTermsName = V3.rootTermsName,
+  rootTermsSignatureMessage = V3.rootTermsSignatureMessage, verifyRootTermsSignature = V3.verifyRootTermsSignature;

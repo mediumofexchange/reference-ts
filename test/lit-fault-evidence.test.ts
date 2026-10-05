@@ -1,0 +1,126 @@
+import { createHash } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { EncodingError } from "../src/bytes.js";
+import { litConfigHash } from "../src/lit/configuration.js";
+import * as frames from "../src/lit/commitments.js";
+import * as fault from "../src/lit/fault-evidence.js";
+import * as codec from "../src/lit/records.js";
+
+// lit-v1 §6's fault evidence against a Buffer/node:crypto oracle, and compact
+// intrinsic exclusion over records that otherwise satisfy §3 so only the
+// failure under test can decide. Records are built with the reviewed codec.
+const ascii = (s: string): Buffer => Buffer.from(s, "ascii");
+const join = (...parts: Uint8Array[]): Buffer => Buffer.concat(parts);
+const int = (v: bigint | number, bytes: number): Buffer => Buffer.from(BigInt(v).toString(16).padStart(bytes * 2, "0"), "hex");
+const hash = (...b: Uint8Array[]): Buffer => createHash("sha256").update(join(...b)).digest();
+const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
+const id = (n: number): Buffer => Buffer.alloc(32, n);
+const secretOf = (n: number): Uint8Array => hash(ascii("lit fault secret"), int(n, 1));
+const keyOf = (n: number): Uint8Array => ed25519.getPublicKey(secretOf(n));
+const sign = (n: number, message: Uint8Array): Uint8Array => ed25519.sign(message, secretOf(n));
+const reason = (f: () => unknown): string => {
+  try { f(); } catch (error) { expect(error).toBeInstanceOf(EncodingError); return (error as Error).message; }
+  throw new Error("expected a refusal");
+};
+
+const DOMAIN = litConfigHash(), SEGMENT = id(19), BACKING = id(31), K = 1;
+const issue: codec.Issue = { domain: DOMAIN, kind: 1, segment: SEGMENT, backing: BACKING, quantity: 100n, owner: keyOf(2), nonce: id(41) };
+const [note] = codec.derivedOutputs(issue);
+const spend: codec.Spend = { domain: DOMAIN, kind: 2, segment: SEGMENT, inputs: [note!],
+  outputs: [{ backing: BACKING, value: 60n, owner: keyOf(3) }, { backing: BACKING, value: 40n, owner: keyOf(4) }] };
+const signed = (s: codec.Statement, signer: number): codec.LitRecord =>
+  ({ statement: s, authorization: sign(signer, codec.statementBytes(s)) });
+const issueRecord = signed(issue, K), spendRecord = signed(spend, 2);
+const pairOf = (r: codec.LitRecord) => codec.evidencePair(r);
+
+describe("lit-v1 §6 fault evidence", () => {
+  const e0 = frames.genesisEvidenceHash(SEGMENT);
+  const e1 = frames.nextEvidenceHash(e0, pairOf(issueRecord), 1n), e2 = frames.nextEvidenceHash(e1, pairOf(spendRecord), 2n);
+  const snapshot = { backing: BACKING, segment: SEGMENT, historyHash: id(7), evidenceHash: e2, issued: 100n, burned: 0n };
+  const evidence = { snapshot, position: 1n, length: 2n, previous: e0, statement: codec.statementBytes(issue),
+    authorization: issueRecord.authorization, suffix: [pairOf(spendRecord)] };
+  const expected = { backing: BACKING, segment: SEGMENT, digest: frames.snapshotDigest(snapshot) };
+
+  it("frames the pair as the oracle does, 244 bytes plus the fields and 64 per later event, and authenticates it", () => {
+    const bytes = fault.encodeFaultEvidence(evidence, 8n);
+    const p = pairOf(spendRecord);
+    const oracle = join(ascii("moe/lit/v1/fault-evidence"), frames.snapshotBytes(snapshot), int(1n, 8), int(2n, 8), e0,
+      int(evidence.statement.length, 4), evidence.statement, int(64, 4), evidence.authorization, p.statementHash, p.signatureHash);
+    expect(hex(bytes)).toBe(hex(oracle));
+    expect(bytes.length).toBe(244 + evidence.statement.length + 64 + 64);
+    expect(fault.FIXED_BYTES).toBe(244);
+    const decoded = fault.decodeFaultEvidence(bytes, 8n);
+    expect(hex(fault.encodeFaultEvidence(decoded, 8n))).toBe(hex(bytes));
+    expect(fault.verifyFaultEvidence(expected, decoded, 8n)).toBe(true);
+    expect(fault.verifyFaultEvidence({ ...expected, segment: id(23) }, decoded, 8n)).toBe(false);
+    expect(fault.verifyFaultEvidence(expected, { ...decoded, authorization: sign(3, evidence.statement) }, 8n)).toBe(false);
+    expect(fault.verifyFaultEvidence(expected, { ...decoded, statement: Uint8Array.of(...decoded.statement, 0) }, 8n)).toBe(false);
+  });
+
+  it("refuses a field past 4096 bytes, a wrong suffix length and a suffix over the budget", () => {
+    const bytes = fault.encodeFaultEvidence(evidence, 8n);
+    expect(reason(() => fault.encodeFaultEvidence({ ...evidence, statement: new Uint8Array(4097) }, 8n))).toBe("target field too long");
+    const long = Buffer.from(bytes); long.writeUInt32BE(4097, 236);
+    expect(reason(() => fault.decodeFaultEvidence(long, 8n))).toBe("target field too long");
+    expect(reason(() => fault.decodeFaultEvidence(bytes.subarray(0, bytes.length - 1), 8n))).toBe("wrong suffix byte length");
+    expect(reason(() => fault.decodeFaultEvidence(join(bytes, new Uint8Array(64)), 8n))).toBe("wrong suffix byte length");
+    expect(() => fault.decodeFaultEvidence(bytes, 0n)).toThrow(fault.FaultEvidenceLimitError);
+    expect(reason(() => fault.encodeFaultEvidence({ ...evidence, suffix: [] }, 8n))).toBe("wrong evidence suffix length");
+    expect(reason(() => fault.decodeFaultEvidence(Buffer.from(bytes).fill(0, 188, 196), 8n))).toBe("invalid evidence positions");
+    // The longest frame a budget admits decodes; one byte more is a local limit, refused before copying.
+    const full = fault.encodeFaultEvidence({ ...evidence, statement: new Uint8Array(4096), authorization: new Uint8Array(4096) }, 8n);
+    expect(full.length).toBe(244 + 2 * 4096 + 64);
+    expect(fault.decodeFaultEvidence(full, 1n).statement).toHaveLength(4096);
+    expect(() => fault.decodeFaultEvidence(join(full, new Uint8Array(1)), 1n)).toThrow(fault.FaultEvidenceLimitError);
+    expect(() => fault.decodeFaultEvidence(full, 0n)).toThrow(fault.FaultEvidenceLimitError);
+  });
+});
+
+describe("lit-v1 §6 compact intrinsic exclusion", () => {
+  const kOf = (backing: Uint8Array): Uint8Array | undefined => hex(backing) === hex(BACKING) ? keyOf(K) : undefined;
+  const statement = (r: codec.LitRecord) => codec.statementBytes(r.statement);
+  it("excludes a failing signature under a key the statement names or K, and failing arithmetic", () => {
+    expect(fault.intrinsicallyInvalid(statement(issueRecord), issueRecord.authorization, kOf)).toBe(false);
+    expect(fault.intrinsicallyInvalid(statement(spendRecord), spendRecord.authorization, kOf)).toBe(false);
+    expect(fault.intrinsicallyInvalid(statement(issueRecord), sign(2, statement(issueRecord)), kOf)).toBe(true);
+    expect(fault.intrinsicallyInvalid(statement(spendRecord), sign(3, statement(spendRecord)), kOf)).toBe(true);
+    const unbalanced = signed({ ...spend, outputs: [spend.outputs[0]!] }, 2);
+    expect(fault.intrinsicallyInvalid(statement(unbalanced), unbalanced.authorization, kOf)).toBe(true);
+    // lit-v1 1bf5bfc: two inputs naming one note, and a demand summing past a u64, in otherwise valid signed statements.
+    const twice: codec.Spend = { ...spend, inputs: [note!, note!], outputs: [{ backing: BACKING, value: 200n, owner: keyOf(3) }] };
+    const twiceBytes = codec.statementBytes(twice), twiceSig = sign(2, twiceBytes);
+    expect(fault.intrinsicallyInvalid(twiceBytes, Uint8Array.of(...twiceSig, ...twiceSig), kOf)).toBe(true);
+    const demandOf = (inputs: typeof spend.inputs): codec.Demand =>
+      ({ domain: DOMAIN, kind: 4, segment: SEGMENT, inputs, presenter: keyOf(6), instant: 1n, deadline: 2n });
+    const big = { ...note!, value: (1n << 64n) - 1n }, other = { ...note!, value: 1n, rho: id(77) };
+    for (const [inputs, expected] of [[[big, other], true], [[{ ...big, value: (1n << 64n) - 2n }, other], false]] as const) {
+      const bytes = codec.statementBytes(demandOf(inputs)), sig = sign(2, bytes);
+      expect(fault.intrinsicallyInvalid(bytes, Uint8Array.of(...sig, ...sig), kOf)).toBe(expected);
+    }
+    const burn: codec.Burn = { domain: DOMAIN, kind: 3, segment: SEGMENT, quantity: 100n, inputs: [note!], outputs: [] };
+    const burnBytes = codec.statementBytes(burn);
+    expect(fault.intrinsicallyInvalid(burnBytes, sign(2, burnBytes), kOf)).toBe(false);
+    expect(fault.intrinsicallyInvalid(burnBytes, sign(3, burnBytes), kOf)).toBe(true);
+  });
+
+  it("is not intrinsic when the target is malformed, of another domain, of a wrong length, unresolved or needs the demand", () => {
+    expect(fault.intrinsicallyInvalid(statement(spendRecord), spendRecord.authorization.subarray(1), kOf)).toBe(false);
+    expect(fault.intrinsicallyInvalid(Uint8Array.of(...statement(spendRecord), 0), spendRecord.authorization, kOf)).toBe(false);
+    const foreign = { ...spend, domain: id(5) };
+    expect(fault.intrinsicallyInvalid(codec.statementBytes(foreign), sign(3, codec.statementBytes(foreign)), kOf)).toBe(false);
+    expect(fault.intrinsicallyInvalid(statement(issueRecord), sign(2, statement(issueRecord)), () => undefined)).toBe(false);
+    const withdraw: codec.Withdraw = { domain: DOMAIN, kind: 5, segment: SEGMENT, demand: id(9) };
+    expect(fault.intrinsicallyInvalid(codec.statementBytes(withdraw), new Uint8Array(64), kOf)).toBe(false);
+    const settle: codec.Settle = { domain: DOMAIN, kind: 6, segment: SEGMENT, demand: id(9), owner: keyOf(5) };
+    expect(fault.intrinsicallyInvalid(codec.statementBytes(settle), new Uint8Array(136), kOf)).toBe(false);
+    // A request is not among §6's kinds, whatever its signature.
+    const request: codec.Request = { domain: DOMAIN, kind: 7, input: note!, refresh: 1n };
+    expect(fault.intrinsicallyInvalid(codec.statementBytes(request), sign(3, codec.statementBytes(request)), kOf)).toBe(false);
+    // K resolved to something that is not a key is unresolved, not a failing signature.
+    const smallOrder = new Uint8Array(32); smallOrder[0] = 1;
+    for (const key of [smallOrder, keyOf(K).subarray(1)]) {
+      expect(fault.intrinsicallyInvalid(statement(issueRecord), issueRecord.authorization, () => key)).toBe(false);
+    }
+  });
+});

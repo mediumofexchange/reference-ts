@@ -1,4 +1,5 @@
 // Source-neutral evidence transport, pool-v3 §12 at 97ff964: u64 item lengths.
+// lit-v1 §6 reads the same frame under its own context (`packageCodec`).
 // Structural success is never a complete certificate or a verdict.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, copyUnshared, EncodingError, FrameFeed, type FrameReader } from "../../bytes.js";
@@ -69,14 +70,14 @@ const u64 = (b: Uint8Array, at: number): bigint => new DataView(b.buffer, b.byte
  * the count and each length must fit the bytes that remain before any payload
  * is read. No inner payload is decoded.
  */
-export function* packageReader(sink: PackageSink, reading: PackageReading = {}): FrameReader<void> {
-  const { total, maxItemBytes, maxItems } = reading;
-  if (total !== undefined && total < 23n) throw new EncodingError("truncated package");
-  const head = yield 23;
-  if (compareBytes(head.subarray(0, CONTEXT.length), CONTEXT) !== 0) throw new EncodingError("wrong package context");
-  const count = u32(head, 19);
+function* readPackage(context: Uint8Array, sink: PackageSink, reading: PackageReading): FrameReader<void> {
+  const { total, maxItemBytes, maxItems } = reading, fixed = context.length + 4;
+  if (total !== undefined && total < BigInt(fixed)) throw new EncodingError("truncated package");
+  const head = yield fixed;
+  if (compareBytes(head.subarray(0, context.length), context) !== 0) throw new EncodingError("wrong package context");
+  const count = u32(head, context.length);
   if (maxItems !== undefined && BigInt(count) > maxItems) throw new PackageLimitError("package reader budget exceeded");
-  let offset = 23n;
+  let offset = BigInt(fixed);
   if (total !== undefined && 9n * BigInt(count) > total - offset) throw new EncodingError("impossible evidence count");
   let previous: { kind: number; hash: Uint8Array } | undefined;
   const ordered = (tag: number, hash: Uint8Array): void => {
@@ -112,14 +113,15 @@ export function* packageReader(sink: PackageSink, reading: PackageReading = {}):
 }
 
 /** Accept canonical order, never repair or deduplicate caller evidence. */
-export function encodeEvidencePackage(input: readonly EvidenceItem[], boundIn?: PackageLimits): Uint8Array {
+function encodePackage(context: Uint8Array, input: readonly EvidenceItem[], boundIn?: PackageLimits): Uint8Array {
   const bound = boundIn === undefined ? undefined : limits(boundIn);
   if (!Array.isArray(input)) throw new EncodingError("invalid evidence count");
   // The count is budgeted before any item is read; each item is then read and
   // judged once, so a long sparse array stops at its first hole.
   const count = arrayLength(input);
   if (count > MAX_U32) throw new EncodingError("invalid evidence count");
-  let size = 23n + 9n * BigInt(count);
+  const fixed = context.length + 4;
+  let size = BigInt(fixed) + 9n * BigInt(count);
   budget(size, BigInt(count), bound);
   const items = copyArray(input, (reference: EvidenceItem): EvidenceItem => {
     if (reference === null || typeof reference !== "object") throw new EncodingError("invalid evidence item");
@@ -140,8 +142,8 @@ export function encodeEvidencePackage(input: readonly EvidenceItem[], boundIn?: 
     previous = { kind: item.kind, hash };
   }
   const out = new Uint8Array(Number(size)), view = new DataView(out.buffer);
-  out.set(CONTEXT); view.setUint32(19, items.length, false);
-  let offset = 23;
+  out.set(context); view.setUint32(context.length, items.length, false);
+  let offset = fixed;
   for (const item of items) {
     out[offset] = item.kind; view.setBigUint64(offset + 1, BigInt(item.payload.length), false);
     out.set(item.payload, offset + 9); offset += 9 + item.payload.length;
@@ -150,17 +152,35 @@ export function encodeEvidencePackage(input: readonly EvidenceItem[], boundIn?: 
 }
 
 /** A package held in memory, read by the one package reader under the caller's optional budget. */
-export function decodeEvidencePackage(bytesIn: Uint8Array, boundIn?: PackageLimits): readonly EvidenceItem[] {
+function decodePackage(context: Uint8Array, bytesIn: Uint8Array, boundIn?: PackageLimits): readonly EvidenceItem[] {
   const bound = boundIn === undefined ? undefined : limits(boundIn);
   budget(BigInt(byteLength(bytesIn)), 0n, bound);
   const input = bytes(bytesIn);
   budget(BigInt(input.length), 0n, bound);
   const items: EvidenceItem[] = [];
-  const feed = new FrameFeed(packageReader({ item: (tag, payload) => { items.push(Object.freeze({ kind: tag, payload })); } },
+  const feed = new FrameFeed(readPackage(context, { item: (tag, payload) => { items.push(Object.freeze({ kind: tag, payload })); } },
     { total: BigInt(input.length), ...(bound === undefined ? {} : { maxItems: bound.maxItems }) }));
   feed.feed(input); feed.end();
   return Object.freeze(items);
 }
+
+/** A construction's §12 package codec under its context; the frame, kinds, order and budgets are pool-v3's. */
+export interface PackageCodec {
+  packageReader(sink: PackageSink, reading?: PackageReading): FrameReader<void>;
+  encodeEvidencePackage(input: readonly EvidenceItem[], bound?: PackageLimits): Uint8Array;
+  decodeEvidencePackage(bytes: Uint8Array, bound?: PackageLimits): readonly EvidenceItem[];
+}
+export function packageCodec(contextIn: Uint8Array): PackageCodec {
+  const context = copyBytes(contextIn);
+  return Object.freeze({
+    packageReader: (sink: PackageSink, reading: PackageReading = {}) => readPackage(context, sink, reading),
+    encodeEvidencePackage: (input: readonly EvidenceItem[], bound?: PackageLimits) => encodePackage(context, input, bound),
+    decodeEvidencePackage: (bytes: Uint8Array, bound?: PackageLimits) => decodePackage(context, bytes, bound),
+  });
+}
+const V3 = packageCodec(CONTEXT);
+export const packageReader = V3.packageReader, encodeEvidencePackage = V3.encodeEvidencePackage,
+  decodeEvidencePackage = V3.decodeEvidencePackage;
 
 /** Existing MOED v1 root preimage. No new directory identity or root. */
 export function encodeEvidenceDirectory(input: readonly SnapshotDigest[], boundIn?: PackageLimits): Uint8Array {
