@@ -2,7 +2,7 @@
 // without randomness; every reader derives it, so these functions are part of
 // validity, not a wallet convention. No membership, spentness or ownership.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { ByteWriter, copyBytes, EncodingError } from "../bytes.js";
+import { arrayLength, ByteWriter, copyArray, copyBytes, EncodingError } from "../bytes.js";
 import {
   LIT_NOTE_CONTEXT as NOTE, LIT_NULLIFIER_CONTEXT as NULLIFIER, LIT_RHO_ISSUE_CONTEXT as RHO_ISSUE,
   LIT_RHO_SPEND_CONTEXT as RHO_SPEND, LIT_TAG_CONTEXT as TAG,
@@ -96,12 +96,13 @@ export function issueRho(output: Output, nonce: Uint8Array): Uint8Array {
 }
 /** The randomness of output `position` of a statement consuming `nullifiers` in input order (§2). */
 export function spendRho(nullifiers: readonly Uint8Array[], position: number): Uint8Array {
-  if (!Array.isArray(nullifiers) || nullifiers.length < 1 || nullifiers.length > MAX_INPUTS) {
-    throw new EncodingError("wrong nullifier count");
-  }
+  const n = Array.isArray(nullifiers) ? arrayLength(nullifiers) : 0;
+  if (n < 1 || n > MAX_INPUTS) throw new EncodingError("wrong nullifier count");
+  const own = copyArray(nullifiers, nf => field32(nf, "nullifier"), MAX_INPUTS);
+  if (own.length < 1) throw new EncodingError("wrong nullifier count");
   if (!Number.isInteger(position) || position < 0 || position >= MAX_OUTPUTS) throw new EncodingError("wrong output position");
-  const w = new ByteWriter(); w.context(RHO_SPEND); w.u8(nullifiers.length);
-  for (const nf of nullifiers) w.key32(field32(nf, "nullifier"), "nullifier");
+  const w = new ByteWriter(); w.context(RHO_SPEND); w.u8(own.length);
+  for (const nf of own) w.key32(nf, "nullifier");
   w.u8(position);
   return sha256(w.finish());
 }
