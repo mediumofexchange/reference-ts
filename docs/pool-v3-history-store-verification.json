@@ -34,83 +34,83 @@
       "kind": 1,
       "count": 37,
       "bytes": 14656,
-      "totalMs": 37216,
-      "maxMs": 1333
+      "totalMs": 31564,
+      "maxMs": 1072
     },
     {
       "kind": 2,
       "count": 39,
       "bytes": 14656,
-      "totalMs": 120513,
-      "maxMs": 3129
+      "totalMs": 102696,
+      "maxMs": 2661
     },
     {
       "kind": 4,
       "count": 2,
       "bytes": 14656,
-      "totalMs": 5191,
-      "maxMs": 2606
+      "totalMs": 4421,
+      "maxMs": 2211
     },
     {
       "kind": 6,
       "count": 1,
       "bytes": 14656,
-      "totalMs": 2593,
-      "maxMs": 2593
+      "totalMs": 2222,
+      "maxMs": 2222
     }
   ],
   "reads": {
     "payerFirstRead": {
       "statements": 37,
       "verified": 37,
-      "ms": 1552,
+      "ms": 1250,
       "fetchedBytes": 565631
     },
     "payerLaterReads": [
       {
         "verified": 12,
         "asked": 4,
-        "ms": 626,
+        "ms": 494,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 615,
+        "ms": 482,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 607,
+        "ms": 481,
         "fetchedBytes": 188545
       }
     ],
     "payerRestart": {
       "verified": 0,
       "asked": 0,
-      "ms": 61,
+      "ms": 96,
       "fetchedBytes": 809
     },
     "receiver": {
       "firstReadVerified": 73,
-      "firstReadMs": 2963,
+      "firstReadMs": 2365,
       "fulfilled": 36,
-      "fulfillMs": 1481
+      "fulfillMs": 1146
     },
     "payerAfterReturn": {
       "verified": 0,
       "asked": 4,
-      "ms": 115,
+      "ms": 89,
       "fetchedBytes": 48192
     },
     "restoredWallet": {
       "verified": 78,
-      "ms": 3389,
+      "ms": 2657,
       "fetchedBytes": 1205514
     },
     "journalAudit": {
-      "ms": 2030
+      "ms": 1626
     }
   },
   "readers": {
@@ -121,8 +121,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "26b5bfad0de3a99cc1a47389a3c5b0629031d6ea471fb090b60bffbb1dac4b54",
-        "history": "e334abd36273a92534a59009af1d9ebc44a788448ff834575a86afb73dee62af",
+        "spentRoot": "179d9dc0a681a5c7d8bb1ccb422d99f28cbe94291e80da15b97d1d9b80536ca8",
+        "history": "a1f12d60d094b521e7eac0719b26891f17cdcb113e616b106f19fdc059ba086b",
         "force": [],
         "clock": {
           "duration": "16",
@@ -135,9 +135,9 @@
       },
       "verified": 73,
       "instances": 2,
-      "readMs": 2428,
-      "maxRssBytes": 554205184,
-      "heapUsedBytes": 29668384,
+      "readMs": 1875,
+      "maxRssBytes": 588013568,
+      "heapUsedBytes": 28344000,
       "fetchedBytes": 1126772
     },
     "offline": {
@@ -147,8 +147,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "26b5bfad0de3a99cc1a47389a3c5b0629031d6ea471fb090b60bffbb1dac4b54",
-        "history": "e334abd36273a92534a59009af1d9ebc44a788448ff834575a86afb73dee62af",
+        "spentRoot": "179d9dc0a681a5c7d8bb1ccb422d99f28cbe94291e80da15b97d1d9b80536ca8",
+        "history": "a1f12d60d094b521e7eac0719b26891f17cdcb113e616b106f19fdc059ba086b",
         "force": [
           {
             "index": "23",
@@ -178,9 +178,9 @@
       },
       "verified": 3,
       "instances": 2,
-      "readMs": 390,
-      "maxRssBytes": 317689856,
-      "heapUsedBytes": 24136824,
+      "readMs": 305,
+      "maxRssBytes": 400986112,
+      "heapUsedBytes": 24198560,
       "fetchedBytes": 0
     },
     "kept": {
@@ -189,9 +189,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "e9d8f5eb7cc80232d5a182a7ecd29dd1bb4922280bacc7223e48555a53d84ca1",
-        "spentRoot": "695c56a08aef8960634eee2defc173bf4ac26317917e4fa7ade1257aa9c8fd10",
-        "history": "bb7abe3d188e06f65a883dcdcfd216557e5f287712837f3cd32413ed13ad1bc3",
+        "segment": "36ea0f7cbdf61d7c7dc729d2df27281f924a36c5449084fd6f9f4cd48ebd7d73",
+        "spentRoot": "048d183f0e0c351d111c76698edeb8f0d4d8051b220110b5639de9e354d208f1",
+        "history": "80ce38565381c30d4b85acf7630af3281325081035177e2f579c7932497a651f",
         "force": [
           {
             "index": "23",
@@ -221,9 +221,9 @@
       },
       "verified": 2,
       "instances": 2,
-      "readMs": 436,
-      "maxRssBytes": 335675392,
-      "heapUsedBytes": 24468488,
+      "readMs": 337,
+      "maxRssBytes": 378740736,
+      "heapUsedBytes": 25657632,
       "fetchedBytes": 79579
     },
     "scratch": {
@@ -232,9 +232,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "e9d8f5eb7cc80232d5a182a7ecd29dd1bb4922280bacc7223e48555a53d84ca1",
-        "spentRoot": "695c56a08aef8960634eee2defc173bf4ac26317917e4fa7ade1257aa9c8fd10",
-        "history": "bb7abe3d188e06f65a883dcdcfd216557e5f287712837f3cd32413ed13ad1bc3",
+        "segment": "36ea0f7cbdf61d7c7dc729d2df27281f924a36c5449084fd6f9f4cd48ebd7d73",
+        "spentRoot": "048d183f0e0c351d111c76698edeb8f0d4d8051b220110b5639de9e354d208f1",
+        "history": "80ce38565381c30d4b85acf7630af3281325081035177e2f579c7932497a651f",
         "force": [
           {
             "index": "23",
@@ -264,17 +264,17 @@
       },
       "verified": 78,
       "instances": 2,
-      "readMs": 2571,
-      "maxRssBytes": 573870080,
-      "heapUsedBytes": 38847976,
+      "readMs": 2042,
+      "maxRssBytes": 561287168,
+      "heapUsedBytes": 37952800,
       "fetchedBytes": 1205514
     }
   },
   "process": {
-    "maxRssBytes": 571736064,
-    "heapUsedBytes": 34198720
+    "maxRssBytes": 606543872,
+    "heapUsedBytes": 39675056
   },
-  "elapsedMs": 221018,
+  "elapsedMs": 187849,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
