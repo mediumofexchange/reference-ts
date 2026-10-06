@@ -4,7 +4,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { compareBytes } from "../src/bytes.js";
 import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapshot } from "../src/lit/commitments.js";
 import { LIT } from "../src/lit/construction.js";
@@ -12,7 +12,8 @@ import { litConfigHash, litConfigurationBytes } from "../src/lit/configuration.j
 import { encodeFaultEvidence } from "../src/lit/fault-evidence.js";
 import { noteCommitment, type Opening, type Output } from "../src/lit/notes.js";
 import {
-  derivedOutputs, encodePublication, encodeRecord, evidencePair, statementBytes, statementHash, type LitRecord, type Statement,
+  acceptanceBytes, acceptanceId, derivedOutputs, encodePublication, encodeRecord, encodeSettlementAuthorization, evidencePair, releaseBytes,
+  statementBytes, statementHash, type LitRecord, type Statement,
 } from "../src/lit/records.js";
 import { encodeLitTerms, litTermsName, litTermsSignatureMessage, type LitRootTerms } from "../src/lit/terms.js";
 import { encodeLitPackage, encodeLitTrail, litSegmentBytes, litSegmentIdentity } from "../src/lit/transport.js";
@@ -24,6 +25,7 @@ import { FAULT_LIMITS } from "../src/pool/v3/fault-observer.js";
 import type { SegmentHeader } from "../src/pool/v3/headers.js";
 import { encodeEvidenceDirectory, type EvidenceItem } from "../src/pool/v3/package.js";
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
+import { keptStateHolds } from "../src/pool/v3/reader.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
@@ -108,6 +110,14 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
     const statement: Statement = { domain: DOMAIN, kind: 4, segment: current.id, inputs, presenter: pub(PRESENTER), instant, deadline };
     return record(statement, sign(statement, ...signers));
   };
+  /** A settlement of the demand `bytes` to `owner`: K's acceptance and the presenter's release (§§3–4). */
+  const settle = (bytes: Uint8Array, owner: Uint8Array, deadline: bigint): Uint8Array => {
+    const demandId = statementHash(LIT.decode(bytes).statement);
+    const statement: Statement = { domain: DOMAIN, kind: 6, segment: current.id, demand: demandId, owner: pub(owner) };
+    const acceptance = { domain: DOMAIN, demand: demandId, owner: pub(owner), deadline };
+    return record(statement, encodeSettlementAuthorization(deadline, ed25519.sign(acceptanceBytes(acceptance), K),
+      ed25519.sign(releaseBytes(DOMAIN, demandId, acceptanceId(acceptance), statementHash(statement)), PRESENTER)));
+  };
   const request = (input: Opening, signer: Uint8Array): Uint8Array => {
     const statement: Statement = { domain: DOMAIN, kind: 7, input, refresh: 1n };
     return record(statement, sign(statement, signer));
@@ -117,7 +127,7 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
     sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
   const pack = (extra: readonly EvidenceItem[] = []): Uint8Array => encodeLitPackage([...items, ...extra].sort((a, z) =>
     a.kind - z.kind || compareBytes(sha256(a.payload), sha256(z.payload))));
-  const read = (commitment: Commitment, extra: readonly EvidenceItem[] = [], options: { evidence?: EvidenceStore } = {}) =>
+  const read = (commitment: Commitment, extra: readonly EvidenceItem[] = [], options: { evidence?: EvidenceStore; store?: ReplayStore } = {}) =>
     readPackage<LitRecord>(pack([...extra, { kind: 1, payload: litConfigurationBytes() }, { kind: 2, payload: encodeCommitment(commitment) }]),
       selection(commitment), { construction: LIT, reference, venue, ...options });
   /** The operator's receipt for the current segment's latest record, given after sequence `after` (§5). */
@@ -137,7 +147,11 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
   const publish = (index: bigint, kind: 1 | 5, bytes: Uint8Array): void =>
     venue.witness(4, backing, index, encodePublication({ domain: DOMAIN, backing, kind, record: LIT.decode(bytes) }));
   const successor = (sequence: bigint, predecessor: Commitment): void => { current = open(sequence, predecessor, current.state); };
-  return { venue, backing, signed, items, checkpoint, admit, commitRaw, outputsOf, issue, spend, demand, request, to, read, receipt, fault,
+  /** The current trail as a reader's evidence store serves it, cut at its last record. */
+  const trailOf = () => new EvidenceStore(":memory:", { construction: LIT })
+    .importTrails([encodeLitTrail({ header: litSegmentBytes(current.header), terms: [signed], records: current.records })])
+    .trail(current.id, evidenceOf(current.records))!;
+  return { trailOf, venue, backing, signed, items, checkpoint, admit, commitRaw, outputsOf, issue, spend, demand, settle, request, to, read, receipt, fault,
     snapshotNow, publish, successor, pack, current: () => current };
 }
 
@@ -277,6 +291,49 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(stateOf(await f.read(latest)).ranges.nonService).toMatchObject({ count: "0", fires: false });
     f.publish(196n, 5, f.request(note!, ALICE));
     expect(stateOf(await f.read(latest)).ranges.nonService).toMatchObject({ count: "1", fires: true, snapshotIndex: "2" });
+  });
+
+  it("rebuilds a kept lit namespace's outputs from its trail before reusing it (§10), and resumes a kept file without discarding it", async () => {
+    const f = litScope(), other = litScope();
+    f.checkpoint(1n, 1n);
+    const issued = f.issue(10n, ALICE); await f.admit(issued);
+    const [note] = f.outputsOf(issued);
+    await f.admit(f.spend([note!], [f.to(6n, BOB), f.to(4n, ALICE)], [ALICE]));
+    // A demand and its settlement: the settlement's output is derived from the demand the trail carries.
+    const [, change] = f.outputsOf(f.current().records[1]!);
+    const presented = f.demand([change!], [ALICE], 0n, 100n); await f.admit(presented);
+    await f.admit(f.settle(presented, BOB, 50n));
+    other.checkpoint(1n, 1n);
+    for (const quantity of [10n, 6n, 4n, 3n]) await other.admit(other.issue(quantity, BOB));
+    const { state } = f.current(), snapshot = f.snapshotNow(), identity = b(90);
+    expect([...state.store.outputs(state.ns, 4n)].map(output => output.position)).toEqual([1n, 2n, 2n, 4n]);
+    expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot, LIT, f.trailOf())).toBe(true);
+    // The same rows against another segment's trail of as many records, or with no trail, do not hold.
+    expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot, LIT, other.trailOf())).toBe(false);
+    expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot, LIT)).toBe(false);
+    // A namespace is read only under its own construction.
+    expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot)).toBe(false);
+
+    const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-kept-"));
+    const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };
+    try {
+      g.checkpoint(1n, 1n);
+      const minted = g.issue(10n, ALICE); await g.admit(minted);
+      const first = g.checkpoint(2n, 3n);
+      let store = new ReplayStore(files.path, { digest: files.digest }), evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      expect(stateOf(await g.read(first, [], { store, evidence })).state.issued).toBe(10n);
+      store.close(); evidence.close();
+      await g.admit(g.spend([g.outputsOf(minted)[0]!], [g.to(6n, BOB), g.to(4n, ALICE)], [ALICE]));
+      // The venue moves on past the index the first read kept its answers through.
+      g.venue.advance(210n);
+      const second = g.checkpoint(3n, 205n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const discard = vi.spyOn(store, "discardKept");
+      const resumed = stateOf(await g.read(second, [], { store, evidence })), fresh = stateOf(await g.read(second));
+      expect(discard).not.toHaveBeenCalled();
+      expect([resumed.carrying, resumed.state.history, resumed.state.position]).toEqual([fresh.carrying, fresh.state.history, 2n]);
+      store.close(); evidence.close();
+    } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
   });
 
   it("reads each construction only under its own configuration, store and evidence file", async () => {

@@ -61,6 +61,8 @@ export function faultObserver(payloads: readonly Uint8Array[] = [],
     return copyUnshared(value);
   };
   const selection = { domain: fixed(selected.domain), venue: fixed(selected.venue) };
+  // A stray positional argument fails by name, not inside a read.
+  if (construction?.reader?.fault === undefined) throw new TypeError("the fault observer's fourth argument is a construction");
   const frames = construction.reader, header = frames.header;
   const verify = verifier.verify.bind(verifier), bound: ProofCheck = { verify };
   const evidence: { id: string; value: FaultTarget }[] = [];

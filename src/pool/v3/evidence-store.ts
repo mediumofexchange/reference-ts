@@ -211,6 +211,13 @@ export class EvidenceStore {
         else if (version !== BigInt(SCHEMA_VERSION)) throw new TypeError("the evidence file has another layout");
         // No read is open, so any per-read items are a crashed read's.
         else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
+        // A party's file reads one construction's evidence: one of another's is refused, never read by the wrong frames.
+        if (source !== ":memory:") {
+          this.#db.exec(CONSTRUCTION_SCHEMA);
+          this.#db.prepare("INSERT OR IGNORE INTO evidence_construction VALUES (1, ?)").run(this.construction.namespace.name);
+          const kept = (this.#db.prepare("SELECT name FROM evidence_construction WHERE id = 1").get() as { name: string }).name;
+          if (kept !== this.construction.namespace.name) throw new TypeError("the evidence file holds another construction's evidence");
+        }
       } catch (error) {
         this.#db.close();
         if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("evidence file");
@@ -220,13 +227,7 @@ export class EvidenceStore {
     // A store that outlives its reads keeps one identity in its own rows; a private in-memory one has none.
     if (source === ":memory:") this.#identity = undefined;
     else {
-      // A party's file reads one construction's evidence: one of another's is refused, never read by the wrong frames.
-      if (typeof source === "string") {
-        this.#db.exec(CONSTRUCTION_SCHEMA);
-        this.#db.prepare("INSERT OR IGNORE INTO evidence_construction VALUES (1, ?)").run(this.construction.namespace.name);
-        const kept = (this.#db.prepare("SELECT name FROM evidence_construction WHERE id = 1").get() as { name: string }).name;
-        if (kept !== this.construction.namespace.name) { this.#db.close(); throw new TypeError("the evidence file holds another construction's evidence"); }
-      }
+      // A host's database holds the journal's pool-v3 evidence; it records no construction (a lit journal is a later slice).
       this.#db.exec(IDENTITY_SCHEMA);
       this.#db.prepare("INSERT OR IGNORE INTO evidence_identity VALUES (1, ?)").run(randomBytes(16));
       this.#identity = new Uint8Array((this.#db.prepare("SELECT value FROM evidence_identity WHERE id = 1").get() as { value: Uint8Array }).value);

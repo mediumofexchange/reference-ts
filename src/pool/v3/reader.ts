@@ -25,7 +25,7 @@ import { POOL_V3, type Construction } from "./construction.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { ReplayRefusal, EvidenceRefusal, requireReplay } from "./refusals.js";
-import { KeptStateMismatch, type ReplayStore } from "./replay-store.js";
+import { KeptStateMismatch, type Demand, type ReplayStore } from "./replay-store.js";
 import {
   applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type DeclaredVerifier, type SegmentReplay, type WitnessPredicate,
 } from "./state.js";
@@ -468,7 +468,9 @@ function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array
     const tip = store.tip(ns);
     if (!same(store.identity(ns), identity)) continue;
     if (tip.position !== lastValid.position || !same(tip.history, lastValid.historyHash) || !same(tip.evidence, lastValid.evidenceHash)) continue;
-    if (!keptTipHolds(store, ns, lastValid, construction)) throw new KeptStateMismatch("a resumed tip is not its checkpoint's snapshot");
+    if (!keptTipHolds(store, ns, lastValid, construction) || !keptOutputsHold(store, ns, construction, trail, lastValid.position)) {
+      throw new KeptStateMismatch("a resumed tip is not its checkpoint's snapshot");
+    }
     const evidence = trail.evidence(tip.position);
     return evidence !== undefined && same(evidence, lastValid.evidenceHash) ? new StateHandle(store, ns, undefined, construction) : undefined;
   }
@@ -477,9 +479,13 @@ function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array
 
 /** §14 kept classes: a kept valid class's state at position m of namespace `ns`, against its re-authenticated
  * snapshot. At the tip the snapshot check recomputes it; below, the stored chain values and totals at m must be
- * the snapshot's, and the file's digest vouches for the other rows at or below m. */
+ * the snapshot's, and the file's digest vouches for the other rows at or below m. A construction without a note
+ * tree also rebuilds its outputs from `trail`, the class's served trail (lit-v1 §10, `keptOutputsHold`). */
 export function keptStateHolds(store: ReplayStore, ns: number, position: bigint, identity: Uint8Array, snapshot: Snapshot,
-  construction: Construction = POOL_V3 as Construction): boolean {
+  construction: Construction = POOL_V3 as Construction, trail?: StoredTrail): boolean {
+  return keptRowsHold(store, ns, position, identity, snapshot, construction) && keptOutputsHold(store, ns, construction, trail, position);
+}
+function keptRowsHold(store: ReplayStore, ns: number, position: bigint, identity: Uint8Array, snapshot: Snapshot, construction: Construction): boolean {
   if (!store.hasNamespace(ns) || store.construction(ns).name !== construction.namespace.name || !same(store.identity(ns), identity) ||
       !same(store.tip(ns).segment, snapshot.segment)) return false;
   const tip = store.tip(ns), checkpoint: ValidCheckpoint = { position, historyHash: snapshot.historyHash, evidenceHash: snapshot.evidenceHash,
@@ -491,6 +497,39 @@ export function keptStateHolds(store: ReplayStore, ns: number, position: bigint,
   const evidence = position === 0n ? construction.genesisEvidence(snapshot.segment) : event?.evidence;
   return history !== undefined && evidence !== undefined && same(history, snapshot.historyHash) && same(evidence, snapshot.evidenceHash) &&
     total.issued === snapshot.issued && total.burned === snapshot.burned;
+}
+
+/** Lit-v1 §10: no root in a lit snapshot checks the output set, so a reader resuming a namespace without a note tree
+ * rebuilds it from the kept statements: its own output rows through `position` must be exactly, in order, the outputs
+ * `trail`'s first `position` records derive (§2). A settlement reads its demand from the trail's earlier records, or,
+ * one the segment imported, from the state before it; imported outputs are their own namespaces' (each checked where its
+ * kept class is reused). A construction with a note tree has its root checked instead (`keptTipHolds`). */
+function keptOutputsHold(store: ReplayStore, ns: number, construction: Construction, trail: StoredTrail | undefined, position: bigint): boolean {
+  if (construction.namespace.tree) return true;
+  if (trail === undefined || trail.length < position) return false;
+  const derived: { readonly cm: bigint; readonly position: bigint }[] = [], local = new Map<string, Demand>();
+  let at = 0n;
+  for (const bytes of position === 0n ? [] : trail.records(0n)) {
+    if (++at > position) break;
+    let record;
+    try { record = construction.decode(bytes); } catch (error) {
+      // A record no valid prefix holds (malformed, or a request below) leaves the kept state unmatched.
+      if (error instanceof EncodingError) return false;
+      throw error;
+    }
+    const kind = construction.kind(record), before = at - 1n;
+    if (kind < 1 || kind > 6) return false;
+    const view = construction.view(record, id => local.get(id) ?? new StateHandle(store, ns, before, construction).demand(id));
+    if (view.demand !== undefined) local.set(view.demand.id, view.demand.value);
+    for (const cm of view.outputs) derived.push({ cm, position: at });
+  }
+  let k = 0;
+  for (const output of store.outputs(ns, position)) {
+    if (output.ns !== ns) continue;
+    const expected = derived[k++];
+    if (expected === undefined || expected.cm !== output.cm || expected.position !== output.position) return false;
+  }
+  return k === derived.length;
 }
 
 /** Whether a namespace's stored tip reproduces from its own rows (§14's snapshot check with the tip's chain values in
@@ -518,8 +557,8 @@ function frontierRoot(leaves: bigint, ommers: readonly (bigint | undefined)[]): 
 /** §14's snapshot check before resuming: the note root from the stored frontier (a construction with a note
  * tree), the spent root from the top node's stored children, the totals from their rows and both chains at n
  * from the stored values at n − 1 and record n's digests, against the checkpoint's authenticated snapshot
- * rather than values stored beside them; and the stored tip must be that position. Lit-v1 §10's output set is
- * checked by no root: its rows are the kept statements', which the history chain binds. */
+ * rather than values stored beside them; and the stored tip must be that position. Lit-v1 §10's output set, which no
+ * root checks, is rebuilt from the trail (`keptOutputsHold`). */
 function keptTipHolds(store: ReplayStore, ns: number, lastValid: ValidCheckpoint, construction: Construction): boolean {
   const tip = store.tip(ns), n = tip.position, segment = tip.segment;
   if (n !== lastValid.position || store.construction(ns).name !== construction.namespace.name) return false;
