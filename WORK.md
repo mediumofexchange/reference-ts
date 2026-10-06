@@ -20,8 +20,7 @@ Stop boundary: adoption; wallet commands and venue drills for lit backings are l
   (k)–(n), (s), (v), (w) closed, a view caught up in bounded passes; every budget holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)).
   Gaps: the operator's own memory at depth (Next 5); the wallet's 10⁵ points, lost to a container restart.
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet. Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
-  Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): a resumed kept walk rechecks a class's scope by the directory's first snapshot; a truncated `wallet.db`
-  refuses, never a fresh seed; no failed act is published; `handoff` checks `--out` before freezing; Node floor 24.21.0 (24.6.0's `node:sqlite` fails the wallet).
+  Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): resumed kept walks recheck scope; a truncated `wallet.db` refuses; no failed act is published; Node floor 24.21.0.
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md).
@@ -64,8 +63,9 @@ Stop boundary: adoption; wallet commands and venue drills for lit backings are l
 6. **Slice 13**, release assurance, after 12 (Next 4's open correctness findings close in it at the latest): reproducible builds of the
    package and its artifacts, installed-package interoperability, backup and restore drills within the standing authority. Security reviews
    until then: separate AI instances (fresh reviewers, rolling audits); the external review once the product is complete (2026-10-01).
-7. The harness's second reader retired (M10e2). Left: run its proof-free cases in vitest with stand-in proofs and consider a real-proof
-   job only for ready PRs (CI time); narrow the still-optional stored event indices (`StoredEvent.index`, `judgedIndex`) when touched.
+7. CI's real-proof checks run in five parallel groups (12 min, not 43) and skip for report/unread-doc commits ([decision](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)); lever: split the drill
+   or local replay. Proposed AGENTS.md wording: "(real-proof jobs take 15–30 min;" → "(real-proof jobs take about 12 min; reports-and-docs commits skip them;".
+   M10e2 left: the harness's proof-free cases in vitest with stand-in proofs; narrow the optional `StoredEvent.index`/`judgedIndex` when touched.
    Root-cause a Windows hang: PR #114 run 37350884943 attempt 1 timed out (30 s, vitest worker RPC too) in `pool-v3-replay-store` keep-point tests and `cli.test.mjs:158`; green on re-run.
 8. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging;
    served-trail caller-object cache; drop the explicit `vite` dev pin at the next dependency change; test a second commit refused while one is in
