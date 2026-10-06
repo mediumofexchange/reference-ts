@@ -304,8 +304,10 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     resumed.venue.records = unopened(resumed.venue.records);
     const answer = await replayLocalPackage(resumed, verifier, codec);
     assert.equal(answer.status, "selected-local-replay", `${answer.status} ${answer.check}`);
+    // Under the silence clause b1 and b2 lie in a gap open since a1, so they are lapsed: lapse is judged first.
+    const unopenedClass = silence ? ["lapsed", null] : ["excluded", "OPENING"];
     assert.deepEqual(answer.audit.range.carrying.map(c => [c.class, c.check ?? null]),
-      [["valid", null], ["valid", null], ["excluded", "OPENING"], ["excluded", "OPENING"], ["valid", null]]);
+      [["valid", null], ["valid", null], unopenedClass, unopenedClass, ["valid", null]]);
   });
   await test("stale, unheld and remembered pre-replacement imports cannot replace the required canonical predecessor", async () => {
     for (const opening of [reference(b1), { ...reference(b2), sequence: 99n }, reference(a1)]) {

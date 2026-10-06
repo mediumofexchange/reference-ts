@@ -238,7 +238,8 @@ describe("multi-backing scope reader", () => {
   });
 
   it("lapses an unopened continuation witnessed while a scoped gap is open, judging lapse before validity (C2.10.11)", async () => {
-    for (const [silence, expected] of [[4n, { status: "lapsed-selection" }], [20n, { check: "OPENING" }]] as const) {
+    for (const [silence, expected] of [[4n, { status: "lapsed-selection", clock: { duration: "4", snapshotIndex: "1", gap: "11", open: true } }],
+      [20n, { check: "OPENING" }]] as const) {
       const f = await twoBackings(silence, 20n);
       f.checkpoint(1n, 1n);
       f.fresh(2n); f.checkpoint(2n, undefined); // a second segment's opening, never witnessed

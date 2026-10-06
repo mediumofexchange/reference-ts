@@ -846,7 +846,13 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           // The segment never opened, so no history of it extends a last valid prefix (C2.10.11). Lapse is still
           // judged first: a scoped backing's gap open at this index needs no opening; a silence boundary does.
           const { clocks } = await scopeClocks(header, termsOf, backing, held.index, held.index);
-          if (clocks.some(clock => clock?.open === true)) return { ...base, class: "lapsed" };
+          const ownGap = header.entries.findIndex(entry => same(entry.backing, backing));
+          const gap = clocks[ownGap]?.open === true ? ownGap : clocks.findIndex(clock => clock?.open === true);
+          if (gap >= 0) {
+            // The record is the gap's clock read at this index (its own backing's first), which proves the lapse.
+            const { record } = await scopeClocks(header, termsOf, header.entries[gap]!.backing, held.index, held.index);
+            return { ...base, class: "lapsed", ...(record === null ? {} : { clock: record }) };
+          }
           requireReplay(false, "OPENING");
         }
         requireReplay(before(openingHeld, held), "IMPORT_RANK");
