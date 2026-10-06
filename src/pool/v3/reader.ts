@@ -492,14 +492,17 @@ export function keptStateHolds(store: ReplayStore, ns: number, position: bigint,
  * which no root in its snapshot checks either. Each imported namespace's own outputs through the position imported
  * must be its segment's trail's, through the chain value kept there; a namespace this process replayed or already
  * rebuilt is known and reads nothing. A trail `trails` does not hold leaves the state unmatched (kept state to
- * discard; a read without the evidence is then unresolved). A construction with a note tree checks its roots instead. */
+ * discard; a read without the evidence is then unresolved). The chain value and demand rows the rebuild reads are
+ * vouched for by §14's digest, as the pool's rows beyond its roots are. A construction with a note tree checks its roots
+ * instead. */
 function keptImportsHold(store: ReplayStore, ns: number, construction: Construction, trails: Pick<TrailEvidence, "trail"> | undefined): boolean {
   if (construction.namespace.tree) return true;
-  for (const { ns: source, upto } of store.imports(ns).values()) {
+  for (const [segment, { ns: source, upto }] of store.imports(ns)) {
     const from = known(store).get(source);
     if (upto === 0n || (from !== undefined && from.position >= upto)) continue;
-    const event = store.event(source, upto);
-    const trail = event === undefined || trails === undefined ? undefined : trails.trail(store.tip(source).segment, event.evidence);
+    const event = store.event(source, upto), named = Uint8Array.from(Buffer.from(segment, "hex"));
+    const trail = event === undefined || trails === undefined || !same(store.tip(source).segment, named) ? undefined :
+      trails.trail(named, event.evidence);
     if (trail === undefined || !keptOutputsHold(store, source, construction, trail, upto)) return false;
   }
   return true;
