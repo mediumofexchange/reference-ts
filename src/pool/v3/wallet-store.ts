@@ -322,6 +322,8 @@ export class V3Wallet {
   /** An existing wallet only: a database with no identity (a file truncated or replaced outside the wallet) is
    * refused, never filled with a fresh seed, so a lost wallet never comes back as a new one. */
   static open(path: string, options: PackageReader): V3Wallet {
+    // Refused before SQLite would create the file, so a later restore into `path` still finds a new destination.
+    requireThat(typeof path !== "string" || existsSync(path), "STORAGE", "wallet identity is missing");
     opening = true;
     try { return new V3Wallet(path, options); } finally { opening = false; }
   }

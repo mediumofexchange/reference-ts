@@ -226,9 +226,9 @@ export function writeExclusive(path: string, data: string | Uint8Array): void {
     try { linkSync(temporary, path); } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists`);
-      // FAT and exFAT, among others, take no hard link: the file goes on storage that does.
-      if (code === "EPERM" || code === "ENOTSUP" || code === "EINVAL" || code === "ENOSYS") {
-        throw new CommandError("STORAGE", `${path}: its file system takes no hard link, which a whole-or-nothing write needs`);
+      // FAT and exFAT, among others, take no hard link; Windows also reports denied access as EPERM.
+      if (code === "EPERM" || code === "ENOTSUP" || code === "EINVAL" || code === "ENOSYS" || code === "EISDIR") {
+        throw new CommandError("STORAGE", `${path}: cannot be linked into place (a file system without hard links, or no access), which a whole-or-nothing write needs`);
       }
       throw error;
     }

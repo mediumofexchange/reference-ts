@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, truncateSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, truncateSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
@@ -129,6 +129,13 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     expect(() => V3Wallet.open(path, options)).toThrow(expect.objectContaining(missing));
     // The refusal left no identity behind for a later open to find.
     expect(() => V3Wallet.open(path, options)).toThrow(expect.objectContaining(missing));
+    // Only a creating open fills it, as `venue create` does again while its mark stands after a run killed mid-creation.
+    const created = new V3Wallet(path, options);
+    expect(created.recoverySeed()).not.toEqual(seed); created.close();
+    // An absent path is refused without creating a file a later restore would find in its way.
+    const absent = join(directory, "absent.db");
+    expect(() => V3Wallet.open(absent, options)).toThrow(expect.objectContaining(missing));
+    expect(existsSync(absent)).toBe(false);
   });
 
   it("validates exact payer-agreed request terms and capsule framing without private material", async () => {

@@ -76,8 +76,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 24 is the floor package.json declares: every party's replay state is
-        # node:sqlite (storage decision 2026-09-29). If the floor ever stops
+        # The latest 24.x, at or above the 24.21.0 floor package.json declares:
+        # every party's replay state is node:sqlite (storage decision
+        # 2026-09-29), and 24.6.0's fails the wallet. If the floor ever stops
         # holding, the engines field is the thing that is wrong, not the test.
         node: [24]
         os: [ubuntu-latest, windows-latest]

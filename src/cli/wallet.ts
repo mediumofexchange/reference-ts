@@ -295,7 +295,9 @@ async function venueCommand(argv: readonly string[]): Promise<void> {
   const { venue, created } = await createVenue(directory, { synthetic: has(args, "synthetic"),
     ...(depth === undefined ? {} : { depth: integer(depth, "--depth", 1n, 1000n) }) });
   if (existsSync(pending)) {
-    if (!existsSync(directory.file(WALLET_DB))) await createDatabase(directory, args);
+    // Created while the mark stands, existing or not: a run killed inside the creating transaction leaves a database
+    // with no identity, which only the creating open fills (one with an identity it leaves as it is).
+    await createDatabase(directory, args);
     rmSync(pending);
   } else if (!existsSync(directory.file(WALLET_DB))) {
     throw new CommandError("ABSENT", "the venue exists but the wallet database is lost: restore it (restore, restore-seed) into a new directory");
