@@ -47,9 +47,13 @@ context cannot follow the mainnet. `moe/venue/ergo-testnet/reference`
 `ErgoVenue` reads it only above an anchor below mainnet's initial difficulty
 (about 1.2e12): within an epoch those rules keep the parent's difficulty, so a
 mainnet anchor would otherwise be followed up to its next epoch boundary. The
-bound rests on sampled headers, not a rule: no mainnet header in the fixtures is
-below it (the newest about 51 times above), and testnet headers sit about 100
-times below it.
+bound rests on observed headers, not a rule: a full scan of mainnet from height
+1,025 to 1,888,276 finds none below it (the least is the initial difficulty
+itself, at 1,025), and testnet headers sit about 100 times below it. No floor
+separates the testnet context from the synthetic chain: the public testnet's
+difficulty has collapsed to 1 (7,296 headers, the latest run 423,297–459,008), so
+a floor would refuse real testnet anchors. The testnet label rests on the
+reader's own nodes, never on work ([M10d decision](../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)).
 `ownErgoProfile` refuses every other context. Beside them,
 `moe/venue/local/reference` (`LOCAL_REFERENCE`, `src/record-venue.ts`) names
 a `FixtureVenue` by a 32-byte label and its lag, with no header rules. The

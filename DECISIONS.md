@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-06` [Drill the moe commands live on the testnet, and keep the testnet context without a difficulty floor (slice 10 M10d)](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)
 - `2026-10-05` [Judge lit records in the one state machine through a construction view (slice 14 M14c)](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)
 - `2026-10-05` [Implement the lit byte layer and close four readings lit-v1 left open (slice 14 M14a)](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a)
 - `2026-10-05` [Fix the lit construction's bytes: outputs derived by every reader, owner signatures over the statement, the pool's frames without a proof digest (Next 10)](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)
