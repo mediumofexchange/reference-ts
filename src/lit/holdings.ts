@@ -167,12 +167,13 @@ export function litNotes(domain: Uint8Array, backing: Uint8Array, state: StateHa
   return [...marked(domain, state, false)].filter(note => same(note.opening.backing, backing));
 }
 
-/** Per backing (hex) whose keys the read found, spent outputs included: §8's `h` (the highest index its restoration rule
- * reaches) and the highest index found at all, beyond a 256-index gap too. */
+/** Per backing (hex) whose keys the read found in outputs of that backing, spent ones included: §8's `h` (the highest
+ * index its restoration rule finds) and the highest index found at all, beyond a 256-index gap too. An output of another
+ * backing to a backing's key is the wallet's note but moves no index (§8). */
 export function foundIndices(domain: Uint8Array, state: StateHandle): Map<string, { readonly reached: bigint; readonly top: bigint }> {
   const indices = new Map<string, bigint[]>();
   for (const note of marked(domain, state, true)) {
-    if (note.owner.index === undefined) continue;
+    if (note.owner.index === undefined || !same(note.opening.backing, note.owner.backing)) continue;
     const name = hex(note.owner.backing);
     indices.set(name, [...(indices.get(name) ?? []), note.owner.index]);
   }

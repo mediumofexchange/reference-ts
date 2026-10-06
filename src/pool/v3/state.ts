@@ -423,7 +423,6 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
   // Every mode judges at a witnessed index (in admission, the horizon); an untyped caller cannot omit it.
   if (typeof replay.index !== "bigint") throw new TypeError("a record is judged at a witnessed index");
   if (mode === "admission" && kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
-  if (replay.witness !== undefined && !construction.namespace.tree) throw new TypeError("a construction without a note tree keeps no witness");
   const view = construction.view(record, id => state.demand(id));
   const demandId = view.ended, demand = demandId === undefined ? undefined : state.demand(demandId);
   // The backing the record is judged under: its demand's where it reads one, else the first it names, else the selected.

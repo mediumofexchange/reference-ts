@@ -30,7 +30,7 @@ import { decodePublication, decodeRecord, encodePublication } from "../pool/v3/r
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../pool/v3/terms.js";
 import { walletBackupDigest } from "../pool/v3/wallet-backup.js";
 import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest } from "../pool/v3/wallet-request.js";
-import { V3Wallet, type Act, type BackerSigner, type LocalProver, type Payment, type WalletView } from "../pool/v3/wallet-store.js";
+import { V3Wallet, type Act, type BackerSigner, type LocalProver, type Payment, type WalletReceipt, type WalletView } from "../pool/v3/wallet-store.js";
 import { startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
 import { readParameters } from "../pool/parameter-files.js";
 import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArguments, print, readOptional, readRequired, readSecret, required,
@@ -49,7 +49,7 @@ const FIRST_NOTES = Object.freeze([
 const EXPLAINED = "explained";
 
 const commitmentOut = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
-const receiptOut = (r: Receipt | undefined) => r === undefined ? null : { operator: r.operator, segment: r.segment, position: r.position };
+const receiptOut = (r: WalletReceipt | undefined) => r === undefined ? null : { operator: r.operator, segment: r.segment, position: r.position };
 const finalOut = (f: { readonly checkpoint: Commitment; readonly judgingIndex: bigint } | undefined) =>
   f === undefined ? null : { checkpoint: commitmentOut(f.checkpoint), judgingIndex: f.judgingIndex };
 const statusOf = (status: "prepared" | "final" | "failed") => status === "prepared" ? "pending" : status;
