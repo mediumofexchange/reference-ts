@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-06` [Exclude a continuation whose opening the record moved past, and read a receipt's term end without its segment's opening (audit, area 31)](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)
 - `2026-10-06` [Read lit packages through the one package reader and walk, the construction a read option (slice 14 M14d)](decisions/2026-10.md#2026-10-06--read-lit-packages-through-the-one-package-reader-and-walk-the-construction-a-read-option-slice-14-m14d)
 - `2026-10-06` [Run CI's real-proof checks in parallel groups and skip them only for unread changes (tooling)](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)
 - `2026-10-06` [Drill the moe commands live on the testnet, and keep the testnet context without a difficulty floor (slice 10 M10d)](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)
