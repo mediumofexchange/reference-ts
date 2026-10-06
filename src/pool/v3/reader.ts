@@ -352,6 +352,7 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     const adoptionIndices = new Map(imported?.adoptionIndices);
     for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
       imported?.adoptionIndices.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
+    replayedOutputs(store, state.ns, construction);
     return new ReplayResult(store, state.ns, position, { issued, burned, adoptionIndices, identity }, construction);
   });
 }
@@ -499,17 +500,41 @@ function keptRowsHold(store: ReplayStore, ns: number, position: bigint, identity
     total.issued === snapshot.issued && total.burned === snapshot.burned;
 }
 
+/** Where each namespace's own outputs are known to be its trail's (lit-v1 §10), per store this process holds: through a
+ * position, with the own outputs (leaves) and the demands its trail stood up there. A namespace this process's replay
+ * wrote is known through what it wrote; one loaded from a kept file is known only once rebuilt, so each is rebuilt once,
+ * from where it is known on, never per checkpoint. */
+interface KnownOutputs { readonly position: bigint; readonly leaves: bigint; readonly demands: ReadonlyMap<string, Demand> }
+const knownOutputs = new WeakMap<ReplayStore, Map<number, KnownOutputs>>();
+function known(store: ReplayStore): Map<number, KnownOutputs> {
+  let map = knownOutputs.get(store);
+  if (map === undefined) { map = new Map(); knownOutputs.set(store, map); }
+  return map;
+}
+/** Record that this process's own replay wrote namespace `ns` through its tip. */
+function replayedOutputs(store: ReplayStore, ns: number, construction: Construction): void {
+  if (construction.namespace.tree) return;
+  const tip = store.tip(ns), prior = known(store).get(ns);
+  known(store).set(ns, { position: tip.position, leaves: tip.leaves, demands: prior?.position === tip.position ? prior.demands : new Map() });
+}
+
 /** Lit-v1 §10: no root in a lit snapshot checks the output set, so a reader resuming a namespace without a note tree
  * rebuilds it from the kept statements: its own output rows through `position` must be exactly, in order, the outputs
- * `trail`'s first `position` records derive (§2). A settlement reads its demand from the trail's earlier records, or,
- * one the segment imported, from the state before it; imported outputs are their own namespaces' (each checked where its
- * kept class is reused). A construction with a note tree has its root checked instead (`keptTipHolds`). */
+ * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`). A
+ * settlement reads its demand from the trail's records, or, one stood up before what is rebuilt (an imported one, or one
+ * this process's replay wrote), from the state before it; imported outputs are their own namespaces' (each checked where
+ * its kept class is reused). The caller has checked the trail's chain at `position` against the namespace's, so its
+ * records are the namespace's. A construction with a note tree has its root checked instead (`keptTipHolds`). */
 function keptOutputsHold(store: ReplayStore, ns: number, construction: Construction, trail: StoredTrail | undefined, position: bigint): boolean {
   if (construction.namespace.tree) return true;
+  const from = known(store).get(ns);
+  // Rows through a known position are a prefix of those known: a position at or below it holds.
+  if (from !== undefined && from.position >= position) return true;
   if (trail === undefined || trail.length < position) return false;
-  const derived: { readonly cm: bigint; readonly position: bigint }[] = [], local = new Map<string, Demand>();
-  let at = 0n;
-  for (const bytes of position === 0n ? [] : trail.records(0n)) {
+  const after = from?.position ?? 0n, local = new Map(from?.demands);
+  const derived: { readonly cm: bigint; readonly position: bigint }[] = [];
+  let at = after;
+  for (const bytes of position === after ? [] : trail.records(after)) {
     if (++at > position) break;
     let record;
     try { record = construction.decode(bytes); } catch (error) {
@@ -523,13 +548,16 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
     if (view.demand !== undefined) local.set(view.demand.id, view.demand.value);
     for (const cm of view.outputs) derived.push({ cm, position: at });
   }
+  // Every own row past the known leaves at or below `position` is a derived output, in order, and none is missing.
   let k = 0;
-  for (const output of store.outputs(ns, position)) {
-    if (output.ns !== ns) continue;
+  for (const output of store.ownOutputs(ns, from?.leaves ?? 0n)) {
+    if (output.position > position) continue;
     const expected = derived[k++];
     if (expected === undefined || expected.cm !== output.cm || expected.position !== output.position) return false;
   }
-  return k === derived.length;
+  if (k !== derived.length) return false;
+  known(store).set(ns, { position, leaves: (from?.leaves ?? 0n) + BigInt(k), demands: local });
+  return true;
 }
 
 /** Whether a namespace's stored tip reproduces from its own rows (§14's snapshot check with the tip's chain values in

@@ -307,10 +307,11 @@ describe("lit packages through the one reader (M14d)", () => {
     for (const quantity of [10n, 6n, 4n, 3n]) await other.admit(other.issue(quantity, BOB));
     const { state } = f.current(), snapshot = f.snapshotNow(), identity = b(90);
     expect([...state.store.outputs(state.ns, 4n)].map(output => output.position)).toEqual([1n, 2n, 2n, 4n]);
-    expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot, LIT, f.trailOf())).toBe(true);
-    // The same rows against another segment's trail of as many records, or with no trail, do not hold.
+    // The operator's rows (written by no reader's replay) against another segment's trail of as many records, or with no
+    // trail, do not hold; against their own trail they do, and are then known, so a lower position holds without one.
     expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot, LIT, other.trailOf())).toBe(false);
     expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot, LIT)).toBe(false);
+    expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot, LIT, f.trailOf())).toBe(true);
     // A namespace is read only under its own construction.
     expect(keptStateHolds(state.store, state.ns, 4n, identity, snapshot)).toBe(false);
 
