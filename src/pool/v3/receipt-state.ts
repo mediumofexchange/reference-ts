@@ -76,8 +76,9 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     contradictedAt.length ? {} : { lapse: { kind, ...(at === undefined ? {} : { at: at.toString() }) } });
   return { receipt, header, termBoundary, evidence: () => ({ contradictedAt: [...contradictedAt] }),
     boundary(at, clock) {
-      if (!opened) return;
-      const silence = clock?.boundary;
+      // A scoped term's end lapses the receipt whether or not its segment opened (C2.10.9b); the silence boundary
+      // runs from the opening as witnessed, so only an opened segment has one (C2b.4.3).
+      const silence = opened ? clock?.boundary : undefined;
       const end = termBoundary === undefined ? silence : silence === undefined ? termBoundary : termBoundary < silence ? termBoundary : silence;
       if (end !== undefined && at >= end) return lapse(end === silence ? "silence" : "scope-boundary", end);
     },
@@ -96,7 +97,8 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
       if (!same(c.operator, receipt.operator) || c.sequence <= receipt.after) return;
       if (own) { lastSegment = c.sequence; passedOver = 0n; return; }
       if (classification !== "valid" || segment === undefined) { passedOver++; return; }
-      if (!opened) throw new EvidenceRefusal("unresolved-evidence");
+      // An unopened segment here is one whose opening the record never held (a lapsed one met its term boundary
+      // first): nothing of it is final or contradicted, and C2.10.9a–b's order reads the rest.
       if (contradictedAt.length) return finish("contradicted");
       if (movedPast) return lapse("moved-past");
       const hole = c.sequence - lastSegment - 1n > passedOver;
@@ -104,7 +106,6 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
       return finish("abandoned", { abandonedAt: fact });
     },
     finish() {
-      if (!opened) throw new EvidenceRefusal("unresolved-evidence");
       return contradictedAt.length ? finish("contradicted") : movedPast ? lapse("moved-past") : finish("pending");
     },
   };

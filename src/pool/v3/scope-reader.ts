@@ -418,8 +418,9 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
     const receiptRead = await receiptWalk(context.receiptBytes, context, view, trails, digest => evidence.snapshot(digest), root => evidence.directory(root), scopeViews);
     context.receiptWalk = receiptRead;
     let openingIndex: bigint | undefined;
+    // A scoped term's end bounds the walk whether or not the segment opened; the silence clock runs from the opening.
     const boundary = async (at: bigint): Promise<ReceiptVerdict | undefined> => {
-      if (openingIndex === undefined) return undefined;
+      if (openingIndex === undefined) return receiptRead.boundary(at, undefined);
       const through = receiptRead.termBoundary !== undefined && receiptRead.termBoundary < at ? receiptRead.termBoundary : at;
       let earliest: bigint | undefined;
       for (const scoped of header.entries) {
@@ -428,8 +429,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
       }
       return receiptRead.boundary(at, { boundary: earliest });
     };
-    for (let held = view.nextHeld(header.operator, 0n); held !== undefined; held = view.nextHeld(header.operator, 0n, held.commitment.sequence)) {
-      if (held.commitment.sequence < header.sequence) continue;
+    for (let held = view.nextHeld(header.operator, 0n, header.sequence - 1n); held !== undefined; held = view.nextHeld(header.operator, 0n, held.commitment.sequence)) {
       const ended = await boundary(held.index);
       if (ended !== undefined) return { receipt: ended };
       const scoped = header.entries.find(entry => scopeViews.get(hex(entry.backing))!.carries(held) !== undefined);
@@ -830,8 +830,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         openingValid = true;
       } else {
         const firstView = scopeViews.values().next().value!;
+        // The record holds this checkpoint's higher sequence, so an opening it does not hold is one it moved past
+        // (C2.3.3): the segment never opened, and no history of it extends a last valid prefix (C2.10.11).
         const openingHeld = firstView.heldAt(c.operator, header.sequence);
-        if (openingHeld === undefined) throw new EvidenceRefusal("unresolved-evidence");
+        requireReplay(openingHeld !== undefined, "OPENING");
         requireReplay(before(openingHeld, held), "IMPORT_RANK");
         const openingDirectory = evidence.directory(openingHeld.commitment.root);
         if (openingDirectory === undefined) throw new EvidenceRefusal("unresolved-evidence");
