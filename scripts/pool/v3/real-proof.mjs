@@ -1,8 +1,7 @@
 // The pool-v3 real-proof checks in one list. `npm run check:pool:v3` runs every script in order (after the build and
 // the proving parameters); CI runs one group per job (its matrix is GROUPS, through scripts/real-proof-gate.mjs) and
-// collects each group's reports from the job that ran them. Groups are balanced by measured time (the serial job at
-// bdcce48, run 37424183597, on Ubuntu: the command drill 8.6 minutes, local replay with Ergo 7.8, the two redemption
-// checks 6.9, conformance, journal and history 5.7, the other six stores 2.7), so CI waits for the slowest group.
+// collects each group's reports from the job that ran them. Groups are balanced by measured time (decisions/2026-10.md,
+// 2026-10-06, parallel real-proof groups), so CI waits for the slowest group; each run prints its scripts' times.
 //
 // Usage: node scripts/pool/v3/real-proof.mjs [--group <name>] [--ergo] [--collect <directory>]
 //        node scripts/pool/v3/real-proof.mjs --expect <directory>...

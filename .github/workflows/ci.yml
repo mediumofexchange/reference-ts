@@ -43,14 +43,14 @@ jobs:
         run: node scripts/real-proof-gate.mjs
 
   # One job per group of scripts/pool/v3/real-proof.mjs on each system, so the run waits for the slowest group rather
-  # than the sum (the serial job had reached 39 minutes on Ubuntu and 51 on Windows). Each job builds (a few seconds of
-  # tsc), checks the proving parameters from a shared cache, runs its group and uploads the reports it wrote.
+  # than the sum (times in decisions/2026-10.md, 2026-10-06). Each job builds (a few seconds of tsc), checks the proving
+  # parameters from a shared cache, runs its group and uploads the reports it wrote.
   pool-v3:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     name: pool-v3 ${{ matrix.group }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # The longest group, the command drill, took 12 minutes on Windows in the serial job (run 37424183597).
+    # Nearly three times the slowest group, the command drill.
     timeout-minutes: 30
     strategy:
       fail-fast: false
