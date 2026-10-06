@@ -582,6 +582,7 @@ export class ReplayStore {
       insertDemandTag: "INSERT OR IGNORE INTO demand_tag VALUES (?, ?, ?)",
       insertDemandEnd: "INSERT INTO demand_end VALUES (?, ?, ?)",
       outputs: `SELECT x.* FROM output x WHERE ${v} ORDER BY x.ns, x.leaf`,
+      ownOutputs: "SELECT * FROM output WHERE ns = ? AND leaf >= ? ORDER BY leaf",
       outputOf: `SELECT x.* FROM output x WHERE x.cm = :key AND ${v}`,
       construction: "SELECT construction, tree FROM namespace_construction WHERE ns = ?",
       insertConstruction: "INSERT INTO namespace_construction VALUES (?, ?, ?)",
@@ -998,6 +999,10 @@ export class ReplayStore {
   #output(row: Record<string, unknown>): StoredOutput {
     return { cm: key(row["cm"]), ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint), leaf: BigInt(row["leaf"] as bigint),
       capsule: row["capsule"] === null ? undefined : bytes(row["capsule"]), settlement: row["settlement"] === 1n };
+  }
+  /** A namespace's own outputs from leaf `from` on, in leaf order (lit-v1 §10's rebuild reads them past what it checked). */
+  *ownOutputs(ns: number, from: bigint): Generator<StoredOutput> {
+    for (const row of this.#q.ownOutputs!.iterate(ns, from)) yield this.#output(row as Record<string, unknown>);
   }
   /** Every visible output, in namespace then leaf order. */
   *outputs(ns: number, p: bigint): Generator<StoredOutput> {

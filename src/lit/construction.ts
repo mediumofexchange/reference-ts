@@ -5,17 +5,27 @@
 // output's commitment is derived (§2), never carried. A settlement repeats none of its demand's notes: its nullifiers
 // and output are its standing demand's, which the store keeps with the demand. The namespace keeps no note tree.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { compareBytes } from "../bytes.js";
-import type { Construction, StatementView } from "../pool/v3/construction.js";
+import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
+import type {
+  Construction, FaultTarget, PublicationView, ReaderFrames, ReceiptView, RequestView, StatementView,
+} from "../pool/v3/construction.js";
+import type { VerifierIdentities } from "../pool/v3/configuration.js";
 import { requireReplay } from "../pool/v3/refusals.js";
 import type { Demand } from "../pool/v3/replay-store.js";
-import { genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash } from "./commitments.js";
-import { CONSTRUCTION } from "./configuration.js";
+import type { RootTerms, TermsCodec } from "../pool/v3/terms.js";
+import {
+  decodeReceipt, decodeSnapshot, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptMatchesEvent,
+  snapshotBytes, snapshotDigest, verifyReceipt,
+} from "./commitments.js";
+import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configuration.js";
+import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  arithmeticHolds, decodeRecord, evidencePair, ownerSignaturesVerify, settlementAuthorization, statementHash,
-  statementSignatureVerifies, type LitRecord,
+  arithmeticHolds, decodePublication, decodeRecord, encodeRecord, evidencePair, hashEvidenceFields, ownerSignaturesVerify,
+  settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord,
 } from "./records.js";
+import { LIT_TERMS } from "./terms.js";
+import { LIT_HEADERS, LIT_PACKAGES, LIT_TRAILS, MAX_LIT_TRAIL_RECORD_BYTES } from "./transport.js";
 import { verifySignatureStrict } from "../keys.js";
 
 const keyOf = (bytes: Uint8Array): bigint => BigInt(`0x${hex(bytes)}`);
@@ -86,6 +96,71 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
   }
 }
 
+/** §6's fault-evidence target: its intrinsic failures (`ARITHMETIC`, owners' and K's `SIGNATURE`), each one §9.1 may
+ * exclude by. No verifier is asked; the demand's keys a withdrawal or settlement needs are state, so none is reported. */
+function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarget {
+  const value = decodeFaultEvidence(payload, maxSuffixEntries);
+  return {
+    snapshot: value.snapshot, position: value.position, length: value.length,
+    digests: hashEvidenceFields(value.statement, value.authorization), demand: undefined,
+    verify: (expected, max) => verifyFaultEvidence(expected, value, max),
+    observe: async ({ domain, scopedTerms }) => {
+      if (compareBytes(domain, litConfigHash()) !== 0) return [];
+      const failures = intrinsicFailures(value.statement, value.authorization, backing => scopedTerms.get(hex(backing))?.obligor);
+      return failures.map(failure => ({ intrinsic: true, observation: failure.check === "ARITHMETIC" ? { check: "ARITHMETIC" as const } :
+        { check: "SIGNATURE" as const, authorizationRole: failure.role, signer: hex(failure.signer), authorizationBacking: hex(failure.backing) } }));
+    },
+  };
+}
+
+const NO_IDENTITIES: VerifierIdentities = Object.freeze({});
+const LIT_READER: ReaderFrames = Object.freeze({
+  specification: "lit-v1 1bf5bfc",
+  domain: litConfigHash,
+  verifyConfiguration: (bytes: Uint8Array): boolean => {
+    try { return compareBytes(copyUnshared(bytes), litConfigurationBytes()) === 0; } catch (error) {
+      if (error instanceof EncodingError) return false;
+      throw error;
+    }
+  },
+  // No circuit, key or parameter (§9): a verifier naming any is another construction's.
+  verifierIdentities: (identities: VerifierIdentities | undefined): VerifierIdentities => {
+    if (identities !== undefined && (identities === null || typeof identities !== "object" || Reflect.ownKeys(identities).length !== 0)) {
+      throw new TypeError("a lit reader takes no circuit identities");
+    }
+    return NO_IDENTITIES;
+  },
+  proofs: false,
+  scopeRoot: () => undefined,
+  header: LIT_HEADERS,
+  trail: Object.freeze({ ...LIT_TRAILS, maxRecordBytes: MAX_LIT_TRAIL_RECORD_BYTES }),
+  package: LIT_PACKAGES,
+  // Lit's silence clause names its duration alone (§9); the walk reads nothing else of it.
+  terms: LIT_TERMS as unknown as TermsCodec<RootTerms>,
+  snapshot: Object.freeze({ bytes: snapshotBytes, digest: snapshotDigest, decode: decodeSnapshot }),
+  receipt: (bytes: Uint8Array): ReceiptView => {
+    const receipt = decodeReceipt(bytes);
+    return { segment: receipt.segment, position: receipt.position, after: receipt.after, operator: receipt.operator,
+      // §5: no scope root; the segment identity binds the scope.
+      verify: ({ domain, operator }) => verifyReceipt({ domain, segment: receipt.segment, operator }, receipt),
+      matches: event => receiptMatchesEvent(receipt, event) };
+  },
+  digests: (record: Uint8Array) => ({ ...evidencePair(decodeRecord(record)), proofHash: new Uint8Array(0) }),
+  publication: (bytes: Uint8Array): PublicationView => {
+    const p = decodePublication(bytes);
+    return { domain: p.domain, backing: p.backing, kind: p.kind, record: p.kind === 2 ? undefined : encodeRecord(p.record) };
+  },
+  // C2b.5.2 as §7 reads it: the owner's signature in the proof's place, the input commitment an output of the state.
+  request: (bytes: Uint8Array): RequestView => {
+    const record = decodeRecord(bytes), s = record.statement;
+    if (s.kind !== 7) throw new EncodingError("not a request");
+    const cm = noteCommitment(s.domain, s.input), input = keyOf(cm);
+    return { identity: hex(statementHash(s)), tag: keyOf(noteTag(noteNullifier(cm))), reads: state => state.hasOutput(input),
+      holds: () => ownerSignaturesVerify(record) };
+  },
+  fault: litFaultTarget,
+});
+
 /** Lit-v1: §3 records, §2's derived outputs, §5's chains with the evidence pair and no note root, no note tree. */
 export const LIT: Construction<LitRecord> = Object.freeze({
   namespace: Object.freeze({ name: CONSTRUCTION, tree: false }),
@@ -104,4 +179,5 @@ export const LIT: Construction<LitRecord> = Object.freeze({
     if (s.kind !== 6) throw new TypeError("not a settlement");
     return hex(s.demand);
   },
+  reader: LIT_READER,
 });

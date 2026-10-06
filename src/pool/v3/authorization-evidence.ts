@@ -9,7 +9,8 @@ import type { RootTerms } from "./terms.js";
 
 export interface AuthorizationFault {
   readonly check: "SIGNATURE";
-  readonly authorizationRole: "issue" | "withdrawal" | "acceptance" | "release";
+  /** Pool-v3's four roles; lit-v1 §6 adds an input's owner. */
+  readonly authorizationRole: "issue" | "withdrawal" | "acceptance" | "release" | "owner";
   readonly signer: string;
   readonly authorizationBacking: string;
   readonly demand?: string;

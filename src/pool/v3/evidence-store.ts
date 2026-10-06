@@ -34,16 +34,15 @@ import { randomBytes } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { compareBytes, copyBytes, copyUnshared, EncodingError, FrameFeed } from "../../bytes.js";
 import type { SnapshotDigest } from "../../venue-records.js";
-import { genesisEvidenceHash, nextEvidenceHash, snapshotDigest, type Snapshot } from "./commitments.js";
+import type { Snapshot } from "./commitments.js";
+import { POOL_V3, type Construction } from "./construction.js";
 import type { ExpectedSnapshot } from "./fault-evidence.js";
-import { decodeSegmentHeader, type SegmentEntry } from "./headers.js";
-import { decodeEvidenceDirectory, decodeEvidencePackage, encodeEvidencePackage, PackageLimitError, packageReader, type PackageSink,
+import type { SegmentEntry } from "./headers.js";
+import { decodeEvidenceDirectory, PackageLimitError, type PackageSink,
   type PayloadSink } from "./package.js";
-import { decodeRecord, evidenceHashes } from "./records.js";
 import { EvidenceRefusal } from "./refusals.js";
 import { FileInUse } from "./replay-store.js";
-import { verifyRootTermsSignature } from "./terms.js";
-import { MAX_TRAIL_RECORD_BYTES, trailHead, trailReader, type TrailSink } from "./trail.js";
+import type { TrailSink } from "./trail.js";
 
 /** A whole item's local per-object budget; a trail is bounded per record instead. */
 export const MAX_ITEM_BYTES = 1_048_576n;
@@ -163,6 +162,11 @@ const SCHEMA = `
  * where missing, so a file made before it gains one: nothing else reads it. */
 const IDENTITY_SCHEMA = `CREATE TABLE IF NOT EXISTS evidence_identity (id INTEGER PRIMARY KEY CHECK (id = 1), value BLOB NOT NULL);
   CREATE TABLE IF NOT EXISTS evidence_lineage (n INTEGER PRIMARY KEY, h BLOB NOT NULL);`;
+/** The construction a party's file reads, beside layout 4's tables. A file made before the row with evidence in it is
+ * pool-v3's, the one construction read then. */
+const CONSTRUCTION_SCHEMA = `CREATE TABLE IF NOT EXISTS evidence_construction (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
+  INSERT OR IGNORE INTO evidence_construction SELECT 1, 'moe/pool/v3' WHERE EXISTS (SELECT 1 FROM chain) OR EXISTS (SELECT 1 FROM object)
+    OR EXISTS (SELECT 1 FROM segment_head);`;
 /** Lineage rows kept: a kept walk whose mark is older is resumed no more, and its next read judges every checkpoint once. */
 const LINEAGE_KEPT = 65_536n;
 
@@ -170,6 +174,8 @@ const LINEAGE_KEPT = 65_536n;
 interface Base { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array; readonly size: bigint }
 
 export class EvidenceStore {
+  /** The construction whose frames its packages and trails are read by (slice 14 M14d); a party's file records it. */
+  readonly construction: Construction;
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
   readonly #quota: bigint;
@@ -185,7 +191,8 @@ export class EvidenceStore {
    * A host's open connection (one that reads integers as BigInt) places the store in the host's database
    * instead, as an operator's journal does (store.ts): the host owns durability and closing, its layout names
    * this one, and what the host keeps of its own (`keep`, `keepHead`, `append`) joins the host's open transaction. */
-  constructor(source: string | DatabaseSync = ":memory:", options: { readonly maxBatchBytes?: bigint } = {}) {
+  constructor(source: string | DatabaseSync = ":memory:", options: { readonly maxBatchBytes?: bigint; readonly construction?: Construction } = {}) {
+    this.construction = options.construction ?? POOL_V3 as Construction;
     const quota = options.maxBatchBytes ?? (source === ":memory:" ? EVIDENCE_QUOTA.memory : EVIDENCE_QUOTA.file);
     if (typeof quota !== "bigint" || quota < 0n) throw new TypeError("invalid evidence quota");
     this.#quota = quota;
@@ -204,6 +211,13 @@ export class EvidenceStore {
         else if (version !== BigInt(SCHEMA_VERSION)) throw new TypeError("the evidence file has another layout");
         // No read is open, so any per-read items are a crashed read's.
         else this.#db.exec("DELETE FROM item; DELETE FROM batch;");
+        // A party's file reads one construction's evidence: one of another's is refused, never read by the wrong frames.
+        if (source !== ":memory:") {
+          this.#db.exec(CONSTRUCTION_SCHEMA);
+          this.#db.prepare("INSERT OR IGNORE INTO evidence_construction VALUES (1, ?)").run(this.construction.namespace.name);
+          const kept = (this.#db.prepare("SELECT name FROM evidence_construction WHERE id = 1").get() as { name: string }).name;
+          if (kept !== this.construction.namespace.name) throw new TypeError("the evidence file holds another construction's evidence");
+        }
       } catch (error) {
         this.#db.close();
         if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("evidence file");
@@ -213,6 +227,7 @@ export class EvidenceStore {
     // A store that outlives its reads keeps one identity in its own rows; a private in-memory one has none.
     if (source === ":memory:") this.#identity = undefined;
     else {
+      // A host's database holds the journal's pool-v3 evidence; it records no construction (a lit journal is a later slice).
       this.#db.exec(IDENTITY_SCHEMA);
       this.#db.prepare("INSERT OR IGNORE INTO evidence_identity VALUES (1, ?)").run(randomBytes(16));
       this.#identity = new Uint8Array((this.#db.prepare("SELECT value FROM evidence_identity WHERE id = 1").get() as { value: Uint8Array }).value);
@@ -262,7 +277,7 @@ export class EvidenceStore {
 
   /** Keep the party's own segment head: its header and each scoped entry's signed terms, under §12.1's rule. */
   keepHead(header: Uint8Array, terms: readonly SignedTermsField[]): void {
-    const own = copyBytes(header), segment = sha256(own), entries = decodeSegmentHeader(own).entries;
+    const own = copyBytes(header), segment = sha256(own), entries = this.construction.reader.header.decodeSegmentHeader(own).entries;
     this.#q.putHead!.run(segment, own);
     terms.forEach((field, i) => this.#keepTerms(segment, entries, i, copyBytes(field.terms), copyBytes(field.signature)));
   }
@@ -274,7 +289,7 @@ export class EvidenceStore {
     if (terms === undefined || entry === undefined || !same(sha256(terms), entry.backing)) return;
     const kept = this.#q.headTerm!.get(segment, i) as { terms: unknown; signature: unknown } | undefined;
     if (kept !== undefined && same(bytes(kept.terms), terms) && same(bytes(kept.signature), signature)) return;
-    if (verifyRootTermsSignature(terms, signature)) {
+    if (this.construction.reader.terms.verifyRootTermsSignature(terms, signature)) {
       this.#q.putTerms!.run(segment, i, terms, signature);
     }
   }
@@ -283,11 +298,11 @@ export class EvidenceStore {
    * the seed), under the chain value the evidence recurrence gives it; returns that position. */
   append(after: TrailTip, record: Uint8Array): TrailTip {
     const segment = copyBytes(after.segment), previous = copyBytes(after.evidence), own = copyBytes(record);
-    const base = after.position === 0n ? (same(previous, genesisEvidenceHash(segment)) ? { size: 0n } : undefined) :
+    const base = after.position === 0n ? (same(previous, this.construction.genesisEvidence(segment)) ? { size: 0n } : undefined) :
       this.#base({ segment, position: after.position, evidence: previous });
     if (base === undefined) throw new Error("no kept trail position to append after");
-    if (own.length > MAX_TRAIL_RECORD_BYTES) throw new EncodingError("trail record too long");
-    const position = after.position + 1n, evidence = nextEvidenceHash(previous, evidenceHashes(decodeRecord(own)), position);
+    if (own.length > this.construction.reader.trail.maxRecordBytes) throw new EncodingError("trail record too long");
+    const position = after.position + 1n, evidence = this.construction.nextEvidence(previous, this.construction.reader.digests(own), position);
     this.#q.record!.run(evidence, segment, previous, position, base.size + 4n + BigInt(own.length), own);
     return { segment, position, evidence };
   }
@@ -301,7 +316,7 @@ export class EvidenceStore {
     // The size is known, so the count and each length are checked against it before any payload.
     const own = copyUnshared(input);
     return this.#transaction(() => {
-      const batch = this.#batch(spent), feed = new FrameFeed(packageReader(this.#sink(batch), { maxItemBytes: MAX_ITEM_BYTES, total: BigInt(own.length) }));
+      const batch = this.#batch(spent), feed = new FrameFeed(this.construction.reader.package.packageReader(this.#sink(batch), { maxItemBytes: MAX_ITEM_BYTES, total: BigInt(own.length) }));
       feed.feed(own); feed.end();
       return batch;
     });
@@ -310,7 +325,7 @@ export class EvidenceStore {
   /** Copy a package from a stream of chunks, each copied as it arrives. */
   async importStream(source: AsyncIterable<Uint8Array>): Promise<EvidenceBatch> {
     return this.#transactionAsync(async () => {
-      const batch = this.#batch(), feed = new FrameFeed(packageReader(this.#sink(batch), { maxItemBytes: MAX_ITEM_BYTES }));
+      const batch = this.#batch(), feed = new FrameFeed(this.construction.reader.package.packageReader(this.#sink(batch), { maxItemBytes: MAX_ITEM_BYTES }));
       for await (const chunk of source) feed.feed(chunk);
       feed.end();
       return batch;
@@ -360,7 +375,7 @@ export class EvidenceStore {
     return this.#transactionAsync(async () => {
       let base: Base | undefined;
       if (after !== undefined) {
-        base = after.position === 0n ? (same(after.evidence, genesisEvidenceHash(after.segment)) ? { ...after, size: 0n } : undefined) : this.#base(after);
+        base = after.position === 0n ? (same(after.evidence, this.construction.genesisEvidence(after.segment)) ? { ...after, size: 0n } : undefined) : this.#base(after);
         // A trail that is not read still costs its supplier's stated bytes: every trail byte counts, kept or not.
         if (base === undefined) return { kept: false, charged: spent + size };
       }
@@ -418,7 +433,7 @@ export class EvidenceStore {
   /** A new batch; `spent` is what earlier parts of the same supply already charged to the quota. */
   #batch(spent = 0n): EvidenceBatch {
     const id = (this.#q.batch!.get() as { id: bigint }).id;
-    return new EvidenceBatch(this.#db, this.#q, id, this.#quota, spent, this.#lineage());
+    return new EvidenceBatch(this.construction, this.#db, this.#q, id, this.#quota, spent, this.#lineage());
   }
 
   /** A new lineage row for a batch of a retained store, in the batch's own transaction where it has one. */
@@ -474,7 +489,7 @@ export class EvidenceStore {
       this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
     };
     try {
-      feed = new FrameFeed(trailReader(this.#rows(batch, base), length + (base?.size ?? 0n),
+      feed = new FrameFeed(this.construction.reader.trail.trailReader(this.#rows(batch, base), length + (base?.size ?? 0n),
         base === undefined ? {} : { retained: { events: base.position, bytes: base.size } }));
     } catch (error) { drop(error); }
     return {
@@ -497,7 +512,7 @@ export class EvidenceStore {
   /** A trail's rows. The evidence chain runs over the longest prefix whose records decode (§5); only
    * that prefix can serve a checkpoint (§12.1), so later records are not kept. */
   #rows(batch: EvidenceBatch, base: Base | undefined): TrailSink {
-    const q = this.#q;
+    const q = this.#q, construction = this.construction;
     let segment: Uint8Array | undefined, entries: readonly SegmentEntry[] = [];
     let chain: Uint8Array | undefined, size = base?.size ?? 0n;
     return {
@@ -506,22 +521,22 @@ export class EvidenceStore {
         // The recurrence continues only within its own segment, whose seed began the kept chain.
         if (base !== undefined && !same(segment, base.segment)) throw new EncodingError("an assembled trail of another segment");
         // The frame refuses a header that does not decode at its end; its entries name the terms fields to keep.
-        entries = decodeSegmentHeader(header).entries;
+        entries = construction.reader.header.decodeSegmentHeader(header).entries;
         q.putHead!.run(segment, header);
-        chain = base?.evidence ?? genesisEvidenceHash(segment);
+        chain = base?.evidence ?? construction.genesisEvidence(segment);
       },
       terms: (i, terms, signature) => { this.#keepTerms(segment!, entries, i, terms, signature); },
       count: () => {},
       record: (position, record) => {
         if (chain === undefined) return;
         let digests;
-        try { digests = evidenceHashes(decodeRecord(record)); } catch (error) {
+        try { digests = construction.reader.digests(record); } catch (error) {
           if (!(error instanceof EncodingError)) throw error;
           chain = undefined;
           return;
         }
         const previous = chain;
-        chain = nextEvidenceHash(previous, digests, position);
+        chain = construction.nextEvidence(previous, digests, position);
         size += 4n + BigInt(record.length);
         batch.charge(RECORD_ROW_BYTES, PackageLimitError);
         // The chain value fixes every record through its position, so a kept row under it holds these bytes
@@ -564,6 +579,8 @@ export class EvidenceStore {
 
 /** One imported package's own items, and the evidence the store retains, as a read uses them. */
 export class EvidenceBatch implements WalkEvidence, TrailEvidence {
+  /** Its store's construction. */
+  readonly construction: Construction;
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
   readonly #quota: bigint;
@@ -572,8 +589,8 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
 
   readonly retained: RetainedLineage | undefined;
 
-  constructor(db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint, spent = 0n, retained?: RetainedLineage) {
-    this.#db = db; this.#q = q; this.id = id; this.#quota = quota; this.#bytes = spent; this.retained = retained;
+  constructor(construction: Construction, db: DatabaseSync, q: Record<string, StatementSync>, id: bigint, quota: bigint, spent = 0n, retained?: RetainedLineage) {
+    this.construction = construction; this.#db = db; this.#q = q; this.id = id; this.#quota = quota; this.#bytes = spent; this.retained = retained;
   }
 
   /** Count taken bytes against the party's quota. */
@@ -625,15 +642,15 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
 
   served(expected: ExpectedSnapshot, snapshot: Snapshot): StoredTrail | undefined {
     if (!same(snapshot.backing, expected.backing) || !same(snapshot.segment, expected.segment) ||
-        !same(snapshotDigest(snapshot), expected.digest)) return undefined;
+        !same(this.construction.reader.snapshot.digest(snapshot), expected.digest)) return undefined;
     const [head] = this.heads(expected.segment);
-    if (head === undefined || !decodeSegmentHeader(head.header).entries.some(entry => same(entry.backing, expected.backing))) return undefined;
+    if (head === undefined || !this.construction.reader.header.decodeSegmentHeader(head.header).entries.some(entry => same(entry.backing, expected.backing))) return undefined;
     return this.trail(expected.segment, snapshot.evidenceHash);
   }
 
   /** The kept records of `segment` through the chain value `evidence` (at its seed, none), with the segment's kept head. */
   trail(segment: Uint8Array, evidence: Uint8Array): StoredTrail | undefined {
-    const seed = genesisEvidenceHash(segment), [head] = this.heads(segment);
+    const seed = this.construction.genesisEvidence(segment), [head] = this.heads(segment);
     if (head === undefined) return undefined;
     if (same(evidence, seed)) return this.#cut(head, segment, seed, undefined, 0n, 0n);
     // A chain value fixes the records before it, and a kept row belongs to the segment whose trail supplied it: the
@@ -642,12 +659,12 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
     const row = this.#q.step!.get(evidence, segment) as { position: bigint; size: bigint } | undefined;
     if (row === undefined) return undefined;
     const length = BigInt(row.position);
-    return chainStep(this.#q, segment, evidence, length) === undefined ? undefined :
+    return chainStep(this.construction, this.#q, segment, evidence, length) === undefined ? undefined :
       this.#cut(head, segment, seed, evidence, length, BigInt(row.size));
   }
 
   #cut(head: TrailHead, segment: Uint8Array, seed: Uint8Array, top: Uint8Array | undefined, length: bigint, size: bigint): StoredTrail {
-    const q = this.#q;
+    const q = this.#q, construction = this.construction;
     // Damage met on a walk leaves the read unresolved; nothing is deleted, and a copy supplied again repairs it.
     const broken = (): never => { throw new EvidenceRefusal("unresolved-evidence"); };
     /** One step back from the value kept at position `p`: the value before it, unchecked. */
@@ -663,7 +680,7 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
     };
     /** The record kept under `value` at position `p`, after its chain step (and its link to `previous`, where known). */
     const checked = (value: Uint8Array, p: bigint, previous?: Uint8Array): { record: Uint8Array; prev: Uint8Array } => {
-      const step = chainStep(q, segment, value, p);
+      const step = chainStep(construction, q, segment, value, p);
       return step === undefined || (previous !== undefined && !same(step.prev, previous)) ? broken() : step;
     };
     /** `through`'s walk back from the top to `position`. */
@@ -763,11 +780,11 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
 /** A kept trail as a supplier streams it: §10's head, then each record after `after` behind its u32 length, read
  * and checked one at a time. Undefined where the trail's chain does not pass through `after`. A scoped terms
  * field the evidence does not hold is served empty: it names no backing, so it is no evidence (§12.1). */
-export async function trailPart(trail: StoredTrail, after?: TrailTip): Promise<EvidencePart | undefined> {
+export async function trailPart(trail: StoredTrail, after?: TrailTip, construction: Construction = POOL_V3 as Construction): Promise<EvidencePart | undefined> {
   const held = after === undefined ? 0n : await trail.reaches(after.position, after.evidence);
   if (held === undefined) return undefined;
-  const count = decodeSegmentHeader(trail.header).entries.length;
-  const head = trailHead(trail.header, Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }), trail.length);
+  const count = construction.reader.header.decodeSegmentHeader(trail.header).entries.length;
+  const head = construction.reader.trail.trailHead(trail.header, Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }), trail.length);
   const chunks = async function* (): AsyncIterable<Uint8Array> {
     yield head;
     for await (const record of trail.stream(after?.position ?? 0n)) {
@@ -783,7 +800,9 @@ export async function trailPart(trail: StoredTrail, after?: TrailTip): Promise<E
  * whole package in memory. A trail served after a position is refused: it is no §10 frame by itself. At its peak it
  * holds about three times the package: its items, the encoder's own copy of them and the encoded package. A party
  * that keeps evidence takes the parts into a store instead (`EvidenceStore.take`), one part at a time. */
-export async function wholePackage(own: Uint8Array, parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>): Promise<Uint8Array> {
+export async function wholePackage(own: Uint8Array, parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>,
+  construction: Construction = POOL_V3 as Construction): Promise<Uint8Array> {
+  const { decodeEvidencePackage, encodeEvidencePackage } = construction.reader.package;
   const items = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
   const add = (kind: number, payload: Uint8Array): void => {
     const hash = sha256(payload); items.set(`${kind}:${bytesToHex(hash)}`, { kind, payload, hash });
@@ -802,12 +821,13 @@ export async function wholePackage(own: Uint8Array, parts: Iterable<EvidencePart
 }
 
 /** The record kept under `value` at position `p` of `segment`, and the value before it, where its chain step holds. */
-function chainStep(q: Record<string, StatementSync>, segment: Uint8Array, value: Uint8Array, p: bigint): { record: Uint8Array; prev: Uint8Array } | undefined {
+function chainStep(construction: Construction, q: Record<string, StatementSync>, segment: Uint8Array, value: Uint8Array, p: bigint):
+  { record: Uint8Array; prev: Uint8Array } | undefined {
   const row = q.entry!.get(value, segment) as { prev: unknown; position: bigint; bytes: unknown } | undefined;
   if (row === undefined || BigInt(row.position) !== p) return undefined;
   const record = bytes(row.bytes), prev = bytes(row.prev);
   let next: Uint8Array | undefined;
-  try { next = nextEvidenceHash(prev, evidenceHashes(decodeRecord(record)), p); } catch (error) { if (!(error instanceof EncodingError)) throw error; }
+  try { next = construction.nextEvidence(prev, construction.reader.digests(record), p); } catch (error) { if (!(error instanceof EncodingError)) throw error; }
   return next !== undefined && same(next, value) ? { record, prev } : undefined;
 }
 

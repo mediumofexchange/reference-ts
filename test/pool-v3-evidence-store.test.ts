@@ -13,6 +13,7 @@ import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
 import { directoryRoot } from "../src/venue-records.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
+import { POOL_V3 } from "../src/pool/v3/construction.js";
 import { authenticatedScope } from "../src/pool/v3/scope-evidence.js";
 import { encodeRootTerms, MAX_ROOT_TERMS_BYTES, rootTermsName, rootTermsSignatureMessage, verifyRootTermsSignature } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
@@ -304,17 +305,17 @@ describe("v3 evidence store", () => {
     const trailOf = (field: typeof signed) => encodeTrail({ header: segmentBytes(named), terms: [field], records: [] });
     const store = new EvidenceStore(), batch = store.importBytes(pack([{ kind: 6, payload: trailOf(forged) },
       { kind: 6, payload: trailOf({ terms: Uint8Array.of(1), signature: signed.signature }) }, { kind: 6, payload: trailOf(signed) }]));
-    const scope = authenticatedScope(batch, id);
+    const scope = authenticatedScope(POOL_V3, batch, id);
     expect(scope.terms).toEqual([signed]);
-    expect(authenticatedScope(batch, id)).toBe(scope);
+    expect(authenticatedScope(POOL_V3, batch, id)).toBe(scope);
     // Another batch of the same bytes authenticates its own.
     const other = store.importBytes(pack([{ kind: 6, payload: trailOf(signed) }]));
-    expect(authenticatedScope(other, id)).not.toBe(scope);
-    expect(authenticatedScope(other, id)).toEqual(scope);
+    expect(authenticatedScope(POOL_V3, other, id)).not.toBe(scope);
+    expect(authenticatedScope(POOL_V3, other, id)).toEqual(scope);
     store.close();
     // Without a verifying field the scope stays unresolved, and is not kept.
     const fresh = new EvidenceStore(), bare = fresh.importBytes(pack([{ kind: 6, payload: trailOf(forged) }]));
-    for (let i = 0; i < 2; i++) expect(() => authenticatedScope(bare, id)).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
+    for (let i = 0; i < 2; i++) expect(() => authenticatedScope(POOL_V3, bare, id)).toThrow(expect.objectContaining({ status: "unresolved-evidence" }));
     fresh.close();
   });
 

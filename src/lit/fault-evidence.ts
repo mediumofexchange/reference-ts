@@ -3,12 +3,13 @@
 // §9.1 with lit's two intrinsic failures. This does not classify checkpoints
 // or establish finality.
 import { arrayLength, byteLength, compareBytes, copyArray, copyBytes, EncodingError } from "../bytes.js";
-import { isValidPublicKey } from "../keys.js";
+import { isValidPublicKey, verifySignatureStrict } from "../keys.js";
 import { LIT_FAULT_EVIDENCE_CONTEXT as CONTEXT, LIT_SNAPSHOT_CONTEXT as SNAPSHOT_CONTEXT } from "../contexts.js";
+import { FaultEvidenceLimitError } from "../pool/v3/fault-evidence.js";
 import { decodeSnapshot, snapshotBytes, SNAPSHOT_BYTES, verifyEvidenceOpening, type Snapshot } from "./commitments.js";
 import { litConfigHash } from "./configuration.js";
 import {
-  arithmeticHolds, authorizationLength, decodeStatement, hashEvidenceFields, ownerSignaturesVerify, statementSignatureVerifies,
+  arithmeticHolds, authorizationLength, decodeStatement, hashEvidenceFields, statementBytes, statementSignatureVerifies,
   type EvidencePair, type LitRecord,
 } from "./records.js";
 
@@ -20,8 +21,9 @@ const POSITION = CONTEXT.length + SNAPSHOT_BYTES, PREVIOUS = POSITION + 16, FIEL
 export const FIXED_BYTES = FIELDS + 8;
 const PAIR_BYTES = 64;
 
-/** A local resource refusal, not malformed evidence or operator fault. */
-export class FaultEvidenceLimitError extends Error {}
+/** A local resource refusal, not malformed evidence or operator fault: pool-v3 §9's class, so a reader catches one
+ * class whatever the construction. */
+export { FaultEvidenceLimitError };
 
 export interface FaultEvidence {
   readonly snapshot: Snapshot;
@@ -149,28 +151,46 @@ export function verifyFaultEvidence(expectedIn: ExpectedSnapshot, input: FaultEv
   }
 }
 
+/** One §6 intrinsic failure of a target: its own arithmetic, or a signature under a key the statement names (an
+ * input's owner) or K resolved from authenticated signed terms (an issue). */
+export type IntrinsicFailure = { readonly check: "ARITHMETIC" } |
+  { readonly check: "SIGNATURE"; readonly role: "issue" | "owner"; readonly signer: Uint8Array; readonly backing: Uint8Array };
+
 /** Compact intrinsic exclusion (§6, pool-v3 §9.1): the authenticated target's statement decodes canonically under
  * the configuration's domain, its authorization has exactly its kind's length, and a signature under a key the
  * statement names (an input's owner, kinds 2–4) or, for an issue, the backing's K that `issuer` resolves from
- * authenticated signed terms fails, or the statement's own arithmetic does. False for anything else: a malformed
+ * authenticated signed terms fails, or the statement's own arithmetic does. Each failure is named, in the state
+ * machine's order (`ARITHMETIC`, then each owner's `SIGNATURE` in input order). None for anything else: a malformed
  * target or a wrong authorization length (malformed, not intrinsic), an unresolved or invalid K, a withdrawal or
  * settlement (their keys need the demand) and a request (§6 names kinds 2–4 only). */
-export function intrinsicallyInvalid(statementIn: Uint8Array, authorizationIn: Uint8Array,
-  issuer: (backing: Uint8Array) => Uint8Array | undefined): boolean {
+export function intrinsicFailures(statementIn: Uint8Array, authorizationIn: Uint8Array,
+  issuer: (backing: Uint8Array) => Uint8Array | undefined): IntrinsicFailure[] {
   let record: LitRecord;
   try {
     const statement = decodeStatement(statementIn), authorization = bytes(authorizationIn);
-    if (compareBytes(statement.domain, litConfigHash()) !== 0 || authorization.length !== authorizationLength(statement)) return false;
+    if (compareBytes(statement.domain, litConfigHash()) !== 0 || authorization.length !== authorizationLength(statement)) return [];
     record = { statement, authorization };
   } catch (error) {
-    if (error instanceof EncodingError) return false;
+    if (error instanceof EncodingError) return [];
     throw error;
   }
   const s = record.statement;
-  if (s.kind === 5 || s.kind === 6 || s.kind === 7) return false;
+  if (s.kind === 5 || s.kind === 6 || s.kind === 7) return [];
   if (s.kind === 1) {
     const key = issuer(Uint8Array.from(s.backing));
-    return key !== undefined && isValidPublicKey(key) && !statementSignatureVerifies(record, key);
+    return key !== undefined && isValidPublicKey(key) && !statementSignatureVerifies(record, key) ?
+      [{ check: "SIGNATURE", role: "issue", signer: Uint8Array.from(key), backing: Uint8Array.from(s.backing) }] : [];
   }
-  return !ownerSignaturesVerify(record) || !arithmeticHolds(s);
+  const failures: IntrinsicFailure[] = arithmeticHolds(s) ? [] : [{ check: "ARITHMETIC" }], message = statementBytes(s);
+  s.inputs.forEach((input, i) => {
+    if (!verifySignatureStrict(record.authorization.subarray(64 * i, 64 * i + 64), message, input.owner)) {
+      failures.push({ check: "SIGNATURE", role: "owner", signer: Uint8Array.from(input.owner), backing: Uint8Array.from(input.backing) });
+    }
+  });
+  return failures;
+}
+/** Whether a target has any intrinsic failure (`intrinsicFailures`). */
+export function intrinsicallyInvalid(statementIn: Uint8Array, authorizationIn: Uint8Array,
+  issuer: (backing: Uint8Array) => Uint8Array | undefined): boolean {
+  return intrinsicFailures(statementIn, authorizationIn, issuer).length > 0;
 }

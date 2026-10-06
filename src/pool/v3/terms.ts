@@ -229,7 +229,8 @@ export function termsCodec<T extends ConstructionTerms = ConstructionTerms>(prof
     verifyRootTermsSignature: (bytes: Uint8Array, signature: Uint8Array) => verifyTermsSignature(p, bytes, signature),
   });
 }
-const V3 = termsCodec<RootTerms>({ construction: "moe/pool/v3", silenceTag: 1 });
+export const V3_TERMS = termsCodec<RootTerms>({ construction: "moe/pool/v3", silenceTag: 1 });
+const V3 = V3_TERMS;
 if (V3.maxBytes !== MAX_ROOT_TERMS_BYTES) throw new Error("pool-v3 terms bound");
 export const encodeRootTerms = V3.encodeRootTerms, decodeRootTerms = V3.decodeRootTerms, rootTermsName = V3.rootTermsName,
   rootTermsSignatureMessage = V3.rootTermsSignatureMessage, verifyRootTermsSignature = V3.verifyRootTermsSignature;

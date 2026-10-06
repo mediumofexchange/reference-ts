@@ -8,7 +8,8 @@ import { CONSTRUCTION } from "./configuration.js";
 export interface LitRootTerms extends Omit<RootTerms, "silence"> {
   readonly silence?: { readonly noCommitmentDuration: bigint };
 }
-const LIT = termsCodec<LitRootTerms>({ construction: CONSTRUCTION, silenceTag: 6 });
+export const LIT_TERMS = termsCodec<LitRootTerms>({ construction: CONSTRUCTION, silenceTag: 6 });
+const LIT = LIT_TERMS;
 /** §9's bound: 1296 bytes. */
 export const MAX_LIT_TERMS_BYTES = LIT.maxBytes;
 export const encodeLitTerms = LIT.encodeRootTerms, decodeLitTerms = LIT.decodeRootTerms, litTermsName = LIT.rootTermsName,

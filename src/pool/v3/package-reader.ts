@@ -1,18 +1,19 @@
-// §12 evidence and §13 record readers for any scope, under the adopted
-// configuration (pool-v3 §11.4). The verifier, selection and reference venue
-// are independently held by the reader.
+// §12 evidence and §13 record readers for any scope, under the configuration of the
+// construction the reader reads (pool-v3 §11.4's by default, or lit-v1 §9's: slice
+// 14 M14d), which reads every frame. The construction, verifier (one with proofs),
+// selection and reference venue are independently held by the reader.
 // A package is copied into the reader's own evidence storage before any pass
 // reads it (pool-v3 §14), from memory or streamed.
 import { compareBytes, copyBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
-import { decodeSnapshot } from "./commitments.js";
-import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration } from "./configuration.js";
+import { POOL_V3, type Construction } from "./construction.js";
 import { faultObserver, type FaultResult, type ReportingFaultObserver } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import { EvidenceStore, type EvidenceBatch } from "./evidence-store.js";
 import type { ReaderSelection, SignedTerms } from "./reader.js";
+import type { Record } from "./records.js";
 import { EvidenceRefusal, requireReplay } from "./refusals.js";
 import type { ReceiptFact } from "./receipt-state.js";
 import { checkpointScope } from "./scope-evidence.js";
@@ -21,19 +22,21 @@ import { classifyScopeFrontier, classifyScopes, withCause, type FrontierContext,
 import { KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import type { DeclaredVerifier, WitnessPredicate } from "./state.js";
 import { declaredParallel } from "./verify-ahead.js";
-import { decodeRootTerms, rootTermsName, verifyRootTermsSignature } from "./terms.js";
 
 /** A §12 package as a reader receives it: bytes in memory or a stream of chunks. */
 export type PackageSource = Uint8Array | AsyncIterable<Uint8Array>;
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 export interface PackageReader {
+  /** The construction read, whose configuration the selection must name: pool-v3 by default. */
+  readonly construction?: Construction | undefined;
+  /** The proof verifier of a construction with proofs (pool-v3); see `ReadOptions` for a read of one without. */
   readonly verifier: DeclaredVerifier;
   readonly venue: RecordVenue;
   readonly reference: VenueReference;
   /** The party's replay storage; a private in-memory store by default, kept alive by the result. */
   readonly store?: ReplayStore | undefined;
-  /** The party's evidence storage the package is copied into before any pass; a private in-memory store by
-   * default, closed when the read ends. A party's file keeps memory flat and retains the evidence across reads,
+  /** The party's evidence storage the package is copied into before any pass, of the read's construction; a private
+   * in-memory store by default, closed when the read ends. A party's file keeps memory flat and retains the evidence across reads,
    * so a later package need carry only new objects and trails can be assembled (§14 incremental retrieval). */
   readonly evidence?: EvidenceStore | undefined;
   /** Outputs to keep incremental witnesses for (a wallet's own), so their paths can be read from the result. */
@@ -46,6 +49,9 @@ export interface PackageReader {
  * (a holder settling reads its disclosure count from them, C3.5, and C3.8's reading its outcome); other reads leave
  * it unset. */
 export interface FrontierReader extends PackageReader { readonly answers?: boolean | undefined }
+/** A read's options: a construction whose records carry no proof (lit-v1) asks no verifier, and ignores one given. */
+export type ReadOptions = Omit<PackageReader, "verifier"> & { readonly verifier?: DeclaredVerifier | undefined };
+export type FrontierReadOptions = Omit<FrontierReader, "verifier"> & { readonly verifier?: DeclaredVerifier | undefined };
 
 /** Own selection bytes and primitive fields before any asynchronous proof check. */
 export function ownSelection(input: ReaderSelection): ReaderSelection {
@@ -64,17 +70,25 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
 }
 
 /** The caller's verifier bound once, with a copy of the circuit identities it declares, which must be the
- * configuration's (§11.1) and name it in kept state (§14). */
-function ownVerifier(verifierIn: DeclaredVerifier, verify: DeclaredVerifier["verify"]): DeclaredVerifier {
-  const parallel = declaredParallel(verifierIn);
-  return { verify: verify.bind(verifierIn), identities: requireConfigurationVerifier(verifierIn.identities), ...(parallel === undefined ? {} : { parallel }) };
+ * configuration's (§11.1) and name it in kept state (§14). A construction without proofs takes none: its verifier
+ * names no circuit, and a call of it is a programming failure. */
+function ownVerifier(construction: Construction, verifierIn: DeclaredVerifier | undefined): DeclaredVerifier {
+  if (!construction.reader.proofs) {
+    return { verify: () => { throw new Error("a record of this construction has no proof"); }, identities: construction.reader.verifierIdentities(undefined) };
+  }
+  const verify = verifierIn?.verify;
+  if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
+  const parallel = declaredParallel(verifierIn!);
+  return { verify: verify.bind(verifierIn), identities: construction.reader.verifierIdentities(verifierIn!.identities), ...(parallel === undefined ? {} : { parallel }) };
 }
 
 /** Copy the package into the reader's evidence storage, then read only the copy and what the store retains.
  * Bytes are copied before the first await; a stream is copied chunk by chunk. The package's own items go
  * when the read ends. */
-async function withEvidence<T>(source: PackageSource, options: PackageReader, read: (batch: EvidenceBatch) => Promise<T>): Promise<T> {
-  const own = options.evidence === undefined, store = options.evidence ?? new EvidenceStore();
+async function withEvidence<T>(source: PackageSource, options: ReadOptions, construction: Construction,
+  read: (batch: EvidenceBatch) => Promise<T>): Promise<T> {
+  if (options.evidence !== undefined && options.evidence.construction !== construction) throw new TypeError("the evidence store reads another construction's evidence");
+  const own = options.evidence === undefined, store = options.evidence ?? new EvidenceStore(":memory:", { construction });
   let batch: EvidenceBatch | undefined, result: T;
   const done = (): void => { if (own) store.close(); else batch?.release(); };
   try {
@@ -102,13 +116,13 @@ function readKinds(batch: EvidenceBatch): void {
  * Compact faults replace only dependency-resolved non-opening target trails;
  * the selected envelope remains complete. The selection's scope and every
  * scope in its ancestry may name one backing or several (C2.10.3–7). */
-export async function readPackage(source: PackageSource, selected: ReaderSelection, options: PackageReader): Promise<ScopeResult & FaultResult> {
+export async function readPackage<R = Record>(source: PackageSource, selected: ReaderSelection, options: ReadOptions): Promise<ScopeResult<R> & FaultResult> {
   return withFacts(async attach => {
     const owned = ownPackageRead(selected, options);
-    return withEvidence(source, options, batch => keptOrAgain(options, async () => {
+    return withEvidence(source, options, owned.construction, batch => keptOrAgain(options, async () => {
       const { context, faults, venue } = openPackage(batch, owned, options);
       try {
-        const result = await classifyScopes(context, venue, batch);
+        const result = await classifyScopes<R>(context, venue, batch);
         return { ...result, ...faults.result() };
       } catch (error) { throw attach(error, faults, context); }
     }));
@@ -148,7 +162,7 @@ async function withFacts<T>(read: (attach: Attach) => Promise<T>): Promise<T> {
 /** §14: kept state that fails a check before reuse is discarded, and the read classifies again from the evidence.
  * A second mismatch, with nothing kept, is a programming failure and stays visible. (Retained evidence that
  * fails its check reads as absent or leaves the read unresolved; see evidence-store.ts.) */
-async function keptOrAgain<T>(options: PackageReader, read: () => Promise<T>): Promise<T> {
+async function keptOrAgain<T>(options: ReadOptions, read: () => Promise<T>): Promise<T> {
   try { return await read(); } catch (error) {
     if (!(error instanceof KeptStateMismatch) || options.store === undefined) throw error;
     options.store.discardKept();
@@ -157,26 +171,24 @@ async function keptOrAgain<T>(options: PackageReader, read: () => Promise<T>): P
 }
 
 /** The reader's own inputs, checked before the package is read. */
-function ownPackageRead(selected: ReaderSelection, options: PackageReader) {
+function ownPackageRead(selected: ReaderSelection, options: ReadOptions) {
   const { verifier: verifierIn, venue, reference: referenceIn } = options;
-  const domain = adoptedDomain();
-  const verify = verifierIn.verify;
-  if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(verifierIn, verify);
+  const construction = options.construction ?? POOL_V3 as Construction, domain = construction.reader.domain();
+  const verifier = ownVerifier(construction, verifierIn);
   const reference = structuredClone(referenceIn), expectedVenue = requireReferenceVenue(reference, venue);
   const selection = ownSelection(selected);
   requireReplay(same(selection.venue, expectedVenue), "VENUE_REFERENCE");
   requireReplay(same(selection.domain, domain), "CONFIGURATION");
-  return { domain, verifier, reference, selection };
+  return { construction, domain, verifier, reference, selection };
 }
 
-function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRead>, options: PackageReader) {
-  const { domain, verifier, reference, selection } = owned, { venue } = options;
+function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRead>, options: ReadOptions) {
+  const { construction, domain, verifier, reference, selection } = owned, { venue } = options, frames = construction.reader;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
   // Directories, snapshots and trails may be retained from earlier packages; each lookup below needs its own.
   if ([1, 2].some(kind => batch.count(kind) === 0)) throw new EvidenceRefusal("unresolved-evidence");
-  requireReplay(verifyConfiguration(payloads(1)[0]!), "CONFIGURATION");
+  requireReplay(frames.verifyConfiguration(payloads(1)[0]!), "CONFIGURATION");
   const commitment = decodeCommitment(payloads(2)[0]!);
   if (!verifyCommitment(commitment)) throw new EvidenceRefusal("unresolved-evidence");
   if (!same(commitment.operator, selection.operator) || commitment.sequence !== selection.sequence || !same(commitment.root, selection.root)) {
@@ -186,15 +198,15 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
   const snapshotBytes = batch.snapshot(entry.digest);
   if (snapshotBytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
-  const snapshot = decodeSnapshot(snapshotBytes), scope = checkpointScope(batch, selection.backing, entry.digest, snapshot);
+  const snapshot = frames.snapshot.decode(snapshotBytes), scope = checkpointScope(construction, batch, selection.backing, entry.digest, snapshot);
   const { header } = scope;
   scope.fullTrail();
   requireReplay(same(header.domain, domain) && same(header.venue, selection.venue) && same(header.operator, selection.operator) &&
     header.sequence <= selection.sequence, "CONTEXT");
   const terms = scope.rootTerms[header.entries.findIndex(scoped => same(scoped.backing, selection.backing))]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
-  const faults = faultObserver(payloads(7), selection, verifier);
-  const context: ImportContext = { store: options.store ?? new ReplayStore(), witness: options.witness, carrying: options.carrying, selection, terms, header, verifier, reference, faults,
+  const faults = faultObserver(payloads(7), selection, verifier, construction);
+  const context: ImportContext = { construction, store: options.store ?? new ReplayStore(), witness: options.witness, carrying: options.carrying, selection, terms, header, verifier, reference, faults,
     ...(batch.count(10) === 0 ? {} : { receiptBytes: payloads(10)[0]! }) };
   return { context, faults, venue };
 }
@@ -203,47 +215,46 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
  * through ancestry scoping one backing or several (C2.10.3–7). An empty result
  * is proved by the complete venue descent, never by missing package objects.
  * Selection and receipt metadata supply no frontier authority. */
-export async function readFrontier(source: PackageSource, signed: SignedTerms, judgingIndex: bigint,
-  options: FrontierReader): Promise<FrontierResult & FaultResult> {
+export async function readFrontier<R = Record>(source: PackageSource, signed: SignedTerms, judgingIndex: bigint,
+  options: FrontierReadOptions): Promise<FrontierResult<R> & FaultResult> {
   return withFacts(async attach => {
     const owned = ownFrontierRead(signed, judgingIndex, options);
-    return withEvidence(source, options, batch => keptOrAgain(options, async () => {
+    return withEvidence(source, options, owned.construction, batch => keptOrAgain(options, async () => {
       const { context, faults, venue } = openFrontier(batch, owned, judgingIndex, options);
       try {
-        const result = await classifyScopeFrontier(context, venue, batch);
+        const result = await classifyScopeFrontier<R>(context, venue, batch);
         return { ...result, ...faults.result() };
       } catch (error) { throw attach(error, faults, {}); }
     }));
   });
 }
 
-/** The reader's own inputs and the authenticated terms, checked before the package is read. */
-function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: PackageReader) {
+/** The reader's own inputs and the authenticated terms, checked before the package is read. The terms decode under
+ * the construction read, whose clause they must name (pool-v3 §11.2, lit-v1 §9). */
+function ownFrontierRead(signed: SignedTerms, judgingIndex: bigint, options: ReadOptions) {
   const { verifier: verifierIn, reference: referenceIn } = options;
-  const domain = adoptedDomain();
-  const verify = verifierIn.verify;
-  if (typeof verify !== "function") throw new TypeError("a proof verifier is required");
-  const verifier = ownVerifier(verifierIn, verify);
+  const construction = options.construction ?? POOL_V3 as Construction, frames = construction.reader, domain = frames.domain();
+  const verifier = ownVerifier(construction, verifierIn);
   const reference = structuredClone(referenceIn);
   if (!isValue(judgingIndex)) throw new EncodingError("invalid judging index");
   const termsBytes = copyUnshared(signed.terms), signature = copyUnshared(signed.signature);
-  requireReplay(verifyRootTermsSignature(termsBytes, signature), "TERMS_SIGNATURE");
-  const terms = decodeRootTerms(termsBytes), backing = rootTermsName(termsBytes);
+  requireReplay(frames.terms.verifyRootTermsSignature(termsBytes, signature), "TERMS_SIGNATURE");
+  const terms = frames.terms.decodeRootTerms(termsBytes), backing = frames.terms.rootTermsName(termsBytes);
   requireReplay(same(terms.configuration, domain), "CONFIGURATION");
-  return { domain, verifier, reference, terms, backing };
+  return { construction, domain, verifier, reference, terms, backing };
 }
 
-function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontierRead>, judgingIndex: bigint, options: FrontierReader) {
-  const { domain, verifier, reference, terms, backing } = owned, { venue } = options;
+function openFrontier(batch: EvidenceBatch, owned: ReturnType<typeof ownFrontierRead>, judgingIndex: bigint, options: FrontierReadOptions) {
+  const { construction, domain, verifier, reference, terms, backing } = owned, { venue } = options;
   readKinds(batch);
   const payloads = (kind: number): Uint8Array[] => batch.payloads(kind);
-  if (batch.count(1) !== 0) requireReplay(verifyConfiguration(payloads(1)[0]!), "CONFIGURATION");
+  if (batch.count(1) !== 0) requireReplay(construction.reader.verifyConfiguration(payloads(1)[0]!), "CONFIGURATION");
   // Invoke the external adapter only after every caller-owned input is copied.
   const venueId = requireReferenceVenue(reference, venue);
   requireReplay(same(terms.venue, venueId), "VENUE_REFERENCE");
   const selection = { mode: "historical-fixture" as const, domain, venue: venueId, backing, judgingIndex };
-  const faults = faultObserver(payloads(7), selection, verifier);
-  const context: FrontierContext = { store: options.store ?? new ReplayStore(), witness: options.witness, carrying: options.carrying, selection, terms, verifier, reference, faults,
+  const faults = faultObserver(payloads(7), selection, verifier, construction);
+  const context: FrontierContext = { construction, store: options.store ?? new ReplayStore(), witness: options.witness, carrying: options.carrying, selection, terms, verifier, reference, faults,
     answers: options.answers === true };
   return { context, faults, venue };
 }

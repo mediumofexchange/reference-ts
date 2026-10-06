@@ -123,11 +123,11 @@ describe("the configuration frame, pool-v3 §11.1, and §11.4's adopted configur
 });
 
 describe("the specification pin", () => {
-  it("is one revision in the reader's rules, the report provenance and the README", () => {
+  it("is one revision in the reader's rules (the construction's frames), the report provenance and the README", () => {
     const text = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
     const pinned = /export const V3_SPECIFICATION = "([0-9a-f]{7})";/.exec(text("../scripts/pool/v3/provenance.mjs"))?.[1];
     expect(pinned).toBeDefined();
-    expect(/const SPECIFICATION = "pool-v3 ([0-9a-f]{7})";/.exec(text("../src/pool/v3/reader.ts"))?.[1]).toBe(pinned);
+    expect(/specification: "pool-v3 ([0-9a-f]{7})",/.exec(text("../src/pool/v3/construction.ts"))?.[1]).toBe(pinned);
     expect(text("../README.md")).toMatch(new RegExp(`money-from-first-principles/tree/${pinned}[0-9a-f]{33}[)]`));
   });
 });

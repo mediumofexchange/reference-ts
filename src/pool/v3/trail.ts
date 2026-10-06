@@ -257,6 +257,7 @@ export function trailCodec(profile: TrailProfile): TrailCodec {
     decodeTrail: (bytes: Uint8Array, budget?: TrailLimits) => decode(f, bytes, budget),
   });
 }
-const V3 = trailCodec({ context: CONTEXT, headerContext: HEADER_CONTEXT, maxRecordBytes: MAX_TRAIL_RECORD_BYTES,
+export const V3_TRAILS = trailCodec({ context: CONTEXT, headerContext: HEADER_CONTEXT, maxRecordBytes: MAX_TRAIL_RECORD_BYTES,
   maxTermsBytes: MAX_ROOT_TERMS_BYTES });
+const V3 = V3_TRAILS;
 export const trailReader = V3.trailReader, trailHead = V3.trailHead, encodeTrail = V3.encodeTrail, decodeTrail = V3.decodeTrail;

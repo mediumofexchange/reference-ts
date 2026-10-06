@@ -178,7 +178,8 @@ export function packageCodec(contextIn: Uint8Array): PackageCodec {
     decodeEvidencePackage: (bytes: Uint8Array, bound?: PackageLimits) => decodePackage(context, bytes, bound),
   });
 }
-const V3 = packageCodec(CONTEXT);
+export const V3_PACKAGES = packageCodec(CONTEXT);
+const V3 = V3_PACKAGES;
 export const packageReader = V3.packageReader, encodeEvidencePackage = V3.encodeEvidencePackage,
   decodeEvidencePackage = V3.decodeEvidencePackage;
 

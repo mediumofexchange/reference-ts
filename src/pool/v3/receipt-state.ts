@@ -1,11 +1,11 @@
-// C2.10.9a–c and C2b.4.3. Classification and clock boundaries come from the reader.
+// C2.10.9a–c and C2b.4.3. Classification and clock boundaries come from the reader; the receipt, header and
+// snapshot frames are the construction's.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
 import type { HeldCommitment } from "../../record-range.js";
-import { ScopeTree } from "../scope.js";
-import { decodeReceipt, decodeSnapshot, receiptMatchesEvent, verifyReceipt, type Receipt } from "./commitments.js";
+import type { Construction, ReceiptView } from "./construction.js";
 import type { TrailEvidence } from "./evidence-store.js";
-import { decodeSegmentHeader, type SegmentHeader } from "./headers.js";
+import type { SegmentHeader } from "./headers.js";
 import type { ReaderSelection, RecordView, ReplayResult } from "./reader.js";
 import { EvidenceRefusal } from "./refusals.js";
 import type { SnapshotDigest } from "../../venue-records.js";
@@ -20,24 +20,24 @@ export interface ReceiptVerdict {
   readonly abandonedAt?: ReceiptFact;
 }
 export interface ReceiptWalk {
-  readonly receipt: Receipt; readonly header: SegmentHeader; readonly termBoundary: bigint | undefined;
+  readonly receipt: ReceiptView; readonly header: SegmentHeader; readonly termBoundary: bigint | undefined;
   evidence(): { contradictedAt: ReceiptFact[] };
   boundary(at: bigint, clock: { readonly boundary?: bigint | undefined } | undefined): ReceiptVerdict | undefined;
   checkpoint(held: HeldCommitment, segment: Uint8Array | undefined, state: ReplayResult | undefined,
     header: SegmentHeader | undefined, classification: string): ReceiptVerdict | undefined;
   finish(): ReceiptVerdict;
 }
-export async function receiptWalk(bytes: Uint8Array, context: { readonly selection: ReaderSelection }, view: RecordView,
+export async function receiptWalk(bytes: Uint8Array, context: { readonly selection: ReaderSelection; readonly construction: Construction }, view: RecordView,
   trails: TrailEvidence, snapshotOf: (digest: Uint8Array) => Uint8Array | undefined,
   directoryOf: (root: Uint8Array) => readonly SnapshotDigest[] | undefined, scopeViews?: ReadonlyMap<string, RecordView>): Promise<ReceiptWalk> {
-  const { selection } = context, receipt = decodeReceipt(bytes);
+  const { selection } = context, frames = context.construction.reader, receipt = frames.receipt(bytes);
   const [trail] = trails.heads(receipt.segment);
   if (trail === undefined) throw new EvidenceRefusal("unresolved-evidence");
-  const header = decodeSegmentHeader(trail.header);
+  const header = frames.header.decodeSegmentHeader(trail.header);
   if (header.entries.length !== 1 && scopeViews === undefined) throw new EvidenceRefusal("unsupported-scope");
   requireReceipt(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
     header.entries.some(scope => same(scope.backing, selection.backing)) && receipt.after >= header.sequence &&
-    verifyReceipt({ domain: selection.domain, segment: receipt.segment, scopeRoot: new ScopeTree(header.entries).root(), operator: header.operator }, receipt));
+    receipt.verify({ domain: selection.domain, header, operator: header.operator }));
   let termBoundary: bigint | undefined;
   for (const scope of header.entries) {
     const scopedView = scopeViews?.get(hex(scope.backing)) ?? view;
@@ -61,7 +61,7 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     const entry = directory[0]; requireReceipt(entry !== undefined && header.entries.some(scope => same(scope.backing, entry.name)));
     const snapshot = snapshotOf(entry.digest);
     if (snapshot === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    const decoded = decodeSnapshot(snapshot);
+    const decoded = frames.snapshot.decode(snapshot);
     // A first snapshot of another backing authenticates nothing, as the checkpoint's judgment reads it.
     if (!same(decoded.backing, entry.name)) throw new EvidenceRefusal("unresolved-evidence");
     requireReceipt(same(decoded.segment, receipt.segment));
@@ -90,7 +90,7 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
       if (classification === "valid" && own) {
         requireReceipt(opened);
         const event = state!.receiptEvent(receipt.position);
-        if (event !== undefined && receiptMatchesEvent(receipt, event)) return finish("final", { includedAt: [fact] });
+        if (event !== undefined && receipt.matches(event)) return finish("final", { includedAt: [fact] });
         if (c.sequence > receipt.after ? reference !== undefined : event !== undefined) contradictedAt.push(fact);
       }
       if (!same(c.operator, receipt.operator) || c.sequence <= receipt.after) return;

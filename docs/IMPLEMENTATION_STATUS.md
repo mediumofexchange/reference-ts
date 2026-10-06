@@ -313,7 +313,7 @@ pool-v3's adoption (`e7f7f24`), whose manifest the runtime holds.
 count and the C3.8 reading (`dishonour.ts`) read it. Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding
 rule to its specification rule, code and test, and marks what is retired.
-Later specification revisions, such as the lit profile (`29fc585`) and its draft layouts `lit-v1.md`, are not pinned by the pool runtime. `src/lit/` implements lit-v1 §§2–9 at `1bf5bfc`: bytes, frames and §7 validity in the pool's one state machine, not yet a reader of lit trails ([map](PRIVATE_PAYMENT_ARCHITECTURE.md#lit-construction-draft)).
+Later specification revisions, such as the lit profile (`29fc585`) and its draft layouts `lit-v1.md`, are not pinned by the pool runtime. `src/lit/` implements lit-v1 §§2–9 at `1bf5bfc`: bytes, frames, §7 validity in the pool's one state machine and lit packages read by the pool's one package reader and walk ([map](PRIVATE_PAYMENT_ARCHITECTURE.md#lit-construction-draft)).
 `pool-recovery.md` specifies presentation, the non-service count, snapshot
 redemption at the venue and the return from silence over the pool;
 `model/pool-recovery.ts` is its executable model with counterexamples.

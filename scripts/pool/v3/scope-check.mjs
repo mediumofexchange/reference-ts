@@ -350,12 +350,12 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     const { faultEvidence: sigFacts, ...sigUnchanged } = signatureResult;
     assert.deepEqual(sigUnchanged, result); authorization = { payload: sigPayload, result: signatureResult };
     // The expected issuer follows the target backing even when selection names x.
-    const observer = faultObserver(sigPayload.package.faults, { ...sigPayload.selection, backing: x }, verifier, codec);
+    const observer = faultObserver(sigPayload.package.faults, { ...sigPayload.selection, backing: x }, verifier);
     const decoded = codec.decodeTrail(unauthorized.trail, LIMITS);
     await observer.inspect({ commitment: unauthorized.commitment, index: unauthorized.at }, unauthorized.directory,
       { header: codec.decodeSegmentHeader(decoded.header), terms: decoded.terms });
     assert.deepEqual(observer.result().faultEvidence, sigFacts);
-    const validSibling = faultObserver(reported.package.faults, { ...reported.selection, backing: x }, verifier, codec);
+    const validSibling = faultObserver(reported.package.faults, { ...reported.selection, backing: x }, verifier);
     await validSibling.inspect({ commitment: late.commitment, index: late.at }, late.directory,
       { header: codec.decodeSegmentHeader(decoded.header), terms: decoded.terms });
     assert.deepEqual(validSibling.result().faultEvidence, observation.faultEvidence);

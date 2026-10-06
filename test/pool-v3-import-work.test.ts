@@ -1,3 +1,4 @@
+import { POOL_V3 } from "../src/pool/v3/construction.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
@@ -70,7 +71,7 @@ function fixture(proofVerifier: DeclaredVerifier = verifier) {
   }
   const read = (target: Segment, selected: Commitment, selectionDomain = domain) => {
     const stored = new EvidenceStore().importTrails(trails);
-    return classifyScopes({ store: new ReplayStore(),
+    return classifyScopes({ construction: POOL_V3, store: new ReplayStore(),
       selection: { mode: "current-fixture", domain: selectionDomain, venue: venueId, backing, operator, sequence: selected.sequence,
         root: selected.root, judgingIndex: venue.witnessedIndex() }, terms, header: target.header, verifier: proofVerifier,
       reference: { context: LOCAL_REFERENCE, label, lag },

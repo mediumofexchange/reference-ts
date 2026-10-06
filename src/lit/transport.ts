@@ -9,7 +9,8 @@ import { trailCodec } from "../pool/v3/trail.js";
 import { MAX_TARGET_FIELD_BYTES } from "./fault-evidence.js";
 import { MAX_LIT_TERMS_BYTES } from "./terms.js";
 
-const header = segmentHeaderCodec(LIT_SEGMENT_CONTEXT);
+export const LIT_HEADERS = segmentHeaderCodec(LIT_SEGMENT_CONTEXT);
+const header = LIT_HEADERS;
 /** 262 to 8,913,022 bytes: a 126-byte prefix and 136 bytes per scoped backing. */
 export const MIN_LIT_HEADER_BYTES = header.minHeaderBytes, MAX_LIT_HEADER_BYTES = header.maxHeaderBytes;
 export const litSegmentBytes = header.segmentBytes, litSegmentIdentity = header.segmentIdentity,
@@ -17,11 +18,13 @@ export const litSegmentBytes = header.segmentBytes, litSegmentIdentity = header.
 
 /** A trail record's bound: two fields at the 4096-byte transport bound with their lengths. */
 export const MAX_LIT_TRAIL_RECORD_BYTES = 2 * (4 + MAX_TARGET_FIELD_BYTES);
-const trail = trailCodec({ context: LIT_TRAIL_CONTEXT, headerContext: LIT_SEGMENT_CONTEXT,
+export const LIT_TRAILS = trailCodec({ context: LIT_TRAIL_CONTEXT, headerContext: LIT_SEGMENT_CONTEXT,
   maxRecordBytes: MAX_LIT_TRAIL_RECORD_BYTES, maxTermsBytes: MAX_LIT_TERMS_BYTES });
+const trail = LIT_TRAILS;
 export const litTrailReader = trail.trailReader, litTrailHead = trail.trailHead, encodeLitTrail = trail.encodeTrail,
   decodeLitTrail = trail.decodeTrail;
 
-const evidence = packageCodec(LIT_PACKAGE_CONTEXT);
+export const LIT_PACKAGES = packageCodec(LIT_PACKAGE_CONTEXT);
+const evidence = LIT_PACKAGES;
 export const litPackageReader = evidence.packageReader, encodeLitPackage = evidence.encodeEvidencePackage,
   decodeLitPackage = evidence.decodeEvidencePackage;
