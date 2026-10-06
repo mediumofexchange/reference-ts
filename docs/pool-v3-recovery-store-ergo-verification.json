@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1187
+      "elapsedMs": 1314
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 898
+      "elapsedMs": 1002
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2283
+      "elapsedMs": 2601
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2336
+      "elapsedMs": 2590
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2267
+      "elapsedMs": 2581
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1263
+      "elapsedMs": 1398
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2334
+      "elapsedMs": 2589
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2321
+      "elapsedMs": 2580
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2289
+      "elapsedMs": 2582
     }
   ],
   "transactions": [
@@ -114,13 +114,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "e80e2702032844ed31076346882458718cb416fffd088d63726a7bd2387da822",
+    "history": "827498e9c5b7939e7f510ef34f3c6c79961aa98d025209fbfb8081ecc79e1d27",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "bbfca8f9b1d113dabbce4a62f45756e5dfddf8a4bb919ebbdc2a47bc35f18acb"
+        "sha256": "7387d5709d55994f6b9fc96f7e5c41a216f02bbbd211cc4309fa3b9f8bd7782a"
       },
       {
         "index": "27",
@@ -130,12 +130,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "bb117be90f13bbba20cdfec17b229c1f018164e6b2e21271fe75d45db2a537e1"
+        "sha256": "72cb32cfc182896df524be77e558d7c1636a1ef92481474c2ae244258b42bcce"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "5ca1f85129858abd513751fc7b6f19e753f44237c6f15d1e712c2332746b4e7b"
+        "sha256": "18c15710e48709b174d44a5d8bee550cc69e05018a1812914dcf3c56441d1c43"
       }
     ],
     "clock": {
@@ -156,7 +156,7 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 32068,
+  "elapsedMs": 36271,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -193,12 +193,12 @@
     "dist/pool/v3/package.js": "e37924e12e51cc7005f177b981320defa251eca1e6ad4f126d2cb10fb04b1133",
     "dist/pool/v3/programs.js": "7f3fc7114320498c51795f287effcbd4a482a00aa64fd32f46dfe33c89a2f4f2",
     "dist/pool/v3/prover.js": "40a871f168e03040490dea985c3d0892cb72e548f2848a87b15b8f59f050fa90",
-    "dist/pool/v3/reader.js": "9da084b25f703ccf34ecaaed9f68ab46f2596d3d27f50e3219c85997e2499ee4",
+    "dist/pool/v3/reader.js": "1d1323266afbe1d22b29e0eef9007c8bae2e271d4116c40fc110db61ec07dd82",
     "dist/pool/v3/receipt-state.js": "5fbaaed0b60850a58aaa96d7f715a8a57a4c2912e92cd310274c422dd3506e90",
     "dist/pool/v3/records.js": "93adfd8958036966e071e376b94baf6c676312e5f39cac4cacb478e2cad33898",
     "dist/pool/v3/recovery.js": "9edbfd461d586425dcf61ab12aeb6d17a0727e3b427d3439c4768ed88cc267d4",
     "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
-    "dist/pool/v3/replay-store.js": "9df2f651e87ab4940dce59309ff45b53e0984d918f0826f55de647b097535a69",
+    "dist/pool/v3/replay-store.js": "9541b88aefda6c1dab834d0b1243dc225f690bd5b9c75716255f0d461187871b",
     "dist/pool/v3/scope-evidence.js": "756dd7a2d4e4d3a7720178761382ca572b8450724ae31dfa51262b3e0befa26d",
     "dist/pool/v3/scope-reader.js": "9dc4149405c06b55a735e2c0234eeae5457df5c2bf0b471bc193fc94c9dff287",
     "dist/pool/v3/state.js": "743cf1b76d98fbc25130d498421965c6c69f0671c6ab6bb5876709e86adf1eb1",
@@ -272,12 +272,12 @@
     "src/pool/v3/programs.json": "b129fcfca83a4b48cb725d839fda7957491948ff15362b3c29c8014b7e77a2ec",
     "src/pool/v3/programs.ts": "90bcb494e6d71242a52d4612246f62ed7e6eb2a1c1f1b183232c6a15fba53bac",
     "src/pool/v3/prover.ts": "e08dfbccd8c92ecfeb1b35e992fd4f42d1e5914cdfb5c06dafe8496425076a01",
-    "src/pool/v3/reader.ts": "ec14dd27187231c9d8040297fc69d7fb6010ac7704cfd085c458ec3a9e48c4a7",
+    "src/pool/v3/reader.ts": "a33318f03fef09a4f2d73f0afb23910aaced3732eb0c6778a37e234ae19b4f42",
     "src/pool/v3/receipt-state.ts": "a45ea011ad62ee59aa6282bc9c6f401a0301a8958cd4a5d377a669fc96392fd2",
     "src/pool/v3/records.ts": "0b46e880f05c6776cda9f8918a8383cc0a8b4b4eb81beddf29331a1749108c32",
     "src/pool/v3/recovery.ts": "cceafc2b3a067b8fc0cc23be4e95e53beb278a891f9a434f451454452112968b",
     "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
-    "src/pool/v3/replay-store.ts": "c70f114dd93b0be7ff7a9e597aea3dd1473c6f9aa94b7c0b03425f2086e60ce3",
+    "src/pool/v3/replay-store.ts": "8d578517762927ff93e34c732a66eadd198642bfd40fa297556ec77b2a34ac22",
     "src/pool/v3/scope-evidence.ts": "b37ae977f1f5c1c5d61ec5d444794c24397907115e6ae9a9f0309ceb4542a879",
     "src/pool/v3/scope-reader.ts": "79ad2ef86b0f5b18f1510485cba7d59459d68b35a31a9e8d925fdcf5391f27fe",
     "src/pool/v3/state.ts": "df327e5818ce3cba7b35b5caf8efe44ad90526d0455e20ed076cd3ca0e211377",
