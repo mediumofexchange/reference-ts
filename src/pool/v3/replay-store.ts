@@ -900,11 +900,14 @@ export class ReplayStore {
     const hash = createHash("sha256");
     const tables: [string, string[]][] = [["event", ["identity", "kind", "proof_hash", "signature_hash", "history", "evidence", "note_root", "spent_root"]],
       ["nullifier", ["nf", "tag"]], ["output", ["cm", "leaf", "settlement"]], ["anchor", ["root"]],
-      ["demand", ["id", "backing", "quantity", "tag0", "tag1", "presenter", "instant", "deadline"]], ["demand_end", ["id"]]];
+      ["demand", ["id", "backing", "quantity", "tag0", "tag1", "presenter", "instant", "deadline"]], ["demand_end", ["id"]],
+      // A lit demand's nullifiers, visible with their demand: a settlement spends them (lit-v1 §7).
+      ["demand_nullifier", ["id", "i", "nf"]]];
     for (const [table, columns] of tables) {
       hash.update(`${table}:`);
-      const list = columns.map(column => `x.${column}`).join(", ");
-      for (const row of this.#db.prepare(`SELECT ${list} FROM ${table} x WHERE ${visible("x")} ORDER BY ${list}`).iterate({ ns, p })) {
+      const own = table === "demand_nullifier" ? "t" : "x", list = columns.map(column => `${own}.${column}`).join(", ");
+      const from = own === "t" ? "demand_nullifier t JOIN demand x ON x.id = t.id AND x.ns = t.ns" : `${table} x`;
+      for (const row of this.#db.prepare(`SELECT ${list} FROM ${from} WHERE ${visible("x")} ORDER BY ${list}`).iterate({ ns, p })) {
         for (const column of columns) {
           const value = (row as Record<string, unknown>)[column];
           const field = value instanceof Uint8Array ? value : new TextEncoder().encode(String(value));
@@ -1092,7 +1095,7 @@ export class ReplayStore {
     // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
     if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
-    this.#lost = false;
+    this.#lost = false; this.#keptMark = undefined;
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
@@ -1146,7 +1149,7 @@ export class ReplayStore {
   closeWalk(walk: number): void {
     // A walk that lost its file at a keep point leaves it to the store that took it: nothing to drop or digest here.
     if (this.#lost) {
-      this.#lost = false;
+      this.#lost = false; this.#keptMark = undefined;
       if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
       return;
     }
@@ -1161,6 +1164,7 @@ export class ReplayStore {
       }
       if (this.#db.isTransaction) this.#db.exec("COMMIT");
     } catch (error) {
+      this.#keptMark = undefined;
       if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
       throw error;
     }

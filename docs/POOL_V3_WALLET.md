@@ -4,7 +4,9 @@
 [pool-delivery C4.1–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-delivery.md)
 and pays under [pool-fees C1.2.3–5](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
 It runs under the adopted configuration (pool-v3 §11.4) and the recomputed reference venue guard. It is
-not exported from the root barrel. Node 24 is required for its SQLite storage.
+not exported from the root barrel. Node 24 is required for its SQLite storage, at 24.21.0 or later (24.6.0's `node:sqlite` binds a
+zero-length blob read back as NULL and refuses a statement naming one numbered parameter twice, and its libuv crashes at a
+command's exit on Windows).
 
 The caller opens `V3Wallet(path, readerOptions)` with its independently
 held configuration, proof verifier, venue and reference identity preimage. The
