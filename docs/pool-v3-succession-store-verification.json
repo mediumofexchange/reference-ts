@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1132
+      "elapsedMs": 1319
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2726
+      "elapsedMs": 3108
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2690
+      "elapsedMs": 3084
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 881
+      "elapsedMs": 1025
     }
   ],
   "transactions": [],
@@ -49,7 +49,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "2261233c042322f55531c96b723172fc487a8f7f74afbb8e2e2dcacf6086ba3a",
-    "history": "795cbd2bc5633529495b542ce5511277f1381afced8ea3782f0afe87181ca394",
+    "history": "5da6ed8512e44977b9800f21155bfe05aab61cac025c66c6b9febe8d05ca3007",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -107,7 +107,7 @@
       }
     ]
   },
-  "elapsedMs": 20347,
+  "elapsedMs": 24024,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -184,7 +184,7 @@
     "scripts/pool/v3/provenance.mjs": "9a9dd856973ad5d55aff737cff8704af1aa1207e00891f693251160f8fc4eb38",
     "scripts/pool/v3/public-artifacts.mjs": "47e2c6d61a404a8aa3c9b41e06de3a760d27b9400933201589f0043d30b5ad82",
     "scripts/pool/v3/succession-store-check.mjs": "33efc2bd8a60e6afc586b9ad4c01da5da48024b290aead0e62738cdc4e8aa47a",
-    "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
+    "scripts/pool/v3/testnet.mjs": "c8fd9b2a84519c70a59e661c136bfbef9e20fb4103954549d21af154dd7b88fa",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
     "src/contexts.ts": "2a0bd8dfd7fed8c229d40d68b1dab984bcdb6b5afa26afdd9ec98d8812dd923a",
     "src/ergo-headers.ts": "c0e21dead5c9a54db64761279504313458e0d6a3c8cf35e4f0651aede2fd7dd0",

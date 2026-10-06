@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1171
+      "elapsedMs": 1281
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 899
+      "elapsedMs": 1004
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2307
+      "elapsedMs": 2606
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2272
+      "elapsedMs": 2589
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2251
+      "elapsedMs": 2586
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1225
+      "elapsedMs": 1405
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2258
+      "elapsedMs": 2584
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2258
+      "elapsedMs": 2581
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2269
+      "elapsedMs": 2589
     }
   ],
   "transactions": [
@@ -114,13 +114,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "3a31f2f9c2537bbbf452a7769f89e77b3e7969cd45b27d1c5e8611b0fc26a6e9",
+    "history": "76afeb6e110eb65a0cba6b27f10d7caeb5f3ef96395f2780c5f080c5e6b85335",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "eae9e02a2b672e09d178fe2591a63a894b61632ca808fd6bd3b68045c297df06"
+        "sha256": "15fefcb59953ec0e054e6f8402323d9d05dc33f307da6ddc7019a1e5fc9ff0b7"
       },
       {
         "index": "27",
@@ -130,12 +130,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "ea79ed7c9ed65ebb808561c300b2629f75b354d0b91af8fb02b2945fa643edfa"
+        "sha256": "3b42bba01d24e444992fe89f53b7e4af936300c35f2218d170be5aff8e5d220f"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "26e92dc986e86f7375f29693e18fdc2965d25a368eb1707a14b73afe1ab98a6e"
+        "sha256": "f8fa646cad4e48ec96923871ed2e6034a52c7119fcda80582b785746c2f6c018"
       }
     ],
     "clock": {
@@ -156,7 +156,7 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 31190,
+  "elapsedMs": 36296,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -233,8 +233,8 @@
     "scripts/pool/v3/provenance.mjs": "9a9dd856973ad5d55aff737cff8704af1aa1207e00891f693251160f8fc4eb38",
     "scripts/pool/v3/public-artifacts.mjs": "47e2c6d61a404a8aa3c9b41e06de3a760d27b9400933201589f0043d30b5ad82",
     "scripts/pool/v3/recovery-store-check.mjs": "329ee6cd00c8a4114dc96171e3347a98b1fb469e9ef2ea6ca55068d110990435",
-    "scripts/pool/v3/testnet-budget.mjs": "1e889ddb208d115192eaef05fb052faac3187b161bc8f6386baf085fc807b079",
-    "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
+    "scripts/pool/v3/testnet-budget.mjs": "0f65509e9256f5baafc8d06bd8d2b73bb36b23a320f27130122e925ae6f2feef",
+    "scripts/pool/v3/testnet.mjs": "c8fd9b2a84519c70a59e661c136bfbef9e20fb4103954549d21af154dd7b88fa",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
     "src/contexts.ts": "2a0bd8dfd7fed8c229d40d68b1dab984bcdb6b5afa26afdd9ec98d8812dd923a",
     "src/ergo-headers.ts": "c0e21dead5c9a54db64761279504313458e0d6a3c8cf35e4f0651aede2fd7dd0",
