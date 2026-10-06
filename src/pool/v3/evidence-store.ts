@@ -511,8 +511,9 @@ export class EvidenceStore {
     };
   }
 
-  /** A trail's rows. The evidence chain runs over the longest prefix whose records decode (§5); only
-   * that prefix can serve a checkpoint (§12.1), so later records are not kept. */
+  /** A trail's rows. The evidence chain runs over the longest prefix whose records give their digests (pool-v3 §5:
+   * those that decode; lit-v1 §6: those that split); only that prefix can serve a checkpoint (§12.1), so later
+   * records are not kept. */
   #rows(batch: EvidenceBatch, base: Base | undefined): TrailSink {
     const q = this.#q, construction = this.construction;
     let segment: Uint8Array | undefined, entries: readonly SegmentEntry[] = [];

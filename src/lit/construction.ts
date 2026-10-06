@@ -21,7 +21,7 @@ import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configurat
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  arithmeticHolds, decodePublication, decodeRecord, encodeRecord, evidencePair, hashEvidenceFields, ownerSignaturesVerify,
+  arithmeticHolds, decodePublication, decodeRecord, encodeRecord, evidencePair, hashEvidenceFields, splitRecord, ownerSignaturesVerify,
   settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
@@ -145,7 +145,11 @@ const LIT_READER: ReaderFrames = Object.freeze({
       verify: ({ domain, operator }) => verifyReceipt({ domain, segment: receipt.segment, operator }, receipt),
       matches: event => receiptMatchesEvent(receipt, event) };
   },
-  digests: (record: Uint8Array) => ({ ...evidencePair(decodeRecord(record)), proofHash: new Uint8Array(0) }),
+  // §6: the pair needs only §3's split, so a record that splits authenticates whether or not it decodes, and fails replay.
+  digests: (bytes: Uint8Array) => {
+    const { statement, authorization } = splitRecord(bytes);
+    return { ...hashEvidenceFields(statement, authorization), proofHash: new Uint8Array(0) };
+  },
   publication: (bytes: Uint8Array): PublicationView => {
     const p = decodePublication(bytes);
     return { domain: p.domain, backing: p.backing, kind: p.kind, record: p.kind === 2 ? undefined : encodeRecord(p.record) };
