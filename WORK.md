@@ -51,7 +51,7 @@ Stop: adoption, which moved after the journal and wallet ([M14f decision](decisi
    output awaiting adoption is not reported at all (only never as spendable). Review 2026-10-06: (aa) the testnet drill sweeps funding keys
    in-process only (no signal handler or `--sweep <dir>`; boxes above the indexed height read as dust); (ab) no command prints a saved
    acceptance's absolute deadline for an exact `accept --deadline +n` retry; (ac) `keepContext`'s throwaway views keep `:memory:` journals
-   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations.
+   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error).
 5. Slice 11 leftovers. Measure `moe operator serve` as its own process at 10⁵ (the depth probe's process, which also held the synthetic
    node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
    if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
