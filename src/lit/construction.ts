@@ -115,7 +115,7 @@ function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTar
 
 const NO_IDENTITIES: VerifierIdentities = Object.freeze({});
 const LIT_READER: ReaderFrames = Object.freeze({
-  specification: "lit-v1 1bf5bfc",
+  specification: "lit-v1 7e1ddd5",
   domain: litConfigHash,
   verifyConfiguration: (bytes: Uint8Array): boolean => {
     try { return compareBytes(copyUnshared(bytes), litConfigurationBytes()) === 0; } catch (error) {
