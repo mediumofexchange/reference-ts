@@ -591,6 +591,9 @@ export class ReplayStore {
       // Driven from the witness rows, so a read visits this predicate's outputs only, not every output in the store.
       unspentWitnessed: `SELECT x.*, w.nf AS mark_nf, w.note AS mark_note FROM witness w CROSS JOIN output x ON x.ns = w.ns AND x.leaf = w.leaf
         WHERE ${v} AND NOT EXISTS (SELECT 1 FROM nullifier y WHERE y.nf = w.nf AND ${visible("y")}) ORDER BY x.ns, x.leaf`,
+      witnessed: `SELECT x.*, w.nf AS mark_nf, w.note AS mark_note FROM witness w CROSS JOIN output x ON x.ns = w.ns AND x.leaf = w.leaf
+        WHERE ${v} ORDER BY x.ns, x.leaf`,
+      marked: `SELECT 1 FROM witness w CROSS JOIN output x ON x.ns = w.ns AND x.leaf = w.leaf WHERE w.nf = :key AND ${v}`,
       nullifiers: `SELECT x.nf FROM nullifier x WHERE ${v} ORDER BY x.ns, x.position`,
       importedNullifiers: "SELECT nf FROM nullifier WHERE ns = ? AND position <= ?",
       spentGet: "SELECT key, bit, l, r, hash FROM spent WHERE ns = ? AND id = ?",
@@ -1010,9 +1013,24 @@ export class ReplayStore {
   }
   /** The visible outputs the replay kept a witness for whose kept nullifier is not visibly spent, in scan order. */
   *unspentWitnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
-    for (const row of this.#q.unspentWitnessed!.iterate({ ns, p })) {
-      const r = row as Record<string, unknown>;
-      yield { ...this.#output(r), mark: { nf: field(r["mark_nf"]), note: bytes(r["mark_note"]) } };
+    yield* this.#witnessed("unspentWitnessed", ns, p);
+  }
+  /** Every visible output the replay kept a witness for, spent or not, in scan order (lit-v1 §8's highest index). */
+  *witnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
+    yield* this.#witnessed("witnessed", ns, p);
+  }
+  /** Whether a visible output the replay kept a witness for is spent by `nf`. */
+  marked(ns: number, p: bigint, nf: bigint): boolean {
+    return this.#q.marked!.get({ ns, p, key: keyBytes(nf) }) !== undefined;
+  }
+  *#witnessed(query: "unspentWitnessed" | "witnessed", ns: number, p: bigint): Generator<WitnessedOutput> {
+    // A pool mark's nullifier is a field element; a construction without a note tree keys SHA-256 digests (lit-v1 §2).
+    const trees = new Map<number, boolean>();
+    for (const row of this.#q[query]!.iterate({ ns, p })) {
+      const r = row as Record<string, unknown>, output = this.#output(r);
+      let tree = trees.get(output.ns);
+      if (tree === undefined) trees.set(output.ns, tree = this.construction(output.ns).tree);
+      yield { ...output, mark: { nf: tree ? field(r["mark_nf"]) : key(r["mark_nf"]), note: bytes(r["mark_note"]) } };
     }
   }
   output(ns: number, p: bigint, cm: bigint): StoredOutput | undefined {
@@ -1474,11 +1492,15 @@ export class ReplayStore {
       let leaves = BigInt(row["leaves"] as bigint), noteRoot = field(row["note_root"]);
       const ommers = decodeOmmers(bytes(row["ommers"]));
       const { tree } = this.construction(ns);
-      // A construction without a note tree (lit-v1 §5) numbers its outputs in scan order and keeps no root or witness.
+      // A construction without a note tree (lit-v1 §5) numbers its outputs in scan order and keeps no root. A
+      // witnessed output keeps its mark with no path: a lit note is spent by its opening, not by membership.
       if (!tree) {
         for (const output of record.outputs) {
-          if (output.witness !== undefined) throw new TypeError("a construction without a note tree keeps no witness");
-          this.#q.insertOutput!.run(keyBytes(output.cm), ns, position, leaves++, output.capsule ?? null, output.settlement ? 1 : 0);
+          const leaf = leaves++;
+          this.#q.insertOutput!.run(keyBytes(output.cm), ns, position, leaf, output.capsule ?? null, output.settlement ? 1 : 0);
+          if (output.witness !== undefined) {
+            this.#q.putWitness!.run(ns, leaf, keyBytes(output.cm), keyBytes(output.witness.nf), output.witness.note, new Uint8Array(0));
+          }
         }
       // Note tree: append each output, recording blocks completed on the way, then fold from the last leaf.
       } else if (record.outputs.length > 0) {

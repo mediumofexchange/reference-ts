@@ -6,6 +6,7 @@
 // and output are its standing demand's, which the store keeps with the demand. The namespace keeps no note tree.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
+import type { LitScan, ScanOutput } from "../pool/v3/state.js";
 import type {
   Construction, FaultTarget, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
@@ -96,6 +97,31 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
   }
 }
 
+/** Output `i` of a judged lit record as a wallet reads it (§8): its opening, rebuilt from the statement and checked
+ * against the view's commitment, the nullifiers of the notes it consumes, and a settlement's acceptance. */
+function litScanOutput(record: LitRecord, _view: StatementView, cm: bigint, i: number, demand: Demand | undefined): ScanOutput {
+  const s = record.statement, domain = s.domain;
+  let opening: Opening, acceptance: LitScan["acceptance"], consumed: readonly bigint[] = [];
+  switch (s.kind) {
+    case 1: { const output = { backing: s.backing, value: s.quantity, owner: s.owner }; opening = { ...output, rho: issueRho(output, s.nonce) }; break; }
+    case 2: case 3: {
+      const nfs = s.inputs.map(input => noteNullifier(noteCommitment(domain, input)));
+      opening = { ...s.outputs[i]!, rho: spendRho(nfs, i) }; consumed = nfs.map(keyOf); break;
+    }
+    case 6: {
+      // §3: the demand's backing and quantity to the settlement's owner, over the demand's nullifiers in input order.
+      if (demand?.nullifiers === undefined) throw new TypeError("a settlement's output needs its demand");
+      opening = { backing: demand.backing, value: demand.quantity, owner: s.owner, rho: spendRho(demand.nullifiers.map(bytesOf), 0) };
+      consumed = demand.nullifiers;
+      acceptance = { demand: Uint8Array.from(s.demand), deadline: settlementAuthorization(record).acceptance.deadline }; break;
+    }
+    default: throw new TypeError("a lit record of this kind creates no output");
+  }
+  if (keyOf(noteCommitment(domain, opening)) !== cm) throw new TypeError("a scanned output is not the view's");
+  return { cm, lit: { backing: Uint8Array.from(opening.backing), value: opening.value, owner: Uint8Array.from(opening.owner),
+    rho: Uint8Array.from(opening.rho), consumed: [...consumed], acceptance } };
+}
+
 /** §6's fault-evidence target: its intrinsic failures (`ARITHMETIC`, owners' and K's `SIGNATURE`), each one §9.1 may
  * exclude by. No verifier is asked; the demand's keys a withdrawal or settlement needs are state, so none is reported. */
 function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarget {
@@ -183,6 +209,7 @@ export const LIT: Construction<LitRecord> = Object.freeze({
     if (s.kind !== 6) throw new TypeError("not a settlement");
     return hex(s.demand);
   },
+  scanOutput: litScanOutput,
   reader: LIT_READER,
   journal: Object.freeze({
     encode: encodeRecord,

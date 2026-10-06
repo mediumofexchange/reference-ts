@@ -29,7 +29,7 @@ import {
 import { effectOf, recoveryEffect, tagOf } from "./recovery.js";
 import { requireReplay } from "./refusals.js";
 import { POOL_V3_NAMESPACE, type Demand, type NamespaceConstruction } from "./replay-store.js";
-import type { ProofCheck, ReceiptEvent, StateView } from "./state.js";
+import type { ProofCheck, ReceiptEvent, ScanOutput, StateView } from "./state.js";
 import { V3_TERMS, type RootTerms, type TermsCodec } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, V3_TRAILS, type TrailCodec } from "./trail.js";
 
@@ -95,6 +95,9 @@ export interface Construction<R = unknown> {
   readonly capacity: bigint | undefined;
   /** The demand a stored settlement record ends (C3.8's taken release). */
   settledDemand(bytes: Uint8Array): string;
+  /** Output `i` (commitment `cm`) of a judged record as a wallet's witness predicate reads it (slice 14 M14g); `demand`
+   * is the standing demand a settlement ends. */
+  scanOutput(record: R, view: StatementView, cm: bigint, i: number, demand: Demand | undefined): ScanOutput;
   /** The frames and objects the readers read (slice 14 M14d). */
   readonly reader: ReaderFrames;
   /** What an operator's journal writes besides (slice 14 M14f). */
@@ -303,6 +306,9 @@ export const POOL_V3: Construction<Record> = Object.freeze({
   nextEvidence: nextEvidenceHash,
   capacity: NOTE_TREE_CAPACITY,
   settledDemand: (bytes: Uint8Array) => recoveryEffect(decodeRecord(bytes)).ended!,
+  // A capsule output, or a settlement's (C4.7), whose owner the record's acceptance names.
+  scanOutput: (record: Record, view: StatementView, cm: bigint, i: number): ScanOutput =>
+    (record.kind === 6 ? { cm, settlement: record } : { cm, capsule: view.capsules[i] }),
   reader: V3_READER,
   journal: Object.freeze({
     encode: encodeRecord,

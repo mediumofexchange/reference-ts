@@ -63,8 +63,19 @@ export interface StateView extends RecoveryView {
   presentedWithTag(tag: bigint): readonly (readonly [string, Demand])[];
 }
 
-/** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
-export interface ScanOutput { readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record }
+/** An output a receiver may scan: its capsule, or for a settlement the record naming its owner (pool-v3); or, where
+ * openings are public (lit-v1 §2), its opening (`lit`). A construction names it (`Construction.scanOutput`). */
+export interface ScanOutput {
+  readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record; readonly lit?: LitScan | undefined;
+}
+/** A lit output as a wallet reads it (lit-v1 §8): its opening, the nullifiers of the notes its statement consumes (a
+ * spend's or burn's inputs, a settlement's demand's notes; none for an issue), and for a settlement's output the demand and
+ * acceptance deadline `acceptSecret` derives from. */
+export interface LitScan {
+  readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array; readonly rho: Uint8Array;
+  readonly consumed: readonly bigint[];
+  readonly acceptance: { readonly demand: Uint8Array; readonly deadline: bigint } | undefined;
+}
 /** Which outputs a replay keeps incremental witnesses for (a wallet's own), and the mark kept with each: undefined
  * for an output it passes over. The identity it declares names it in kept state (§14), so it must fix exactly which
  * outputs the predicate accepts and their marks; an undeclared one is named per object. */
@@ -470,10 +481,12 @@ export function applyJudged(state: SegmentState, judged: Judged<unknown>, replay
   const tags = kind === 4 ? demand!.value.tags.filter(tag => tag !== 0n) :
     kind === 5 ? judged.demand?.tags.filter(tag => tag !== 0n) ?? [] : view.tags;
   const touched = kind === 4 ? hex(identity) : judged.demandId;
-  const scan = (cm: bigint, i: number): ScanOutput => (kind === 6 ? { cm, settlement: judged.record as Record } : { cm, capsule: view.capsules[i] });
+  const scan = (cm: bigint, i: number): ScanOutput => construction.scanOutput(judged.record, view, cm, i, judged.demand);
+  // A pool mark's nullifier is a field element; a construction without a note tree keys SHA-256 digests (lit-v1 §2).
+  const nullifier = construction.namespace.tree ? isField : (nf: unknown) => typeof nf === "bigint" && nf >= 0n && nf < 1n << 256n;
   const markOf = (output: ScanOutput): WitnessMark | undefined => {
     const mark: unknown = replay.witness?.(output);
-    if (mark !== undefined && !(typeof mark === "object" && mark !== null && isField((mark as WitnessMark).nf) && (mark as WitnessMark).note instanceof Uint8Array)) {
+    if (mark !== undefined && !(typeof mark === "object" && mark !== null && nullifier((mark as WitnessMark).nf) && (mark as WitnessMark).note instanceof Uint8Array)) {
       throw new TypeError("a witness predicate returns a mark { nf, note } or undefined");
     }
     return mark as WitnessMark | undefined;

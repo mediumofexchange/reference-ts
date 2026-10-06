@@ -37,7 +37,17 @@ import { requireReferenceVenue } from "./guard.js";
 import { EvidenceStore } from "./evidence-store.js";
 import type { SegmentHeader } from "./headers.js";
 import { inputOf, ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
-import { readFrontier, type PackageReader } from "./package-reader.js";
+import { readFrontier, type ReadOptions } from "./package-reader.js";
+import { POOL_V3, type Construction } from "./construction.js";
+import { LIT } from "../../lit/construction.js";
+import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, windowFor, type LitNote } from "../../lit/holdings.js";
+import { decodeReceipt as decodeLitReceipt, encodeReceipt as encodeLitReceipt, verifyReceipt as verifyLitReceipt,
+  type Receipt as LitReceipt } from "../../lit/commitments.js";
+import { noteCommitment as litCommitment, type Output as LitOutput } from "../../lit/notes.js";
+import { decodeRecord as decodeLitRecord, derivedOutputs, encodePublication as encodeLitPublication, statementHash as litStatementHash,
+  type LitRecord } from "../../lit/records.js";
+import { copyLitPaymentRequest, signedSpend, type LitPaymentRequest } from "../../lit/wallet.js";
+import { OWNER_LOOK_AHEAD, presentSecret, publicKeyOf } from "../../lit/wallet-keys.js";
 import type { SignedTerms } from "./reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeRecord, evidenceHashes, settlementAuthorization,
   statementBytes, statementHash, type Record, type SignedAcceptance } from "./records.js";
@@ -56,10 +66,10 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
   type ProofTask } from "./witness.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
-const PROFILE = "moe/wallet/v3/8", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/8", LIT_PROFILE = "moe/wallet/lit/v1/1", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
-    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE", message: string) { super(message); this.name = "V3WalletError"; }
+    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW", message: string) { super(message); this.name = "V3WalletError"; }
 }
 function requireThat(ok: boolean, code: V3WalletError["code"], message: string): asserts ok {
   if (!ok) throw new V3WalletError(code, message);
@@ -97,7 +107,13 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS backer_acceptances (alias TEXT PRIMARY KEY, demand TEXT NOT NULL, deadline TEXT NOT NULL,
     owner TEXT NOT NULL, signature BLOB NOT NULL, backing BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
   CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`;
-const DEFINITIONS = new Map(SCHEMA.split(";").map(s => s.replace(/\s+/g, " ").trim()).filter(s => s !== "")
+/** A lit wallet's owner-index state per backing (lit-v1 §8): its highest exposed index, NULL where a wallet restored from
+ * its seed alone (`seeded`) has not read the backing yet (its first read exposes every index through `high + 256`), the
+ * highest index §8's restoration rule reaches (`h`), and the highest index any read found; −1 for none. */
+const LIT_SCHEMA = `${SCHEMA}
+  CREATE TABLE IF NOT EXISTS lit_wallet (id INTEGER PRIMARY KEY CHECK(id=1), seeded INTEGER NOT NULL CHECK(seeded IN (0,1))) STRICT;
+  CREATE TABLE IF NOT EXISTS lit_keys (backing BLOB PRIMARY KEY, exposed TEXT, high TEXT NOT NULL, found TEXT NOT NULL) STRICT;`;
+const definitions = (schema: string) => new Map(schema.split(";").map(s => s.replace(/\s+/g, " ").trim()).filter(s => s !== "")
   .map(s => { const sql = s.replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE "); return [sql.split(" ")[2]!, sql] as const; }));
 /** The wallet's state tables and columns in export order; fixed names, never SQL
  * supplied by a backup. Identity and custody rows are not transferred: the
@@ -112,6 +128,16 @@ const TABLES = [
   ["saved_superseded", ["statement", "alias", "record", "receipt"]],
   ["backer_acceptances", ["alias", "demand", "deadline", "owner", "signature", "backing"]],
 ] as const;
+/** A wallet file's layout by construction (slice 14 M14g): its profile, schema and exported tables. A lit wallet's
+ * receiver rows name each request's owner key (`cm`) and index (`request_id`, a u64), and a fulfillment the output it
+ * credits; its owner-index state is exported, so a restored copy never names a key twice. */
+interface Layout {
+  readonly profile: string; readonly schema: string; readonly definitions: ReadonlyMap<string, string>;
+  readonly tables: readonly (readonly [string, readonly string[]])[];
+}
+const POOL_LAYOUT: Layout = { profile: PROFILE, schema: SCHEMA, definitions: definitions(SCHEMA), tables: TABLES };
+const LIT_LAYOUT: Layout = { profile: LIT_PROFILE, schema: LIT_SCHEMA, definitions: definitions(LIT_SCHEMA),
+  tables: [...TABLES, ["lit_wallet", ["id", "seeded"]], ["lit_keys", ["backing", "exposed", "high", "found"]]] };
 /** A restoration the constructor consumes synchronously: the seed, the state
  * rows, the envelope's digest, and the domain and venue it was opened under. */
 interface Installation {
@@ -125,16 +151,25 @@ function persistentPath(path: string): void {
   requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"),
     "STORAGE", "a persistent filesystem path is required");
 }
-/** Each caller field read once: the wallet's domain, guarded venue identity and
- * the owned reader options every later step uses. */
-function ownOptions(options: PackageReader) {
-  const { verifier, venue, reference } = options;
+/** A wallet's options: the reader's, its construction pool-v3's by default or lit-v1's (slice 14 M14g), which takes no
+ * verifier. */
+export type WalletOptions = ReadOptions;
+/** Each caller field read once: the wallet's construction and layout, domain, guarded venue identity and the owned
+ * reader options every later step uses. Only pool-v3 and lit-v1 are wallet constructions. */
+function ownOptions(options: WalletOptions) {
+  const { construction: chosen, verifier, venue, reference } = options;
+  const construction = (chosen ?? POOL_V3) as Construction;
+  if (construction !== POOL_V3 && construction !== LIT) throw new TypeError("a wallet holds pool-v3 or lit-v1 notes");
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
-  const verify = verifier.verify.bind(verifier);
-  const identities = requireConfigurationVerifier(verifier.identities), parallel = declaredParallel(verifier);
-  const reader: PackageReader = { verifier: { verify, identities, ...(parallel === undefined ? {} : { parallel }) },
+  if (construction === LIT) {
+    return { construction, layout: LIT_LAYOUT, domain: construction.reader.domain(), venueId,
+      reader: { construction, venue, reference: ownReference } as WalletOptions };
+  }
+  const verify = verifier!.verify.bind(verifier);
+  const identities = requireConfigurationVerifier(verifier!.identities), parallel = declaredParallel(verifier!);
+  const reader: WalletOptions = { verifier: { verify, identities, ...(parallel === undefined ? {} : { parallel }) },
     venue, reference: ownReference };
-  return { domain: adoptedDomain(), venueId, reader };
+  return { construction, layout: POOL_LAYOUT, domain: adoptedDomain(), venueId, reader };
 }
 /** The canonical checkpoint and witnessed index a request was found paid at. Its evidence is what the
  * wallet's evidence file retains; nothing here stores or proves that evidence. */
@@ -305,7 +340,11 @@ function demandSelection(notes: readonly OwnedNote[], presented: readonly (reado
 
 export class V3Wallet {
   private readonly db: DatabaseSync;
-  private readonly options: PackageReader;
+  private readonly options: WalletOptions;
+  private readonly construction: Construction;
+  private readonly layout: Layout;
+  /** A lit wallet's owner keys (lit-v1 §8), derived once per handle as its window grows. */
+  private readonly keys: OwnerKeys | undefined;
   private readonly domain: Uint8Array;
   private readonly venueId: Uint8Array;
   private readonly seed: Uint8Array;
@@ -321,17 +360,18 @@ export class V3Wallet {
 
   /** An existing wallet only: a database with no identity (a file truncated or replaced outside the wallet) is
    * refused, never filled with a fresh seed, so a lost wallet never comes back as a new one. */
-  static open(path: string, options: PackageReader): V3Wallet {
+  static open(path: string, options: WalletOptions): V3Wallet {
     // Refused before SQLite would create the file, so a later restore into `path` still finds a new destination.
     requireThat(typeof path !== "string" || existsSync(path), "STORAGE", "wallet identity is missing");
     opening = true;
     try { return new V3Wallet(path, options); } finally { opening = false; }
   }
 
-  constructor(path: string, options: PackageReader) {
+  constructor(path: string, options: WalletOptions) {
     const restore = installing, existing = opening; installing = undefined; opening = false;
     const own = ownOptions(options);
     this.venueId = own.venueId; this.domain = own.domain; this.options = own.reader; this.path = path;
+    this.construction = own.construction; this.layout = own.layout;
     requireThat(restore === undefined || (same(restore.domain, this.domain) && same(restore.venue, this.venueId)),
       "CONFLICT", "wallet configuration or venue changed");
     persistentPath(path);
@@ -344,26 +384,33 @@ export class V3Wallet {
       // An earlier receiver-only profile's seed is never silently replaced.
       requireThat(this.db.prepare("SELECT 1 FROM sqlite_schema WHERE name='receiver_identity'").get() === undefined,
         "CONFLICT", "wallet database has an earlier profile");
-      this.db.exec(SCHEMA);
+      this.db.exec(this.layout.schema);
       let meta = this.metadata();
       requireThat(restore === undefined || meta === undefined, "CONFLICT", "recovery destination is no longer pristine");
       if (meta === undefined) {
         requireThat(!existing, "STORAGE", "wallet identity is missing");
-        requireThat([...TABLES.map(([table]) => table), "wallet_custody"].every(table =>
+        requireThat([...this.layout.tables.map(([table]) => table), "wallet_custody"].every(table =>
           this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n === 0), "STORAGE", "wallet identity is missing");
-        this.db.prepare("INSERT INTO wallet_identity VALUES(1,?,?,?,?,0,'0')").run(PROFILE, hex(this.domain), hex(this.venueId),
+        this.db.prepare("INSERT INTO wallet_identity VALUES(1,?,?,?,?,0,'0')").run(this.layout.profile, hex(this.domain), hex(this.venueId),
           restore?.seed ?? randomBytes(32));
         this.db.prepare("INSERT INTO wallet_custody VALUES(1,NULL,?)").run(restore?.digest ?? null);
-        if (restore !== undefined) this.install(restore.tables);
+        if (restore !== undefined) this.install(restore.tables, restore.seed);
+        // A wallet restored from its seed alone reads every index through h + 256 as exposed (lit-v1 §8); an encrypted
+        // handoff brought its own rows.
+        if (this.layout === LIT_LAYOUT && this.db.prepare("SELECT 1 FROM lit_wallet").get() === undefined) {
+          this.db.prepare("INSERT INTO lit_wallet VALUES(1,?)").run(restore === undefined ? 0 : 1);
+        }
         meta = this.metadata()!;
       }
       // A database from before offline handoff has no custody row: it was never exported.
       this.db.exec("INSERT OR IGNORE INTO wallet_custody VALUES(1,NULL,NULL)");
-      requireThat(meta.profile === PROFILE, "CONFLICT", "wallet database has another profile");
+      requireThat(meta.profile === this.layout.profile, "CONFLICT", "wallet database has another profile");
+      if (this.layout === LIT_LAYOUT) this.seeded();
       requireThat(meta.domain === hex(this.domain) && meta.venue === hex(this.venueId), "CONFLICT", "wallet configuration or venue changed");
       requireThat(typeof meta.owner === "bigint" && meta.owner >= 0n && meta.owner < MAX_OWNER,
         "STORAGE", "wallet owner counter exhausted");
       this.seed = identifier(meta.seed as Uint8Array); this.owner = meta.owner + 1n;
+      this.keys = this.layout === LIT_LAYOUT ? new OwnerKeys(this.seed, this.domain) : undefined;
       this.db.prepare("UPDATE wallet_identity SET owner=? WHERE id=1").run(this.owner);
       this.db.exec("COMMIT");
     } catch (error) {
@@ -375,12 +422,29 @@ export class V3Wallet {
   private metadata() {
     const query = this.db.prepare("SELECT * FROM wallet_identity WHERE id=1"); query.setReadBigInts(true); return query.get();
   }
+  /** Whether this lit wallet was restored from its seed alone (lit-v1 §8). */
+  private seeded(): boolean {
+    const row = this.db.prepare("SELECT seeded FROM lit_wallet WHERE id=1").get();
+    requireThat(row !== undefined && (row.seeded === 0 || row.seeded === 1), "STORAGE", "lit wallet state is missing");
+    return row.seeded === 1;
+  }
+  /** A lit wallet's owner-index state of `backing` (lit-v1 §8), undefined before its first read or request: the highest
+   * exposed index (undefined where a seed-restored wallet has not read it), `h`, and the highest index found. */
+  private litKeys(backing: Uint8Array): { readonly exposed: bigint | undefined; readonly high: bigint; readonly found: bigint } | undefined {
+    const row = this.db.prepare("SELECT exposed, high, found FROM lit_keys WHERE backing=?").get(backing);
+    if (row === undefined) return undefined;
+    const index = (value: unknown): bigint => {
+      requireThat(typeof value === "string" && /^(-1|0|[1-9][0-9]{0,19})$/.test(value) && BigInt(value) < MAX_OWNER, "STORAGE", "lit key state is malformed");
+      return BigInt(value);
+    };
+    return { exposed: row.exposed === null ? undefined : index(row.exposed), high: index(row.high), found: index(row.found) };
+  }
   /** Inside the constructor's transaction: the snapshot's rows in storage order,
    * so each table keeps its order; SQLite's strict types, uniqueness and
    * references refuse state that no wallet could have written. */
-  private install(tables: WalletSnapshot["tables"]): void {
+  private install(tables: WalletSnapshot["tables"], seed: Uint8Array): void {
     try {
-      TABLES.forEach(([table, columns], t) => {
+      this.layout.tables.forEach(([table, columns], t) => {
         const insert = this.db.prepare(`INSERT INTO ${table} (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`);
         for (const row of tables[t]!) insert.run(...row);
       });
@@ -388,9 +452,34 @@ export class V3Wallet {
       if (error instanceof V3WalletError) throw error;
       throw new V3WalletError("INVALID", "backup state does not fit the wallet schema");
     }
+    // A pool fulfillment names its request's exact output; a lit one the output it credited to its request's key.
+    const lit = this.layout === LIT_LAYOUT;
     requireThat(this.db.prepare("PRAGMA foreign_key_check").all().length === 0 && this.db.prepare(`SELECT 1 FROM receiver_fulfilled f
-      LEFT JOIN receiver_requests r ON r.alias=f.alias AND r.cm=f.cm WHERE r.alias IS NULL`).get() === undefined,
+      LEFT JOIN receiver_requests r ON r.alias=f.alias${lit ? "" : " AND r.cm=f.cm"} WHERE r.alias IS NULL`).get() === undefined,
       "INVALID", "backup state has unmatched references");
+    if (lit) {
+      // Well-formed owner-index rows, and each request naming its backing's key at an index the rows show exposed: a
+      // restored copy then never names a key twice.
+      const owners = new OwnerKeys(seed, this.domain);
+      try {
+        this.seeded();
+        for (const row of this.db.prepare("SELECT backing FROM lit_keys").all()) {
+          const keys = this.litKeys(row.backing as Uint8Array);
+          requireThat((row.backing as Uint8Array).length === 32 && keys !== undefined && keys.high <= keys.found,
+            "INVALID", "backup state has malformed lit key state");
+        }
+        for (const row of this.db.prepare("SELECT request_id, backing, cm FROM receiver_requests").all()) {
+          const id = row.request_id as Uint8Array, backing = row.backing as Uint8Array;
+          const index = id.length === 40 && same(id.subarray(0, 32), backing) ? new DataView(id.buffer, id.byteOffset + 32).getBigUint64(0) : undefined;
+          const exposed = this.litKeys(backing)?.exposed;
+          requireThat(index !== undefined && exposed !== undefined && index <= exposed && row.cm === hex(owners.key(backing, index)),
+            "INVALID", "backup state has a malformed lit request");
+        }
+      } catch (error) {
+        if (error instanceof V3WalletError && error.code === "INVALID") throw error;
+        throw new V3WalletError("INVALID", "backup state has malformed lit key state");
+      } finally { owners.close(); }
+    }
     // A prepared record always reserves its inputs, and saving one other than a settlement re-checks every
     // reservation: no wallet writes two outside settlements (`saveAct`).
     requireThat(this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE a.status='prepared'
@@ -756,7 +845,7 @@ export class V3Wallet {
       if (error instanceof V3WalletError) throw error;
       throw new V3WalletError("INVALID", "prover returned a malformed record");
     }
-    requireThat(await this.options.verifier.verify(task.kind, [...task.publicInputs], new Uint8Array(proof)) === true, "INVALID", "proof does not verify");
+    requireThat(await this.options.verifier!.verify(task.kind, [...task.publicInputs], new Uint8Array(proof)) === true, "INVALID", "proof does not verify");
     return { domain: new Uint8Array(this.domain), kind: task.kind, publicInputs: [...task.publicInputs], proof,
       authorization: new Uint8Array(), capsules: task.capsules.map(c => new Uint8Array(c)) };
   }
@@ -852,10 +941,11 @@ export class V3Wallet {
         // Exact definitions, not only names: any other shape could export, freeze and then never restore.
         const stored = new Map(this.db.prepare("SELECT name, sql FROM sqlite_schema WHERE type='table'").all()
           .map(row => [row.name as string, String(row.sql).replace(/\s+/g, " ").trim()]));
-        requireThat(stored.size === DEFINITIONS.size && [...DEFINITIONS].every(([name, sql]) => stored.get(name) === sql),
+        const expected = this.layout.definitions;
+        requireThat(stored.size === expected.size && [...expected].every(([name, sql]) => stored.get(name) === sql),
           "INVALID", "unsupported wallet schema");
-        let size = WALLET_BACKUP_OVERHEAD + 4 + Buffer.byteLength(PROFILE) + 32;
-        const tables = TABLES.map(([table, columns]) => {
+        let size = WALLET_BACKUP_OVERHEAD + 4 + Buffer.byteLength(this.layout.profile) + 32;
+        const tables = this.layout.tables.map(([table, columns]) => {
           const rows: WalletCell[][] = [];
           size += 4;
           for (const row of this.db.prepare(`SELECT ${columns.join(",")} FROM ${table} ORDER BY rowid`).iterate()) {
@@ -867,7 +957,7 @@ export class V3Wallet {
           return rows;
         });
         requireThat(size <= MAX_WALLET_BACKUP_BYTES, "INVALID", "wallet exceeds the offline backup limit");
-        const plaintext = encodeWalletSnapshot({ profile: PROFILE, seed: this.seed, tables });
+        const plaintext = encodeWalletSnapshot({ profile: this.layout.profile, seed: this.seed, tables });
         try {
           const bytes = sealWalletBackup(plaintext, ownedKey, this.domain, this.venueId);
           this.db.prepare("UPDATE wallet_custody SET export=? WHERE id=1").run(bytes);
@@ -883,17 +973,17 @@ export class V3Wallet {
    * that digest as provenance, in a staging file linked to `path` only once
    * complete. A refused or interrupted restore leaves nothing at `path`; if a
    * reply is lost and `path` exists, `custody().restoredFrom` confirms it. */
-  static restoreBackup(path: string, options: PackageReader, bytes: Uint8Array, key: Uint8Array, expectedDigest: string): V3Wallet {
+  static restoreBackup(path: string, options: WalletOptions, bytes: Uint8Array, key: Uint8Array, expectedDigest: string): V3Wallet {
     const own = ownOptions(options);
     let plaintext: Uint8Array;
     try { plaintext = openWalletBackup(bytes, key, own.domain, own.venueId, expectedDigest); }
     catch { throw new V3WalletError("INVALID", "invalid wallet backup or recovery credentials"); }
     let snapshot: WalletSnapshot;
-    try { snapshot = decodeWalletSnapshot(plaintext, TABLES.map(([, columns]) => columns.length)); }
+    try { snapshot = decodeWalletSnapshot(plaintext, own.layout.tables.map(([, columns]) => columns.length)); }
     catch { throw new V3WalletError("INVALID", "invalid wallet snapshot"); }
     finally { plaintext.fill(0); }
     try {
-      requireThat(snapshot.profile === PROFILE, "INVALID", "wallet snapshot has another profile");
+      requireThat(snapshot.profile === own.layout.profile, "INVALID", "wallet snapshot has another profile");
       return V3Wallet.create(path, own, { seed: snapshot.seed, tables: snapshot.tables, digest: expectedDigest });
     } finally { snapshot.seed.fill(0); }
   }
@@ -904,9 +994,9 @@ export class V3Wallet {
    * requests draw fresh identifiers. A payment another copy prepared but did not
    * finish is unknown here; its inputs show available until spent. One active
    * copy of a seed remains the holder's precondition. */
-  static restoreSeed(path: string, options: PackageReader, seed: Uint8Array): V3Wallet {
-    const own = identifier(seed);
-    try { return V3Wallet.create(path, ownOptions(options), { seed: own, tables: TABLES.map(() => []), digest: null }); }
+  static restoreSeed(path: string, options: WalletOptions, seed: Uint8Array): V3Wallet {
+    const own = identifier(seed), options_ = ownOptions(options);
+    try { return V3Wallet.create(path, options_, { seed: own, tables: options_.layout.tables.map(() => []), digest: null }); }
     finally { own.fill(0); }
   }
 
