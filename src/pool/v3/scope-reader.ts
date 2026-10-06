@@ -830,25 +830,29 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         openingValid = true;
       } else {
         const firstView = scopeViews.values().next().value!;
-        // The record holds this checkpoint's higher sequence, so an opening it does not hold is one it moved past
-        // (C2.3.3): the segment never opened, and no history of it extends a last valid prefix (C2.10.11).
-        const openingHeld = firstView.heldAt(c.operator, header.sequence);
-        requireReplay(openingHeld !== undefined, "OPENING");
-        requireReplay(before(openingHeld, held), "IMPORT_RANK");
-        const openingDirectory = evidence.directory(openingHeld.commitment.root);
-        if (openingDirectory === undefined) throw new EvidenceRefusal("unresolved-evidence");
-        // The opening is this segment's where its own first snapshot names it, as its judgment reads it,
-        // whichever backing this read holds: one it omits too (C2.10.12).
-        // A first entry this segment does not scope is not its opening, which the directory alone shows.
-        const openingEntry = openingDirectory[0];
-        requireReplay(openingEntry !== undefined && header.entries.some(scoped => same(scoped.backing, openingEntry.name)) &&
-          same(snapshotFor(openingEntry.digest).segment, segment), "OPENING");
-        // Lapse is judged before validity (C2.10.11), on the clock from the opening as
-        // witnessed, valid or not (C2b.4.1).
         const termsOf = (name: Uint8Array): RootTerms => scopedTerms.get(hex(name))!;
-        const { clocks } = await scopeClocks(header, termsOf, backing, openingHeld.index, held.index);
         const lapses = (clock: ScopeClock | null | undefined): boolean =>
           clock != null && (clock.open || (clock.boundary !== undefined && clock.boundary < held.index));
+        // The record holds this checkpoint's higher sequence, so an opening it does not hold is one it moved past
+        // (C2.3.3). The opening is this segment's where its own first snapshot names it, as its judgment reads it,
+        // whichever backing this read holds: one it omits too (C2.10.12). A first entry this segment does not scope
+        // is not its opening, which the directory alone shows.
+        const openingHeld = firstView.heldAt(c.operator, header.sequence);
+        const openingDirectory = openingHeld === undefined ? undefined : evidence.directory(openingHeld.commitment.root);
+        if (openingHeld !== undefined && openingDirectory === undefined) throw new EvidenceRefusal("unresolved-evidence");
+        const openingEntry = openingDirectory?.[0];
+        if (openingHeld === undefined || openingEntry === undefined || !header.entries.some(scoped => same(scoped.backing, openingEntry.name)) ||
+            !same(snapshotFor(openingEntry.digest).segment, segment)) {
+          // The segment never opened, so no history of it extends a last valid prefix (C2.10.11). Lapse is still
+          // judged first: a scoped backing's gap open at this index needs no opening; a silence boundary does.
+          const { clocks } = await scopeClocks(header, termsOf, backing, held.index, held.index);
+          if (clocks.some(clock => clock?.open === true)) return { ...base, class: "lapsed" };
+          requireReplay(false, "OPENING");
+        }
+        requireReplay(before(openingHeld, held), "IMPORT_RANK");
+        // Lapse is judged before validity (C2.10.11), on the clock from the opening as
+        // witnessed, valid or not (C2b.4.1).
+        const { clocks } = await scopeClocks(header, termsOf, backing, openingHeld.index, held.index);
         const own = header.entries.findIndex(entry => same(entry.backing, backing)), cause = lapses(clocks[own]) ? own : clocks.findIndex(lapses);
         if (cause >= 0) {
           // The record is the clock of a backing whose gap proves the lapse (its own first).

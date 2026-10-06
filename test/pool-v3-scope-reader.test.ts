@@ -37,10 +37,11 @@ const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items
 
 /** One operator opens a segment scoping two backings and issues into the first;
  * a successor segment may then import the first backing alone. */
-async function twoBackings() {
-  const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
+async function twoBackings(silence?: bigint, witnessed = 10n) {
+  const venue = FixtureVenue.reference(label, lag, witnessed), operatorStore = new ReplayStore();
   const termsOf = (thing: string): RootTerms => ({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
-    payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)) });
+    payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)),
+    ...(silence === undefined ? {} : { silence: { noCommitmentDuration: silence, challengeWindow: 5n } }) });
   const backings = ["scope test x", "scope test y"].map(thing => {
     const fields = termsOf(thing), terms = encodeRootTerms(fields);
     return { fields, name: rootTermsName(terms), signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) } };
@@ -234,6 +235,17 @@ describe("multi-backing scope reader", () => {
     const repair = stateOf(await f.read(f.x.name, f.checkpoint(3n, 4n)));
     expect(repair.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["2", "excluded", "OPENING"], ["3", "valid", undefined]]);
     expect([repair.state.issued, repair.state.position]).toEqual([0n, 0n]);
+  });
+
+  it("lapses an unopened continuation witnessed while a scoped gap is open, judging lapse before validity (C2.10.11)", async () => {
+    for (const [silence, expected] of [[4n, { status: "lapsed-selection" }], [20n, { check: "OPENING" }]] as const) {
+      const f = await twoBackings(silence, 20n);
+      f.checkpoint(1n, 1n);
+      f.fresh(2n); f.checkpoint(2n, undefined); // a second segment's opening, never witnessed
+      await f.issue(5n, 101n);
+      const continuation = f.checkpoint(3n, 12n); // c(12) = 1: the gap is open under a duration of 4, not of 20
+      await expect(f.read(f.x.name, continuation)).rejects.toMatchObject(expected);
+    }
   });
 
   it("lapses a receipt whose `after` the record moved past without holding it (C2.10.9b, C2b.4)", async () => {
