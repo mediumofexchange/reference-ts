@@ -1,7 +1,8 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -26,7 +27,7 @@ import type { SegmentHeader } from "../src/pool/v3/headers.js";
 import { encodeEvidenceDirectory, type EvidenceItem } from "../src/pool/v3/package.js";
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { keptStateHolds } from "../src/pool/v3/reader.js";
-import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { keptFileDigest, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
 
@@ -275,6 +276,21 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(frontier.force[0]!.record.statement.kind).toBe(4);
     expect(statementHash(frontier.force[0]!.record.statement)).toEqual(statementHash(LIT.decode(honest).statement));
     expect(frontier.canonical!.scope).toBeUndefined();
+    // A demand whose summed value passes a u64, or whose inputs name two backings, does not decode as a publication
+    // (§4's derived routing backing), so it has no force and is not judged by ARITHMETIC (pool-v3 §13.3).
+    const g = litScope({ silence: { noCommitmentDuration: 5n } });
+    g.checkpoint(1n, 1n);
+    const minted = g.issue(10n, ALICE); await g.admit(minted);
+    g.checkpoint(2n, 2n);
+    const [held] = g.outputsOf(minted), max = (1n << 64n) - 1n;
+    const raw = (bytes: Uint8Array): Uint8Array => Uint8Array.from([...new TextEncoder().encode("moe/lit/v1/publication"), ...DOMAIN, ...g.backing, 1,
+      ...[24, 16, 8, 0].map(shift => (bytes.length >>> shift) & 255), ...bytes]);
+    for (const inputs of [[{ ...held!, value: max }, held!], [held!, { ...held!, backing: b(55) }]]) {
+      g.venue.witness(4, g.backing, 20n, raw(g.demand(inputs, [ALICE, ALICE], 18n, 100n)));
+    }
+    const unread = await readFrontier<LitRecord>(g.pack(), g.signed, 200n, { construction: LIT, reference, venue: g.venue });
+    expect(unread.ranges.publications.map(p => [p.index, p.ordinal, p.force, "check" in p])).toEqual([["20", "0", false, false], ["20", "1", false, false]]);
+    expect(unread.force).toHaveLength(0);
     // A holder's answers read pool-v3's releases; a lit read lists none.
     await expect(readFrontier(f.pack(), f.signed, 200n, { construction: LIT, reference, venue: f.venue, answers: true })).rejects.toThrow(TypeError);
   });
@@ -291,6 +307,23 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(stateOf(await f.read(latest)).ranges.nonService).toMatchObject({ count: "0", fires: false });
     f.publish(196n, 5, f.request(note!, ALICE));
     expect(stateOf(await f.read(latest)).ranges.nonService).toMatchObject({ count: "1", fires: true, snapshotIndex: "2" });
+  });
+
+  it("passes another construction's checkpoint of the same operator key as non-carrying by its directory alone (§6)", async () => {
+    const f = litScope();
+    f.checkpoint(1n, 1n); await f.admit(f.issue(10n, ALICE));
+    // The key commits a pool-v3 checkpoint between the lit ones: its directory names a backing no lit scope holds,
+    // and the package carries nothing else of it.
+    const directory = [{ name: b(77), digest: b(78) }], foreign = signCommitment(OPERATOR, 2n, directoryRoot(directory));
+    f.venue.witness(1, operator, 2n, encodeCommitment(foreign));
+    f.items.push({ kind: 3, payload: encodeEvidenceDirectory(directory) });
+    const latest = f.checkpoint(3n, 3n);
+    const read = stateOf(await f.read(latest));
+    expect(read.carrying.map(item => [item.sequence, item.class])).toEqual([["1", "valid"], ["3", "valid"]]);
+    expect(read.state.issued).toBe(10n);
+    // A receipt whose `after` names the pool's checkpoint is not of the receipt's segment (pool-v3 §7.1).
+    expect((await f.read(latest, [{ kind: 10, payload: f.receipt(1n) }])).receipt).toMatchObject({ status: "final", includedAt: [{ sequence: "3" }] });
+    await expect(f.read(latest, [{ kind: 10, payload: f.receipt(2n) }])).rejects.toMatchObject({ status: "invalid-receipt" });
   });
 
   it("rebuilds a kept lit namespace's outputs from its trail before reusing it (§10), and resumes a kept file without discarding it", async () => {
@@ -333,6 +366,43 @@ describe("lit packages through the one reader (M14d)", () => {
       const resumed = stateOf(await g.read(second, [], { store, evidence })), fresh = stateOf(await g.read(second));
       expect(discard).not.toHaveBeenCalled();
       expect([resumed.carrying, resumed.state.history, resumed.state.position]).toEqual([fresh.carrying, fresh.state.history, 2n]);
+      store.close(); evidence.close();
+    } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
+  });
+
+  it("rebuilds an imported namespace's outputs before a kept successor resumes on them (§10)", async () => {
+    const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-imported-"));
+    const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };
+    try {
+      g.checkpoint(1n, 1n);
+      const minted = g.issue(10n, ALICE); await g.admit(minted);
+      const predecessor = g.checkpoint(2n, 3n);
+      g.successor(3n, predecessor);
+      const opened = g.checkpoint(3n, 4n);
+      let store = new ReplayStore(files.path, { digest: files.digest }), evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      expect(stateOf(await g.read(opened, [], { store, evidence })).state.importedEventCount()).toBe(1n);
+      store.close(); evidence.close();
+      // Reopened, the honest kept rows rebuild from the predecessor's trail and the kept walk stands.
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const honest = vi.spyOn(store, "discardKept");
+      expect(stateOf(await g.read(opened, [], { store, evidence })).state.importedEventCount()).toBe(1n);
+      expect(honest).not.toHaveBeenCalled();
+      store.close(); evidence.close();
+      // The imported note's row now names a note of Mallory's worth 1000, under a digest re-recorded for it: §14's
+      // digest check cannot see it, and only the rebuild from the predecessor's trail can.
+      const [note] = g.outputsOf(minted), forged: Opening = { ...note!, value: 1000n, owner: pub(MALLORY) };
+      const db = new DatabaseSync(files.path);
+      expect(db.prepare("UPDATE output SET cm = ? WHERE cm = ?").run(noteCommitment(DOMAIN, forged), noteCommitment(DOMAIN, note!)).changes).toBe(1);
+      db.close();
+      writeFileSync(files.digest, keptFileDigest(files.path)!);
+      g.commitRaw(g.spend([forged], [g.to(1000n, MALLORY)], [MALLORY]));
+      g.venue.advance(210n);
+      const hostile = g.checkpoint(4n, 205n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const discard = vi.spyOn(store, "discardKept");
+      await expect(g.read(hostile, [], { store, evidence })).rejects.toMatchObject({ check: "INPUT" });
+      expect(discard).toHaveBeenCalled();
+      await expect(g.read(hostile)).rejects.toMatchObject({ check: "INPUT" });
       store.close(); evidence.close();
     } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
   });

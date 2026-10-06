@@ -29,7 +29,7 @@ import { KeptStateMismatch, type Demand, type ReplayStore } from "./replay-store
 import {
   applyRecord, openSegmentState, StateHandle, type Adopted, type LastValid, type MergedImport, type DeclaredVerifier, type SegmentReplay, type WitnessPredicate,
 } from "./state.js";
-import type { StoredTrail, WalkEvidence } from "./evidence-store.js";
+import type { StoredTrail, TrailEvidence, WalkEvidence } from "./evidence-store.js";
 import { verifyAhead } from "./verify-ahead.js";
 import type { RootTerms } from "./terms.js";
 
@@ -481,10 +481,28 @@ function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array
 /** §14 kept classes: a kept valid class's state at position m of namespace `ns`, against its re-authenticated
  * snapshot. At the tip the snapshot check recomputes it; below, the stored chain values and totals at m must be
  * the snapshot's, and the file's digest vouches for the other rows at or below m. A construction without a note
- * tree also rebuilds its outputs from `trail`, the class's served trail (lit-v1 §10, `keptOutputsHold`). */
+ * tree also rebuilds its outputs from `trail`, the class's served trail, and each imported namespace's from its own
+ * segment's trail in `trails` (lit-v1 §10, `keptOutputsHold`, `keptImportsHold`). */
 export function keptStateHolds(store: ReplayStore, ns: number, position: bigint, identity: Uint8Array, snapshot: Snapshot,
-  construction: Construction = POOL_V3 as Construction, trail?: StoredTrail): boolean {
-  return keptRowsHold(store, ns, position, identity, snapshot, construction) && keptOutputsHold(store, ns, construction, trail, position);
+  construction: Construction = POOL_V3 as Construction, trail?: StoredTrail, trails?: Pick<TrailEvidence, "trail">): boolean {
+  return keptRowsHold(store, ns, position, identity, snapshot, construction) && keptOutputsHold(store, ns, construction, trail, position) &&
+    keptImportsHold(store, ns, construction, trails);
+}
+/** Lit-v1 §10's imports: a resumed lit state reads its imported closure's outputs from the imported namespaces' rows,
+ * which no root in its snapshot checks either. Each imported namespace's own outputs through the position imported
+ * must be its segment's trail's, through the chain value kept there; a namespace this process replayed or already
+ * rebuilt is known and reads nothing. A trail `trails` does not hold leaves the state unmatched (kept state to
+ * discard; a read without the evidence is then unresolved). A construction with a note tree checks its roots instead. */
+function keptImportsHold(store: ReplayStore, ns: number, construction: Construction, trails: Pick<TrailEvidence, "trail"> | undefined): boolean {
+  if (construction.namespace.tree) return true;
+  for (const { ns: source, upto } of store.imports(ns).values()) {
+    const from = known(store).get(source);
+    if (upto === 0n || (from !== undefined && from.position >= upto)) continue;
+    const event = store.event(source, upto);
+    const trail = event === undefined || trails === undefined ? undefined : trails.trail(store.tip(source).segment, event.evidence);
+    if (trail === undefined || !keptOutputsHold(store, source, construction, trail, upto)) return false;
+  }
+  return true;
 }
 function keptRowsHold(store: ReplayStore, ns: number, position: bigint, identity: Uint8Array, snapshot: Snapshot, construction: Construction): boolean {
   if (!store.hasNamespace(ns) || store.construction(ns).name !== construction.namespace.name || !same(store.identity(ns), identity) ||
@@ -522,9 +540,9 @@ function replayedOutputs(store: ReplayStore, ns: number, construction: Construct
  * rebuilds it from the kept statements: its own output rows through `position` must be exactly, in order, the outputs
  * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`). A
  * settlement reads its demand from the trail's records, or, one stood up before what is rebuilt (an imported one, or one
- * this process's replay wrote), from the state before it; imported outputs are their own namespaces' (each checked where
- * its kept class is reused). The caller has checked the trail's chain at `position` against the namespace's, so its
- * records are the namespace's. A construction with a note tree has its root checked instead (`keptTipHolds`). */
+ * this process's replay wrote), from the state before it; imported outputs are their own namespaces' (each rebuilt by
+ * `keptImportsHold` before a state importing it is reused). The caller has checked the trail's chain at `position`
+ * against the namespace's, so its records are the namespace's. A construction with a note tree has its root checked instead (`keptTipHolds`). */
 function keptOutputsHold(store: ReplayStore, ns: number, construction: Construction, trail: StoredTrail | undefined, position: bigint): boolean {
   if (construction.namespace.tree) return true;
   const from = known(store).get(ns);
