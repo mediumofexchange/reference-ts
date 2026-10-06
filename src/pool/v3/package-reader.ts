@@ -72,7 +72,7 @@ export function ownSelection(input: ReaderSelection): ReaderSelection {
 /** The caller's verifier bound once, with a copy of the circuit identities it declares, which must be the
  * configuration's (§11.1) and name it in kept state (§14). A construction without proofs takes none: its verifier
  * names no circuit, and a call of it is a programming failure. */
-function ownVerifier(construction: Construction, verifierIn: DeclaredVerifier | undefined): DeclaredVerifier {
+export function ownVerifier(construction: Construction, verifierIn: DeclaredVerifier | undefined): DeclaredVerifier {
   if (!construction.reader.proofs) {
     return { verify: () => { throw new Error("a record of this construction has no proof"); }, identities: construction.reader.verifierIdentities(undefined) };
   }

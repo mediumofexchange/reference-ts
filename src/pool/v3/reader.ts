@@ -582,10 +582,14 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
 }
 
 /** Whether a namespace's stored tip reproduces from its own rows (§14's snapshot check with the tip's chain values in
- * the snapshot's place): an operator's journal checks its admission state so when it reopens, without re-verifying. */
-export function storedTipHolds(store: ReplayStore, ns: number, construction: Construction = POOL_V3 as Construction): boolean {
+ * the snapshot's place): an operator's journal checks its admission state so when it reopens, without re-verifying. A
+ * construction without a note tree also rebuilds its outputs through the tip from `trail`, the namespace's own trail,
+ * and its imports' from `trails` (lit-v1 §10), since no chain value checks them. */
+export function storedTipHolds(store: ReplayStore, ns: number, construction: Construction = POOL_V3 as Construction, trail?: StoredTrail,
+  trails?: Pick<TrailEvidence, "trail">): boolean {
   const tip = store.tip(ns);
-  return keptTipHolds(store, ns, { position: tip.position, historyHash: tip.history, evidenceHash: tip.evidence }, construction);
+  return keptTipHolds(store, ns, { position: tip.position, historyHash: tip.history, evidenceHash: tip.evidence }, construction) &&
+    keptOutputsHold(store, ns, construction, trail, tip.position) && keptImportsHold(store, ns, construction, trails);
 }
 
 /** The note root of a stored frontier: each completed left subtree folded with what lies to its right. */

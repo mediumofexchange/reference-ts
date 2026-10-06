@@ -4,7 +4,8 @@
 // input commitments), its recovery effect and its checks in the proof's place. Every mode rule, ordering,
 // continuity, revocation, supply, lock and uniqueness check stays in state.ts and recovery.ts, once. This file
 // holds pool-v3's adapter; lit-v1's is src/lit/construction.ts. The readers (package-reader.ts, scope-reader.ts,
-// reader.ts) read a construction's frames beside it (`reader`, slice 14 M14d).
+// reader.ts) read a construction's frames beside it (`reader`, slice 14 M14d); the operator journal (store.ts) also writes
+// its records, receipts and configuration item (`journal`, M14f).
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
@@ -14,10 +15,10 @@ import { NOTE_TREE_CAPACITY } from "../note-tree.js";
 import { ScopeTree } from "../scope.js";
 import { authorizationFaults, type AuthorizationFault } from "./authorization-evidence.js";
 import {
-  decodeReceipt, decodeSnapshot, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptMatchesEvent,
-  snapshotBytes, snapshotDigest, verifyReceipt, type Snapshot,
+  decodeReceipt, decodeSnapshot, encodeReceipt, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptBytes,
+  receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt, type Snapshot,
 } from "./commitments.js";
-import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration, type VerifierIdentities } from "./configuration.js";
+import { adoptedConfigurationBytes, adoptedDomain, requireConfigurationVerifier, verifyConfiguration, type VerifierIdentities } from "./configuration.js";
 import { decodeFaultEvidence, verifyFaultEvidence, type ExpectedSnapshot } from "./fault-evidence.js";
 import { V3_HEADERS, type SegmentHeader, type SegmentHeaderCodec } from "./headers.js";
 import { V3_PACKAGES, type PackageCodec } from "./package.js";
@@ -96,6 +97,32 @@ export interface Construction<R = unknown> {
   settledDemand(bytes: Uint8Array): string;
   /** The frames and objects the readers read (slice 14 M14d). */
   readonly reader: ReaderFrames;
+  /** What an operator's journal writes besides (slice 14 M14f). */
+  readonly journal: JournalFrames<R>;
+}
+
+/** A receipt's fields (§7.2) as the journal names them for any construction: pool-v3's name its scope root and the
+ * record's evidence triple, lit-v1's neither the scope root nor a proof digest (lit-v1 §5). */
+export interface ReceiptFieldsOf {
+  readonly domain: Uint8Array;
+  readonly segment: Uint8Array;
+  /** Pool-v3's scope root; undefined for a construction whose segment identity binds its scope. */
+  readonly scopeRoot: bigint | undefined;
+  readonly position: bigint;
+  readonly digests: EvidenceDigests;
+  readonly historyHash: Uint8Array;
+  readonly after: bigint;
+}
+/** What an operator's journal (store.ts) writes of a construction besides the frames the readers read (slice 14 M14f). */
+export interface JournalFrames<R = unknown> {
+  /** A decoded record's canonical bytes, which the journal admits and keeps. */
+  encode(record: R): Uint8Array;
+  /** Its statement identity, by which an exact replay is answered (invariant 26). */
+  identity(record: R): Uint8Array;
+  /** The configuration bytes a package's kind-1 item carries: a fresh copy. */
+  configuration(): Uint8Array;
+  /** The receipt record for `fields` under `operator`'s key; `sign` signs the receipt message with its secret. */
+  receipt(fields: ReceiptFieldsOf, operator: Uint8Array, sign: (message: Uint8Array) => Uint8Array): Uint8Array;
 }
 
 /** A receipt (§7.2) as a receipt walk reads it: the fields every construction's receipt names, and its checks. */
@@ -277,5 +304,15 @@ export const POOL_V3: Construction<Record> = Object.freeze({
   capacity: NOTE_TREE_CAPACITY,
   settledDemand: (bytes: Uint8Array) => recoveryEffect(decodeRecord(bytes)).ended!,
   reader: V3_READER,
+  journal: Object.freeze({
+    encode: encodeRecord,
+    identity: (record: Record) => statementHash(record),
+    configuration: adoptedConfigurationBytes,
+    receipt: ({ digests, scopeRoot, ...rest }: ReceiptFieldsOf, operator: Uint8Array, sign: (message: Uint8Array) => Uint8Array): Uint8Array => {
+      if (scopeRoot === undefined) throw new TypeError("a pool-v3 receipt names its scope root");
+      const fields = { ...rest, scopeRoot, statementHash: digests.statementHash, proofHash: digests.proofHash, signatureHash: digests.signatureHash };
+      return encodeReceipt({ ...fields, operator, signature: sign(receiptBytes(fields)) });
+    },
+  }),
 });
 
