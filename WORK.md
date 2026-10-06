@@ -9,10 +9,11 @@ Acceptance: the reference replays a lit trail through the shared seams (records,
 lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`. Stop: adoption.
 - **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors; §6 frames over pool-v3's codecs.
 - **M14c done** (PR #116, [decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)): `state.ts` judges lit records in every mode through a construction view; `test/lit-state.test.ts` against an oracle.
-- **M14d done** (PR #120, [decision](decisions/2026-10.md#2026-10-06--read-lit-packages-through-the-one-package-reader-and-walk-the-construction-a-read-option-slice-14-m14d)): `readPackage`/`readFrontier` with `construction: LIT` read lit packages
-  through each construction's reader frames; kept lit state rebuilds its outputs (§10); `test/lit-reader.test.ts`. Left: lit `answers`, serving.
-- **M14e next: adoption** (Construction C0a): a fresh conformance read of lit-v1 at `1bf5bfc` against `src/lit/` and the readers; spec
-  status draft → adopted with a pin; PROTOCOL_RULES rows; then slice 14 closes.
+- **M14d done** (PR #120, [decision](decisions/2026-10.md#2026-10-06--read-lit-packages-through-the-one-package-reader-and-walk-the-construction-a-read-option-slice-14-m14d)): lit packages read through the one walk; kept lit outputs rebuilt (§10).
+- **M14e next: adoption**, held by the [conformance read](decisions/archive/2026-10-06-lit-v1-conformance-read.md) (no byte deviates):
+  B1, a record that splits but does not decode is unexcludable as lit-v1 §§3/5/6 read now; proposed (a), a reviewed draft clarification
+  that it fails replay (`digests` by `splitRecord`, a `ReplayRefusal`, a test); M1, vectors for every remaining layout; M2, §10's imports
+  (wording or a check); tests 2–4. Then status draft → adopted, rows and docs from draft to adopted (`contexts.ts`'s comment re-records reports).
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
