@@ -494,8 +494,9 @@ a submission already sent, so quiesce operations before exporting.
 [M10c2b1](../decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)).
 The directory binds one venue and holds `wallet.db` (with the seed), its evidence and replay files, the kept terms,
 a service file per operator and the package of its last sync per backing. `init --venue <file>` creates it with a
-fresh seed; with `--backer` it also holds K (`backer.key`), and `venue create`, `terms create`, `issue`, `accept`,
-`burn` and `publish-acceptance` are enabled. Only `init`, a backer's `venue create`, `restore-seed` and `restore`
+fresh seed; with `--backer` it also holds K (`backer.key`), and `venue create`, `terms create`, `issue`, `accept`
+and `burn` are enabled (`publish-acceptance` signs nothing, so a backer's copy restored without K still
+republishes its saved acceptances). Only `init`, a backer's `venue create`, `restore-seed` and `restore`
 create a wallet database, so a lost one never comes back as a fresh seed. The directory holds no funding key.
 
 | Command | Does |

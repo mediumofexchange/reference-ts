@@ -26,8 +26,8 @@ admissions. Unexpected fields, malformed UTF-8, compressed bodies and oversized
 envelopes refuse. The transport signs no JSON and adds no protocol bytes.
 
 The client is `V3ServiceClient(baseUrl, walletToken, expected, adminToken?)` from
-`service-client.ts`. `expected` independently supplies the configuration domain,
-operator and reference venue preimage. Only an HTTP `127.0.0.1` root URL is
+`service-client.ts`. `expected` independently supplies the operator and
+reference venue preimage; the domain is the adopted configuration's. Only an HTTP `127.0.0.1` root URL is
 accepted. Identity inputs and submitted bytes are copied. These modules are
 subpath APIs, not root exports.
 
@@ -149,6 +149,6 @@ receiver fulfillment independently. Its evidence is retained in the
 [journal report](pool-v3-store-verification.json). The payment is prepared,
 saved and submitted by the [v3 wallet](POOL_V3_WALLET.md); issue, burn and the
 hostile cases are still prepared by the harness. Payment requests pass between
-wallets, not through this service. Restoration drills and encrypted backup remain
-open. V2 checks stay until their remaining wallet
-and service cases pass on v3. No live service or physical custody is qualified.
+wallets, not through this service. The encrypted handoff (`moe wallet handoff`,
+`restore`) is drilled; qualified backup and restore drills remain open. No live
+service or physical custody is qualified.

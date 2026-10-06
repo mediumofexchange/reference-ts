@@ -2,9 +2,7 @@
 // directory its root authenticates (C2.3), a replacement (C2.5) and a
 // revocation (C2b.1). Their exact bytes, signed messages, hashes and signature
 // checks, and nothing else: no ledger, venue view, backing terms or walk. Every
-// construction reads these records, so they live apart from any one of them;
-// `commitment.ts`, `replacement.ts` and `revocation.ts` re-export them for the
-// transparent path and pool-v2.
+// construction reads these records, so they live apart from any one of them.
 //
 // Everything that reads bytes here is a verifier: the bytes come from whoever
 // publishes them.

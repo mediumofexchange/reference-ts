@@ -292,7 +292,7 @@ until the journal is reopened.
   budget. `syncCaughtUp` repeats the sync while a pass ended on progress that
   cost its supplier: one stopped by its header budget, having added that many
   headers, or a section-budget stop after a section was read (a fetch-budget
-  stop costs nothing and ends it). Every `moe` command syncs its view through
+  stop costs nothing and ends it). Every `moe` command that reads the venue syncs its view through
   it, so a view any distance behind reaches the tip in one command, one
   bounded pass at a time. A refused header stops that supplier for the sync. Every new
   header a supplier added that is off the best chain at the end of that
