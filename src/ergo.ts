@@ -247,7 +247,8 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     // which no mainnet header has. The testnet context reads only above an anchor below mainnet's initial
     // difficulty: the testnet's rules keep a parent's difficulty within an epoch, so a mainnet anchor would
     // otherwise be followed up to its next epoch boundary (at most 127 headers, each with the mainnet's work).
-    // No mainnet header sampled to date is below it (the newest about 51 times above); a mainnet hashrate collapse
+    // No mainnet header is below it (M10d's full scan from height 1,025, whose least difficulty is the initial one;
+    // the newest about 51 times above); a mainnet hashrate collapse
     // past that margin would reopen the 127-header exposure, and testnet hashrate past it would refuse real anchors.
     if (this.profile.reference !== undefined) {
       const last: unknown = context[context.length - 1];

@@ -82,9 +82,9 @@ function withdraw(id: Uint8Array, signer = PRESENTER): Uint8Array {
   const statement: Statement = { domain: DOMAIN, kind: 5, segment: SEGMENT, demand: id };
   return record(statement, sign(statement, signer));
 }
-function settle(d: { statement: LitDemand; id: Uint8Array }, owner: Uint8Array, options: { deadline?: bigint; acceptor?: Uint8Array; releaser?: Uint8Array } = {}):
+function settle(d: { statement: LitDemand; id: Uint8Array }, owner: Uint8Array, options: { deadline?: bigint; acceptor?: Uint8Array; releaser?: Uint8Array; segment?: Uint8Array } = {}):
   { bytes: Uint8Array; note: Opening } {
-  const deadline = options.deadline ?? 15n, statement: Statement = { domain: DOMAIN, kind: 6, segment: SEGMENT, demand: d.id, owner: pub(owner) };
+  const deadline = options.deadline ?? 15n, statement: Statement = { domain: DOMAIN, kind: 6, segment: options.segment ?? SEGMENT, demand: d.id, owner: pub(owner) };
   const acceptance = { domain: DOMAIN, demand: d.id, owner: pub(owner), deadline };
   const authorization = encodeSettlementAuthorization(deadline, ed25519.sign(acceptanceBytes(acceptance), options.acceptor ?? K),
     ed25519.sign(releaseBytes(DOMAIN, d.id, acceptanceId(acceptance), statementHash(statement)), options.releaser ?? PRESENTER));
@@ -252,6 +252,19 @@ describe("lit-v1 records at the one validity seam (M14c)", () => {
     const door = replay({ admission: true, lag: 2n, index: 9n });
     expect(await refusal(state, demand([c.note], [BOB], { instant: 8n }).bytes, door)).toBe("DEADLINE");
     await applyRecord(state, demand([c.note], [BOB], { instant: 6n }).bytes, door);
+  });
+
+  it("settles a predecessor's demand in a successor over a frontier copied into another store (an operator's import)", async () => {
+    const store = new ReplayStore(), first = fresh(store), a = issue(10n, ALICE);
+    await applyRecord(first, a.bytes, replay());
+    const d = demand([a.note], [ALICE]);
+    await applyRecord(first, d.bytes, replay());
+    // An issue's event stores an empty proof digest, which the copy binds again.
+    const other = new ReplayStore(), frontier = other.copyFrontier(store, first.frontier(), segment => segment);
+    const copied = openSegmentState(other, NEXT, b(42), { store: other, frontier }, LIT), s = settle(d, CAROL, { segment: NEXT });
+    await applyRecord(copied, s.bytes, replay({ segment: NEXT }));
+    expect(copied.hasOutput(key(oracle.cm(s.note)))).toBe(true);
+    expect(await refusal(copied, s.bytes, replay({ segment: NEXT }))).toBe("DEMAND");
   });
 
   it("adopts an exact settlement, deriving its output from the stored demand, and refuses one whose demand does not stand", async () => {

@@ -67,9 +67,11 @@ function paymentOut(payment: Payment) {
     receipt: receiptOut(payment.receipt), final: finalOut(payment.final), superseded: payment.superseded.length, record: sha256(payment.record) };
 }
 function viewOut(view: WalletView) {
-  const available = view.holdings.filter(h => h.status === "available").reduce((n, h) => n + h.value, 0n);
+  // `available` is what `pay` and `burn` can spend; notes a demand presented move only by `freshen`.
+  const total = (presented: boolean) => view.holdings.filter(h => h.status === "available" && (h.presented.length > 0) === presented)
+    .reduce((n, h) => n + h.value, 0n);
   return { status: view.checkpoint === undefined ? "unavailable" : "final", backing: view.backing, judgingIndex: view.judgingIndex,
-    checkpoint: view.checkpoint === undefined ? null : commitmentOut(view.checkpoint), gap: view.gap, available,
+    checkpoint: view.checkpoint === undefined ? null : commitmentOut(view.checkpoint), gap: view.gap, available: total(false), presented: total(true),
     holdings: view.holdings.map(h => ({ cm: h.cm, value: h.value, status: h.status, presented: h.presented })),
     demands: view.demands.map(d => ({ id: d.id, quantity: d.quantity, instant: d.instant, deadline: d.deadline, holdings: d.holdings })) };
 }
@@ -93,7 +95,8 @@ function walletOver(directory: Directory, view: View, verifier: ProofVerifier, c
   if (!create && !existsSync(path)) {
     throw new CommandError("ABSENT", "the directory has no wallet database: init with --venue, or a backer's venue create");
   }
-  return new V3Wallet(path, { venue: view.venue, reference: view.file.reference, verifier });
+  const options = { venue: view.venue, reference: view.file.reference, verifier };
+  return create ? new V3Wallet(path, options) : V3Wallet.open(path, options);
 }
 
 /** The prover over the directory's cached parameters, loaded by dynamic import so a non-proving process loads no
@@ -292,7 +295,9 @@ async function venueCommand(argv: readonly string[]): Promise<void> {
   const { venue, created } = await createVenue(directory, { synthetic: has(args, "synthetic"),
     ...(depth === undefined ? {} : { depth: integer(depth, "--depth", 1n, 1000n) }) });
   if (existsSync(pending)) {
-    if (!existsSync(directory.file(WALLET_DB))) await createDatabase(directory, args);
+    // Created while the mark stands, existing or not: a run killed inside the creating transaction leaves a database
+    // with no identity, which only the creating open fills (one with an identity it leaves as it is).
+    await createDatabase(directory, args);
     rmSync(pending);
   } else if (!existsSync(directory.file(WALLET_DB))) {
     throw new CommandError("ABSENT", "the venue exists but the wallet database is lost: restore it (restore, restore-seed) into a new directory");
@@ -404,6 +409,11 @@ async function handoff(argv: readonly string[]): Promise<void> {
     }
     try {
       if (key.length !== 32) throw new CommandError("INVALID", "the key file is not 32 bytes");
+      // The freeze cannot be undone: an output path that cannot take the handoff is refused before it.
+      if (!wallet.custody().frozen) {
+        if (readOptional(outPath!) !== undefined) throw new CommandError("EXISTS", `${outPath} already exists; the handoff is written to a new file`);
+        if (!existsSync(dirname(outPath!))) throw new CommandError("ABSENT", `the parent of ${outPath} does not exist`);
+      }
       const bytes = wallet.exportBackup(key);
       writeSame(outPath!, bytes);
       print({ status: "frozen", digest: walletBackupDigest(bytes), key: keyPath, out: outPath });

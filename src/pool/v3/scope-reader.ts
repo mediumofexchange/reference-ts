@@ -579,7 +579,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const entry = directory.find(item => same(item.name, snapshot.backing));
     if (entry === undefined || !same(entry.digest, snapshotDigest(snapshot))) throw new KeptStateMismatch("a kept walk's snapshot");
     if (evidence.snapshot(entry.digest) === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    const scope = checkpointScope(trails, snapshot.backing, entry.digest, snapshot);
+    // The scope is authenticated as the judgment did, from the directory's first snapshot (C2.10.11, pool-v3 §7.1):
+    // the row's snapshot is that of whichever backing last judged it, and in an excluded or lapsed class it may
+    // name another segment.
+    const first = directory[0]!, named = same(first.name, snapshot.backing) ? snapshot : snapshotFor(first.digest);
+    if (!same(named.segment, row.segment)) throw new KeptStateMismatch("a kept walk's segment");
+    const scope = checkpointScope(trails, first.name, first.digest, named);
     const s = row.state;
     if (row.class === "valid") {
       scope.fullTrail();

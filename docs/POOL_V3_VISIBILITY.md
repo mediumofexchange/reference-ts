@@ -135,7 +135,7 @@ that set without touching the cryptography (§C1.5), and in a small pool it can 
   several statements, and the combination still identifies it to that payee. The evidence supplier sees the
   combination of backings each address syncs.
 
-The installable wallet (slice 10) is to explain these to its user before the first payment and at each
+The installable wallet (slice 10) explains these to its user before the first payment and at each
 redemption: what the payee learns, what the operator learns when it takes a fee, that publication funding
 identifies a holder who publishes from an identified address, and that in a small pool timing and amounts can
 identify the parties ([production requirements](PRODUCTION_REQUIREMENTS.md#release-contract)).
@@ -155,6 +155,4 @@ These are wallet and deployment duties the rules above assume; each is listed in
    scoped backing, or an unlinkable transport).
 4. The user-facing explanations above: `moe wallet` shows the request channel, thin intervals and publication
    funding with a wallet's first request or payment, and what a demand's tags link at each demand and `freshen`;
-   longer texts, and what the operator learns from a fee, stay in this guide.
-</content>
-</invoke>
+   what an operator taking a fee learns is among those first notes; longer texts stay in this guide.

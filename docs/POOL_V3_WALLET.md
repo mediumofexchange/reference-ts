@@ -4,7 +4,9 @@
 [pool-delivery C4.1–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-delivery.md)
 and pays under [pool-fees C1.2.3–5](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
 It runs under the adopted configuration (pool-v3 §11.4) and the recomputed reference venue guard. It is
-not exported from the root barrel. Node 24 is required for its SQLite storage.
+not exported from the root barrel. Node 24 is required for its SQLite storage, at 24.21.0 or later (24.6.0's `node:sqlite` binds a
+zero-length blob read back as NULL and refuses a statement naming one numbered parameter twice, and its libuv crashes at a
+command's exit on Windows).
 
 The caller opens `V3Wallet(path, readerOptions)` with its independently
 held configuration, proof verifier, venue and reference identity preimage. The
@@ -492,22 +494,23 @@ a submission already sent, so quiesce operations before exporting.
 [M10c2b1](../decisions/2026-10.md#2026-10-02--run-the-wallet-and-relay-commands-over-the-library-with-kept-evidence-acceptance-files-and-a-status-read-slice-10-m10c2b1)).
 The directory binds one venue and holds `wallet.db` (with the seed), its evidence and replay files, the kept terms,
 a service file per operator and the package of its last sync per backing. `init --venue <file>` creates it with a
-fresh seed; with `--backer` it also holds K (`backer.key`), and `venue create`, `terms create`, `issue`, `accept`,
-`burn` and `publish-acceptance` are enabled. Only `init`, a backer's `venue create`, `restore-seed` and `restore`
+fresh seed; with `--backer` it also holds K (`backer.key`), and `venue create`, `terms create`, `issue`, `accept`
+and `burn` are enabled (`publish-acceptance` signs nothing, so a backer's copy restored without K still
+republishes its saved acceptances). Only `init`, a backer's `venue create`, `restore-seed` and `restore`
 create a wallet database, so a lost one never comes back as a fresh seed. The directory holds no funding key.
 
 | Command | Does |
 |---|---|
 | `request <alias> <backing> <value> [--out f]` | the exact request: its 246-byte frame (hex, and the file) and digest to hand on |
 | `pay <alias> <backing> --request f --digest d --value n` | authenticates the frame by the digest, prepares the payment and submits it |
-| `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records |
+| `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records. `available` totals what `pay` and `burn` can spend, `presented` the available notes a demand presented, which only `freshen` moves |
 | `fulfill <alias> <backing>` / `fulfillment <alias>` | the request found paid; never replayed: a rerun exits 4 printing the saved fulfillment |
 | `demand`, `withdraw`, `settle --acceptance f`, `freshen` | the acts above; `freshen` submits as `pay` does |
 | `submit <alias> <backing>`, `status <alias>`, `reprove` | submits a saved record (a rerun prints the kept receipt); reads a saved record as the last sync resolved it; re-proves a payment in the canonical segment |
 | `presentation <backing> <demand>` | C3.8's reading from public evidence |
 | `publish <alias> <backing> --out f` | a demand, withdrawal or release as a publication file for `moe relay publish`; refused unless the read shows the gap open |
 | backer: `issue`, `accept <alias> <backing> <demand> --deadline n --out f`, `burn`, `publish-acceptance` | `accept` writes the acceptance as its canonical publication bytes, which the holder's `settle --acceptance` reads |
-| `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files outside the directory); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
+| `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files new, outside the directory and on a file system with hard links; `o` is checked new before the wallet freezes); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
 
 Each command that reads syncs the directory's Ergo view first, in bounded passes until it is caught up, with a
 `syncing` event on stderr for each pass another follows. Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact

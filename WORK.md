@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-05
+Updated: 2026-10-06
 
 ## Goal
 **Slice 14: the lit implementation** (Next 10; numbered after 13 but before it; spec `lit-v1.md`, a draft until adopted;
@@ -9,8 +9,7 @@ Acceptance: the reference replays a lit trail through the shared seams (records,
 lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`.
 Stop boundary: adoption; wallet commands and venue drills for lit backings are later slices.
 - **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors; §6 frames over pool-v3's codecs.
-- **M14c done in PR (branch `claude/lit-state`)** ([decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)):
-  `state.ts` judges lit records in every mode through a construction view (`pool/v3/construction.ts`, `lit/construction.ts`); `test/lit-state.test.ts` against an oracle. Design and patch reviewed (one blocker fixed, read back); reports re-recorded from CI.
+- **M14c done** (PR #116, [decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)): `state.ts` judges lit records in every mode through a construction view; `test/lit-state.test.ts` against an oracle.
 - **M14d next: the readers over lit.** `reader.ts`/`package-reader.ts`/`scope-reader.ts` replay a lit package (lit header, trail,
   terms, `LIT` construction; snapshot check without a note root), hostile trail cases; then the adoption decision (Construction C0a).
 
@@ -21,6 +20,8 @@ Stop boundary: adoption; wallet commands and venue drills for lit backings are l
   (k)–(n), (s), (v), (w) closed, a view caught up in bounded passes; every budget holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)).
   Gaps: the operator's own memory at depth (Next 5); the wallet's 10⁵ points, lost to a container restart.
 - **Audits**: area 27 (state machine) made the 2^32-th leaf and §7's bound verdicts ([decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); journal/readers not yet. Area 29 (wallet): a payment whose output another statement made fails; no act with a pending receipt fails by door times ([decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)).
+  Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): a resumed kept walk rechecks a class's scope by the directory's first snapshot; a truncated `wallet.db`
+  refuses, never a fresh seed; no failed act is published; `handoff` checks `--out` before freezing; Node floor 24.21.0 (24.6.0's `node:sqlite` fails the wallet).
 
 ## Evidence
 - Guides: [wallet](docs/POOL_V3_WALLET.md), [service](docs/POOL_V3_SERVICE.md), [who sees what](docs/POOL_V3_VISIBILITY.md), [Ergo venue](docs/ERGO_VENUE_PROFILE.md).
@@ -48,7 +49,10 @@ Stop boundary: adoption; wallet commands and venue drills for lit backings are l
    window (another process committing between the hash and the store's connection; inherited): check under the store's own
    `BEGIN IMMEDIATE` and refuse a moved `data_version`. Audit 29: (y) a restored handoff starts `seen` at 0, so it may build from a view
    older than its source synced at (refusals, not loss; carry `seen` at the next profile change); (z) pool-delivery C4.7's venue-created
-   output awaiting adoption is not reported at all (only never as spendable).
+   output awaiting adoption is not reported at all (only never as spendable). Review 2026-10-06: (aa) the testnet drill sweeps funding keys
+   in-process only (no signal handler or `--sweep <dir>`; boxes above the indexed height read as dust); (ab) no command prints a saved
+   acceptance's absolute deadline for an exact `accept --deadline +n` retry; (ac) `keepContext`'s throwaway views keep `:memory:` journals
+   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations.
 5. Slice 11 leftovers. Measure `moe operator serve` as its own process at 10⁵ (the depth probe's process, which also held the synthetic
    node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
    if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
@@ -84,16 +88,13 @@ Stop boundary: adoption; wallet commands and venue drills for lit backings are l
   2026-10-06: run them (`experiments/ergo-range/nodes.mjs start|stop`) only while work uses them, allowing catch-up sync.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public `pool-v3-testnet-reader/`, `pool-v3-recovery-testnet-reader/` and `pool-v3-scope-testnet-reader/`
   bundles, `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/`, `ergo-headers/` and `node24/` (Node 24.21.0, checksummed) under scratch.
-- Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`
-  and `node-startup/`, `sync-preparation/` caches; do not allocate another. Archive node `C:\Users\Bob\ergo-node` (outside this project): synced,
-  stopped 2026-09-29, unused. Delete slice scratch after delivery; preserve legacy Temp/moeclean. Node management is authorized.
+- Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`, `node-startup/`, `sync-preparation/`;
+  allocate no other. Archive node `C:\Users\Bob\ergo-node` (outside): synced, stopped, unused. Preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking (2026-10-06), deletions the classifier refused (retired by the M10d decision, cited at `2fd0f08`): in reference-ts,
-  `git rm scripts/pool/v3/testnet-reader-check.mjs docs/pool-v3-testnet-reader-verification.json`, then commit and push.
-- Non-blocking (2026-10-06): the PC's Node 24.6.0 crashes at a command's exit in libuv on Windows (`UV_HANDLE_CLOSING`, M10d
-  decision); install the current Node 24 LTS from nodejs.org (needs elevation). Until then local real-proof runs use `scratch/node24/`.
+- Non-blocking (2026-10-06, approved; its UAC prompt went unanswered): as administrator run `msiexec /i scratch\node-install\node-v24.21.0-x64.msi`
+  (checksum and OpenJS signature verified) over the PC's 24.6.0, then delete `scratch/node-install/`; until then use `scratch/node24/`.
 
 Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: the commands ran live on the testnet and the design point
 holds to 10⁵; the lit profile's readers and adoption, release assurance, holder transport, qualified storage and mainnet remain.
