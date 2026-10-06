@@ -119,6 +119,8 @@ interface Installation {
   readonly domain: Uint8Array; readonly venue: Uint8Array;
 }
 let installing: Installation | undefined;
+/** Set by `V3Wallet.open` for the constructor it calls: the database must already hold an identity. */
+let opening = false;
 function persistentPath(path: string): void {
   requireThat(typeof path === "string" && path.trim() !== "" && path !== ":memory:" && !path.startsWith("file:"),
     "STORAGE", "a persistent filesystem path is required");
@@ -317,8 +319,15 @@ export class V3Wallet {
   private closed = false;
   private poisoned = false;
 
+  /** An existing wallet only: a database with no identity (a file truncated or replaced outside the wallet) is
+   * refused, never filled with a fresh seed, so a lost wallet never comes back as a new one. */
+  static open(path: string, options: PackageReader): V3Wallet {
+    opening = true;
+    try { return new V3Wallet(path, options); } finally { opening = false; }
+  }
+
   constructor(path: string, options: PackageReader) {
-    const restore = installing; installing = undefined;
+    const restore = installing, existing = opening; installing = undefined; opening = false;
     const own = ownOptions(options);
     this.venueId = own.venueId; this.domain = own.domain; this.options = own.reader; this.path = path;
     requireThat(restore === undefined || (same(restore.domain, this.domain) && same(restore.venue, this.venueId)),
@@ -337,6 +346,7 @@ export class V3Wallet {
       let meta = this.metadata();
       requireThat(restore === undefined || meta === undefined, "CONFLICT", "recovery destination is no longer pristine");
       if (meta === undefined) {
+        requireThat(!existing, "STORAGE", "wallet identity is missing");
         requireThat([...TABLES.map(([table]) => table), "wallet_custody"].every(table =>
           this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n === 0), "STORAGE", "wallet identity is missing");
         this.db.prepare("INSERT INTO wallet_identity VALUES(1,?,?,?,?,0,'0')").run(PROFILE, hex(this.domain), hex(this.venueId),
@@ -1571,9 +1581,10 @@ export class V3Wallet {
     requireThat(row !== undefined, "UNKNOWN", "unknown act");
     const kind = ({ "4": 1, "6": 3, "5": 4 } as const)[row.kind as string];
     requireThat(kind !== undefined, "INVALID", "only a demand, a withdrawal or a release is published");
-    // A failed settlement has no force at any later index, and its release would disclose the output that a later
-    // settlement of the demand at the same disclosure count names (C3.5).
-    requireThat(kind !== 3 || row.status !== "failed", "CONFLICT", "a failed settlement is not published");
+    // A failed act has no force at any later index, and publishing it only discloses: a failed settlement's release
+    // the output that a later settlement of the demand at the same disclosure count names (C3.5), a failed demand
+    // the tags of notes that are free again, linking their later spends to it (C3.1).
+    requireThat(row.status !== "failed", "CONFLICT", "a failed act is not published");
     const send = publisher?.publishRecord;
     requireThat(typeof send === "function", "INVALID", "a venue publisher is required");
     const backing = copyUnshared(row.backing as Uint8Array);

@@ -213,6 +213,8 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const view = await f.holder.sync(f.served(), f.signed);
     expect(f.holder.act("late")!.status).toBe("failed");
     expect(view.holdings.map(h => h.status)).toEqual(["available", "available"]);
+    // Published now it has no force and would only link the freed notes' later spends to it (C3.1).
+    await expect(f.holder.publish("late", f.venue)).rejects.toMatchObject({ code: "CONFLICT", message: "a failed act is not published" });
     // The freed note is demanded again under a new alias and admitted.
     await f.holder.demand("again", 10n, f.venue.witnessedIndex() + 30n, f.served(), f.signed, prove);
     await f.holder.submit("again", f.service); await f.publish();
@@ -722,7 +724,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const later = await f.backer.accept("later", demand.demand!, f.venue.witnessedIndex() + 20n, f.served(), f.signed, sign);
     const s2 = await f.holder.settle("s2", later, f.served(), f.signed, prove);
     expect(decodeRecord(s2.record).publicInputs[9]).toBe(decodeRecord(s1.record).publicInputs[9]);
-    await expect(f.holder.publish("s1", f.venue)).rejects.toMatchObject({ code: "CONFLICT", message: "a failed settlement is not published" });
+    await expect(f.holder.publish("s1", f.venue)).rejects.toMatchObject({ code: "CONFLICT", message: "a failed act is not published" });
     await f.holder.submit("s2", f.service); await f.publish();
     await f.holder.sync(f.served(), f.signed);
     expect(f.holder.act("s2")!.status).toBe("final");

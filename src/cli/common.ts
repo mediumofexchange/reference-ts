@@ -224,7 +224,12 @@ export function writeExclusive(path: string, data: string | Uint8Array): void {
   try {
     writeNew(temporary, data);
     try { linkSync(temporary, path); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists`);
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists`);
+      // FAT and exFAT, among others, take no hard link: the file goes on storage that does.
+      if (code === "EPERM" || code === "ENOTSUP" || code === "EINVAL" || code === "ENOSYS") {
+        throw new CommandError("STORAGE", `${path}: its file system takes no hard link, which a whole-or-nothing write needs`);
+      }
       throw error;
     }
   } finally { rmSync(temporary, { force: true }); }

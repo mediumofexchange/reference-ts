@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, truncateSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
@@ -115,6 +115,20 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     seed.fill(0); other.opening.backing.fill(0); other.capsule.fill(0);
     expect(next.recoverySeed()).not.toEqual(seed);
     expect(next.request("other", f.backing, 7n).opening.backing).toEqual(f.backing);
+  });
+
+  it("opens an existing wallet only: a database truncated outside it never comes back as a fresh seed", () => {
+    mkdirSync(scratch, { recursive: true });
+    const directory = mkdtempSync(join(scratch, "v3-wallet-test-")); directories.push(directory);
+    const venue = FixtureVenue.reference(label, lag), path = join(directory, "wallet.db"), options = { venue, reference, verifier };
+    const wallet = new V3Wallet(path, options), seed = wallet.recoverySeed(); wallet.close();
+    const reopened = V3Wallet.open(path, options);
+    expect(reopened.recoverySeed()).toEqual(seed); reopened.close();
+    truncateSync(path, 0);
+    const missing = { code: "STORAGE", message: "wallet identity is missing" };
+    expect(() => V3Wallet.open(path, options)).toThrow(expect.objectContaining(missing));
+    // The refusal left no identity behind for a later open to find.
+    expect(() => V3Wallet.open(path, options)).toThrow(expect.objectContaining(missing));
   });
 
   it("validates exact payer-agreed request terms and capsule framing without private material", async () => {
