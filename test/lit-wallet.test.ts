@@ -132,6 +132,14 @@ describe("the one wallet holding lit notes", () => {
     await holder.submit("self", f.service); await f.checkpoint();
     expect(values(await holder.sync(await f.served(), f.signed))).toEqual([[5n, "available"]]);
     expect(await refusal(holder.keyedFulfill("own", await f.served(), f.signed))).toBe("ABSENT");
+    // The spent input's mark withheld from the kept file under a re-recorded digest: the saved payment still names it.
+    holder.close();
+    const replay = `${f.path("holder")}.replay`, db = new DatabaseSync(replay, { readBigInts: true });
+    const first = db.prepare("SELECT ns, leaf FROM witness ORDER BY ns, leaf LIMIT 1").get() as { ns: bigint; leaf: bigint };
+    db.prepare("DELETE FROM witness WHERE ns = ? AND leaf = ?").run(first.ns, first.leaf); db.close();
+    writeFileSync(`${replay}.sha256`, keptFileDigest(replay)!);
+    const reopened = f.open("holder");
+    expect(await refusal(reopened.keyedFulfill("own", await f.served(), f.signed))).toBe("ABSENT");
   });
 
   it("names a payment the payee already spent, and trusts no kept mark's owner fields", async () => {

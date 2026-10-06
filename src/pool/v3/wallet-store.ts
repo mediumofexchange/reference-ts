@@ -1914,7 +1914,7 @@ export class V3Wallet {
       const credited = this.db.prepare("SELECT 1 FROM receiver_fulfilled WHERE cm=?");
       const pays = (note: KeyedNote) => note.owner.index === index && note.owner.backing !== undefined &&
         same(note.owner.backing, backing) && same(note.opening.owner, request.owner) && same(note.opening.backing, backing) &&
-        note.opening.value === request.value && !this.keyed!.ownFunded(canonical.state, note) && credited.get(note.cm.toString()) === undefined;
+        note.opening.value === request.value && !this.selfPaid(canonical.state, note) && credited.get(note.cm.toString()) === undefined;
       const paid = (notes as KeyedNote[]).filter(pays).sort((a, b) => (a.cm < b.cm ? -1 : 1));
       if (paid.length === 0) {
         // A payment the wallet already spent, in canonical history or by force, is named as such.
@@ -1936,6 +1936,14 @@ export class V3Wallet {
     return this.keyedFulfillment(name)!;
   }
 
+  /** Whether the note's creating statement consumed notes, all of them this wallet's own (lit-v1 §8): marked by its
+   * scan, or reserved by a payment or act saved here. Both are local custody: a mark withheld from the kept replay file
+   * under a re-recorded digest is still caught where the wallet saved the payment. */
+  private selfPaid(state: CanonicalCheckpoint["state"], note: KeyedNote): boolean {
+    if (this.keyed!.ownFunded(state, note)) return true;
+    const consumed = state.store.consumedAt(note.ns, note.position), saved = this.db.prepare("SELECT 1 FROM saved_inputs WHERE nf=?");
+    return consumed.length > 0 && consumed.every(nf => state.store.marked(state.ns, state.position, nf) || saved.get(nf.toString()) !== undefined);
+  }
   /** Each selected lit note's opening and owner secret (the caller zeroes the secrets): read before any write, so a mark
    * its seed does not derive is found while the read can still discard kept state and replay (§14). */
   private keyedInputs(notes: readonly KeyedNote[]): KeyedInput[] {
