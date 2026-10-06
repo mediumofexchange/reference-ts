@@ -6,12 +6,13 @@ Updated: 2026-10-06
 **Slice 14: the lit implementation** (Next 10; numbered after 13 but before it; spec `lit-v1.md`, a draft until adopted;
 [layouts decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)).
 Acceptance: the reference replays a lit trail through the shared seams (records, `state.ts`'s validity seam, frames, reader) with
-lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`.
-Stop boundary: adoption; wallet commands and venue drills for lit backings are later slices.
+lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`. Stop: adoption.
 - **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors; §6 frames over pool-v3's codecs.
 - **M14c done** (PR #116, [decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)): `state.ts` judges lit records in every mode through a construction view; `test/lit-state.test.ts` against an oracle.
-- **M14d next: the readers over lit.** `reader.ts`/`package-reader.ts`/`scope-reader.ts` replay a lit package (lit header, trail,
-  terms, `LIT` construction; snapshot check without a note root), hostile trail cases; then the adoption decision (Construction C0a).
+- **M14d in progress (branch `claude/m14d-lit-readers`): the readers over lit.** `readPackage`/`readFrontier` and the one walk read a lit
+  package through each construction's reader frames, the construction a read option, an evidence store bound to one. Acceptance: a lit
+  fixture read end to end (continuation, import, receipt, force, non-service, compact fault) with hostile trails refused by code; pool-v3
+  verdicts unchanged; one fresh adversarial review. Stop: merged; then adoption (Construction C0a). Lit `answers`/serving: lit wallet slice.
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
@@ -80,21 +81,19 @@ Stop boundary: adoption; wallet commands and venue drills for lit backings are l
 10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)): lit notes first (slice 14, Goal); offline, accumulator, Chaumian after release.
 11. **Agent-first surfaces** (AGENTS.md direction): every command, wallet and service answer serves agents managing backings and wallets and autonomous AIs (one JSON object and coded exits exist, M10b); check each new lit command against it.
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
-   Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is the second venue. Cheapest probe: count OP_RETURN outputs over
-   83 bytes by pool over 2,016 blocks (read-only), then a week's exhaustion read. Before release assurance; BTC/XMR as chain-asset terms.
+   Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probe: OP_RETURN outputs over 83 bytes by pool over 2,016
+   blocks (read-only), then a week's exhaustion read; before release assurance; BTC/XMR as chain-asset terms.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
   2026-10-06: run them (`experiments/ergo-range/nodes.mjs start|stop`) only while work uses them, allowing catch-up sync.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public `pool-v3-testnet-reader/`, `pool-v3-recovery-testnet-reader/` and `pool-v3-scope-testnet-reader/`
-  bundles, `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/`, `ergo-headers/` and `node24/` (Node 24.21.0, checksummed) under scratch.
+  bundles, `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/` and `ergo-headers/` under scratch. The PC's Node is 24.21.0 (installed 2026-10-06).
 - Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`, `node-startup/`, `sync-preparation/`;
   allocate no other. Archive node `C:\Users\Bob\ergo-node` (outside): synced, stopped, unused. Preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking (2026-10-06, approved; its UAC prompt went unanswered): as administrator run `msiexec /i scratch\node-install\node-v24.21.0-x64.msi`
-  (checksum and OpenJS signature verified) over the PC's 24.6.0, then delete `scratch/node-install/`; until then use `scratch/node24/`.
 
 Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: the commands ran live on the testnet and the design point
 holds to 10⁵; the lit profile's readers and adoption, release assurance, holder transport, qualified storage and mainnet remain.
