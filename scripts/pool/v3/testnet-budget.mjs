@@ -1,6 +1,7 @@
 // Explicit live-drill publication budget. This validator runs before the real
 // supplier's submit: it never connects to a node or reads a wallet. Each live
-// drill names its own transaction, total spend and fee caps.
+// drill names its own transaction, total spend and fee caps. --check also checks
+// the live drills' funding transfers (testnet.mjs) offline.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -89,5 +90,6 @@ export async function checkPublicationBudget() {
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === import.meta.filename) {
   assert.deepEqual(process.argv.slice(2), ["--check"], "testnet-budget supports only its offline --check");
-  process.stdout.write(JSON.stringify(await checkPublicationBudget()) + "\n");
+  const { checkPlainTransfer } = await import("./testnet.mjs");
+  process.stdout.write(JSON.stringify({ budget: await checkPublicationBudget(), transfer: await checkPlainTransfer() }) + "\n");
 }
