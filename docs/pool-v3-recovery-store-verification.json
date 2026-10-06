@@ -19,19 +19,19 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1289
+      "elapsedMs": 1341
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1013
+      "elapsedMs": 1008
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2614
+      "elapsedMs": 2617
     },
     {
       "name": "service demand settled",
@@ -43,31 +43,31 @@
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2609
+      "elapsedMs": 2639
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1409
+      "elapsedMs": 1410
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2596
+      "elapsedMs": 2584
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2599
+      "elapsedMs": 2592
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2596
+      "elapsedMs": 2588
     }
   ],
   "transactions": [],
@@ -77,13 +77,13 @@
     "position": "4",
     "adoptionIndex": "24",
     "spentRoot": "5f374bcb11033eb9d6497b5c89ab72fac42592b033d4e3ebe9804e5102bca7c0",
-    "history": "48adf567d66e3a1afb23ee2351f293780db47c9f5d1a9c9463bdc6e6f3257fc8",
+    "history": "5b8daff880f5a44ea3a40d4d6e49b0ff031e96587c2dc3616fa608da1c92ac7b",
     "canonicalIndex": "25",
     "force": [
       {
         "index": "21",
         "kind": 4,
-        "sha256": "2832f8140f36a45853c282885b69f138fc8f485ee6bed8be403c83f8348c413f"
+        "sha256": "3cf0cda0a57d3c1ad3638bcec939dfcc6649f786329448c38a55b627b825d3b3"
       },
       {
         "index": "22",
@@ -93,12 +93,12 @@
       {
         "index": "23",
         "kind": 4,
-        "sha256": "9a6402cd3ece868a00a261db6496fd8c05f1fd25b276bcc2048dff7286445f38"
+        "sha256": "8774f888ce8b422dec0938da5b6e3ab404fdc94a1a6363b4ab4593f43d107987"
       },
       {
         "index": "24",
         "kind": 6,
-        "sha256": "e7703f2bcdd9dacf2253181c2f9e9399c85f0564f837e8e6aed359eb901efccf"
+        "sha256": "806c0af1b799b23e3ff8a914e1a06a21d1860289016ba202f989b9c28a4137e2"
       }
     ],
     "clock": {
@@ -119,7 +119,7 @@
       "snapshotIndex": "24"
     }
   },
-  "elapsedMs": 34067,
+  "elapsedMs": 34059,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",

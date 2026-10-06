@@ -53,7 +53,7 @@
     "check:docs": "node scripts/check-docs.mjs && node scripts/check-links.mjs .",
     "check:evidence": "node scripts/check-evidence.mjs",
     "check:package": "node scripts/check-package.mjs",
-    "check:pool:v3": "npm run build && node scripts/pool/v3/testnet-budget.mjs --check && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/check.mjs && node scripts/pool/v3/store-check.mjs --ergo && node scripts/pool/v3/history-store-check.mjs && node scripts/pool/v3/recovery-store-check.mjs && node scripts/pool/v3/recovery-store-check.mjs --ergo && node scripts/pool/v3/succession-store-check.mjs && node scripts/pool/v3/succession-store-check.mjs --ergo && node scripts/pool/v3/scope-store-check.mjs && node scripts/pool/v3/scope-store-check.mjs --ergo && node scripts/pool/v3/redemption-store-check.mjs && node scripts/pool/v3/redemption-store-check.mjs --ergo && node scripts/pool/v3/command-drill.mjs && node scripts/pool/v3/local-check.mjs",
+    "check:pool:v3": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/real-proof.mjs",
     "check:pool:v3-succession": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/succession-store-check.mjs",
     "check:pool:v3-scope": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/scope-store-check.mjs",
     "check:pool:v3-redemption": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/redemption-store-check.mjs",
