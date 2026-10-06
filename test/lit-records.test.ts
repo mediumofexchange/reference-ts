@@ -8,6 +8,10 @@ import * as notes from "../src/lit/notes.js";
 import * as codec from "../src/lit/records.js";
 import * as frames from "../src/lit/commitments.js";
 import * as wallet from "../src/lit/wallet-keys.js";
+import * as fault from "../src/lit/fault-evidence.js";
+import * as terms from "../src/lit/terms.js";
+import * as transport from "../src/lit/transport.js";
+import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 
 // Independent byte oracle for lit-v1 §§2–5, 8, 9: Node Buffer and node:crypto
 // only, no ByteWriter or production helper. Domains, segments and keys are
@@ -448,6 +452,48 @@ describe("lit-v1 conformance vectors", () => {
   // Every vector comes from the oracle above; the codec must reproduce each byte. LIT_VECTORS=write rewrites the file.
   const path = new URL("./fixtures/lit-v1-vectors.json", import.meta.url);
   const seed = id(71);
+  const walletSecret = (info: string, ...message: Uint8Array[]): Buffer =>
+    createHmac("sha256", Buffer.from(hkdfSync("sha256", seed, DOMAIN, ascii(`moe/wallet/lit/v1/${info}`), 32))).update(join(...message)).digest();
+  const demandTags = demand.inputs.map(input => oTag(oNf(oCm(input))));
+  // §5's chains over a valid prefix: two issues, the two-input spend and the burn. The spent root is pool-spent's
+  // (the shared RadixSpentSet, vectored with pool-v3); every other byte is the oracle's.
+  const chainStatements: [codec.Statement, Uint8Array][] = [records[0]!, [issueB, sign(K, oStatement(issueB))], records[1]!, records[2]!];
+  const spentSet = new RadixSpentSet();
+  let history = hash(ascii("moe/lit/v1/genesis"), SEGMENT), evidence = hash(ascii("moe/lit/v1/evidence-seed"), SEGMENT);
+  const evidenceSeed = evidence;
+  const chainSteps = chainStatements.map(([s, authorization], i) => {
+    const statement = oStatement(s), position = BigInt(i + 1);
+    if (s.kind === 2 || s.kind === 3) for (const input of s.inputs) spentSet.insert(oNf(oCm(input)));
+    const statementHash = hash(statement), signatureHash = hash(authorization), spentRoot = Buffer.from(spentSet.root());
+    history = hash(ascii("moe/lit/v1/history"), history, statementHash, spentRoot, u64(position));
+    evidence = hash(ascii("moe/lit/v1/evidence-link"), evidence, statementHash, signatureHash, u64(position));
+    return { record: oRecord(statement, authorization), statement, authorization, statementHash, signatureHash, spentRoot, history, evidence };
+  });
+  const tip = chainSteps[3]!;
+  const chainSnapshot = join(ascii("moe/lit/v1/snapshot"), BACKING, SEGMENT, tip.history, tip.evidence, u64(100n), u64(15n));
+  const receiptMessage = join(ascii("moe/lit/v1/receipt"), DOMAIN, SEGMENT, u64(3n), chainSteps[2]!.statementHash,
+    chainSteps[2]!.history, chainSteps[2]!.signatureHash, u64(5n));
+  const receiptRecord = join(receiptMessage, keyOf(OPERATOR), sign(OPERATOR, receiptMessage));
+  // §6: pool-v3 §8's header under the lit context, one entry an opening import.
+  const headerBytes = join(ascii("moe/lit/v1/segment"), DOMAIN, id(3), keyOf(OPERATOR), u64(4n), u32(2),
+    BACKING, id(11), Buffer.alloc(72), BACKING_2, id(13), u64(9n), keyOf(12), id(14));
+  // §9: the MOEB version-1 frame with every clause, tag 6 the silence duration.
+  const termsBytes = join(ascii("MOEB"), u8(1), u8(1), keyOf(K), u8(1), u32(12), ascii("gram of gold"), u8(0xfd),
+    u32(1), u8(5), u32(0), u8(5), keyOf(OPERATOR), u32(5),
+    u8(2), id(3), u64(60n), u8(3), keyOf(4), u8(4), u64(30n), u32(3), u64(90n),
+    u8(5), u32(10), ascii("moe/lit/v1"), DOMAIN, u8(6), u64(720n));
+  const termsSignature = sign(K, join(ascii("moe/backing-signature/v1"), hash(termsBytes)));
+  const trailBytes = join(ascii("moe/lit/v1/trail"), u32(headerBytes.length), headerBytes,
+    u32(termsBytes.length), termsBytes, termsSignature, u32(termsBytes.length), termsBytes, termsSignature,
+    u64(4n), ...chainSteps.flatMap(s => [u32(s.record.length), s.record]));
+  // §6: the spend at position 3 of 4, against the chain's snapshot.
+  const faultBytes = join(ascii("moe/lit/v1/fault-evidence"), chainSnapshot, u64(3n), u64(4n), chainSteps[1]!.evidence,
+    u32(chainSteps[2]!.statement.length), chainSteps[2]!.statement, u32(chainSteps[2]!.authorization.length), chainSteps[2]!.authorization,
+    tip.statementHash, tip.signatureHash);
+  const packageItems: [number, Uint8Array][] = [[1, join(ascii("moe/lit/v1/config"), u8(2), u8(4))], [4, chainSnapshot], [6, trailBytes],
+    [7, faultBytes], [10, receiptRecord]];
+  const packageBytes = join(ascii("moe/lit/v1/package"), u32(packageItems.length), ...packageItems.flatMap(([kind, payload]) =>
+    [u8(kind), u64(BigInt(payload.length)), payload]));
   const vectors = {
     specification: "money-from-first-principles lit-v1.md at 1bf5bfc (draft until adopted)",
     configHash: hex(DOMAIN),
@@ -468,7 +514,19 @@ describe("lit-v1 conformance vectors", () => {
       hex(oPublication(BACKING, 4, oRecord(oStatement(withdraw), records[4]![1]))),
       hex(oPublication(BACKING, 5, oRecord(oStatement(request), ownerSigs(request)))),
     ],
-    wallet: { seed: hex(seed), owner0: hex(hmac(seed)) },
+    wallet: { seed: hex(seed), owner0: hex(hmac(seed)), acceptSecret: hex(walletSecret("settlement", demandHash, u64(ACCEPTANCE_DEADLINE))),
+      presentSecret2: hex(walletSecret("presenter", ...demandTags, u64(1000n), u64(2000n))),
+      presentSecret1: hex(walletSecret("presenter", demandTags[0]!, Buffer.alloc(32), u64(1000n), u64(2000n))) },
+    acceptance: { bytes: hex(acceptance), id: hex(hash(acceptance)), release: hex(release) },
+    chain: { segment: hex(SEGMENT), steps: chainSteps.map(s => ({ record: hex(s.record), statementHash: hex(s.statementHash),
+      signatureHash: hex(s.signatureHash), spentRoot: hex(s.spentRoot), history: hex(s.history), evidence: hex(s.evidence) })) },
+    snapshot: hex(chainSnapshot),
+    receipt: { message: hex(receiptMessage), record: hex(receiptRecord) },
+    header: { bytes: hex(headerBytes), identity: hex(hash(headerBytes)) },
+    terms: { bytes: hex(termsBytes), name: hex(hash(termsBytes)), signature: hex(termsSignature) },
+    trail: hex(trailBytes),
+    faultEvidence: hex(faultBytes),
+    package: hex(packageBytes),
   };
   function settled(s: codec.Settle): notes.Opening[] {
     const d = records.map(([statement]) => statement).find(t => t.kind === 4 && hex(hash(oStatement(t))) === hex(s.demand)) as codec.Demand;
@@ -497,5 +555,60 @@ describe("lit-v1 conformance vectors", () => {
     }
     for (const p of vectors.publications) expect(hex(codec.encodePublication(codec.decodePublication(Buffer.from(p, "hex"))))).toBe(p);
     expect(hex(wallet.ownerSecret(seed, DOMAIN, 0n))).toBe(vectors.wallet.owner0);
+    expect(hex(wallet.acceptSecret(seed, DOMAIN, demandHash, ACCEPTANCE_DEADLINE))).toBe(vectors.wallet.acceptSecret);
+    expect(hex(wallet.presentSecret(seed, DOMAIN, demandTags, 1000n, 2000n))).toBe(vectors.wallet.presentSecret2);
+    expect(hex(wallet.presentSecret(seed, DOMAIN, [demandTags[0]!], 1000n, 2000n))).toBe(vectors.wallet.presentSecret1);
+    const accepted = { domain: DOMAIN, demand: demandHash, owner: settle.owner, deadline: ACCEPTANCE_DEADLINE };
+    expect(hex(codec.acceptanceBytes(accepted))).toBe(vectors.acceptance.bytes);
+    expect(hex(codec.acceptanceId(accepted))).toBe(vectors.acceptance.id);
+    expect(hex(codec.releaseBytes(DOMAIN, demandHash, codec.acceptanceId(accepted), codec.statementHash(settle)))).toBe(vectors.acceptance.release);
+
+    // §5: each step from the record's split fields and the previous step, then the snapshot and receipt over the chain.
+    let h = frames.genesisHistoryHash(SEGMENT), e = frames.genesisEvidenceHash(SEGMENT);
+    expect(hex(e)).toBe(hex(evidenceSeed));
+    vectors.chain.steps.forEach((step, i) => {
+      const fields = codec.splitRecord(Buffer.from(step.record, "hex")), pair = codec.hashEvidenceFields(fields.statement, fields.authorization);
+      expect([hex(pair.statementHash), hex(pair.signatureHash)]).toEqual([step.statementHash, step.signatureHash]);
+      h = frames.nextHistoryHash(h, pair.statementHash, Buffer.from(step.spentRoot, "hex"), BigInt(i + 1));
+      e = frames.nextEvidenceHash(e, pair, BigInt(i + 1));
+      expect([hex(h), hex(e)]).toEqual([step.history, step.evidence]);
+    });
+    const snapshot = { backing: BACKING, segment: SEGMENT, historyHash: h, evidenceHash: e, issued: 100n, burned: 15n };
+    expect(hex(frames.snapshotBytes(snapshot))).toBe(vectors.snapshot);
+    const at3 = vectors.chain.steps[2]!, hexBytes = (s: string): Buffer => Buffer.from(s, "hex");
+    const receiptFields = { domain: DOMAIN, segment: SEGMENT, position: 3n, statementHash: hexBytes(at3.statementHash),
+      historyHash: hexBytes(at3.history), signatureHash: hexBytes(at3.signatureHash), after: 5n };
+    expect(hex(frames.receiptBytes(receiptFields))).toBe(vectors.receipt.message);
+    const receipt = frames.decodeReceipt(hexBytes(vectors.receipt.record));
+    expect(hex(frames.encodeReceipt(receipt))).toBe(vectors.receipt.record);
+    expect(frames.verifyReceipt({ domain: DOMAIN, segment: SEGMENT, operator: keyOf(OPERATOR) }, receipt)).toBe(true);
+
+    // §§6, 9: the header, terms, trail, fault evidence and package, encoded from their fields.
+    const header = { domain: DOMAIN, venue: id(3), operator: keyOf(OPERATOR), sequence: 4n, entries: [{ backing: BACKING, link: id(11) },
+      { backing: BACKING_2, link: id(13), opening: { operator: keyOf(12), sequence: 9n, root: id(14) } }] };
+    expect(hex(transport.litSegmentBytes(header))).toBe(vectors.header.bytes);
+    expect(hex(transport.litSegmentIdentity(header))).toBe(vectors.header.identity);
+    const termsFields: terms.LitRootTerms = { obligor: keyOf(K), payout: { thing: "gram of gold", quantumExponent: -3, perUnit: 5n },
+      operator: keyOf(OPERATOR), configuration: DOMAIN, venue: id(3), interval: 60n, silence: { noCommitmentDuration: 720n },
+      replacementRule: keyOf(4), nonService: { duration: 30n, count: 3n, window: 90n } };
+    const termsOut = terms.encodeLitTerms(termsFields);
+    expect(hex(termsOut)).toBe(vectors.terms.bytes);
+    expect(hex(terms.litTermsName(termsOut))).toBe(vectors.terms.name);
+    expect(terms.verifyLitTermsSignature(termsOut, hexBytes(vectors.terms.signature))).toBe(true);
+    const signedTerms = { terms: termsOut, signature: hexBytes(vectors.terms.signature) };
+    const trail = { header: transport.litSegmentBytes(header), terms: [signedTerms, signedTerms],
+      records: vectors.chain.steps.map(step => hexBytes(step.record)) };
+    expect(hex(transport.encodeLitTrail(trail))).toBe(vectors.trail);
+    expect(hex(transport.encodeLitTrail(transport.decodeLitTrail(hexBytes(vectors.trail))))).toBe(vectors.trail);
+    const target = codec.splitRecord(hexBytes(at3.record)), last = vectors.chain.steps[3]!;
+    const faultEvidence = { snapshot, position: 3n, length: 4n, previous: hexBytes(vectors.chain.steps[1]!.evidence), ...target,
+      suffix: [{ statementHash: hexBytes(last.statementHash), signatureHash: hexBytes(last.signatureHash) }] };
+    expect(hex(fault.encodeFaultEvidence(faultEvidence, 8n))).toBe(vectors.faultEvidence);
+    expect(fault.verifyFaultEvidence({ backing: BACKING, segment: SEGMENT, digest: frames.snapshotDigest(snapshot) },
+      fault.decodeFaultEvidence(hexBytes(vectors.faultEvidence), 8n), 8n)).toBe(true);
+    const items = [{ kind: 1, payload: config.litConfigurationBytes() }, { kind: 4, payload: frames.snapshotBytes(snapshot) },
+      { kind: 6, payload: hexBytes(vectors.trail) }, { kind: 7, payload: hexBytes(vectors.faultEvidence) }, { kind: 10, payload: hexBytes(vectors.receipt.record) }];
+    expect(hex(transport.encodeLitPackage(items))).toBe(vectors.package);
+    expect(transport.decodeLitPackage(hexBytes(vectors.package)).map(item => item.kind)).toEqual([1, 4, 6, 7, 10]);
   });
 });
