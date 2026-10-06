@@ -1502,13 +1502,6 @@ export class V3Wallet {
       this.db.prepare("INSERT INTO saved_records VALUES(?,?,?,?,?,?,?,?,NULL,'prepared',NULL,NULL,NULL,?,?)").run(name, String(kind), intent,
         statement, bytes, backing, operator, demand ?? null, at.toString(), repeats === undefined || repeats.length === 0 ? null : JSON.stringify(repeats));
       for (const nf of inputs) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(nf.toString(), name);
-      // A lit burn's change, as a lit payment's outputs: the window move reads which keys saved records pay. Not an issue's:
-      // one made again under a new alias after its segment ended has the same output by design.
-      if (this.keyed !== undefined && kind === 3) {
-        for (const { cm, opening: o } of this.keyed.outputs(this.domain, bytes)) {
-          this.db.prepare("INSERT INTO saved_outputs VALUES(?,?,?,?,?)").run(cm.toString(), name, o.value.toString(), hex(o.owner), hex(o.rho));
-        }
-      }
     });
     return this.act(name)!;
   }
@@ -2283,8 +2276,11 @@ export class V3Wallet {
       requireThat(own.deadline <= demand.deadline, "INVALID", "the acceptance is due after the demand");
       requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
       const { header } = this.route(view);
-      // The presenter key of any demand this seed presents over its unspent notes, this one's included.
-      const presenters = notes.flatMap(note => [...force!.demandsWithTag(note.tag)].map(([, d]) => d)).filter(d => this.presents(d));
+      // The presenter key of any demand this seed presents over its unspent notes, this one's included, and of every demand
+      // saved here (another backing's, or one that never stood, public all the same).
+      const presenters = [...notes.flatMap(note => [...force!.demandsWithTag(note.tag)].map(([, d]) => d)).filter(d => this.presents(d)),
+        ...this.db.prepare("SELECT record FROM saved_records WHERE kind='4'").all()
+          .map(row => this.construction.view(this.construction.decode(row.record as Uint8Array), () => undefined).demand!.value)];
       requireThat(this.keys!.find(own.owner) === undefined && !presenters.some(d => same(own.owner, d.presenter)) &&
         !same(own.owner, demand.presenter), "OWN_KEY", "the acceptance's owner is a key of this wallet: withdraw the demand instead");
       const nfs = demand.nullifiers ?? [];
@@ -2347,9 +2343,13 @@ export class V3Wallet {
       // §8 moves a full window only: one whose next index `allocate` refuses.
       requireThat(target + 1n > keys.high + this.keyed!.lookAhead, "CONFLICT", "the window is not full: requests still take new keys");
       requireThat(target === keys.high + this.keyed!.lookAhead, "WINDOW", "the highest exposed owner key lies past the window");
-      // One move per window: a saved record not failed that already pays `target`'s key moves it once final.
+      // One move per window: a saved payment, or a burn's change, not failed that already pays `target`'s key moves it once
+      // final. A burn keeps no output rows: one remade after its segment ended may derive a later move's output exactly.
+      const targetKey = hex(this.keys!.key(backing, target));
       requireThat(this.db.prepare(`SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE o.owner=? AND r.status!='failed'`)
-        .get(hex(this.keys!.key(backing, target))) === undefined, "CONFLICT", "a saved record already pays the highest exposed key: sync once it is final");
+        .get(targetKey) === undefined && this.db.prepare("SELECT record FROM saved_records WHERE kind='3' AND status!='failed' AND backing=?").all(backing)
+        .every(row => this.keyed!.outputs(this.domain, row.record as Uint8Array).every(o => hex(o.opening.owner) !== targetKey)),
+        "CONFLICT", "a saved record already pays the highest exposed key: sync once it is final");
       const holdings = this.holdingsOf(notes, force, at), price = paid?.value ?? 0n;
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
       requireThat(isValue(price + 1n), "INVALID", "invalid payment order");

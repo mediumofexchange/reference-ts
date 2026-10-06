@@ -449,6 +449,22 @@ describe("the one wallet holding lit notes", () => {
     expect([backer.act("i1")!.status, backer.act("i2")!.status]).toEqual(["failed", "final"]);
     expect((await holder.keyedFulfill("fund", await f.served(), f.signed)).request).toEqual(fund);
   });
+
+  it("moves the window over a burn whose segment ended, whose change derived the move's output, without poisoning the handle", async () => {
+    const f = await fixture(), holder = f.open("holder"), operator = f.open("operator");
+    await f.issue(holder.keyedRequest("fund", f.backing, 10n)); await f.issue(holder.keyedRequest("fund2", f.backing, 5n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    for (let i = 2; i <= 256; i++) holder.keyedRequest(`r${i}`, f.backing, 1n);
+    // The burn's change of 2 takes index 256 = h + 256; its segment then ends, and the burn fails with its note free.
+    await holder.burn("b", 3n, await f.served(), f.signed);
+    await f.j.rescope("again", { keep: [f.backing] }); await f.j.publish(); await f.j.adopt();
+    await holder.sync(await f.served(), f.signed);
+    expect(holder.act("b")).toMatchObject({ status: "failed" });
+    // A move of that note with a fee of 3 derives exactly the failed burn's change (§2: output 0 over the same nullifier).
+    const move = await holder.moveWindow("move", await f.served(), f.signed, { request: operator.keyedRequest("fee", f.backing, 3n), value: 3n });
+    expect(move).toMatchObject({ status: "prepared", value: 2n, fee: { value: 3n } });
+    expect(values(await holder.sync(await f.served(), f.signed)).sort((p, q) => (p[0]! < q[0]! ? -1 : 1))).toEqual([[5n, "reserved"], [10n, "available"]]);
+  });
 });
 
 describe("lit-v1 §8's reach and the scan window", () => {
