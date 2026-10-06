@@ -9,7 +9,7 @@ Acceptance: lit trails replay through the shared seams with lit-v1's verdicts, h
 an operator journal and a wallet run lit backings through the `moe` commands (direction item 1); then a decision adopts `moe/lit/v1`.
 Stop: adoption, which moved after the journal and wallet ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4).
 - **Done:** M14a–b bytes and frames (spec `1bf5bfc`), M14c the one state machine (PR #116), M14d the one reader (PR #120). **M14e ready to merge** (PR #122 green at `4e95939`, spec PR #15 `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)): conformance findings closed, residuals recorded.
-- **M14f (branch `claude/m14f-lit-journal`, PR stacked on #122): the one operator journal serves a lit scope** ([decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)); stop: merge after #122.
+- **M14f ready to merge** (PR #123 on #122's branch, green at `6032153`, run 37514975539, whose artifact re-recorded the 12 reports; reviewed and read back): the one operator journal serves a lit scope ([decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)); unit suite 1272.
 - **Next:** M14g the lit wallet (§8 keys, scan, request, pay), the HTTP service's wire and client per construction, and `moe` dispatch on
   the terms' construction; M14h adoption (lit-v1 §1 by a decision, C0a; README/rows/docs, `contexts.ts`, pin, vectors, reports).
 
