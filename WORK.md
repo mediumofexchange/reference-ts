@@ -5,23 +5,13 @@ Updated: 2026-10-06
 ## Goal
 **Slice 14: the lit implementation** (Next 10; numbered after 13 but before it; spec `lit-v1.md`, a draft until adopted;
 [layouts decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)).
-Acceptance: the reference replays a lit trail through the shared seams (records, `state.ts`'s validity seam, frames, reader) with
-lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; an operator journal and a wallet run lit
-backings through the `moe` commands (direction item 1); then a decision adopts `moe/lit/v1`. Stop: adoption. Adoption moved after the
-journal and wallet (2026-10-06): as pool-v3's came last, once nothing left could move a byte, since §8's keys, requests and payments and
-the journal's admission of lit records are not yet exercised by any party, and no backing can use lit before a release anyway.
-- **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors; §6 frames over pool-v3's codecs.
-- **M14c done** (PR #116, [decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)): `state.ts` judges lit records in every mode through a construction view; `test/lit-state.test.ts` against an oracle.
-- **M14d done** (PR #120, [decision](decisions/2026-10.md#2026-10-06--read-lit-packages-through-the-one-package-reader-and-walk-the-construction-a-read-option-slice-14-m14d)): lit packages read through the one walk; kept lit outputs rebuilt (§10).
-- **M14e ready to merge** (PR #122 green at `25d3aab`, spec PR #15 `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)): B1, M1, M2, tests 2–4 reviewed;
-  residuals in the decision.
-- **M14f in progress (branch `claude/m14f-lit-journal`, stacked on PR #122): the lit operator journal.** `store.ts` takes the construction
-  as an option (pool-v3's by default) and reads every construction frame through it (domain, terms, header, snapshot, receipt, package,
-  configuration, records; no verifier for lit). Acceptance: a lit journal opens a scope, admits lit issue/spend/burn/demand/withdraw/settle
-  records with signed lit receipts and exact replay, refuses a pool record and a forged signature by check, commits, publishes, serves a
-  package the lit reader reads to the same totals, reopens, rescopes/returns, and audits; pool-v3 journal tests unchanged. Stop: merge.
-- Next: M14g the lit wallet (§8 keys, scan, request, pay) and `moe` dispatch on the terms' construction; M14h adoption (lit-v1 §1 →
-  adopted by a decision, C0a; README/rows/docs, `contexts.ts`, pin, vectors, reports).
+Acceptance: lit trails replay through the shared seams with lit-v1's verdicts, hostile cases included, and vectors bind every layout;
+an operator journal and a wallet run lit backings through the `moe` commands (direction item 1); then a decision adopts `moe/lit/v1`.
+Stop: adoption, which moved after the journal and wallet ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4).
+- **Done:** M14a–b bytes and frames (spec `1bf5bfc`), M14c the one state machine (PR #116), M14d the one reader (PR #120). **M14e ready to merge** (PR #122 green at `4e95939`, spec PR #15 `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)): conformance findings closed, residuals recorded.
+- **M14f (branch `claude/m14f-lit-journal`, PR stacked on #122): the one operator journal serves a lit scope** ([decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)); stop: merge after #122.
+- **Next:** M14g the lit wallet (§8 keys, scan, request, pay), the HTTP service's wire and client per construction, and `moe` dispatch on
+  the terms' construction; M14h adoption (lit-v1 §1 by a decision, C0a; README/rows/docs, `contexts.ts`, pin, vectors, reports).
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
@@ -103,8 +93,8 @@ the journal's admission of lit records are not yet exercised by any party, and n
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
+- 2026-10-06: cloud runs cannot merge (the permission classifier refuses "merge without review"): review and merge spec PR #15, then
+  PR #122, then M14f's PR (based on #122's branch; GitHub retargets it to main once #122 merges and its branch is deleted).
 
-- 2026-10-06: cloud runs cannot merge (the permission classifier refuses "merge without review"): review and merge spec PR #15, then PR #122.
-
-Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: lit packages read through the one walk and pass conformance (M14e);
-lit adoption, release assurance, holder transport, qualified storage and mainnet remain.
+Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: lit packages pass conformance (M14e) and a lit scope is served
+by the one journal (M14f); the lit wallet and commands, lit adoption, release assurance, holder transport, qualified storage and mainnet remain.
