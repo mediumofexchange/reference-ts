@@ -10,8 +10,7 @@ journal and a wallet run lit backings through the `moe` commands (direction item
 - **Done:** M14a–b bytes and frames (spec `1bf5bfc`), M14c the one state machine (PR #116), M14d the one reader (PR #120). **M14e ready to merge** (PR #122 green at `4e95939`, spec PR #15 `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)): conformance findings closed, residuals recorded.
 - **M14f ready to merge** (PR #123 on #122's branch, green at `6032153`, run 37514975539, whose artifact re-recorded the 12 reports; reviewed and read back): the one operator journal serves a lit scope ([decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)); unit suite 1272.
 - **M14g1** (PR #125 on #123's branch, green at `f583308`, run 37540982373, whose artifact re-recorded the 12 reports; spec `claude/lit-v1-backing-keys` on #15, §8 keys per backing; [decision](decisions/2026-10.md#2026-10-06--hold-lit-notes-in-the-one-wallet-with-owner-keys-per-backing-found-under-a-doubling-window-slice-14-m14g); reviews taken): the one wallet holds lit notes via `Construction.wallet` (`keyedRequest`, doubling-window scan, owner-signed `prepare`/`reprove`, `keyedFulfill` once).
-- **Next:** M14g2 acts (issue with K's kept nonce, demand, accept refusing an own key, settle, withdraw, burn, freshen, publish) and the window move;
-  M14g3 service wire/client per construction; M14g4 `moe` dispatch on the terms' construction; M14h adoption (decision, C0a; docs, pin, vectors, reports).
+- **M14g2** (PR #126 on #125's branch, [decision](decisions/2026-10.md#2026-10-06--take-lits-acts-and-8s-window-move-in-the-one-wallet-presented-notes-spending-as-any-other-slice-14-m14g2); design and patch reviews taken): issue (seed-derived nonce), burn, demand, `keyedAccept`, settle (`OWN_KEY`), withdraw, publish, `moveWindow` (`CLOSED`); no lit freshen. Next: M14g3 service wire/client per construction; M14g4 `moe` dispatch; M14h adoption (C0a; docs, pin, vectors, reports).
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
@@ -51,7 +50,7 @@ journal and a wallet run lit backings through the `moe` commands (direction item
    output awaiting adoption is not reported at all (only never as spendable). Review 2026-10-06: (aa) the testnet drill sweeps funding keys
    in-process only (no signal handler or `--sweep <dir>`; boxes above the indexed height read as dust); (ab) no command prints a saved
    acceptance's absolute deadline for an exact `accept --deadline +n` retry; (ac) `keepContext`'s throwaway views keep `:memory:` journals
-   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error). M14g1 review: (al) a keyed scan's identity names every held backing's window (one replay of every held scope per new backing or grown window; old namespaces kept).
+   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error). M14g1 review: (al) a keyed scan's identity names every held backing's window (one replay of every held scope per new backing or grown window; old namespaces kept). M14g2: (am) lit-v1 §7 question: read an acceptance naming the demand's presenter or an input owner key as no answer under C3.8 (K escapes dishonour otherwise); (an) no lit gap-route act or `presentation` yet; a remade lit burn takes a new change index.
 5. Slice 11 leftovers. Measure `moe operator serve` as its own process at 10⁵ (the depth probe's process, which also held the synthetic
    node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
    if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
@@ -93,8 +92,8 @@ journal and a wallet run lit backings through the `moe` commands (direction item
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- 2026-10-06: cloud runs cannot merge (the permission classifier refuses "merge without review"): review and merge spec PR #15, then
-  PR #122, then #123, then the audit's #124 (doc/report conflicts expected), then spec `claude/lit-v1-backing-keys` and M14g1's PR (stacked).
+- 2026-10-06, maintainer's direction: runs put changes up for review as PRs and the maintainer merges. Up for review, in order: spec #15,
+  #122, #123, audit #124 (doc/report conflicts expected), spec #16, #125, #126 (each stacked on the one before).
 
 Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: lit packages pass conformance (M14e) and a lit scope is served
 by the one journal (M14f); the lit wallet and commands, lit adoption, release assurance, holder transport, qualified storage and mainnet remain.
