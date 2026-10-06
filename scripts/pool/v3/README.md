@@ -72,11 +72,11 @@ sections must remain unresolved. Successful runs retain
 `node scratch/pool-v3-testnet-reader/replay.mjs`. The bundle holds no wallet key,
 holder seed, witness or journal; it includes the public bytecode required by
 the reader's six artifact/key identity checks. The retained [live report](../../../docs/pool-v3-testnet-verification.json)
-records transaction acceptance at `acc1ab7`. Run
-`node scripts/pool/v3/testnet-reader-check.mjs` to check the completed bundle
-without transactions; its [readback report](../../../docs/pool-v3-testnet-reader-verification.json)
-binds the sources and bundle hashes of its revision (`2fd0f08`); later runtime changes retired some of those
-sources, so it is historical until a run on the machine holding the bundle re-records it. Current work belongs in WORK.md.
+records transaction acceptance at `acc1ab7`. `testnet-reader-check.mjs` checked the completed bundle without
+transactions; it and its [readback report](https://github.com/mediumofexchange/reference-ts/blob/2fd0f08/docs/pool-v3-testnet-reader-verification.json)
+are historical at `2fd0f08` and retired ([M10d](../../../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)):
+the live command drill (`command-drill.mjs --testnet --authorized-testnet`) is the current live evidence. Current
+work belongs in WORK.md.
 
 The local replay command additionally checks, against the runtime manifest
 (`manifest.mjs`, pool-v3 §§11.1, 11.4), all six source/toolchain/bytecode/key

@@ -223,7 +223,8 @@ The explicit `store-check.mjs --testnet` path uses the reference testnet identit
 and a fresh reader fetching its own headers/sections. The [live journal report](pool-v3-testnet-verification.json)
 records successful public supply verification and hostile refusals; the header rules have a separate
 [historical own-node check at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-testnet-header-verification.json).
-The corrected retained public bundle has a separate [standalone readback](pool-v3-testnet-reader-verification.json).
+The corrected retained public bundle had a separate [standalone readback](https://github.com/mediumofexchange/reference-ts/blob/2fd0f08/docs/pool-v3-testnet-reader-verification.json),
+historical and retired with M10d.
 Those live observations describe slice 2 at
 [`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c); their
 source bindings are historical after the recovery changes.

@@ -1,0 +1,1854 @@
+{
+  "status": "passed",
+  "specification": "e7f7f24",
+  "evidence": "live-testnet-commands-real-proofs",
+  "live": {
+    "endpoint": "http://127.0.0.1:9052",
+    "venue": "21b42b2513718920e68a9333f22c87dcb78c5351d45f632a3bb35e1b40353a64",
+    "context": "moe/venue/ergo-testnet/reference",
+    "anchorHeight": "583356",
+    "depth": "2",
+    "silence": "30",
+    "tipHeight": "583563",
+    "funding": [
+      {
+        "to": "0008cd0310d44bd3ef4c58a60bfbe49031ce38616b585cd349fed802cf785a179dcfc01b",
+        "id": "05fc64dfa6cdb2d81aef695c563743c4195ab2e4851ca5a61e8069652e3f0cc7",
+        "spentNanoErg": "1001100000"
+      },
+      {
+        "to": "0008cd03d4e2fbf91ce58c4ee25b3e42243bab7b57070e39e09213ca0276b783e72f5988",
+        "id": "3c1d5f61dcd12e8ebcdf87f7ae8d740f9d64edae72865e607ef5bfda685b31a2",
+        "spentNanoErg": "1001100000"
+      },
+      {
+        "to": "0008cd02adf8789828c97fad89f1be65b8e6dde276c7c476e9bef01a6c777392abb8cb2b",
+        "id": "8c9940f04cb461de2e9edb99b261ec737b8f755811b6a2337aad82eea85e1a97",
+        "spentNanoErg": "1001100000"
+      },
+      {
+        "to": "0008cd03c61726c0e825927245da209b367479a1517a96c162d986140be3363d2c8d513a",
+        "id": "37b19800f08631db71c23a86e6fbe906b2a67f6314dac63694faf6a29e0e1d39",
+        "spentNanoErg": "1001100000"
+      }
+    ],
+    "fundingDirectories": [
+      {
+        "directory": "operator",
+        "reservedNanoErg": "3570000",
+        "sweeps": [
+          {
+            "id": "ceef3e3ee631ac25631e96041abc15204bef19f26c6151877f71c83a7245b9db",
+            "spentNanoErg": "996430000"
+          }
+        ]
+      },
+      {
+        "directory": "operator-2",
+        "reservedNanoErg": "0",
+        "sweeps": [
+          {
+            "id": "18327d70d94fc72131d6bbd76ca973c2b901e1928e86a6187edcec239f1f0f10",
+            "spentNanoErg": "1000000000"
+          }
+        ]
+      },
+      {
+        "directory": "operator-wallets",
+        "reservedNanoErg": "15470000",
+        "sweeps": [
+          {
+            "id": "c3672716a11d6455e78793808be7a4a1503c5319ec266f6092c27a28da45db63",
+            "spentNanoErg": "984530000"
+          }
+        ]
+      },
+      {
+        "directory": "relay",
+        "reservedNanoErg": "14868960",
+        "sweeps": [
+          {
+            "id": "4a1d78c12cea209290e39633e53ef82d803be6ae623b9178f4ed4f0b6c9eb7a9",
+            "spentNanoErg": "985131040"
+          }
+        ]
+      }
+    ]
+  },
+  "package": {
+    "tarballBytes": 693149,
+    "files": 336,
+    "consumerLockSha256": "cc08c92501cda46c78bc3b91f18702ca7a3ebff7dae73775b095a439818f80b1"
+  },
+  "checks": [
+    "operator init, funding, venue create (rerun prints the same file, refuses other flags)",
+    "operator open under terms a fixture obligor signed, published and witnessed",
+    "reader init with the operator's venue file, terms add (the synthetic chain only with --synthetic), terms show",
+    "operator serve listens, publishes and keeps the checkpoint alive within silence less the lag; a second command refuses BUSY",
+    "with the service stopped, a reader reads the package file on one verifier instance",
+    "past the terms' silence the operator returns and adopts, then serves again",
+    "a backer's wallet creates terms naming the operator; the operator opens them; holders keep them",
+    "issue, payment and fulfillment through wallet commands; serve commits on admission; fulfill is never replayed",
+    "demand, the backer's acceptance relayed, settlement and burn through wallet commands, final by sync and the reader",
+    "a withdrawn demand's notes are presented: payment refuses them, freshen moves them to one fresh note",
+    "restore-seed finds the holdings from the seed alone; a handoff freezes its source and restores once",
+    "2 real-proof issues to the holder's seed, synced by the holder and the reader; the reader's next process rests on its kept replay file, and one whose file fails its digest replays in full to the same answer",
+    "with the operator offline past silence, a demand and its settlement are published through the relay and read final by force; the operator returns and adopts, and the payment the silence lapsed is proved again and final",
+    "an interrupted venue create anchors again over a stale context; a publication past the spend budget refuses BUDGET",
+    "hostile directories: shared modes, another role, an interrupted init, an existing directory",
+    "SQLite's temporary files stay in the directory (Linux)",
+    "from the packed install, no process that proves nothing loads a @noir-lang module; proving ones do"
+  ],
+  "readerReplay": {
+    "position": "10",
+    "keptMs": 5778,
+    "fullMs": 7421
+  },
+  "processes": [
+    {
+      "command": "operator init",
+      "status": 0,
+      "elapsedMs": 8409,
+      "maxRssKb": 83116,
+      "noir": false
+    },
+    {
+      "command": "operator venue",
+      "status": 1,
+      "elapsedMs": 1012,
+      "maxRssKb": 83028,
+      "noir": false
+    },
+    {
+      "command": "operator venue",
+      "status": 0,
+      "elapsedMs": 2654,
+      "maxRssKb": 110400,
+      "noir": false
+    },
+    {
+      "command": "operator venue",
+      "status": 0,
+      "elapsedMs": 929,
+      "maxRssKb": 82584,
+      "noir": false
+    },
+    {
+      "command": "operator venue",
+      "status": 1,
+      "elapsedMs": 994,
+      "maxRssKb": 83628,
+      "noir": false
+    },
+    {
+      "command": "operator venue",
+      "status": 1,
+      "elapsedMs": 1012,
+      "maxRssKb": 83920,
+      "noir": false
+    },
+    {
+      "command": "operator open",
+      "status": 1,
+      "elapsedMs": 1158,
+      "maxRssKb": 85756,
+      "noir": false
+    },
+    {
+      "command": "operator open",
+      "status": 1,
+      "elapsedMs": 908,
+      "maxRssKb": 85592,
+      "noir": false
+    },
+    {
+      "command": "operator open",
+      "status": 0,
+      "elapsedMs": 7641,
+      "maxRssKb": 241268,
+      "noir": false
+    },
+    {
+      "command": "operator open",
+      "status": 0,
+      "elapsedMs": 7560,
+      "maxRssKb": 248884,
+      "noir": false
+    },
+    {
+      "command": "reader init",
+      "status": 0,
+      "elapsedMs": 2100,
+      "maxRssKb": 114380,
+      "noir": false
+    },
+    {
+      "command": "reader terms",
+      "status": 1,
+      "elapsedMs": 1039,
+      "maxRssKb": 80964,
+      "noir": false
+    },
+    {
+      "command": "reader terms",
+      "status": 1,
+      "elapsedMs": 988,
+      "maxRssKb": 81528,
+      "noir": false
+    },
+    {
+      "command": "reader terms",
+      "status": 0,
+      "elapsedMs": 931,
+      "maxRssKb": 81244,
+      "noir": false
+    },
+    {
+      "command": "reader terms",
+      "status": 0,
+      "elapsedMs": 1166,
+      "maxRssKb": 81488,
+      "noir": false
+    },
+    {
+      "command": "operator open",
+      "status": 1,
+      "elapsedMs": 1451,
+      "maxRssKb": 85244,
+      "noir": false
+    },
+    {
+      "command": "reader service",
+      "status": 0,
+      "elapsedMs": 1351,
+      "maxRssKb": 81328,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 9491,
+      "maxRssKb": 237092,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 6331,
+      "maxRssKb": 257272,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 6024,
+      "maxRssKb": 267560,
+      "noir": false
+    },
+    {
+      "command": "reader presentation",
+      "status": 1,
+      "elapsedMs": 5629,
+      "maxRssKb": 258640,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 6013,
+      "maxRssKb": 267308,
+      "noir": false
+    },
+    {
+      "command": "operator serve (running)",
+      "status": null,
+      "elapsedMs": 855103,
+      "maxRssKb": null,
+      "noir": null
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 5732,
+      "maxRssKb": 255936,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 2,
+      "elapsedMs": 1556,
+      "maxRssKb": 119948,
+      "noir": false
+    },
+    {
+      "command": "operator return",
+      "status": 0,
+      "elapsedMs": 213433,
+      "maxRssKb": 247584,
+      "noir": false
+    },
+    {
+      "command": "operator adopt",
+      "status": 0,
+      "elapsedMs": 248110,
+      "maxRssKb": 242620,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 1,
+      "elapsedMs": 6486,
+      "maxRssKb": 259964,
+      "noir": false
+    },
+    {
+      "command": "reader service",
+      "status": 0,
+      "elapsedMs": 837,
+      "maxRssKb": 79328,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 5868,
+      "maxRssKb": 265772,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 6083,
+      "maxRssKb": 257728,
+      "noir": false
+    },
+    {
+      "command": "operator serve (running)",
+      "status": null,
+      "elapsedMs": 78525,
+      "maxRssKb": null,
+      "noir": null
+    },
+    {
+      "command": "operator init",
+      "status": 0,
+      "elapsedMs": 1878,
+      "maxRssKb": 109388,
+      "noir": false
+    },
+    {
+      "command": "wallet init",
+      "status": 0,
+      "elapsedMs": 6873,
+      "maxRssKb": 320856,
+      "noir": false
+    },
+    {
+      "command": "wallet terms",
+      "status": 1,
+      "elapsedMs": 834,
+      "maxRssKb": 76740,
+      "noir": false
+    },
+    {
+      "command": "wallet terms",
+      "status": 0,
+      "elapsedMs": 875,
+      "maxRssKb": 76420,
+      "noir": false
+    },
+    {
+      "command": "operator open",
+      "status": 0,
+      "elapsedMs": 7798,
+      "maxRssKb": 250692,
+      "noir": false
+    },
+    {
+      "command": "wallet init",
+      "status": 0,
+      "elapsedMs": 7779,
+      "maxRssKb": 297872,
+      "noir": false
+    },
+    {
+      "command": "wallet issue",
+      "status": 1,
+      "elapsedMs": 1513,
+      "maxRssKb": 77692,
+      "noir": false
+    },
+    {
+      "command": "wallet terms",
+      "status": 0,
+      "elapsedMs": 889,
+      "maxRssKb": 76376,
+      "noir": false
+    },
+    {
+      "command": "wallet init",
+      "status": 0,
+      "elapsedMs": 6808,
+      "maxRssKb": 289868,
+      "noir": false
+    },
+    {
+      "command": "wallet issue",
+      "status": 1,
+      "elapsedMs": 761,
+      "maxRssKb": 76964,
+      "noir": false
+    },
+    {
+      "command": "wallet terms",
+      "status": 0,
+      "elapsedMs": 885,
+      "maxRssKb": 77016,
+      "noir": false
+    },
+    {
+      "command": "wallet init",
+      "status": 0,
+      "elapsedMs": 874,
+      "maxRssKb": 77276,
+      "noir": false
+    },
+    {
+      "command": "wallet venue",
+      "status": 0,
+      "elapsedMs": 6884,
+      "maxRssKb": 290816,
+      "noir": false
+    },
+    {
+      "command": "wallet venue",
+      "status": 0,
+      "elapsedMs": 746,
+      "maxRssKb": 77076,
+      "noir": false
+    },
+    {
+      "command": "wallet venue",
+      "status": 1,
+      "elapsedMs": 730,
+      "maxRssKb": 76544,
+      "noir": false
+    },
+    {
+      "command": "wallet burn",
+      "status": 1,
+      "elapsedMs": 876,
+      "maxRssKb": 76652,
+      "noir": false
+    },
+    {
+      "command": "relay init",
+      "status": 0,
+      "elapsedMs": 1829,
+      "maxRssKb": 110444,
+      "noir": false
+    },
+    {
+      "command": "wallet service",
+      "status": 0,
+      "elapsedMs": 1093,
+      "maxRssKb": 80632,
+      "noir": false
+    },
+    {
+      "command": "wallet service",
+      "status": 0,
+      "elapsedMs": 854,
+      "maxRssKb": 80840,
+      "noir": false
+    },
+    {
+      "command": "wallet service",
+      "status": 0,
+      "elapsedMs": 875,
+      "maxRssKb": 80536,
+      "noir": false
+    },
+    {
+      "command": "wallet request",
+      "status": 0,
+      "elapsedMs": 5625,
+      "maxRssKb": 242144,
+      "noir": false
+    },
+    {
+      "command": "wallet issue",
+      "status": 0,
+      "elapsedMs": 10404,
+      "maxRssKb": 323152,
+      "noir": true
+    },
+    {
+      "command": "wallet submit",
+      "status": 0,
+      "elapsedMs": 6676,
+      "maxRssKb": 244944,
+      "noir": false
+    },
+    {
+      "command": "wallet issue",
+      "status": 0,
+      "elapsedMs": 6375,
+      "maxRssKb": 284572,
+      "noir": true
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5955,
+      "maxRssKb": 284168,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5350,
+      "maxRssKb": 241304,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5842,
+      "maxRssKb": 267192,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5781,
+      "maxRssKb": 250472,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6279,
+      "maxRssKb": 284584,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5454,
+      "maxRssKb": 250544,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 8771,
+      "maxRssKb": 286932,
+      "noir": false
+    },
+    {
+      "command": "wallet request",
+      "status": 0,
+      "elapsedMs": 5471,
+      "maxRssKb": 246152,
+      "noir": false
+    },
+    {
+      "command": "wallet pay",
+      "status": 0,
+      "elapsedMs": 12222,
+      "maxRssKb": 321368,
+      "noir": true
+    },
+    {
+      "command": "wallet pay",
+      "status": 1,
+      "elapsedMs": 5635,
+      "maxRssKb": 283448,
+      "noir": true
+    },
+    {
+      "command": "wallet request",
+      "status": 0,
+      "elapsedMs": 5474,
+      "maxRssKb": 263960,
+      "noir": false
+    },
+    {
+      "command": "wallet pay",
+      "status": 1,
+      "elapsedMs": 5685,
+      "maxRssKb": 255396,
+      "noir": true
+    },
+    {
+      "command": "wallet pay",
+      "status": 1,
+      "elapsedMs": 857,
+      "maxRssKb": 81268,
+      "noir": false
+    },
+    {
+      "command": "wallet fulfill",
+      "status": 1,
+      "elapsedMs": 8690,
+      "maxRssKb": 259560,
+      "noir": false
+    },
+    {
+      "command": "wallet fulfill",
+      "status": 1,
+      "elapsedMs": 5909,
+      "maxRssKb": 266684,
+      "noir": false
+    },
+    {
+      "command": "wallet fulfill",
+      "status": 1,
+      "elapsedMs": 6307,
+      "maxRssKb": 258108,
+      "noir": false
+    },
+    {
+      "command": "wallet fulfill",
+      "status": 0,
+      "elapsedMs": 6482,
+      "maxRssKb": 240404,
+      "noir": false
+    },
+    {
+      "command": "wallet fulfill",
+      "status": 4,
+      "elapsedMs": 5711,
+      "maxRssKb": 248544,
+      "noir": false
+    },
+    {
+      "command": "wallet fulfillment",
+      "status": 0,
+      "elapsedMs": 5428,
+      "maxRssKb": 242216,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6602,
+      "maxRssKb": 268024,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 6009,
+      "maxRssKb": 242836,
+      "noir": false
+    },
+    {
+      "command": "wallet demand",
+      "status": 0,
+      "elapsedMs": 10393,
+      "maxRssKb": 329872,
+      "noir": true
+    },
+    {
+      "command": "wallet publish",
+      "status": 1,
+      "elapsedMs": 5889,
+      "maxRssKb": 283956,
+      "noir": false
+    },
+    {
+      "command": "wallet submit",
+      "status": 0,
+      "elapsedMs": 5861,
+      "maxRssKb": 264308,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5978,
+      "maxRssKb": 267372,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5349,
+      "maxRssKb": 243124,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5924,
+      "maxRssKb": 267048,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 6010,
+      "maxRssKb": 251376,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6747,
+      "maxRssKb": 260212,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5411,
+      "maxRssKb": 250336,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6237,
+      "maxRssKb": 243104,
+      "noir": false
+    },
+    {
+      "command": "wallet accept",
+      "status": 0,
+      "elapsedMs": 7066,
+      "maxRssKb": 268832,
+      "noir": false
+    },
+    {
+      "command": "wallet publish-acceptance",
+      "status": 0,
+      "elapsedMs": 5446,
+      "maxRssKb": 242780,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 3580,
+      "maxRssKb": 129412,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1624,
+      "maxRssKb": 128168,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1597,
+      "maxRssKb": 131264,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1624,
+      "maxRssKb": 129764,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1647,
+      "maxRssKb": 130140,
+      "noir": false
+    },
+    {
+      "command": "wallet settle",
+      "status": 0,
+      "elapsedMs": 10723,
+      "maxRssKb": 338928,
+      "noir": true
+    },
+    {
+      "command": "wallet submit",
+      "status": 0,
+      "elapsedMs": 6551,
+      "maxRssKb": 242684,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6070,
+      "maxRssKb": 255396,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5869,
+      "maxRssKb": 251056,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5924,
+      "maxRssKb": 275076,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5308,
+      "maxRssKb": 251576,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5936,
+      "maxRssKb": 256860,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5356,
+      "maxRssKb": 242016,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 7098,
+      "maxRssKb": 267184,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5364,
+      "maxRssKb": 241852,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5806,
+      "maxRssKb": 274508,
+      "noir": false
+    },
+    {
+      "command": "wallet presentation",
+      "status": 0,
+      "elapsedMs": 6894,
+      "maxRssKb": 284036,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6674,
+      "maxRssKb": 275048,
+      "noir": false
+    },
+    {
+      "command": "wallet burn",
+      "status": 0,
+      "elapsedMs": 11182,
+      "maxRssKb": 324260,
+      "noir": true
+    },
+    {
+      "command": "wallet submit",
+      "status": 0,
+      "elapsedMs": 5958,
+      "maxRssKb": 251392,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6077,
+      "maxRssKb": 283876,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 6364,
+      "maxRssKb": 251444,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6504,
+      "maxRssKb": 247880,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5295,
+      "maxRssKb": 251480,
+      "noir": false
+    },
+    {
+      "command": "reader terms",
+      "status": 0,
+      "elapsedMs": 840,
+      "maxRssKb": 78808,
+      "noir": false
+    },
+    {
+      "command": "reader service",
+      "status": 0,
+      "elapsedMs": 816,
+      "maxRssKb": 79980,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 7684,
+      "maxRssKb": 241248,
+      "noir": false
+    },
+    {
+      "command": "reader presentation",
+      "status": 0,
+      "elapsedMs": 5736,
+      "maxRssKb": 266380,
+      "noir": false
+    },
+    {
+      "command": "reader presentation",
+      "status": 0,
+      "elapsedMs": 7037,
+      "maxRssKb": 265996,
+      "noir": false
+    },
+    {
+      "command": "wallet demand",
+      "status": 0,
+      "elapsedMs": 11569,
+      "maxRssKb": 355168,
+      "noir": true
+    },
+    {
+      "command": "wallet submit",
+      "status": 0,
+      "elapsedMs": 5813,
+      "maxRssKb": 251716,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6098,
+      "maxRssKb": 276272,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5389,
+      "maxRssKb": 251272,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5963,
+      "maxRssKb": 252016,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5998,
+      "maxRssKb": 238996,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6089,
+      "maxRssKb": 267264,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5382,
+      "maxRssKb": 241944,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6530,
+      "maxRssKb": 275192,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5298,
+      "maxRssKb": 261268,
+      "noir": false
+    },
+    {
+      "command": "wallet withdraw",
+      "status": 0,
+      "elapsedMs": 5899,
+      "maxRssKb": 266456,
+      "noir": false
+    },
+    {
+      "command": "wallet submit",
+      "status": 0,
+      "elapsedMs": 5740,
+      "maxRssKb": 253848,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6115,
+      "maxRssKb": 259152,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5393,
+      "maxRssKb": 251140,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5948,
+      "maxRssKb": 267684,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5298,
+      "maxRssKb": 242528,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6187,
+      "maxRssKb": 248272,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5390,
+      "maxRssKb": 242536,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5804,
+      "maxRssKb": 274128,
+      "noir": false
+    },
+    {
+      "command": "wallet request",
+      "status": 0,
+      "elapsedMs": 5695,
+      "maxRssKb": 249876,
+      "noir": false
+    },
+    {
+      "command": "wallet pay",
+      "status": 1,
+      "elapsedMs": 5924,
+      "maxRssKb": 255240,
+      "noir": true
+    },
+    {
+      "command": "wallet freshen",
+      "status": 0,
+      "elapsedMs": 12201,
+      "maxRssKb": 318096,
+      "noir": true
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6212,
+      "maxRssKb": 276196,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5320,
+      "maxRssKb": 269452,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6054,
+      "maxRssKb": 283732,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5370,
+      "maxRssKb": 251320,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6507,
+      "maxRssKb": 284336,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5769,
+      "maxRssKb": 251680,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6040,
+      "maxRssKb": 275668,
+      "noir": false
+    },
+    {
+      "command": "wallet seed",
+      "status": 0,
+      "elapsedMs": 5400,
+      "maxRssKb": 242072,
+      "noir": false
+    },
+    {
+      "command": "wallet seed",
+      "status": 2,
+      "elapsedMs": 746,
+      "maxRssKb": 81596,
+      "noir": false
+    },
+    {
+      "command": "wallet restore-seed",
+      "status": 0,
+      "elapsedMs": 6754,
+      "maxRssKb": 301180,
+      "noir": false
+    },
+    {
+      "command": "wallet terms",
+      "status": 0,
+      "elapsedMs": 872,
+      "maxRssKb": 81668,
+      "noir": false
+    },
+    {
+      "command": "wallet service",
+      "status": 0,
+      "elapsedMs": 874,
+      "maxRssKb": 81072,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 10868,
+      "maxRssKb": 262204,
+      "noir": false
+    },
+    {
+      "command": "wallet handoff",
+      "status": 1,
+      "elapsedMs": 909,
+      "maxRssKb": 80904,
+      "noir": false
+    },
+    {
+      "command": "wallet handoff",
+      "status": 0,
+      "elapsedMs": 5904,
+      "maxRssKb": 241824,
+      "noir": false
+    },
+    {
+      "command": "wallet handoff",
+      "status": 0,
+      "elapsedMs": 5308,
+      "maxRssKb": 251412,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 1,
+      "elapsedMs": 5567,
+      "maxRssKb": 283164,
+      "noir": false
+    },
+    {
+      "command": "wallet restore",
+      "status": 0,
+      "elapsedMs": 6325,
+      "maxRssKb": 273644,
+      "noir": false
+    },
+    {
+      "command": "wallet restore",
+      "status": 0,
+      "elapsedMs": 5307,
+      "maxRssKb": 241364,
+      "noir": false
+    },
+    {
+      "command": "wallet restore",
+      "status": 1,
+      "elapsedMs": 5506,
+      "maxRssKb": 251092,
+      "noir": false
+    },
+    {
+      "command": "wallet terms",
+      "status": 0,
+      "elapsedMs": 1017,
+      "maxRssKb": 81104,
+      "noir": false
+    },
+    {
+      "command": "wallet service",
+      "status": 0,
+      "elapsedMs": 986,
+      "maxRssKb": 81432,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 10374,
+      "maxRssKb": 287300,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5352,
+      "maxRssKb": 251220,
+      "noir": false
+    },
+    {
+      "command": "wallet seed",
+      "status": 0,
+      "elapsedMs": 5343,
+      "maxRssKb": 242892,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 7620,
+      "maxRssKb": 258188,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 5826,
+      "maxRssKb": 257504,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 6365,
+      "maxRssKb": 255952,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 5778,
+      "maxRssKb": 283268,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 0,
+      "elapsedMs": 7421,
+      "maxRssKb": 266128,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6669,
+      "maxRssKb": 268256,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6086,
+      "maxRssKb": 284024,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 8961,
+      "maxRssKb": 268400,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 7559,
+      "maxRssKb": 270504,
+      "noir": false
+    },
+    {
+      "command": "operator serve (running)",
+      "status": null,
+      "elapsedMs": 2562682,
+      "maxRssKb": null,
+      "noir": null
+    },
+    {
+      "command": "wallet request",
+      "status": 0,
+      "elapsedMs": 5478,
+      "maxRssKb": 246432,
+      "noir": false
+    },
+    {
+      "command": "wallet pay",
+      "status": 1,
+      "elapsedMs": 11237,
+      "maxRssKb": 292596,
+      "noir": true
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 6201,
+      "maxRssKb": 241212,
+      "noir": false
+    },
+    {
+      "command": "wallet demand",
+      "status": 0,
+      "elapsedMs": 11569,
+      "maxRssKb": 325040,
+      "noir": true
+    },
+    {
+      "command": "wallet publish",
+      "status": 0,
+      "elapsedMs": 5935,
+      "maxRssKb": 274088,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 2991,
+      "maxRssKb": 130944,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1607,
+      "maxRssKb": 131868,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1625,
+      "maxRssKb": 130492,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1607,
+      "maxRssKb": 130600,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6379,
+      "maxRssKb": 259344,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5319,
+      "maxRssKb": 250972,
+      "noir": false
+    },
+    {
+      "command": "wallet accept",
+      "status": 0,
+      "elapsedMs": 7493,
+      "maxRssKb": 255292,
+      "noir": false
+    },
+    {
+      "command": "wallet settle",
+      "status": 0,
+      "elapsedMs": 10709,
+      "maxRssKb": 316420,
+      "noir": true
+    },
+    {
+      "command": "wallet publish",
+      "status": 0,
+      "elapsedMs": 5901,
+      "maxRssKb": 283092,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 0,
+      "elapsedMs": 1697,
+      "maxRssKb": 130444,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5875,
+      "maxRssKb": 266412,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6163,
+      "maxRssKb": 283548,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6403,
+      "maxRssKb": 283920,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 6102,
+      "maxRssKb": 242452,
+      "noir": false
+    },
+    {
+      "command": "operator return",
+      "status": 0,
+      "elapsedMs": 209320,
+      "maxRssKb": 244132,
+      "noir": false
+    },
+    {
+      "command": "operator adopt",
+      "status": 0,
+      "elapsedMs": 71752,
+      "maxRssKb": 253552,
+      "noir": false
+    },
+    {
+      "command": "wallet service",
+      "status": 0,
+      "elapsedMs": 889,
+      "maxRssKb": 80968,
+      "noir": false
+    },
+    {
+      "command": "wallet service",
+      "status": 0,
+      "elapsedMs": 839,
+      "maxRssKb": 80972,
+      "noir": false
+    },
+    {
+      "command": "wallet reprove",
+      "status": 0,
+      "elapsedMs": 12507,
+      "maxRssKb": 328620,
+      "noir": true
+    },
+    {
+      "command": "wallet submit",
+      "status": 1,
+      "elapsedMs": 5537,
+      "maxRssKb": 273308,
+      "noir": false
+    },
+    {
+      "command": "wallet submit",
+      "status": 1,
+      "elapsedMs": 5532,
+      "maxRssKb": 252940,
+      "noir": false
+    },
+    {
+      "command": "wallet submit",
+      "status": 0,
+      "elapsedMs": 6560,
+      "maxRssKb": 245900,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6852,
+      "maxRssKb": 276640,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 6045,
+      "maxRssKb": 279080,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6126,
+      "maxRssKb": 283388,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5557,
+      "maxRssKb": 234132,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6004,
+      "maxRssKb": 267308,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5396,
+      "maxRssKb": 242636,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 6023,
+      "maxRssKb": 259208,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5326,
+      "maxRssKb": 250960,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5998,
+      "maxRssKb": 268224,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5320,
+      "maxRssKb": 251192,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 5888,
+      "maxRssKb": 284400,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 5329,
+      "maxRssKb": 251276,
+      "noir": false
+    },
+    {
+      "command": "wallet sync",
+      "status": 0,
+      "elapsedMs": 7241,
+      "maxRssKb": 259592,
+      "noir": false
+    },
+    {
+      "command": "wallet status",
+      "status": 0,
+      "elapsedMs": 6934,
+      "maxRssKb": 242588,
+      "noir": false
+    },
+    {
+      "command": "wallet fulfill",
+      "status": 0,
+      "elapsedMs": 9181,
+      "maxRssKb": 278420,
+      "noir": false
+    },
+    {
+      "command": "operator serve (running)",
+      "status": null,
+      "elapsedMs": 681750,
+      "maxRssKb": null,
+      "noir": null
+    },
+    {
+      "command": "relay publish",
+      "status": 1,
+      "elapsedMs": 1010,
+      "maxRssKb": 80276,
+      "noir": false
+    },
+    {
+      "command": "relay publish",
+      "status": 1,
+      "elapsedMs": 1032,
+      "maxRssKb": 80168,
+      "noir": false
+    },
+    {
+      "command": "operator init",
+      "status": 0,
+      "elapsedMs": 1299,
+      "maxRssKb": 84516,
+      "noir": false
+    },
+    {
+      "command": "operator venue",
+      "status": 0,
+      "elapsedMs": 2012,
+      "maxRssKb": 114988,
+      "noir": false
+    },
+    {
+      "command": "operator open",
+      "status": 1,
+      "elapsedMs": 6065,
+      "maxRssKb": 257328,
+      "noir": false
+    },
+    {
+      "command": "operator serve",
+      "status": 1,
+      "elapsedMs": 783,
+      "maxRssKb": 83900,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 1,
+      "elapsedMs": 760,
+      "maxRssKb": 79948,
+      "noir": false
+    },
+    {
+      "command": "reader init",
+      "status": 1,
+      "elapsedMs": 711,
+      "maxRssKb": 79996,
+      "noir": false
+    },
+    {
+      "command": "reader supply",
+      "status": 2,
+      "elapsedMs": 701,
+      "maxRssKb": 76604,
+      "noir": false
+    }
+  ],
+  "elapsedMs": 9380644,
+  "sourceSha256Lf": {
+    "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
+    "dist/cli/backend.js": "3edec99ff4d534ca06ddeea70738f2dc68f5aa09f1e94be8640381ea681dd37e",
+    "dist/cli/common.js": "2b46df042cd1480d207c34ebbe173252cf93583c64e2e5c3a46e740ff5c851b9",
+    "dist/cli/moe.js": "49a5bc62e791c00665e6f2799156e6bc7b0aa0503bde2dff49b9e5a05ba4b3cb",
+    "dist/cli/operator.js": "9a6ca4f94ca06c602fb9c747dea4863b105e5258b127a4f9cc7e74d5108f5cb1",
+    "dist/cli/reader.js": "b36772ee107112d6a6631809ee57058ee5f905e20d794a48dac310e19b065cc6",
+    "dist/cli/relay.js": "155579c142d29fff8d9593f06a0757f926baeab9ccef7c745497434d08cecffe",
+    "dist/cli/terms.js": "e4e8192711ef75aa20a907bcef7ca7d1ef1654117727362870cb00f2a613bfe4",
+    "dist/cli/venue.js": "285dac51f725476dd9cfbb084f02d1c5d3c45ca474eed85b8f02527320b1b4e0",
+    "dist/cli/wallet.js": "e357cd6c170a6246e0f010cd70d6273d3f9152a8e8844318022981e6b71b3314",
+    "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
+    "dist/ergo-headers.js": "c92133bc2c437b7e199f12689bd5c2bd98167327ab6e7c7cc7e47028d819df5c",
+    "dist/ergo-profile.js": "3913b613a2664a0fdfc5677e8dea0b77f861c8d3dda563ded7e1200e3e4cee81",
+    "dist/ergo-publisher.js": "41f26ff08349bc0f8f595519b9566e0f708a65dd4d385a32edff21a29fbd0067",
+    "dist/ergo-store.js": "d762da95dcc7d7d19b75169b9116a0ef8ec4f788d47ae9df3984647e2f62f207",
+    "dist/ergo-supplier.js": "43fb57b48737439888fdbcbfbafbc7f613db5c6fb959767af90b0899d7d92d2a",
+    "dist/ergo-synthetic.js": "6888728d3d42d27880ecf777b8f5717e4ac355dc516452b4fb3307e826ae17d7",
+    "dist/ergo.js": "ab7b5ead26ba9faa52b399237ed8f1911b1e2046c71c8d30aabdc61fc646067e",
+    "dist/keys.js": "9075b1091976522893cf4613e326423a46d726c4ee4adfa6710691641f9f240c",
+    "dist/pool/field.js": "8348d48159c397cb49bcb03ced9e606103d689d7892072b27b9a05b50e9f2bb8",
+    "dist/pool/note-tree.js": "48fa3cfdcc8183f5aaa86889c9a066a775afc6ff79148d294933d26a1fbf40d1",
+    "dist/pool/notes.js": "eb63d7562dea56fa98ab5313b8049524d51f8e733b26a09e25e666a967bbeb31",
+    "dist/pool/parameter-files.js": "56d8fbaaa71d2dc7ecd0e9488cd2eaebf162f74b0ec6cbaf87187fa3cd138158",
+    "dist/pool/parameters.js": "3f48d3133f7542a878cf3fbbcaac0c2f84364e634d6ba7b7c32265f1fcd90ede",
+    "dist/pool/poseidon2.js": "4731ae2cec4ef774eb93ffb10b8a8d152e95b6d1f127e7546002481a6c7bf2d4",
+    "dist/pool/proof-verifier.js": "51502e01308777bb0f81548ca98db47f896e9a3cfa75792cc8b357e29bc64558",
+    "dist/pool/schedule.js": "47136b811c6f4cb3aea5edb82bfe7f051a76583c943bfc0a892714ca6718c967",
+    "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
+    "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
+    "dist/pool/v3/capsules.js": "594dfaaf85da7ec968a00c636598642634805d36ce3525c3e20a1fa5bf75e324",
+    "dist/pool/v3/commitments.js": "d75b0216af32fa8b28e28f21634446c58ee34aa16b7e7a43d031da6358b8afa4",
+    "dist/pool/v3/configuration.js": "7af6147f90d70c7c03372751ae6f7be172c836adcf9d7197c8daac36d7caabc5",
+    "dist/pool/v3/construction.js": "f116ff47fa47b27cedef5aed9bee0fb0d7594f6ee68fbbb9fe3d17ca0297f15a",
+    "dist/pool/v3/dishonour.js": "c20c81bb0bb98cca5f4ee7d029e84b932748f20545bd63a8a30f996eb3553bc4",
+    "dist/pool/v3/evidence-store.js": "93bf98331ab138dc9e34870fce67a296931e1baed161f67fb70165ddf7e526a7",
+    "dist/pool/v3/fault-evidence.js": "39af73b8067aa0568dfd70533ed61effabf3911adb98d1ba70ef9afa084d8786",
+    "dist/pool/v3/fault-observer.js": "e67dcc0954c558e2432593c3478db0aaf183f2d1381e7581c334676144958ae5",
+    "dist/pool/v3/guard.js": "2f5a954e2f702a477dee85e51956d0fbd1ff279b4813b9ae2131b03a7f8c4306",
+    "dist/pool/v3/headers.js": "936e15890a70d96d9f920fefaffd2e72afa3eafd498732c20fc7ccb1dcc9c229",
+    "dist/pool/v3/holdings.js": "cae9907a8a49908467f7e99ff4085a4dbd244c42e4fd3c587b35f00a0c78d7fa",
+    "dist/pool/v3/non-service.js": "d7497c5d4a2e43c1cd01440961d23a77b7851b982594553b9137f8c78f1e3bea",
+    "dist/pool/v3/package-reader.js": "e9704c7369412c17e64fc6d3ae05fcef59260c892866441575609b4d5c882392",
+    "dist/pool/v3/package.js": "16fe806dbe40b8966538837659d55c6283e1ee8e1ca340857898db23d23c65de",
+    "dist/pool/v3/programs.js": "7f3fc7114320498c51795f287effcbd4a482a00aa64fd32f46dfe33c89a2f4f2",
+    "dist/pool/v3/prover.js": "40a871f168e03040490dea985c3d0892cb72e548f2848a87b15b8f59f050fa90",
+    "dist/pool/v3/reader.js": "19b83e2255818508f59c7754967bd0bcb4be19cdf79acada94cfbcf7bc555aca",
+    "dist/pool/v3/receipt-state.js": "81df63a73005dfb59c5aec6212ea06bab356725dc072e423e1b3b720c322cacd",
+    "dist/pool/v3/records.js": "93adfd8958036966e071e376b94baf6c676312e5f39cac4cacb478e2cad33898",
+    "dist/pool/v3/recovery.js": "9edbfd461d586425dcf61ab12aeb6d17a0727e3b427d3439c4768ed88cc267d4",
+    "dist/pool/v3/redemption.js": "23a5cc869d6a0eb5ff687a4ff6c96f8d5682500565db40dec22228ffffb18abd",
+    "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
+    "dist/pool/v3/replay-store.js": "96f4f27df59d046e2c8096cd24212c10bb9a9f6a2d7e176a79aa7ea574fec23c",
+    "dist/pool/v3/scope-evidence.js": "4473d90329b561592768ffa02f1350aee6dcd4369c7ce64eeb5d77b64bf89789",
+    "dist/pool/v3/scope-reader.js": "b6538a4135a4f930d789f59cae39eea8bf3046e46044beec15ec4f6d4a8786d7",
+    "dist/pool/v3/service-client.js": "76fbaf2b2729945899e0799c28eac5a42cccb50c1ef65e49a480550ad73adecd",
+    "dist/pool/v3/service-http.js": "7a9eff7a46070a2a165077e6bf9a83229f7da4b621b4c5af8382eadd61e5a955",
+    "dist/pool/v3/service-wire.js": "b9928faffde6a4477c502584a3732765fdaea293ed5f45d4ba1d9a7361ce69ca",
+    "dist/pool/v3/state.js": "743cf1b76d98fbc25130d498421965c6c69f0671c6ab6bb5876709e86adf1eb1",
+    "dist/pool/v3/store.js": "ecdc6bf7c5a52f6394516828acec71ffafde66bd4316d9ad77ac663ccffd33bd",
+    "dist/pool/v3/terms.js": "c648d0301e4f67226356bc0e830ce4a0378f70e53b622f0479873f0d3a01566b",
+    "dist/pool/v3/trail.js": "1fa84c1b11cf497e3ffc16890f096ded8eb0e08aa6582a5bab9b5090a9a757d8",
+    "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
+    "dist/pool/v3/verify-ahead.js": "ac0418efa0aada00095d7d0d827efefe90b34d7e457e1bd9d53fea0f8d0a4315",
+    "dist/pool/v3/wallet-backup.js": "ed2c1d580e7c49ae2cd80aa5d3cc7fd6edfc0c68a3135aa7a5ea931ad63e31dc",
+    "dist/pool/v3/wallet-request.js": "a9e017276511b5af8a909465d504a60456c79fdbfc50e0f2683bc971a9e3cda2",
+    "dist/pool/v3/wallet-store.js": "e92f00b3969563df68a8755638b7f92bbd1834dd512c94028074c763d578931d",
+    "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
+    "dist/record-range.js": "4e5132808c4aa8c01495134363958e53ea1aeda3df162ac35bcc7f5457c5db6f",
+    "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
+    "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
+    "dist/venue-records.js": "c4f6a71db791baab7db23888229c9165ed6c9d0d22d8c9f068d2f1affb4c965e",
+    "package-lock.json": "b28158533beea580aa3cc925fb53fc7a9e7b47017544615038e9e19aaa56b980",
+    "package.json": "99056a374b95bd959671e74b62a6e39385e479bcfc5aa4d56231adf2bb21e38e",
+    "scripts/pool/prepare-crs.mjs": "7efbcbe292559a26225c83720b053d38d36294f47ed3d5684d2cfa478e9ad6cb",
+    "scripts/pool/v3/command-drill.mjs": "3dc824cc23f23aceceee7575e0921fc587984f086eb91faba34631f0276538b1",
+    "scripts/pool/v3/fault-evidence.mjs": "6eaadc9e0645da5b8d2f3b392976fe65ef6f804d93a7703d056e5b126703d93a",
+    "scripts/pool/v3/local-replay.mjs": "b50ad5baf0af5cc4b4c488eace91a7c06f869a6a580affadc255d05293d4e379",
+    "scripts/pool/v3/provenance.mjs": "9a9dd856973ad5d55aff737cff8704af1aa1207e00891f693251160f8fc4eb38",
+    "scripts/pool/v3/rss-hook.mjs": "c5d8f8ba74c0ce0fb5ca61361bcae93bb0a1ef96412555dd5415272cc1ca4bba",
+    "scripts/pool/v3/synthetic-node.mjs": "19b07153d1c764cc8880ef18b17b4021078ebbdfb90800e676741c801d88356b",
+    "scripts/pool/v3/testnet.mjs": "c8fd9b2a84519c70a59e661c136bfbef9e20fb4103954549d21af154dd7b88fa",
+    "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
+    "src/cli/backend.ts": "d41c6dce0f9de55e231c1f1c9356321dcb21cf45a985b80206a93c1e82cd7b87",
+    "src/cli/common.ts": "5aefd5c7dc6f4f22480b67a71cc3c9afb2e1f0bbb6447df49ad5d0ad25795855",
+    "src/cli/moe.ts": "c68f9c2f195b1fae3cc3511039cbee29cb1deee2fa5f361da3ff7de45d63914d",
+    "src/cli/operator.ts": "3e1c33d489f996344d1b886f1ae5f81997f02887499c626ecb6faf04ff785bf7",
+    "src/cli/reader.ts": "1639bb1b5eb34f5a9c30c507e9087e889fee862c85da5e3742e315c11ada2d6a",
+    "src/cli/relay.ts": "bc05cb1add5623da721ef716364c1027b6069964527d70968d8ecb106dc982b8",
+    "src/cli/terms.ts": "457ae5e3dcb3d0398e1b7523cc8ac52ae397fc371ed652d7b30ab20d89829afa",
+    "src/cli/venue.ts": "e3f9e16b29a2687379b240ed4ea28df608664a87e4287038f5dd8ea444e3154d",
+    "src/cli/wallet.ts": "2fd6f88453dae64717a1274a85d9173c852c10d18e4caba9b49e19362c517d8f",
+    "src/contexts.ts": "2a0bd8dfd7fed8c229d40d68b1dab984bcdb6b5afa26afdd9ec98d8812dd923a",
+    "src/ergo-headers.ts": "c0e21dead5c9a54db64761279504313458e0d6a3c8cf35e4f0651aede2fd7dd0",
+    "src/ergo-profile.ts": "5ba30d70a8d7b04f920b6145006cc2fcda11d9e2f5a1152d00d97600baa96009",
+    "src/ergo-publisher.ts": "09b2d8044abb0c83165b01d8ea5613f38d33a4c0ee322494e8d00ab5cfc1e08d",
+    "src/ergo-store.ts": "51b6f791405bc0336089a648f7982079402c07bf9701c24e82195964ac943ee5",
+    "src/ergo-supplier.ts": "f76d4fc69efa9683b8440122b555a65d47011f6b0dc282fcf4ff2bfe28d5b863",
+    "src/ergo-synthetic.ts": "73c8f3555ebfc0c5a462ff071ec646d3e128701a84bd79f633d4f60e769bbb8d",
+    "src/ergo.ts": "41a12ff2260e705bd7bd720519cf7ca10fb945e2310c85e23b13d7884d5dacf0",
+    "src/keys.ts": "0b063bfb4030dbae01abe88c7c59cad9324d47800f1025d55c2742d8060a5dd2",
+    "src/pool/field.ts": "abd55bd8bd2a51fb954c9dc05fb3380bf4c2df6dd3c145c2eff0f29b1e36710a",
+    "src/pool/note-tree.ts": "05087d8637faa1db300b8b98af7002eff3a6eb40b8e48900c7c90ee5a51a8fbb",
+    "src/pool/notes.ts": "df1ced5d5384fa5de5b8071071ecc1f057ddaca4cc38ad252984b326a7e2e3a7",
+    "src/pool/parameter-files.ts": "cdc4874d068250ed14b92db156e90a3329509c0f07a231fb513ff99df3269c5b",
+    "src/pool/parameters.ts": "2146e141727e8016fe1849fe8ceb882d958e11807908a1d8d4db6291e19fcef6",
+    "src/pool/poseidon2.ts": "eadd2f03b20e64e76077494fc4769fc4626796723f5d2ec77d8479e18dfaab6c",
+    "src/pool/proof-verifier.ts": "c66e057e3b51cd5f78252b4e177f055361159ee627a6fe9c91155949508ae60e",
+    "src/pool/schedule.ts": "4c4936504b7e1445548df649bbbc1a120196ff155a7954a138ffab29b578834a",
+    "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
+    "src/pool/v3/authorization-evidence.ts": "3abf5ba67308ba03752183f7e2065d7e0b1990ad1dbec21930d03960289a492e",
+    "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
+    "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
+    "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
+    "src/pool/v3/construction.ts": "d6acd7f082a70841bdd23e1335670f7383b3fcb19bda53f50a1f86301ddd768b",
+    "src/pool/v3/dishonour.ts": "7484d25993dba1247c1f4c6343046307b9811ee07fbf2fa5c3db33c203ccbee3",
+    "src/pool/v3/evidence-store.ts": "343977c66feab459c644778616999f4e98b29a90e16c70b9057f73d330e852b5",
+    "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
+    "src/pool/v3/fault-observer.ts": "0891d5e2c6fccba206aeeab342b605de80a58bb182bb955189e52749bfe2b307",
+    "src/pool/v3/guard.ts": "5639df996a29ae215380e39739e0bbce82241d9ab1bec0f4746eff48a481b7cf",
+    "src/pool/v3/headers.ts": "e2f83070ead0a73459d4fddadbb3c4e69d78fbbb264b2aa8725c1f2aa9be3ee6",
+    "src/pool/v3/holdings.ts": "304a6ee8e8a4c27284240f2c6c7ca22efe8df45fbe27c6dbe45aa19d5e021971",
+    "src/pool/v3/non-service.ts": "6572a0d87bcb20e93f95594238173d2252b1255bddd647537df5ca524575a95e",
+    "src/pool/v3/package-reader.ts": "cec8ea2ab33b744c1ae03bc6584d6f36c07ab3f29c8dff61cdee449ab89255b3",
+    "src/pool/v3/package.ts": "63ecb41e478711c381be366948ec0d399213f889ed65514fd0124cda3304aa98",
+    "src/pool/v3/programs.json": "b129fcfca83a4b48cb725d839fda7957491948ff15362b3c29c8014b7e77a2ec",
+    "src/pool/v3/programs.ts": "90bcb494e6d71242a52d4612246f62ed7e6eb2a1c1f1b183232c6a15fba53bac",
+    "src/pool/v3/prover.ts": "e08dfbccd8c92ecfeb1b35e992fd4f42d1e5914cdfb5c06dafe8496425076a01",
+    "src/pool/v3/reader.ts": "e8aebf9fdc9861c18c5140cd2cf0205823e8c65a8c7d53ff56f06ddca622d63f",
+    "src/pool/v3/receipt-state.ts": "80f38f6e8338fc5fd91668f9189825e2e0bcf987500f9911cad0b65ef9e7e99b",
+    "src/pool/v3/records.ts": "0b46e880f05c6776cda9f8918a8383cc0a8b4b4eb81beddf29331a1749108c32",
+    "src/pool/v3/recovery.ts": "cceafc2b3a067b8fc0cc23be4e95e53beb278a891f9a434f451454452112968b",
+    "src/pool/v3/redemption.ts": "7445c3db89a2263d720a2fdb552ae9c8991fdf3ddf086bcc3dc7507e89f26899",
+    "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
+    "src/pool/v3/replay-store.ts": "d969fb9d07c41d30977379ea5466c2a7faa4824998386490f0ef3c8bda852542",
+    "src/pool/v3/scope-evidence.ts": "217dd8a730ef9e60b40a574fbc0c1cea6b768dc73d8defac406d41a69a0fdeec",
+    "src/pool/v3/scope-reader.ts": "6a7ccb4baeafe2b934e7c81a2444556c721f24a53f61c9c83bd40b1c4421032a",
+    "src/pool/v3/service-client.ts": "4e41fc62553316b86c8002b44aa9ab9cb6e096d8f061a6fc08d24e1120f21b9e",
+    "src/pool/v3/service-http.ts": "c0fb983594ae5903f349ebb7ca5f3d0e601ee4b57f45a1cabe376fe86f517b0d",
+    "src/pool/v3/service-wire.ts": "ad23b26d4183db467906e05c192dbdffee696217721e3dbd9c57923c2ca7315a",
+    "src/pool/v3/state.ts": "df327e5818ce3cba7b35b5caf8efe44ad90526d0455e20ed076cd3ca0e211377",
+    "src/pool/v3/store.ts": "350df0b4edd2f518fc67da74f0bdfbba2deb7c2dd5cb941536ce3d758a13f7e7",
+    "src/pool/v3/terms.ts": "231fa273f3e644c4ba1d18c313260c677ce1019965f8bc0b4aaf748fadca1546",
+    "src/pool/v3/trail.ts": "c21ebd8fba870d4304493a2ca6d9cbe40df7a5c55f0e0cf837ec5a885edb1034",
+    "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
+    "src/pool/v3/verify-ahead.ts": "7f67861fb3e768576b60d0d896c3b26c61b4096809b8eb2d4b1dbaacf3b9561e",
+    "src/pool/v3/wallet-backup.ts": "b51105bfdba12ec8a23a882d90da366198b94f78f3ae782511eea52494f9d06e",
+    "src/pool/v3/wallet-request.ts": "65f043159a6f3eeabfa092f9ca25545355a932e843b702219fcf678fc45c6470",
+    "src/pool/v3/wallet-store.ts": "cd031736f87c30ac88cb322378ec2fc7afbdb9ec9fc5126b1998d28d860781ad",
+    "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
+    "src/record-range.ts": "d1dee26da4bb12364650470bffdbd322292a51167cab4db1bdf525e4f7159dac",
+    "src/record-venue.ts": "2283ccb169c66174805bd2fea6c3531dd8faf7744cc42faa313ab45fc664988b",
+    "src/venue-error.ts": "f2e9535ed81d544801967c1bd8edb26b0191900794a6f4fdc66a448612907810",
+    "src/venue-records.ts": "ce98c25655612077396eeba5938c506a94fb6e162e2538fa2afe0f6ae4b1afde"
+  }
+}

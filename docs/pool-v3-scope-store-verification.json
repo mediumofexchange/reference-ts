@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1143
+      "elapsedMs": 1326
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 884
+      "elapsedMs": 1009
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2739
+      "elapsedMs": 3105
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2699
+      "elapsedMs": 3082
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 884
+      "elapsedMs": 994
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2692
+      "elapsedMs": 3071
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2686
+      "elapsedMs": 3083
     }
   ],
   "transactions": [],
@@ -67,8 +67,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "8b3581ec1de8982aaceeda416f2a0b63d5f42fb62589e6306fdc5c965adf86bd",
-      "history": "b85a8cb1ac317969a97659b6b9175cce23dcd32d9ef26fc4579132204383cff6",
+      "spentRoot": "0987cf0bf383ff6cd2ab4329899c618e67b361da760bb2b1359dd0233bf7281f",
+      "history": "ed8f7672a3e1980b44f1d59bb820a5e26c86d586601097feea310142f8f6c4ae",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -123,8 +123,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "8b3581ec1de8982aaceeda416f2a0b63d5f42fb62589e6306fdc5c965adf86bd",
-      "history": "b85a8cb1ac317969a97659b6b9175cce23dcd32d9ef26fc4579132204383cff6",
+      "spentRoot": "0987cf0bf383ff6cd2ab4329899c618e67b361da760bb2b1359dd0233bf7281f",
+      "history": "ed8f7672a3e1980b44f1d59bb820a5e26c86d586601097feea310142f8f6c4ae",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -182,7 +182,7 @@
       ]
     }
   },
-  "elapsedMs": 29847,
+  "elapsedMs": 35020,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -264,8 +264,8 @@
     "scripts/pool/v3/provenance.mjs": "9a9dd856973ad5d55aff737cff8704af1aa1207e00891f693251160f8fc4eb38",
     "scripts/pool/v3/public-artifacts.mjs": "47e2c6d61a404a8aa3c9b41e06de3a760d27b9400933201589f0043d30b5ad82",
     "scripts/pool/v3/scope-store-check.mjs": "5f918fed9efa06d64c41b11cf0f142af90d6491d64c8037b2cc60423915251b1",
-    "scripts/pool/v3/testnet-budget.mjs": "1e889ddb208d115192eaef05fb052faac3187b161bc8f6386baf085fc807b079",
-    "scripts/pool/v3/testnet.mjs": "a3d4b1c379d1368148fa9d306dcd78ccf509e5e9724cd9649f5664fcddc7124a",
+    "scripts/pool/v3/testnet-budget.mjs": "0f65509e9256f5baafc8d06bd8d2b73bb36b23a320f27130122e925ae6f2feef",
+    "scripts/pool/v3/testnet.mjs": "c8fd9b2a84519c70a59e661c136bfbef9e20fb4103954549d21af154dd7b88fa",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
     "src/contexts.ts": "2a0bd8dfd7fed8c229d40d68b1dab984bcdb6b5afa26afdd9ec98d8812dd923a",
     "src/ergo-headers.ts": "c0e21dead5c9a54db64761279504313458e0d6a3c8cf35e4f0651aede2fd7dd0",

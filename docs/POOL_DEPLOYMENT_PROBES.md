@@ -146,9 +146,9 @@ remain unresolved. A successful run retains a public bundle in
 contains no holder seed, wallet key, witness or journal. The [live report](pool-v3-testnet-verification.json)
 owns the transaction run at `acc1ab7`. Its initial export omitted public bytecode
 needed by the reader's identity checks; the corrected export retains it beside
-the keys. `node scripts/pool/v3/testnet-reader-check.mjs` rebuilds those public
-artifacts and verifies the bundle without sending transactions. Its separate
-[readback report](pool-v3-testnet-reader-verification.json) binds the corrected
+the keys. `testnet-reader-check.mjs` (retired with M10d, at `2fd0f08`) rebuilt those public
+artifacts and verified the bundle without sending transactions. Its separate
+[readback report](https://github.com/mediumofexchange/reference-ts/blob/2fd0f08/docs/pool-v3-testnet-reader-verification.json) binds the corrected
 exporter and reader, preserves every original bundle input hash, and records
 standalone replay and altered-bytecode refusal. The chosen anchor and prehistory remain trust inputs; depth 2 on
 one controlled testnet node establishes no mainnet finality, adoption or deployment.
