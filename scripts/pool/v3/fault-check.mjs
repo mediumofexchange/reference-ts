@@ -133,7 +133,7 @@ export async function checkCompactFault({ payload, complete, fault, codec, verif
       const changed = structuredClone(scope);
       if (key === "sequence") changed.header.sequence = commitment.sequence + 1n;
       else changed.header[key][0] ^= 1;
-      const observer = faultObserver([fault], payload.selection, beforeProof, codec);
+      const observer = faultObserver([fault], payload.selection, beforeProof);
       await observer.inspect({ commitment, index: 4n }, directory, changed);
       assert.deepEqual(observer.result(), {});
     }
@@ -152,7 +152,7 @@ export async function checkCompactFault({ payload, complete, fault, codec, verif
       const bytes = codec.encodeFaultEvidence(changed, FAULT_LIMITS.maxSuffixEntries);
       assert.equal(codec.verifyFaultEvidence({ backing: changed.snapshot.backing, segment: changed.snapshot.segment,
         digest: changedDirectory[0].digest }, changed, FAULT_LIMITS.maxSuffixEntries), true);
-      const observer = faultObserver([bytes], payload.selection, beforeProof, codec);
+      const observer = faultObserver([bytes], payload.selection, beforeProof);
       await observer.inspect({ commitment: signed, index: 4n }, changedDirectory, scope);
       assert.deepEqual(observer.result(), {});
     }

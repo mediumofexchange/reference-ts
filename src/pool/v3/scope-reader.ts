@@ -2,7 +2,8 @@
 // backing or several: whole-scope classification, merged finalized prefixes
 // with per-backing totals and adoption indices, publication force and silence
 // clocks per backing, receipt reads across a scope, the non-service count and
-// compact faults. Reference venues only (guard.ts).
+// compact faults. Reference venues only (guard.ts). Every frame, snapshot, receipt, publication and request is
+// read through the context's construction (construction.ts `reader`): pool-v3's, or lit-v1's (slice 14 M14d).
 //
 // The walk goes forward (M5b.3b): each backing's held checkpoints are
 // classified once, in rank order, by a cursor over that backing's terms, and
@@ -18,24 +19,25 @@ import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import type { Commitment } from "../../venue-records.js";
 import { identifierOf, VALUE_BOUND } from "../field.js";
-import { ScopeTree } from "../scope.js";
-import { adoptedDomain, requireConfigurationVerifier } from "./configuration.js";
-import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest, type Snapshot } from "./commitments.js";
-import { decodeSegmentHeader, segmentBytes, type SegmentHeader } from "./headers.js";
+import type { Snapshot } from "./commitments.js";
+import { POOL_V3, type Construction } from "./construction.js";
+import type { SegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
 import type { WalkEvidence } from "./evidence-store.js";
 import { keptContext, keptStateHolds, lastValidOf, readRecordView, replayTrail, ReplayResult, type CarryingVerdict, type FaultObserver,
   type ReaderSelection, type RecordView, type ReplayContext, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
-import { decodePublication, decodeRecord, encodeRecord, settlementAuthorization, type Record, type SignedAcceptance } from "./records.js";
+import { decodePublication, settlementAuthorization, type Record, type SignedAcceptance } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import { KeptStateMismatch, type ImportEntry, type ReplayStore, type WalkBase, type WalkForce, type WalkVerdict } from "./replay-store.js";
 import { applyForceEffects, applyForceRecord, openForceState, type MergedImport } from "./state.js";
-import { decodeRootTerms, type RootTerms } from "./terms.js";
+import type { RootTerms } from "./terms.js";
 
 export interface ImportContext extends ReplayContext {
+  /** The construction the read selected by its configuration: every frame is read through it. */
+  readonly construction: Construction;
   readonly reference: VenueReference;
   /** Unless false, the result lists the selected backing's carrying checkpoints through the judging index
    * (`carrying`): one row for every checkpoint ever held, so a party that reads none of them leaves them out. */
@@ -46,12 +48,15 @@ export interface ImportContext extends ReplayContext {
   receiptWalk?: Pick<ReceiptWalk, "evidence"> | undefined;
 }
 export interface CanonicalCheckpoint {
-  readonly commitment: Commitment; readonly index: bigint; readonly segment: Uint8Array; readonly scope: bigint;
+  readonly commitment: Commitment; readonly index: bigint; readonly segment: Uint8Array;
+  /** Pool-v3's scope root; undefined for a construction whose segment identity binds its scope (lit-v1 §5). */
+  readonly scope: bigint | undefined;
   /** The segment's header as the read authenticated it: `segment` is its identity and `scope` its entries' root. */
   readonly header: SegmentHeader;
   readonly state: ReplayResult;
 }
-export interface ForcedPublication { readonly index: bigint; readonly record: Record; readonly bytes: Uint8Array }
+/** A forced publication's record, decoded by its construction: pool-v3's `Record` by default, a lit read's `LitRecord`. */
+export interface ForcedPublication<R = Record> { readonly index: bigint; readonly record: R; readonly bytes: Uint8Array }
 /** A release (publication kind 3) as an answer carries it: the segment its settlement names, the output it discloses
  * with its `rho_out`, the presenter's signature with the exact message it must sign (C3.6), and its force verdict
  * (none where no gap could open: the backing declares no silence). The proof is not kept. */
@@ -77,9 +82,9 @@ export interface FrontierContext extends Omit<ImportContext, "selection" | "head
   /** List the backing's witnessed acceptances and releases (`FrontierResult.answers`); otherwise none is read for them. */
   readonly answers?: boolean;
 }
-export interface FrontierResult {
+export interface FrontierResult<R = Record> {
   readonly canonical: CanonicalCheckpoint | undefined;
-  readonly force: readonly ScopeForcedPublication[];
+  readonly force: readonly ScopeForcedPublication<R>[];
   /** The selected backing's carrying checkpoints through the judging index; empty, not listed, where the read
    * asked for none (`carrying: false`). */
   readonly carrying: readonly ImportCarryingVerdict[];
@@ -195,8 +200,8 @@ export interface ScopeRanges {
   readonly publications: readonly ScopePublicationVerdict[]; readonly nonService?: NonServiceCount;
 }
 /** A forced publication and the backing it names. */
-export interface ScopeForcedPublication extends ForcedPublication { readonly backing: string }
-export type ScopeResult = {
+export interface ScopeForcedPublication<R = Record> extends ForcedPublication<R> { readonly backing: string }
+export type ScopeResult<R = Record> = {
   readonly receipt: ReceiptVerdict; readonly state?: undefined; readonly carrying?: undefined; readonly clock?: undefined;
   readonly ranges?: undefined; readonly canonical?: undefined; readonly force?: undefined;
 } | {
@@ -207,22 +212,22 @@ export type ScopeResult = {
   /** The selected checkpoint, which a successful read establishes as the backing's canonical one. */
   readonly canonical: CanonicalCheckpoint;
   /** Every scoped backing's forced publications through the judging index, in venue order. */
-  readonly force: readonly ScopeForcedPublication[];
+  readonly force: readonly ScopeForcedPublication<R>[];
 };
 type Latest = (backing: Uint8Array, terms: RootTerms, child?: Child) => Promise<ValidScope | undefined>;
 /** A forced publication as a read returns it, with its venue ordinal. */
-type ScopeForce = ScopeForcedPublication & { readonly ordinal: bigint };
-const forcedOf = (force: WalkForce): ScopeForce =>
-  ({ backing: force.backing, index: force.index, ordinal: force.ordinal, record: decodeRecord(force.bytes), bytes: force.bytes });
+type ScopeForce = ScopeForcedPublication<unknown> & { readonly ordinal: bigint };
+const forcedOf = (construction: Construction, force: WalkForce): ScopeForce =>
+  ({ backing: force.backing, index: force.index, ordinal: force.ordinal, record: construction.decode(force.bytes), bytes: force.bytes });
 /** Silence clocks kept per backing and opening while the walk moves forward; older ones recompute. */
 const RUNNING_CLOCKS = 256;
 
 /** C2b.3.1–4.2 per backing. Snapshots exclude the entire publication index;
  * canonical opening predecessors additionally include lower same-key sequences. */
-function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "receiptBytes" | "store">, walk: number,
+function scopeRecovery(context: Pick<WalkContext, "construction" | "selection" | "verifier" | "receiptBytes" | "store">, walk: number,
   viewFor: (backing: Uint8Array, terms: RootTerms) => Promise<RecordView>, latest: Latest,
   snapshotIndexAt: (backing: Uint8Array, terms: RootTerms, index: bigint) => Promise<bigint>) {
-  const { selection, verifier, store } = context;
+  const { construction, selection, verifier, store } = context, frames = construction.reader;
   const progress = new Map<string, { last: Pick<RangeEntry, "index" | "ordinal"> | undefined; busy: boolean }>();
   const running = new Map<string, { upto: bigint; boundary: bigint | undefined }>();
   const forceStates = new Map<string, { key: string; state: ReturnType<typeof openForceState> }>();
@@ -231,9 +236,9 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
   // What a publication's verdict reads besides its own bytes: the backing's latest valid snapshot strictly before
   // its index, classified on this read's evidence. Undefined where the publication cannot force.
   const dependency = async (backing: Uint8Array, terms: RootTerms, duration: bigint,
-    entry: RangeEntry): Promise<{ readonly record: Record; readonly snapshot: ValidScope } | undefined> => {
+    entry: RangeEntry): Promise<{ readonly record: Uint8Array; readonly snapshot: ValidScope } | undefined> => {
     let publication;
-    try { publication = decodePublication(entry.record); }
+    try { publication = frames.publication(entry.record); }
     catch (error) {
       if (error instanceof EncodingError) return undefined;
       throw error;
@@ -242,7 +247,7 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
         publication.kind === 2 || publication.kind === 5) return undefined;
     const snapshot = await snapshotAt(backing, terms, entry.index);
     if (snapshot === undefined || entry.index - snapshot.index <= duration) return undefined;
-    return { record: publication.record, snapshot };
+    return { record: publication.record!, snapshot };
   };
   const classifyPublication = async (backing: Uint8Array, terms: RootTerms, view: RecordView, duration: bigint,
     entry: RangeEntry): Promise<{ force: boolean; check?: string; bytes?: Uint8Array }> => {
@@ -256,14 +261,14 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
     let kept = forceStates.get(name);
     if (kept === undefined || kept.key !== key) {
       const state = openForceState(source);
-      for (const prior of store.forced(backing, source.adoptionIndices.get(name) ?? 0n, entry.index)) applyForceEffects(state, decodeRecord(prior.bytes));
+      for (const prior of store.forced(backing, source.adoptionIndices.get(name) ?? 0n, entry.index)) applyForceEffects(state, construction.decode(prior.bytes), construction);
       kept = { key, state }; forceStates.set(name, kept);
     }
-    const { state } = kept, { record } = found, bytes = encodeRecord(record);
+    const { state } = kept, bytes = found.record;
     try {
       await applyForceRecord(state, bytes, { mode: "force", domain: selection.domain, backing,
-        segment: snapshot.segment, scope: new ScopeTree(snapshot.header.entries).root(), issuer: terms.obligor,
-        index: entry.index, lag: view.lag, verifier });
+        segment: snapshot.segment, scope: frames.scopeRoot(snapshot.header), issuer: terms.obligor,
+        index: entry.index, lag: view.lag, verifier }, construction);
       return { force: true, bytes };
     } catch (error) {
       if (!(error instanceof ReplayRefusal)) throw error;
@@ -365,10 +370,10 @@ function scopeRecovery(context: Pick<WalkContext, "selection" | "verifier" | "re
  * merged finalized prefixes with each backing's adoption index. Continuations
  * resume from their segment's opening. Unrelated old trails are not read.
  * A receipt instead returns its verdict at the deciding checkpoint or boundary. */
-export async function classifyScopes(context: ImportContext, record: RecordVenue, evidence: WalkEvidence): Promise<ScopeResult> {
+export async function classifyScopes<R = Record>(context: ImportContext, record: RecordVenue, evidence: WalkEvidence): Promise<ScopeResult<R>> {
   const walk = scopeWalk(context, record, evidence);
   return closing(walk, async () => {
-    try { return await selectedRead(context, evidence, walk); } catch (error) {
+    try { return await selectedRead(context, evidence, walk) as ScopeResult<R>; } catch (error) {
       if (error instanceof EvidenceRefusal && context.receiptBytes === undefined) await walk.inspectRefused(context.selection.backing, context.terms);
       throw error;
     }
@@ -393,15 +398,15 @@ export function withCause(error: unknown, cause: unknown): void {
   if (error instanceof Error && error.cause === undefined) error.cause = cause;
 }
 
-async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk: ReturnType<typeof scopeWalk>): Promise<ScopeResult> {
-  const { selection } = context, { viewFor, latest, recovery, classify } = walk;
+async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk: ReturnType<typeof scopeWalk>): Promise<ScopeResult<unknown>> {
+  const { selection, construction } = context, { viewFor, latest, recovery, classify } = walk;
   const { trails } = evidence;
   const view = await viewFor(selection.backing, context.terms);
   const selectedHeld = view.heldAt(selection.operator, selection.sequence);
   if (selectedHeld === undefined || !matches(selectedHeld.commitment, selection)) throw new EvidenceRefusal("selection-mismatch");
   if (context.receiptBytes !== undefined) {
-    const receipt = decodeReceipt(context.receiptBytes);
-    const original = authenticatedScope(trails, receipt.segment);
+    const receipt = construction.reader.receipt(context.receiptBytes);
+    const original = authenticatedScope(construction, trails, receipt.segment);
     const { header } = original, scopeViews = new Map<string, RecordView>(), termsByBacking = new Map<string, RootTerms>();
     // authenticatedScope resolved and verified every scoped terms field.
     for (let i = 0; i < header.entries.length; i++) {
@@ -466,7 +471,7 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
   const current = await latest(selection.backing, context.terms);
   if (!matches(current?.commitment, selection)) throw new EvidenceRefusal("superseded-selection");
   const { clock, publications, force, nonService } = await walk.around(selected, context.terms, view);
-  return { state: selected.state, carrying: context.carrying === false ? [] : walk.carrying(), clock, canonical: canonicalOf(selected), force, ranges: {
+  return { state: selected.state, carrying: context.carrying === false ? [] : walk.carrying(), clock, canonical: canonicalOf(construction, selected), force, ranges: {
     judgingIndex: view.t, lag: view.lag, checkpointIndex: selectedHeld.index, revokedAt: view.revokedAt, chain: view.chain,
     heldBefore, heldAfter, publications, ...(nonService === undefined ? {} : { nonService }) } };
 }
@@ -474,8 +479,11 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
 /** C2.7 descent for one backing's independently authenticated terms in any
  * scope: its canonical checkpoint, if the record holds one, with every scoped
  * backing's forced publications and the clock. */
-export async function classifyScopeFrontier(context: FrontierContext, record: RecordVenue, evidence: WalkEvidence): Promise<FrontierResult> {
-  const { selection, terms } = context, walk = scopeWalk(context, record, evidence);
+export async function classifyScopeFrontier<R = Record>(context: FrontierContext, record: RecordVenue, evidence: WalkEvidence): Promise<FrontierResult<R>> {
+  const { selection, terms, construction } = context;
+  // A holder's answers read pool-v3's releases (C3.5's disclosure, C3.8); lit's are the lit wallet's (WORK.md slice 14).
+  if (context.answers === true && construction !== POOL_V3 as Construction) throw new TypeError("a lit read lists no answers");
+  const walk = scopeWalk(context, record, evidence);
   return closing(walk, async () => { try {
     const view = await walk.viewFor(selection.backing, terms), canonical = await walk.latest(selection.backing, terms);
     const around = await walk.around(canonical, terms, view);
@@ -503,7 +511,7 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
         throw error;
       }
     }
-    return { canonical: canonical === undefined ? undefined : canonicalOf(canonical), force: around.force, carrying: context.carrying === false ? [] : walk.carrying(), scopeChains, answers,
+    return { canonical: canonical === undefined ? undefined : canonicalOf(construction, canonical), force: around.force as ScopeForcedPublication<R>[], carrying: context.carrying === false ? [] : walk.carrying(), scopeChains, answers,
       clock: canonical === undefined ? undefined : around.clock, ranges: { judgingIndex: view.t, lag: view.lag, revokedAt: view.revokedAt,
         chain: view.chain, publications: around.publications, ...(around.nonService === undefined ? {} : { nonService: around.nonService }) } };
   } catch (error) {
@@ -512,8 +520,8 @@ export async function classifyScopeFrontier(context: FrontierContext, record: Re
   } });
 }
 
-const canonicalOf = (valid: ValidScope): CanonicalCheckpoint => ({ commitment: valid.commitment, index: valid.index, segment: valid.segment,
-  scope: new ScopeTree(valid.header.entries).root(), header: valid.header, state: valid.state });
+const canonicalOf = (construction: Construction, valid: ValidScope): CanonicalCheckpoint => ({ commitment: valid.commitment, index: valid.index,
+  segment: valid.segment, scope: construction.reader.scopeRoot(valid.header), header: valid.header, state: valid.state });
 
 /** What a scope read needs besides a selected checkpoint or backing. */
 type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
@@ -521,14 +529,14 @@ type WalkContext = FrontierContext & Pick<ImportContext, "receiptBytes">;
 /** Whole-scope classification, shared by selected and frontier reads. Every
  * checkpoint is classified once, into the walk's rows; close() drops them. */
 function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvidence) {
-  const { selection, store } = context, faults = context.faults ?? NO_FAULTS;
+  const { selection, store, construction } = context, faults = context.faults ?? NO_FAULTS, frames = construction.reader;
   // These walks are exported: a selection under another configuration is refused here, not trusted from a caller.
-  requireReplay(same(selection.domain, adoptedDomain()), "CONFIGURATION");
+  requireReplay(same(selection.domain, frames.domain()), "CONFIGURATION");
   // The verifier's circuits name every replay and kept class (§14), so they must be the configuration's. A kept
   // store keeps state across processes, so where the read witnesses outputs, the predicate's identity must be
   // declared too, not named per object. Witnesses stay only at a namespace's tip; a path read below it discards
   // the kept state (replay-store.ts `witness`).
-  const identities = requireConfigurationVerifier(context.verifier.identities);
+  const identities = frames.verifierIdentities(context.verifier.identities);
   if (store.kept && context.witness !== undefined && !(context.witness.identity instanceof Uint8Array)) {
     throw new TypeError("a kept store needs a witness predicate that declares its identity");
   }
@@ -540,7 +548,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   const retained = evidence.retained, keptWalk = retained !== undefined && context.receiptBytes === undefined &&
     faults.holdsEvidence?.() !== true && witnessed !== undefined && selection.judgingIndex <= witnessed ? { selected: selection.backing, evidence: retained.identity, mark: retained.mark,
       holds: (mark: Uint8Array) => retained.holds(mark), through: selection.judgingIndex } : undefined;
-  const { trails } = evidence, { walk, resumed } = store.openWalk(keptContext({ domain: selection.domain, venue: selection.venue,
+  const { trails } = evidence, { walk, resumed } = store.openWalk(keptContext({ construction, domain: selection.domain, venue: selection.venue,
     verifier: { verify: context.verifier.verify, identities }, witness: context.witness }), keptWalk);
   const views = new Map<string, Promise<RecordView>>(), running = new Map<string, Promise<ScopeVerdict>>();
   const cursors = new Map<string, { term: number; after: bigint | undefined; busy: boolean }>();
@@ -554,7 +562,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   const snapshotFor = (digest: Uint8Array): Snapshot => {
     const bytes = evidence.snapshot(digest);
     if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    return decodeSnapshot(bytes);
+    return frames.snapshot.decode(bytes);
   };
   // A resumed walk reads a class an earlier read made only after §14's checks on this read's evidence: the venue
   // holds the same commitment at the same index, the kept snapshot authenticates against the checkpoint's retained
@@ -570,30 +578,30 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       throw new KeptStateMismatch("a kept walk's commitment");
     }
     let snapshot: Snapshot;
-    try { snapshot = decodeSnapshot(row.snapshot); } catch (error) {
+    try { snapshot = frames.snapshot.decode(row.snapshot); } catch (error) {
       if (error instanceof EncodingError) throw new KeptStateMismatch("a kept walk's snapshot");
       throw error;
     }
     const directory = evidence.directory(row.root);
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const entry = directory.find(item => same(item.name, snapshot.backing));
-    if (entry === undefined || !same(entry.digest, snapshotDigest(snapshot))) throw new KeptStateMismatch("a kept walk's snapshot");
+    if (entry === undefined || !same(entry.digest, frames.snapshot.digest(snapshot))) throw new KeptStateMismatch("a kept walk's snapshot");
     if (evidence.snapshot(entry.digest) === undefined) throw new EvidenceRefusal("unresolved-evidence");
     // The scope is authenticated as the judgment did, from the directory's first snapshot (C2.10.11, pool-v3 §7.1):
     // the row's snapshot is that of whichever backing last judged it, and in an excluded or lapsed class it may
     // name another segment.
     const first = directory[0]!, named = same(first.name, snapshot.backing) ? snapshot : snapshotFor(first.digest);
     if (!same(named.segment, row.segment)) throw new KeptStateMismatch("a kept walk's segment");
-    const scope = checkpointScope(trails, first.name, first.digest, named);
+    const scope = checkpointScope(construction, trails, first.name, first.digest, named);
     const s = row.state;
     if (row.class === "valid") {
       scope.fullTrail();
-      if (s === undefined || !keptStateHolds(store, s.ns, s.position, s.identity, snapshot)) throw new KeptStateMismatch("a kept walk's state");
+      if (s === undefined || !keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction)) throw new KeptStateMismatch("a kept walk's state");
       // Every scoped sibling's snapshot is the same state's, with that backing's totals at its position.
       for (const sibling of directory) {
         const bytes = evidence.snapshot(sibling.digest);
         if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
-        const other = decodeSnapshot(bytes), total = store.total(s.ns, s.position, hex(other.backing));
+        const other = frames.snapshot.decode(bytes), total = store.total(s.ns, s.position, hex(other.backing));
         if (!same(other.segment, snapshot.segment) || !same(other.historyHash, snapshot.historyHash) || !same(other.evidenceHash, snapshot.evidenceHash) ||
             total.issued !== other.issued || total.burned !== other.burned) throw new KeptStateMismatch("a kept walk's sibling");
       }
@@ -616,21 +624,21 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   const loaded = (row: WalkVerdict, backing: Uint8Array): ScopeVerdict => {
     const scope = store.scope(row.segment);
     if (scope === undefined) throw new KeptStateMismatch("a kept walk's scope");
-    const header = decodeSegmentHeader(scope.header);
+    const header = frames.header.decodeSegmentHeader(scope.header);
     const base: Classified = { commitment: { operator: row.operator, sequence: row.sequence, root: row.root, signature: row.signature },
-      index: row.index, segment: row.segment, header, snapshot: decodeSnapshot(row.snapshot) };
+      index: row.index, segment: row.segment, header, snapshot: frames.snapshot.decode(row.snapshot) };
     if (row.class === "excluded") return { ...base, class: "excluded", check: row.detail! };
     if (row.class === "lapsed") return { ...base, class: "lapsed", ...(row.detail === undefined ? {} : { clock: JSON.parse(row.detail) as ClockRecord }) };
     const s = row.state!;
     const { issued, burned } = store.total(s.ns, s.position, hex(backing));
     return { ...base, class: "valid", openingIndex: s.opening,
-      scopedTerms: new Map(header.entries.map((scoped, i) => [hex(scoped.backing), decodeRootTerms(scope.terms[i]!.terms)])),
-      state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }) };
+      scopedTerms: new Map(header.entries.map((scoped, i) => [hex(scoped.backing), frames.terms.decodeRootTerms(scope.terms[i]!.terms)])),
+      state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }, construction) };
   };
   const keep = (held: HeldCommitment, verdict: ScopeVerdict): void => {
     const c = held.commitment, state = verdict.class === "valid" ? verdict.state : undefined;
     store.putVerdict(walk, { key: rowKey(c), operator: c.operator, sequence: c.sequence, root: c.root, signature: c.signature, index: held.index,
-      class: verdict.class, segment: verdict.segment, snapshot: snapshotBytes(verdict.snapshot),
+      class: verdict.class, segment: verdict.segment, snapshot: frames.snapshot.bytes(verdict.snapshot),
       detail: verdict.class === "excluded" ? verdict.check : verdict.class === "lapsed" && verdict.clock !== undefined ? JSON.stringify(verdict.clock) : undefined,
       state: state === undefined || verdict.class !== "valid" ? undefined : { ns: state.ns, position: state.position, identity: state.identity,
         issued: state.issued, burned: state.burned, adoption: state.adoptionIndices, opening: verdict.openingIndex } });
@@ -756,11 +764,11 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     // holds, so every reader judges one class (C2.10.11, pool-v3 §7.1); a snapshot naming another segment
     // fails SNAPSHOT below, after lapse.
     const first = directory[0]!, named = same(first.name, backing) ? snapshot : snapshotFor(first.digest);
-    const scope = checkpointScope(trails, first.name, first.digest, named), { header } = scope, { segment } = named;
+    const scope = checkpointScope(construction, trails, first.name, first.digest, named), { header } = scope, { segment } = named;
     await faults.inspect(held, directory, scope);
     // The descent had visited this checkpoint once its faults were inspected.
     began = true;
-    store.putScope(segment, segmentBytes(header), scope.terms);
+    store.putScope(segment, frames.header.segmentBytes(header), scope.terms);
     // Required scope is discovered only after its header is authenticated;
     // checkpointScope resolved and verified every scoped terms field.
     const scopedTerms = new Map(header.entries.map((scoped, i) => [hex(scoped.backing), scope.rootTerms[i]!]));
@@ -882,11 +890,11 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       if (kept !== undefined) {
         let verdict: ScopeVerdict;
         if (kept.class === "excluded" && kept.detail !== undefined) verdict = { ...base, class: "excluded", check: kept.detail };
-        else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot) &&
+        else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction) &&
             scopedSnapshots.every(sibling => { const t = store.total(s.ns, s.position, hex(sibling.backing)); return t.issued === sibling.issued && t.burned === sibling.burned; })) {
           const { issued, burned } = store.total(s.ns, s.position, hex(backing));
           verdict = { ...base, class: "valid", scopedTerms, openingIndex,
-            state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }) };
+            state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }, construction) };
         } else throw new KeptStateMismatch("a kept class or its state");
         return verdict;
       }
@@ -910,7 +918,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       const scopedTerms = valid?.scopedTerms.get(hex(scoped.backing)) ?? terms;
       if (!await recovery.forces(scoped.backing, scopedTerms, selection.judgingIndex)) continue;
       for (const verdict of recovery.verdictsThrough(scoped.backing, selection.judgingIndex)) publications.push(verdict);
-      for (const forced of store.forced(scoped.backing, undefined, selection.judgingIndex)) force.push(forcedOf(forced));
+      for (const forced of store.forced(scoped.backing, undefined, selection.judgingIndex)) force.push(forcedOf(construction, forced));
     }
     const clock = valid === undefined ? null : (await scopeClocks(valid.header, name => valid.scopedTerms.get(hex(name))!,
       selection.backing, valid.openingIndex, selection.judgingIndex)).record;
@@ -918,7 +926,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     force.sort(venueOrder);
     // The audit may select a checkpoint at t; C2b.5.2 instead reads the whole
     // canonical scope strictly before t. Unadopted force never mutates it.
-    const nonService = terms.nonService === undefined ? undefined : await countNonService({ selection, terms, verifier: context.verifier }, view,
+    const nonService = terms.nonService === undefined ? undefined : await countNonService({ construction, selection, terms, verifier: context.verifier }, view,
       await latest(selection.backing, terms, { index: view.t, strict: true }), view.publications());
     return { clock, publications, force, nonService };
   };
@@ -944,7 +952,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           const entry = directory.find(item => same(item.name, backing));
           if (entry === undefined) continue;
           const snapshot = snapshotFor(entry.digest);
-          await faults.inspect(held, directory, checkpointScope(trails, backing, entry.digest, snapshot));
+          await faults.inspect(held, directory, checkpointScope(construction, trails, backing, entry.digest, snapshot));
         }
       }
     } catch (error) {

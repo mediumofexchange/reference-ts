@@ -1,18 +1,18 @@
-// §9 facts, with §9.1 intrinsic failures available only to dependency-resolved reads.
+// §9 facts, with §9.1 intrinsic failures available only to dependency-resolved reads. Each item is read through
+// the read's construction (construction.ts `fault`): pool-v3's proofs and signature facts, lit-v1 §6's arithmetic
+// and signatures.
 import { sha256 as hash } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { arrayLength, byteLength, compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
-import { authorizationFaults, type AuthorizationFault } from "./authorization-evidence.js";
-import { decodeFaultEvidence, FaultEvidenceLimitError, verifyFaultEvidence, type FaultEvidence } from "./fault-evidence.js";
-import { segmentBytes } from "./headers.js";
+import { POOL_V3, type Construction, type FaultObservation, type FaultTarget } from "./construction.js";
+import { FaultEvidenceLimitError } from "./fault-evidence.js";
 import type { FaultObserver, ReaderSelection } from "./reader.js";
-import { decodeStatement, hashEvidenceFields, type Statement } from "./records.js";
 import { EvidenceRefusal } from "./refusals.js";
 import type { ProofCheck } from "./state.js";
-import { decodeRootTerms, type RootTerms } from "./terms.js";
+import type { RootTerms } from "./terms.js";
 
+export type { FaultObservation } from "./construction.js";
 export const FAULT_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 32n, maxSuffixEntries: 1024n });
-export type FaultObservation = { readonly check: "PROOF"; readonly authorizationRole?: never } | AuthorizationFault;
 export type FaultFact = FaultObservation & {
   readonly operator: string;
   readonly sequence: string;
@@ -26,7 +26,8 @@ export type FaultFact = FaultObservation & {
   readonly configuration: string;
   readonly classification: "not-established";
   readonly statementHash: string;
-  readonly proofHash: string;
+  /** Absent for a construction whose records carry no proof (lit-v1 §5). */
+  readonly proofHash?: string;
   readonly signatureHash: string;
 };
 export interface FaultResult { readonly faultEvidence?: readonly FaultFact[] }
@@ -54,24 +55,22 @@ export function boundFaultInputs(faults: readonly Uint8Array[] = []): Uint8Array
 /** Own caller inputs synchronously. inspect receives the reader's authenticated,
  * internally owned scope; diagnostics alone never classify a checkpoint. */
 export function faultObserver(payloads: readonly Uint8Array[] = [],
-  selected: Pick<ReaderSelection, "domain" | "venue">, verifier: ProofCheck): ReportingFaultObserver {
+  selected: Pick<ReaderSelection, "domain" | "venue">, verifier: ProofCheck, construction: Construction = POOL_V3 as Construction): ReportingFaultObserver {
   const fixed = (value: Uint8Array): Uint8Array => {
     if (byteLength(value) !== 32) throw new EncodingError("invalid fault selection");
     return copyUnshared(value);
   };
   const selection = { domain: fixed(selected.domain), venue: fixed(selected.venue) };
-  const verify = verifier.verify.bind(verifier);
-  const evidence: { id: string; value: FaultEvidence; statement: Statement | undefined }[] = [];
-  const checked = new Map<string, boolean>(), facts = new Map<string, FaultFact>(), demands = new Map<string, Statement>();
-  const intrinsic = new Map<string, { position: bigint; check: "PROOF" | "SIGNATURE" }[]>();
+  const frames = construction.reader, header = frames.header;
+  const verify = verifier.verify.bind(verifier), bound: ProofCheck = { verify };
+  const evidence: { id: string; value: FaultTarget }[] = [];
+  const facts = new Map<string, FaultFact>(), demands = new Map<string, unknown>();
+  const intrinsic = new Map<string, { position: bigint; check: FaultObservation["check"] }[]>();
   for (const payload of boundFaultInputs(payloads)) {
     try {
-      const value = decodeFaultEvidence(payload, FAULT_LIMITS.maxSuffixEntries);
-      let statement: Statement | undefined;
-      try { statement = decodeStatement(value.statement); }
-      catch (error) { if (!(error instanceof EncodingError)) throw error; }
-      evidence.push({ id: hex(hash(payload)), value, statement });
-      if (statement?.kind === 4 && same(statement.domain, selection.domain)) demands.set(hex(hash(value.statement)), statement);
+      const value = frames.fault(payload, FAULT_LIMITS.maxSuffixEntries);
+      evidence.push({ id: hex(hash(payload)), value });
+      if (value.demand !== undefined) demands.set(value.demand.id, value.demand.statement);
     } catch (error) {
       if (error instanceof FaultEvidenceLimitError) throw new EvidenceRefusal("resource-refusal");
       if (!(error instanceof EncodingError)) throw error;
@@ -96,64 +95,45 @@ export function faultObserver(payloads: readonly Uint8Array[] = [],
     intrinsicFailure(held, scope, blockLength) {
       if (typeof blockLength !== "bigint") throw new Error("adopted block length required");
       if (held.commitment.sequence <= scope.header.sequence) return undefined;
-      const eligible = (intrinsic.get(`${heldKey(held)}:${hex(hash(segmentBytes(scope.header)))}`) ?? [])
+      const eligible = (intrinsic.get(`${heldKey(held)}:${hex(hash(header.segmentBytes(scope.header)))}`) ?? [])
         .filter(fact => fact.position > blockLength);
       return (eligible.find(fact => fact.check === "PROOF") ?? eligible[0])?.check;
     },
     async inspect(held, directory, scope) {
       if (evidence.length === 0) return;
-      const { header, terms } = scope, c = held.commitment;
-      if (!same(header.domain, selection.domain) || !same(header.venue, selection.venue) ||
-          !same(header.operator, c.operator) || header.sequence > c.sequence) return;
+      const { header: segmentHeader, terms } = scope, c = held.commitment;
+      if (!same(segmentHeader.domain, selection.domain) || !same(segmentHeader.venue, selection.venue) ||
+          !same(segmentHeader.operator, c.operator) || segmentHeader.sequence > c.sequence) return;
       // checkpointScope already authenticated the header and every signed term.
       const scopedTerms = new Map<string, RootTerms>();
       for (let i = 0; i < terms.length; i++) {
-        const term = decodeRootTerms(terms[i]!.terms);
+        const term = frames.terms.decodeRootTerms(terms[i]!.terms);
         if (!same(term.configuration, selection.domain) || !same(term.venue, selection.venue)) return;
-        scopedTerms.set(hex(header.entries[i]!.backing), term);
+        scopedTerms.set(hex(segmentHeader.entries[i]!.backing), term);
       }
-      for (const { id, value: e, statement } of evidence) {
+      const segment = hash(header.segmentBytes(segmentHeader));
+      for (const { id, value: e } of evidence) {
         const entry = directory.find(item => same(item.name, e.snapshot.backing));
-        if (entry === undefined || !header.entries.some(item => same(item.backing, entry.name)) ||
-            !same(hash(segmentBytes(header)), e.snapshot.segment) ||
-            !verifyFaultEvidence({ backing: entry.name, segment: e.snapshot.segment, digest: entry.digest }, e, FAULT_LIMITS.maxSuffixEntries)) continue;
-        if (!checked.has(id)) {
-          let rejected = false;
-          if (statement !== undefined && [1, 2, 3, 4, 6].includes(statement.kind) &&
-              same(statement.domain, selection.domain) && e.proof.length > 0 && e.proof.length % 32 === 0) {
-            try { rejected = await verify(statement.kind, [...statement.publicInputs], new Uint8Array(e.proof)) === false; }
-            catch (cause) {
-              // Never let a verifier's error class enter classification catches.
-              throw new Error("compact proof verifier failed", { cause });
-            }
-          }
-          checked.set(id, rejected);
+        if (entry === undefined || !segmentHeader.entries.some(item => same(item.backing, entry.name)) || !same(segment, e.snapshot.segment) ||
+            !e.verify({ backing: entry.name, segment: e.snapshot.segment, digest: entry.digest }, FAULT_LIMITS.maxSuffixEntries)) continue;
+        const observations = await e.observe({ domain: selection.domain, scopedTerms, demands, verifier: bound });
+        for (const { observation, intrinsic: excludes } of observations) {
+          if (!excludes) continue;
+          // §9 bounds proof size; strict-false verification requires its length shape. Prefer PROOF at one
+          // position, retaining all distinct positions for the adopted-block eligibility test.
+          const key = `${heldKey(held)}:${hex(e.snapshot.segment)}`, positions = intrinsic.get(key) ?? [];
+          const prior = positions.find(fact => fact.position === e.position);
+          if (prior === undefined) positions.push({ position: e.position, check: observation.check });
+          else if (observation.check === "PROOF") prior.check = "PROOF";
+          intrinsic.set(key, positions);
         }
-        const observations: FaultObservation[] = checked.get(id) ? [{ check: "PROOF" }] : [];
-        // Scope-derived signers are resolved per mapping. An absent signer
-        // is never cached as validity or rejection.
-        if (statement !== undefined && same(statement.domain, selection.domain)) {
-          observations.push(...authorizationFaults(statement, e, scopedTerms, demands));
-        }
-        for (const observation of observations) {
-          if (observation.check === "PROOF" || observation.authorizationRole === "issue") {
-            // §9 bounds proof size; strict-false verification above requires
-            // its length shape. Prefer PROOF at one position, retaining all
-            // distinct positions for the adopted-block eligibility test.
-            const key = `${heldKey(held)}:${hex(e.snapshot.segment)}`, positions = intrinsic.get(key) ?? [];
-            const prior = positions.find(fact => fact.position === e.position);
-            if (prior === undefined) positions.push({ position: e.position, check: observation.check });
-            else if (observation.check === "PROOF") prior.check = "PROOF";
-            intrinsic.set(key, positions);
-          }
-        }
-        const key = `${hex(c.operator)}:${c.sequence}:${hex(c.root)}:${id}`;
-        const digests = hashEvidenceFields(hash(e.statement), e.proof, e.authorization);
-        for (const observation of observations) facts.set(`${key}:${observation.check}:${observation.authorizationRole ?? ""}`, {
+        const key = `${hex(c.operator)}:${c.sequence}:${hex(c.root)}:${id}`, digests = e.digests;
+        for (const { observation } of observations) facts.set(`${key}:${observation.check}:${observation.authorizationRole ?? ""}:${observation.authorizationRole === undefined ? "" : observation.signer}`, {
           operator: hex(c.operator), sequence: c.sequence.toString(), root: hex(c.root), index: held.index.toString(),
           backing: hex(entry.name), segment: hex(e.snapshot.segment), position: e.position.toString(), length: e.length.toString(),
           evidence: id, configuration: hex(selection.domain), ...observation, classification: "not-established",
-          statementHash: hex(digests.statementHash), proofHash: hex(digests.proofHash), signatureHash: hex(digests.signatureHash) });
+          statementHash: hex(digests.statementHash), ...(digests.proofHash === undefined ? {} : { proofHash: hex(digests.proofHash) }),
+          signatureHash: hex(digests.signatureHash) });
       }
     },
   };

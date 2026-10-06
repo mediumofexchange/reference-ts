@@ -140,5 +140,7 @@ function decodeHeader(context: Uint8Array, prefix: number, input: Uint8Array): S
   return header;
 }
 
-const V3 = segmentHeaderCodec(CONTEXT);
+/** Pool-v3 §8 under its own context. */
+export const V3_HEADERS = segmentHeaderCodec(CONTEXT);
+const V3 = V3_HEADERS;
 export const segmentBytes = V3.segmentBytes, segmentIdentity = V3.segmentIdentity, decodeSegmentHeader = V3.decodeSegmentHeader;
