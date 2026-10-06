@@ -261,6 +261,20 @@ describe("the operator journal over a lit scope", () => {
     expect(await refusal(f.create().status())).toEqual(["STORAGE", undefined]);
   });
 
+  it("refuses on reopening a demand row the trail did not stand up, from which a settlement would derive its output", async () => {
+    const f = fixture(), j = f.create();
+    await j.open("genesis", f.signed); await j.publish();
+    const now = f.venue.witnessedIndex();
+    const issued = f.issue(f.segment, 10n, ALICE), [note] = f.outputsOf(issued);
+    await j.submit(issued); await j.submit(f.demand(f.segment, [note!], [ALICE], now, now + 200n));
+    await j.commit("c2"); await j.publish();
+    j.close();
+    const db = new DatabaseSync(f.file);
+    expect(db.prepare("UPDATE demand SET quantity = '1000'").run().changes).toBe(1);
+    db.close();
+    expect(await refusal(f.create().status())).toEqual(["STORAGE", undefined]);
+  });
+
   it("reopens after a demand stood up in one segment is settled in its successor and a third segment imports both", async () => {
     const f = fixture(), j = f.create();
     await j.open("genesis", f.signed); await j.publish();

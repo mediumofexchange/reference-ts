@@ -492,8 +492,8 @@ export function keptStateHolds(store: ReplayStore, ns: number, position: bigint,
  * which no root in its snapshot checks either. Each imported namespace's own outputs through the position imported
  * must be its segment's trail's, through the chain value kept there; a namespace this process replayed or already
  * rebuilt is known and reads nothing. A trail `trails` does not hold leaves the state unmatched (kept state to
- * discard; a read without the evidence is then unresolved). The chain value and demand rows the rebuild reads are
- * vouched for by §14's digest, as the pool's rows beyond its roots are. A construction with a note tree checks its roots
+ * discard; a read without the evidence is then unresolved). The chain value the rebuild reads is vouched for by §14's
+ * digest, as the pool's rows beyond its roots are. A construction with a note tree checks its roots
  * instead. */
 function keptImportsHold(store: ReplayStore, ns: number, construction: Construction, trails: Pick<TrailEvidence, "trail"> | undefined): boolean {
   if (construction.namespace.tree) return true;
@@ -544,7 +544,8 @@ function replayedOutputs(store: ReplayStore, ns: number, construction: Construct
 
 /** Lit-v1 §10: no root in a lit snapshot checks the output set, so a reader resuming a namespace without a note tree
  * rebuilds it from the kept statements: its own output rows through `position` must be exactly, in order, the outputs
- * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`). A
+ * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`), and each
+ * demand row it stands up the trail's demand, since a settlement's output and nullifiers are read from it. A
  * settlement reads its demand from the trail's records, or, one stood up before what is rebuilt (an imported one, or one
  * this process's replay wrote), from the state before it; imported outputs are their own namespaces' (each rebuilt by
  * `keptImportsHold` before a state importing it is reused). The caller has checked the trail's chain at `position`
@@ -572,7 +573,12 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
     const kind = construction.kind(record), before = at - 1n;
     if (kind < 1 || kind > 6) return false;
     const view = construction.view(record, id => local.get(id) ?? new StateHandle(store, ns, before, construction).demand(id) ?? closure?.(id));
-    if (view.demand !== undefined) local.set(view.demand.id, view.demand.value);
+    if (view.demand !== undefined) {
+      // A settlement reads its output and nullifiers from its demand's row, so the row must be the one the trail stands up.
+      const kept = store.presented(ns, at, view.demand.id);
+      if (kept === undefined || kept.event.ns !== ns || kept.event.position !== at || !sameDemand(kept.demand, view.demand.value)) return false;
+      local.set(view.demand.id, view.demand.value);
+    }
     for (const cm of view.outputs) derived.push({ cm, position: at });
   }
   // Every own row past the known leaves at or below `position` is a derived output, in order, and none is missing.
@@ -585,6 +591,13 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
   if (k !== derived.length) return false;
   known(store).set(ns, { position, leaves: (from?.leaves ?? 0n) + BigInt(k), demands: local });
   return true;
+}
+
+function sameDemand(a: Demand, z: Demand): boolean {
+  const list = (x: readonly bigint[] | undefined, y: readonly bigint[] | undefined): boolean =>
+    (x ?? []).length === (y ?? []).length && (x ?? []).every((value, i) => value === (y ?? [])[i]);
+  return same(a.backing, z.backing) && a.quantity === z.quantity && list(a.tags, z.tags) && same(a.presenter, z.presenter) &&
+    a.instant === z.instant && a.deadline === z.deadline && list(a.nullifiers, z.nullifiers);
 }
 
 /** Whether a namespace's stored tip reproduces from its own rows (§14's snapshot check with the tip's chain values in
