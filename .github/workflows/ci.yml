@@ -18,17 +18,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Whether the real-proof jobs run (scripts/real-proof-gate.mjs): they are skipped only when the tree under test
+  # differs from a tree whose real-proof jobs all passed solely in re-recorded reports and documentation that no
+  # real-proof check reads. Any doubt runs them; a manual dispatch always does.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      groups: ${{ steps.gate.outputs.groups }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/real-proof-gate.mjs
+
+  # One job per group of scripts/pool/v3/real-proof.mjs on each system, so the run waits for the slowest group rather
+  # than the sum (the serial job had reached 39 minutes on Ubuntu and 51 on Windows). Each job builds (a few seconds of
+  # tsc), checks the proving parameters from a shared cache, runs its group and uploads the reports it wrote.
   pool-v3:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    name: pool-v3 ${{ matrix.group }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # The --ergo pass replays every local group a second time from synthetic Ergo block sections through the
-    # profile's own framer, the history acceptance proves some eighty statements, and the command drill runs every
-    # moe command from a packed install; the budget leaves headroom over the baseline (Windows took 36 minutes at
-    # c618f4f and finished every check at 45 minutes, the old limit, in run 37197846501).
-    timeout-minutes: 60
+    # The longest group, the command drill, took 12 minutes on Windows in the serial job (run 37424183597).
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        group: ${{ fromJSON(needs.gate.outputs.groups) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,26 +64,23 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Pool-v3 relations, stores, history, command drill and replay, with the Ergo adapter
-        run: npm run check:pool:v3 -- --ergo
-      - name: Retain source-bound v3 acceptance reports
+      # prepare-crs.mjs keeps a cached file only when its length and SHA-256 are the ones parameters.ts pins, and
+      # fetches it otherwise; the cache only saves the download.
+      - name: Proving parameters cache
+        uses: actions/cache@v4
+        with:
+          path: scratch/private-payment-crs
+          key: proving-parameters-${{ runner.os }}-${{ hashFiles('src/pool/parameters.ts', 'src/pool/parameter-files.ts') }}
+      - name: Pool-v3 real-proof group ${{ matrix.group }}, with the Ergo adapter
+        run: npm run check:pool:v3 -- --group ${{ matrix.group }} --ergo --collect scratch/ci-reports
+      - name: Retain this group's source-bound v3 acceptance reports
         uses: actions/upload-artifact@v4
         with:
-          name: pool-v3-reports-${{ matrix.os }}
-          path: |
-            scratch/pool-v3-results.json
-            scratch/pool-v3-store-results.json
-            scratch/pool-v3-local-replay-results.json
-            docs/pool-v3-history-store-verification.json
-            docs/pool-v3-recovery-store-verification.json
-            docs/pool-v3-recovery-store-ergo-verification.json
-            docs/pool-v3-succession-store-verification.json
-            docs/pool-v3-succession-store-ergo-verification.json
-            docs/pool-v3-scope-store-verification.json
-            docs/pool-v3-scope-store-ergo-verification.json
-            docs/pool-v3-redemption-store-verification.json
-            docs/pool-v3-redemption-store-ergo-verification.json
-          if-no-files-found: error
+          name: pool-v3-reports-${{ matrix.os }}-${{ matrix.group }}
+          path: scratch/ci-reports
+          # A group whose scripts write no report (the command drill) uploads nothing; a missing report fails the
+          # step before this one.
+          if-no-files-found: ignore
       - name: Diagnose proving parameter integrity on failure
         if: failure()
         shell: bash
@@ -69,6 +94,46 @@ jobs:
             console.log(JSON.stringify({ name, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }));
           }
           JS
+
+  # Only when every real-proof job passed: merge each system's reports into the one artifact runs re-record from
+  # (pool-v3-reports-<os>, laid out at repository paths as before) and record the tested tree for the gate.
+  real-proof-passed:
+    needs: [gate, pool-v3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Merge the Ubuntu reports
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: pool-v3-reports-ubuntu-latest
+          pattern: pool-v3-reports-ubuntu-latest-*
+      - name: Merge the Windows reports
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: pool-v3-reports-windows-latest
+          pattern: pool-v3-reports-windows-latest-*
+      - uses: actions/download-artifact@v4
+        with:
+          name: pool-v3-reports-ubuntu-latest
+          path: scratch/merged/ubuntu-latest
+      - uses: actions/download-artifact@v4
+        with:
+          name: pool-v3-reports-windows-latest
+          path: scratch/merged/windows-latest
+      - name: Check every report reached its system's artifact
+        run: node scripts/pool/v3/real-proof.mjs --expect scratch/merged/ubuntu-latest scratch/merged/windows-latest
+      - name: Record the tree whose real-proof jobs passed
+        run: node scripts/real-proof-gate.mjs --record scratch/real-proof-tree.z
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-proof-tree
+          path: scratch/real-proof-tree.z
+          if-no-files-found: error
+          overwrite: true
 
   check:
     runs-on: ${{ matrix.os }}
@@ -95,3 +160,7 @@ jobs:
 
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
+
+      # Lists retained reports whose bound sources changed (informational: an older report can stay correct history).
+      - name: Retained evidence drift
+        run: npm run check:evidence
