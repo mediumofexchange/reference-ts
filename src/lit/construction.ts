@@ -8,7 +8,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
 import type { LitScan, ScanOutput } from "../pool/v3/state.js";
 import type {
-  Construction, FaultTarget, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
+  Construction, FaultTarget, KeyedNote, KeyedWalletFrames, Keyring, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
 import type { VerifierIdentities } from "../pool/v3/configuration.js";
 import { requireReplay } from "../pool/v3/refusals.js";
@@ -22,10 +22,13 @@ import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configurat
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  arithmeticHolds, decodePublication, decodeRecord, encodeRecord, evidencePair, hashEvidenceFields, splitRecord, ownerSignaturesVerify,
+  arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodeRecord, evidencePair, hashEvidenceFields, splitRecord, ownerSignaturesVerify,
   settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
+import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, windowFor } from "./holdings.js";
+import { copyLitPaymentRequest, signedSpend } from "./wallet.js";
+import { OWNER_LOOK_AHEAD, presentSecret } from "./wallet-keys.js";
 import { LIT_HEADERS, LIT_PACKAGES, LIT_TRAILS, MAX_LIT_TRAIL_RECORD_BYTES } from "./transport.js";
 import { verifySignatureStrict } from "../keys.js";
 
@@ -191,6 +194,36 @@ const LIT_READER: ReaderFrames = Object.freeze({
   fault: litFaultTarget,
 });
 
+/** §8's keyed wallet, as the one wallet (pool/v3/wallet-store.ts) reads it (slice 14 M14g). */
+const LIT_WALLET: KeyedWalletFrames = Object.freeze({
+  lookAhead: OWNER_LOOK_AHEAD,
+  window: windowFor,
+  keyring: (seed: Uint8Array, domain: Uint8Array) => new OwnerKeys(seed, domain),
+  witness: (seed: Uint8Array, domain: Uint8Array, windows: ReadonlyMap<string, bigint>, keyring: Keyring) => {
+    if (!(keyring instanceof OwnerKeys)) throw new TypeError("a lit scan reads lit owner keys");
+    return litWitness(seed, domain, windows, keyring);
+  },
+  notes: litNotes,
+  found: foundIndices,
+  ownFunded,
+  noteSecret: (seed: Uint8Array, domain: Uint8Array, keyring: Keyring, note: KeyedNote) => {
+    if (!(keyring instanceof OwnerKeys)) throw new TypeError("a lit note is spent by lit owner keys");
+    return noteSecret(seed, domain, keyring, note);
+  },
+  presentSecret,
+  request: copyLitPaymentRequest,
+  spend: signedSpend,
+  spendOf: (bytes: Uint8Array) => {
+    const s = decodeRecord(bytes).statement;
+    if (s.kind !== 2) throw new EncodingError("not a spend");
+    return { segment: s.segment, inputs: s.inputs, outputs: s.outputs };
+  },
+  outputs: (domain: Uint8Array, bytes: Uint8Array) =>
+    derivedOutputs(decodeRecord(bytes).statement).map(opening => ({ cm: keyOf(noteCommitment(domain, opening)), opening })),
+  commitment: (domain: Uint8Array, opening: Opening) => keyOf(noteCommitment(domain, opening)),
+  receipt: Object.freeze({ decode: decodeReceipt, encode: encodeReceipt, verify: verifyReceipt }),
+});
+
 /** Lit-v1: §3 records, §2's derived outputs, §5's chains with the evidence pair and no note root, no note tree. */
 export const LIT: Construction<LitRecord> = Object.freeze({
   namespace: Object.freeze({ name: CONSTRUCTION, tree: false }),
@@ -211,6 +244,7 @@ export const LIT: Construction<LitRecord> = Object.freeze({
   },
   scanOutput: litScanOutput,
   reader: LIT_READER,
+  wallet: LIT_WALLET,
   journal: Object.freeze({
     encode: encodeRecord,
     identity: (record: LitRecord) => statementHash(record.statement),

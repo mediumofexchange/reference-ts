@@ -29,7 +29,7 @@ import {
 import { effectOf, recoveryEffect, tagOf } from "./recovery.js";
 import { requireReplay } from "./refusals.js";
 import { POOL_V3_NAMESPACE, type Demand, type NamespaceConstruction } from "./replay-store.js";
-import type { ProofCheck, ReceiptEvent, ScanOutput, StateView } from "./state.js";
+import type { ProofCheck, ReceiptEvent, ScanOutput, StateHandle, StateView, WitnessPredicate } from "./state.js";
 import { V3_TERMS, type RootTerms, type TermsCodec } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, V3_TRAILS, type TrailCodec } from "./trail.js";
 
@@ -102,6 +102,85 @@ export interface Construction<R = unknown> {
   readonly reader: ReaderFrames;
   /** What an operator's journal writes besides (slice 14 M14f). */
   readonly journal: JournalFrames<R>;
+  /** What the one wallet (wallet-store.ts) reads and builds for a construction whose notes are held by owner keys
+   * (lit-v1 §8, slice 14 M14g); pool-v3's wallet path is the wallet's own, so it names none. */
+  readonly wallet?: KeyedWalletFrames | undefined;
+}
+
+/** A note's public opening where openings are public (lit-v1 §2). */
+export interface KeyedOpening {
+  readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array; readonly rho: Uint8Array;
+}
+/** An output as a statement carries it: backing, value and owner key. */
+export interface KeyedOutput { readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array }
+/** A request by owner key (lit-v1 §8): the backing, the quantity and this request's own key. */
+export interface KeyedRequest {
+  readonly domain: Uint8Array; readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array;
+}
+/** How a note is a wallet's: an owner key of a backing and index, or a settlement's acceptance (lit-v1 §8). */
+export type KeyedOwner = { readonly backing: Uint8Array; readonly index: bigint; readonly acceptance?: never } |
+  { readonly backing?: never; readonly index?: never; readonly acceptance: { readonly demand: Uint8Array; readonly deadline: bigint } };
+/** A wallet's note found by its key: its opening, commitment, nullifier and tag (C3.3), how it is the wallet's, the
+ * nullifiers of the notes its creating statement consumed (none for an issue), and where the read found it. */
+export interface KeyedNote {
+  readonly opening: KeyedOpening;
+  readonly cm: bigint;
+  readonly nf: bigint;
+  readonly tag: bigint;
+  readonly owner: KeyedOwner;
+  readonly consumed: readonly bigint[];
+  readonly ns: number;
+  readonly local: boolean;
+}
+/** A wallet's owner keys by backing and index (public keys derived once per handle; secrets derived when spent). */
+export interface Keyring {
+  key(backing: Uint8Array, index: bigint): Uint8Array;
+  /** The caller zeroes it after use. */
+  secret(backing: Uint8Array, index: bigint): Uint8Array;
+  close(): void;
+}
+/** A receipt of a construction without a scope root or proof digest (lit-v1 §5). */
+export interface KeyedReceipt {
+  readonly domain: Uint8Array; readonly segment: Uint8Array; readonly position: bigint; readonly statementHash: Uint8Array;
+  readonly historyHash: Uint8Array; readonly signatureHash: Uint8Array; readonly after: bigint;
+  readonly operator: Uint8Array; readonly signature: Uint8Array;
+}
+/** A note to spend: its opening and its owner's secret (the caller zeroes it). */
+export interface KeyedInput { readonly opening: KeyedOpening; readonly secret: Uint8Array }
+/** What the one wallet reads and builds for a construction whose notes are held by owner keys (lit-v1 §8). */
+export interface KeyedWalletFrames {
+  /** §8's look-ahead: 256 indices. */
+  readonly lookAhead: bigint;
+  /** The scan window of a backing whose found index is `h` (−1 for none). */
+  window(h: bigint): bigint;
+  keyring(seed: Uint8Array, domain: Uint8Array): Keyring;
+  /** The replay's witness predicate over each held backing's window (hex name to window). */
+  witness(seed: Uint8Array, domain: Uint8Array, windows: ReadonlyMap<string, bigint>, keyring: Keyring): WitnessPredicate;
+  /** The wallet's unspent notes of `backing` in a state replayed with its predicate. */
+  notes(domain: Uint8Array, backing: Uint8Array, state: StateHandle): KeyedNote[];
+  /** Per held backing (hex): §8's `h` and the highest index found in an output of it, spent ones included. */
+  found(domain: Uint8Array, state: StateHandle): Map<string, { readonly reached: bigint; readonly top: bigint }>;
+  /** Whether the note's creating statement consumed notes, all of them the wallet's own. */
+  ownFunded(state: StateHandle, note: KeyedNote): boolean;
+  /** The note's spend secret, checked against its owner (KeptStateMismatch otherwise). */
+  noteSecret(seed: Uint8Array, domain: Uint8Array, keyring: Keyring, note: KeyedNote): Uint8Array;
+  /** A demand's presenter secret from its tags in input order, instant and deadline. */
+  presentSecret(seed: Uint8Array, domain: Uint8Array, tags: readonly Uint8Array[], instant: bigint, deadline: bigint): Uint8Array;
+  /** An owned request checked against the payer's agreed domain, backing and amount; EncodingError otherwise. */
+  request(input: KeyedRequest, expected: { readonly domain: Uint8Array; readonly backing: Uint8Array; readonly value: bigint }): KeyedRequest;
+  /** A spend's record signed by each input's owner in input order. */
+  spend(domain: Uint8Array, segment: Uint8Array, inputs: readonly KeyedInput[], outputs: readonly KeyedOutput[]): Uint8Array;
+  /** A spend record's segment, inputs and outputs; EncodingError where the bytes are no spend. */
+  spendOf(bytes: Uint8Array): { readonly segment: Uint8Array; readonly inputs: readonly KeyedOpening[]; readonly outputs: readonly KeyedOutput[] };
+  /** A record's derived outputs in statement order, each with its commitment (a settlement's needs its demand: none here). */
+  outputs(domain: Uint8Array, bytes: Uint8Array): { readonly cm: bigint; readonly opening: KeyedOpening }[];
+  /** A note's commitment from its opening. */
+  commitment(domain: Uint8Array, opening: KeyedOpening): bigint;
+  readonly receipt: {
+    decode(bytes: Uint8Array): KeyedReceipt;
+    encode(receipt: KeyedReceipt): Uint8Array;
+    verify(authority: { readonly domain: Uint8Array; readonly segment: Uint8Array; readonly operator: Uint8Array }, receipt: KeyedReceipt): boolean;
+  };
 }
 
 /** A receipt's fields (§7.2) as the journal names them for any construction: pool-v3's name its scope root and the

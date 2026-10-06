@@ -82,17 +82,17 @@ describe("the one wallet holding lit notes", () => {
 
   it("requests by owner key, pays with change to the next index, and credits the payee's output once", async () => {
     const f = await fixture(), payer = f.open("payer"), receiver = f.open("receiver");
-    const fund = payer.litRequest("fund", f.backing, 10n);
+    const fund = payer.keyedRequest("fund", f.backing, 10n);
     // Index 0 of the backing, from the seed: lit-v1 §8's owner key.
     expect(same(fund.owner, pub(ownerSecret(payer.recoverySeed(), DOMAIN, f.backing, 0n)))).toBe(true);
-    expect(payer.litRequest("fund", f.backing, 10n)).toEqual(fund);
-    expect(await refusal(() => payer.litRequest("fund", f.backing, 11n))).toBe("CONFLICT");
+    expect(payer.keyedRequest("fund", f.backing, 10n)).toEqual(fund);
+    expect(await refusal(() => payer.keyedRequest("fund", f.backing, 11n))).toBe("CONFLICT");
     await f.issue(fund); await f.checkpoint();
     expect(values(await payer.sync(await f.served(), f.signed))).toEqual([[10n, "available"]]);
     // An issue consumes no note: K's issue to the payer's request credits it.
-    expect((await payer.litFulfill("fund", await f.served(), f.signed)).request).toEqual(fund);
+    expect((await payer.keyedFulfill("fund", await f.served(), f.signed)).request).toEqual(fund);
 
-    const invoice = receiver.litRequest("invoice", f.backing, 4n);
+    const invoice = receiver.keyedRequest("invoice", f.backing, 4n);
     const order = { request: invoice, value: 4n };
     const payment = await payer.prepare("shop", order, await f.served(), f.signed);
     expect(payment).toMatchObject({ status: "prepared", value: 4n, fee: undefined });
@@ -101,7 +101,7 @@ describe("the one wallet holding lit notes", () => {
     expect(await refusal(payer.prepare("shop", { request: invoice, value: 3n }, await f.served(), f.signed))).toBe("INVALID");
     expect(values(await payer.sync(await f.served(), f.signed))).toEqual([[10n, "reserved"]]);
     // Not yet paid: no output to the key.
-    expect(await refusal(receiver.litFulfill("invoice", await f.served(), f.signed))).toBe("ABSENT");
+    expect(await refusal(receiver.keyedFulfill("invoice", await f.served(), f.signed))).toBe("ABSENT");
 
     const receipt = await payer.submit("shop", f.service);
     expect(receipt.position).toBe(2n);
@@ -110,10 +110,10 @@ describe("the one wallet holding lit notes", () => {
     expect(values(await payer.sync(await f.served(), f.signed))).toEqual([[6n, "available"]]);
     expect(payer.payment("shop")).toMatchObject({ status: "final" });
 
-    const credited = await receiver.litFulfill("invoice", await f.served(), f.signed);
+    const credited = await receiver.keyedFulfill("invoice", await f.served(), f.signed);
     expect(credited).toMatchObject({ cm: payment.payee, judgingIndex: f.venue.witnessedIndex() });
-    expect(receiver.litFulfillment("invoice")).toEqual(credited);
-    expect(await refusal(receiver.litFulfill("invoice", await f.served(), f.signed))).toBe("CONFLICT");
+    expect(receiver.keyedFulfillment("invoice")).toEqual(credited);
+    expect(await refusal(receiver.keyedFulfill("invoice", await f.served(), f.signed))).toBe("CONFLICT");
     expect(values(await receiver.sync(await f.served(), f.signed))).toEqual([[4n, "available"]]);
     // A pool request on a lit wallet, and a lit act not taken yet, refuse by name.
     expect(await refusal(() => receiver.request("pool", f.backing, 1n))).toBe("INVALID");
@@ -122,20 +122,20 @@ describe("the one wallet holding lit notes", () => {
 
   it("credits no request with an output of the wallet's own notes", async () => {
     const f = await fixture(), holder = f.open("holder");
-    const fund = holder.litRequest("fund", f.backing, 5n);
+    const fund = holder.keyedRequest("fund", f.backing, 5n);
     await f.issue(fund); await f.checkpoint();
     // A payment of the holder's own note to its own request: the output is the holder's, but credits nothing (§8).
-    const own = holder.litRequest("own", f.backing, 5n);
+    const own = holder.keyedRequest("own", f.backing, 5n);
     await holder.prepare("self", { request: own, value: 5n }, await f.served(), f.signed);
     await holder.submit("self", f.service); await f.checkpoint();
     expect(values(await holder.sync(await f.served(), f.signed))).toEqual([[5n, "available"]]);
-    expect(await refusal(holder.litFulfill("own", await f.served(), f.signed))).toBe("ABSENT");
+    expect(await refusal(holder.keyedFulfill("own", await f.served(), f.signed))).toBe("ABSENT");
   });
 
   it("signs a payment again for the canonical segment after a scope change, its outputs unchanged", async () => {
     const f = await fixture(), payer = f.open("payer"), receiver = f.open("receiver");
-    await f.issue(payer.litRequest("fund", f.backing, 10n)); await f.checkpoint();
-    const invoice = receiver.litRequest("invoice", f.backing, 4n);
+    await f.issue(payer.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    const invoice = receiver.keyedRequest("invoice", f.backing, 4n);
     const first = await payer.prepare("shop", { request: invoice, value: 4n }, await f.served(), f.signed);
     // Before the scope changes the saved record names the canonical segment: it is returned unchanged.
     expect((await payer.reprove("shop", await f.served(), f.signed)).record).toEqual(first.record);
@@ -146,34 +146,34 @@ describe("the one wallet holding lit notes", () => {
     await payer.submit("shop", f.service); await f.checkpoint();
     expect(values(await payer.sync(await f.served(), f.signed))).toEqual([[6n, "available"]]);
     expect(payer.payment("shop")).toMatchObject({ status: "final" });
-    expect((await receiver.litFulfill("invoice", await f.served(), f.signed)).cm).toBe(first.payee);
+    expect((await receiver.keyedFulfill("invoice", await f.served(), f.signed)).cm).toBe(first.payee);
   });
 
   it("hands its exposed indices to an encrypted backup's restored copy, which never names a key twice", async () => {
     const f = await fixture(), holder = f.open("holder");
-    for (let i = 0; i < 5; i++) holder.litRequest(`r${i}`, f.backing, 1n);
+    for (let i = 0; i < 5; i++) holder.keyedRequest(`r${i}`, f.backing, 1n);
     const key = b(77), backup = holder.exportBackup(key);
-    expect(await refusal(() => holder.litRequest("r5", f.backing, 1n))).toBe("FENCED");
+    expect(await refusal(() => holder.keyedRequest("r5", f.backing, 1n))).toBe("FENCED");
     const { walletBackupDigest } = await import("../src/pool/v3/wallet-backup.js");
     const restored = V3Wallet.restoreBackup(join(resolve(directories.at(-1)!), "copy.db"), { construction: LIT, venue: f.venue, reference },
       backup, key, walletBackupDigest(backup));
     wallets.push(restored);
-    const next = restored.litRequest("r5", f.backing, 1n);
+    const next = restored.keyedRequest("r5", f.backing, 1n);
     expect(same(next.owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 5n)))).toBe(true);
-    expect(restored.litRequest("r0", f.backing, 1n).owner).toEqual(pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 0n)));
+    expect(restored.keyedRequest("r0", f.backing, 1n).owner).toEqual(pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 0n)));
   });
 
   it("restores every note from the seed under doubling windows and exposes nothing it may have exposed", async () => {
     const f = await fixture(), holder = f.open("holder");
     // Indices 0..700: paid at 200, then 450 (h = 200 exposes through 456), then 700 (h = 450 exposes through 706).
     const requests = new Map<number, LitPaymentRequest>();
-    const ask = (from: number, to: number) => { for (let i = from; i <= to; i++) requests.set(i, holder.litRequest(`r${i}`, f.backing, BigInt(i + 1))); };
+    const ask = (from: number, to: number) => { for (let i = from; i <= to; i++) requests.set(i, holder.keyedRequest(`r${i}`, f.backing, BigInt(i + 1))); };
     ask(0, 255);
-    expect(await refusal(() => holder.litRequest("r256", f.backing, 257n))).toBe("WINDOW");
+    expect(await refusal(() => holder.keyedRequest("r256", f.backing, 257n))).toBe("WINDOW");
     await f.issue(requests.get(200)!); await f.checkpoint();
     await holder.sync(await f.served(), f.signed);
     ask(256, 456);
-    expect(await refusal(() => holder.litRequest("r457", f.backing, 458n))).toBe("WINDOW");
+    expect(await refusal(() => holder.keyedRequest("r457", f.backing, 458n))).toBe("WINDOW");
     await f.issue(requests.get(450)!); await f.checkpoint();
     await holder.sync(await f.served(), f.signed);
     ask(457, 700);
@@ -181,12 +181,12 @@ describe("the one wallet holding lit notes", () => {
     expect(values(await holder.sync(await f.served(), f.signed))).toEqual([[201n, "available"], [451n, "available"], [701n, "available"]]);
 
     const restored = f.restore("restored", holder.recoverySeed());
-    expect(await refusal(() => restored.litRequest("next", f.backing, 1n))).toBe("WINDOW");
+    expect(await refusal(() => restored.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
     // A first read under 512 finds 200 and 450; h = 450 doubles the window, and the read again finds 700.
     const view = await restored.sync(await f.served(), f.signed);
     expect(values(view).sort((p, q) => (p[0]! < q[0]! ? -1 : 1))).toEqual([[201n, "available"], [451n, "available"], [701n, "available"]]);
     // Every index through h + 256 = 956 reads as exposed: no new request until the window moves.
-    expect(await refusal(() => restored.litRequest("next", f.backing, 1n))).toBe("WINDOW");
+    expect(await refusal(() => restored.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
   });
 });
 

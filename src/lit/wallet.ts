@@ -7,15 +7,11 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { ByteReader, ByteWriter, compareBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { field32, key32, positive, type Opening, type Output } from "./notes.js";
 import { encodeRecord, statementBytes, type Statement } from "./records.js";
+import type { KeyedRequest } from "../pool/v3/construction.js";
 
 /** §8: what a payer is asked to pay, on an authenticated channel. The owner key is the receiver's for this request
  * alone; outputs are public, so the frame carries nothing secret. */
-export interface LitPaymentRequest {
-  readonly domain: Uint8Array;
-  readonly backing: Uint8Array;
-  readonly value: bigint;
-  readonly owner: Uint8Array;
-}
+export type LitPaymentRequest = KeyedRequest;
 
 /** Own and check a request against the payer's agreed domain, backing and amount. This is not recipient
  * authentication or evidence of payment. */

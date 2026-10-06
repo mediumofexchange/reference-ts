@@ -14,6 +14,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { ByteReader, ByteWriter, compareBytes, copyBytes } from "../bytes.js";
 import { utf8Encoder } from "../contexts.js";
 import { KeptStateMismatch } from "../pool/v3/replay-store.js";
+import type { KeyedNote, KeyedOwner, Keyring } from "../pool/v3/construction.js";
 import type { ScanOutput, StateHandle, WitnessMark, WitnessPredicate } from "../pool/v3/state.js";
 import { noteCommitment, noteNullifier, noteTag, type Opening } from "./notes.js";
 import { acceptSecret, OWNER_LOOK_AHEAD, ownerRoot, ownerSecretAt, publicKeyOf } from "./wallet-keys.js";
@@ -43,7 +44,7 @@ export function reached(indices: Iterable<bigint>): bigint {
 
 /** One wallet's owner keys by backing and index, derived once per handle and extended as windows grow. Only public keys
  * are kept; a secret is derived again when a note is spent. */
-export class OwnerKeys {
+export class OwnerKeys implements Keyring {
   readonly #root: Uint8Array;
   readonly #owners = new Map<string, { readonly backing: Uint8Array; readonly index: bigint }>();
   readonly #counts = new Map<string, bigint>();
@@ -68,21 +69,9 @@ export class OwnerKeys {
   close(): void { this.#root.fill(0); }
 }
 
-/** How a note is the wallet's: an owner key of a backing and index, or a settlement's acceptance (§8). */
-export type LitOwner = { readonly backing: Uint8Array; readonly index: bigint; readonly acceptance?: never } |
-  { readonly backing?: never; readonly index?: never; readonly acceptance: { readonly demand: Uint8Array; readonly deadline: bigint } };
-/** A wallet's lit note: its opening, commitment, nullifier and tag (C3.3), how it is the wallet's, the nullifiers of the
- * notes its creating statement consumed (none for an issue), and where the read found it. */
-export interface LitNote {
-  readonly opening: Opening;
-  readonly cm: bigint;
-  readonly nf: bigint;
-  readonly tag: bigint;
-  readonly owner: LitOwner;
-  readonly consumed: readonly bigint[];
-  readonly ns: number;
-  readonly local: boolean;
-}
+/** How a note is the wallet's (§8), and a wallet's lit note, as the one wallet reads them (pool/v3/construction.ts). */
+export type LitOwner = KeyedOwner;
+export type LitNote = KeyedNote;
 
 /** A mark: the opening; how it is the wallet's (0: a key's backing and index; 1: an acceptance's demand and deadline);
  * the tag; and the consumed nullifiers. A local layout of the kept file, read only under the predicate that wrote it. */
