@@ -7,10 +7,11 @@ import { compareBytes } from "../src/bytes.js";
 import { decodeReceipt } from "../src/lit/commitments.js";
 import { litConfigHash } from "../src/lit/configuration.js";
 import { LIT } from "../src/lit/construction.js";
-import { encodeRecord, statementBytes, type Statement } from "../src/lit/records.js";
+import { noteCommitment, noteNullifier, noteTag } from "../src/lit/notes.js";
+import { acceptanceBytes, decodePublication, decodeRecord, encodeRecord, statementBytes, type Statement } from "../src/lit/records.js";
 import { encodeLitTerms, litTermsName, litTermsSignatureMessage, type LitRootTerms } from "../src/lit/terms.js";
 import { decodeLitPackage, decodeLitSegmentHeader, decodeLitTrail, litSegmentIdentity } from "../src/lit/transport.js";
-import { ownerSecret } from "../src/lit/wallet-keys.js";
+import { acceptSecret, issueNonce, ownerSecret, presentSecret } from "../src/lit/wallet-keys.js";
 import type { LitPaymentRequest } from "../src/lit/wallet.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import type { V3Wallet as Wallet, V3WalletError as WalletError } from "../src/pool/v3/wallet-store.js";
@@ -18,7 +19,8 @@ import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { keptFileDigest } from "../src/pool/v3/replay-store.js";
 
 // The one wallet (src/pool/v3/wallet-store.ts) holding lit-v1 notes (slice 14 M14g1): requests by owner key, notes found by
-// owner keys per backing under doubling windows (lit-v1 §8), payments signed by the notes' owners, credited once. A lit
+// owner keys per backing under doubling windows (lit-v1 §8), payments signed by the notes' owners, credited once; and (M14g2)
+// K's issue and acceptance, the holder's burn, demand, withdrawal and settlement, their publication, and §8's window move. A lit
 // operator journal serves the evidence; no verifier is given anywhere.
 
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
@@ -117,9 +119,9 @@ describe("the one wallet holding lit notes", () => {
     expect(receiver.keyedFulfillment("invoice")).toEqual(credited);
     expect(await refusal(receiver.keyedFulfill("invoice", await f.served(), f.signed))).toBe("CONFLICT");
     expect(values(await receiver.sync(await f.served(), f.signed))).toEqual([[4n, "available"]]);
-    // A pool request on a lit wallet, and a lit act not taken yet, refuse by name.
+    // A pool request on a lit wallet, and the presentation reading lit does not take yet, refuse by name.
     expect(await refusal(() => receiver.request("pool", f.backing, 1n))).toBe("INVALID");
-    expect(await refusal(receiver.burn("burn", 1n, await f.served(), f.signed, async () => { throw new Error("no prover"); }))).toBe("INVALID");
+    expect(await refusal(receiver.presentation(b(1), await f.served(), f.signed))).toBe("INVALID");
   });
 
   it("credits no request with an output of the wallet's own notes", async () => {
@@ -225,6 +227,163 @@ describe("the one wallet holding lit notes", () => {
     expect(values(view).sort((p, q) => (p[0]! < q[0]! ? -1 : 1))).toEqual([[201n, "available"], [451n, "available"], [701n, "available"]]);
     // Every index through h + 256 = 956 reads as exposed: no new request until the window moves.
     expect(await refusal(() => restored.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
+    // §8: the restored wallet pays itself at 956, and once that is final requests again past it.
+    await restored.moveWindow("move", await f.served(), f.signed);
+    await restored.submit("move", f.service); await f.checkpoint();
+    await restored.sync(await f.served(), f.signed);
+    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 957n)))).toBe(true);
+  });
+
+  // --- M14g2: the acts and the window move -----------------------------------------------------------------------------
+  const sign = (message: Uint8Array): Uint8Array => ed25519.sign(message, K);
+
+  it("issues once per request key under a nonce K's wallet derives, and credits no issue the wallet's own seed made", async () => {
+    const f = await fixture(), backer = f.open("backer"), holder = f.open("holder");
+    await f.issue(holder.keyedRequest("seed", f.backing, 1n)); await f.checkpoint();
+    const fund = holder.keyedRequest("fund", f.backing, 7n);
+    const issued = await backer.issue("i1", fund, 7n, await f.served(), f.signed, undefined, sign);
+    expect(issued).toMatchObject({ kind: 1, status: "prepared", inputs: [] });
+    expect((await backer.issue("i1", fund, 7n, await f.served(), f.signed, undefined, sign)).record).toEqual(issued.record);
+    expect(await refusal(backer.issue("i1", fund, 8n, await f.served(), f.signed, undefined, sign))).toBe("INVALID");
+    // One issue per key: another alias for the same key refuses while the first is saved.
+    expect(await refusal(backer.issue("i2", fund, 7n, await f.served(), f.signed, undefined, sign))).toBe("CONFLICT");
+    // A signer that is not the obligor's is refused before anything is saved.
+    expect(await refusal(f.open("other").issue("x", fund, 7n, await f.served(), f.signed, undefined, m => ed25519.sign(m, b(99))))).toBe("INVALID");
+    // The nonce is the seed's: a wallet restored from it builds the same record, so at most one is ever admitted (§2).
+    const copy = f.restore("copy", backer.recoverySeed());
+    expect((await copy.issue("i1", fund, 7n, await f.served(), f.signed, undefined, sign)).record).toEqual(issued.record);
+    await backer.submit("i1", f.service); await f.checkpoint();
+    await backer.sync(await f.served(), f.signed);
+    expect(backer.act("i1")).toMatchObject({ status: "final" });
+    expect(await refusal(f.restore("again", backer.recoverySeed()).issue("i9", fund, 7n, await f.served(), f.signed, undefined, sign))).toBe("CONFLICT");
+    expect((await holder.keyedFulfill("fund", await f.served(), f.signed)).request).toEqual(fund);
+    // K's wallet issuing to its own key credits no request: refused by name.
+    const mine = backer.keyedRequest("mine", f.backing, 3n);
+    expect(await refusal(backer.issue("i3", mine, 3n, await f.served(), f.signed, undefined, sign))).toBe("OWN_KEY");
+    // An issue whose nonce the holder's own seed derives is the holder's own: it credits nothing (§8).
+    const own = holder.keyedRequest("own", f.backing, 2n);
+    const statement: Statement = { domain: DOMAIN, kind: 1, segment: f.segment, backing: f.backing, quantity: 2n, owner: own.owner,
+      nonce: issueNonce(holder.recoverySeed(), DOMAIN, f.backing, own.owner, 2n) };
+    await f.j.submit(encodeRecord({ statement, authorization: ed25519.sign(statementBytes(statement), K) })); await f.checkpoint();
+    expect(await refusal(holder.keyedFulfill("own", await f.served(), f.signed))).toBe("ABSENT");
+  });
+
+  it("burns from its notes with change to the next index, and with none where nothing is left", async () => {
+    const f = await fixture(), holder = f.open("holder");
+    await f.issue(holder.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    const burn = await holder.burn("b1", 3n, await f.served(), f.signed);
+    expect(burn).toMatchObject({ kind: 3, status: "prepared" });
+    const s = decodeRecord(burn.record).statement as Extract<Statement, { kind: 3 }>;
+    expect([s.quantity, s.outputs.length, s.outputs[0]!.value]).toEqual([3n, 1, 7n]);
+    expect(same(s.outputs[0]!.owner, pub(ownerSecret(holder.recoverySeed(), DOMAIN, f.backing, 1n)))).toBe(true);
+    expect((await holder.burn("b1", 3n, await f.served(), f.signed)).record).toEqual(burn.record);
+    expect(await refusal(holder.burn("b1", 4n, await f.served(), f.signed))).toBe("CONFLICT");
+    expect(values(await holder.sync(await f.served(), f.signed))).toEqual([[10n, "reserved"]]);
+    await holder.submit("b1", f.service); await f.checkpoint();
+    expect(values(await holder.sync(await f.served(), f.signed))).toEqual([[7n, "available"]]);
+    expect(holder.act("b1")).toMatchObject({ status: "final" });
+    const all = await holder.burn("b2", 7n, await f.served(), f.signed);
+    expect((decodeRecord(all.record).statement as Extract<Statement, { kind: 3 }>).outputs).toEqual([]);
+    await holder.submit("b2", f.service); await f.checkpoint();
+    expect(values(await holder.sync(await f.served(), f.signed))).toEqual([]);
+    expect(holder.act("b2")).toMatchObject({ status: "final" });
+  });
+
+  it("demands whole notes, and settles K's acceptance to its owner, which K's wallet then holds", async () => {
+    const f = await fixture(), holder = f.open("holder"), backer = f.open("backer");
+    await f.issue(holder.keyedRequest("five", f.backing, 5n)); await f.issue(holder.keyedRequest("three", f.backing, 3n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 100n;
+    const demand = await holder.demand("d", 8n, deadline, await f.served(), f.signed);
+    expect(demand).toMatchObject({ kind: 4, status: "prepared", repeats: [] });
+    expect(demand.inputs.length).toBe(2);
+    expect((await holder.demand("d", 8n, deadline, await f.served(), f.signed)).record).toEqual(demand.record);
+    // §8: the presenter key derives from the seed, the inputs' tags in input order, the instant and the deadline.
+    const d = decodeRecord(demand.record).statement as Extract<Statement, { kind: 4 }>;
+    const tags = d.inputs.map(input => noteTag(noteNullifier(noteCommitment(DOMAIN, input))));
+    expect(same(d.presenter, pub(presentSecret(holder.recoverySeed(), DOMAIN, tags, d.instant, deadline)))).toBe(true);
+    await holder.submit("d", f.service); await f.checkpoint();
+    const view = await holder.sync(await f.served(), f.signed);
+    expect(values(view).sort((p, q) => (p[0]! < q[0]! ? -1 : 1))).toEqual([[3n, "locked"], [5n, "locked"]]);
+    expect(view.demands.map(x => [x.id, x.quantity])).toEqual([[demand.demand, 8n]]);
+    expect(holder.act("d")).toMatchObject({ status: "final" });
+
+    const acceptance = await backer.keyedAccept("a", demand.demand!, deadline, await f.served(), f.signed, sign);
+    expect(same(acceptance.owner, pub(acceptSecret(backer.recoverySeed(), DOMAIN, demand.demand!, deadline)))).toBe(true);
+    expect(await backer.keyedAccept("a", demand.demand!, deadline, await f.served(), f.signed, sign)).toEqual(acceptance);
+    // An acceptance naming the holder's own owner key or the demand's presenter key is refused by name; one K did not sign, as invalid.
+    const signedFor = (owner: Uint8Array) => ({ ...acceptance, owner,
+      signature: ed25519.sign(acceptanceBytes({ domain: DOMAIN, demand: demand.demand!, owner, deadline }), K) });
+    expect(await refusal(holder.settle("s0", signedFor(d.inputs[0]!.owner), await f.served(), f.signed))).toBe("OWN_KEY");
+    expect(await refusal(holder.settle("s0", signedFor(d.presenter), await f.served(), f.signed))).toBe("OWN_KEY");
+    expect(await refusal(holder.settle("s0", { ...acceptance, signature: new Uint8Array(64) }, await f.served(), f.signed))).toBe("INVALID");
+    const settled = await holder.settle("s", acceptance, await f.served(), f.signed);
+    expect(settled).toMatchObject({ kind: 6, status: "prepared", demand: demand.demand });
+    expect((await holder.settle("s", acceptance, await f.served(), f.signed)).record).toEqual(settled.record);
+    await holder.submit("s", f.service); await f.checkpoint();
+    expect(values(await holder.sync(await f.served(), f.signed))).toEqual([]);
+    expect([holder.act("d")!.status, holder.act("s")!.status]).toEqual(["final", "final"]);
+    expect(values(await backer.sync(await f.served(), f.signed))).toEqual([[8n, "available"]]);
+  });
+
+  it("withdraws a demand, after which its notes pay as any other; publishes lit frames; has nothing to freshen", async () => {
+    const f = await fixture(), holder = f.open("holder"), receiver = f.open("receiver");
+    await f.issue(holder.keyedRequest("fund", f.backing, 6n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    const demand = await holder.demand("d", 6n, f.venue.witnessedIndex() + 100n, await f.served(), f.signed);
+    await holder.submit("d", f.service); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    const withdrawal = await holder.withdraw("w", demand.demand!, await f.served(), f.signed);
+    expect(withdrawal).toMatchObject({ kind: 5, demand: demand.demand });
+    await holder.submit("w", f.service); await f.checkpoint();
+    const view = await holder.sync(await f.served(), f.signed);
+    expect(values(view)).toEqual([[6n, "available"]]);
+    expect(view.holdings[0]!.presented).toEqual([demand.demand]);
+    expect(holder.act("w")).toMatchObject({ status: "final" });
+    expect(await refusal(holder.freshen("fresh", demand.demand!, await f.served(), f.signed))).toBe("INVALID");
+    // A presented note pays as any other: lit's tags hide nothing (§2).
+    await holder.prepare("pay", { request: receiver.keyedRequest("invoice", f.backing, 6n), value: 6n }, await f.served(), f.signed);
+    await holder.submit("pay", f.service); await f.checkpoint();
+    expect(values(await receiver.sync(await f.served(), f.signed))).toEqual([[6n, "available"]]);
+    // §4's publication frames, routed to the act's backing.
+    const sent: { kind: number; subject: Uint8Array; bytes: Uint8Array }[] = [];
+    const publisher = { publishRecord: async (kind: number, subject: Uint8Array, bytes: Uint8Array) => { sent.push({ kind, subject, bytes }); } };
+    await holder.publish("d", publisher as never); await holder.publish("w", publisher as never);
+    const frames = sent.map(x => decodePublication(x.bytes));
+    expect(sent.map(x => [x.kind, same(x.subject, f.backing)])).toEqual([[4, true], [4, true]]);
+    expect(frames.map(x => [x.kind, x.kind === 2 ? 0 : x.record.statement.kind])).toEqual([[1, 4], [4, 5]]);
+    expect(await refusal(holder.publish("pay", publisher as never))).toBe("UNKNOWN");
+  });
+
+  it("moves a full window by paying itself at the highest exposed key, closing that request but crediting a payer's output to it", async () => {
+    const f = await fixture(), holder = f.open("holder"), payer = f.open("payer");
+    await f.issue(holder.keyedRequest("fund", f.backing, 2n)); await f.issue(payer.keyedRequest("fund", f.backing, 2n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    expect(await refusal(payer.moveWindow("early", await f.served(), f.signed))).toBe("CONFLICT");
+    const requests: LitPaymentRequest[] = [];
+    for (let i = 1; i <= 256; i++) requests.push(holder.keyedRequest(`r${i}`, f.backing, 2n));
+    expect(await refusal(() => holder.keyedRequest("r257", f.backing, 2n))).toBe("WINDOW");
+    const move = await holder.moveWindow("move", await f.served(), f.signed);
+    expect(move).toMatchObject({ status: "prepared", value: 2n, fee: undefined });
+    const outputs = (decodeRecord(move.record).statement as Extract<Statement, { kind: 2 }>).outputs;
+    expect(outputs.map(o => same(o.owner, pub(ownerSecret(holder.recoverySeed(), DOMAIN, f.backing, 256n))))).toEqual([true]);
+    expect((await holder.moveWindow("move", await f.served(), f.signed)).record).toEqual(move.record);
+    expect(await refusal(holder.moveWindow("again", await f.served(), f.signed))).toBe("CONFLICT");
+    // The request that named index 256 is closed: no retry hands its key out again.
+    expect(await refusal(() => holder.keyedRequest("r256", f.backing, 2n))).toBe("CLOSED");
+    await holder.submit("move", f.service); await f.checkpoint();
+    expect(values(await holder.sync(await f.served(), f.signed))).toEqual([[2n, "available"]]);
+    expect(holder.payment("move")).toMatchObject({ status: "final" });
+    // The move's own output is never credited; a payer's to the closed request's key is.
+    expect(await refusal(holder.keyedFulfill("r256", await f.served(), f.signed))).toBe("ABSENT");
+    await payer.sync(await f.served(), f.signed);
+    const paid = await payer.prepare("pay", { request: requests[255]!, value: 2n }, await f.served(), f.signed);
+    await payer.submit("pay", f.service); await f.checkpoint();
+    expect((await holder.keyedFulfill("r256", await f.served(), f.signed)).cm).toBe(paid.payee);
+    // h reached 256: requests resume at 257.
+    const next = holder.keyedRequest("r257", f.backing, 2n);
+    expect(same(next.owner, pub(ownerSecret(holder.recoverySeed(), DOMAIN, f.backing, 257n)))).toBe(true);
   });
 });
 

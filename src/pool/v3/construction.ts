@@ -137,7 +137,13 @@ export interface Keyring {
   key(backing: Uint8Array, index: bigint): Uint8Array;
   /** The caller zeroes it after use. */
   secret(backing: Uint8Array, index: bigint): Uint8Array;
+  /** The backing and index whose key is `owner`, among those derived (each held backing's window, from a read's scan). */
+  find(owner: Uint8Array): { readonly backing: Uint8Array; readonly index: bigint } | undefined;
   close(): void;
+}
+/** K's acceptance where an acceptance owner is a key (lit-v1 §4): the demand, the owner, the deadline and K's signature. */
+export interface KeyedAcceptance {
+  readonly domain: Uint8Array; readonly demand: Uint8Array; readonly owner: Uint8Array; readonly deadline: bigint; readonly signature: Uint8Array;
 }
 /** A receipt of a construction without a scope root or proof digest (lit-v1 §5). */
 export interface KeyedReceipt {
@@ -171,6 +177,28 @@ export interface KeyedWalletFrames {
   request(input: KeyedRequest, expected: { readonly domain: Uint8Array; readonly backing: Uint8Array; readonly value: bigint }): KeyedRequest;
   /** A spend's record signed by each input's owner in input order. */
   spend(domain: Uint8Array, segment: Uint8Array, inputs: readonly KeyedInput[], outputs: readonly KeyedOutput[]): Uint8Array;
+  /** A burn of `quantity` from `inputs`, the rest to `change` (none where nothing is left), signed by their owners. */
+  burn(domain: Uint8Array, segment: Uint8Array, quantity: bigint, inputs: readonly KeyedInput[], change: KeyedOutput | undefined): Uint8Array;
+  /** A demand presenting `inputs` under `presenter` (a key), signed by their owners. */
+  demand(domain: Uint8Array, segment: Uint8Array, inputs: readonly KeyedInput[], presenter: Uint8Array, instant: bigint, deadline: bigint): Uint8Array;
+  /** A withdrawal of `demand` signed by the presenter secret (the caller zeroes it). */
+  withdraw(domain: Uint8Array, segment: Uint8Array, demand: Uint8Array, presenter: Uint8Array): Uint8Array;
+  /** A settlement of the acceptance's demand to its owner, the release signed by the presenter secret (the caller zeroes it). */
+  settle(domain: Uint8Array, segment: Uint8Array, acceptance: KeyedAcceptance, presenter: Uint8Array): Uint8Array;
+  /** K's issue nonce for `output`, from the backer wallet's seed (lit-v1 §8 leaves the derivation to K). */
+  issueNonce(seed: Uint8Array, domain: Uint8Array, output: KeyedOutput): Uint8Array;
+  /** An issue of `output` under `nonce`: the bytes K signs, the derived output's commitment, and the record carrying K's signature. */
+  issue(domain: Uint8Array, segment: Uint8Array, output: KeyedOutput, nonce: Uint8Array):
+    { readonly message: Uint8Array; readonly cm: bigint; record(signature: Uint8Array): Uint8Array };
+  /** Whether an output with this opening is one this seed's issue nonce derives (lit-v1 §8: an issue the wallet made). */
+  ownIssue(seed: Uint8Array, domain: Uint8Array, opening: KeyedOpening): boolean;
+  /** K's acceptance owner for `demand` and `deadline`: `acceptSecret`'s key (lit-v1 §8). */
+  acceptOwner(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array;
+  /** The acceptance bytes K signs (lit-v1 §4); EncodingError where a field is malformed. */
+  acceptance(acceptance: Omit<KeyedAcceptance, "signature">): Uint8Array;
+  /** Publication kind 1, 3 or 4 of a demand, settlement or withdrawal record, or kind 2 of an acceptance, routed to `backing`. */
+  publication(domain: Uint8Array, backing: Uint8Array, body: { readonly kind: 1 | 3 | 4; readonly record: Uint8Array } |
+    { readonly kind: 2; readonly acceptance: KeyedAcceptance }): Uint8Array;
   /** A spend record's segment, inputs and outputs; EncodingError where the bytes are no spend. */
   spendOf(bytes: Uint8Array): { readonly segment: Uint8Array; readonly inputs: readonly KeyedOpening[]; readonly outputs: readonly KeyedOutput[] };
   /** A record's derived outputs in statement order, each with its commitment (a settlement's needs its demand: none here). */
