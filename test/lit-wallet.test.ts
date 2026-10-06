@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { compareBytes } from "../src/bytes.js";
@@ -14,6 +15,7 @@ import type { LitPaymentRequest } from "../src/lit/wallet.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import type { V3Wallet as Wallet, V3WalletError as WalletError } from "../src/pool/v3/wallet-store.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
+import { keptFileDigest } from "../src/pool/v3/replay-store.js";
 
 // The one wallet (src/pool/v3/wallet-store.ts) holding lit-v1 notes (slice 14 M14g1): requests by owner key, notes found by
 // owner keys per backing under doubling windows (lit-v1 §8), payments signed by the notes' owners, credited once. A lit
@@ -70,7 +72,7 @@ describe("the one wallet holding lit notes", () => {
     const checkpoint = async () => { await j.commit(`c${commits++}`); await j.publish(); };
     const served = async () => (await j.package()).package;
     const service = { submit: async (bytes: Uint8Array) => decodeReceipt(await j.submit(bytes)) };
-    return { venue, backing, signed, open, restore, j, issue, checkpoint, served, service, segment };
+    return { venue, backing, signed, open, restore, j, issue, checkpoint, served, service, segment, path: (name: string) => join(directory, `${name}.db`) };
   }
   async function refusal(action: Promise<unknown> | (() => unknown)): Promise<string> {
     const error = typeof action === "function" ? (() => { try { action(); return undefined; } catch (e) { return e; } })() :
@@ -130,6 +132,34 @@ describe("the one wallet holding lit notes", () => {
     await holder.submit("self", f.service); await f.checkpoint();
     expect(values(await holder.sync(await f.served(), f.signed))).toEqual([[5n, "available"]]);
     expect(await refusal(holder.keyedFulfill("own", await f.served(), f.signed))).toBe("ABSENT");
+  });
+
+  it("names a payment the payee already spent, and trusts no kept mark's owner fields", async () => {
+    const f = await fixture(), payer = f.open("payer"), receiver = f.open("receiver"), third = f.open("third");
+    await f.issue(payer.keyedRequest("fund", f.backing, 4n)); await f.checkpoint();
+    const invoice = receiver.keyedRequest("invoice", f.backing, 4n);
+    await payer.prepare("shop", { request: invoice, value: 4n }, await f.served(), f.signed);
+    await payer.submit("shop", f.service); await f.checkpoint();
+    // The receiver spends the note before crediting it: the credit is refused as spent, not absent.
+    await receiver.sync(await f.served(), f.signed);
+    await receiver.prepare("onward", { request: third.keyedRequest("onward", f.backing, 4n), value: 4n }, await f.served(), f.signed);
+    await receiver.submit("onward", f.service); await f.checkpoint();
+    expect(await refusal(receiver.keyedFulfill("invoice", await f.served(), f.signed))).toBe("SPENT");
+
+    // A kept mark rewritten to name index 300 under a re-recorded digest: read back against the seed's keys, it is
+    // discarded and the read replays, so the found index (0) and the exposure (through 256) stay the true ones; trusted, it
+    // would have refused the first request (an index past 300 beyond the reach of h).
+    expect(values(await third.sync(await f.served(), f.signed))).toEqual([[4n, "available"]]);
+    third.close();
+    const replay = `${f.path("third")}.replay`, db = new DatabaseSync(replay, { readBigInts: true });
+    const row = db.prepare("SELECT ns, leaf, note FROM witness ORDER BY ns, leaf LIMIT 1").get() as { ns: bigint; leaf: bigint; note: Uint8Array };
+    const note = new Uint8Array(row.note); note[143] = 1; note[144] = 44;
+    db.prepare("UPDATE witness SET note = ? WHERE ns = ? AND leaf = ?").run(note, row.ns, row.leaf); db.close();
+    writeFileSync(`${replay}.sha256`, keptFileDigest(replay)!);
+    const reopened = f.open("third");
+    expect(values(await reopened.sync(await f.served(), f.signed))).toEqual([[4n, "available"]]);
+    for (let i = 1; i <= 256; i++) reopened.keyedRequest(`r${i}`, f.backing, 1n);
+    expect(await refusal(() => reopened.keyedRequest("r257", f.backing, 1n))).toBe("WINDOW");
   });
 
   it("signs a payment again for the canonical segment after a scope change, its outputs unchanged", async () => {

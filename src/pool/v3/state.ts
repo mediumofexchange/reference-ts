@@ -68,12 +68,10 @@ export interface StateView extends RecoveryView {
 export interface ScanOutput {
   readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record; readonly lit?: LitScan | undefined;
 }
-/** A lit output as a wallet reads it (lit-v1 §8): its opening, the nullifiers of the notes its statement consumes (a
- * spend's or burn's inputs, a settlement's demand's notes; none for an issue), and for a settlement's output the demand and
- * acceptance deadline `acceptSecret` derives from. */
+/** A lit output as a wallet reads it (lit-v1 §8): its opening and, for a settlement's output, the demand and acceptance
+ * deadline `acceptSecret` derives from. */
 export interface LitScan {
   readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array; readonly rho: Uint8Array;
-  readonly consumed: readonly bigint[];
   readonly acceptance: { readonly demand: Uint8Array; readonly deadline: bigint } | undefined;
 }
 /** Which outputs a replay keeps incremental witnesses for (a wallet's own), and the mark kept with each: undefined

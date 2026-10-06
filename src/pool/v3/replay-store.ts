@@ -593,6 +593,7 @@ export class ReplayStore {
         WHERE ${v} AND NOT EXISTS (SELECT 1 FROM nullifier y WHERE y.nf = w.nf AND ${visible("y")}) ORDER BY x.ns, x.leaf`,
       witnessed: `SELECT x.*, w.nf AS mark_nf, w.note AS mark_note FROM witness w CROSS JOIN output x ON x.ns = w.ns AND x.leaf = w.leaf
         WHERE ${v} ORDER BY x.ns, x.leaf`,
+      consumedAt: "SELECT nf FROM nullifier WHERE ns = ? AND position = ? ORDER BY nf",
       marked: `SELECT 1 FROM witness w CROSS JOIN output x ON x.ns = w.ns AND x.leaf = w.leaf WHERE w.nf = :key AND ${v}`,
       nullifiers: `SELECT x.nf FROM nullifier x WHERE ${v} ORDER BY x.ns, x.position`,
       importedNullifiers: "SELECT nf FROM nullifier WHERE ns = ? AND position <= ?",
@@ -1018,6 +1019,10 @@ export class ReplayStore {
   /** Every visible output the replay kept a witness for, spent or not, in scan order (lit-v1 §8's highest index). */
   *witnessed(ns: number, p: bigint): Generator<WitnessedOutput> {
     yield* this.#witnessed("witnessed", ns, p);
+  }
+  /** The nullifiers the record at (`ns`, `position`) inserted: the notes it consumed. */
+  consumedAt(ns: number, position: bigint): bigint[] {
+    return this.#q.consumedAt!.all(ns, position).map(row => key((row as { nf: unknown }).nf));
   }
   /** Whether a visible output the replay kept a witness for is spent by `nf`. */
   marked(ns: number, p: bigint, nf: bigint): boolean {

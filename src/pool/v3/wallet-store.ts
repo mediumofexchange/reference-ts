@@ -490,15 +490,16 @@ export class V3Wallet {
         requireThat((this.db.prepare("SELECT COUNT(*) AS n FROM owner_wallet").get()!.n as number) <= 1, "INVALID", "backup state has malformed owner key state");
         for (const row of this.db.prepare("SELECT backing FROM owner_keys").all()) {
           const keys = this.ownerKeys(row.backing as Uint8Array);
-          requireThat((row.backing as Uint8Array).length === 32 && keys !== undefined && keys.high <= keys.found,
-            "INVALID", "backup state has malformed owner key state");
+          // No wallet exposes an index past h + 256 (lit-v1 §8): h only rises.
+          requireThat((row.backing as Uint8Array).length === 32 && keys !== undefined && keys.high <= keys.found &&
+            (keys.exposed === undefined || keys.exposed <= keys.high + this.keyed!.lookAhead), "INVALID", "backup state has malformed owner key state");
         }
-        for (const row of this.db.prepare("SELECT request_id, backing, cm FROM receiver_requests").all()) {
+        for (const row of this.db.prepare("SELECT request_id, backing, value, cm FROM receiver_requests").all()) {
           const id = row.request_id as Uint8Array, backing = row.backing as Uint8Array;
           const index = id.length === 40 && same(id.subarray(0, 32), backing) ? new DataView(id.buffer, id.byteOffset + 32).getBigUint64(0) : undefined;
           const exposed = this.ownerKeys(backing)?.exposed;
-          requireThat(index !== undefined && exposed !== undefined && index <= exposed && row.cm === hex(owners.key(backing, index)),
-            "INVALID", "backup state has a malformed keyed request");
+          requireThat(index !== undefined && exposed !== undefined && index <= exposed && row.cm === hex(owners.key(backing, index)) &&
+            typeof row.value === "string" && /^[1-9][0-9]{0,19}$/.test(row.value) && isValue(BigInt(row.value)), "INVALID", "backup state has a malformed keyed request");
         }
       } catch (error) {
         if (error instanceof V3WalletError && error.code === "INVALID") throw error;
@@ -679,7 +680,7 @@ export class V3Wallet {
           // A lit read whose keys reach past a window reads again from nothing under the larger one.
           if (lit && this.found(backing, canonical.state)) continue;
           // The scan ran inside the replay, once per output: this seed's unspent outputs are read from their kept marks.
-          notes = (lit ? this.keyed!.notes(this.domain, backing, canonical.state) : ownedNotes(this.seed, this.domain, backing, canonical.state))
+          notes = (lit ? this.keyed!.notes(this.seed, this.domain, backing, canonical.state, this.keys!) : ownedNotes(this.seed, this.domain, backing, canonical.state))
             .filter(note => !spent.hasNullifier(note.nf));
         }
         return { terms, backing, at, observed, canonical, force, notes, chain: result.ranges.chain, scopeChains: result.scopeChains,
@@ -711,7 +712,7 @@ export class V3Wallet {
    * (each only rises). True where a window grew, so the read runs again under it; otherwise a backing read for the first
    * time since a restoration from the seed alone exposes every index through `h + 256` (lit-v1 §8). */
   private found(backing: Uint8Array, state: CanonicalCheckpoint["state"]): boolean {
-    const found = this.keyed!.found(this.domain, state);
+    const found = this.keyed!.found(this.seed, this.domain, state, this.keys!);
     return this.transaction(() => {
       let grew = false;
       for (const row of this.db.prepare("SELECT backing FROM owner_keys").all()) {
@@ -1911,11 +1912,15 @@ export class V3Wallet {
     await this.read(packageBytes, own, ({ terms, at, observed, canonical, force, notes }) => {
       requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical payment");
       const credited = this.db.prepare("SELECT 1 FROM receiver_fulfilled WHERE cm=?");
-      const paid = (notes as KeyedNote[]).filter(note => note.owner.index === index && note.owner.backing !== undefined &&
+      const pays = (note: KeyedNote) => note.owner.index === index && note.owner.backing !== undefined &&
         same(note.owner.backing, backing) && same(note.opening.owner, request.owner) && same(note.opening.backing, backing) &&
-        note.opening.value === request.value && !this.keyed!.ownFunded(canonical.state, note) && credited.get(note.cm.toString()) === undefined)
-        .sort((a, b) => (a.cm < b.cm ? -1 : 1));
-      requireThat(paid.length !== 0, "ABSENT", "no unspent output to the request's key of its backing and quantity");
+        note.opening.value === request.value && !this.keyed!.ownFunded(canonical.state, note) && credited.get(note.cm.toString()) === undefined;
+      const paid = (notes as KeyedNote[]).filter(pays).sort((a, b) => (a.cm < b.cm ? -1 : 1));
+      if (paid.length === 0) {
+        // A payment the wallet already spent, in canonical history or by force, is named as such.
+        const spent = this.keyed!.notes(this.seed, this.domain, backing, canonical.state, this.keys!, true).some(pays);
+        throw new V3WalletError(spent ? "SPENT" : "ABSENT", spent ? "payment is already spent" : "no unspent output to the request's key of its backing and quantity");
+      }
       const note = paid.find(n => !locked(force, n.tag, at));
       requireThat(note !== undefined, "LOCKED", "payment is locked by a standing demand");
       const checkpoint = encodeCommitment(canonical.commitment);
@@ -2032,6 +2037,8 @@ export class V3Wallet {
       // The same notes, now read in the canonical segment's history, in the saved input order.
       const held = old.inputs.map(input => (notes as KeyedNote[]).find(note => note.cm === this.keyed!.commitment(this.domain, input)));
       requireThat(held.every(note => note !== undefined), "ABSENT", "a reserved input is not in canonical history");
+      // The saved record spends exactly the notes its reservations hold.
+      requireThat(held.length === saved.inputs.length && held.every(note => saved.inputs.includes(note!.nf)), "STORAGE", "saved inputs do not reproduce the record");
       requireThat(!held.some(note => locked(force, note!.tag, at)), "LOCKED", "a reserved input is locked by a standing demand");
       const inputs = this.keyedInputs(held as KeyedNote[]);
       try {

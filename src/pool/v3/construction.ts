@@ -120,16 +120,16 @@ export interface KeyedRequest {
 /** How a note is a wallet's: an owner key of a backing and index, or a settlement's acceptance (lit-v1 §8). */
 export type KeyedOwner = { readonly backing: Uint8Array; readonly index: bigint; readonly acceptance?: never } |
   { readonly backing?: never; readonly index?: never; readonly acceptance: { readonly demand: Uint8Array; readonly deadline: bigint } };
-/** A wallet's note found by its key: its opening, commitment, nullifier and tag (C3.3), how it is the wallet's, the
- * nullifiers of the notes its creating statement consumed (none for an issue), and where the read found it. */
+/** A wallet's note found by its key: its opening, commitment, nullifier and tag (C3.3), how it is the wallet's, and the
+ * namespace and position of the statement that created it. */
 export interface KeyedNote {
   readonly opening: KeyedOpening;
   readonly cm: bigint;
   readonly nf: bigint;
   readonly tag: bigint;
   readonly owner: KeyedOwner;
-  readonly consumed: readonly bigint[];
   readonly ns: number;
+  readonly position: bigint;
   readonly local: boolean;
 }
 /** A wallet's owner keys by backing and index (public keys derived once per handle; secrets derived when spent). */
@@ -156,10 +156,11 @@ export interface KeyedWalletFrames {
   keyring(seed: Uint8Array, domain: Uint8Array): Keyring;
   /** The replay's witness predicate over each held backing's window (hex name to window). */
   witness(seed: Uint8Array, domain: Uint8Array, windows: ReadonlyMap<string, bigint>, keyring: Keyring): WitnessPredicate;
-  /** The wallet's unspent notes of `backing` in a state replayed with its predicate. */
-  notes(domain: Uint8Array, backing: Uint8Array, state: StateHandle): KeyedNote[];
+  /** The wallet's unspent notes of `backing` (spent ones too with `spent`) in a state replayed with its predicate, each
+   * mark checked against its output and the seed's keys (KeptStateMismatch otherwise). */
+  notes(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle, keyring: Keyring, spent?: boolean): KeyedNote[];
   /** Per held backing (hex): §8's `h` and the highest index found in an output of it, spent ones included. */
-  found(domain: Uint8Array, state: StateHandle): Map<string, { readonly reached: bigint; readonly top: bigint }>;
+  found(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring): Map<string, { readonly reached: bigint; readonly top: bigint }>;
   /** Whether the note's creating statement consumed notes, all of them the wallet's own. */
   ownFunded(state: StateHandle, note: KeyedNote): boolean;
   /** The note's spend secret, checked against its owner (KeptStateMismatch otherwise). */

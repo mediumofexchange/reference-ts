@@ -74,30 +74,27 @@ export type LitOwner = KeyedOwner;
 export type LitNote = KeyedNote;
 
 /** A mark: the opening; how it is the wallet's (0: a key's backing and index; 1: an acceptance's demand and deadline);
- * the tag; and the consumed nullifiers. A local layout of the kept file, read only under the predicate that wrote it. */
-const FIXED_MARK_BYTES = 32 + 8 + 32 + 32 + 1 + 32 + 8 + 32 + 1;
-function encodeMark(opening: Opening, owner: LitOwner, tag: Uint8Array, consumed: readonly bigint[]): Uint8Array {
+ * and the tag. A local layout of the kept file, read only under the predicate that wrote it, and checked when read. */
+const MARK_BYTES = 32 + 8 + 32 + 32 + 1 + 32 + 8 + 32;
+function encodeMark(opening: Opening, owner: LitOwner, tag: Uint8Array): Uint8Array {
   const w = new ByteWriter();
   w.key32(opening.backing, "backing"); w.u64(opening.value); w.key32(opening.owner, "owner"); w.key32(opening.rho, "rho");
   if (owner.acceptance === undefined) { w.u8(0); w.key32(owner.backing, "key backing"); w.u64(owner.index); }
   else { w.u8(1); w.key32(owner.acceptance.demand, "demand"); w.u64(owner.acceptance.deadline); }
-  w.key32(tag, "tag"); w.u8(consumed.length);
-  for (const nf of consumed) w.key32(bytesOf(nf), "consumed");
+  w.key32(tag, "tag");
   return w.finish();
 }
-function decodeMark(note: Uint8Array): { readonly opening: Opening; readonly owner: LitOwner; readonly tag: bigint; readonly consumed: bigint[] } {
+function decodeMark(note: Uint8Array): { readonly opening: Opening; readonly owner: LitOwner; readonly tag: bigint } {
   try {
-    if (note.length < FIXED_MARK_BYTES) throw new RangeError("length");
+    if (note.length !== MARK_BYTES) throw new RangeError("length");
     const r = new ByteReader(note);
     const opening: Opening = Object.freeze({ backing: r.raw(32), value: r.u64(), owner: r.raw(32), rho: r.raw(32) });
     const source = r.u8(), name = r.raw(32), number = r.u64();
     if (opening.value === 0n || source > 1) throw new RangeError("mark");
     const owner: LitOwner = source === 0 ? { backing: name, index: number } : { acceptance: { demand: name, deadline: number } };
-    const tag = keyOf(r.raw(32)), k = r.u8();
-    if (k > 2) throw new RangeError("consumed");
-    const consumed = Array.from({ length: k }, () => keyOf(r.raw(32)));
+    const tag = keyOf(r.raw(32));
     r.expectEnd();
-    return { opening, owner, tag, consumed };
+    return { opening, owner, tag };
   } catch { throw new KeptStateMismatch("a witnessed output's mark"); }
 }
 
@@ -131,37 +128,48 @@ export function litWitness(seed: Uint8Array, domain: Uint8Array, windows: Readon
         owner = found;
       }
       const nf = noteNullifier(bytesOf(output.cm)), opening = { backing: lit.backing, value: lit.value, owner: lit.owner, rho: lit.rho };
-      return { nf: keyOf(nf), note: encodeMark(opening, owner, noteTag(nf), lit.consumed) };
+      return { nf: keyOf(nf), note: encodeMark(opening, owner, noteTag(nf)) };
     } catch { return undefined; }
   }, { identity });
 }
 
-/** The marks of `state` read back, each checked against its commitment, nullifier and tag (a mark its output does not
- * give is kept state to discard, §14). `spent` includes the spent ones. */
-function* marked(domain: Uint8Array, state: StateHandle, spent: boolean): Generator<LitNote> {
+/** The marks of `state` read back, each checked against its commitment, nullifier and tag, and its owner against the
+ * seed's keys (the key of its backing and index, among those the keyring derived, or its acceptance's key), so no
+ * field of a kept mark is trusted: a mark its output and seed do not give is kept state to discard (§14). `spent`
+ * includes the spent ones. */
+function* marked(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keys: OwnerKeys, spent: boolean): Generator<LitNote> {
   const rows = spent ? state.store.witnessed(state.ns, state.position) : state.store.unspentWitnessed(state.ns, state.position);
   for (const stored of rows) {
-    const { opening, owner, tag, consumed } = decodeMark(stored.mark.note), cm = stored.cm;
+    const { opening, owner, tag } = decodeMark(stored.mark.note), cm = stored.cm;
     const nf = noteNullifier(bytesOf(cm));
-    if (keyOf(noteCommitment(domain, opening)) !== cm || keyOf(nf) !== stored.mark.nf || keyOf(noteTag(nf)) !== tag) {
-      throw new KeptStateMismatch("a witnessed output's mark is not what its output gives");
+    let keyed: boolean;
+    if (owner.acceptance === undefined) {
+      const found = keys.find(opening.owner);
+      keyed = found !== undefined && found.index === owner.index && same(found.backing, owner.backing);
+    } else {
+      const secret = acceptSecret(seed, domain, owner.acceptance.demand, owner.acceptance.deadline);
+      try { keyed = same(publicKeyOf(secret), opening.owner); } finally { secret.fill(0); }
     }
-    yield Object.freeze({ opening, cm, nf: stored.mark.nf, tag, owner, consumed: Object.freeze(consumed), ns: stored.ns, local: stored.ns === state.ns });
+    if (!keyed || keyOf(noteCommitment(domain, opening)) !== cm || keyOf(nf) !== stored.mark.nf || keyOf(noteTag(nf)) !== tag) {
+      throw new KeptStateMismatch("a witnessed output's mark is not what its output and seed give");
+    }
+    yield Object.freeze({ opening, cm, nf: stored.mark.nf, tag, owner, ns: stored.ns, position: stored.position, local: stored.ns === state.ns });
   }
 }
 
 /** This wallet's unspent notes of `backing` in a state replayed with its `litWitness`. Shared history can hold the same
  * wallet's notes of other scoped backings. */
-export function litNotes(domain: Uint8Array, backing: Uint8Array, state: StateHandle): LitNote[] {
-  return [...marked(domain, state, false)].filter(note => same(note.opening.backing, backing));
+export function litNotes(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle, keys: OwnerKeys, spent = false): LitNote[] {
+  return [...marked(seed, domain, state, keys, spent)].filter(note => same(note.opening.backing, backing));
 }
 
 /** Per backing (hex) whose keys the read found in outputs of that backing, spent ones included: §8's `h` (the highest
  * index its restoration rule finds) and the highest index found at all, beyond a 256-index gap too. An output of another
  * backing to a backing's key is the wallet's note but moves no index (§8). */
-export function foundIndices(domain: Uint8Array, state: StateHandle): Map<string, { readonly reached: bigint; readonly top: bigint }> {
+export function foundIndices(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keys: OwnerKeys):
+  Map<string, { readonly reached: bigint; readonly top: bigint }> {
   const indices = new Map<string, bigint[]>();
-  for (const note of marked(domain, state, true)) {
+  for (const note of marked(seed, domain, state, keys, true)) {
     if (note.owner.index === undefined || !same(note.opening.backing, note.owner.backing)) continue;
     const name = hex(note.owner.backing);
     indices.set(name, [...(indices.get(name) ?? []), note.owner.index]);
@@ -170,9 +178,11 @@ export function foundIndices(domain: Uint8Array, state: StateHandle): Map<string
 }
 
 /** Whether the statement that created the note consumed notes, all of them the wallet's own (§8: no request is credited
- * with such an output). An issue consumes none. */
+ * with such an output): the nullifiers that statement inserted, read from the replay's own rows, each spending an output
+ * the wallet marked. An issue consumes none. */
 export function ownFunded(state: StateHandle, note: LitNote): boolean {
-  return note.consumed.length > 0 && note.consumed.every(nf => state.store.marked(state.ns, state.position, nf));
+  const consumed = state.store.consumedAt(note.ns, note.position);
+  return consumed.length > 0 && consumed.every(nf => state.store.marked(state.ns, state.position, nf));
 }
 
 /** The note's spend secret (the caller zeroes it), checked against its owner: a mark whose key this seed does not
