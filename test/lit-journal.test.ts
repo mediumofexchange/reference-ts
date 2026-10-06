@@ -8,7 +8,7 @@ import { compareBytes } from "../src/bytes.js";
 import { decodeReceipt, decodeSnapshot, verifyReceipt } from "../src/lit/commitments.js";
 import { litConfigHash, litConfigurationBytes } from "../src/lit/configuration.js";
 import { LIT } from "../src/lit/construction.js";
-import { type Opening, type Output } from "../src/lit/notes.js";
+import { noteCommitment, type Opening, type Output } from "../src/lit/notes.js";
 import {
   acceptanceBytes, acceptanceId, derivedOutputs, encodePublication, encodeRecord, encodeSettlementAuthorization, releaseBytes, statementBytes,
   statementHash, type LitRecord, type Statement,
@@ -201,7 +201,7 @@ describe("the operator journal over a lit scope", () => {
     const f = fixture(), j = f.create();
     await j.open("genesis", f.signed); j.close();
     // The same file opened as a pool-v3 journal: the identity names lit's domain.
-    expect(() => f.create(true)).toThrow(V3StoreError);
+    expect(() => f.create(true)).toThrow(expect.objectContaining({ code: "STORAGE", message: "journal identity does not match" }));
     const other = fixture(), pool = other.create(true);
     // Lit terms do not decode under the pool's construction clause.
     expect(await refusal(pool.open("genesis", other.signed))).toEqual(["REFUSED", "TERMS"]);
@@ -233,6 +233,58 @@ describe("the operator journal over a lit scope", () => {
     expect(db.prepare("UPDATE output SET cm = ? WHERE ns = ? AND leaf = (SELECT MAX(leaf) FROM output WHERE ns = ?)").run(b(66), ns, ns).changes).toBe(1);
     db.close();
     expect(await refusal(f.create().status())).toEqual(["STORAGE", undefined]);
+  });
+
+  it("refuses on reopening an output row past its tip, and a trail record that no longer chains, as storage", async () => {
+    const f = fixture(), segment = f.segment;
+    let j = f.create();
+    await j.open("genesis", f.signed); await j.publish();
+    const issued = f.issue(segment, 10n, ALICE), [note] = f.outputsOf(issued);
+    await j.submit(issued); await j.submit(f.spend(segment, [note!], [f.to(10n, BOB)], [ALICE]));
+    await j.commit("c2"); await j.publish();
+    j.close();
+    // A phantom note's row one position past the tip would become visible, and spendable, at the next admission.
+    let db = new DatabaseSync(f.file);
+    const { ns } = db.prepare("SELECT ns FROM journal_state WHERE id = 1").get() as { ns: number };
+    const phantom: Opening = { backing: f.backing, value: 1000n, owner: pub(MALLORY), rho: b(88) };
+    const row = db.prepare("INSERT INTO output (cm, ns, position, leaf, capsule, settlement) VALUES (?, ?, 3, 1000, NULL, 0)");
+    expect(row.run(noteCommitment(DOMAIN, phantom), ns).changes).toBe(1);
+    db.close();
+    j = f.create();
+    expect(await refusal(j.status())).toEqual(["STORAGE", undefined]);
+    j.close();
+    db = new DatabaseSync(f.file);
+    db.prepare("DELETE FROM output WHERE leaf = 1000").run();
+    // The trail's first record replaced: the second no longer chains to the stored evidence.
+    expect(db.prepare("UPDATE chain SET bytes = ? WHERE position = 1").run(Uint8Array.of(0, 0, 0, 1, 1, 0, 0, 0, 0)).changes).toBe(1);
+    db.close();
+    expect(await refusal(f.create().status())).toEqual(["STORAGE", undefined]);
+  });
+
+  it("reopens after a demand stood up in one segment is settled in its successor and a third segment imports both", async () => {
+    const f = fixture(), j = f.create();
+    await j.open("genesis", f.signed); await j.publish();
+    const now = f.venue.witnessedIndex();
+    const issued = f.issue(f.segment, 10n, ALICE), [note] = f.outputsOf(issued);
+    const presented = f.demand(f.segment, [note!], [ALICE], now, now + 200n);
+    await j.submit(issued); await j.submit(presented);
+    await j.commit("c2"); await j.publish();
+    await j.rescope("p", { keep: [f.backing] }); await j.publish(); await j.adopt();
+    const p = litSegmentIdentity(await f.header(j)), settled = f.settle(p, presented, CAROL, now + 150n);
+    const [carols] = derivedOutputs(LIT.decode(settled).statement, LIT.decode(presented).statement as never);
+    await j.submit(settled); await j.commit("c4"); await j.publish();
+    await j.rescope("q", { keep: [f.backing] }); await j.publish(); await j.adopt();
+    const q = litSegmentIdentity(await f.header(j));
+    await j.submit(f.spend(q, [carols!], [f.to(10n, BOB)], [CAROL]));
+    await j.commit("c6"); await j.publish();
+    const served = await j.package();
+    expect((await f.read(served)).state.position).toBe(1n);
+    // Each imported copy is rebuilt; the settlement's demand is read from the closure the third segment imports.
+    j.close();
+    const reopened = f.create();
+    expect(await reopened.package()).toEqual(served);
+    expect((await reopened.status()).signed?.sequence).toBe(6n);
+    await reopened.audit();
   });
 
   it("changes scope electively after its tail is witnessed, importing its own state, and spends an imported note", async () => {

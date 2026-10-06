@@ -431,6 +431,8 @@ export class V3OperatorJournal {
     this.engine = this.transaction(() => {
       try { return this.stored(); } catch (error) {
         if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "stored journal state does not decode");
+        // A lit journal reads its trail back on reopening (lit-v1 §10): a record that no longer chains is damage.
+        if (error instanceof EvidenceRefusal) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
         throw error;
       }
     });

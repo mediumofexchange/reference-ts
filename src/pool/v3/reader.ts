@@ -503,7 +503,10 @@ function keptImportsHold(store: ReplayStore, ns: number, construction: Construct
     const event = store.event(source, upto), named = Uint8Array.from(Buffer.from(segment, "hex"));
     const trail = event === undefined || trails === undefined || !same(store.tip(source).segment, named) ? undefined :
       trails.trail(named, event.evidence);
-    if (trail === undefined || !keptOutputsHold(store, source, construction, trail, upto)) return false;
+    // A settlement there may end a demand an earlier segment of the closure stood up. An operator's journal copies each
+    // imported namespace without import rows of its own (`copyFrontier`), so the demand is read from the importer's
+    // closure, where every imported segment is visible; a demand identity names one statement.
+    if (trail === undefined || !keptOutputsHold(store, source, construction, trail, upto, id => store.presented(ns, 0n, id)?.demand)) return false;
   }
   return true;
 }
@@ -546,8 +549,11 @@ function replayedOutputs(store: ReplayStore, ns: number, construction: Construct
  * this process's replay wrote), from the state before it; imported outputs are their own namespaces' (each rebuilt by
  * `keptImportsHold` before a state importing it is reused). The caller has checked the trail's chain at `position`
  * against the namespace's, so its records are the namespace's. A construction with a note tree has its root checked instead (`keptTipHolds`). */
-function keptOutputsHold(store: ReplayStore, ns: number, construction: Construction, trail: StoredTrail | undefined, position: bigint): boolean {
+function keptOutputsHold(store: ReplayStore, ns: number, construction: Construction, trail: StoredTrail | undefined, position: bigint,
+  closure?: (id: string) => Demand | undefined, tip = false): boolean {
   if (construction.namespace.tree) return true;
+  // At the tip no own row may lie past it: one would become visible, and spendable, as the namespace grows.
+  if (tip) for (const output of store.ownOutputs(ns, 0n)) if (output.position > position) return false;
   const from = known(store).get(ns);
   // Rows through a known position are a prefix of those known: a position at or below it holds.
   if (from !== undefined && from.position >= position) return true;
@@ -565,7 +571,7 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
     }
     const kind = construction.kind(record), before = at - 1n;
     if (kind < 1 || kind > 6) return false;
-    const view = construction.view(record, id => local.get(id) ?? new StateHandle(store, ns, before, construction).demand(id));
+    const view = construction.view(record, id => local.get(id) ?? new StateHandle(store, ns, before, construction).demand(id) ?? closure?.(id));
     if (view.demand !== undefined) local.set(view.demand.id, view.demand.value);
     for (const cm of view.outputs) derived.push({ cm, position: at });
   }
@@ -589,7 +595,7 @@ export function storedTipHolds(store: ReplayStore, ns: number, construction: Con
   trails?: Pick<TrailEvidence, "trail">): boolean {
   const tip = store.tip(ns);
   return keptTipHolds(store, ns, { position: tip.position, historyHash: tip.history, evidenceHash: tip.evidence }, construction) &&
-    keptOutputsHold(store, ns, construction, trail, tip.position) && keptImportsHold(store, ns, construction, trails);
+    keptOutputsHold(store, ns, construction, trail, tip.position, undefined, true) && keptImportsHold(store, ns, construction, trails);
 }
 
 /** The note root of a stored frontier: each completed left subtree folded with what lies to its right. */
