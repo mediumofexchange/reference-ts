@@ -10,10 +10,10 @@ lit-v1's verdicts, hostile cases included, and conformance vectors bind every by
 - **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors; §6 frames over pool-v3's codecs.
 - **M14c done** (PR #116, [decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)): `state.ts` judges lit records in every mode through a construction view; `test/lit-state.test.ts` against an oracle.
 - **M14d done** (PR #120, [decision](decisions/2026-10.md#2026-10-06--read-lit-packages-through-the-one-package-reader-and-walk-the-construction-a-read-option-slice-14-m14d)): lit packages read through the one walk; kept lit outputs rebuilt (§10).
-- **M14e next: adoption**, held by the [conformance read](decisions/archive/2026-10-06-lit-v1-conformance-read.md) (no byte deviates):
-  B1, a record that splits but does not decode is unexcludable as lit-v1 §§3/5/6 read now; proposed (a), a reviewed draft clarification
-  that it fails replay (`digests` by `splitRecord`, a `ReplayRefusal`, a test); M1, vectors for every remaining layout; M2, §10's imports
-  (wording or a check); tests 2–4. Then status draft → adopted, rows and docs from draft to adopted (`contexts.ts`'s comment re-records reports).
+- **M14e in review** (PR #122, spec PR #15 at `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)):
+  the read's B1 (split records fail replay `MALFORMED`), M2 (kept imports rebuilt; a real gap), M1 (every layout vectored), tests 2–4.
+  Next: resolve the integrated review, re-record the 12 v3 reports from PR #122's CI, merge both PRs, then adopt (lit-v1 §1 draft →
+  adopted, README/rows/docs from draft, `contexts.ts`'s comment; a decision clears C0a).
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
