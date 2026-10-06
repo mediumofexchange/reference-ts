@@ -368,4 +368,39 @@ describe("pool-v3 §14 kept walk: scope changes", () => {
     expect(kept2).toEqual(fresh2);
 
   });
+
+  it("rechecks a kept excluded class by the directory's first snapshot, as its judgment authenticated it (C2.10.11)", async () => {
+    const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
+    const backings = ["recheck x", "recheck y"].map(thing => {
+      const terms = encodeRootTerms({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n, payout: { thing, quantumExponent: 0, perUnit: 1n } });
+      return { name: rootTermsName(terms), signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) } };
+    }).sort((a, z) => compareBytes(a.name, z.name));
+    const [x, y] = backings as [typeof backings[0], typeof backings[0]];
+    const items: EvidenceItem[] = [];
+    const add = (kind: number, payload: Uint8Array) => { if (!items.some(i => i.kind === kind && compareBytes(i.payload, payload) === 0)) items.push({ kind, payload }); };
+    const header: SegmentHeader = { domain, venue: venue.id, operator, sequence: 1n, entries: [x, y].map(item => ({ backing: item.name, link: item.name })) };
+    const id = segmentIdentity(header), state = openSegmentState(operatorStore, id, b(90), undefined);
+    const checkpoint = (sequence: bigint, index: bigint, segmentOf: (name: Uint8Array) => Uint8Array) => {
+      const snapshots = [x, y].map(item => ({ backing: item.name, segment: segmentOf(item.name), historyHash: state.history, evidenceHash: state.evidence, ...state.total(hex(item.name)) }));
+      const directory = snapshots.map(s => ({ name: s.backing, digest: snapshotDigest(s) }));
+      for (const s of snapshots) add(4, snapshotBytes(s));
+      add(3, encodeEvidenceDirectory(directory));
+      add(6, encodeTrail({ header: segmentBytes(header), terms: [x.signed, y.signed], records: [] }));
+      venue.witness(1, operator, index, encodeCommitment(signCommitment(operatorSecret, sequence, directoryRoot(directory))));
+    };
+    // The opening's y snapshot names a segment no evidence holds: excluded (SNAPSHOT), its segment x's first entry names.
+    checkpoint(1n, 1n, name => (compareBytes(name, y.name) === 0 ? b(77) : id));
+    // A continuation whose snapshots both name the segment: the backings' canonical checkpoint.
+    checkpoint(2n, 3n, () => id);
+    const read = (backing: typeof x, at: bigint, store?: ReplayStore, evidence?: EvidenceStore) => settled(readFrontier(pack(items), backing.signed, at,
+      { verifier: counting(), reference, venue, ...(store === undefined ? {} : { store }), ...(evidence === undefined ? {} : { evidence }) }));
+    const k = files(), store = keptStore(k), evidence = evidenceAt(k.evidence);
+    expect(await read(y, 2n, store, evidence)).toEqual(await read(y, 2n));
+    // The resumed walk loads the opening's row, which holds y's snapshot, when it classifies the continuation.
+    const fresh = await read(y, 10n);
+    expect(fresh).toMatchObject({ read: { canonical: { commitment: { sequence: 2n }, index: 3n } } });
+    expect(await read(y, 10n, store, evidence)).toEqual(fresh);
+    // x's walk over the same file reads the row y's walk wrote last.
+    expect(await read(x, 10n, store, evidence)).toEqual(await read(x, 10n));
+  });
 });
