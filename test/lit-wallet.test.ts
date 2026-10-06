@@ -385,6 +385,70 @@ describe("the one wallet holding lit notes", () => {
     const next = holder.keyedRequest("r257", f.backing, 2n);
     expect(same(next.owner, pub(ownerSecret(holder.recoverySeed(), DOMAIN, f.backing, 257n)))).toBe(true);
   });
+
+  it("refuses a second issue racing to one key, a move to a key a burn's change pays, and an acceptance naming any presenter key of its own", async () => {
+    // Two issues to one key with different quantities, saved concurrently: the check runs again where each saves.
+    const f = await fixture(), backer = f.open("backer"), holder = f.open("holder");
+    const fund = holder.keyedRequest("fund", f.backing, 7n), served = await f.served();
+    const raced = await Promise.allSettled([backer.issue("i1", fund, 7n, served, f.signed, undefined, sign),
+      backer.issue("i2", { ...fund, value: 8n }, 8n, served, f.signed, undefined, sign)]);
+    expect(raced.map(r => r.status)).toEqual(["fulfilled", "rejected"]);
+    expect(((raced[1] as PromiseRejectedResult).reason as WalletError).code).toBe("CONFLICT");
+
+    // A burn's change filling the window at h + 256 already moves it once final: no second statement pays that key.
+    const g = await fixture(), burner = g.open("burner");
+    await g.issue(burner.keyedRequest("fund", g.backing, 10n)); await g.issue(burner.keyedRequest("fund2", g.backing, 5n)); await g.checkpoint();
+    await burner.sync(await g.served(), g.signed);
+    for (let i = 2; i <= 255; i++) burner.keyedRequest(`r${i}`, g.backing, 1n);
+    await burner.burn("b", 3n, await g.served(), g.signed);
+    expect(await refusal(burner.moveWindow("move", await g.served(), g.signed))).toBe("CONFLICT");
+
+    // An acceptance naming the presenter key of the holder's other standing demand, whose output no scan marks.
+    const h = await fixture(), presenter = h.open("presenter");
+    await h.issue(presenter.keyedRequest("five", h.backing, 5n)); await h.issue(presenter.keyedRequest("three", h.backing, 3n)); await h.checkpoint();
+    await presenter.sync(await h.served(), h.signed);
+    const deadline = h.venue.witnessedIndex() + 100n;
+    const d1 = await presenter.demand("d1", 5n, deadline, await h.served(), h.signed);
+    const d2 = await presenter.demand("d2", 3n, deadline, await h.served(), h.signed);
+    await presenter.submit("d1", h.service); await presenter.submit("d2", h.service); await h.checkpoint();
+    await presenter.sync(await h.served(), h.signed);
+    const other = (decodeRecord(d2.record).statement as Extract<Statement, { kind: 4 }>).presenter;
+    const acceptance = { domain: DOMAIN, demand: d1.demand!, owner: other, deadline,
+      signature: ed25519.sign(acceptanceBytes({ domain: DOMAIN, demand: d1.demand!, owner: other, deadline }), K) };
+    expect(await refusal(presenter.settle("s", acceptance, await h.served(), h.signed))).toBe("OWN_KEY");
+  });
+
+  it("hands a window move to an encrypted backup's restored copy, which reads it as the same payment", async () => {
+    const f = await fixture(), holder = f.open("holder");
+    await f.issue(holder.keyedRequest("fund", f.backing, 2n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    for (let i = 1; i <= 256; i++) holder.keyedRequest(`r${i}`, f.backing, 2n);
+    const move = await holder.moveWindow("move", await f.served(), f.signed);
+    const key = b(78), backup = holder.exportBackup(key);
+    const { walletBackupDigest } = await import("../src/pool/v3/wallet-backup.js");
+    const restored = V3Wallet.restoreBackup(join(resolve(directories.at(-1)!), "copy.db"), { construction: LIT, venue: f.venue, reference },
+      backup, key, walletBackupDigest(backup));
+    wallets.push(restored);
+    expect(restored.payment("move")).toEqual(move);
+    expect(await refusal(() => restored.keyedRequest("r256", f.backing, 2n))).toBe("CLOSED");
+  });
+
+  it("fails an issue whose segment ended, and makes it again under a new alias with the same output, admitted and credited once", async () => {
+    const f = await fixture(), backer = f.open("backer"), holder = f.open("holder");
+    const fund = holder.keyedRequest("fund", f.backing, 7n);
+    const first = await backer.issue("i1", fund, 7n, await f.served(), f.signed, undefined, sign);
+    await f.j.rescope("again", { keep: [f.backing] }); await f.j.publish(); await f.j.adopt();
+    await backer.sync(await f.served(), f.signed);
+    expect(backer.act("i1")).toMatchObject({ status: "failed" });
+    const again = await backer.issue("i2", fund, 7n, await f.served(), f.signed, undefined, sign);
+    const nonce = (bytes: Uint8Array) => (decodeRecord(bytes).statement as Extract<Statement, { kind: 1 }>).nonce;
+    expect([again.record.length, same(nonce(again.record), nonce(first.record))]).toEqual([first.record.length, true]);
+    expect(again.record).not.toEqual(first.record);
+    await backer.submit("i2", f.service); await f.checkpoint();
+    await backer.sync(await f.served(), f.signed);
+    expect([backer.act("i1")!.status, backer.act("i2")!.status]).toEqual(["failed", "final"]);
+    expect((await holder.keyedFulfill("fund", await f.served(), f.signed)).request).toEqual(fund);
+  });
 });
 
 describe("lit-v1 §8's reach and the scan window", () => {

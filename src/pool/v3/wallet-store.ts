@@ -512,7 +512,8 @@ export class V3Wallet {
     requireThat(this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE a.status='prepared'
       AND a.kind!='6' GROUP BY i.nf HAVING COUNT(*) > 1`).get() === undefined, "INVALID", "backup state reserves a note twice");
     // Shapes `act` and `payment` read: a demand's repeats are demand identities; a freshen has one positive output.
-    for (const row of this.db.prepare("SELECT alias,kind,intent,repeats FROM saved_records WHERE repeats IS NOT NULL OR kind='2'").all()) {
+    let moveKeys: Keyring | undefined;
+    try { for (const row of this.db.prepare("SELECT alias,kind,intent,repeats,record,backing FROM saved_records WHERE repeats IS NOT NULL OR kind='2'").all()) {
       let ok: boolean;
       try {
         if (row.kind === "4") {
@@ -523,8 +524,14 @@ export class V3Wallet {
           const decimal = (v: unknown) => typeof v === "string" && /^(0|[1-9][0-9]{0,19})$/.test(v);
           // A lit window move: its fee's key and price (or none) and the moved index (`keyedPayment`, `moved`).
           if (Array.isArray(intent) && intent[1] === "move") {
+            const exposed = this.ownerKeys(row.backing as Uint8Array)?.exposed;
             ok = this.keyed !== undefined && intent.length === 5 && decimal(intent[4]) && ((intent[2] === null && intent[3] === null) ||
-              (typeof intent[2] === "string" && /^[0-9a-f]{64}$/.test(intent[2]) && decimal(intent[3])));
+              (typeof intent[2] === "string" && /^[0-9a-f]{64}$/.test(intent[2]) && decimal(intent[3]))) &&
+              // Its record pays the moved index's key, and the fee's where it names one, at an index the rows show exposed.
+              exposed !== undefined && BigInt(intent[4] as string) <= exposed &&
+              this.keyed.outputs(this.domain, row.record as Uint8Array).map(o => hex(o.opening.owner)).join() ===
+                [hex((moveKeys ??= this.keyed.keyring(seed, this.domain)).key(row.backing as Uint8Array, BigInt(intent[4] as string))),
+                  ...(intent[2] === null ? [] : [intent[2]])].join();
             requireThat(ok, "INVALID", "backup state has a malformed saved record");
             continue;
           }
@@ -534,7 +541,7 @@ export class V3Wallet {
         }
       } catch { ok = false; }
       requireThat(ok, "INVALID", "backup state has a malformed saved record");
-    }
+    } } finally { moveKeys?.close(); }
   }
   private active(): void {
     requireThat(!this.closed && !this.poisoned, "STORAGE", "wallet is closed or needs reopening");
@@ -1483,6 +1490,9 @@ export class V3Wallet {
       requireThat(kind === 6 || inputs.every(nf => !this.reserved(nf)), "CONFLICT", "an input is reserved by another payment or act");
       // Lit-v1's tags hide nothing (§2), so a presented note links nothing new: only pool-v3 keeps C3.1's rule.
       if ((kind === 3 || kind === 4) && this.keyed === undefined) this.requireUnpresented(inputs, repeats);
+      // A lit request key is issued to once (§8): checked again here, where two calls racing to save would both pass a check
+      // made before their reads.
+      if (kind === 1 && this.keyed !== undefined) this.requireUnissued((JSON.parse(intent) as string[])[2]!);
       const bytes = typeof built === "function" ? built() : built, statement = hex(this.statementOf(bytes));
       requireThat(this.db.prepare("SELECT 1 FROM saved_records WHERE statement=?").get(statement) === undefined, "CONFLICT",
         "another alias saved this statement");
@@ -1492,6 +1502,13 @@ export class V3Wallet {
       this.db.prepare("INSERT INTO saved_records VALUES(?,?,?,?,?,?,?,?,NULL,'prepared',NULL,NULL,NULL,?,?)").run(name, String(kind), intent,
         statement, bytes, backing, operator, demand ?? null, at.toString(), repeats === undefined || repeats.length === 0 ? null : JSON.stringify(repeats));
       for (const nf of inputs) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(nf.toString(), name);
+      // A lit burn's change, as a lit payment's outputs: the window move reads which keys saved records pay. Not an issue's:
+      // one made again under a new alias after its segment ended has the same output by design.
+      if (this.keyed !== undefined && kind === 3) {
+        for (const { cm, opening: o } of this.keyed.outputs(this.domain, bytes)) {
+          this.db.prepare("INSERT INTO saved_outputs VALUES(?,?,?,?,?)").run(cm.toString(), name, o.value.toString(), hex(o.owner), hex(o.rho));
+        }
+      }
     });
     return this.act(name)!;
   }
@@ -2142,10 +2159,7 @@ export class V3Wallet {
     const existing = this.savedAct(name, 1, intent);
     if (existing !== undefined) return existing;
     requireThat(typeof sign === "function", "INVALID", "a backer signer is required");
-    // A request's key is paid once (§8): an issue saved here naming it with any quantity, not failed, refuses another; one
-    // whose segment ended has failed, and is made again under a new alias with the same output.
-    requireThat(this.db.prepare("SELECT intent FROM saved_records WHERE kind='1' AND status!='failed'").all().every(row =>
-      (JSON.parse(row.intent as string) as unknown[])[2] !== hex(output.owner)), "CONFLICT", "an issue to this key is already saved");
+    this.requireUnissued(hex(output.owner));
     const nonce = this.keyed!.issueNonce(this.seed, this.domain, output);
     const planned = await this.read(packageBytes, own, view => {
       if (this.savedAct(name, 1, intent) !== undefined) return undefined;
@@ -2162,6 +2176,13 @@ export class V3Wallet {
     if (planned === undefined) return this.act(name)!;
     const signature = await this.backerSignature(sign, planned.issue.message, obligor);
     return this.saveAct(name, 1, intent, planned.issue.record(signature), backing, planned.header.operator, undefined, [], planned.at);
+  }
+
+  /** A request's key is paid once (§8): an issue saved here naming it with any quantity, not failed, refuses another; one
+   * whose segment ended has failed, and is made again under a new alias with the same output. */
+  private requireUnissued(owner: string): void {
+    requireThat(this.db.prepare("SELECT intent FROM saved_records WHERE kind='1' AND status!='failed'").all().every(row =>
+      (JSON.parse(row.intent as string) as unknown[])[2] !== owner), "CONFLICT", "an issue to this key is already saved");
   }
 
   /** Lit-v1 §3 kind 3: burn `quantity` from this wallet's available notes (the smallest covering note or pair),
@@ -2230,7 +2251,7 @@ export class V3Wallet {
   /** Lit-v1 §§3–4 kind 6 and C3.5–C3.6: settle this seed's standing demand that K's acceptance answers, to the acceptance's
    * owner, the release signed by the presenter key over this settlement's own statement hash. The acceptance must verify
    * under the obligor, be due no later than the demand and not behind the horizon, and name no key of this wallet K can
-   * see (`OWN_KEY`): an owner key of a held backing, or the demand's presenter key, which no scan marks. Its notes paid
+   * see (`OWN_KEY`): an owner key of a held backing, or the presenter key of a demand it presents, which no scan marks. Its notes paid
    * back to itself, or stranded, would end the demand with K paying nothing; refused, an acceptance published in time
    * still reads as answered (C3.8), and the holder withdraws. The
    * settlement's output derives from the demand's nullifiers (§3), so no disclosure count is read (§7) and at most one
@@ -2256,14 +2277,16 @@ export class V3Wallet {
     return this.read(packageBytes, terms, view => {
       const again = this.savedAct(name, 6, intent);
       if (again !== undefined) return again;
-      const { canonical, force, at, lag, observed } = view;
+      const { canonical, force, notes, at, lag, observed } = view;
       this.current(at);
       const demand = this.standing(view, own.demand);
       requireThat(own.deadline <= demand.deadline, "INVALID", "the acceptance is due after the demand");
       requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
       const { header } = this.route(view);
-      requireThat(this.keys!.find(own.owner) === undefined && !same(own.owner, demand.presenter), "OWN_KEY",
-        "the acceptance's owner is a key of this wallet: withdraw the demand instead");
+      // The presenter key of any demand this seed presents over its unspent notes, this one's included.
+      const presenters = notes.flatMap(note => [...force!.demandsWithTag(note.tag)].map(([, d]) => d)).filter(d => this.presents(d));
+      requireThat(this.keys!.find(own.owner) === undefined && !presenters.some(d => same(own.owner, d.presenter)) &&
+        !same(own.owner, demand.presenter), "OWN_KEY", "the acceptance's owner is a key of this wallet: withdraw the demand instead");
       const nfs = demand.nullifiers ?? [];
       requireThat(nfs.length !== 0 && nfs.every(nf => !force!.hasNullifier(nf)), "ABSENT", "a demanded note is not unspent in canonical history");
       const presenter = this.presenterOf(demand);
