@@ -301,39 +301,33 @@ async function adopt(argv: readonly string[]): Promise<void> {
 
 /** `restore --id <id>`: record that this directory was restored from a copy or a backup (M13d). Its journal then signs
  * nothing but C2b.4's return, at a sequence past any its lost instance can have signed, once the scope's silence
- * boundary is witnessed; what was co-signed after the last witnessed commitment lapses there. A return pending when
- * the copy was made is adopted first, as the lost instance would. Before the boundary it answers `restored` and
- * waits for nothing: run it again once silence is witnessed. Run again after the return is signed, from the same
- * directory, it publishes and answers that return; `adopt` then takes it. */
+ * boundary is witnessed; what was co-signed after the last witnessed commitment lapses there. A return pending in the
+ * directory is published and adopted first, as the lost instance would. Before the boundary it answers `restored`:
+ * run it again, with the same `--id`, once silence is witnessed. Every run records a restoration (a file's identity
+ * cannot tell a retry from a copy rolled back in place), so once it answers `pending` the next step is `adopt`,
+ * never `restore`. */
 async function restore(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, { ...POLL, id: "value" }, 0);
   const directory = openDirectory(required(args, "dir"), "operator"), id = required(args, "id");
-  // The same directory, after its return was signed, is a retry; anything else is a restoration (of a copy taken
-  // after the return was signed, too: the journal draws a fresh fence over it).
-  let op: Operator | undefined;
-  try { op = await openOperator(directory, args); } catch (error) { if (!(error instanceof V3StoreError && error.code === "COPIED")) throw error; }
-  if (op !== undefined && (await op.journal.status()).restoredOpening === undefined) { await op.close(); op = undefined; }
-  op ??= await openOperator(directory, args, true);
+  const op = await openOperator(directory, args, true);
   try {
-    const status = await op.journal.status();
-    if (status.restoredOpening !== undefined) {
-      const published = await budgeted(op, () => op!.journal.publish());
-      print({ status: "pending", commitment: commitmentOf(published), published: commitmentOf(published), notes: [ADOPT] });
-      return;
+    if ((await op.journal.status()).pendingReturn) {
+      await budgeted(op, () => op.journal.publish());
+      await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE", "UNAVAILABLE"], () => op.journal.adopt());
     }
-    if (status.pendingReturn) await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE", "UNAVAILABLE"], () => op!.journal.adopt());
     let signed: Commitment;
-    try { signed = await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE"], () => op!.journal.return(id)); } catch (error) {
-      if (!(error instanceof V3StoreError && error.code === "STALE" && /silence boundary/.test(error.message))) throw error;
-      print({ status: "restored", restoredAt: status.restoredAt, waiting: "silence",
-        notes: ["it signs nothing until the scope's silence boundary is witnessed; then run moe operator restore again"] });
+    try { signed = await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE"], () => op.journal.return(id)); } catch (error) {
+      if (!(error instanceof V3StoreError && error.check === "SILENCE")) throw error;
+      print({ status: "restored", restoredAt: (await op.journal.status()).restoredAt, waiting: "silence",
+        notes: ["it signs nothing until the scope's silence boundary is witnessed; then run moe operator restore again with the same --id"] });
       return;
     }
-    const published = await budgeted(op, () => op!.journal.publish());
-    print({ status: "pending", commitment: commitmentOf(signed), published: commitmentOf(published), notes: [ADOPT] });
+    const published = await budgeted(op, () => op.journal.publish());
+    print({ status: "pending", commitment: commitmentOf(signed), published: commitmentOf(published),
+      notes: ["statements co-signed after the last witnessed commitment lapse at this return; holders reprove them",
+        "once it is witnessed, moe operator adopt (never restore again), then serve"] });
   } finally { await op.close(); }
 }
-const ADOPT = "statements co-signed after the last witnessed commitment lapse at this return; once it is witnessed, moe operator adopt, then serve";
 
 export async function operator(argv: readonly string[]): Promise<void> {
   const [command, ...rest] = argv;

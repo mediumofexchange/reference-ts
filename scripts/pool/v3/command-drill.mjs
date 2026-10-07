@@ -372,13 +372,12 @@ try {
     const restore = ["operator", "restore", "--dir", OP, "--id", "restore-1", "--poll-ms", POLL];
     const early = await ok(restore, { mining: "waiting" });
     // Before the silence boundary it records the restoration and signs nothing.
-    if (early.status === "restored") assert.equal(early.waiting, "silence");
+    assert.deepEqual([early.status, early.waiting], ["restored", "silence"]);
     await refused(["operator", "open", "--dir", OP, "--id", "genesis-2", backing, "--terms", termsFile, "--signature", signatureFile, ...SYN], "RESTORED");
     await advance(Number(SILENCE) + 4);
     const returned = await ok(restore, { mining: "waiting" });
     assert.equal(returned.status, "pending");
     assert(BigInt(returned.commitment.sequence) > 1n << 16n, "the return skips past any sequence the lost instance can have signed");
-    assert.deepEqual((await ok(restore)).commitment, returned.commitment, "restore run again answers the same return");
     const adopted = await ok(["operator", "adopt", "--dir", OP, "--poll-ms", POLL], { mining: "waiting" });
     assert.deepEqual([adopted.status, adopted.receipts], ["final", []]);
     await refused(["reader", "supply", ...reader, backing], "UNAVAILABLE");

@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
@@ -213,9 +214,26 @@ describe("v3 recovery journal and independent package reader", () => {
     f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
     expect((await again.package()).selection.sequence).toBe(next.sequence);
     await again.audit();
+    // A reader served through the lost instance's in-flight commitment, inside the skip, is served from the return on.
+    let served = 0;
+    for await (const _ of (await again.serve(f.backing, unwitnessed.sequence)).parts) served++;
+    expect(served).toBeGreaterThan(0);
+    // The lost instance's commitment landing late, inside the skip, is no conflict: the record moved past it.
+    f.venue.witness(1, operator, f.venue.witnessedIndex(), encodeCommitment(unwitnessed));
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    const late = await again.commit("after-late"); await again.publish();
+    expect(late.sequence).toBe(next.sequence + 1n);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    for (const receipt of [tail, after]) expect(await verdict(f, again, encodeReceipt(receipt))).toMatchObject({ status: "lapsed" });
     // Reopened, it reads its rows across the skip.
     again.close();
-    const reopened = copy(); expect((await reopened.package()).selection.sequence).toBe(next.sequence); reopened.close();
+    const reopened = copy(); expect((await reopened.package()).selection.sequence).toBe(late.sequence); reopened.close();
+    // A skipped range that disagrees with the signed rows is damage.
+    const raw = new DatabaseSync(join(`${f.file.slice(0, -"/journal.db".length)}-copy`, "journal.db"));
+    raw.prepare("UPDATE journal_skipped SET below=below+1").run(); raw.close();
+    const damaged = copy();
+    await expect(damaged.package()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is missing" });
+    await expect(damaged.status()).rejects.toMatchObject({ code: "STORAGE", message: "a skipped range disagrees with the signed rows" });
     // The obsolete lost instance, restarted, publishes and signs nothing under the restored return.
     const obsolete = new V3OperatorJournal(f.file, { secret: operatorSecret, venue: f.venue, reference, verifier }); journals.push(obsolete);
     await expect(obsolete.publish()).rejects.toMatchObject({ code: "CONFLICT" });
@@ -245,6 +263,8 @@ describe("v3 recovery journal and independent package reader", () => {
     expect((await second.status()).restoredAt).toBeDefined();
     await expect(second.commit("served")).rejects.toMatchObject({ code: "RESTORED" });
     f.venue.advance(f.venue.witnessedIndex() + 16n);
+    // The earlier restoration's identifier answers nothing under this one.
+    await expect(second.return("restored")).rejects.toMatchObject({ code: "RESTORED" });
     const next = await second.return("restored-again");
     expect(next.sequence > opening.sequence + (1n << 16n)).toBe(true);
   });

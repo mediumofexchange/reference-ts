@@ -176,15 +176,20 @@ Construction C2.4.1). Resuming on it would co-sign other statements at the same 
    - It records the restoration. From then on the journal signs nothing but C2b.4's return, once the scope's silence
      boundary is witnessed, at a sequence at least 2¹⁶ past its own and the record's latest; the step is random per
      restoration.
-   - Before the boundary it answers `{ "status": "restored", "waiting": "silence" }`. Run it again once silence is
-     witnessed. It then signs and publishes the return and answers `pending`.
-   - What was co-signed after the last witnessed commitment lapses there; holders resubmit it.
-4. Run `moe operator adopt` once the return is witnessed, then `serve`.
+   - Before the boundary it answers `{ "status": "restored", "waiting": "silence" }`. Run it again with the same `--id`
+     once silence is witnessed. It then signs and publishes the return and answers `pending`.
+   - A return pending in the directory is published and adopted first, as the lost instance would.
+   - What was co-signed after the last witnessed commitment lapses there; holders reprove it.
+4. Once it answers `pending`, never run `restore` again. Run `moe operator adopt` once the return is witnessed, then
+   `serve`. Every `restore` records a new restoration, because a file's identity cannot tell a retry from a copy rolled
+   back in place. One run after `pending` costs another silence period. The lost instance's in-flight commitment
+   landing later, inside the skip, is no conflict.
 
 Every other signing command refuses `RESTORED` until `adopt` takes that return.
 
 A journal whose database file is not the one it was made in refuses `COPIED`; the remedy is `restore`. The journal
-compares the file's inode, and its birth time where the filesystem keeps one. That catches a fresh copy or a restore to
+compares the file's inode, and its birth time on systems that report one (not Linux, where without statx the reported
+birth time is the change time). That catches a fresh copy or a restore to
 another disk or machine. It misses a file overwritten in place and a filesystem or machine snapshot rolled back: after
 either, run `restore` before anything else. A directory that was only moved is refused the same way and costs one
 return.
@@ -199,9 +204,9 @@ Limits:
   permanent.
 - A repair before silence (C2.10.9a) would avoid the wait, but C2.10.9 forbids excusing live receipts by a new
   segment; it is a lever for a later version.
-- Run `restore` once per restoration. After its return is signed, running it again from the same directory answers
-  that return. A copy taken after that is a restoration of its own: it adopts the earlier return as the lost instance
-  would, then waits for silence again.
+- The lost instance's in-flight commitment landing before the restoration's return is signed is case (B): `CONFLICT`.
+- Two live instances of one key, and a rollback in place that `restore` does not follow, stay outside what the journal
+  can see.
 
 ## Acceptance and remaining work
 
