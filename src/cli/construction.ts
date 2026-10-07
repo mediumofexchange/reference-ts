@@ -1,4 +1,4 @@
-// The construction a `moe` directory declares (slice 14 M14g4): pool-v3's, or lit-v1's (a draft until adopted). It
+// The construction a `moe` directory declares (slice 14 M14g4): pool-v3's, or lit-v1's. It
 // is chosen once, at `init` (`--construction`), and kept in config.json; a directory made before the choice existed
 // is pool-v3's. Every file a directory holds serves one construction (a journal, a wallet and an evidence file each
 // name their configuration domain), so a directory's terms, journal, wallet, service client and reads all go through

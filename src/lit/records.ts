@@ -1,5 +1,5 @@
 // Canonical lit statements, records, signed objects and publications (lit-v1
-// §§2–4, a draft until adopted). Decoding establishes structure, key encodings
+// §§2–4). Decoding establishes structure, key encodings
 // and positive values only: no membership, spentness, locks, time, finality or
 // admission. The derived values and arithmetic below are state-free functions
 // of one statement (and, for a settlement, its demand).

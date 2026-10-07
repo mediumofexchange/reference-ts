@@ -1,4 +1,4 @@
-// Lit-v1's view for the one state machine (pool/v3/state.ts, slice 14 M14c; lit-v1 §7, a draft until adopted): a
+// Lit-v1's view for the one state machine (pool/v3/state.ts, slice 14 M14c; lit-v1 §7): a
 // lit record is judged by the pool's rules with §7's readings, named here rather than branched there. Inputs are
 // live when their commitment is an output of the visible state (`INPUT`, the anchors' place); the statement check in
 // the proof's place is the statement's own arithmetic (`ARITHMETIC`) and its owners' signatures (`SIGNATURE`); every

@@ -1,5 +1,5 @@
-// What the one wallet (pool/v3/wallet-store.ts) builds for a lit backing (slice 14 M14g; lit-v1 §8, a draft until
-// adopted): the payment request, which names a backing, a quantity and an owner key in place of an exact output, and the
+// What the one wallet (pool/v3/wallet-store.ts) builds for a lit backing (slice 14 M14g; lit-v1 §8): the
+// payment request, which names a backing, a quantity and an owner key in place of an exact output, and the
 // statements it authorizes by its notes' owner keys in place of a proof.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";

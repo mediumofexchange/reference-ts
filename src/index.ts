@@ -21,7 +21,7 @@ export * from "./venue-records.js";
 // The core claim layer's shared primitives: the shielded pool's field, hash,
 // notes, trees and scope. pool-v3 and its proof backend are on their own
 // subpaths (`pool/v3/…`, `pool/proof-verifier`), since the backend needs
-// `@aztec/bb.js`. The lit construction (lit-v1, a draft until adopted) is on
+// `@aztec/bb.js`. The lit construction (lit-v1, adopted) is on
 // its own subpaths (`lit/…`) too.
 export * from "./pool/index.js";
 
