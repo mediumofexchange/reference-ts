@@ -27,37 +27,37 @@
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1007
+      "elapsedMs": 1018
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3095
+      "elapsedMs": 3102
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3075
+      "elapsedMs": 3084
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1005
+      "elapsedMs": 998
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3068
+      "elapsedMs": 3084
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3061
+      "elapsedMs": 3073
     }
   ],
   "transactions": [
@@ -110,8 +110,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "5af0d5cced94a4b8c0c40bc9d495e3b747b1675e6e113e4ade0cb3fd90f401a6",
-      "history": "a467a395ed18fb02c5041623911ae48b55976c573ccd69356c1cefbdd3a62fbb",
+      "spentRoot": "448f5ec08dd371465752403c174042dbc8dd2863ff42dedcd986422f4248aefc",
+      "history": "c002f7a106ea85358de77fcd7a1db2ba6b18b04ed80951cbb53a604562b5e82e",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -166,8 +166,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "5af0d5cced94a4b8c0c40bc9d495e3b747b1675e6e113e4ade0cb3fd90f401a6",
-      "history": "a467a395ed18fb02c5041623911ae48b55976c573ccd69356c1cefbdd3a62fbb",
+      "spentRoot": "448f5ec08dd371465752403c174042dbc8dd2863ff42dedcd986422f4248aefc",
+      "history": "c002f7a106ea85358de77fcd7a1db2ba6b18b04ed80951cbb53a604562b5e82e",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -225,7 +225,7 @@
       ]
     }
   },
-  "elapsedMs": 38294,
+  "elapsedMs": 38621,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -280,7 +280,7 @@
     "dist/pool/v3/verify-ahead.js": "ac0418efa0aada00095d7d0d827efefe90b34d7e457e1bd9d53fea0f8d0a4315",
     "dist/pool/v3/wallet-backup.js": "ed2c1d580e7c49ae2cd80aa5d3cc7fd6edfc0c68a3135aa7a5ea931ad63e31dc",
     "dist/pool/v3/wallet-request.js": "a9e017276511b5af8a909465d504a60456c79fdbfc50e0f2683bc971a9e3cda2",
-    "dist/pool/v3/wallet-store.js": "fa4e1741c7c21816f8be7df2c67b7c592e6a2b264fc24c0ac8136123c7e6b7ce",
+    "dist/pool/v3/wallet-store.js": "1ef34a1d0a1bfdf7cb5485743d34e5b4613091882798d84e61f2b4743957f87b",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
     "dist/record-range.js": "4e5132808c4aa8c01495134363958e53ea1aeda3df162ac35bcc7f5457c5db6f",
     "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
@@ -333,7 +333,7 @@
     "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
-    "src/pool/v3/construction.ts": "1ab6ac1cacf61a423f4c935379f602dd2eeacdd487655dbc59f8ea9ead02daf9",
+    "src/pool/v3/construction.ts": "3c6ea9f62c0db107ab19feb11e04d5a2030d77c458dfc93a9215c1815131b151",
     "src/pool/v3/dishonour.ts": "7484d25993dba1247c1f4c6343046307b9811ee07fbf2fa5c3db33c203ccbee3",
     "src/pool/v3/evidence-store.ts": "453fd0224e4f39ed9b309d72ba8f98f921df1e00fdd17a66bf8197e5d3ae3939",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
@@ -364,7 +364,7 @@
     "src/pool/v3/verify-ahead.ts": "7f67861fb3e768576b60d0d896c3b26c61b4096809b8eb2d4b1dbaacf3b9561e",
     "src/pool/v3/wallet-backup.ts": "b51105bfdba12ec8a23a882d90da366198b94f78f3ae782511eea52494f9d06e",
     "src/pool/v3/wallet-request.ts": "65f043159a6f3eeabfa092f9ca25545355a932e843b702219fcf678fc45c6470",
-    "src/pool/v3/wallet-store.ts": "06eff97e2033d190ad1ecb3a59f4da6108d8196e5e04e87960245d6162d699e0",
+    "src/pool/v3/wallet-store.ts": "ad3c2f937d27fc5c4035bd919724173d65afd43217f9643b469a1b37fcd581bf",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
     "src/record-range.ts": "d1dee26da4bb12364650470bffdbd322292a51167cab4db1bdf525e4f7159dac",
     "src/record-venue.ts": "2283ccb169c66174805bd2fea6c3531dd8faf7744cc42faa313ab45fc664988b",
