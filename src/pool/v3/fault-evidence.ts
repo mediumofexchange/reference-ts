@@ -1,149 +1,22 @@
-// Portable evidence authentication, pool-v3 §9 at 322bcae. This does not
-// classify checkpoints, validate target records/proofs or establish finality.
-import { sha256 } from "@noble/hashes/sha2.js";
-import { arrayLength, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
-import { V3_FAULT_EVIDENCE_CONTEXT as CONTEXT, V3_SNAPSHOT_CONTEXT as SNAPSHOT_CONTEXT } from "../../contexts.js";
-import { isValue } from "../field.js";
-import { decodeSnapshot, snapshotBytes, verifyEvidenceOpening, type Snapshot } from "./commitments.js";
-import { hashEvidenceFields, type EvidenceDigests } from "./records.js";
-
-export const MAX_TARGET_FIELD_BYTES = 131072;
-const FIXED_BYTES = 250, TRIPLE_BYTES = 96;
+// Portable evidence authentication, pool-v3 §9 at 322bcae: the shared evidence
+// chain's frame (`../evidence-chain.ts`) with v3's contexts, the statement,
+// proof and authorization as target fields and the digest triple. This does
+// not classify checkpoints, validate target records/proofs or establish finality.
+import { FaultEvidenceLimitError, type FaultEvidence as ChainEvidence } from "../evidence-chain.js";
+import { MAX_TARGET_FIELD_BYTES, V3_CHAIN } from "./commitments.js";
+import type { EvidenceDigests } from "./records.js";
 
 /** A local resource refusal, not malformed evidence or operator fault. */
-export class FaultEvidenceLimitError extends Error {}
-
-export interface FaultEvidence {
-  readonly snapshot: Snapshot;
-  readonly position: bigint;
-  readonly length: bigint;
-  readonly previous: Uint8Array;
-  readonly statement: Uint8Array;
-  readonly proof: Uint8Array;
-  readonly authorization: Uint8Array;
-  readonly suffix: readonly EvidenceDigests[];
-}
-/** Established separately from the expected commitment's signed directory
- * and authenticated header context. Never take these from the record itself. */
-export interface ExpectedSnapshot {
-  readonly backing: Uint8Array;
-  readonly segment: Uint8Array;
-  readonly digest: Uint8Array;
-}
-
-function object(v: unknown): void {
-  if (typeof v !== "object" || v === null) throw new EncodingError("not an object");
-}
-/** The caller's bytes as an owned copy: nothing below reads the caller again. */
-function bytes(v: unknown, width?: number): Uint8Array {
-  const own = copyBytes(v as Uint8Array);
-  if (width !== undefined && own.length !== width) throw new EncodingError("invalid bytes");
-  return own;
-}
-function suffixCount(position: bigint, length: bigint, maximum: bigint): bigint {
-  if (!isValue(maximum)) throw new EncodingError("invalid suffix budget");
-  if (!isValue(position) || position === 0n || !isValue(length) || length < position) {
-    throw new EncodingError("invalid evidence positions");
-  }
-  const count = length - position;
-  if (count > maximum) throw new FaultEvidenceLimitError("suffix exceeds reader budget");
-  return count;
-}
-/** Each caller field is read once into the owned evidence returned, with its
- * snapshot's bytes, the only values the encoder and the verifier then read. */
-function requireEvidence(e: FaultEvidence, maximum: bigint): { snapshot: Uint8Array; evidence: FaultEvidence } {
-  object(e);
-  const position = e.position, length = e.length, suffixField = e.suffix;
-  const count = suffixCount(position, length, maximum);
-  // The suffix length is checked before any entry is read, then each entry is
-  // read and judged once, so a long sparse array stops at its first hole.
-  const declared = Array.isArray(suffixField) ? arrayLength(suffixField) : -1;
-  if (BigInt(declared) !== count) throw new EncodingError("wrong evidence suffix length");
-  const [statement, proof, authorization] = [e.statement, e.proof, e.authorization].map(field => {
-    const own = bytes(field);
-    if (own.length > MAX_TARGET_FIELD_BYTES) throw new EncodingError("target field too long");
-    return own;
-  }) as [Uint8Array, Uint8Array, Uint8Array];
-  const previous = bytes(e.previous, 32), snapshot = snapshotBytes(e.snapshot);
-  const triples = copyArray(suffixField, (triple: EvidenceDigests) => {
-    object(triple);
-    return Object.freeze({ statementHash: bytes(triple.statementHash, 32), proofHash: bytes(triple.proofHash, 32),
-      signatureHash: bytes(triple.signatureHash, 32) });
-  }, declared);
-  if (triples.length !== declared) throw new EncodingError("wrong evidence suffix length");
-  return { snapshot, evidence: Object.freeze({ snapshot: decodeSnapshot(snapshot), position, length, previous,
-    statement, proof, authorization, suffix: Object.freeze(triples) }) };
-}
+export { FaultEvidenceLimitError, MAX_TARGET_FIELD_BYTES };
+export type { ExpectedSnapshot } from "../evidence-chain.js";
+export type FaultEvidence = ChainEvidence<keyof EvidenceDigests, "statement" | "proof" | "authorization">;
 
 /** Strict wire structure; raw target bytes need not be valid §5 records.
  * The caller must supply its local suffix budget, including zero if desired. */
-export function encodeFaultEvidence(input: FaultEvidence, maxSuffixEntries: bigint): Uint8Array {
-  const { snapshot, evidence: e } = requireEvidence(input, maxSuffixEntries);
-  const size = FIXED_BYTES + e.statement.length + e.proof.length + e.authorization.length + TRIPLE_BYTES * e.suffix.length;
-  const out = new Uint8Array(size), view = new DataView(out.buffer);
-  let offset = 0;
-  const put = (b: Uint8Array): void => { out.set(b, offset); offset += b.length; };
-  const u64 = (n: bigint): void => { view.setBigUint64(offset, n, false); offset += 8; };
-  put(CONTEXT); put(snapshot); u64(e.position); u64(e.length); put(e.previous);
-  for (const field of [e.statement, e.proof, e.authorization]) {
-    view.setUint32(offset, field.length, false); offset += 4; put(field);
-  }
-  for (const triple of e.suffix) { put(triple.statementHash); put(triple.proofHash); put(triple.signatureHash); }
-  return out;
-}
-
-function contextAt(input: Uint8Array, start: number, expected: Uint8Array): void {
-  for (let i = 0; i < expected.length; i++) if (input[start + i] !== expected[i]) throw new EncodingError("wrong evidence context");
-}
-
-/** Scan every boundary without copying target/suffix data first. Counts use
- * bigint until exact remaining-byte equality establishes a safe array count. */
-export function decodeFaultEvidence(bytesIn: Uint8Array, maxSuffixEntries: bigint): FaultEvidence {
-  const input = bytes(bytesIn);
-  if (!isValue(maxSuffixEntries)) throw new EncodingError("invalid suffix budget");
-  if (input.length < FIXED_BYTES) throw new EncodingError("truncated evidence");
-  contextAt(input, 0, CONTEXT); contextAt(input, 26, SNAPSHOT_CONTEXT);
-  const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
-  const position = view.getBigUint64(190, false), length = view.getBigUint64(198, false);
-  const count = suffixCount(position, length, maxSuffixEntries);
-  const fields: { offset: number; length: number }[] = [];
-  let offset = 238;
-  for (let i = 0; i < 3; i++) {
-    if (offset + 4 > input.length) throw new EncodingError("truncated target length");
-    const length = view.getUint32(offset, false); offset += 4;
-    if (length > MAX_TARGET_FIELD_BYTES) throw new EncodingError("target field too long");
-    if (offset + length > input.length) throw new EncodingError("truncated target field");
-    fields.push({ offset, length }); offset += length;
-  }
-  if (BigInt(input.length - offset) !== BigInt(TRIPLE_BYTES) * count) throw new EncodingError("wrong suffix byte length");
-  // This conversion is bounded by the already allocated input's exact length.
-  const entries = Number(count);
-  const take = (start: number, length: number): Uint8Array => copyBytes(input.subarray(start, start + length));
-  const target = fields.map(f => take(f.offset, f.length));
-  const suffix: EvidenceDigests[] = [];
-  for (let i = 0; i < entries; i++) {
-    suffix.push(Object.freeze({ statementHash: take(offset, 32), proofHash: take(offset + 32, 32), signatureHash: take(offset + 64, 32) }));
-    offset += TRIPLE_BYTES;
-  }
-  return Object.freeze({ snapshot: decodeSnapshot(input.subarray(26, 190)), position, length,
-    previous: take(206, 32), statement: target[0]!, proof: target[1]!, authorization: target[2]!, suffix: Object.freeze(suffix) });
-}
-
+export const encodeFaultEvidence: (input: FaultEvidence, maxSuffixEntries: bigint) => Uint8Array = V3_CHAIN.encodeFaultEvidence;
+/** Scan every boundary without copying target/suffix data first. */
+export const decodeFaultEvidence: (bytes: Uint8Array, maxSuffixEntries: bigint) => FaultEvidence = V3_CHAIN.decodeFaultEvidence;
 /** True authenticates the exact target bytes only. False means malformed or
  * unauthenticated data, never exclusion. Budget/resource/programming failures
  * propagate, so callers cannot accidentally classify them as operator fault. */
-export function verifyFaultEvidence(expectedIn: ExpectedSnapshot, input: FaultEvidence, maxSuffixEntries: bigint): boolean {
-  try {
-    // Every argument is read once into owned values; the answer is about them.
-    object(expectedIn);
-    const expected = { backing: bytes(expectedIn.backing, 32), segment: bytes(expectedIn.segment, 32), digest: bytes(expectedIn.digest, 32) };
-    const { evidence: e } = requireEvidence(input, maxSuffixEntries);
-    if (compareBytes(e.snapshot.backing, expected.backing) !== 0 || compareBytes(e.snapshot.segment, expected.segment) !== 0) return false;
-    const target = hashEvidenceFields(sha256(e.statement), e.proof, e.authorization);
-    return verifyEvidenceOpening(expected.digest, e.snapshot, { position: e.position, length: e.length,
-      previous: e.previous, target, suffix: e.suffix });
-  } catch (error) {
-    if (error instanceof EncodingError) return false;
-    throw error;
-  }
-}
+export const verifyFaultEvidence = V3_CHAIN.verifyFaultEvidence;

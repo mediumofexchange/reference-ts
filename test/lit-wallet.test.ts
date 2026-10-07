@@ -12,7 +12,11 @@ import { acceptanceBytes, decodePublication, decodeRecord, encodePublication, en
 import { encodeLitTerms, litTermsName, litTermsSignatureMessage, type LitRootTerms } from "../src/lit/terms.js";
 import { decodeLitPackage, decodeLitSegmentHeader, decodeLitTrail, litSegmentIdentity } from "../src/lit/transport.js";
 import { acceptSecret, issueNonce, ownerSecret, presentSecret } from "../src/lit/wallet-keys.js";
-import type { LitPaymentRequest } from "../src/lit/wallet.js";
+import * as contexts from "../src/contexts.js";
+import {
+  authenticateLitPaymentRequest, encodeLitPaymentRequest, litPaymentRequestDigest, WALLET_LIT_REQUEST_CONTEXT, type LitPaymentRequest,
+} from "../src/lit/wallet.js";
+import { WALLET_V3_REQUEST_CONTEXT } from "../src/pool/v3/wallet-request.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import type { V3Wallet as Wallet, V3WalletError as WalletError } from "../src/pool/v3/wallet-store.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
@@ -535,5 +539,20 @@ describe("lit-v1 §8's reach and the scan window", () => {
     expect([reached([]), reached([0n]), reached([0n, 256n, 300n]), reached([0n, 300n]), reached([255n]), reached([256n])])
       .toEqual([-1n, 0n, 300n, 0n, 255n, -1n]);
     expect([windowFor(-1n), windowFor(255n), windowFor(256n), windowFor(767n), windowFor(768n)]).toEqual([512n, 512n, 1024n, 1024n, 2048n]);
+  });
+});
+
+describe("lit payment request frame (lit-v1 §8)", () => {
+  it("is one fixed-width frame under a prefix-free tag, authenticated only by its exact digest", () => {
+    const tags = Object.values(contexts).filter((v): v is Uint8Array => v instanceof Uint8Array);
+    expect(contexts.contextsArePrefixFree([...tags, WALLET_V3_REQUEST_CONTEXT, WALLET_LIT_REQUEST_CONTEXT])).toBe(true);
+    const request: LitPaymentRequest = { domain: litConfigHash(), backing: new Uint8Array(32).fill(2), value: 7n,
+      owner: ed25519.getPublicKey(new Uint8Array(32).fill(3)) };
+    const frame = encodeLitPaymentRequest(request), digest = litPaymentRequestDigest(frame);
+    expect(frame.length).toBe(WALLET_LIT_REQUEST_CONTEXT.length + 104);
+    expect(authenticateLitPaymentRequest(frame, digest)).toEqual(request);
+    const changed = Uint8Array.from(frame); changed[changed.length - 33]! ^= 1;
+    expect(() => authenticateLitPaymentRequest(changed, digest)).toThrow("payment request does not match the trusted digest");
+    expect(() => litPaymentRequestDigest(frame.subarray(1))).toThrow("not a lit payment request");
   });
 });

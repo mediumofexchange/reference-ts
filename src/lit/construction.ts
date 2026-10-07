@@ -280,7 +280,6 @@ export const LIT: Construction<LitRecord> = Object.freeze({
     nextHistoryHash(previous, identity, spentRoot, position),
   nextEvidence: (previous: Uint8Array, digests: { readonly statementHash: Uint8Array; readonly signatureHash: Uint8Array }, position: bigint) =>
     nextEvidenceHash(previous, { statementHash: digests.statementHash, signatureHash: digests.signatureHash }, position),
-  capacity: undefined,
   settledDemand: (bytes: Uint8Array) => {
     const s = decodeRecord(bytes).statement;
     if (s.kind !== 6) throw new TypeError("not a settlement");

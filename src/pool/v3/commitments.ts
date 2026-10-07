@@ -1,15 +1,32 @@
 // Byte conformance for pool-v3 §7 at 4a58fdc. This is not runtime replay,
 // checkpoint classification, a certificate transport or an adopted domain.
+// The evidence chain (seed, link, snapshot, opening and §9's fault-evidence
+// frame) is the one in `../evidence-chain.ts`, with v3's contexts and triple.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { arrayLength, ByteReader, ByteWriter, compareBytes, copyArray, copyBytes, EncodingError } from "../../bytes.js";
+import { ByteReader, ByteWriter, compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
-  V3_EVIDENCE_LINK_CONTEXT as LINK, V3_EVIDENCE_SEED_CONTEXT as SEED, V3_GENESIS_CONTEXT as GENESIS,
-  V3_HISTORY_CONTEXT as HISTORY, V3_RECEIPT_CONTEXT as RECEIPT, V3_SNAPSHOT_CONTEXT as SNAPSHOT,
+  V3_EVIDENCE_LINK_CONTEXT as LINK, V3_EVIDENCE_SEED_CONTEXT as SEED, V3_FAULT_EVIDENCE_CONTEXT as FAULT_EVIDENCE,
+  V3_GENESIS_CONTEXT as GENESIS, V3_HISTORY_CONTEXT as HISTORY, V3_RECEIPT_CONTEXT as RECEIPT, V3_SNAPSHOT_CONTEXT as SNAPSHOT,
 } from "../../contexts.js";
+import { evidenceChain, segmentSeed, type EvidenceOpening as ChainOpening } from "../evidence-chain.js";
 import { bytesToField, fieldToBytes, isValue } from "../field.js";
 import { verifySignatureStrict } from "../../keys.js";
-import type { EvidenceDigests } from "./records.js";
+import { hashEvidenceFields, type EvidenceDigests } from "./records.js";
 
+export type { Snapshot } from "../evidence-chain.js";
+export type EvidenceOpening = ChainOpening<keyof EvidenceDigests>;
+/** §9's transport bound on each target field. */
+export const MAX_TARGET_FIELD_BYTES = 131072;
+/** v3's evidence chain; its fault evidence bounds a frame by its own checks only (§9 as adopted). */
+export const V3_CHAIN = evidenceChain({
+  contexts: { seed: SEED, link: LINK, snapshot: SNAPSHOT, faultEvidence: FAULT_EVIDENCE },
+  digests: ["statementHash", "proofHash", "signatureHash"], fields: ["statement", "proof", "authorization"],
+  maxTargetFieldBytes: MAX_TARGET_FIELD_BYTES, boundBeforeCopy: false,
+  target: e => hashEvidenceFields(sha256(e.statement), e.proof, e.authorization),
+});
+export const {
+  genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, decodeSnapshot, verifyEvidenceOpening,
+} = V3_CHAIN;
 
 function object(value: unknown): void {
   if (value === null || typeof value !== "object") throw new EncodingError("not an object");
@@ -23,11 +40,6 @@ function owned(bytes: Uint8Array): Uint8Array {
   if (own.length !== 32) throw new EncodingError("fixed field must be 32 bytes");
   return own;
 }
-function ownDigests(d: EvidenceDigests): EvidenceDigests {
-  object(d);
-  const { statementHash, proofHash, signatureHash } = d;
-  return { statementHash: owned(statementHash), proofHash: owned(proofHash), signatureHash: owned(signatureHash) };
-}
 function u64(w: ByteWriter, value: bigint, positive = false): void {
   if (!isValue(value) || (positive && value === 0n)) throw new EncodingError("invalid u64");
   w.u64(value);
@@ -35,85 +47,14 @@ function u64(w: ByteWriter, value: bigint, positive = false): void {
 function context(r: ByteReader, expected: Uint8Array): void {
   if (compareBytes(r.raw(expected.length), expected) !== 0) throw new EncodingError("wrong context");
 }
-function digest(w: ByteWriter): Uint8Array { return sha256(w.finish()); }
-function seed(context: Uint8Array, segment: Uint8Array): Uint8Array {
-  const w = new ByteWriter(); w.context(context); fixed(w, segment); return digest(w);
-}
-export function genesisHistoryHash(segment: Uint8Array): Uint8Array { return seed(GENESIS, segment); }
-export function genesisEvidenceHash(segment: Uint8Array): Uint8Array { return seed(SEED, segment); }
+export function genesisHistoryHash(segment: Uint8Array): Uint8Array { return segmentSeed(GENESIS, segment); }
 
 /** Hash an assertion; caller supplies the validated resulting roots for valid replay. */
 export function nextHistoryHash(previous: Uint8Array, statement: Uint8Array,
   noteRoot: bigint, spentRoot: Uint8Array, position: bigint): Uint8Array {
   const w = new ByteWriter(); w.context(HISTORY);
   fixed(w, previous); fixed(w, statement); fixed(w, fieldToBytes(noteRoot)); fixed(w, spentRoot); u64(w, position, true);
-  return digest(w);
-}
-/** No proof/authorization validation: failing committed evidence must also hash. */
-export function nextEvidenceHash(previous: Uint8Array, evidence: EvidenceDigests, position: bigint): Uint8Array {
-  object(evidence);
-  const w = new ByteWriter(); w.context(LINK); fixed(w, previous);
-  fixed(w, evidence.statementHash); fixed(w, evidence.proofHash); fixed(w, evidence.signatureHash); u64(w, position, true);
-  return digest(w);
-}
-
-export interface Snapshot {
-  readonly backing: Uint8Array;
-  readonly segment: Uint8Array;
-  readonly historyHash: Uint8Array;
-  readonly evidenceHash: Uint8Array;
-  readonly issued: bigint;
-  readonly burned: bigint;
-}
-/** Authenticate even an invalid supply assertion. Replay checks burned <= issued. */
-export function snapshotBytes(s: Snapshot): Uint8Array {
-  object(s);
-  const w = new ByteWriter(); w.context(SNAPSHOT);
-  for (const value of [s.backing, s.segment, s.historyHash, s.evidenceHash]) fixed(w, value);
-  u64(w, s.issued); u64(w, s.burned); return w.finish();
-}
-export function snapshotDigest(s: Snapshot): Uint8Array { return sha256(snapshotBytes(s)); }
-export function decodeSnapshot(bytes: Uint8Array): Snapshot {
-  const r = new ByteReader(bytes); context(r, SNAPSHOT);
-  const s = { backing: r.raw(32), segment: r.raw(32), historyHash: r.raw(32), evidenceHash: r.raw(32),
-    issued: r.u64(), burned: r.u64() }; r.expectEnd();
-  return Object.freeze(s);
-}
-
-/** A hash opening, not a wire certificate. The target digests must separately
- * match the supplied target bytes; later digests authenticate no later contents. */
-export interface EvidenceOpening {
-  readonly position: bigint;
-  readonly length: bigint;
-  readonly previous: Uint8Array;
-  readonly target: EvidenceDigests;
-  readonly suffix: readonly EvidenceDigests[];
-}
-
-/** The expected snapshot digest MUST come from the expected signed commitment's
- * authenticated directory. A caller-chosen digest has no authority. Returns
- * only preimage/suffix authentication; never validity, finality or exclusion.
- * Resource or unexpected programming failures propagate, not a fault verdict. */
-export function verifyEvidenceOpening(expectedIn: Uint8Array, snapshotIn: Snapshot, opening: EvidenceOpening): boolean {
-  try {
-    // Every argument is read once into owned values; the answer is about them.
-    const expected = owned(expectedIn), snapshot = decodeSnapshot(snapshotBytes(snapshotIn));
-    if (compareBytes(snapshotDigest(snapshot), expected) !== 0) return false;
-    object(opening);
-    const { position, length, previous: previousIn, target: targetIn, suffix: suffixIn } = opening;
-    if (!isValue(position) || position === 0n || !isValue(length) || length < position || !Array.isArray(suffixIn) ||
-        length - position !== BigInt(arrayLength(suffixIn))) return false;
-    const previous = owned(previousIn), target = ownDigests(targetIn);
-    const suffix = copyArray(suffixIn, ownDigests, Number(length - position));
-    if (BigInt(suffix.length) !== length - position) return false;
-    if (position === 1n && compareBytes(previous, genesisEvidenceHash(snapshot.segment)) !== 0) return false;
-    let result = nextEvidenceHash(previous, target, position);
-    for (let i = 0; i < suffix.length; i++) result = nextEvidenceHash(result, suffix[i]!, position + BigInt(i) + 1n);
-    return compareBytes(result, snapshot.evidenceHash) === 0;
-  } catch (error) {
-    if (error instanceof EncodingError) return false;
-    throw error;
-  }
+  return sha256(w.finish());
 }
 
 export interface ReceiptFields extends EvidenceDigests {

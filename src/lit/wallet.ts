@@ -34,8 +34,6 @@ export function copyLitPaymentRequest(input: LitPaymentRequest,
 /** An application frame's tag, never signed or part of a statement; like pool-v3's request tag it lives beside its
  * codec, and its test checks it against contexts.ts for prefix freedom. */
 export const WALLET_LIT_REQUEST_CONTEXT = new TextEncoder().encode("moe/wallet/lit/v1/request");
-/** Tag, domain, backing, value and owner key. */
-export const LIT_PAYMENT_REQUEST_BYTES = WALLET_LIT_REQUEST_CONTEXT.length + 32 + 32 + 8 + 32;
 
 /** The canonical fixed-width frame of a request. */
 export function encodeLitPaymentRequest(request: LitPaymentRequest): Uint8Array {
@@ -58,8 +56,6 @@ export function litPaymentRequestDigest(frame: Uint8Array): string {
   decode(own);
   return bytesToHex(sha256(own));
 }
-/** Strict structural reading for display; it authenticates nothing. */
-export function readLitPaymentRequest(frame: Uint8Array): LitPaymentRequest { return decode(copyUnshared(frame)); }
 /** The payer's entry: the frame must hash to a digest obtained independently from the intended receiver. */
 export function authenticateLitPaymentRequest(frame: Uint8Array, trustedDigest: string): LitPaymentRequest {
   const own = copyUnshared(frame);
