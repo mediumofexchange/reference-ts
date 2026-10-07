@@ -267,6 +267,11 @@ describe("v3 recovery journal and independent package reader", () => {
     await expect(second.return("restored")).rejects.toMatchObject({ code: "RESTORED" });
     const next = await second.return("restored-again");
     expect(next.sequence > opening.sequence + (1n << 16n)).toBe(true);
+    // Past the lost instance's band, a commitment of this key in the gap is another signer's: a conflict (invariant 22).
+    await second.publish();
+    f.venue.witness(1, operator, f.venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, next.sequence - 5n, b(9))));
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await expect(second.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("keeps a restored copy refused when the record holds a commitment it did not sign (M13d)", async () => {

@@ -256,6 +256,9 @@ const BIRTH_TIME = !["linux", "android"].includes(process.platform);
  * one-in-flight rules can leave unwitnessed past the record's latest, and two restorations' openings, each with its
  * own random spacing, at least that far apart. */
 const RESTORED_SKIP = 1n << 16n;
+/** How far past a skip's base the lost instance's own unwitnessed commitments can lie: its one-in-flight rules leave an
+ * ordinary commitment and a pending opening, about two; sixteen is margin. */
+const LOST_IN_FLIGHT = 16n;
 
 export class V3OperatorJournal {
   private readonly db: DatabaseSync;
@@ -425,6 +428,12 @@ export class V3OperatorJournal {
     const sequence = (own > held ? own : held) + RESTORED_SKIP * (1n + spacing);
     requireThat(sequence < SQLITE_LIMIT && sequence < U64, "STORAGE", "signed sequence counter exhausted");
     return sequence;
+  }
+  /** Whether `sequence` is one a restored journal's lost instance can have left unwitnessed just past the skip's base
+   * (M13d, Construction C2.4.1): landing late, the record moves past it (pool-v3 §13.3), and it is no other signer's.
+   * Elsewhere in the gap a commitment of this key is another signer's, a conflict as anywhere. */
+  private lostInstance(sequence: bigint): boolean {
+    return this.db.prepare("SELECT 1 FROM journal_skipped WHERE below<? AND ?<=below+? AND sequence>?").get(sequence, sequence, LOST_IN_FLIGHT, sequence) !== undefined;
   }
   /** Inside the return's transaction: the restoration's opening is `sequence`, and serving passes the gap below it. */
   private restoredOpening(engine: Engine, sequence: bigint): void {
@@ -868,9 +877,7 @@ export class V3OperatorJournal {
       catch (error) { if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "a signed row does not decode"); throw error; }
       if (own !== undefined && same(encodeCommitment(own.commitment), entry.record)) return false;
       if (!same(c.operator, this.operator) || !verifyCommitment(c)) return false;
-      // A sequence a restored journal's return skipped is its lost instance's, landing late: the record moves past it
-      // (M13d, Construction C2.4.1, pool-v3 §13.3), and it is no other signer's.
-      if (own === undefined && this.db.prepare("SELECT 1 FROM journal_skipped WHERE below<? AND sequence>?").get(c.sequence, c.sequence) !== undefined) return false;
+      if (own === undefined && this.lostInstance(c.sequence)) return false;
       // This journal's own row at that sequence that no longer verifies as its commitment is damage, not another signer's.
       requireThat(own === undefined || (same(own.commitment.operator, this.operator) && verifyCommitment(own.commitment)), "STORAGE",
         "a signed row is damaged");
@@ -1065,7 +1072,7 @@ export class V3OperatorJournal {
       if (prior !== undefined) {
         // Under a restoration, only its own return answers again; an earlier return's identifier signs nothing and is refused.
         const answered = decodeCommitment(hexToBytes(prior)), fence = this.restoration();
-        requireThat(fence === undefined || fence.opening === answered.sequence, "RESTORED", "this identifier names a return before this restoration");
+        requireThat(fence === undefined || fence.opening === answered.sequence, "RESTORED", "this identifier names a return before this restoration: use a new --id");
         return answered;
       }
       const view = this.view(engine);
@@ -1487,7 +1494,8 @@ export class V3OperatorJournal {
       if (this.ownHeld(held) === undefined) {
         // Each held commitment of this key without its signed row was recorded as a conflict when its window was
         // read (`foreign`); with none recorded, the row was lost or changed since: damage, not another signer's.
-        requireThat(view.conflict, "STORAGE", "a held commitment's signed row is missing");
+        // The lost instance's commitment landing inside a restored journal's skip is passed over the same way (M13d).
+        requireThat(view.conflict || this.lostInstance(held.commitment.sequence), "STORAGE", "a held commitment's signed row is missing");
         continue;
       }
       selected = this.db.prepare("SELECT * FROM journal_signed WHERE sequence=?").get(held.commitment.sequence);

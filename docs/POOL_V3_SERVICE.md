@@ -176,8 +176,8 @@ Construction C2.4.1). Resuming on it would co-sign other statements at the same 
    - It records the restoration. From then on the journal signs nothing but C2b.4's return, once the scope's silence
      boundary is witnessed, at a sequence at least 2¹⁶ past its own and the record's latest; the step is random per
      restoration.
-   - Before the boundary it answers `{ "status": "restored", "waiting": "silence" }`. Run it again with the same `--id`
-     once silence is witnessed. It then signs and publishes the return and answers `pending`.
+   - Before the boundary it answers `{ "status": "restored", "waiting": "silence" }`. Run it again once silence is
+     witnessed (the same `--id`, or a new one after a crash once its return was signed). It then signs and publishes the return and answers `pending`.
    - A return pending in the directory is published and adopted first, as the lost instance would.
    - What was co-signed after the last witnessed commitment lapses there; holders reprove it.
 4. Once it answers `pending`, never run `restore` again. Run `moe operator adopt` once the return is witnessed, then
@@ -205,6 +205,9 @@ Limits:
 - A repair before silence (C2.10.9a) would avoid the wait, but C2.10.9 forbids excusing live receipts by a new
   segment; it is a lever for a later version.
 - The lost instance's in-flight commitment landing before the restoration's return is signed is case (B): `CONFLICT`.
+  Landing after the return is signed but before it is witnessed, it is held in the return's place with evidence that
+  was lost with the instance: the backing reads unresolved and `adopt` waits for good, so recovery is succession.
+  Anyone holding that signed transaction can choose this timing.
 - Two live instances of one key, and a rollback in place that `restore` does not follow, stay outside what the journal
   can see.
 
