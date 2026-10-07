@@ -13,7 +13,7 @@ signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's o
 (au) first; (e) Next 5's 10⁵ rerun. Stop: (a)–(e) merged, CI green; the 10⁶ run, live Tor and the external review stay outside.
 - **Done:** (a) M13a #143 ([release record](docs/RELEASE.md), CI's `reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (d)'s (au) M13b #144.
 - **(c):** M13d #146, spec #19 ([decision](decisions/2026-10.md#2026-10-07--restore-an-operator-journal-by-a-return-at-a-skipped-sequence-once-silence-is-witnessed-slice-13-m13d)): a restored operator returns past silence at a skipped sequence (`moe operator restore`). M13e
-  ([decision](decisions/2026-10.md#2026-10-07--restore-a-wallet-directory-from-a-copy-by-a-recorded-restoration-and-audit-copied-views-slice-13-m13e), branch `claude/m13e-restore-drills`): `wallet restore --copy` marks open requests (`fulfill` `RESTORED` unless
+  ([decision](decisions/2026-10.md#2026-10-07--restore-a-wallet-directory-from-a-copy-by-a-recorded-restoration-and-audit-copied-views-slice-13-m13e), #147): `wallet restore --copy` marks open requests (`fulfill` `RESTORED` unless
   `--uncredited`) and exposes a lit window; copied replay files are read again, copied views audited; `moe venue audit`. **Next:** (d), then (e).
 
 ## Status
