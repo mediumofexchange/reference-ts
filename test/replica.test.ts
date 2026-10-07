@@ -9,7 +9,7 @@ import { litConfigHash } from "../src/lit/configuration.js";
 import { LIT } from "../src/lit/construction.js";
 import { encodeRecord, statementBytes, type Statement } from "../src/lit/records.js";
 import { encodeLitTerms, litTermsName, litTermsSignatureMessage, type LitRootTerms } from "../src/lit/terms.js";
-import { decodeLitPackage, decodeLitSegmentHeader, decodeLitTrail, litSegmentIdentity } from "../src/lit/transport.js";
+import { decodeLitPackage, decodeLitSegmentHeader, decodeLitTrail, encodeLitTrail, litSegmentIdentity } from "../src/lit/transport.js";
 import { EncodingError } from "../src/bytes.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { EvidenceRefusal } from "../src/pool/v3/refusals.js";
@@ -86,7 +86,12 @@ describe("a replica of a lit operator's evidence", () => {
     /** The replica's round: sync from the operator, then serve the selection (its read is the command's, M12b). */
     const mirror = async () => { const served = await operator.sync(backing, store); expect(replica.keep(served)).toBe(true); return served; };
     const commit = async (id: string) => { await operator.commit(id); return operator.publish(); };
-    return { j, venue, backing, signed, operator, store, path, replica, url, client, seen, issue, open, mirror, commit, directory };
+    /** A longer trail of the genuine segment that diverges at its first record, as a hostile supplier could send. */
+    const fork = async () => {
+      const t = decodeLitTrail(decodeLitPackage((await j.package()).package).find(item => item.kind === 6)!.payload);
+      return encodeLitTrail({ header: t.header, terms: t.terms, records: Array.from({ length: t.records.length + 3 }, () => issue(pub(b(77)), 1n)) });
+    };
+    return { j, venue, backing, signed, operator, store, path, replica, url, client, seen, issue, open, mirror, commit, fork, directory };
   }
   /** The items of each package part of a served stream, and the trails it carries. */
   const counted = async (parts: AsyncIterable<EvidencePart> | Iterable<EvidencePart>) => {
@@ -158,14 +163,46 @@ describe("a replica of a lit operator's evidence", () => {
     expect(credentialed.status).toBe(200); await credentialed.arrayBuffer();
   });
 
+  it("files what a source ahead sent under a later selection only, never one a reader already holds", async () => {
+    const f = await fixture(), payer = f.open("payer");
+    await f.operator.submit(f.issue(payer.keyedRequest("fund", f.backing, 10n).owner, 10n));
+    await f.commit("c1");
+    const s1 = await f.mirror();
+    const read = async (wallet: Wallet) => wallet.sync((await wallet.supply(store => f.client.sync(f.backing, store))).package, f.signed);
+    expect((await read(payer)).holdings.map(h => h.value)).toEqual([10n]);
+    // The replica takes c2 from the operator before its read finds c2 canonical, then a round reads s1 final again (the
+    // operator not answering, another replica at s1): s1 is served still, and c2's objects wait for a higher selection.
+    await f.operator.submit(f.issue(payer.keyedRequest("fund2", f.backing, 5n).owner, 5n));
+    await f.commit("c2");
+    const s2 = await f.operator.sync(f.backing, f.store);
+    expect(f.replica.keep(s1)).toBe(true);
+    expect(await counted((await f.replica.serve(f.backing, s1.selection.sequence)).parts)).toEqual({ items: 0, trails: 0 });
+    expect(f.replica.keep(s2)).toBe(true);
+    expect((await read(payer)).holdings.map(h => h.value).sort()).toEqual([10n, 5n].sort());
+    // A lower selection than the highest served is refused.
+    expect(f.replica.keep(s1)).toBe(false);
+  });
+
+  it("serves the trail its read used beside a longer fork a supplier sent", async () => {
+    const f = await fixture(), payer = f.open("payer");
+    await f.operator.submit(f.issue(payer.keyedRequest("fund", f.backing, 10n).owner, 10n));
+    await f.commit("c1");
+    const served = await f.operator.sync(f.backing, f.store), bytes = await f.fork();
+    expect(await f.store.take([{ trail: { size: BigInt(bytes.length), chunks: [bytes] } }], pub(OPERATOR))).toBe(true);
+    expect(f.replica.keep(served)).toBe(true);
+    expect((await counted((await f.replica.serve(f.backing, 0n)).parts)).trails).toBe(2);
+    expect((await payer.sync((await payer.supply(store => f.client.sync(f.backing, store))).package, f.signed)).holdings.map(h => h.value)).toEqual([10n]);
+  });
+
   it("ends a stream at a damaged object, so the reader keeps its mark", async () => {
     const f = await fixture();
     await f.operator.submit(f.issue(pub(b(44)), 2n));
     await f.commit("c1"); await f.mirror();
     const db = new DatabaseSync(f.path); db.exec("UPDATE object SET payload = x'00' WHERE kind = 4"); db.close();
-    await expect(counted((await f.replica.serve(f.backing, 0n)).parts)).rejects.toBeInstanceOf(EvidenceRefusal);
+    await expect(counted((await f.replica.serve(f.backing, 0n)).parts)).rejects.toMatchObject({ status: "unresolved-evidence" });
     const reader = new EvidenceStore(":memory:", { construction: LIT }); closing.push(reader);
-    await expect(f.client.sync(f.backing, reader)).rejects.toThrow();
+    // The stream ends short of its end mark: the connection is cut, which a holder reads as a source that did not answer.
+    await expect(f.client.sync(f.backing, reader)).rejects.toThrow(/^(fetch failed|terminated)$/);
     const source = Buffer.concat([DOMAIN, f.venue.id, pub(OPERATOR), Buffer.from(f.url)]);
     expect(reader.suppliedThrough(source)).toBe(0n);
   });

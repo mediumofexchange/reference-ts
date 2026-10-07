@@ -54,13 +54,14 @@ export class V3Replica implements V3EvidenceSource {
 
   /** Serve `served` for its backing from now on: a selection the replica's own read over its evidence file found
    * canonical at its witnessed index, so the file holds what a read of it needs. What the file kept of that operator's
-   * evidence since is indexed under it. A lower sequence of the same operator than the one served is kept out. A backing
-   * whose operator changed is served by the new operator's selections. */
+   * evidence since is indexed under it where it is above every selection of that operator served before
+   * (`EvidenceStore.keepSelection`); one below is kept out (false). A backing whose operator changed is served by the new
+   * operator's selections. */
   keep(served: ServedPackage): boolean {
     const key = bytesToHex(served.selection.backing), held = this.#selections.get(key);
     if (held !== undefined && same(held.selection.operator, served.selection.operator) && held.selection.sequence > served.selection.sequence) return false;
     const own = copied(served);
-    this.#evidence.keepSelection(own.selection.backing, own.package, own.selection.operator, own.selection.sequence);
+    if (!this.#evidence.keepSelection(own.selection.backing, own.package, own.selection.operator, own.selection.sequence)) return false;
     this.#selections.set(key, own);
     return true;
   }

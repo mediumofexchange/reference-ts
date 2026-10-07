@@ -109,7 +109,8 @@ connections, eight streams, the minimum rate). Its source is a `V3Replica` (`rep
 file opened `shared` (WAL), which `moe reader serve` runs ([M12b](../decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b)). A replica signs and admits nothing. For each
 backing it serves the operator's selection that its own read found canonical, with that read's own package, and after a
 sequence it served before, what its file kept since: the file indexes what it takes per operator and assigns it to the
-next selection the replica serves, so no supplier's statement places anything. A reader's mark for a replica is that
+next selection the replica serves above every earlier one, so no supplier's statement places anything, and every trail
+top no other served top reaches goes, so a longer fork never displaces the trail the read used. A reader's mark for a replica is that
 replica's own (a client with no credential keys its mark by URL); its mark for the operator's service holds at any URL.
 Each stream reads one committed state on a connection of its own, so a take neither shows through nor waits, and a
 damaged object or trail ends the stream short of its end mark, so the reader keeps its mark and reads elsewhere.

@@ -572,10 +572,12 @@ with `moe reader serve --dir <r> [--port <p>] [--onion <host>] [--poll-ms <ms>]`
 from its own sources, reads each frontier as `supply` does (proofs verified), and serves the selection its read found
 canonical, with no credential, from what `evidence.db` holds, so it keeps serving while the operator is down and across
 its own restarts. It writes `replica.json` (its URL; with `--onion` the name Tor serves for its port) and prints one line
-once listening, one per backing whose served sequence moved and one once stopped; a round's refusal is a `refused`
-event on stderr. A holder or reader keeps replicas with `replica add <backing> <url>` (a loopback or v3 onion URL, no
-token; added again, nothing changes) and reads them in the order added when the operator's service does not answer, or
-when it keeps none: a reader of replicas alone needs no `service add`. A replica that does not answer, refuses or sends
+once listening, one per backing whose served sequence moved or whose read was not served, and one once stopped; a
+round's refusal is a `refused` event on stderr. It holds the directory's lock while it runs, so terms and replicas are
+added with it stopped. A holder or reader keeps replicas with `replica add <backing> <url>` (a loopback or v3 onion URL, no
+token; added again, nothing changes) and reads them in the order added when the operator's service does not answer,
+refuses or sends evidence that does not frame, or when it keeps none (where no replica answers, the operator's refusal
+stands): a reader of replicas alone needs no `service add`. A replica that does not answer, refuses or sends
 evidence that does not frame or assemble is passed over; the holder's own proxy missing still refuses as `PROXY`.
 Evidence is public, so a replica sees only which backing a connection syncs and when, as the operator does; it sees no
 submission. A replica the holder lists that withholds while the operator is down leaves reads unresolved until the

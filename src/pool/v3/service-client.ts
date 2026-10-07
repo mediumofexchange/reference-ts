@@ -204,7 +204,11 @@ export class V3ServiceClient {
         if (!same(s.domain, this.#domain) || !same(s.operator, this.#operator) || !same(s.venue, this.#venue) || !same(s.backing, backing)) {
           throw new EncodingError("wrong service package context");
         }
-        const signed = this.#construction.reader.package.decodeEvidencePackage(served.package).filter(item => item.kind === 2).map(item => decodeCommitment(item.payload));
+        // The read's own package is the configuration and the commitment alone: whatever else a source put in it would be
+        // read once and never kept, so a replica serving it on would leave its own readers short (M12b).
+        const own = this.#construction.reader.package.decodeEvidencePackage(served.package);
+        if (!own.every(item => item.kind === 1 || item.kind === 2)) throw new EncodingError("the read's own package carries more than its configuration and commitment");
+        const signed = own.filter(item => item.kind === 2).map(item => decodeCommitment(item.payload));
         if (signed.length !== 1 || !verifyCommitment(signed[0]!) || !same(signed[0]!.operator, s.operator) || signed[0]!.sequence !== s.sequence ||
             !same(signed[0]!.root, s.root) || s.sequence >= 1n << 63n) throw new EncodingError("wrong commitment authority");
         return take(served, parts);

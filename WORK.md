@@ -14,7 +14,7 @@ identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement i
 - **M12b ([decision](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b), branch `claude/m12b-replica`):** `moe reader serve` serves kept, verified evidence with no
   credential from the replica's own index; holders read the operator first, replicas where it does not answer; the operator's
   credential stays service-wide. Lit drill: holder and a fresh reader read from the replica with the operator stopped. Design
-  reviewed (1 blocker, 6 majors resolved); patch review owed before merge. Limits: no per-source read retry; WAL and egress growth.
+  and patch reviewed (all blockers and majors resolved). Limits: no per-source read retry; WAL and egress growth.
 - **Next:** M12c, gap funding (duty 2) and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`) is done: [M14h](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h).
 
 ## Status
