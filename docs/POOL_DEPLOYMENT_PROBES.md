@@ -119,10 +119,11 @@ The [local](pool-v3-succession-store-verification.json) and
 [synthetic Ergo](pool-v3-succession-store-ergo-verification.json) reports own the
 proof counts, package sizes, transaction bytes and source bindings.
 
-The live testnet drills keep their commands (`recovery-store-check.mjs --testnet --authorized-testnet`,
-`scope-store-check.mjs --testnet --authorized-testnet`), each needing separate authorization after
-local/synthetic acceptance and run through `drill.mjs` and its pre-broadcast guard (`testnet-budget.mjs --check`
-runs the guard offline). The authorized 2026-09-27 [recovery acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
+The store checks' live testnet modes are retired ([decision](../decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify)):
+the live command drill (`command-drill.mjs --testnet --authorized-testnet`, [M10d](../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d))
+is the live evidence, and the recovery and scope checks keep their local and synthetic Ergo modes. Their live
+runs used `--testnet --authorized-testnet` through `drill.mjs` and a pre-broadcast publication guard, all at
+[`09534a8`](https://github.com/mediumofexchange/reference-ts/tree/09534a8/scripts/pool/v3). The authorized 2026-09-27 [recovery acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
 passed with nine real proofs and ten distinct transactions (guard cap: ten transactions, 0.05 tERG
 spend), spending 0.03434168 tERG including 0.011 tERG fees; the complete package was 126,037 bytes, and
 the holder-only reader verified force, the non-service count, unchanged supply of 20 and exact adoption of
@@ -130,20 +131,20 @@ four recovery records at opening index 51. It is historical after later journal 
 [two-backing scope drill (M8b) at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)
 passed in 69 minutes with seven real proofs and twelve distinct transactions (the cap) spending 0.01434984
 tERG (0.0132 tERG fees), equal to the synthetic run's spend; fresh processes read each backing from the
-node at every group, and the retained public bundle (`scratch/pool-v3-scope-testnet-reader/`) re-reads to
+node at every group, and the retained public bundle (`scratch/pool-v3-scope-testnet-reader/`) re-read to
 its `readback.json`. The anchor is a trust input; persistence, custody and mainnet remain outside both.
 The planned transaction order, budgets and timing are in the full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal).
 
-The explicit `node scripts/pool/v3/store-check.mjs --testnet` path uses the own
-v6.0.6 testnet node and throwaway tERG funding. It selects the distinct
-reference-testnet identity and verifies the pinned testnet header rules,
-inclusion and depth through `ErgoVenue`. The fresh seedless reader receives
+The journal's live path, `store-check.mjs --testnet` (retired with the modes above, at `09534a8`), used the own
+v6.0.6 testnet node and throwaway tERG funding. It selected the distinct
+reference-testnet identity and verified the pinned testnet header rules,
+inclusion and depth through `ErgoVenue`. The fresh seedless reader received
 only the served package and selection; its endpoint, profile, judging index,
-witnessed pin and verification keys are held separately, and it fetches the
-headers and sections itself. Wrong pins and withheld carrying sections must
-remain unresolved. A successful run retains a public bundle in
+witnessed pin and verification keys were held separately, and it fetched the
+headers and sections itself. Wrong pins and withheld carrying sections
+remained unresolved. The run retained a public bundle in
 `scratch/pool-v3-testnet-reader/`, runnable with its `replay.mjs`; the bundle
-contains no holder seed, wallet key, witness or journal. The [live report](pool-v3-testnet-verification.json)
+contains no holder seed, wallet key, witness or journal. The [live report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json)
 owns the transaction run at `acc1ab7`. Its initial export omitted public bytecode
 needed by the reader's identity checks; the corrected export retains it beside
 the keys. `testnet-reader-check.mjs` (retired with M10d, at `2fd0f08`) rebuilt those public

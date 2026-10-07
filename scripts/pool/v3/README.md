@@ -59,24 +59,17 @@ offline-operator recovery in which a holder forces redemption with the service
 down, the operator returns and adopts, and the wallet proves its lapsed payment
 again. It records `docs/pool-v3-history-store-verification.json`.
 
-`node scripts/pool/v3/store-check.mjs --testnet` is an explicit live acceptance
-command after a build. It uses the own v6.0.6 testnet node at `127.0.0.1:9052`
-and the throwaway wallet in `scratch/ergo-testnet/wallet.json`, and submits
-testnet transactions. It is never invoked by ordinary checks or CI. The same
-issue/payment/burn path waits for actual inclusion and depth through `ErgoVenue`;
-the testnet profile selects the legacy header rules and depth 2. A fresh seedless
-worker reads the node itself with its profile, endpoint, judging index, pin and
-keys held outside the supplied package. Wrong pins and withheld
-sections must remain unresolved. Successful runs retain
-`scratch/pool-v3-testnet-results.json` and a public reader bundle, replayed with
-`node scratch/pool-v3-testnet-reader/replay.mjs`. The bundle holds no wallet key,
-holder seed, witness or journal; it includes the public bytecode required by
-the reader's six artifact/key identity checks. The retained [live report](../../../docs/pool-v3-testnet-verification.json)
-records transaction acceptance at `acc1ab7`. `testnet-reader-check.mjs` checked the completed bundle without
-transactions; it and its [readback report](https://github.com/mediumofexchange/reference-ts/blob/2fd0f08/docs/pool-v3-testnet-reader-verification.json)
-are historical at `2fd0f08` and retired ([M10d](../../../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)):
-the live command drill (`command-drill.mjs --testnet --authorized-testnet`) is the current live evidence. Current
-work belongs in WORK.md.
+The live command drill (`command-drill.mjs --testnet --authorized-testnet`,
+[M10d](../../../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d))
+is the live evidence; `testnet.mjs` holds its node and transfer helpers, and
+`node scripts/pool/v3/testnet.mjs --check` checks the transfers offline. The
+store checks' live testnet modes (`store-check.mjs --testnet`,
+`recovery-store-check.mjs`/`scope-store-check.mjs --testnet --authorized-testnet`)
+are retired ([decision](../../../decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify));
+they, their publication guard and their readers of the retained public bundles
+are at [`09534a8`](https://github.com/mediumofexchange/reference-ts/tree/09534a8/scripts/pool/v3),
+and their runs are [recorded with the journal acceptance](../../../docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal).
+Current work belongs in WORK.md.
 
 The local replay command additionally checks, against the runtime manifest
 (`manifest.mjs`, pool-v3 §§11.1, 11.4), all six source/toolchain/bytecode/key

@@ -2,8 +2,7 @@
 // one segment over two backings, a split at one backing's term end, and an
 // elective rejoin after the witnessed tail, each read per backing by a fresh process;
 // a wallet pays in the rejoined scope from a note imported from the split segment.
-// --ergo uses the actual publisher and a synthetic mining supplier; explicit
-// --testnet --authorized-testnet runs the same drill on the own live testnet node.
+// --ergo uses the actual publisher and a synthetic mining supplier.
 // --worker independently reconstructs the venue and reads public evidence only.
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -23,11 +22,10 @@ import { decodeRecord, encodeRecord } from "../../../dist/pool/v3/records.js";
 import { identifierOf } from "../../../dist/pool/field.js";
 import { v3Codec as codec } from "./codec.mjs";
 import { drillMode, drillWorker, openDrill } from "./drill.mjs";
-import { publicationBudget } from "./testnet-budget.mjs";
 
 const b = n => new Uint8Array(32).fill(n), hex = bytes => Buffer.from(bytes).toString("hex");
-// Four openings, two replacements and six checkpoints: twelve transactions on either Ergo venue.
-const TRANSACTIONS = 12, LIVE_LIMITS = { transactions: TRANSACTIONS, spentNanoErg: 40_000_000n, feeNanoErg: 13_200_000n };
+// Four openings, two replacements and six checkpoints: twelve transactions on the synthetic Ergo venue.
+const TRANSACTIONS = 12;
 const summary = result => {
   assert(result.state !== undefined);
   return { issued: String(result.state.issued), burned: String(result.state.burned), position: String(result.state.position),
@@ -37,8 +35,7 @@ const summary = result => {
 };
 
 async function acceptance(mode) {
-  const live = mode === "testnet";
-  const drill = await openDrill(mode, { name: "scope-store", script: import.meta.filename, budget: live ? publicationBudget(LIVE_LIMITS) : undefined });
+  const drill = await openDrill(mode, { name: "scope-store", script: import.meta.filename });
   const { venue, reference, domain, build, lag, prove, publishRecord, publish, checkpoint, advance } = drill;
   const refusal = (action, code, check) => assert.rejects(action, error => error instanceof V3StoreError && error.code === code &&
     (check === undefined || error.check === check));
@@ -47,7 +44,7 @@ async function acceptance(mode) {
     const aSecret = b(16), bSecret = b(18), ruleSecret = b(19), aKey = ed25519.getPublicKey(aSecret), bKey = ed25519.getPublicKey(bSecret);
     const backingOf = (thing, issuer) => {
       const terms = codec.encodeRootTerms({ obligor: ed25519.getPublicKey(issuer), operator: aKey, configuration: domain, venue: venue.id,
-        interval: live ? 1024n : 80n, payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret) });
+        interval: 80n, payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(ruleSecret) });
       return { name: codec.rootTermsName(terms), issuer, signed: { terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), issuer) } };
     };
     const x = backingOf("scope reference x units", b(15)), y = backingOf("scope reference y units", b(14));
@@ -61,13 +58,13 @@ async function acceptance(mode) {
     const read = input => readPackage(input.package, input.selection, { verifier: drill.verifier, venue, reference });
     // Both backings' fresh-process verdicts equal the in-process reads; shared history is one.
     const both = async (journal, supplies) => {
-      const results = [], inputs = [];
+      const results = [];
       for (const [backing, issued] of [[x, supplies[0]], [y, supplies[1]]]) {
         const input = await served(journal, backing), result = summary(await read(input));
-        assert.equal(result.issued, String(issued)); assert.deepEqual(drill.fresh(input), result); results.push(result); inputs.push(input);
+        assert.equal(result.issued, String(issued)); assert.deepEqual(drill.fresh(input), result); results.push(result);
       }
       assert.equal(results[0].history, results[1].history);
-      return { results, inputs };
+      return { results };
     };
     // The served commitment's segment: the operator's latest header opened at or before its sequence.
     const contextOf = async (journal, backing) => {
@@ -80,13 +77,11 @@ async function acceptance(mode) {
       return { domain, header };
     };
     const replace = async (secret, predecessor) => {
-      // Include one publication lag before the lead floor, then one spare index (live: from a fresh view, plus inclusion slack).
-      await drill.sync();
+      // Include one publication lag before the lead floor, then one spare index.
       const fields = { role: ROLE_OPERATOR, successor: ed25519.getPublicKey(secret), predecessor,
-        effective: venue.witnessedIndex() + 3n * lag + 2n + drill.inclusionSlack, signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+        effective: venue.witnessedIndex() + 3n * lag + 2n, signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
       const message = replacementMessage(x.name, fields), replacement = { ...fields, signature: ed25519.sign(message, ruleSecret), successorSignature: ed25519.sign(message, secret) };
-      const at = await publishRecord(2, x.name, encodeReplacement(x.name, replacement));
-      assert(at === undefined || at + 2n * lag + 1n <= fields.effective, "replacement included after its lead floor; readers ignore it");
+      await publishRecord(2, x.name, encodeReplacement(x.name, replacement));
       return { effective: fields.effective, link: replacementHash(x.name, replacement) };
     };
     const force = async replacement => { const wait = replacement.effective - venue.witnessedIndex(); if (wait > 0n) await advance(wait); };
@@ -173,18 +168,11 @@ async function acceptance(mode) {
     });
     const funding = await drill.funding();
     if (mode === "ergo") assert.equal(drill.transactions.length, TRANSACTIONS);
-    if (live) {
-      assert.equal(funding.transactions.length, TRANSACTIONS);
-      assert.equal(new Set(drill.live.submitted).size, TRANSACTIONS, "no transaction for retries");
-    }
-    const reader = live ? drill.keepReader("pool-v3-scope-testnet-reader", { x: final.inputs[0], y: final.inputs[1] },
-      { x: final.results[0], y: final.results[1] }) : undefined;
     drill.report({
       limits: ["the adopted configuration on reference venues only", "two backings, one operator per term", "one wallet payment, in the rejoined scope",
-        live ? "live testnet only, own node v6.0.6, depth 2; the reader's already-final anchor is a trust input; no mainnet or production finality claim" : "no live broadcasts",
-        "no persistence claim", "empty recovery blocks; forced recovery over a scope is oracle-proof only"],
+        "no live broadcasts", "no persistence claim", "empty recovery blocks; forced recovery over a scope is oracle-proof only"],
       checks: drill.checks, proofs: drill.proofs, transactions: drill.transactions, ...(funding === undefined ? {} : { funding }),
-      maxPackageBytes: Math.max(...drill.packages), final: { x: final.results[0], y: final.results[1] }, ...(reader === undefined ? {} : { reader }) });
+      maxPackageBytes: Math.max(...drill.packages), final: { x: final.results[0], y: final.results[1] } });
     completed = true;
   } finally {
     for (const opened of [...journals, ...wallets]) opened.close();
@@ -193,5 +181,5 @@ async function acceptance(mode) {
 }
 
 if (process.argv[2] === "--worker") await drillWorker(process.argv.slice(3),
-  async (input, options) => summary(await readPackage(input.package, input.selection, options)), { testnet: true });
-else await acceptance(drillMode(process.argv.slice(2), "scope-store-check", { testnet: true }));
+  async (input, options) => summary(await readPackage(input.package, input.selection, options)));
+else await acceptance(drillMode(process.argv.slice(2), "scope-store-check"));

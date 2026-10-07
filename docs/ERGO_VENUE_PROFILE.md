@@ -121,7 +121,7 @@ contiguous real window, every recalculation in that window and fresh own-node
 tip agreement. It took an independently pinned anchor and applied the runtime
 store to every descendant. Terminal signed-Int arithmetic and activation reset
 are covered by hostile unit fixtures, rather than the current-height window.
-This is header evidence only; the [live journal report](pool-v3-testnet-verification.json)
+This is header evidence only; the [live journal report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json)
 separately records publication and public supply verification.
 
 - The reader runs no decoder, so no decoder's refusal denies a range. Until
@@ -535,9 +535,10 @@ serves packages and mined block evidence to a fresh seedless reader, whose
 witnessed block pin is held independently beside its candidate keys. Both
 journal and reader require the caller's reference identity preimage. See the
 [journal acceptance](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
-for the synthetic report and limits. The explicit `--testnet` path uses the same
+for the synthetic report and limits. The explicit `--testnet` path (retired, at `09534a8`) used the same
 journal on the live reference testnet, with throwaway tERG funding and a fresh
-reader fetching its own headers and sections ([live report](pool-v3-testnet-verification.json)).
+reader fetching its own headers and sections ([live report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json));
+the live command drill is the current live evidence ([report](pool-v3-command-testnet-verification.json)).
 
 What remains before an Ergo deployment: qualified durable storage/custody, the one-transaction
 condition checked against an adopted configuration, publication on the

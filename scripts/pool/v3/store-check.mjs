@@ -4,7 +4,6 @@
 // reference venue, or --ergo through the actual publisher and a synthetic mining
 // supplier; the payer wallet and holders spend notes they restore from the served package;
 // a fresh seedless process verifies supply from the package and the venue alone.
-// --testnet explicitly publishes on the own live testnet node, never in CI.
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -39,16 +38,11 @@ import { PACKAGE_LIMITS, recordReader, replayEvidencePackage } from "./local-rep
 import { RELATION_KINDS, loadManifest, checkSources, adoptedDomain, readKeys } from "./manifest.mjs";
 import { v3Codec as codec } from "./codec.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
-import { publicArtifactFiles } from "./public-artifacts.mjs";
 import { ERGO_CHAIN, ERGO_PROFILE, ERGO_EVIDENCE_KIND, ergoRecord } from "./ergo-check.mjs";
 
 const here = import.meta.dirname, root = resolve(here, "../../..");
-assert(process.argv.length === 2 || (process.argv.length === 3 && ["--ergo", "--testnet"].includes(process.argv[2])), "store-check takes only --ergo or --testnet");
+assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--ergo"), "store-check takes only --ergo");
 const withErgo = process.argv[2] === "--ergo";
-const withTestnet = process.argv[2] === "--testnet";
-// Literal dynamic import is included by report provenance, while ordinary
-// checks cannot open a live publisher implicitly.
-const testnet = withTestnet ? await import("./testnet.mjs") : undefined;
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(join(root, "scratch"));
 const build = realpathSync(mkdtempSync(join(scratch, "pool-v3-store-")));
@@ -72,7 +66,6 @@ async function stopService() {
   await new Promise((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); });
 }
 try {
-  const live = withTestnet ? await testnet.openTestnet() : undefined;
   const manifest = loadManifest(); checkSources(manifest);
   execFileSync(process.execPath, [join(here, "compile.mjs"), build], { cwd: root, stdio: "inherit", windowsHide: true, timeout: 300_000 });
   checkSources(manifest);
@@ -94,12 +87,12 @@ try {
   // The parties: a backer (K), the operator it names, and three holders' seeds.
   const issuerSecret = b(15), operatorSecret = b(16), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
   const operatorSeed = b(23);
-  const label = b(12), lag = live?.venue.lag() ?? 2n;
-  const reference = live?.reference ?? (withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE } : { context: LOCAL_REFERENCE, label, lag });
+  const label = b(12), lag = 2n;
+  const reference = withErgo ? { context: ERGO_SYNTHETIC_REFERENCE, profile: ERGO_PROFILE } : { context: LOCAL_REFERENCE, label, lag };
   const supplier = withErgo ? new MiningSupplier("journal-synthetic", ERGO_CHAIN, verifyErgoProof) : undefined;
   const publisher = withErgo ? new ErgoPublisher({ secretKey: b(17), suppliers: [supplier.mempool] }) : undefined;
-  const venue = live?.venue ?? (withErgo ? new ErgoVenue(ERGO_PROFILE, ERGO_CHAIN.context, {}, publisher) : FixtureVenue.reference(label, lag));
-  const evidenceKind = withTestnet ? testnet.TESTNET_EVIDENCE_KIND : withErgo ? ERGO_EVIDENCE_KIND : "fixture-verifier";
+  const venue = withErgo ? new ErgoVenue(ERGO_PROFILE, ERGO_CHAIN.context, {}, publisher) : FixtureVenue.reference(label, lag);
+  const evidenceKind = withErgo ? ERGO_EVIDENCE_KIND : "fixture-verifier";
   let pin;
   async function mineAndSync() {
     supplier.mine(Number(ERGO_PROFILE.depth + 1n));
@@ -114,14 +107,11 @@ try {
     await mineAndSync();
   }
   const verifier = { reference, identities: prover.verifier.identities, verify: (kind, inputs, proof) => prover.verifier.verify(kind, inputs, proof),
-    record: data => withTestnet ? testnet.testnetRecord(live.selection(), live.pin)
-      : withErgo ? ergoRecord(data, { pin }) : recordReader(FixtureVenue.from(data), evidenceKind) };
-  // The range-replay harness needs a venue-presence marker. Testnet's marker
-  // is reader-owned and empty: its factory always fetches node bytes itself.
-  const replay = input => replayEvidencePackage(withTestnet ? { ...input, venue: {} } : input, verifier, codec);
+    record: data => withErgo ? ergoRecord(data, { pin }) : recordReader(FixtureVenue.from(data), evidenceKind) };
+  const replay = input => replayEvidencePackage(input, verifier, codec);
   const domain = adoptedDomain();
   const termsBytes = codec.encodeRootTerms({ obligor: issuer, payout: { thing: "test units", quantumExponent: 0, perUnit: 1n },
-    operator, configuration: domain, venue: venue.id, interval: withTestnet ? BigInt(testnet.TESTNET_LIMITS.maxBlocks) : 10n });
+    operator, configuration: domain, venue: venue.id, interval: 10n });
   const signed = { terms: termsBytes, signature: ed25519.sign(codec.rootTermsSignatureMessage(termsBytes), issuerSecret) };
   const backing = codec.rootTermsName(termsBytes);
   const receiverPath = join(build, "receiver.db"), receiverOptions = { venue, reference, verifier: prover.verifier };
@@ -159,7 +149,7 @@ try {
   async function served(seed) {
     const { selection, package: bytes } = await serviceClient.package(backing);
     return { selection: { ...selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" }, package: bytes,
-      ...(withTestnet ? {} : { venue: withErgo ? { tip: supplier.tip } : venue.export() }), ...(seed === undefined ? {} : { seed }) };
+      venue: withErgo ? { tip: supplier.tip } : venue.export(), ...(seed === undefined ? {} : { seed }) };
   }
   /** A holder's note as the reader restores it from public evidence, joined to the holder's own request. */
   async function restored(seed, prepared) {
@@ -178,12 +168,6 @@ try {
       await mineAndSync();
       assert.equal(supplier.mempool.pool.length, 0);
       assert.equal(venue.witnessedIndex(), before + lag);
-    }
-    if (withTestnet) {
-      assert.equal(venue.witnessedIndex(), before, "mempool acceptance cannot advance the venue's clock");
-      await live.waitFor(commitment);
-      assert(venue.witnessedIndex() > before, "the actual commitment must be witnessed in a later block");
-      pin = live.pin;
     }
     return commitment;
   }
@@ -210,7 +194,7 @@ try {
   });
   await test("the journal runs only on a venue whose identity recomputes from its reference preimage", () => {
     assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, venue: new FixtureVenue(b(12), 0n, lag) }), ReferenceVenueError);
-    const wrongReference = withTestnet || withErgo ? { ...reference, profile: { ...reference.profile, depth: reference.profile.depth + 1n } } : { ...reference, lag: 3n };
+    const wrongReference = withErgo ? { ...reference, profile: { ...reference.profile, depth: reference.profile.depth + 1n } } : { ...reference, lag: 3n };
     assert.throws(() => new V3OperatorJournal(join(build, "refused.db"), { ...options, reference: wrongReference }), ReferenceVenueError);
   });
   journal = new V3OperatorJournal(journalPath, options);
@@ -276,10 +260,6 @@ try {
     assert.notDeepEqual(again, records.issue);
     assert.deepEqual(await submit(again), receipts.issue);
     assert.deepEqual(await serviceClient.commit("after-burn"), await serviceClient.publish());
-    if (withTestnet) {
-      assert.equal(live.submitted.length, 4, "exactly four live commitments, no transaction for retries");
-      assert.equal(new Set(live.submitted).size, 4);
-    }
   });
   const audit = await replay(await served());
   const holders = { receiver: receiverSeed, payer: payerSeed, operator: operatorSeed };
@@ -309,14 +289,13 @@ try {
   await prover.close();
   await api.destroy(); api = undefined;
   // The fresh reader holds this pin beside its keys, independently of the served package.
-  if (withErgo || withTestnet) writeFileSync(join(build, "ergo-pin.bin"), pin);
-  if (withTestnet) writeFileSync(join(build, "testnet-reader.json"), JSON.stringify(live.readerConfig()));
+  if (withErgo) writeFileSync(join(build, "ergo-pin.bin"), pin);
   // Asynchronous, so the in-process loopback service keeps its connection
   // timers: a blocked loop let an overdue keep-alive close race the next fetch.
-  const worker = async (input, directory = build) => {
-    const url = pathToFileURL(directory + sep).href;
-    const child = spawn(process.execPath, [join(here, "local-worker.mjs"), url, ...(withTestnet ? ["--testnet"] : withErgo ? ["--ergo"] : [])], {
-      timeout: withTestnet ? testnet.TESTNET_LIMITS.workerMs : 120_000, cwd: build, windowsHide: true });
+  const worker = async input => {
+    const url = pathToFileURL(build + sep).href;
+    const child = spawn(process.execPath, [join(here, "local-worker.mjs"), url, ...(withErgo ? ["--ergo"] : [])], {
+      timeout: 120_000, cwd: build, windowsHide: true });
     const stdout = [], stderr = [];
     child.stdout.on("data", chunk => stdout.push(chunk)); child.stderr.on("data", chunk => stderr.push(chunk));
     const closed = once(child, "close");
@@ -329,15 +308,15 @@ try {
   const fresh = {};
   await test("a fresh seedless process verifies the same supply from the package and the venue alone", async () => {
     const input = await served();
-    assert.deepEqual(Object.keys(input).sort(), withTestnet ? ["package", "selection"] : ["package", "selection", "venue"]);
+    assert.deepEqual(Object.keys(input).sort(), ["package", "selection", "venue"]);
     fresh.audit = await worker(input);
     assert.deepEqual(fresh.audit, audit);
   });
-  if (!withTestnet) await test("a fresh process restores the receiver's note from its seed and public bytes", async () => {
+  await test("a fresh process restores the receiver's note from its seed and public bytes", async () => {
     fresh.receiver = await worker(await served(receiverSeed));
     assert.deepEqual(fresh.receiver, holdings.receiver);
   });
-  if (withErgo || withTestnet) await test("the fresh reader refuses a wrong independent pin and a withheld carrying section", async () => {
+  if (withErgo) await test("the fresh reader refuses a wrong independent pin and a withheld carrying section", async () => {
     const input = await served();
     const refused = result => {
       assert.equal(result.status, "unresolved-evidence"); assert.equal(result.audit, null);
@@ -350,17 +329,6 @@ try {
       writeFileSync(join(build, "ergo-pin.bin"), wrongPin);
       fresh.wrongPin = refused(await worker(input));
     } finally { writeFileSync(join(build, "ergo-pin.bin"), pin); }
-    if (withTestnet) {
-      // Withhold the last commitment's actual carrying block, which need not
-      // equal the judging block after live-chain progress during proving.
-      const carrying = audit.audit.range.carrying.at(-1);
-      const withheldHeader = hex(await live.headerId(BigInt(carrying.index)));
-      try {
-        writeFileSync(join(build, "testnet-reader.json"), JSON.stringify({ ...live.readerConfig(), withheldHeader }));
-        fresh.withheldSection = refused(await worker(input));
-      } finally { writeFileSync(join(build, "testnet-reader.json"), JSON.stringify(live.readerConfig())); }
-      return;
-    }
     // At depth 1 the tip's parent is the witnessed block carrying the last commitment.
     // Keep that header and all ancestry intact, withholding only its transaction section.
     assert.equal(hex(input.venue.tip.parent.id), hex(pin));
@@ -388,55 +356,22 @@ try {
     } finally { await reopenApi.destroy(); }
   });
 
-  let publicBundle;
-  if (withTestnet) {
-    // Retain only public replay inputs, independently selected trust inputs
-    // and checked public bytecode/keys. No journal, witness, seed or funding key.
-    const directory = join(scratch, "pool-v3-testnet-reader"), input = await served();
-    assert.deepEqual(Object.keys(input).sort(), ["package", "selection"]);
-    const files = new Map([["input.bin", serialize(input)],
-      ["testnet-reader.json", Buffer.from(JSON.stringify(live.readerConfig(), null, 2) + "\n")],
-      ["ergo-pin.bin", pin],
-      ...publicArtifactFiles(build, manifest)]);
-    const launcher = 'import { spawnSync } from "node:child_process";\n' +
-      'import { readFileSync } from "node:fs";\nimport { fileURLToPath } from "node:url";\n' +
-      'const child = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/pool/v3/local-worker.mjs", import.meta.url)), ' +
-      'new URL("./", import.meta.url).href, "--testnet"], { input: readFileSync(new URL("input.bin", import.meta.url)), ' +
-      `stdio: ["pipe", "inherit", "inherit"], windowsHide: true, timeout: ${testnet.TESTNET_LIMITS.workerMs} });\n` +
-      'if (child.error) throw child.error;\nprocess.exitCode = child.status ?? 1;\n';
-    files.set("replay.mjs", Buffer.from(launcher));
-    const totalBytes = [...files.values()].reduce((sum, value) => sum + value.length, 0);
-    assert(totalBytes <= 4_194_304, "public testnet reader bundle budget");
-    mkdirSync(directory, { recursive: true });
-    for (const [name, value] of files) writeFileSync(join(directory, name), value);
-    assert.deepEqual(await worker(input, directory), fresh.audit, "the retained public bundle must replay independently");
-    publicBundle = { directory: "scratch/pool-v3-testnet-reader", totalBytes,
-      replay: "node scratch/pool-v3-testnet-reader/replay.mjs",
-      sha256: Object.fromEntries([...files].map(([name, value]) => [name, hex(sha(value))])) };
-  }
   assert.deepEqual(sourceHashes(sources), sourceSha256Lf, "acceptance sources changed during the run");
   const elapsedMs = Math.round(performance.now() - runStarted);
-  if (withTestnet) assert(elapsedMs < testnet.TESTNET_LIMITS.runMs, "testnet run time budget");
-  const report = { schema: withTestnet ? "moe-v3-testnet-journal-1" : "moe-v3-operator-journal-1",
+  const report = { schema: "moe-v3-operator-journal-1",
     specification: V3_SPECIFICATION, node: process.version, platform: process.platform, elapsedMs,
     configHash: hex(domain), backing: hex(backing), venue: { context: reference.context, lag: lag.toString(), id: hex(venue.id),
-      ...(withTestnet ? { ...live.readerConfig(), witnessedBlock: hex(pin), tipHeight: live.tipHeight.toString(),
-        anchorContextSha256: hex(sha(Buffer.concat(live.context))), funding: "throwaway testnet key", publisher: "ErgoPublisher",
-        submittedTransactions: live.submitted, budgets: testnet.TESTNET_LIMITS }
-      : withErgo ? { anchor: hex(ERGO_PROFILE.anchor), depth: ERGO_PROFILE.depth.toString(), witnessedBlock: hex(pin),
+      ...(withErgo ? { anchor: hex(ERGO_PROFILE.anchor), depth: ERGO_PROFILE.depth.toString(), witnessedBlock: hex(pin),
         tipHeight: supplier.tip.height.toString(), funding: "invented synthetic box", publisher: "ErgoPublisher" } : { label: hex(label) }) },
     checks, metrics, packageBytes: finalPackage.package.length, recordBytes: Object.fromEntries(Object.entries(records).map(([k, v]) => [k, v.length])),
     venueRecords: audit.audit.range.carrying.length, sourceSha256Lf, audit, holdings, receiptReads, fresh,
-    ...(publicBundle === undefined ? {} : { publicBundle }),
-    limits: [withTestnet
-      ? "Explicit live testnet only, own node v6.0.6, depth 2. The independently selected already-final anchor and its pre-anchor ancestry are trust inputs. Header work, testnet difficulty, linkage and transaction sections after that anchor are verified by ErgoVenue. The fresh seedless reader holds its manifest, keys, endpoint, profile and witnessed pin outside the package and fetches node bytes itself. No mainnet, deployment or production finality claim."
-      : withErgo
+    limits: [withErgo
       ? "The adopted configuration from the runtime manifest; actual ErgoPublisher transactions mined by a synthetic supplier and read through ErgoVenue under a recomputed synthetic reference identity. The seedless reader independently holds the witnessed block pin: difficulty 1 permits anyone to re-mine a heavier chain. Invented funding; no live node, network deployment or real-chain finality."
       : "The adopted configuration from the runtime manifest and a local reference venue whose identity the guard recomputes; no chain venue or finality.",
       "One genesis segment of one backing: no imports, recovery kinds, replacement, second backing or silence/non-service clause. The journal reads the venue's full ranges on every operation.",
       "The payer wallet restores its note from the served package, selects and pads its inputs, prepares its own change and zero outputs beside the receiver's and operator's exact requests, proves through the runtime prover, saves and submits the exact record, and reconciles it final. The receiver wallet persists an exact request and final fulfillment across reopening. Submission, commitment, publication and evidence retrieval use the authenticated loopback v3 service. Receiver invitation transport and fee quotes remain outside this fixture; the burn and hostile cases restore paths and prove through the existing reader/prover.",
       "Restart replay is exercised once here; restarts mid-publication and exact retry across restarts are slice 5."] };
-  const reportName = withTestnet ? "pool-v3-testnet-results.json" : "pool-v3-store-results.json";
+  const reportName = "pool-v3-store-results.json";
   writeFileSync(join(scratch, reportName), JSON.stringify(report, null, 2) + "\n");
   console.log(`PASS: ${checks.length} operator journal checks, ${metrics.length} real proofs; scratch/${reportName}`);
 } finally {

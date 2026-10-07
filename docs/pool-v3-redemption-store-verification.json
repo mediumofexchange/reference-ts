@@ -22,133 +22,133 @@
       "name": "backer: sync undefined, issue issue, submit issue",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1290
+      "elapsedMs": 1343
     },
     {
       "name": "holder: sync undefined, prepare pay, submit pay",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3263
+      "elapsedMs": 3264
     },
     {
       "name": "shop: sync undefined, demand redeem, submit redeem",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2959
+      "elapsedMs": 2916
     },
     {
       "name": "shop: sync undefined, settle settle, submit settle",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2959
+      "elapsedMs": 2937
     },
     {
       "name": "backer: sync undefined, burn retire, submit retire",
       "kind": 3,
       "bytes": 14656,
-      "elapsedMs": 2797
+      "elapsedMs": 2770
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1285
+      "elapsedMs": 1324
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1011
+      "elapsedMs": 1010
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1003
+      "elapsedMs": 998
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1008
+      "elapsedMs": 1005
     },
     {
       "name": "holder: sync undefined, demand four, submit four, demand five, submit five",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2772
+      "elapsedMs": 2770
     },
     {
       "name": "holder: sync undefined, demand four, submit four, demand five, submit five",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2618
+      "elapsedMs": 2611
     },
     {
       "name": "restored: sync undefined, settle settle-4, submit settle-4, withdraw back-5, submit back-5",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2929
+      "elapsedMs": 2960
     },
     {
       "name": "holder: sync undefined, settle lost-4",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2762
+      "elapsedMs": 2765
     },
     {
       "name": "holder: demand gap, publish gap",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2952
+      "elapsedMs": 2961
     },
     {
       "name": "holder: settle gap-settle, publish gap-settle",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2930
+      "elapsedMs": 2933
     },
     {
       "name": "holder: demand hostile, publish hostile",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2975
+      "elapsedMs": 2924
     },
     {
       "name": "holder: sync undefined, settle late",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2754
+      "elapsedMs": 2771
     },
     {
       "name": "holder: sync undefined, settle again",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2959
+      "elapsedMs": 2921
     },
     {
       "name": "taker demand 0",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2786
+      "elapsedMs": 2748
     },
     {
       "name": "taker demand 1",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2614
+      "elapsedMs": 2612
     },
     {
       "name": "taken release",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2598
+      "elapsedMs": 2596
     },
     {
       "name": "taking settlement",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2592
+      "elapsedMs": 2588
     }
   ],
   "processes": [
@@ -156,241 +156,241 @@
       "role": "holder",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3015
+      "elapsedMs": 2987
     },
     {
       "role": "backer",
       "steps": "sync,issue,submit",
       "retry": false,
-      "elapsedMs": 4772
+      "elapsedMs": 4800
     },
     {
       "role": "backer",
       "steps": "issue,act",
       "retry": true,
-      "elapsedMs": 2939
+      "elapsedMs": 2932
     },
     {
       "role": "shop",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3009
+      "elapsedMs": 3010
     },
     {
       "role": "holder",
       "steps": "sync,prepare,submit",
       "retry": false,
-      "elapsedMs": 6839
+      "elapsedMs": 6817
     },
     {
       "role": "shop",
       "steps": "fulfill,sync",
       "retry": false,
-      "elapsedMs": 3448
+      "elapsedMs": 3426
     },
     {
       "role": "holder",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3348
+      "elapsedMs": 3310
     },
     {
       "role": "backer",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3364
+      "elapsedMs": 3312
     },
     {
       "role": "shop",
       "steps": "sync,demand,submit",
       "retry": false,
-      "elapsedMs": 6243
+      "elapsedMs": 6180
     },
     {
       "role": "shop",
       "steps": "demand,act",
       "retry": true,
-      "elapsedMs": 2971
+      "elapsedMs": 2902
     },
     {
       "role": "shop",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3326
+      "elapsedMs": 3291
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 3340
+      "elapsedMs": 3327
     },
     {
       "role": "backer",
       "steps": "accept",
       "retry": true,
-      "elapsedMs": 2937
+      "elapsedMs": 2915
     },
     {
       "role": "shop",
       "steps": "sync,settle,submit",
       "retry": false,
-      "elapsedMs": 6331
+      "elapsedMs": 6226
     },
     {
       "role": "shop",
       "steps": "settle,act",
       "retry": true,
-      "elapsedMs": 2933
+      "elapsedMs": 2941
     },
     {
       "role": "shop",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3313
+      "elapsedMs": 3311
     },
     {
       "role": "holder",
       "steps": "sync,presentation",
       "retry": false,
-      "elapsedMs": 3441
+      "elapsedMs": 3427
     },
     {
       "role": "backer",
       "steps": "sync,burn,submit",
       "retry": false,
-      "elapsedMs": 6375
+      "elapsedMs": 6341
     },
     {
       "role": "backer",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3313
+      "elapsedMs": 3297
     },
     {
       "role": "holder",
       "steps": "request,request",
       "retry": false,
-      "elapsedMs": 2992
+      "elapsedMs": 2956
     },
     {
       "role": "backer",
       "steps": "sync,issue,submit,issue,submit,issue,submit,issue,submit",
       "retry": false,
-      "elapsedMs": 8073
+      "elapsedMs": 8054
     },
     {
       "role": "holder",
       "steps": "sync,demand,submit,demand,submit",
       "retry": false,
-      "elapsedMs": 9392
+      "elapsedMs": 9377
     },
     {
       "role": "restored",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3882
+      "elapsedMs": 3852
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 3569
+      "elapsedMs": 3528
     },
     {
       "role": "restored",
       "steps": "sync,settle,submit,withdraw,submit",
       "retry": false,
-      "elapsedMs": 6344
+      "elapsedMs": 6352
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6247
+      "elapsedMs": 6196
     },
     {
       "role": "restored",
       "steps": "sync,act,act",
       "retry": false,
-      "elapsedMs": 3367
+      "elapsedMs": 3325
     },
     {
       "role": "holder",
       "steps": "sync,act,act,presentation",
       "retry": false,
-      "elapsedMs": 3385
+      "elapsedMs": 3352
     },
     {
       "role": "holder",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3046
+      "elapsedMs": 3028
     },
     {
       "role": "backer",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3341
+      "elapsedMs": 3309
     },
     {
       "role": "holder",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 2947
+      "elapsedMs": 2933
     },
     {
       "role": "backer",
       "steps": "issue",
       "retry": false,
-      "elapsedMs": 3004
+      "elapsedMs": 3016
     },
     {
       "role": "holder",
       "steps": "demand,publish",
       "retry": false,
-      "elapsedMs": 6043
+      "elapsedMs": 6012
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3229
+      "elapsedMs": 3191
     },
     {
       "role": "backer",
       "steps": "sync,accept",
       "retry": false,
-      "elapsedMs": 3263
+      "elapsedMs": 3275
     },
     {
       "role": "holder",
       "steps": "settle,publish",
       "retry": false,
-      "elapsedMs": 5986
+      "elapsedMs": 5991
     },
     {
       "role": "holder",
       "steps": "sync,act,presentation",
       "retry": false,
-      "elapsedMs": 3293
+      "elapsedMs": 3282
     },
     {
       "role": "backer",
       "steps": "burn",
       "retry": false,
-      "elapsedMs": 3235
+      "elapsedMs": 3226
     },
     {
       "role": "holder",
       "steps": "demand,publish",
       "retry": false,
-      "elapsedMs": 6037
+      "elapsedMs": 5986
     },
     {
       "role": "backer",
       "steps": "sync,accept",
       "retry": false,
-      "elapsedMs": 3279
+      "elapsedMs": 3255
     },
     {
       "role": "holder",
@@ -402,48 +402,48 @@
       "role": "holder",
       "steps": "publish",
       "retry": false,
-      "elapsedMs": 2928
+      "elapsedMs": 2939
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3224
+      "elapsedMs": 3230
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 3297
+      "elapsedMs": 3281
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6076
+      "elapsedMs": 6045
     },
     {
       "role": "holder",
       "steps": "publish",
       "retry": false,
-      "elapsedMs": 2930
+      "elapsedMs": 2927
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3347
+      "elapsedMs": 3269
     },
     {
       "role": "backer",
       "steps": "sync,presentation,presentation",
       "retry": false,
-      "elapsedMs": 3524
+      "elapsedMs": 3517
     }
   ],
   "transactions": [],
   "maxPackageBytes": 79489,
-  "elapsedMs": 230501,
+  "elapsedMs": 228964,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -520,16 +520,14 @@
     "scripts/pool/v3/circuits/spend.nr": "920c4702d2ae0c3e2d0f251fe298c39c0d658a390220b0c4d68b4e06c31ae695",
     "scripts/pool/v3/codec.mjs": "809edcf556d1307417bdb0fb1f5a78cf4d89d3c06062bc6ef8e1157676cec318",
     "scripts/pool/v3/compile.mjs": "a5a066ae697ff5fce5dd45f55772d14a13c28d5766350af575f4fbc627f1112b",
-    "scripts/pool/v3/drill.mjs": "bf0e69ce6db46597059d1ae92583401b6099d0f401e944bd9adae699fab90d9b",
+    "scripts/pool/v3/drill.mjs": "f50398be0be98086735d2f52936297bc4f9dc6b2175cfd68a9e31a2995e25ed3",
     "scripts/pool/v3/ergo-check.mjs": "ad944cb4fdf3ad5d7bbc253579a9cecd7e32fc724b342c52a38094fcd17918c2",
     "scripts/pool/v3/fault-evidence.mjs": "6eaadc9e0645da5b8d2f3b392976fe65ef6f804d93a7703d056e5b126703d93a",
     "scripts/pool/v3/frontier-check.mjs": "e47323a95d24b91690c323dfb93caacf78db2f1ae3abbd77ce8c56e852134fee",
     "scripts/pool/v3/local-replay.mjs": "b50ad5baf0af5cc4b4c488eace91a7c06f869a6a580affadc255d05293d4e379",
     "scripts/pool/v3/manifest.mjs": "725d3b164752fa58ab8e8eef319470e71c788cd59a71a75fe23ec69606249092",
     "scripts/pool/v3/provenance.mjs": "9a9dd856973ad5d55aff737cff8704af1aa1207e00891f693251160f8fc4eb38",
-    "scripts/pool/v3/public-artifacts.mjs": "47e2c6d61a404a8aa3c9b41e06de3a760d27b9400933201589f0043d30b5ad82",
     "scripts/pool/v3/redemption-store-check.mjs": "0b7c7e24d396b1a233b6cf1e7096f6e97e5329126b9de6b8f6f45d3326f36d8b",
-    "scripts/pool/v3/testnet.mjs": "c8fd9b2a84519c70a59e661c136bfbef9e20fb4103954549d21af154dd7b88fa",
     "src/bytes.ts": "e22afb403ee5c994857e32c0c08ac7bd361e3691405baaf28758d82cdf9555b3",
     "src/contexts.ts": "2a0bd8dfd7fed8c229d40d68b1dab984bcdb6b5afa26afdd9ec98d8812dd923a",
     "src/ergo-headers.ts": "c0e21dead5c9a54db64761279504313458e0d6a3c8cf35e4f0651aede2fd7dd0",
