@@ -8,12 +8,11 @@ Updated: 2026-10-07
 Acceptance: lit trails replay through the shared seams with lit-v1's verdicts (hostile cases), vectors bind every layout; an operator
 journal and a wallet run lit backings through the `moe` commands, failure path included (gap route, return and adoption, C3.8's reading);
 then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4; [direction 2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)).
-- **Done and merged (2026-10-07; decisions M14a–M14g4 in [2026-10](decisions/2026-10.md)):** M14a–b bytes and frames, M14c state machine (#116),
-  M14d reader (#120), M14e conformance (#122), M14f journal (#123), M14g1–g2 wallet (#125–#126), M14g3 service wire (#127), M14g4 commands:
-  each directory declares its construction at init, lit keeps no parameters, `move-window`, and a synthetic-node lit drill in `check:scripts`
-  with the gap route, return and adoption (#129); spec #15–#16 (`3af6abe`).
-- **Next:** M14g5: settle (am) as a lit-v1 draft clarification (spec first, fresh review, C0a), then lit `presentation` (C3.8) in the
-  wallet and reader (both refuse `CONSTRUCTION` now). M14h adoption, once nothing can move a byte or verdict.
+- **Done and merged (2026-10-07; decisions M14a–M14g5a in [2026-10](decisions/2026-10.md)):** M14a–b bytes and frames, M14c state machine (#116),
+  M14d reader (#120), M14e conformance (#122), M14f journal (#123), M14g1–g2 wallet (#125–#126), M14g3 service wire (#127), M14g4 commands
+  with a synthetic-node lit drill, gap route included (#129); spec #15–#17 (`a554f8a`: M14g5a, the acceptance's owner key signs it too).
+- **Next:** merge #130 (M14g5a code; review on the PR; Open questions), then M14g5b: lit `presentation` (C3.8) through the seam in `scope-reader.ts`
+  (throws for lit `answers`) and `dishonour.ts` (answers where K and the owner signed; no taken release, §7). M14h adoption when nothing moves a verdict.
 
 ## Status
 - **Slices 10–11 done** (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
@@ -51,7 +50,7 @@ then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2
    output awaiting adoption is not reported at all (only never as spendable). Review 2026-10-06: (aa) the testnet drill sweeps funding keys
    in-process only (no signal handler or `--sweep <dir>`; boxes above the indexed height read as dust); (ab) no command prints a saved
    acceptance's absolute deadline for an exact `accept --deadline +n` retry; (ac) `keepContext`'s throwaway views keep `:memory:` journals
-   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error). M14g1 review: (al) a keyed scan's identity names every held backing's window (one replay of every held scope per new backing or grown window; old namespaces kept). M14g2: (am) lit-v1 §7 question: an acceptance whose owner is the holder's key (the presenter, an input owner, or any key K links) reads as answered under C3.8, so K escapes dishonour; M14g5 chooses (no answer for keys a reader can tell, or the owner key's signature in the acceptance, a byte change); (an) no lit `presentation` yet (M14g5); a remade lit burn takes a new change index. M14g4: (ao) a reader whose operator does not answer reads only a `--package` file (no kept fallback as the wallet's; slice 12's replica).
+   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error). M14g1 review: (al) a keyed scan's identity names every held backing's window (one replay of every held scope per new backing or grown window; old namespaces kept). M14g2: (an) no lit `presentation` yet (M14g5); a remade lit burn takes a new change index. M14g4: (ao) a reader whose operator does not answer reads only a `--package` file (no kept fallback as the wallet's; slice 12's replica).
    Audit 31 ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)): (ag) the package reader's scope from the selected snapshot (§7.1); (ah) own snapshot before term lapse; (ai) an undecodable committed snapshot surfaces as `EncodingError`; (aj) the non-service count rereads every publication and keeps every request; (ak) the replay identity names the backing, so a sibling's read replays again.
 5. Slice 11 leftovers. One design-point rerun, in slice 13 at the latest: `moe operator serve` as its own process at 10⁵, and the wallet's first sync and steady state at 10⁵ (the depth probe's process, which also held the synthetic
    node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
@@ -94,6 +93,8 @@ then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2
 
 ## Open questions
 - Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- 2026-10-07, blocks merges: after spec #17 merged (reviewed in-run), the cloud session's auto-mode classifier refused follow-ups as "Merge Without
+  Review", so #130 stays open until the maintainer allows run merges. Deletion list: spec remote branch `claude/m14g5-acceptance-owner` (merged, #17).
 
 Roughly **66% done / 34% remaining** (range 56–75%), reassessed 2026-10-07 (M14g4): lit runs through the commands, gap route included; C3.8's lit
 reading and adoption, an evidence replica, holder transport, release assurance, qualified storage and mainnet remain.
