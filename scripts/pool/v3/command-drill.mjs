@@ -82,7 +82,8 @@ function signTerms(name, operator, venue) {
 }
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "command-drill-")));
-const checks = [], processes = [], servers = [];
+// Module files a party's process resolved outside its own install (M13c).
+const checks = [], processes = [], servers = [], strays = [];
 
 /** The package exactly as a release installs it: packed, and installed from its install lock once per party into a
  * machine of its own outside the checkout's dependency tree (scripts/release.mjs), each party's `moe` run from there. */
@@ -179,7 +180,7 @@ function moe(args, { mining, input } = {}) {
   return new Promise((done, failed) => {
     const rss = join(scratch, `rss-${processes.length}-${process.hrtime.bigint()}.json`);
     const machine = machineOf(args), began = performance.now(), child = spawn(process.execPath, ["--import", RSS_HOOK, machine.bin, ...args],
-      { cwd: machine.cwd, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: rss } });
+      { cwd: machine.cwd, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: rss, MOE_DRILL_INSTALL: machine.install } });
     if (input !== undefined) child.stdin.end(input);
     const out = [], err = [];
     child.stdout.on("data", chunk => out.push(chunk));
@@ -193,8 +194,9 @@ function moe(args, { mining, input } = {}) {
     child.on("error", failed);
     child.on("close", status => {
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
-      let maxRssKb = null, noir = null;
-      try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* a process that died before its exit handler */ }
+      let maxRssKb = null, noir = null, outside = [];
+      try { ({ maxRssKb, noir, outside } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* a process that died before its exit handler */ }
+      for (const url of outside) strays.push(`${args.slice(0, 2).join(" ")}: ${url}`);
       processes.push({ command: args.slice(0, 2).join(" "), party: machine.party, status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
       let json;
       try { json = stdout.trim() === "" ? undefined : JSON.parse(stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
@@ -223,7 +225,7 @@ function serve(directory) {
   const rss = join(scratch, `rss-serve-${process.hrtime.bigint()}.json`), began = performance.now();
   const machine = machineOf(["operator", "serve", "--dir", directory]);
   const child = spawn(process.execPath, ["--import", RSS_HOOK, machine.bin, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL],
-    { cwd: machine.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: rss } });
+    { cwd: machine.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: rss, MOE_DRILL_INSTALL: machine.install } });
   servers.push(child);
   let stdout = "", stderr = "";
   child.stderr.on("data", chunk => { stderr += chunk; });
@@ -237,8 +239,9 @@ function serve(directory) {
     // the operating system releases its directory lock either way.
     child.kill("SIGTERM"); const status = await exited;
     if (process.platform !== "win32") assert.equal(status, 0, stderr);
-    let maxRssKb = null, noir = null;
-    try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* ended outright (Windows) */ }
+    let maxRssKb = null, noir = null, outside = [];
+    try { ({ maxRssKb, noir, outside } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* ended outright (Windows) */ }
+    for (const url of outside) strays.push(`operator serve: ${url}`);
     processes.push({ command: "operator serve (running)", party: machine.party, status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
   } };
 }
@@ -759,6 +762,7 @@ console.log(JSON.stringify(open.filter(path => path.includes("etilqs_"))));`);
     assert.equal(new Set(bins).size, Object.keys(MACHINES).length);
     for (const bin of bins) assert(!bin.startsWith(root + sep + "dist" + sep) && !bin.startsWith(root + sep + "node_modules" + sep), bin);
     for (const party of Object.keys(MACHINES)) assert(processes.some(p => p.party === party && p.status === 0), `${party} ran no command`);
+    assert.deepEqual(strays, [], "a party's process resolved a module outside its own install");
   });
 
   const result = { status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files, installLockSha256: packed.installLock,

@@ -37,6 +37,7 @@ import { connect } from "node:net";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { prepareExactOutput } from "../../dist/pool/v3/capsules.js";
 import { adoptedDomain } from "../../dist/pool/v3/configuration.js";
@@ -55,7 +56,8 @@ const LIT = ["--construction", "moe/lit/v1"], SYN = ["--synthetic"], POLL = "100
 const FUND = 1_000_000_000n, BUDGET = "50000000";
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "lit-command-drill-")));
-const checks = [], processes = [], servers = [];
+// Module files a party's process resolved outside its own install (M13c).
+const checks = [], processes = [], servers = [], strays = [];
 const check = async (label, fn) => { await fn(); checks.push(label); process.stderr.write(`passed: ${label}\n`); };
 const pause = ms => new Promise(done => setTimeout(done, ms));
 
@@ -115,7 +117,7 @@ const nextRound = async () => { await advance(Number(DEPTH) + 2); await pause(30
  * the guard ends it at any other connection. */
 const holderProcess = (args, { input, proxy = torPort, proxyHost = "127.0.0.1", rss } = {}) => {
   const holder = args[0] !== "operator", party = partyOf(args), machine = parties[party];
-  const env = { ...machine.env, MOE_DRILL_RSS: rss, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
+  const env = { ...machine.env, MOE_DRILL_RSS: rss, MOE_DRILL_INSTALL: machine.install, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
     HTTP_PROXY: `http://drill-${processes.length}-${process.hrtime.bigint()}:x@${proxyHost}:${proxy}`, NO_PROXY: "127.0.0.1" } : {}),
     ...(holder ? { MOE_DRILL_PORTS: `${proxy ?? torPort},${nodePort}` } : {}) };
   const child = spawn(process.execPath, ["--import", RSS_HOOK, ...(holder ? ["--import", GUARD] : []), machine.bin, ...args],
@@ -140,8 +142,9 @@ function moe(args, { mining, input, proxy = torPort, proxyHost = "127.0.0.1" } =
     child.on("error", failed);
     child.on("close", status => {
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
-      let noir = null;
-      try { ({ noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* died before its exit handler */ }
+      let noir = null, outside = [];
+      try { ({ noir, outside } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* died before its exit handler */ }
+      for (const url of outside) strays.push(`${args.slice(0, 2).join(" ")}: ${url}`);
       processes.push({ command: args.slice(0, 2).join(" "), party: child.party, status, noir });
       let json, refusal;
       try { json = stdout.trim() === "" ? undefined : JSON.parse(stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
@@ -179,7 +182,8 @@ const usage = async args => {
 function serve(directory) {
   const machine = parties[partyOf(["operator", "serve", "--dir", directory])];
   const child = spawn(process.execPath, ["--import", RSS_HOOK, machine.bin, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL,
-    "--onion", ONION], { cwd: machine.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: join(scratch, `rss-serve-${process.hrtime.bigint()}.json`) } });
+    "--onion", ONION], { cwd: machine.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: join(scratch, `rss-serve-${process.hrtime.bigint()}.json`),
+      MOE_DRILL_INSTALL: machine.install } });
   servers.push(child);
   let stdout = "", stderr = "";
   child.stderr.on("data", chunk => { stderr += chunk; });
@@ -584,11 +588,19 @@ try {
     for (const p of ended) assert.equal(p.noir, false, `${p.command} loaded @noir-lang`);
   });
 
-  await check("every party ran from its own install of one release, which the shop's restorations opened on a new machine", async () => {
+  await check("every party ran from its own install of one release, which the shop's restorations opened on a new machine, and " +
+    "resolved no module outside it (a dependency removed from one install is named)", async () => {
     const bins = Object.values(parties).map(party => realpathSync(party.bin));
     assert.equal(new Set(bins).size, Object.keys(MACHINES).length);
     for (const bin of bins) assert(!bin.startsWith(root + sep + "dist" + sep) && !bin.startsWith(root + sep + "node_modules" + sep), bin);
     for (const party of Object.keys(MACHINES)) assert(processes.some(p => p.party === party && p.status === 0), `${party} ran no command`);
+    assert.deepEqual(strays, [], "a party's process resolved a module outside its own install");
+    // Hostile: a dependency missing from the reader's install, which Node's resolution finds in the checkout's
+    // node_modules above the machine, is named.
+    rmSync(join(scratch, "machines", "reader", "install", "node_modules", "@noble", "hashes"), { recursive: true });
+    await moe(["reader", "supply", "--dir", RD, backing]);
+    const checkout = `${pathToFileURL(join(root, "node_modules")).href}/@noble/hashes/`;
+    assert(strays.length > 0 && strays.every(stray => stray.startsWith("reader supply: ") && stray.includes(checkout)), JSON.stringify(strays));
   });
 
   console.log(JSON.stringify({ status: "passed", release: { tarball: release.tarball.integrity, installLock: release.installLock.sha256 },

@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
@@ -97,7 +98,8 @@ function install(directory, name) {
  * `packRelease` wrote to `release` (the tarball and install lock copied there, then `npm ci`), and its own home and
  * temporary directories. Each party's `moe` runs from its install with that directory as its working directory and
  * home, so no party reaches another's code, caches or temporary files except through what the drill hands across.
- * Returns, per name, the bin and the `cwd` and `env` (over `env`) to spawn it with. */
+ * Returns, per name, the bin, the install directory as a file URL ending in "/", and the `cwd` and `env` (over `env`)
+ * to spawn it with. */
 export function installParties(release, directory, names, env = process.env) {
   const record = JSON.parse(readFileSync(join(release, "release-record.json"), "utf8"));
   const parties = {};
@@ -106,7 +108,7 @@ export function installParties(release, directory, names, env = process.env) {
     for (const path of [installed, home, tmp]) mkdirSync(path, { recursive: true });
     for (const file of [record.tarball.file, "package.json", "package-lock.json"]) copyFileSync(join(release, file), join(installed, file));
     const shipped = install(installed, record.package);
-    parties[name] = { bin: join(shipped, "dist", "cli", "moe.js"), cwd: machine,
+    parties[name] = { bin: join(shipped, "dist", "cli", "moe.js"), install: pathToFileURL(join(installed, "/")).href, cwd: machine,
       env: { ...env, HOME: home, USERPROFILE: home, TMPDIR: tmp, TEMP: tmp, TMP: tmp } };
   }
   return parties;
