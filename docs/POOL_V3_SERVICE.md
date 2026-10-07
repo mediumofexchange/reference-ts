@@ -16,6 +16,10 @@ keeps the network out there; the admin credential never reaches that listener ([
 Bearer …` header is required. The wallet credential permits submission and
 evidence retrieval; the admin credential additionally permits commit and publish.
 Credentials grant local operations, never protocol authorization or finality.
+The wallet credential is service-wide: one per service, handed with the URL to every holder (`service.json`,
+`holders.json`), never one per holder, so it identifies nobody and a deployment may publish it beside its terms. It
+bounds who uses the operator's connections, not who reads published evidence, which a replica serves to anyone
+(below, [M12b](../decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b)).
 
 | Endpoint | Request | Reply |
 |---|---|---|
@@ -96,6 +100,21 @@ complete range answers. Server metadata cannot select those inputs. Missing or
 changed evidence refuses fulfillment, and receipts alone cannot fulfill a
 request. See the [receiver obligations](POOL_V3_WALLET.md) and
 [package rule](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#12-evidence-packages-and-dependency-retention).
+
+## Replicas
+
+`createV3EvidenceService(source)` serves the evidence route alone, with no credential: every other request is
+`NOT_FOUND`, a credential sent anyway is ignored, and the listener keeps the operator's bounds (loopback peers, sixteen
+connections, eight streams, the minimum rate). Its source is a `V3Replica` (`replica.ts`) over a reader's evidence
+file opened `shared` (WAL), which `moe reader serve` runs ([M12b](../decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b)). A replica signs and admits nothing. For each
+backing it serves the operator's selection that its own read found canonical, with that read's own package, and after a
+sequence it served before, what its file kept since: the file indexes what it takes per operator and assigns it to the
+next selection the replica serves, so no supplier's statement places anything. A reader's mark for a replica is that
+replica's own (a client with no credential keys its mark by URL); its mark for the operator's service holds at any URL.
+Each stream reads one committed state on a connection of its own, so a take neither shows through nor waits, and a
+damaged object or trail ends the stream short of its end mark, so the reader keeps its mark and reads elsewhere.
+`test/replica.test.ts` covers a wallet paid and credited through a replica, incremental serving after a mark,
+selections that only rise, operators kept apart, damage, the index made once from a whole sync and the refusals.
 
 ## Bounds and interrupted operations
 
