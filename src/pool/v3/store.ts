@@ -48,6 +48,7 @@
 // lit-v1 §9's) and only on a reference venue (guard.ts). Time is the venue's witnessed index.
 // SQLite fences handles of this journal; it cannot fence another database or
 // a copied key.
+import { statSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -76,7 +77,7 @@ import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, 
   type SegmentState } from "./state.js";
 import type { RootTerms } from "./terms.js";
 
-const PROFILE = "pool-store/v3/7";
+const PROFILE = "pool-store/v3/8";
 /** Signed rows read at a time while serving. */
 const SERVE_PAGE = 256n;
 const U64 = 1n << 64n;
@@ -95,7 +96,8 @@ const isGenesis = (header: SegmentHeader): boolean => header.sequence === 1n &&
   header.entries.every(entry => entry.opening === undefined && same(entry.link, entry.backing));
 
 export class V3StoreError extends Error {
-  constructor(readonly code: "STORAGE" | "FENCED" | "BUSY" | "CONFLICT" | "UNAVAILABLE" | "STALE" | "SCHEDULE" | "UNSUPPORTED" | "REFUSED",
+  constructor(readonly code: "STORAGE" | "FENCED" | "BUSY" | "CONFLICT" | "UNAVAILABLE" | "STALE" | "SCHEDULE" | "UNSUPPORTED" | "REFUSED" |
+    "COPIED" | "RESTORED",
     message: string, readonly check?: string) {
     super(message); this.name = "V3StoreError";
   }
@@ -205,6 +207,13 @@ export interface V3StoreOptions {
   /** The construction the journal's scope declares: pool-v3's by default, or lit-v1's (slice 14 M14f). Its domain is
    * the journal's identity, so a journal's file serves one construction. */
   readonly construction?: Construction | undefined;
+  /** The owner restored this journal from a copy or backup (slice 13 M13d). It records the fact, and from then on signs
+   * nothing but C2b.4's return, once the silence boundary is witnessed, at a sequence above any its lost instance can
+   * have left unwitnessed, and that return's adopted block; adopting it lifts the fence. Recorded again before the
+   * return is signed, it changes nothing; after, it is a restoration of its own (the copy may have been taken after
+   * the return was signed) and draws a fresh spacing. Also the only way to open a journal whose file is not the one it
+   * was made in. */
+  readonly restored?: boolean | undefined;
 }
 /** A served §12 package with the selection it names; a reader makes its own selection and judges at its own index. */
 export interface ServedPackage {
@@ -227,7 +236,24 @@ export interface JournalStatus {
   readonly signed?: { readonly sequence: bigint; readonly at: bigint; readonly published: boolean; readonly held: boolean; readonly admitted: bigint };
   readonly heldIndex?: bigint;
   readonly pendingReturn: boolean;
+  /** The venue index at which the owner recorded a restoration whose opening is not yet adopted (M13d). */
+  readonly restoredAt?: bigint;
+  /** That restoration's opening sequence, once signed. */
+  readonly restoredOpening?: bigint;
 }
+
+/** The database file's identity: its inode, and its birth time where the filesystem keeps one (not the device, which
+ * a remount can change). A fresh copy, or a file restored to another disk or machine, has another (M13d). A file
+ * overwritten in place, or a filesystem or machine snapshot rolled back, keeps it: detection is a guard, and a
+ * restoration is the owner's to record (`restored`). */
+function fileIdentity(path: string): string {
+  const { ino, birthtimeNs } = statSync(path, { bigint: true });
+  return birthtimeNs === 0n ? `${ino}` : `${ino}:${birthtimeNs}`;
+}
+/** A restored journal's opening skips 2^16 sequences per spacing step (M13d): far above the few a lost instance's
+ * one-in-flight rules can leave unwitnessed past the record's latest, and two restorations' openings, each with its
+ * own random spacing, at least that far apart. */
+const RESTORED_SKIP = 1n << 16n;
 
 export class V3OperatorJournal {
   private readonly db: DatabaseSync;
@@ -294,7 +320,11 @@ export class V3OperatorJournal {
         CREATE TABLE IF NOT EXISTS journal_receipt (statement BLOB PRIMARY KEY, receipt BLOB NOT NULL) STRICT, WITHOUT ROWID;
         CREATE INDEX IF NOT EXISTS journal_signed_segment ON journal_signed(segment, sequence);
         CREATE TABLE IF NOT EXISTS journal_taken (sequence INTEGER NOT NULL, kind INTEGER NOT NULL, hash BLOB NOT NULL, PRIMARY KEY(sequence, kind, hash)) STRICT, WITHOUT ROWID;
-        CREATE TABLE IF NOT EXISTS journal_conflict (id INTEGER PRIMARY KEY CHECK(id=1), idx TEXT NOT NULL, record BLOB NOT NULL) STRICT;`);
+        CREATE TABLE IF NOT EXISTS journal_conflict (id INTEGER PRIMARY KEY CHECK(id=1), idx TEXT NOT NULL, record BLOB NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS journal_file (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL) STRICT;
+        CREATE TABLE IF NOT EXISTS journal_restored (id INTEGER PRIMARY KEY CHECK(id=1), idx TEXT NOT NULL, seq INTEGER NOT NULL,
+        spacing INTEGER NOT NULL, opening INTEGER) STRICT;
+        CREATE TABLE IF NOT EXISTS journal_skipped (sequence INTEGER PRIMARY KEY, below INTEGER NOT NULL) STRICT;`);
       let meta = this.metadata();
       if (meta === undefined) {
         requireThat(this.db.prepare("SELECT COUNT(*) AS n FROM events").get()?.n === 0n, "STORAGE", "journal identity is missing");
@@ -303,6 +333,21 @@ export class V3OperatorJournal {
         meta = this.metadata()!;
       }
       this.identity(meta, true);
+      // M13d: a journal opened from a copy co-signs nothing on the segment it holds. Its book may lack a tail whose
+      // receipts the original exposed (C2.8.1 assumes the book it held is durable), which no record shows.
+      const file = fileIdentity(path), kept = this.db.prepare("SELECT identity FROM journal_file WHERE id=1").get()?.identity;
+      if (options.restored === true) {
+        const spacing = BigInt(crypto.getRandomValues(new Uint32Array(1))[0]! & 0x7fffffff);
+        // A copy taken after the restoration's return was signed may stand beside an instance that adopted it and
+        // co-signed in its segment: that return is never this restoration's to adopt (it is adopted as any pending
+        // opening, keeping the fence) and the next skips past it.
+        this.db.prepare("DELETE FROM journal_restored WHERE id=1 AND opening IS NOT NULL").run();
+        this.db.prepare("INSERT OR IGNORE INTO journal_restored VALUES(1,?,?,?,NULL)").run(now.toString(), meta.tip as bigint, spacing);
+      } else {
+        requireThat(kept === undefined || kept === file, "COPIED", "this journal's file is not the one it was made in: if it is a copy " +
+          "or a restored backup, run moe operator restore, which signs nothing on its segment and returns after silence");
+      }
+      this.db.prepare("INSERT INTO journal_file VALUES(1,?) ON CONFLICT(id) DO UPDATE SET identity=excluded.identity").run(file);
       // A venue still catching up to what this journal has read of it: nothing is wrong with the rows.
       requireThat(now >= decimal(meta.observed), "UNAVAILABLE", "the venue's clock is behind what this journal has read");
       requireThat(typeof meta.owner === "bigint" && meta.owner < SQLITE_LIMIT, "STORAGE", "journal owner counter exhausted");
@@ -359,6 +404,32 @@ export class V3OperatorJournal {
   }
 
   private metadata() { return this.db.prepare("SELECT * FROM identity WHERE id=1").get(); }
+  /** The owner's recorded restoration (M13d): the venue index it was recorded at and the log's tip then. */
+  private restoration(): { readonly at: bigint; readonly seq: bigint; readonly spacing: bigint; readonly opening?: bigint } | undefined {
+    const row = this.db.prepare("SELECT idx,seq,spacing,opening FROM journal_restored WHERE id=1").get();
+    if (row === undefined) return undefined;
+    requireThat(typeof row.seq === "bigint" && typeof row.spacing === "bigint" && (row.opening === null || typeof row.opening === "bigint"),
+      "STORAGE", "invalid restoration row");
+    return { at: decimal(row.idx), seq: row.seq, spacing: row.spacing, ...(row.opening === null ? {} : { opening: row.opening as bigint }) };
+  }
+  /** A restored journal signs nothing but its one opening and that opening's adopted block (deny by default). */
+  private unrestored(): void {
+    requireThat(this.restoration() === undefined, "RESTORED", "this journal was restored from a copy: it signs nothing but a return past " +
+      "any sequence its lost instance can have signed, once silence is witnessed (moe operator restore), then adopts it");
+  }
+  /** The restored journal's return sequence at `at`: past its own last signed sequence and the record's latest held
+   * one for this key by RESTORED_SKIP times one more than its spacing (M13d, Construction C2.4.1). */
+  private restoredSequence(engine: Engine, at: bigint, spacing: bigint): bigint {
+    const own = engine.last?.commitment.sequence ?? 0n, held = this.heldBelow(at)?.commitment.sequence ?? 0n;
+    const sequence = (own > held ? own : held) + RESTORED_SKIP * (1n + spacing);
+    requireThat(sequence < SQLITE_LIMIT && sequence < U64, "STORAGE", "signed sequence counter exhausted");
+    return sequence;
+  }
+  /** Inside the return's transaction: the restoration's opening is `sequence`, and serving passes the gap below it. */
+  private restoredOpening(engine: Engine, sequence: bigint): void {
+    this.db.prepare("UPDATE journal_restored SET opening=? WHERE id=1 AND opening IS NULL").run(sequence);
+    this.db.prepare("INSERT INTO journal_skipped VALUES(?,?)").run(sequence, engine.last?.commitment.sequence ?? 0n);
+  }
   /** The journal is this configuration's, key's and venue's, and its log ends at the recorded tip. Opening also
    * counts the log, once: a count at every transaction would cost each command the whole history. */
   private identity(meta: ReturnType<V3OperatorJournal["metadata"]>, opening = false): void {
@@ -447,9 +518,9 @@ export class V3OperatorJournal {
     const opened = this.openedFrom(segment), state = new StateHandle(this.replays, ns, undefined, this.construction);
     requireThat(same(last.segment, segment) && same(last.commitment.operator, this.operator) && verifyCommitment(last.commitment) &&
       last.length <= state.position && last.at <= this.observedIndex, "STORAGE", "the last signed commitment is not this journal's");
-    // Every signed sequence has its row, and the log's latest signing reply is the latest row: a lost row
-    // would let the next commitment reuse its sequence.
-    const count = this.db.prepare("SELECT COUNT(*) AS n FROM journal_signed").get()!.n;
+    // Every signed sequence has its row, but for those a restored journal's return skipped (M13d), and the log's
+    // latest signing reply is the latest row: a lost row would let the next commitment reuse its sequence.
+    const count = this.db.prepare("SELECT COUNT(*) + (SELECT COALESCE(SUM(sequence - below - 1), 0) FROM journal_skipped) AS n FROM journal_signed").get()!.n;
     const reply = this.db.prepare("SELECT response FROM events WHERE id LIKE 'command:%' ORDER BY seq DESC LIMIT 1").get()?.response;
     requireThat(count === last.commitment.sequence && reply === hexOf(last.commitment), "STORAGE", "the signed commitments disagree with the command log");
     // The roots and chains recomputed from the stored state, against the last signed snapshot of every scoped backing.
@@ -878,6 +949,7 @@ export class V3OperatorJournal {
   /** Service needs the current signed state, the scope's schedule open, and for issuance an unrevoked backer. */
   private async ready(engine: Engine, view: View, action: "admit" | "commit"): Promise<void> {
     this.exclusive(view);
+    this.unrestored();
     const opened = engine.opened, state = engine.state, last = engine.last;
     requireThat(opened !== undefined && state !== undefined && last !== undefined, "STALE", "open the segment first");
     requireThat(!engine.pendingReturn, "STALE", "the return opening must be witnessed and its block adopted before service");
@@ -964,11 +1036,11 @@ export class V3OperatorJournal {
 
   /** The empty successor of the active segment at a witnessed silence boundary (C2b.4.1): the whole scope
    * returns from its one canonical checkpoint (C2.10.3). Old bytes stay as evidence, not live accepted state. */
-  private returnOpening(engine: Engine, source: StateRead, at: bigint): Opened {
+  private returnOpening(engine: Engine, source: StateRead, at: bigint, restored?: bigint): Opened {
     const old = engine.opened!;
     requireThat(!engine.pendingReturn && source.clock?.boundary !== null && source.clock?.boundary !== undefined &&
       BigInt(source.clock.boundary) <= at && same(source.canonical.segment, old.segment), "STALE", "return needs the active segment's witnessed silence boundary");
-    const sequence = this.nextSequence(engine), predecessor = source.canonical.commitment;
+    const sequence = restored ?? this.nextSequence(engine), predecessor = source.canonical.commitment;
     const header: SegmentHeader = { ...old.header, sequence, entries: old.header.entries.map(({ backing, link }) => ({ backing, link,
       opening: { operator: copyBytes(predecessor.operator), sequence: predecessor.sequence, root: copyBytes(predecessor.root) } })) };
     return openedOf(this.frames, header, old.entries);
@@ -984,13 +1056,17 @@ export class V3OperatorJournal {
       const view = this.view(engine);
       this.exclusive(view);
       requireThat(engine.opened !== undefined && !engine.pendingReturn, "STALE", "a return is already pending or no segment exists");
+      const fence = this.restoration();
+      requireThat(fence?.opening === undefined, "RESTORED", "the restoration's opening is signed: adopt it");
       const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
         ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
       requireThat(!schedule.lapsed && schedule.commitNow, "SCHEDULE", "return signing is outside the operator's term");
       const source = await this.currentRead(engine, view.now);
-      const opened = this.returnOpening(engine, source, view.now), observed = hexOf(view.latest?.commitment);
+      const restored = fence === undefined ? undefined : this.restoredSequence(engine, view.now, fence.spacing);
+      const opened = this.returnOpening(engine, source, view.now, restored), observed = hexOf(view.latest?.commitment);
       const { state, signed } = this.transaction(() => {
         this.stable(view);
+        if (restored !== undefined) this.restoredOpening(engine, restored);
         const next = this.openSegment(engine, opened, source.state, view.now, observed);
         this.append(engine, commandId, "return", { kind: "return", at: view.now.toString(), observed }, bytesToHex(encodeCommitment(next.signed.commitment)));
         return next;
@@ -1034,6 +1110,11 @@ export class V3OperatorJournal {
           throw error;
         }
         this.append(engine, id, "adopt", { kind: "adopt", at: held.index.toString(), opening: opened.header.sequence.toString() }, JSON.stringify(signed.map(bytesToHex)));
+        // Adopting the restoration's own return lifts its fence: the new segment's receipts start at its own
+        // positions, and what was co-signed after the last witnessed commitment was never final (C2b.4). An opening
+        // pending when the copy was made is adopted exactly as the lost instance would (the same record gives the same
+        // receipts) and leaves the fence standing.
+        if (this.restoration()?.opening === opened.header.sequence) this.db.prepare("DELETE FROM journal_restored WHERE id=1").run();
         return signed;
       });
       engine.pendingReturn = false; engine.revision++;
@@ -1065,6 +1146,7 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
+      this.unrestored();
       requireThat(engine.opened === undefined, "UNSUPPORTED", "the journal holds one genesis segment");
       const opened = this.opening(own), view = this.view(engine);
       this.exclusive(view);
@@ -1115,6 +1197,9 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const prior = this.prior(commandId, request);
       if (prior !== undefined) return decodeCommitment(hexToBytes(prior));
+      // A scope change, a repair among them, would excuse a tail its lost instance co-signed (C2.10.9): a restored
+      // journal only returns (M13d).
+      this.unrestored();
       const { at, target, view } = this.keeping(() => {
         // This key's held commitments are kept through the clock first: the target's checks read them.
         const at = this.viewed(undefined).now, target = this.rescopeTarget(engine, own, at), view = this.viewed(target.opened);
@@ -1214,7 +1299,12 @@ export class V3OperatorJournal {
     return this.run(async engine => {
       const last = engine.last;
       requireThat(last !== undefined, "STALE", "no signed commitment to publish");
-      const held = this.isHeld(this.view(engine).now, last);
+      // An obsolete instance publishes nothing under a record holding a later commitment of this key, which it did not
+      // sign: a restored copy's opening, say (M13d). Its own bytes at a sequence the record holds are only republished.
+      const view = this.view(engine);
+      requireThat(view.latest === undefined || view.latest.commitment.sequence <= last.commitment.sequence, "CONFLICT",
+        "the venue holds a later commitment of this key that this journal did not sign");
+      const held = this.isHeld(view.now, last);
       this.transaction(() => {}); // Fence again before the venue call.
       if (!held) {
         try { await this.venue.publishRecord(1, this.operator, encodeCommitment(last.commitment)); } catch (error) {
@@ -1242,7 +1332,9 @@ export class V3OperatorJournal {
   async status(): Promise<JournalStatus> {
     return this.run(async engine => {
       const view = this.view(engine), last = engine.last;
+      const restoration = this.restoration();
       return { now: view.now, pendingReturn: engine.pendingReturn,
+        ...(restoration === undefined ? {} : { restoredAt: restoration.at, ...(restoration.opening === undefined ? {} : { restoredOpening: restoration.opening }) }),
         ...(last === undefined ? {} : { signed: { sequence: last.commitment.sequence, at: last.at, published: last.published,
           held: this.isHeld(view.now, last), admitted: (engine.state?.position ?? last.length) - last.length } }),
         ...(view.latest === undefined ? {} : { heldIndex: view.latest.index }) };
@@ -1299,8 +1391,10 @@ export class V3OperatorJournal {
         const rows = this.db.prepare("SELECT sequence,commitment FROM journal_signed WHERE sequence>? AND sequence<=? ORDER BY sequence LIMIT ?").all(cursor, through, SERVE_PAGE);
         if (rows.length === 0) break;
         for (const row of rows) {
-          // Every signed sequence keeps its row: a gap is damage, never a checkpoint left out.
-          requireThat(row.sequence === cursor + 1n, "STORAGE", "a signed row is missing");
+          // Every signed sequence keeps its row: a gap is damage, never a checkpoint left out, except below a restored
+          // journal's opening, which skipped it (M13d).
+          requireThat(row.sequence === cursor + 1n || this.db.prepare("SELECT below FROM journal_skipped WHERE sequence=?").get(row.sequence as bigint)?.below === cursor,
+            "STORAGE", "a signed row is missing");
           const directory = this.retained.object(3, decodeCommitment(bytes(row.commitment)).root);
           requireThat(directory !== undefined, "STORAGE", "a signed directory is missing");
           add(3, directory);
