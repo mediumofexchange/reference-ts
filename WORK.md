@@ -96,5 +96,5 @@ then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2
 - Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Deletion list (2026-10-07): none open; the merged spec and code branches of M14g5a are gone from both remotes (a stale local tracking ref only).
 
-Roughly **66% done / 34% remaining** (range 56–75%), reassessed 2026-10-07 (M14g4): lit runs through the commands, gap route included; C3.8's lit
-reading and adoption, an evidence replica, holder transport, release assurance, qualified storage and mainnet remain.
+Roughly **67% done / 33% remaining** (range 57–76%), reassessed 2026-10-07 (M14g5b): lit runs through the commands with C3.8's reading, by force
+included; lit's adoption, an evidence replica, holder transport, release assurance, qualified storage and mainnet remain.
