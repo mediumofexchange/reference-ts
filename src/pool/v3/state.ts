@@ -20,13 +20,13 @@
 // A record is read through its construction's view (construction.ts, slice 14 M14c): pool-v3's records here,
 // lit-v1's beside them, judged by these same rules. A namespace replays one construction, which its handle carries.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { compareBytes } from "../../bytes.js";
+import { compareBytes, EncodingError } from "../../bytes.js";
 import { isField, VALUE_BOUND } from "../field.js";
 import { EMPTY_NOTE_ROOT, type NotePath } from "../note-tree.js";
 import { POOL_V3, type Construction, type StatementView } from "./construction.js";
 import type { EvidenceDigests, Record } from "./records.js";
 import { checkRecovery, type Demand, type RecoveryView } from "./recovery.js";
-import { EvidenceRefusal, requireReplay } from "./refusals.js";
+import { EvidenceRefusal, ReplayRefusal, requireReplay } from "./refusals.js";
 import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals, WitnessMark } from "./replay-store.js";
 import type { VerifierIdentities } from "./configuration.js";
 import type { RootTerms } from "./terms.js";
@@ -396,7 +396,15 @@ export function judgeAdopted<R = Record>(state: SegmentState, bytes: Uint8Array,
 function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): { readonly check: boolean; readonly view: StatementView; finish(): Judged<unknown> } {
   const construction = state.construction;
   const position = state.position, mode = modeAt(replay, position), adopted = replay.block[Number(position)];
-  const record = construction.decode(bytes), kind = construction.kind(record);
+  // An authenticated record that does not decode fails replay at its position (lit-v1 §6: its evidence pair needs only
+  // the split). A pool record never reaches here undecoded: its evidence triple needs the decode (§10.1), and admission
+  // decodes before judging.
+  let record: unknown;
+  try { record = construction.decode(bytes); } catch (error) {
+    if (error instanceof EncodingError) throw new ReplayRefusal("MALFORMED");
+    throw error;
+  }
+  const kind = construction.kind(record);
   // A request (kind 7) decodes but is never a history event (§7): a trail carrying one fails replay (§10.1).
   requireReplay([1, 2, 3, 4, 5, 6].includes(kind), "KIND");
   // §7: advancing past 2^64 − 1 refuses before any state is read or the u64 position framed.

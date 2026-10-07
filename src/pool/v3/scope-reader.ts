@@ -596,7 +596,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const s = row.state;
     if (row.class === "valid") {
       const trail = scope.fullTrail();
-      if (s === undefined || !keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction, trail)) throw new KeptStateMismatch("a kept walk's state");
+      if (s === undefined || !keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction, trail, trails)) throw new KeptStateMismatch("a kept walk's state");
       // Every scoped sibling's snapshot is the same state's, with that backing's totals at its position.
       for (const sibling of directory) {
         const bytes = evidence.snapshot(sibling.digest);
@@ -890,7 +890,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       if (kept !== undefined) {
         let verdict: ScopeVerdict;
         if (kept.class === "excluded" && kept.detail !== undefined) verdict = { ...base, class: "excluded", check: kept.detail };
-        else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction, classification.trail) &&
+        else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction, classification.trail, trails) &&
             scopedSnapshots.every(sibling => { const t = store.total(s.ns, s.position, hex(sibling.backing)); return t.issued === sibling.issued && t.burned === sibling.burned; })) {
           const { issued, burned } = store.total(s.ns, s.position, hex(backing));
           verdict = { ...base, class: "valid", scopedTerms, openingIndex,

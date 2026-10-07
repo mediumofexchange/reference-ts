@@ -1,7 +1,8 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -26,7 +27,7 @@ import type { SegmentHeader } from "../src/pool/v3/headers.js";
 import { encodeEvidenceDirectory, type EvidenceItem } from "../src/pool/v3/package.js";
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { keptStateHolds } from "../src/pool/v3/reader.js";
-import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { keptFileDigest, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
 
@@ -46,6 +47,10 @@ const stateOf = <T extends { readonly receipt?: unknown }>(result: T): Exclude<T
   return result as Exclude<T, { readonly receipt: object }>;
 };
 const key = (bytes: Uint8Array): bigint => BigInt(`0x${hex(bytes)}`);
+/** §5's pair over a committed record's split fields; one that does not split commits some value no prefix reproduces. */
+const pairOf = (bytes: Uint8Array) => {
+  try { return LIT.reader.digests(bytes); } catch { return { statementHash: sha256(bytes), proofHash: new Uint8Array(0), signatureHash: sha256(bytes) }; }
+};
 
 /** One operator's lit scope of one backing on a reference venue at index 200, with the records each checkpoint carries. */
 function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
@@ -68,7 +73,7 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
   };
   /** The evidence chain over the current trail as committed, valid or not (§5). */
   const evidenceOf = (records: readonly Uint8Array[]): Uint8Array =>
-    records.reduce((chain, bytes, i) => LIT.nextEvidence(chain, LIT.reader.digests(bytes), BigInt(i + 1)), LIT.genesisEvidence(current.id));
+    records.reduce((chain, bytes, i) => LIT.nextEvidence(chain, pairOf(bytes), BigInt(i + 1)), LIT.genesisEvidence(current.id));
   const snapshotNow = (): Snapshot => ({ backing, segment: current.id, historyHash: current.state.history, evidenceHash: evidenceOf(current.records),
     ...current.state.total(hex(backing)) });
   /** Commit the current trail at `index`; `alter` may change the snapshot, and `withhold` keeps its trail out of the package. */
@@ -275,6 +280,21 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(frontier.force[0]!.record.statement.kind).toBe(4);
     expect(statementHash(frontier.force[0]!.record.statement)).toEqual(statementHash(LIT.decode(honest).statement));
     expect(frontier.canonical!.scope).toBeUndefined();
+    // A demand whose summed value passes a u64, or whose inputs name two backings, does not decode as a publication
+    // (§4's derived routing backing), so it has no force and is not judged by ARITHMETIC (pool-v3 §13.3).
+    const g = litScope({ silence: { noCommitmentDuration: 5n } });
+    g.checkpoint(1n, 1n);
+    const minted = g.issue(10n, ALICE); await g.admit(minted);
+    g.checkpoint(2n, 2n);
+    const [held] = g.outputsOf(minted), max = (1n << 64n) - 1n;
+    const raw = (bytes: Uint8Array): Uint8Array => Uint8Array.from([...new TextEncoder().encode("moe/lit/v1/publication"), ...DOMAIN, ...g.backing, 1,
+      ...[24, 16, 8, 0].map(shift => (bytes.length >>> shift) & 255), ...bytes]);
+    for (const inputs of [[{ ...held!, value: max }, held!], [held!, { ...held!, backing: b(55) }]]) {
+      g.venue.witness(4, g.backing, 20n, raw(g.demand(inputs, [ALICE, ALICE], 18n, 100n)));
+    }
+    const unread = await readFrontier<LitRecord>(g.pack(), g.signed, 200n, { construction: LIT, reference, venue: g.venue });
+    expect(unread.ranges.publications.map(p => [p.index, p.ordinal, p.force, "check" in p])).toEqual([["20", "0", false, false], ["20", "1", false, false]]);
+    expect(unread.force).toHaveLength(0);
     // A holder's answers read pool-v3's releases; a lit read lists none.
     await expect(readFrontier(f.pack(), f.signed, 200n, { construction: LIT, reference, venue: f.venue, answers: true })).rejects.toThrow(TypeError);
   });
@@ -291,6 +311,75 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(stateOf(await f.read(latest)).ranges.nonService).toMatchObject({ count: "0", fires: false });
     f.publish(196n, 5, f.request(note!, ALICE));
     expect(stateOf(await f.read(latest)).ranges.nonService).toMatchObject({ count: "1", fires: true, snapshotIndex: "2" });
+  });
+
+  it("excludes a checkpoint whose record splits but does not decode by MALFORMED, and leaves one that does not split unresolved (§6)", async () => {
+    // A valid spend's record, patched after its fields split: offsets past the 4-byte statement length.
+    const patched = (f: ReturnType<typeof litScope>, note: Opening, patch: (bytes: Uint8Array) => Uint8Array): Uint8Array =>
+      patch(Uint8Array.from(f.spend([note], [f.to(10n, BOB)], [ALICE])));
+    const field = (statement: Uint8Array, authorization: Uint8Array): Uint8Array => {
+      const out = new Uint8Array(8 + statement.length + authorization.length), view = new DataView(out.buffer);
+      view.setUint32(0, statement.length); out.set(statement, 4);
+      view.setUint32(4 + statement.length, authorization.length); out.set(authorization, 8 + statement.length);
+      return out;
+    };
+    const fields = (bytes: Uint8Array) => { const n = new DataView(bytes.buffer).getUint32(0); return { s: bytes.slice(4, 4 + n), a: bytes.slice(8 + n) }; };
+    const output = 4 + 53 + 32 + 1 + 104 + 1;
+    const cases: [string, (f: ReturnType<typeof litScope>, note: Opening) => Uint8Array][] = [
+      ["value 0", (f, note) => patched(f, note, r => { r.fill(0, output + 32, output + 40); return r; })],
+      ["small-order owner", (f, note) => patched(f, note, r => { r.fill(0, output + 40, output + 72); r[output + 40] = 1; return r; })],
+      ["kind 8", (f, note) => patched(f, note, r => { r[4 + 52] = 8; return r; })],
+      ["63-byte authorization", (f, note) => patched(f, note, r => { const { s, a } = fields(r); return field(s, a.subarray(0, 63)); })],
+      ["both lengths zero", () => new Uint8Array(8)],
+      ["5000-byte statement", (f, note) => patched(f, note, r => field(new Uint8Array(5000), fields(r).a))],
+    ];
+    for (const [name, build] of cases) {
+      const f = litScope();
+      f.checkpoint(1n, 1n);
+      const issued = f.issue(10n, ALICE); await f.admit(issued);
+      const valid = f.checkpoint(2n, 3n);
+      f.commitRaw(build(f, f.outputsOf(issued)[0]!));
+      const hostile = f.checkpoint(3n, 4n);
+      await expect(f.read(hostile), name).rejects.toMatchObject({ check: "MALFORMED" });
+      const read = stateOf(await f.read(valid));
+      expect(read.carrying.map(item => [item.sequence, item.class, item.check]), name).toEqual([["1", "valid", undefined], ["2", "valid", undefined],
+        ["3", "excluded", "MALFORMED"]]);
+    }
+    // A record that does not split authenticates nothing: the checkpoint stays unresolved (§10.1).
+    const g = litScope();
+    g.checkpoint(1n, 1n);
+    const minted = g.issue(10n, ALICE); await g.admit(minted);
+    g.checkpoint(2n, 3n);
+    g.commitRaw(Uint8Array.from([...g.spend([g.outputsOf(minted)[0]!], [g.to(10n, BOB)], [ALICE]), 0]));
+    await expect(g.read(g.checkpoint(3n, 4n))).rejects.toMatchObject({ status: "unresolved-evidence" });
+    // An opening whose trail holds one is excluded as no opening (an opening's trail is empty).
+    const h = litScope();
+    h.commitRaw(new Uint8Array(8));
+    await expect(h.read(h.checkpoint(1n, 1n))).rejects.toMatchObject({ check: "OPENING" });
+    // A later trail that replaces the last valid prefix's record with one does not extend it.
+    const k = litScope();
+    k.checkpoint(1n, 1n);
+    await k.admit(k.issue(10n, ALICE));
+    k.checkpoint(2n, 3n);
+    k.current().records.length = 0; k.commitRaw(new Uint8Array(8));
+    await expect(k.read(k.checkpoint(3n, 4n))).rejects.toMatchObject({ check: "CONTINUITY" });
+  });
+
+  it("passes another construction's checkpoint of the same operator key as non-carrying by its directory alone (§6)", async () => {
+    const f = litScope();
+    f.checkpoint(1n, 1n); await f.admit(f.issue(10n, ALICE));
+    // The key commits a pool-v3 checkpoint between the lit ones: its directory names a backing no lit scope holds,
+    // and the package carries nothing else of it.
+    const directory = [{ name: b(77), digest: b(78) }], foreign = signCommitment(OPERATOR, 2n, directoryRoot(directory));
+    f.venue.witness(1, operator, 2n, encodeCommitment(foreign));
+    f.items.push({ kind: 3, payload: encodeEvidenceDirectory(directory) });
+    const latest = f.checkpoint(3n, 3n);
+    const read = stateOf(await f.read(latest));
+    expect(read.carrying.map(item => [item.sequence, item.class])).toEqual([["1", "valid"], ["3", "valid"]]);
+    expect(read.state.issued).toBe(10n);
+    // A receipt whose `after` names the pool's checkpoint is not of the receipt's segment (pool-v3 §7.1).
+    expect((await f.read(latest, [{ kind: 10, payload: f.receipt(1n) }])).receipt).toMatchObject({ status: "final", includedAt: [{ sequence: "3" }] });
+    await expect(f.read(latest, [{ kind: 10, payload: f.receipt(2n) }])).rejects.toMatchObject({ status: "invalid-receipt" });
   });
 
   it("rebuilds a kept lit namespace's outputs from its trail before reusing it (§10), and resumes a kept file without discarding it", async () => {
@@ -333,6 +422,43 @@ describe("lit packages through the one reader (M14d)", () => {
       const resumed = stateOf(await g.read(second, [], { store, evidence })), fresh = stateOf(await g.read(second));
       expect(discard).not.toHaveBeenCalled();
       expect([resumed.carrying, resumed.state.history, resumed.state.position]).toEqual([fresh.carrying, fresh.state.history, 2n]);
+      store.close(); evidence.close();
+    } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
+  });
+
+  it("rebuilds an imported namespace's outputs before a kept successor resumes on them (§10)", async () => {
+    const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-imported-"));
+    const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };
+    try {
+      g.checkpoint(1n, 1n);
+      const minted = g.issue(10n, ALICE); await g.admit(minted);
+      const predecessor = g.checkpoint(2n, 3n);
+      g.successor(3n, predecessor);
+      const opened = g.checkpoint(3n, 4n);
+      let store = new ReplayStore(files.path, { digest: files.digest }), evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      expect(stateOf(await g.read(opened, [], { store, evidence })).state.importedEventCount()).toBe(1n);
+      store.close(); evidence.close();
+      // Reopened, the honest kept rows rebuild from the predecessor's trail and the kept walk stands.
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const honest = vi.spyOn(store, "discardKept");
+      expect(stateOf(await g.read(opened, [], { store, evidence })).state.importedEventCount()).toBe(1n);
+      expect(honest).not.toHaveBeenCalled();
+      store.close(); evidence.close();
+      // The imported note's row now names a note of Mallory's worth 1000, under a digest re-recorded for it: §14's
+      // digest check cannot see it, and only the rebuild from the predecessor's trail can.
+      const [note] = g.outputsOf(minted), forged: Opening = { ...note!, value: 1000n, owner: pub(MALLORY) };
+      const db = new DatabaseSync(files.path);
+      expect(db.prepare("UPDATE output SET cm = ? WHERE cm = ?").run(noteCommitment(DOMAIN, forged), noteCommitment(DOMAIN, note!)).changes).toBe(1);
+      db.close();
+      writeFileSync(files.digest, keptFileDigest(files.path)!);
+      g.commitRaw(g.spend([forged], [g.to(1000n, MALLORY)], [MALLORY]));
+      g.venue.advance(210n);
+      const hostile = g.checkpoint(4n, 205n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const discard = vi.spyOn(store, "discardKept");
+      await expect(g.read(hostile, [], { store, evidence })).rejects.toMatchObject({ check: "INPUT" });
+      expect(discard).toHaveBeenCalled();
+      await expect(g.read(hostile)).rejects.toMatchObject({ check: "INPUT" });
       store.close(); evidence.close();
     } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
   });
