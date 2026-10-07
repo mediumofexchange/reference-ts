@@ -236,6 +236,23 @@ describe("relay HTTP trust boundary (slice 12 M12c)", () => {
     expect(r.take.mock.calls[0]![1]()).toBe(true);
   });
 
+  it("refuses a duplicate or lower-case credential before reading the body", async () => {
+    const r = await relay(), body = JSON.stringify(FILE);
+    const raw = (headers: string[]) => new Promise<{ status: number | undefined; body: unknown }>((resolve, reject) => {
+      const request = httpRequest(new URL("/publications", r.url), { method: "POST", headers: ["Host", new URL(r.url).host, "Connection", "close",
+        ...headers, "Content-Type", "application/json", "Content-Length", String(Buffer.byteLength(body))] }, response => {
+        const chunks: Buffer[] = [];
+        response.on("data", chunk => chunks.push(Buffer.from(chunk)));
+        response.on("end", () => { try { resolve({ status: response.statusCode, body: JSON.parse(Buffer.concat(chunks).toString("utf8")) }); } catch (error) { reject(error); } });
+        response.on("error", reject);
+      });
+      request.on("error", reject); request.setTimeout(5000, () => request.destroy(new Error("stalled"))); request.end(body);
+    });
+    expect(await raw(["Authorization", `Bearer ${TOKEN}`, "Authorization", `Bearer ${TOKEN}`])).toEqual({ status: 401, body: { code: "UNAUTHORIZED" } });
+    expect(await raw(["Authorization", `bearer ${TOKEN}`])).toEqual({ status: 401, body: { code: "UNAUTHORIZED" } });
+    expect(r.take).not.toHaveBeenCalled();
+  });
+
   it("answers a named refusal by its code and anything else as UNAVAILABLE, told to the owner", async () => {
     const r = await relay();
     r.take.mockRejectedValueOnce(new Refusal("EARLY"));

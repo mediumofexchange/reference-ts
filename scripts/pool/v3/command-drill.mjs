@@ -449,7 +449,8 @@ try {
     await serving.listening;
     for (const directory of [BK, HD, SH]) await ok(wallet("service add", directory, backing2, join(OW, "service.json")));
     const fund = await request(HD, "fund", 10);
-    assert.equal(fund.made.notes.length, 3, "the first request explains");
+    assert.equal(fund.made.notes.length, 4, "the first request explains");
+    assert.match(fund.made.notes[3], /a third party's relay reached as an onion service \(moe relay send\) ties them to its other users' acts, not to your coins/);
     const issued = await ok(wallet("issue", BK, "issue-1", backing2, ...fund.args, "--value", "10"));
     assert.deepEqual([issued.status, issued.kind], ["pending", "issue"]);
     const submitted = await submit(BK, "issue-1");

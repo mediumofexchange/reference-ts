@@ -594,14 +594,17 @@ with a fresh funding key (fund it to the budget, no more: `serve` keeps it onlin
 publishes a file from it. A relay of the holder's own links all the acts it funds to each other and to its coins;
 one relay directory per demand links only that demand's acts, each still tied to whatever funded its key.
 
-A third party's relay funds the act instead: `moe relay serve --dir <r> [--port <p>] [--onion <host>] [--poll-ms <ms>]`
-serves the relay on a loopback listener for Tor's `HiddenServicePort` and writes `relay.json` (its URL and the relay's
+A third party's relay funds the act instead: `moe relay serve --dir <r> --port <p> [--onion <host>] [--poll-ms <ms>]`
+serves the relay on a loopback listener for Tor's `HiddenServicePort 80 127.0.0.1:<p>` (without `--port` each run takes a
+new port) and writes `relay.json` (its URL and the relay's
 one credential, `relay.token`, the same for every holder), and a holder hands it a file with
 `moe relay send <file> --to <relay.json>` through its own proxy (as [transport](#transport)). The relay judges the file as
 `publish` does (`VENUE`, `INVALID`, `CONFIGURATION`, `SUBJECT`, `EARLY` for a demand whose instant its view has not
 reached, `BUDGET`), answers `pending` with the transaction or, once witnessed, `final` with the index, and a resend
-answers the same: an agent sends until `final`, or reads the act by its own `sync`. `EARLY` passes at the relay's next
-poll; `BUSY` (one request runs and one waits) and `UNAVAILABLE` (it did not answer) are sent again. `serve` listens
+answers the same (a new transaction where the publisher rebuilt it): an agent sends until `final`, or reads the act by
+its own `sync`. `EARLY` passes once the relay's nodes reach the instant; `BUSY` (two requests wait at most beside the
+work running) and `UNAVAILABLE` (it did not answer, or its chain is not yet deep enough) are sent again; `TOO_LARGE` and
+`FULL` (its outbox holds too many unsettled publications) are not, so try another relay. `serve` listens
 only once its view has synced, holds the directory's lock (a `relay publish` there is `BUSY`), and ends with `STORAGE`
 where its publisher's state fails to persist.
 

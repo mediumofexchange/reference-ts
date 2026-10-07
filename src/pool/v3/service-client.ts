@@ -116,7 +116,8 @@ async function exchangeWith<T>(baseUrl: string, onion: boolean, path: string, to
  * Hand a publication file to a relay (slice 12 M12c): `POST /publications` at a loopback or v3 onion URL under the
  * relay's one credential, answering its bounded JSON reply. An onion URL is reached only through the holder's loopback
  * proxy, refused `PROXY` before any connection otherwise (M12a). The bound passes the relay listener's own fifteen
- * seconds, so a publication still in flight there ends as a reply that did not come, and the file is sent again. The
+ * seconds, so a publication still in flight there usually ends as a reply that did not come (an onion circuit's setup
+ * counts against this bound alone); either way the file is sent again, and the relay answers a resend as the same. The
  * reply is the relay's word: the holder reads its act at the venue by its own read.
  */
 export async function sendToRelay(baseUrl: string, token: string, file: unknown): Promise<unknown> {

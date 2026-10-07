@@ -87,7 +87,7 @@ function judged(value: unknown, venue: Uint8Array): { readonly file: Publication
 
 /** What a relay answers for a file: final where its view witnesses the record, else pending on the transaction its
  * publisher built last for the record. */
-type Relayed = { readonly status: "final"; readonly record: string; readonly index: string } |
+export type Relayed = { readonly status: "final"; readonly record: string; readonly index: string } |
   { readonly status: "pending"; readonly record: string; readonly transaction: string | null; readonly witnessedIndex: string };
 
 /** Publish a judged file over a synced view: final where the view witnesses it, refused `EARLY` for a demand whose
@@ -146,15 +146,42 @@ async function publish(argv: readonly string[]): Promise<void> {
 }
 
 /** A refusal's status and code on the relay's listener: the file's own (400), one a later send may pass (409), and the
- * relay's view or nodes not ready (503). */
-function relayRefusal(error: unknown): RelayRefusal | undefined {
+ * relay's view or nodes not ready (503). The publisher's two refusals no resend passes have codes of their own; its
+ * other venue refusal is the best chain shorter than the clock's depth, which passes as the chain grows. */
+export function relayRefusal(error: unknown): RelayRefusal | undefined {
   if (error instanceof CommandError) {
-    return { status: ["INVALID", "VENUE", "SUBJECT", "CONFIGURATION"].includes(error.code) ? 400 : ["EARLY", "BUDGET", "UNREPLAYED", "BUSY"].includes(error.code) ? 409 : 503,
-      code: error.code };
+    return { status: ["INVALID", "VENUE", "SUBJECT", "CONFIGURATION"].includes(error.code) ? 400 :
+      ["EARLY", "BUDGET", "UNREPLAYED", "BUSY", "FULL"].includes(error.code) ? 409 : 503, code: error.code };
   }
-  // The best chain shorter than the clock's depth: the publisher builds nothing yet.
-  if (error instanceof VenueError) return { status: 503, code: "UNAVAILABLE" };
+  if (error instanceof VenueError) {
+    // ErgoPublisher's messages: a record its funding cannot carry in one transaction, and a full outbox.
+    if (/does not fit one transaction/.test(error.message)) return { status: 400, code: "TOO_LARGE" };
+    if (/too many unsettled publications/.test(error.message)) return { status: 409, code: "FULL" };
+    return { status: 503, code: "UNAVAILABLE" };
+  }
   return undefined;
+}
+
+/**
+ * The relay's turns (slice 12 M12c): `turn` runs work one at a time, the loop's syncs and requests alike, and `take`
+ * runs a request's `judge` in its turn. Two requests wait at most beside the work running; a third is refused `BUSY`,
+ * and a request whose connection is gone by its turn is dropped unjudged (`GONE`), so a long sync holds no queue of
+ * files spent for nobody. `after` runs once each request ends.
+ */
+export function relayTurns<R>(judge: (value: unknown) => Promise<R>, after: () => void = () => {}) {
+  let tail: Promise<unknown> = Promise.resolve(), waiting = 0;
+  const turn = <T>(work: () => Promise<T>): Promise<T> => { const run = tail.then(work, work); tail = run.catch(() => {}); return run; };
+  const take = async (value: unknown, gone: () => boolean): Promise<R> => {
+    if (waiting >= 2) throw new CommandError("BUSY", "the relay is busy; send the file again");
+    waiting++;
+    try {
+      return await turn(async () => {
+        if (gone()) throw new CommandError("GONE", "the request's connection closed before its turn");
+        return judge(value);
+      });
+    } finally { waiting--; after(); }
+  };
+  return { turn, take, idle: () => tail };
 }
 
 /** The relay's one credential, made at its first `serve` and kept across runs. */
@@ -170,9 +197,9 @@ function relayToken(directory: Directory): string {
  * `serve [--port <p>] [--onion <host>] [--poll-ms <ms>]` (slice 12 M12c): serve this relay to holders. A loop syncs the
  * view each poll, settling what the publisher kept pending; it listens once a first sync has passed. `POST /publications`
  * takes a publication file and answers as `publish` prints, judged over the view as last synced (a demand whose instant
- * that view has not reached is `EARLY` until a later poll). The loop and the requests take one turn at a time; one
- * request waits at most, others are refused `BUSY`, and a request whose connection is gone by its turn is dropped
- * unjudged. A resend of a file answers the same transaction until its record is witnessed, then `final`. A publisher
+ * that view has not reached is `EARLY` until a poll whose nodes reach it). The loop and the requests take turns as
+ * `relayTurns` says. A resend of a file answers the same transaction (a new one where the publisher rebuilt it) until its
+ * record is witnessed, then `final`. A publisher
  * whose persistence failed ends `serve` with `STORAGE`. Writes `relay.json` (the URL, the
  * v3 onion name Tor serves for this port with `--onion`, and the relay's one credential, to hand to holders) and prints
  * one line once listening and one once stopped; a sync's or a request's unexpected failure is an event on stderr.
@@ -189,11 +216,11 @@ async function serve(argv: readonly string[]): Promise<void> {
   process.once("SIGTERM", stop); process.once("SIGINT", stop);
   const pause = () => stopping ? Promise.resolve() : new Promise<void>(done => { wake = done; setTimeout(done, ms); });
   await withPublisher(directory, async (view, budget, publisher) => {
-    let tail: Promise<unknown> = Promise.resolve(), waiting = 0;
-    const turn = <T>(work: () => Promise<T>): Promise<T> => { const run = tail.then(work, work); tail = run.catch(() => {}); return run; };
+    const { turn, take, idle } = relayTurns(value => relayed(judged(value, venue.id), view, budget), () => { if (publisher.failed) stop(); });
     const synced = async (): Promise<boolean> => {
       try { await turn(() => view.syncWitnessed()); return true; } catch (error) {
-        if (!(error instanceof VenueError) && !unanswered(error)) throw error;
+        // A venue that has witnessed nothing yet, a chain short of its depth, nodes that do not answer: a later poll passes.
+        if (!(error instanceof VenueError) && !unanswered(error) && !(error instanceof CommandError && error.code === "UNAVAILABLE")) throw error;
         event({ event: "sync", code: "UNAVAILABLE", message: (error as Error).message });
         return false;
       }
@@ -201,20 +228,6 @@ async function serve(argv: readonly string[]): Promise<void> {
     // Requests are judged over a synced view only.
     while (!stopping && !await synced()) await pause();
     if (stopping) return;
-    const take = async (value: unknown, gone: () => boolean): Promise<Relayed> => {
-      // One request runs and one waits: a sync that takes minutes holds no queue of files to spend on later.
-      if (waiting >= 2) throw new CommandError("BUSY", "the relay is busy; send the file again");
-      waiting++;
-      try {
-        return await turn(async () => {
-          if (gone()) throw new CommandError("GONE", "the request's connection closed before its turn");
-          return relayed(judged(value, venue.id), view, budget);
-        });
-      } finally {
-        waiting--;
-        if (publisher.failed) stop();
-      }
-    };
     const server = createRelayService(token, take, relayRefusal);
     server.on("relayError", (error: unknown) => { event({ event: "relay", code: "UNAVAILABLE", message: (error as Error).message }); });
     try {
@@ -234,7 +247,7 @@ async function serve(argv: readonly string[]): Promise<void> {
       }
     } finally {
       await new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); });
-      await tail;
+      await idle();
     }
     if (publisher.failed) throw new CommandError("STORAGE", "the relay's publisher state failed to persist; restart serve from its durable state");
   });
@@ -242,7 +255,7 @@ async function serve(argv: readonly string[]): Promise<void> {
 }
 
 /** A relay file: the relay's URL (loopback, or its v3 onion name) and its one credential. */
-function parseRelayFile(value: unknown): { readonly url: string; readonly token: string } {
+export function parseRelayFile(value: unknown): { readonly url: string; readonly token: string } {
   const v = value as { url?: unknown; token?: unknown };
   if (value === null || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join() !== "token,url" || typeof v.url !== "string" ||
       !/^http:\/\/(127\.0\.0\.1:[0-9]{1,5}|[a-z2-7]{55}d\.onion(:[0-9]{1,5})?)\/$/.test(v.url) || typeof v.token !== "string" || !/^[0-9a-f]{64}$/.test(v.token)) {
@@ -252,7 +265,7 @@ function parseRelayFile(value: unknown): { readonly url: string; readonly token:
 }
 
 /** The relay's answer, checked to name the file's record. */
-function relayAnswer(value: unknown, record: string): Relayed {
+export function relayAnswer(value: unknown, record: string): Relayed {
   const v = value as Record<string, unknown>, decimal = (x: unknown) => typeof x === "string" && /^(0|[1-9][0-9]{0,19})$/.test(x);
   const keys = value !== null && typeof value === "object" && !Array.isArray(value) ? Object.keys(value).sort().join() : "";
   if (v?.record === record && ((keys === "index,record,status" && v.status === "final" && decimal(v.index)) ||
