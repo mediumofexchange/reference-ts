@@ -89,7 +89,7 @@ function installPacked() {
   const { record, bin } = packRelease(consumer);
   assert(statSync(bin).isFile(), "the packed install carries the moe bin");
   // The install lock names what the commands ran on.
-  return { bin, tarballBytes: record.tarball.bytes, files: record.tarball.entries, consumerLock: record.installLock.sha256 };
+  return { bin, tarballBytes: record.tarball.bytes, files: record.tarball.entries, installLock: record.installLock.sha256 };
 }
 const packed = installPacked(), MOE = packed.bin;
 const check = async (label, fn) => { await fn(); checks.push(label); process.stderr.write(`passed: ${label}\n`); };
@@ -741,7 +741,7 @@ console.log(JSON.stringify(open.filter(path => path.includes("etilqs_"))));`);
     }
   });
 
-  const result = { status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files, consumerLockSha256: packed.consumerLock }, checks, readerReplay, processes };
+  const result = { status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files, installLockSha256: packed.installLock }, checks, readerReplay, processes };
   if (LIVE) {
     const directories = await sweep(), file = JSON.parse(readFileSync(join(OP, "venue.json"), "utf8"));
     assert.deepEqual(sourceHashes(SOURCES), HASHES, "sources changed during the live drill");

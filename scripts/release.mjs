@@ -1,13 +1,15 @@
 // The release record (slice 13 M13a): the package's tarball and the install that pins every dependency to the tree this
 // checkout tested. `packRelease` packs the built package into a directory and writes beside it a package.json and a
 // package-lock.json naming the tarball and, by integrity, each runtime entry of this checkout's lockfile at the place
-// it holds there; `npm ci` in that directory installs exactly that tree or refuses. A consumer resolving the package's
+// it holds there; `npm ci` in that directory installs that tree or refuses, and `verifyInstall` refuses the optional
+// entry npm ci drops silently when its bytes fail. A consumer resolving the package's
 // ranges itself installs whatever the registry holds that day (2026-10-07: `pako` 3.0.2 under noir_js, tested 3.0.1),
 // and a shipped shrinkwrap did not pin a tarball install (npm 11.19), so the pin travels as this install lock instead.
 // The record names the tarball's bytes, the lock, the toolchain and the specification pins the shipped build carries;
 // two systems building one commit must record the same tarball and lock (`--compare`).
 //
 // Usage: node scripts/release.mjs --compare <release-record.json> <release-record.json>
+//        node scripts/release.mjs --verify <directory>   (an install made there with npm ci from the install lock)
 //        (packRelease is called by check-package.mjs and the pool-v3 command drill)
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -34,6 +36,10 @@ export function installLock(lock, manifest, tarball, integrity) {
   assert.equal(lock.lockfileVersion, 3, "the checkout's lockfile is version 3");
   const own = lock.packages[""];
   assert.deepEqual(own.dependencies, manifest.dependencies, "the lockfile was made from this package.json");
+  // The package's entry carries its `dependencies` alone; another kind would be left out of the install unseen.
+  for (const field of ["optionalDependencies", "peerDependencies", "bundleDependencies", "bundledDependencies"]) {
+    assert.equal(manifest[field], undefined, `the package declares no ${field}`);
+  }
   const packages = {
     "": { name: "moe-release", dependencies: { [manifest.name]: `file:${tarball}` } },
     [`node_modules/${manifest.name}`]: { version: manifest.version, resolved: `file:${tarball}`, integrity,
@@ -64,21 +70,14 @@ export function packRelease(directory) {
   writeFileSync(join(directory, "package.json"), manifestOut);
   writeFileSync(join(directory, "package-lock.json"), lockOut);
   npm(["ci", "--ignore-scripts", "--no-audit", "--no-fund"], directory);
-  // What npm ci placed, by its own record: every lock entry this system takes, at its version and integrity, and
-  // nothing else (an optional entry for another system is absent).
-  const installed = JSON.parse(readFileSync(join(directory, "node_modules", ".package-lock.json"), "utf8")).packages;
-  for (const [path, entry] of Object.entries(installed)) {
-    const pinned = lock.packages[path];
-    assert(pinned !== undefined && pinned.version === entry.version && pinned.integrity === entry.integrity,
-      `installed ${path} ${entry.version} is not the pinned entry`);
-  }
-  for (const [path, entry] of Object.entries(lock.packages)) {
-    if (path !== "" && !entry.optional) assert(installed[path] !== undefined, `pinned ${path} was not installed`);
-  }
+  verifyInstall(directory);
   const shipped = join(directory, "node_modules", ...manifest.name.split("/"));
+  const commit = git(["rev-parse", "HEAD"]), clean = git(["status", "--porcelain"]) === "";
   const record = {
     package: manifest.name,
     version: manifest.version,
+    // The commit built (in a pull request's CI, the merge commit checked out); a tree with changes matches no commit.
+    source: { commit, clean },
     tarball: { file: packed.filename, bytes: bytes.length, entries: packed.entryCount, sha256: sha256(bytes), integrity },
     installLock: { sha256: sha256(lockOut), runtimeEntries: Object.keys(lock.packages).length - 2 },
     checkoutLock: sha256(lockText.toString("utf8").replaceAll("\r\n", "\n")),
@@ -87,6 +86,38 @@ export function packRelease(directory) {
   };
   writeFileSync(join(directory, "release-record.json"), `${JSON.stringify(record, null, 2)}\n`);
   return { record, files: packed.files.map(file => file.path), bin: join(shipped, "dist", "cli", "moe.js") };
+}
+
+/** Whether `list` (a lock entry's `os` or `cpu`, entries possibly negated with "!") admits `value`; no list admits all. */
+const admits = (list, value) => list === undefined || list.includes(value) ||
+  (list.every(item => item.startsWith("!")) && !list.includes(`!${value}`));
+
+/** Checks an install made with `npm ci` in `directory` against that directory's install lock, by npm's own record of
+ * what it placed (node_modules/.package-lock.json): every installed entry is the pinned one, and every pinned entry
+ * this system takes is there. npm ci refuses a required entry whose bytes fail their integrity, but drops an optional
+ * one silently (2026-10-07, M13a review), so the optional entries for this system's `os` and `cpu` are required here. */
+export function verifyInstall(directory) {
+  const lock = JSON.parse(readFileSync(join(directory, "package-lock.json"), "utf8")).packages;
+  const installed = JSON.parse(readFileSync(join(directory, "node_modules", ".package-lock.json"), "utf8")).packages;
+  for (const [path, entry] of Object.entries(installed)) {
+    const pinned = lock[path];
+    assert(pinned !== undefined && pinned.version === entry.version && pinned.integrity === entry.integrity,
+      `installed ${path} ${entry.version} is not the pinned entry`);
+  }
+  for (const [path, entry] of Object.entries(lock)) {
+    if (path === "") continue;
+    assert.equal(entry.libc, undefined, `pinned ${path} names a libc this check cannot judge`);
+    if (!entry.optional || admits(entry.os, process.platform) && admits(entry.cpu, process.arch)) {
+      assert(installed[path] !== undefined, `pinned ${path} was not installed`);
+    }
+  }
+}
+
+/** git with `args` in the checkout, its output trimmed. */
+function git(args) {
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8", windowsHide: true, timeout: 60_000 });
+  assert.equal(result.status, 0, `git ${args.join(" ")}: ${result.error?.message ?? result.stderr}`);
+  return result.stdout.trim();
 }
 
 /** The specification revisions the shipped constructions name (`specification: "<document> <revision>"`). */
@@ -103,11 +134,19 @@ function specificationPins(shipped) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
-  const args = process.argv.slice(2);
-  assert(args.length === 3 && args[0] === "--compare", "usage: node scripts/release.mjs --compare <record> <record>");
-  const [a, b] = args.slice(1).map(file => JSON.parse(readFileSync(file, "utf8")));
-  for (const field of ["package", "version", "tarball", "installLock", "checkoutLock", "specification"]) {
-    assert.deepEqual(a[field], b[field], `the two builds differ in ${field}`);
+  const args = process.argv.slice(2), usage = "usage: node scripts/release.mjs --compare <record> <record> | --verify <directory>";
+  if (args[0] === "--verify") {
+    assert(args.length === 2, usage);
+    verifyInstall(args[1]);
+    console.log(`The install in ${args[1]} is its install lock's tree, every entry for this system present`);
+  } else {
+    assert(args.length === 3 && args[0] === "--compare", usage);
+    const [a, b] = args.slice(1).map(file => JSON.parse(readFileSync(file, "utf8")));
+    // A different Node or npm can pack other bytes: name both toolchains before comparing.
+    console.log(`Toolchains: ${JSON.stringify(a.toolchain)} and ${JSON.stringify(b.toolchain)}`);
+    for (const field of ["package", "version", "source", "tarball", "installLock", "checkoutLock", "specification"]) {
+      assert.deepEqual(a[field], b[field], `the two builds differ in ${field}`);
+    }
+    console.log(`One release on both systems: ${a.tarball.file} ${a.tarball.integrity}, install lock ${a.installLock.sha256}`);
   }
-  console.log(`One release on both systems: ${a.tarball.file} ${a.tarball.integrity}, install lock ${a.installLock.sha256}`);
 }
