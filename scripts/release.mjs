@@ -10,11 +10,12 @@
 //
 // Usage: node scripts/release.mjs --compare <release-record.json> <release-record.json>
 //        node scripts/release.mjs --verify <directory>   (an install made there with npm ci from the install lock)
-//        (packRelease is called by check-package.mjs and the pool-v3 command drill)
+//        (packRelease is called by check-package.mjs and the command drills, installParties by the drills)
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
@@ -69,9 +70,7 @@ export function packRelease(directory) {
   const lockOut = `${JSON.stringify(lock, null, 2)}\n`, manifestOut = `${JSON.stringify(lock.packages[""], null, 2)}\n`;
   writeFileSync(join(directory, "package.json"), manifestOut);
   writeFileSync(join(directory, "package-lock.json"), lockOut);
-  npm(["ci", "--ignore-scripts", "--no-audit", "--no-fund"], directory);
-  verifyInstall(directory);
-  const shipped = join(directory, "node_modules", ...manifest.name.split("/"));
+  const shipped = install(directory, manifest.name);
   const commit = git(["rev-parse", "HEAD"]), clean = git(["status", "--porcelain"]) === "";
   const record = {
     package: manifest.name,
@@ -86,6 +85,33 @@ export function packRelease(directory) {
   };
   writeFileSync(join(directory, "release-record.json"), `${JSON.stringify(record, null, 2)}\n`);
   return { record, files: packed.files.map(file => file.path), bin: join(shipped, "dist", "cli", "moe.js") };
+}
+
+/** `npm ci` from the install lock in `directory`, checked by `verifyInstall`; the installed package's directory. */
+function install(directory, name) {
+  npm(["ci", "--ignore-scripts", "--no-audit", "--no-fund"], directory);
+  verifyInstall(directory);
+  return join(directory, "node_modules", ...name.split("/"));
+}
+
+/** One party's machine for each name (slice 13 M13c): a directory holding its own install of the release that
+ * `packRelease` wrote to `release` (the tarball and install lock copied there, then `npm ci`), and its own home and
+ * temporary directories. Each party's `moe` runs from its install with that directory as its working directory and
+ * home, so no party reaches another's code, caches or temporary files except through what the drill hands across.
+ * Returns, per name, the bin, the install directory as a file URL ending in "/", and the `cwd` and `env` (over `env`)
+ * to spawn it with. */
+export function installParties(release, directory, names, env = process.env) {
+  const record = JSON.parse(readFileSync(join(release, "release-record.json"), "utf8"));
+  const parties = {};
+  for (const name of names) {
+    const machine = join(directory, name), installed = join(machine, "install"), home = join(machine, "home"), tmp = join(machine, "tmp");
+    for (const path of [installed, home, tmp]) mkdirSync(path, { recursive: true });
+    for (const file of [record.tarball.file, "package.json", "package-lock.json"]) copyFileSync(join(release, file), join(installed, file));
+    const shipped = install(installed, record.package);
+    parties[name] = { bin: join(shipped, "dist", "cli", "moe.js"), install: pathToFileURL(join(installed, "/")).href, cwd: machine,
+      env: { ...env, HOME: home, USERPROFILE: home, TMPDIR: tmp, TEMP: tmp, TMP: tmp } };
+  }
+  return parties;
 }
 
 /** Whether `list` (a lock entry's `os` or `cpu`, entries possibly negated with "!") admits `value`; no list admits all. */

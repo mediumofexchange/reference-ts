@@ -539,7 +539,8 @@ Terms of the other construction refuse as `CONSTRUCTION`. A lit directory proves
 first request). `freshen` refuses as `CONSTRUCTION`; `presentation` reads an acceptance as an answer only where K and its
 owner key both signed it (lit-v1 §7), and a lit release discloses nothing. Everything a lit statement carries is public
 (lit-v1 §11), and its explanations say so. The relay keeps no parameters and publishes either construction's
-publications. `npm run check:lit:commands` drills a lit backing on the synthetic node, its gap route included.
+publications. `npm run check:lit:commands` drills a lit backing on the synthetic node, its gap route included, each party
+(operator, replica, relays, wallets, reader) from its own install of the release.
 
 ### Transport
 
@@ -679,8 +680,8 @@ and a gap release taken by another demand's settlement under an acceptance namin
 releases the holder's acceptance and leaves the backer's dishonour. Not covered: a release of the demand in another
 segment, a gap across several backings, an ended term or a return, and a venue that witnesses an exact republication
 again.
-`command-drill.mjs` (in `check:pool:v3`; `npm run check:pool:v3-commands` alone) runs the commands from an `npm pack`
-install in a fresh directory, with real proofs, in fresh processes on separate directories over the synthetic Ergo
+`command-drill.mjs` (in `check:pool:v3`; `npm run check:pool:v3-commands` alone) runs the commands with real proofs,
+each party from its own install of the packed release ([separate installs](RELEASE.md#separate-installs)), in fresh processes on separate directories over the synthetic Ergo
 node, and checks that no process proving nothing loads a `@noir-lang` module: a backer's terms, issue, payment, serve committing
 on admission, fulfillment and its exit-4 rerun, a demand, the acceptance relayed, settlement and burn read final by sync
 and the reader's supply, a withdrawn demand's notes refused to a payment and freshened, restore-seed and a handoff

@@ -18,6 +18,9 @@
 // read by the holder's sync and the reader's supply; then, with the operator offline past silence, a payment
 // prepared as it went quiet lapses, the gap redemption runs through the relay, the operator returns and adopts, and
 // the lapsed payment is proved again and final, its payee fulfilling it.
+// Slice 13 M13c: each party (operator, reader, backer, holder, shop, relay, and the holder's restorations on a new
+// machine) runs `moe` from its own install of the one packed release, with its own working, home and temporary
+// directories (scripts/release.mjs `installParties`); a command runs on the machine owning the directory it names.
 // M10d: with --testnet --authorized-testnet the same commands run over the own live testnet node
 // (experiments/ergo-range/nodes.mjs, synced), without --synthetic, which there is the hostile switch. The chain moves
 // by itself where the synthetic drill mines; each funding directory is paid from the retained testnet wallet and
@@ -30,7 +33,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { openView, parseVenue } from "../../../dist/cli/venue.js";
 import { readParameters } from "../../../dist/pool/parameter-files.js";
@@ -48,7 +51,7 @@ import { payToPublicKeyTree } from "../../../dist/ergo-publisher.js";
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
-import { packRelease } from "../../release.mjs";
+import { installParties, packRelease } from "../../release.mjs";
 
 const root = resolve(import.meta.dirname, "../../.."), RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href;
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -79,19 +82,29 @@ function signTerms(name, operator, venue) {
 }
 mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "command-drill-")));
-const checks = [], processes = [], servers = [];
+// Module files a party's process resolved outside its own install (M13c).
+const checks = [], processes = [], servers = [], strays = [];
 
-/** The package exactly as a release installs it: packed, installed from its install lock into a fresh directory outside
- * the checkout's dependency tree (scripts/release.mjs), and its `moe` run from there. */
+/** The package exactly as a release installs it: packed, and installed from its install lock once per party into a
+ * machine of its own outside the checkout's dependency tree (scripts/release.mjs), each party's `moe` run from there. */
+const MACHINES = { operator: ["operator", "operator-2", "operator-wallets"], reader: ["reader", "partial"], backer: ["backer", "backer-2"],
+  holder: ["holder"], shop: ["shop"], relay: ["relay"], restored: ["holder-seed", "holder-handoff"] };
 function installPacked() {
-  const consumer = join(scratch, "consumer");
-  mkdirSync(consumer);
-  const { record, bin } = packRelease(consumer);
-  assert(statSync(bin).isFile(), "the packed install carries the moe bin");
+  const release = join(scratch, "release");
+  mkdirSync(release);
+  const { record } = packRelease(release), parties = installParties(release, join(scratch, "machines"), Object.keys(MACHINES));
+  for (const party of Object.values(parties)) assert(statSync(party.bin).isFile(), "the packed install carries the moe bin");
   // The install lock names what the commands ran on.
-  return { bin, tarballBytes: record.tarball.bytes, files: record.tarball.entries, installLock: record.installLock.sha256 };
+  return { parties, tarballBytes: record.tarball.bytes, files: record.tarball.entries, installLock: record.installLock.sha256 };
 }
-const packed = installPacked(), MOE = packed.bin;
+const packed = installPacked();
+const OWNER = new Map(Object.entries(MACHINES).flatMap(([party, directories]) => directories.map(directory => [directory, party])));
+/** The party whose machine runs `args`: the one owning the directory it names. */
+function machineOf(args) {
+  const at = args.indexOf("--dir"), directory = args[at + 1];
+  assert(at >= 0 && dirname(directory) === scratch && OWNER.has(basename(directory)), `moe ${args.join(" ")} names a party's directory`);
+  return { party: OWNER.get(basename(directory)), ...packed.parties[OWNER.get(basename(directory))] };
+}
 const check = async (label, fn) => { await fn(); checks.push(label); process.stderr.write(`passed: ${label}\n`); };
 
 const pause = ms => new Promise(done => setTimeout(done, ms));
@@ -166,8 +179,8 @@ async function sweep() {
 function moe(args, { mining, input } = {}) {
   return new Promise((done, failed) => {
     const rss = join(scratch, `rss-${processes.length}-${process.hrtime.bigint()}.json`);
-    const began = performance.now(), child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, ...args],
-      { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...process.env, MOE_DRILL_RSS: rss } });
+    const machine = machineOf(args), began = performance.now(), child = spawn(process.execPath, ["--import", RSS_HOOK, machine.bin, ...args],
+      { cwd: machine.cwd, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: rss, MOE_DRILL_INSTALL: machine.install } });
     if (input !== undefined) child.stdin.end(input);
     const out = [], err = [];
     child.stdout.on("data", chunk => out.push(chunk));
@@ -181,9 +194,10 @@ function moe(args, { mining, input } = {}) {
     child.on("error", failed);
     child.on("close", status => {
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
-      let maxRssKb = null, noir = null;
-      try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* a process that died before its exit handler */ }
-      processes.push({ command: args.slice(0, 2).join(" "), status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
+      let maxRssKb = null, noir = null, outside = [];
+      try { ({ maxRssKb, noir, outside } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* a process that died before its exit handler */ }
+      for (const url of outside) strays.push(`${args.slice(0, 2).join(" ")}: ${url}`);
+      processes.push({ command: args.slice(0, 2).join(" "), party: machine.party, status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
       let json;
       try { json = stdout.trim() === "" ? undefined : JSON.parse(stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
       let refusal;
@@ -209,8 +223,9 @@ const refused = async (args, code) => {
 /** `moe operator serve` in the background: resolves with its first line once listening, and a stop. */
 function serve(directory) {
   const rss = join(scratch, `rss-serve-${process.hrtime.bigint()}.json`), began = performance.now();
-  const child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL],
-    { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MOE_DRILL_RSS: rss } });
+  const machine = machineOf(["operator", "serve", "--dir", directory]);
+  const child = spawn(process.execPath, ["--import", RSS_HOOK, machine.bin, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL],
+    { cwd: machine.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: rss, MOE_DRILL_INSTALL: machine.install } });
   servers.push(child);
   let stdout = "", stderr = "";
   child.stderr.on("data", chunk => { stderr += chunk; });
@@ -224,9 +239,10 @@ function serve(directory) {
     // the operating system releases its directory lock either way.
     child.kill("SIGTERM"); const status = await exited;
     if (process.platform !== "win32") assert.equal(status, 0, stderr);
-    let maxRssKb = null, noir = null;
-    try { ({ maxRssKb, noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* ended outright (Windows) */ }
-    processes.push({ command: "operator serve (running)", status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
+    let maxRssKb = null, noir = null, outside = [];
+    try { ({ maxRssKb, noir, outside } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* ended outright (Windows) */ }
+    for (const url of outside) strays.push(`operator serve: ${url}`);
+    processes.push({ command: "operator serve (running)", party: machine.party, status, elapsedMs: Math.round(performance.now() - began), maxRssKb, noir });
   } };
 }
 
@@ -741,7 +757,16 @@ console.log(JSON.stringify(open.filter(path => path.includes("etilqs_"))));`);
     }
   });
 
-  const result = { status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files, installLockSha256: packed.installLock }, checks, readerReplay, processes };
+  await check("every party ran from its own install of one release, which the holder's restorations opened on a new machine", async () => {
+    const bins = Object.values(packed.parties).map(party => realpathSync(party.bin));
+    assert.equal(new Set(bins).size, Object.keys(MACHINES).length);
+    for (const bin of bins) assert(!bin.startsWith(root + sep + "dist" + sep) && !bin.startsWith(root + sep + "node_modules" + sep), bin);
+    for (const party of Object.keys(MACHINES)) assert(processes.some(p => p.party === party && p.status === 0), `${party} ran no command`);
+    assert.deepEqual(strays, [], "a party's process resolved a module outside its own install");
+  });
+
+  const result = { status: "passed", package: { tarballBytes: packed.tarballBytes, files: packed.files, installLockSha256: packed.installLock,
+    parties: Object.keys(MACHINES) }, checks, readerReplay, processes };
   if (LIVE) {
     const directories = await sweep(), file = JSON.parse(readFileSync(join(OP, "venue.json"), "utf8"));
     assert.deepEqual(sourceHashes(SOURCES), HASHES, "sources changed during the live drill");

@@ -28,8 +28,7 @@ Before writing the record it installs from the install lock with `npm ci`, check
 there, optional ones included. It then runs the installed package's imports and its `moe` bin. A record made from a
 tree with changes says `clean: false` and matches no commit. In a pull request's CI the commit is the merge commit
 checked out. CI does this on Linux and Windows and its `reproducible-release` job compares the
-two records: one commit must give the same tarball bytes, install lock and pins on both systems. The pool-v3 command
-drill installs the commands it runs the same way.
+two records: one commit must give the same tarball bytes, install lock and pins on both systems.
 
 ## Installing
 
@@ -47,6 +46,25 @@ install: it requires every pinned entry for this system's `os` and `cpu` in npm'
 commands are then `node node_modules/@mediumofexchange/reference/dist/cli/moe.js` (or `npx moe` in that directory). The package's own
 `dependencies` are exact versions, so a library consumer that resolves the package itself gets the tested direct
 dependencies, but their dependencies float within their ranges; only the install lock pins the whole tree.
+
+## Separate installs
+
+Each party of a deployment installs the release on its own machine. The two command drills
+(`scripts/pool/v3/command-drill.mjs` with real proofs, `scripts/lit/command-drill.mjs` over onion services) pack the
+release once and install it once per party with `npm ci` from the install lock, each install checked as above
+(`installParties` in `scripts/release.mjs`, slice 13 M13c). Every party's `moe` runs from its own install with its own
+working, home and temporary directories, on the data directories it owns: the operator, backer, holder, shop and reader
+in both drills, the relay that publishes for the backer and holder, and in the lit drill the replica (`reader serve`)
+and a third party's relay (`relay serve`) behind their own onion names. Parties meet only through the venue, the
+services and the files the drill hands across (terms, service files, publications, a handoff). A wallet restored from
+a handoff or from its seed opens on a new machine with an install of its own. Each drill fails if a party ran nothing
+or two parties shared an install.
+
+What this shows: no command reaches the checkout's build, another party's install or a shared home or temporary
+directory, and the roles interoperate when each runs its own copy of one release. What it does not: the parties share
+one host, one Node and one user, read the proving parameters from one directory (`--parameters`, read-only) and
+reach each other over loopback; interoperability across two releases is not checked (a release changing bytes,
+identity or verdicts is a successor construction).
 
 ## Limits
 
