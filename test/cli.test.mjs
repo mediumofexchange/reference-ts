@@ -209,7 +209,7 @@ describe('moe constructions (slice 14 M14g4)', () => {
   });
   it('reads a publication under the construction whose frame it decodes in, refusing another configuration and either frame\'s garbage', () => {
     const acceptance = { domain: litConfigHash(), demand: new Uint8Array(32).fill(3), owner: ed25519.getPublicKey(new Uint8Array(32).fill(9)), deadline: 70n,
-      signature: new Uint8Array(64).fill(1) };
+      signature: new Uint8Array(64).fill(1), ownerSignature: new Uint8Array(64).fill(4) };
     const backing = new Uint8Array(32).fill(2);
     expect(readPublication(encodeLitPublication({ domain: litConfigHash(), backing, kind: 2, acceptance }))).toEqual({ backing, instant: undefined });
     const zero = new Uint8Array(32);

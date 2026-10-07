@@ -82,6 +82,12 @@ describe("the one wallet holding lit notes", () => {
     expect(error).toBeInstanceOf(V3WalletError);
     return (error as WalletError).code;
   }
+  /** The refusal's code and message, where two refusals share a code. */
+  async function refusalOf(action: Promise<unknown>): Promise<string> {
+    const error = await action.then(() => undefined, (e: unknown) => e);
+    expect(error).toBeInstanceOf(V3WalletError);
+    return `${(error as WalletError).code}: ${(error as Error).message}`;
+  }
   const values = (view: { holdings: readonly { value: bigint; status: string }[] }) => view.holdings.map(h => [h.value, h.status]);
 
   it("requests by owner key, pays with change to the next index, and credits the payee's output once", async () => {
@@ -312,12 +318,19 @@ describe("the one wallet holding lit notes", () => {
     const acceptance = await backer.keyedAccept("a", demand.demand!, deadline, await f.served(), f.signed, sign);
     expect(same(acceptance.owner, pub(acceptSecret(backer.recoverySeed(), DOMAIN, demand.demand!, deadline)))).toBe(true);
     expect(await backer.keyedAccept("a", demand.demand!, deadline, await f.served(), f.signed, sign)).toEqual(acceptance);
-    // An acceptance naming the holder's own owner key or the demand's presenter key is refused by name; one K did not sign, as invalid.
-    const signedFor = (owner: Uint8Array) => ({ ...acceptance, owner,
-      signature: ed25519.sign(acceptanceBytes({ domain: DOMAIN, demand: demand.demand!, owner, deadline }), K) });
-    expect(await refusal(holder.settle("s0", signedFor(d.inputs[0]!.owner), await f.served(), f.signed))).toBe("OWN_KEY");
-    expect(await refusal(holder.settle("s0", signedFor(d.presenter), await f.served(), f.signed))).toBe("OWN_KEY");
-    expect(await refusal(holder.settle("s0", { ...acceptance, signature: new Uint8Array(64) }, await f.served(), f.signed))).toBe("INVALID");
+    expect(ed25519.verify(acceptance.ownerSignature, acceptanceBytes(acceptance), acceptance.owner)).toBe(true);
+    // §§4, 7: K cannot sign for the holder's own owner key or the demand's presenter key, so an acceptance naming either
+    // carries no owner signature and is no acceptance; nor is one K did not sign.
+    const signedFor = (owner: Uint8Array) => {
+      const bytes = acceptanceBytes({ domain: DOMAIN, demand: demand.demand!, owner, deadline });
+      return { ...acceptance, owner, signature: ed25519.sign(bytes, K), ownerSignature: ed25519.sign(bytes, K) };
+    };
+    const unsigned = "INVALID: the acceptance's owner key did not sign it";
+    expect(await refusalOf(holder.settle("s0", signedFor(d.inputs[0]!.owner), await f.served(), f.signed))).toBe(unsigned);
+    expect(await refusalOf(holder.settle("s0", signedFor(d.presenter), await f.served(), f.signed))).toBe(unsigned);
+    expect(await refusalOf(holder.settle("s0", { ...acceptance, ownerSignature: new Uint8Array(64) }, await f.served(), f.signed))).toBe(unsigned);
+    expect(await refusalOf(holder.settle("s0", { ...acceptance, signature: new Uint8Array(64) }, await f.served(), f.signed)))
+      .toBe("INVALID: the acceptance does not answer a demand under the backing's obligor");
     const settled = await holder.settle("s", acceptance, await f.served(), f.signed);
     expect(settled).toMatchObject({ kind: 6, status: "prepared", demand: demand.demand });
     expect((await holder.settle("s", acceptance, await f.served(), f.signed)).record).toEqual(settled.record);
@@ -413,9 +426,10 @@ describe("the one wallet holding lit notes", () => {
     await presenter.submit("d1", h.service); await presenter.submit("d2", h.service); await h.checkpoint();
     await presenter.sync(await h.served(), h.signed);
     const other = (decodeRecord(d2.record).statement as Extract<Statement, { kind: 4 }>).presenter;
-    const acceptance = { domain: DOMAIN, demand: d1.demand!, owner: other, deadline,
-      signature: ed25519.sign(acceptanceBytes({ domain: DOMAIN, demand: d1.demand!, owner: other, deadline }), K) };
-    expect(await refusal(presenter.settle("s", acceptance, await h.served(), h.signed))).toBe("OWN_KEY");
+    const otherBytes = acceptanceBytes({ domain: DOMAIN, demand: d1.demand!, owner: other, deadline });
+    const acceptance = { domain: DOMAIN, demand: d1.demand!, owner: other, deadline, signature: ed25519.sign(otherBytes, K),
+      ownerSignature: ed25519.sign(otherBytes, K) };
+    expect(await refusalOf(presenter.settle("s", acceptance, await h.served(), h.signed))).toBe("INVALID: the acceptance's owner key did not sign it");
   });
 
   it("hands a window move to an encrypted backup's restored copy, which reads it as the same payment", async () => {

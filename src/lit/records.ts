@@ -47,7 +47,7 @@ export interface LitRecord {
 
 /** The 53 bytes before a statement's body: context, configuration hash and kind. */
 export const STATEMENT_PREFIX_BYTES = STATEMENT.length + 33;
-const SETTLEMENT_AUTHORIZATION_BYTES = 136;
+const SETTLEMENT_AUTHORIZATION_BYTES = 200;
 
 function object(value: unknown, what: string): asserts value is { readonly [key: string]: unknown } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new EncodingError(`invalid ${what}`);
@@ -149,7 +149,7 @@ export function decodeStatement(bytes: Uint8Array): Statement {
   const r = new ByteReader(bytes), s = readStatement(r); r.expectEnd(); return s;
 }
 
-/** §3's authorization length for a statement: K, an owner per input, the presenter key, or a settlement's 136 bytes. */
+/** §3's authorization length for a statement: K, an owner per input, the presenter key, or a settlement's 200 bytes. */
 export function authorizationLength(s: Statement): number {
   switch (s.kind) {
     case 2: case 3: case 4: return 64 * s.inputs.length;
@@ -312,14 +312,15 @@ export interface Acceptance {
   readonly owner: Uint8Array;
   readonly deadline: bigint;
 }
-export interface SignedAcceptance extends Acceptance { readonly signature: Uint8Array }
+/** K's signature and the owner key's, each over `acceptanceBytes` (§4). */
+export interface SignedAcceptance extends Acceptance { readonly signature: Uint8Array; readonly ownerSignature: Uint8Array }
 function ownAcceptance(value: Acceptance): Acceptance {
   object(value, "acceptance");
   const { domain, demand, owner, deadline } = value;
   return Object.freeze({ domain: field32(domain, "domain"), demand: field32(demand, "demand"), owner: key32(owner, "owner"),
     deadline: u64(deadline, "deadline") });
 }
-/** `"moe/lit/v1/acceptance" || configHash || demand || owner || u64 deadline` (125 bytes), signed by K. */
+/** `"moe/lit/v1/acceptance" || configHash || demand || owner || u64 deadline` (125 bytes), signed by K and by the owner key. */
 export function acceptanceBytes(acceptance: Acceptance): Uint8Array {
   const a = ownAcceptance(acceptance), w = new ByteWriter();
   w.context(ACCEPTANCE); w.key32(a.domain, "domain"); w.key32(a.demand, "demand"); w.key32(a.owner, "owner"); w.u64(a.deadline);
@@ -334,14 +335,16 @@ export function releaseBytes(domain: Uint8Array, demand: Uint8Array, acceptance:
   }
   return w.finish();
 }
-/** The settlement's 136-byte authorization frame (§3); verifies nothing. */
-export function encodeSettlementAuthorization(deadline: bigint, acceptanceSignature: Uint8Array, releaseSignature: Uint8Array): Uint8Array {
+/** The settlement's 200-byte authorization frame (§3); verifies nothing. */
+export function encodeSettlementAuthorization(deadline: bigint, acceptanceSignature: Uint8Array, ownerSignature: Uint8Array,
+  releaseSignature: Uint8Array): Uint8Array {
   const w = new ByteWriter(); w.u64(u64(deadline, "deadline"));
-  w.fixed(acceptanceSignature, 64, "acceptance signature"); w.fixed(releaseSignature, 64, "release signature");
+  w.fixed(acceptanceSignature, 64, "acceptance signature"); w.fixed(ownerSignature, 64, "owner signature");
+  w.fixed(releaseSignature, 64, "release signature");
   return w.finish();
 }
-/** The exact messages a settlement's two signatures are over, reconstructed from its own demand, owner and
- * authorization (§4). The caller verifies the acceptance under K and the release under the demand's presenter key,
+/** The exact messages a settlement's three signatures are over, reconstructed from its own demand, owner and
+ * authorization (§4). The caller verifies the acceptance under K and under its owner, and the release under the demand's presenter key,
  * and resolves the demand, terms, state and time; this grants no authority. */
 export function settlementAuthorization(record: LitRecord): {
   readonly acceptance: SignedAcceptance; readonly acceptanceMessage: Uint8Array;
@@ -349,10 +352,10 @@ export function settlementAuthorization(record: LitRecord): {
 } {
   const r = ownRecord(record), s = r.statement;
   if (s.kind !== 6) throw new EncodingError("not a settlement");
-  const a = new ByteReader(r.authorization), deadline = a.u64(), signature = a.raw(64), releaseSignature = a.raw(64);
+  const a = new ByteReader(r.authorization), deadline = a.u64(), signature = a.raw(64), ownerSignature = a.raw(64), releaseSignature = a.raw(64);
   a.expectEnd();
   const acceptance = Object.freeze({ domain: Uint8Array.from(s.domain), demand: Uint8Array.from(s.demand),
-    owner: Uint8Array.from(s.owner), deadline, signature });
+    owner: Uint8Array.from(s.owner), deadline, signature, ownerSignature });
   return Object.freeze({ acceptance, acceptanceMessage: acceptanceBytes(acceptance),
     releaseMessage: releaseBytes(s.domain, s.demand, acceptanceId(acceptance), statementHash(s)), releaseSignature });
 }
@@ -367,7 +370,7 @@ const recordBound = (statement: number, authorization: number): number => 8 + ST
 /** Each kind's largest valid body; kind 1's, a demand over two notes, is §4's 478-byte bound. */
 const BODY_BOUNDS = {
   1: recordBound(81 + OPENING_BYTES * MAX_INPUTS, 64 * MAX_INPUTS),
-  2: ACCEPTANCE.length + 104 + 64,
+  2: ACCEPTANCE.length + 104 + 128,
   3: recordBound(96, SETTLEMENT_AUTHORIZATION_BYTES),
   4: recordBound(64, 64),
   5: recordBound(OPENING_BYTES + 8, 64),
@@ -388,11 +391,14 @@ function ownPublication(value: Publication): Publication {
     const signed = (value as { readonly acceptance: unknown }).acceptance;
     object(signed, "acceptance");
     const a = ownAcceptance(signed as unknown as Acceptance);
-    let signature: Uint8Array;
-    try { signature = copyBytes(signed.signature as Uint8Array); } catch { throw new EncodingError("invalid signature"); }
-    if (signature.length !== 64) throw new EncodingError("wrong signature length");
+    const [signature, ownerSignature] = (["signature", "ownerSignature"] as const).map(field => {
+      let bytes: Uint8Array;
+      try { bytes = copyBytes(signed[field] as Uint8Array); } catch { throw new EncodingError("invalid signature"); }
+      if (bytes.length !== 64) throw new EncodingError("wrong signature length");
+      return bytes;
+    }) as [Uint8Array, Uint8Array];
     if (compareBytes(a.domain, domain) !== 0) throw new EncodingError("inconsistent domain");
-    return Object.freeze({ domain, backing, kind, acceptance: Object.freeze({ ...a, signature }) });
+    return Object.freeze({ domain, backing, kind, acceptance: Object.freeze({ ...a, signature, ownerSignature }) });
   }
   const record = ownRecord((value as { readonly record: LitRecord }).record), s = record.statement;
   if (s.kind !== PUBLICATION_STATEMENT[kind]) throw new EncodingError("wrong publication body kind");
@@ -404,6 +410,7 @@ function ownPublication(value: Publication): Publication {
 function body(p: Publication): Uint8Array {
   if (p.kind !== 2) return encodeRecord(p.record);
   const w = new ByteWriter(); w.context(acceptanceBytes(p.acceptance)); w.fixed(p.acceptance.signature, 64, "signature");
+  w.fixed(p.acceptance.ownerSignature, 64, "owner signature");
   return w.finish();
 }
 /** `"moe/lit/v1/publication" || configHash || backing || u8 kind || u32 bodyLength || body` (§4). */
@@ -424,7 +431,7 @@ export function decodePublication(bytes: Uint8Array): Publication {
   if (kind !== 2) return ownPublication({ domain, backing, kind, record: decodeRecord(bytesIn) });
   const b = new ByteReader(bytesIn);
   if (compareBytes(b.raw(ACCEPTANCE.length), ACCEPTANCE) !== 0) throw new EncodingError("wrong acceptance context");
-  const acceptance = { domain: b.raw(32), demand: b.raw(32), owner: b.raw(32), deadline: b.u64(), signature: b.raw(64) };
+  const acceptance = { domain: b.raw(32), demand: b.raw(32), owner: b.raw(32), deadline: b.u64(), signature: b.raw(64), ownerSignature: b.raw(64) };
   b.expectEnd();
   return ownPublication({ domain, backing, kind, acceptance });
 }

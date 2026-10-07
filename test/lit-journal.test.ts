@@ -92,7 +92,7 @@ describe("the operator journal over a lit scope", () => {
       const demandId = statementHash(LIT.decode(bytes).statement);
       const statement: Statement = { domain: DOMAIN, kind: 6, segment, demand: demandId, owner: pub(owner) };
       const acceptance = { domain: DOMAIN, demand: demandId, owner: pub(owner), deadline };
-      return record(statement, encodeSettlementAuthorization(deadline, ed25519.sign(acceptanceBytes(acceptance), K),
+      return record(statement, encodeSettlementAuthorization(deadline, ed25519.sign(acceptanceBytes(acceptance), K), ed25519.sign(acceptanceBytes(acceptance), owner),
         ed25519.sign(releaseBytes(DOMAIN, demandId, acceptanceId(acceptance), statementHash(statement)), PRESENTER)));
     };
     const request = (input: Opening, signer: Uint8Array): Uint8Array => {
