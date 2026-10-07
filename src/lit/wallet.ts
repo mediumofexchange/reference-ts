@@ -99,9 +99,9 @@ export function signedWithdrawal(domain: Uint8Array, segment: Uint8Array, demand
   const statement: Statement = { domain, kind: 5, segment, demand };
   return encodeRecord({ statement, authorization: ed25519.sign(statementBytes(statement), presenter) });
 }
-/** §§4, 8: the owner key's signature over the acceptance bytes, by K's `acceptSecret` of its demand and deadline. */
-export function ownerAcceptanceSignature(seed: Uint8Array, domain: Uint8Array, acceptance: Acceptance): Uint8Array {
-  const message = acceptanceBytes(acceptance), secret = acceptSecret(seed, domain, acceptance.demand, acceptance.deadline);
+/** §§4, 8: the owner key's signature over the acceptance bytes, by K's `acceptSecret` of its domain, demand and deadline. */
+export function ownerAcceptanceSignature(seed: Uint8Array, acceptance: Acceptance): Uint8Array {
+  const message = acceptanceBytes(acceptance), secret = acceptSecret(seed, acceptance.domain, acceptance.demand, acceptance.deadline);
   try { return ed25519.sign(message, secret); } finally { secret.fill(0); }
 }
 /** §§3–4 kind 6: settle the acceptance's demand to its owner, K's and the owner's acceptance signatures carried and the

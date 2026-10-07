@@ -338,9 +338,18 @@ describe("lit-v1 records at the one validity seam (M14c)", () => {
       .rejects.toMatchObject({ status: "unsupported-scope" });
     await expect(applyForceRecord(state, withdraw(d.id, MALLORY), force(), LIT)).rejects.toMatchObject({ check: "SIGNATURE" });
     await expect(applyForceRecord(state, settle(d, CAROL, { deadline: 8n }).bytes, force(), LIT)).rejects.toMatchObject({ check: "DEADLINE" });
+    // §7: a release's acceptance verifies under its owner at the venue too, whatever key K names.
+    for (const owner of [ALICE, PRESENTER, CAROL]) {
+      await expect(applyForceRecord(state, settle(d, owner, { ownerSigner: K }).bytes, force(), LIT)).rejects.toMatchObject({ check: "SIGNATURE" });
+    }
     expect(overlay()).toEqual(before);
     await applyForceRecord(state, withdraw(d.id), force(), LIT);
     expect(state.demand(hex(d.id))).toBeUndefined();
+    // An acceptance whose owner is K itself carries two equal signatures and has force.
+    const own = openForceState(source);
+    await applyForceRecord(own, d.bytes, force(), LIT);
+    await applyForceRecord(own, settle(d, K).bytes, force(), LIT);
+    expect(own.demand(hex(d.id))).toBeUndefined();
   });
 });
 

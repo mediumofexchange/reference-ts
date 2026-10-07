@@ -319,6 +319,11 @@ describe("the one wallet holding lit notes", () => {
     expect(same(acceptance.owner, pub(acceptSecret(backer.recoverySeed(), DOMAIN, demand.demand!, deadline)))).toBe(true);
     expect(await backer.keyedAccept("a", demand.demand!, deadline, await f.served(), f.signed, sign)).toEqual(acceptance);
     expect(ed25519.verify(acceptance.ownerSignature, acceptanceBytes(acceptance), acceptance.owner)).toBe(true);
+    // Its publication (kind 2) is the same acceptance, both signatures included.
+    const sent: Uint8Array[] = [];
+    await backer.publishAcceptance("a", { publishRecord: async (_kind: number, _subject: Uint8Array, bytes: Uint8Array) => { sent.push(bytes); } } as never);
+    const published = decodePublication(sent[0]!);
+    expect(published.kind === 2 ? published.acceptance : undefined).toEqual(acceptance);
     // §§4, 7: K cannot sign for the holder's own owner key or the demand's presenter key, so an acceptance naming either
     // carries no owner signature and is no acceptance; nor is one K did not sign.
     const signedFor = (owner: Uint8Array) => {

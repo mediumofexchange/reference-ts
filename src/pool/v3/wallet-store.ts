@@ -1608,7 +1608,13 @@ export class V3Wallet {
     requireThat(this.keyed !== undefined, "INVALID", "a pool wallet's acceptance owner is a field element");
     const row = await this.acceptance(name, demand, deadline, packageBytes, signed, sign);
     const fields = { domain: new Uint8Array(this.domain), demand: hexToBytes(row.demand), owner: hexToBytes(row.owner), deadline };
-    return { ...fields, signature: row.signature, ownerSignature: this.keyed.acceptSignature(this.seed, this.domain, fields) };
+    return { ...fields, signature: row.signature, ownerSignature: this.ownerSigned(fields) };
+  }
+  /** The saved acceptance's owner signature, derived again and checked against the saved owner (`STORAGE` otherwise). */
+  private ownerSigned(fields: Omit<KeyedAcceptance, "signature" | "ownerSignature">): Uint8Array {
+    const signature = this.keyed!.acceptSignature(this.seed, fields);
+    requireThat(verifySignatureStrict(signature, this.keyed!.acceptance(fields), fields.owner), "STORAGE", "stored acceptance does not reproduce");
+    return signature;
   }
   /** The saved acceptance under `name`, made and signed once: its demand, its owner as stored (pool-v3's a decimal field
    * element, lit-v1's a key in hex) and K's signature. */
@@ -1856,7 +1862,7 @@ export class V3Wallet {
     // Lit-v1 §4: kind 2 is the acceptance bytes, K's signature and the owner key's, the owner a key.
     const keyed = this.keyed, owner = keyed !== undefined ? hexToBytes(row.owner as string) : undefined;
     const bytes = keyed !== undefined ? keyed.publication(new Uint8Array(this.domain), backing, { kind: 2, acceptance:
-      { ...fields, owner: owner!, ownerSignature: keyed.acceptSignature(this.seed, this.domain, { ...fields, owner: owner! }) } }) :
+      { ...fields, owner: owner!, ownerSignature: this.ownerSigned({ ...fields, owner: owner! }) } }) :
       encodePublication({ domain: new Uint8Array(this.domain), backing, kind: 2, acceptance: { ...fields, owner: BigInt(row.owner as string) } });
     await send.call(publisher, 4, backing, bytes);
   }
@@ -2231,7 +2237,7 @@ export class V3Wallet {
   /** Lit-v1 §§3–4 kind 6 and C3.5–C3.6: settle this seed's standing demand that K's acceptance answers, to the acceptance's
    * owner, the release signed by the presenter key over this settlement's own statement hash. The acceptance must verify
    * under the obligor and under the owner it names (§§4, 7: the owner's signature shows K holds that key, so no acceptance
-   * names a key of this wallet), and be due no later than the demand and not behind the horizon. The settlement's output derives from the demand's nullifiers (§3), so no disclosure count is read (§7) and at most one
+   * names a holder key K cannot sign for), and be due no later than the demand and not behind the horizon. The settlement's output derives from the demand's nullifiers (§3), so no disclosure count is read (§7) and at most one
    * settlement of a demand is admitted. In a gap (`route`) it is bound to the snapshot and its release published. */
   private async keyedSettle(name: string, acceptance: KeyedAcceptance, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
     name = alias(name); this.mutable();

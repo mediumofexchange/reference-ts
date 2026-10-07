@@ -197,7 +197,7 @@ export interface KeyedWalletFrames {
   /** K's acceptance owner for `demand` and `deadline`: `acceptSecret`'s key (lit-v1 §8). */
   acceptOwner(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array;
   /** The owner key's signature over the acceptance bytes, by `acceptSecret` of its demand and deadline (lit-v1 §§4, 8). */
-  acceptSignature(seed: Uint8Array, domain: Uint8Array, acceptance: Omit<KeyedAcceptance, "signature" | "ownerSignature">): Uint8Array;
+  acceptSignature(seed: Uint8Array, acceptance: Omit<KeyedAcceptance, "signature" | "ownerSignature">): Uint8Array;
   /** The acceptance bytes K and the owner key sign (lit-v1 §4); EncodingError where a field is malformed. */
   acceptance(acceptance: Omit<KeyedAcceptance, "signature" | "ownerSignature">): Uint8Array;
   /** Publication kind 1, 3 or 4 of a demand, settlement or withdrawal record, or kind 2 of an acceptance, routed to `backing`. */
