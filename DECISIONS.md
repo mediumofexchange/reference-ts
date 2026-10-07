@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-06` [Hold lit notes in the one wallet, with owner keys per backing found under a doubling window (slice 14 M14g)](decisions/2026-10.md#2026-10-06--hold-lit-notes-in-the-one-wallet-with-owner-keys-per-backing-found-under-a-doubling-window-slice-14-m14g)
 - `2026-10-06` [Serve a lit scope from the one operator journal, the construction an option (slice 14 M14f)](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)
 - `2026-10-06` [Exclude a lit record that splits but does not decode, rebuild kept imports, and vector every layout (slice 14 M14e)](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)
 - `2026-10-06` [Read lit packages through the one package reader and walk, the construction a read option (slice 14 M14d)](decisions/2026-10.md#2026-10-06--read-lit-packages-through-the-one-package-reader-and-walk-the-construction-a-read-option-slice-14-m14d)

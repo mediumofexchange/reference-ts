@@ -364,8 +364,10 @@ describe("lit-v1 §8 key derivation", () => {
   const root = (info: string): Buffer => Buffer.from(hkdfSync("sha256", seed, DOMAIN, ascii(info), 32));
   const hmac = (key: Uint8Array, ...m: Uint8Array[]): Buffer => createHmac("sha256", key).update(join(...m)).digest();
   it("derives owner, acceptance and presenter secrets under three HKDF roots", () => {
-    expect(hex(wallet.ownerSecret(seed, DOMAIN, 0n))).toBe(hex(hmac(root("moe/wallet/lit/v1/owner"), u64(0n))));
-    expect(hex(wallet.ownerSecret(seed, DOMAIN, 255n))).toBe(hex(hmac(root("moe/wallet/lit/v1/owner"), u64(255n))));
+    expect(hex(wallet.ownerSecret(seed, DOMAIN, BACKING, 0n))).toBe(hex(hmac(root("moe/wallet/lit/v1/owner"), BACKING, u64(0n))));
+    expect(hex(wallet.ownerSecret(seed, DOMAIN, BACKING, 255n))).toBe(hex(hmac(root("moe/wallet/lit/v1/owner"), BACKING, u64(255n))));
+    // Owner indices are per backing: one index of two backings names two keys.
+    expect(hex(wallet.ownerSecret(seed, DOMAIN, id(2), 0n))).not.toBe(hex(wallet.ownerSecret(seed, DOMAIN, BACKING, 0n)));
     expect(hex(wallet.acceptSecret(seed, DOMAIN, demandHash, ACCEPTANCE_DEADLINE)))
       .toBe(hex(hmac(root("moe/wallet/lit/v1/settlement"), demandHash, u64(ACCEPTANCE_DEADLINE))));
     const tags = demand.inputs.map(input => oTag(oNf(oCm(input))));
@@ -373,10 +375,10 @@ describe("lit-v1 §8 key derivation", () => {
       .toBe(hex(hmac(root("moe/wallet/lit/v1/presenter"), tags[0]!, tags[1]!, u64(1000n), u64(2000n))));
     expect(hex(wallet.presentSecret(seed, DOMAIN, [tags[0]!], 1000n, 2000n)))
       .toBe(hex(hmac(root("moe/wallet/lit/v1/presenter"), tags[0]!, Buffer.alloc(32), u64(1000n), u64(2000n))));
-    const secret = wallet.ownerSecret(seed, DOMAIN, 7n);
+    const secret = wallet.ownerSecret(seed, DOMAIN, BACKING, 7n);
     expect(hex(wallet.publicKeyOf(secret))).toBe(hex(ed25519.getPublicKey(secret)));
-    expect(hex(wallet.ownerSecret(seed, id(1), 7n))).not.toBe(hex(secret));
-    expect(reason(() => wallet.ownerSecret(seed, DOMAIN, -1n))).toBe("owner index outside u64");
+    expect(hex(wallet.ownerSecret(seed, id(1), BACKING, 7n))).not.toBe(hex(secret));
+    expect(reason(() => wallet.ownerSecret(seed, DOMAIN, BACKING, -1n))).toBe("owner index outside u64");
   });
 });
 
@@ -534,7 +536,7 @@ describe("lit-v1 conformance vectors", () => {
     return [{ backing: BACKING, value, owner: s.owner, rho: oSpendRho(d.inputs.map(input => oNf(oCm(input))), 0) }];
   }
   function hmac(s: Uint8Array): Buffer {
-    return createHmac("sha256", Buffer.from(hkdfSync("sha256", s, DOMAIN, ascii("moe/wallet/lit/v1/owner"), 32))).update(u64(0n)).digest();
+    return createHmac("sha256", Buffer.from(hkdfSync("sha256", s, DOMAIN, ascii("moe/wallet/lit/v1/owner"), 32))).update(join(BACKING, u64(0n))).digest();
   }
   it("matches the committed vectors, and the codec reproduces every one", () => {
     if (process.env.LIT_VECTORS === "write") writeFileSync(path, `${JSON.stringify(vectors, null, 2)}\n`);
@@ -554,7 +556,7 @@ describe("lit-v1 conformance vectors", () => {
         .toEqual(v.outputs.map(o => o.tag));
     }
     for (const p of vectors.publications) expect(hex(codec.encodePublication(codec.decodePublication(Buffer.from(p, "hex"))))).toBe(p);
-    expect(hex(wallet.ownerSecret(seed, DOMAIN, 0n))).toBe(vectors.wallet.owner0);
+    expect(hex(wallet.ownerSecret(seed, DOMAIN, BACKING, 0n))).toBe(vectors.wallet.owner0);
     expect(hex(wallet.acceptSecret(seed, DOMAIN, demandHash, ACCEPTANCE_DEADLINE))).toBe(vectors.wallet.acceptSecret);
     expect(hex(wallet.presentSecret(seed, DOMAIN, demandTags, 1000n, 2000n))).toBe(vectors.wallet.presentSecret2);
     expect(hex(wallet.presentSecret(seed, DOMAIN, [demandTags[0]!], 1000n, 2000n))).toBe(vectors.wallet.presentSecret1);

@@ -6,8 +6,9 @@
 // and output are its standing demand's, which the store keeps with the demand. The namespace keeps no note tree.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
+import type { LitScan, ScanOutput, StateHandle } from "../pool/v3/state.js";
 import type {
-  Construction, FaultTarget, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
+  Construction, FaultTarget, KeyedNote, KeyedWalletFrames, Keyring, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
 import type { VerifierIdentities } from "../pool/v3/configuration.js";
 import { requireReplay } from "../pool/v3/refusals.js";
@@ -21,10 +22,13 @@ import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configurat
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  arithmeticHolds, decodePublication, decodeRecord, encodeRecord, evidencePair, hashEvidenceFields, splitRecord, ownerSignaturesVerify,
+  arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodeRecord, evidencePair, hashEvidenceFields, splitRecord, ownerSignaturesVerify,
   settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
+import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, windowFor } from "./holdings.js";
+import { copyLitPaymentRequest, signedSpend } from "./wallet.js";
+import { OWNER_LOOK_AHEAD, presentSecret } from "./wallet-keys.js";
 import { LIT_HEADERS, LIT_PACKAGES, LIT_TRAILS, MAX_LIT_TRAIL_RECORD_BYTES } from "./transport.js";
 import { verifySignatureStrict } from "../keys.js";
 
@@ -96,6 +100,30 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
   }
 }
 
+/** Output `i` of a judged lit record as a wallet reads it (§8): its opening, rebuilt from the statement and checked
+ * against the view's commitment, and a settlement's acceptance. */
+function litScanOutput(record: LitRecord, _view: StatementView, cm: bigint, i: number, demand: Demand | undefined): ScanOutput {
+  const s = record.statement, domain = s.domain;
+  let opening: Opening, acceptance: LitScan["acceptance"];
+  switch (s.kind) {
+    case 1: { const output = { backing: s.backing, value: s.quantity, owner: s.owner }; opening = { ...output, rho: issueRho(output, s.nonce) }; break; }
+    case 2: case 3: {
+      const nfs = s.inputs.map(input => noteNullifier(noteCommitment(domain, input)));
+      opening = { ...s.outputs[i]!, rho: spendRho(nfs, i) }; break;
+    }
+    case 6: {
+      // §3: the demand's backing and quantity to the settlement's owner, over the demand's nullifiers in input order.
+      if (demand?.nullifiers === undefined) throw new TypeError("a settlement's output needs its demand");
+      opening = { backing: demand.backing, value: demand.quantity, owner: s.owner, rho: spendRho(demand.nullifiers.map(bytesOf), 0) };
+      acceptance = { demand: Uint8Array.from(s.demand), deadline: settlementAuthorization(record).acceptance.deadline }; break;
+    }
+    default: throw new TypeError("a lit record of this kind creates no output");
+  }
+  if (keyOf(noteCommitment(domain, opening)) !== cm) throw new TypeError("a scanned output is not the view's");
+  return { cm, lit: { backing: Uint8Array.from(opening.backing), value: opening.value, owner: Uint8Array.from(opening.owner),
+    rho: Uint8Array.from(opening.rho), acceptance } };
+}
+
 /** §6's fault-evidence target: its intrinsic failures (`ARITHMETIC`, owners' and K's `SIGNATURE`), each one §9.1 may
  * exclude by. No verifier is asked; the demand's keys a withdrawal or settlement needs are state, so none is reported. */
 function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarget {
@@ -165,6 +193,37 @@ const LIT_READER: ReaderFrames = Object.freeze({
   fault: litFaultTarget,
 });
 
+/** A keyring this construction made. */
+function owned(keyring: Keyring): OwnerKeys {
+  if (!(keyring instanceof OwnerKeys)) throw new TypeError("a lit wallet reads lit owner keys");
+  return keyring;
+}
+/** §8's keyed wallet, as the one wallet (pool/v3/wallet-store.ts) reads it (slice 14 M14g). */
+const LIT_WALLET: KeyedWalletFrames = Object.freeze({
+  lookAhead: OWNER_LOOK_AHEAD,
+  window: windowFor,
+  keyring: (seed: Uint8Array, domain: Uint8Array) => new OwnerKeys(seed, domain),
+  witness: (seed: Uint8Array, domain: Uint8Array, windows: ReadonlyMap<string, bigint>, keyring: Keyring) =>
+    litWitness(seed, domain, windows, owned(keyring)),
+  notes: (seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle, keyring: Keyring, spent?: boolean) =>
+    litNotes(seed, domain, backing, state, owned(keyring), spent),
+  found: (seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring) => foundIndices(seed, domain, state, owned(keyring)),
+  ownFunded,
+  noteSecret: (seed: Uint8Array, domain: Uint8Array, keyring: Keyring, note: KeyedNote) => noteSecret(seed, domain, owned(keyring), note),
+  presentSecret,
+  request: copyLitPaymentRequest,
+  spend: signedSpend,
+  spendOf: (bytes: Uint8Array) => {
+    const s = decodeRecord(bytes).statement;
+    if (s.kind !== 2) throw new EncodingError("not a spend");
+    return { segment: s.segment, inputs: s.inputs, outputs: s.outputs };
+  },
+  outputs: (domain: Uint8Array, bytes: Uint8Array) =>
+    derivedOutputs(decodeRecord(bytes).statement).map(opening => ({ cm: keyOf(noteCommitment(domain, opening)), opening })),
+  commitment: (domain: Uint8Array, opening: Opening) => keyOf(noteCommitment(domain, opening)),
+  receipt: Object.freeze({ decode: decodeReceipt, encode: encodeReceipt, verify: verifyReceipt }),
+});
+
 /** Lit-v1: §3 records, §2's derived outputs, §5's chains with the evidence pair and no note root, no note tree. */
 export const LIT: Construction<LitRecord> = Object.freeze({
   namespace: Object.freeze({ name: CONSTRUCTION, tree: false }),
@@ -183,7 +242,9 @@ export const LIT: Construction<LitRecord> = Object.freeze({
     if (s.kind !== 6) throw new TypeError("not a settlement");
     return hex(s.demand);
   },
+  scanOutput: litScanOutput,
   reader: LIT_READER,
+  wallet: LIT_WALLET,
   journal: Object.freeze({
     encode: encodeRecord,
     identity: (record: LitRecord) => statementHash(record.statement),
