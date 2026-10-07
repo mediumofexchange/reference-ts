@@ -600,6 +600,10 @@ describe("v3 evidence store", () => {
       { package: pack([{ kind: 4, payload: snapshot }]) }, (await trailPart(full))!]))
       .toEqual(pack([{ kind: 1, payload: Uint8Array.of(1) }, { kind: 4, payload: snapshot }, { kind: 6, payload: bare(6) }]));
     await expect(wholePackage(pack([]), [(await trailPart(full, tip))!])).rejects.toThrow("a whole package takes whole trails");
+    // However many chunks a source splits a trail into (here one per byte, past an argument list's bound), it is one item.
+    const whole = bare(6), bytewise: EvidencePart = { trail: { size: BigInt(whole.length),
+      chunks: (function* () { for (let i = 0; i < 200_000; i++) yield i < whole.length ? whole.subarray(i, i + 1) : new Uint8Array(0); })() } };
+    expect(await wholePackage(pack([]), [bytewise])).toEqual(pack([{ kind: 6, payload: whole }]));
     // The cut's link at 4 damaged where the fork leaves it: the cut's own records before, then the walk back meets it.
     supplierDb.prepare("UPDATE chain SET prev = ? WHERE evidence = ?").run(b(1), chain[4]!);
     const given: Uint8Array[] = [];

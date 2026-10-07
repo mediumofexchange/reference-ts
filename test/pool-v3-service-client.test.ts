@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer, type RequestListener, type Server } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -8,7 +8,7 @@ import { encodeReceipt, receiptBytes, type Receipt, type ReceiptFields } from ".
 import { adoptedDomain } from "../src/pool/v3/configuration.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
-import { encodeEvidencePackage } from "../src/pool/v3/package.js";
+import { encodeEvidenceDirectory, encodeEvidencePackage } from "../src/pool/v3/package.js";
 import { encodeRecord, evidenceHashes, type Record as StatementRecord } from "../src/pool/v3/records.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import { MAX_V3_SERVICE_REPLY_BYTES, replyFromReceipt, replyFromCommitment, servedFrames } from "../src/pool/v3/service-wire.js";
@@ -28,9 +28,12 @@ const receipt = (fields: Partial<ReceiptFields> = {}, signingKey = secret) => {
   const r = { domain, segment, scopeRoot: 7n, position: 1n, ...evidenceHashes(record()), historyHash: b(8), after: 1n, ...fields };
   return encodeReceipt({ ...r, operator: ed25519.getPublicKey(signingKey), signature: ed25519.sign(receiptBytes(r), signingKey) });
 };
-/** A selection whose own package carries the commitment it names, and no further parts. */
-const served = (signer = secret, sequence = 1n): ServedEvidence => ({ selection: { domain, operator, venue: localVenueIdentity(reference.label, reference.lag), backing,
-  sequence: 1n, root: b(9) }, package: encodeEvidencePackage([{ kind: 2, payload: encodeCommitment(signCommitment(signer, sequence, b(9))) }]), parts: [] });
+/** A directory naming no snapshot, so a store that holds it holds all the selection needs; its hash is the root. */
+const directory = encodeEvidenceDirectory([]), root = sha256(directory);
+/** A selection whose own package carries the commitment it names (sequence 1 unless `selected`), and no further parts. */
+const served = (signer = secret, sequence = 1n, selected = 1n, named = root): ServedEvidence => ({ selection: { domain, operator,
+  venue: localVenueIdentity(reference.label, reference.lag), backing, sequence: selected, root: named },
+  package: encodeEvidencePackage([{ kind: 2, payload: encodeCommitment(signCommitment(signer, sequence, named)) }]), parts: [] });
 const servers: Server[] = [];
 async function endpoint(handler: RequestListener): Promise<string> {
   const server = createServer(handler); servers.push(server);
@@ -135,18 +138,26 @@ describe("bounded v3 local service client", () => {
     // The operator's service has one mark at whatever URL; a replica (no credential) has its own per URL (M12b).
     const operatorSource = Buffer.concat([domain, localVenueIdentity(reference.label, reference.lag), operator]), object = b(30);
     const source = (url?: string) => url === undefined ? operatorSource : Buffer.concat([operatorSource, Buffer.from(url)]);
-    const store = new EvidenceStore(), good = { ...served(), parts: [{ package: encodeEvidencePackage([{ kind: 4, payload: object }]) }] };
+    const store = new EvidenceStore(), good = { ...served(), parts: [{ package: encodeEvidencePackage([{ kind: 3, payload: directory }, { kind: 4, payload: object }]) }] };
     const goodUrl = await serving(good);
     expect(await new V3ServiceClient(goodUrl, TOKEN, expected()).sync(backing, store)).toEqual({ selection: good.selection, package: good.package });
     expect([store.suppliedThrough(source()), store.retained().snapshot(sha256(object))]).toEqual([1n, object]);
-    // A selection with no parts is a complete answer: nothing is new.
-    const empty = new EvidenceStore(), emptyUrl = await serving(served());
-    await new V3ServiceClient(emptyUrl, TOKEN, expected()).sync(backing, empty);
-    expect(empty.suppliedThrough(source())).toBe(1n);
+    // A later selection with no parts over a store that holds its directory is a complete answer: nothing is new.
+    const asked: (string | undefined)[] = [], quiet = await serving(served(secret, 2n, 2n), url => asked.push(url));
+    await new V3ServiceClient(quiet, TOKEN, expected()).sync(backing, store);
+    expect([store.suppliedThrough(source()), asked.map(url => url?.split("&")[1])]).toEqual([2n, ["after=1"]]);
+    // One that states a sequence and leaves its directory out, an empty answer included, is refused from the mark and
+    // from nothing alike, and moves no mark: so no later sync of the operator, at any URL, skips what it left out.
+    const withheld = await serving(served(secret, 5n, 5n, b(31)), url => asked.push(url));
+    await expect(new V3ServiceClient(withheld, TOKEN, expected()).sync(backing, store)).rejects.toThrow("served evidence does not assemble");
+    expect([store.suppliedThrough(source()), asked.slice(1).map(url => url?.split("&")[1])]).toEqual([2n, ["after=2", "after=0"]]);
+    const empty = new EvidenceStore();
+    await expect(new V3ServiceClient(quiet, TOKEN, expected()).sync(backing, empty)).rejects.toThrow("served evidence does not assemble");
+    expect(empty.suppliedThrough(source())).toBe(0n);
     // A replica's mark is its own: the operator's is not asked of it, nor its of the operator.
     const replicaStore = new EvidenceStore();
-    await new V3ServiceClient(emptyUrl, undefined, expected()).sync(backing, replicaStore);
-    expect([replicaStore.suppliedThrough(source()), replicaStore.suppliedThrough(source(emptyUrl))]).toEqual([0n, 1n]);
+    await new V3ServiceClient(goodUrl, undefined, expected()).sync(backing, replicaStore);
+    expect([replicaStore.suppliedThrough(source()), replicaStore.suppliedThrough(source(goodUrl))]).toEqual([0n, 1n]);
     replicaStore.close();
     // A kind no v3 reader reads refuses the sync, and another context is refused before any part is kept: no sequence is recorded.
     const other = new EvidenceStore(), unread = { ...served(), parts: [{ package: encodeEvidencePackage([{ kind: 9, payload: object }]) }] };
@@ -199,6 +210,28 @@ describe("bounded v3 local service client", () => {
     await expect(new V3ServiceClient(error, TOKEN, expected()).package(backing)).rejects.toMatchObject({ code: "UNAVAILABLE", status: 503 });
     const refused = await endpoint((_, response) => { response.writeHead(409, { "content-type": "application/json" }); response.end(JSON.stringify({ code: "FENCED" })); });
     await expect(new V3ServiceClient(refused, TOKEN, expected()).package(backing)).rejects.toMatchObject({ code: "FENCED", status: 409 });
+  });
+
+  it("stops waiting on a source that drips evidence below the minimum rate, as a source that did not answer", async () => {
+    // A valid selection, then a trail of a terabyte, one byte at a time: each byte comes within the stall bound, and
+    // the clock moves three seconds per byte, so the waits pass fifteen seconds.
+    const head: Uint8Array[] = [];
+    for await (const chunk of servedFrames({ ...served(), parts: [{ trail: { size: 1n << 40n, chunks: [] } }] })) {
+      head.push(chunk);
+      if (head.length === 2) break;
+    }
+    // The clock moves only while it is faked: a tick after the test ends never installs a frozen clock for the next.
+    let faking = true;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const url = await endpoint((request, response) => {
+        request.resume(); response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
+        for (const chunk of head) response.write(chunk);
+        const tick = setInterval(() => { if (faking) vi.setSystemTime(Date.now() + 3_000); response.write(Uint8Array.of(0x70)); }, 5);
+        response.once("close", () => clearInterval(tick));
+      });
+      await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toMatchObject({ name: "TimeoutError" });
+    } finally { faking = false; vi.useRealTimers(); }
   });
 
   it("aborts a real server that stalls after response headers", async () => {

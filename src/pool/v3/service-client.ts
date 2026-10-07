@@ -5,7 +5,7 @@ import { POOL_V3, type Construction, type OperatorReceipt } from "./construction
 import { EVIDENCE_QUOTA, wholePackage, type EvidenceStore } from "./evidence-store.js";
 import { referenceVenue, type VenueReference } from "./guard.js";
 import { PackageLimitError } from "./package.js";
-import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, V3_SERVICE_PROFILE,
+import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, servedTooSlow, V3_SERVICE_PROFILE,
   MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES, type V3ServiceCommand } from "./service-wire.js";
 import type { ServedPackage } from "./store.js";
 
@@ -133,6 +133,26 @@ export async function sendToRelay(baseUrl: string, token: string, file: unknown)
   return exchangeWith(url.href, onion, "/publications", token, body, "application/json", response => json(response, MAX_V3_SERVICE_REPLY_BYTES), 20_000);
 }
 
+/** Whether `evidence` holds what a source serving the selection whose directory is `root` sends by then (§12.1, §14):
+ * that directory, each snapshot it names, and each snapshot's trail. A source's mark moves only past such an answer, so
+ * one that states a sequence and leaves its evidence out (an empty answer included) moves no mark, and a quiet or
+ * closed backing is never left with evidence no later checkpoint sends again. Each lookup is one row and one chain step. */
+function holdsSelection(evidence: EvidenceStore, root: Uint8Array): boolean {
+  const kept = evidence.retained();
+  try {
+    const directory = kept.directory(root);
+    return directory !== undefined && directory.every(entry => {
+      const payload = kept.snapshot(entry.digest);
+      if (payload === undefined) return false;
+      const snapshot = evidence.construction.reader.snapshot.decode(payload);
+      return kept.trail(snapshot.segment, snapshot.evidenceHash) !== undefined;
+    });
+  } catch (error) {
+    if (error instanceof EncodingError) return false;
+    throw error;
+  } finally { kept.release(); }
+}
+
 /** Local operation credentials do not select protocol authority. The caller
  * independently holds the expected operator, reference venue and construction; the
  * domain is that construction's configuration (pool-v3 §11.4's adopted one, or
@@ -218,12 +238,17 @@ export class V3ServiceClient {
     take: Parameters<typeof readServed<T>>[1]): Promise<{ readonly served: ServedPackage; readonly taken: T }> {
     if (typeof maxBytes !== "bigint" || maxBytes < 0n) throw new TypeError("invalid evidence budget");
     return this.exchange(`/evidence?backing=${hex(backing)}&after=${after}`, this.#walletToken, undefined, "application/octet-stream", (response, progress) => {
+      // Each chunk restarts the bound on a stall; the time spent waiting for chunks bounds a drip, as the server bounds
+      // its peers. A source slower than that did not answer.
       const bounded = async function* (): AsyncIterable<Uint8Array> {
-        let total = 0n;
+        let total = 0n, waited = 0, asked = Date.now();
         for await (const chunk of chunksOf(response)) {
+          waited += Date.now() - asked;
           progress(); total += BigInt(chunk.length);
           if (total > maxBytes) throw new PackageLimitError("served evidence exceeds the reader's budget");
+          if (servedTooSlow(waited, Number(total))) throw new DOMException("the source served evidence below the minimum rate", "TimeoutError");
           yield chunk;
+          asked = Date.now();
         }
       };
       return readServed(bounded(), (served, parts) => {
@@ -249,8 +274,10 @@ export class V3ServiceClient {
    * and the request names it, so the source sends only later objects and, for each trail, its head and the records
    * after what the store holds. The source is the expected operator's service, at whatever URL, or a replica (a client
    * with no credential) at this URL: a replica serves after a sequence it served before what it kept since (M12b), so
-   * its mark is its own, and one that withholds what it states as served costs only its own later syncs. Where those parts do not assemble over what the store holds, everything is fetched once more from
-   * nothing; `full` asks for that outright, which also replaces retained evidence that storage damaged. A source
+   * its mark is its own. Where those parts do not assemble over what the store holds, or leave out the selection's
+   * directory, a snapshot it names or that snapshot's trail (`holdsSelection`), everything is fetched once more from
+   * nothing, and a source whose answer from nothing still leaves them out is refused as one that does not assemble, its
+   * mark unmoved; `full` asks for that outright, which also replaces retained evidence that storage damaged. A source
    * whose selection is below the mark sends nothing new, and the mark stays. Returns the selection and the read's own
    * package (the configuration and the selected commitment) to read with that store.
    *
@@ -266,8 +293,8 @@ export class V3ServiceClient {
       (served, parts) => evidence.take(parts, served.selection.operator));
     let after = options.full === true ? 0n : evidence.suppliedThrough(source);
     let result = await receive(after);
-    if (!result.taken && after > 0n) result = await receive(after = 0n);
-    if (!result.taken) throw new EncodingError("served evidence does not assemble");
+    if (!(result.taken && holdsSelection(evidence, result.served.selection.root)) && after > 0n) result = await receive(after = 0n);
+    if (!result.taken || !holdsSelection(evidence, result.served.selection.root)) throw new EncodingError("served evidence does not assemble");
     const sequence = result.served.selection.sequence;
     evidence.supplied(source, sequence > after ? sequence : after);
     return result.served;

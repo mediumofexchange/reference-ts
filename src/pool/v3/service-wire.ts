@@ -105,6 +105,10 @@ const SERVED = utf8ToBytes("pool-store/v3/served");
 const MAX_OWN_PACKAGE_BYTES = 65_536;
 /** One package part: a supplier sends objects in parts of about 1 MiB, and one object is at most 1 MiB. */
 export const MAX_V3_SERVED_PART_BYTES = 4_194_304;
+/** Whether a served stream's peer is too slow: the time one side spent waiting on the other passed fifteen seconds and a
+ * millisecond per 64 bytes moved. Each side charges only its own wait on the peer (a server its writes' backpressure, a
+ * reader its reads), never its own work, so neither cuts off a peer for its own slowness and neither waits on a drip. */
+export function servedTooSlow(waitedMs: number, bytes: number): boolean { return waitedMs > 15_000 + bytes / 64; }
 const u32 = (value: number): Uint8Array => { const out = new Uint8Array(4); new DataView(out.buffer).setUint32(0, value, false); return out; };
 const u64 = (value: bigint): Uint8Array => { const out = new Uint8Array(8); new DataView(out.buffer).setBigUint64(0, value, false); return out; };
 
