@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1324
+      "elapsedMs": 1296
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3111
+      "elapsedMs": 3126
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3111
+      "elapsedMs": 3093
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 997
+      "elapsedMs": 995
     }
   ],
   "transactions": [
@@ -95,7 +95,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "7c508ac3c03f76246a4225622a9f91b7924c7bf0007f260f20f80d1921a92d71",
-    "history": "a2c351958f663124b110a99600734bfe5a5db21d3312158b33f132c429fee2b2",
+    "history": "b07ac63f3a0402c13e818995f963c467db849cfad4270687c9e96f4f7fe5173c",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -153,7 +153,7 @@
       }
     ]
   },
-  "elapsedMs": 27747,
+  "elapsedMs": 27692,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -255,7 +255,7 @@
     "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
-    "src/pool/v3/construction.ts": "1ab6ac1cacf61a423f4c935379f602dd2eeacdd487655dbc59f8ea9ead02daf9",
+    "src/pool/v3/construction.ts": "3c6ea9f62c0db107ab19feb11e04d5a2030d77c458dfc93a9215c1815131b151",
     "src/pool/v3/evidence-store.ts": "453fd0224e4f39ed9b309d72ba8f98f921df1e00fdd17a66bf8197e5d3ae3939",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
     "src/pool/v3/fault-observer.ts": "7a7492584ced10a483257789edd282b974469fe2260815b3dba9758eed0f41c0",

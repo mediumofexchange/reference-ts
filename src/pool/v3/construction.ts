@@ -141,9 +141,11 @@ export interface Keyring {
   find(owner: Uint8Array): { readonly backing: Uint8Array; readonly index: bigint } | undefined;
   close(): void;
 }
-/** K's acceptance where an acceptance owner is a key (lit-v1 §4): the demand, the owner, the deadline and K's signature. */
+/** K's acceptance where an acceptance owner is a key (lit-v1 §4): the demand, the owner, the deadline, K's signature and the
+ * owner key's, each over the acceptance bytes. */
 export interface KeyedAcceptance {
   readonly domain: Uint8Array; readonly demand: Uint8Array; readonly owner: Uint8Array; readonly deadline: bigint; readonly signature: Uint8Array;
+  readonly ownerSignature: Uint8Array;
 }
 /** A receipt of a construction without a scope root or proof digest (lit-v1 §5). */
 export interface KeyedReceipt {
@@ -194,8 +196,10 @@ export interface KeyedWalletFrames {
   ownIssue(seed: Uint8Array, domain: Uint8Array, opening: KeyedOpening): boolean;
   /** K's acceptance owner for `demand` and `deadline`: `acceptSecret`'s key (lit-v1 §8). */
   acceptOwner(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array;
-  /** The acceptance bytes K signs (lit-v1 §4); EncodingError where a field is malformed. */
-  acceptance(acceptance: Omit<KeyedAcceptance, "signature">): Uint8Array;
+  /** The owner key's signature over the acceptance bytes, by `acceptSecret` of its demand and deadline (lit-v1 §§4, 8). */
+  acceptSignature(seed: Uint8Array, acceptance: Omit<KeyedAcceptance, "signature" | "ownerSignature">): Uint8Array;
+  /** The acceptance bytes K and the owner key sign (lit-v1 §4); EncodingError where a field is malformed. */
+  acceptance(acceptance: Omit<KeyedAcceptance, "signature" | "ownerSignature">): Uint8Array;
   /** Publication kind 1, 3 or 4 of a demand, settlement or withdrawal record, or kind 2 of an acceptance, routed to `backing`. */
   publication(domain: Uint8Array, backing: Uint8Array, body: { readonly kind: 1 | 3 | 4; readonly record: Uint8Array } |
     { readonly kind: 2; readonly acceptance: KeyedAcceptance }): Uint8Array;

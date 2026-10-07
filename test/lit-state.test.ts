@@ -82,11 +82,12 @@ function withdraw(id: Uint8Array, signer = PRESENTER): Uint8Array {
   const statement: Statement = { domain: DOMAIN, kind: 5, segment: SEGMENT, demand: id };
   return record(statement, sign(statement, signer));
 }
-function settle(d: { statement: LitDemand; id: Uint8Array }, owner: Uint8Array, options: { deadline?: bigint; acceptor?: Uint8Array; releaser?: Uint8Array; segment?: Uint8Array } = {}):
+function settle(d: { statement: LitDemand; id: Uint8Array }, owner: Uint8Array, options: { deadline?: bigint; acceptor?: Uint8Array; ownerSigner?: Uint8Array; releaser?: Uint8Array; segment?: Uint8Array } = {}):
   { bytes: Uint8Array; note: Opening } {
   const deadline = options.deadline ?? 15n, statement: Statement = { domain: DOMAIN, kind: 6, segment: options.segment ?? SEGMENT, demand: d.id, owner: pub(owner) };
   const acceptance = { domain: DOMAIN, demand: d.id, owner: pub(owner), deadline };
   const authorization = encodeSettlementAuthorization(deadline, ed25519.sign(acceptanceBytes(acceptance), options.acceptor ?? K),
+    ed25519.sign(acceptanceBytes(acceptance), options.ownerSigner ?? owner),
     ed25519.sign(releaseBytes(DOMAIN, d.id, acceptanceId(acceptance), statementHash(statement)), options.releaser ?? PRESENTER));
   const nfs = d.statement.inputs.map(nfOf), value = d.statement.inputs.reduce((sum, input) => sum + input.value, 0n);
   return { bytes: record(statement, authorization), note: { backing: d.statement.inputs[0]!.backing, value, owner: pub(owner), rho: oracle.spendRho(nfs, 0) } };
@@ -239,8 +240,12 @@ describe("lit-v1 records at the one validity seam (M14c)", () => {
     // A second demand on the locked note, and a withdrawal the presenter did not sign.
     expect(await refusal(state, demand([a.note], [ALICE], { deadline: 21n }).bytes, context)).toBe("LOCKED");
     expect(await refusal(state, withdraw(d.id, MALLORY), context)).toBe("SIGNATURE");
-    // Settlement: K's acceptance, the presenter's release, the acceptance deadline within the demand's.
+    // Settlement: K's acceptance and its owner's signature (§§4, 7), the presenter's release, the acceptance deadline within
+    // the demand's. An acceptance naming the holder's own key, which K cannot sign for, is no acceptance.
     expect(await refusal(state, settle(d, CAROL, { acceptor: MALLORY }).bytes, context)).toBe("SIGNATURE");
+    expect(await refusal(state, settle(d, CAROL, { ownerSigner: K }).bytes, context)).toBe("SIGNATURE");
+    expect(await refusal(state, settle(d, ALICE, { ownerSigner: K }).bytes, context)).toBe("SIGNATURE");
+    expect(await refusal(state, settle(d, PRESENTER, { ownerSigner: MALLORY }).bytes, context)).toBe("SIGNATURE");
     expect(await refusal(state, settle(d, CAROL, { releaser: MALLORY }).bytes, context)).toBe("SIGNATURE");
     expect(await refusal(state, settle(d, CAROL, { deadline: 21n }).bytes, context)).toBe("DEADLINE");
     await applyRecord(state, withdraw(d.id), context);
@@ -333,9 +338,18 @@ describe("lit-v1 records at the one validity seam (M14c)", () => {
       .rejects.toMatchObject({ status: "unsupported-scope" });
     await expect(applyForceRecord(state, withdraw(d.id, MALLORY), force(), LIT)).rejects.toMatchObject({ check: "SIGNATURE" });
     await expect(applyForceRecord(state, settle(d, CAROL, { deadline: 8n }).bytes, force(), LIT)).rejects.toMatchObject({ check: "DEADLINE" });
+    // §7: a release's acceptance verifies under its owner at the venue too, whatever key K names.
+    for (const owner of [ALICE, PRESENTER, CAROL]) {
+      await expect(applyForceRecord(state, settle(d, owner, { ownerSigner: K }).bytes, force(), LIT)).rejects.toMatchObject({ check: "SIGNATURE" });
+    }
     expect(overlay()).toEqual(before);
     await applyForceRecord(state, withdraw(d.id), force(), LIT);
     expect(state.demand(hex(d.id))).toBeUndefined();
+    // An acceptance whose owner is K itself carries two equal signatures and has force.
+    const own = openForceState(source);
+    await applyForceRecord(own, d.bytes, force(), LIT);
+    await applyForceRecord(own, settle(d, K).bytes, force(), LIT);
+    expect(own.demand(hex(d.id))).toBeUndefined();
   });
 });
 

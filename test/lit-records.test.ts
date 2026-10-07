@@ -85,16 +85,16 @@ const ownerSigs = (s: codec.Spend | codec.Burn | codec.Demand | codec.Request): 
 };
 const ACCEPTANCE_DEADLINE = 1900n;
 const acceptance = oAcceptance(demandHash, settle.owner, ACCEPTANCE_DEADLINE);
-const acceptanceSig = sign(K, acceptance);
+const acceptanceSig = sign(K, acceptance), ownerSig = sign(11, acceptance);
 const release = join(ascii("moe/lit/v1/release"), DOMAIN, demandHash, hash(acceptance), hash(oStatement(settle)));
-const settleAuthorization = join(u64(ACCEPTANCE_DEADLINE), acceptanceSig, sign(10, release));
+const settleAuthorization = join(u64(ACCEPTANCE_DEADLINE), acceptanceSig, ownerSig, sign(10, release));
 // The smallest shapes too: a one-input spend to one output, a burn with no change, a demand over one note and its settlement.
 const spendOne: codec.Spend = { domain: DOMAIN, kind: 2, segment: SEGMENT, inputs: [noteB], outputs: [{ backing: BACKING, value: 30n, owner: keyOf(8) }] };
 const burnAll: codec.Burn = { domain: DOMAIN, kind: 3, segment: SEGMENT, quantity: 70n, inputs: [noteA], outputs: [] };
 const demandOne: codec.Demand = { ...demand, inputs: [noteA], instant: 1001n };
 const settleOne: codec.Settle = { domain: DOMAIN, kind: 6, segment: SEGMENT, demand: hash(oStatement(demandOne)), owner: keyOf(11) };
 const acceptanceOne = oAcceptance(settleOne.demand, settleOne.owner, ACCEPTANCE_DEADLINE);
-const settleOneAuthorization = join(u64(ACCEPTANCE_DEADLINE), sign(K, acceptanceOne),
+const settleOneAuthorization = join(u64(ACCEPTANCE_DEADLINE), sign(K, acceptanceOne), sign(11, acceptanceOne),
   sign(10, join(ascii("moe/lit/v1/release"), DOMAIN, settleOne.demand, hash(acceptanceOne), hash(oStatement(settleOne)))));
 const records: [codec.Statement, Uint8Array][] = [
   [issueA, sign(K, oStatement(issueA))], [spend, ownerSigs(spend)], [burn, ownerSigs(burn)], [demand, ownerSigs(demand)],
@@ -255,22 +255,25 @@ describe("lit-v1 §§6–7 arithmetic and signatures", () => {
 });
 
 describe("lit-v1 §4 signed objects and publications", () => {
-  it("reconstructs a settlement's acceptance and release, which verify under K and the presenter key", () => {
+  it("reconstructs a settlement's acceptance and release, which verify under K, the owner and the presenter key", () => {
     const a = codec.settlementAuthorization(record(5));
     expect(hex(a.acceptanceMessage)).toBe(hex(acceptance));
     expect(a.acceptanceMessage).toHaveLength(125);
     expect(hex(a.releaseMessage)).toBe(hex(release));
     expect(a.releaseMessage).toHaveLength(146);
     expect(ed25519.verify(a.acceptance.signature, a.acceptanceMessage, keyOf(K))).toBe(true);
+    expect(ed25519.verify(a.acceptance.ownerSignature, a.acceptanceMessage, settle.owner)).toBe(true);
     expect(ed25519.verify(a.releaseSignature, a.releaseMessage, demand.presenter)).toBe(true);
-    expect(hex(codec.encodeSettlementAuthorization(ACCEPTANCE_DEADLINE, acceptanceSig, sign(10, release)))).toBe(hex(settleAuthorization));
+    expect(settleAuthorization).toHaveLength(200);
+    expect(hex(codec.encodeSettlementAuthorization(ACCEPTANCE_DEADLINE, acceptanceSig, ownerSig, sign(10, release)))).toBe(hex(settleAuthorization));
     expect(reason(() => codec.settlementAuthorization(record(4)))).toBe("not a settlement");
   });
 
-  const signed = { domain: DOMAIN, demand: demandHash, owner: settle.owner, deadline: ACCEPTANCE_DEADLINE, signature: acceptanceSig };
+  const signed = { domain: DOMAIN, demand: demandHash, owner: settle.owner, deadline: ACCEPTANCE_DEADLINE, signature: acceptanceSig,
+    ownerSignature: ownerSig };
   const publications: [codec.Publication, Buffer][] = [
     [{ domain: DOMAIN, backing: BACKING, kind: 1, record: record(3) }, oPublication(BACKING, 1, oRecord(oStatement(demand), ownerSigs(demand)))],
-    [{ domain: DOMAIN, backing: BACKING, kind: 2, acceptance: signed }, oPublication(BACKING, 2, join(acceptance, acceptanceSig))],
+    [{ domain: DOMAIN, backing: BACKING, kind: 2, acceptance: signed }, oPublication(BACKING, 2, join(acceptance, acceptanceSig, ownerSig))],
     [{ domain: DOMAIN, backing: BACKING, kind: 3, record: record(5) }, oPublication(BACKING, 3, oRecord(oStatement(settle), settleAuthorization))],
     [{ domain: DOMAIN, backing: BACKING, kind: 4, record: record(4) }, oPublication(BACKING, 4, oRecord(oStatement(withdraw), records[4]![1]))],
     [{ domain: DOMAIN, backing: BACKING, kind: 5, record: record(6) }, oPublication(BACKING, 5, oRecord(oStatement(request), ownerSigs(request)))],
@@ -282,7 +285,7 @@ describe("lit-v1 §4 signed objects and publications", () => {
       expect(hex(codec.encodePublication(codec.decodePublication(bytes)))).toBe(hex(bytes));
       expect(hex(codec.publicationId(p))).toBe(hex(hash(expected)));
     }
-    expect(publications[1]![1].length).toBe(22 + 69 + 189);
+    expect(publications[1]![1].length).toBe(22 + 69 + 253);
     expect(codec.MAX_PUBLICATION_BYTES).toBe(569);
     const largest = codec.encodePublication(publications[0]![0]);
     expect(largest.length).toBe(569);
@@ -304,8 +307,12 @@ describe("lit-v1 §4 signed objects and publications", () => {
     expect(reason(() => codec.decodePublication(join(ascii("moe/lit/v1/publication"), DOMAIN, BACKING, u8(6), u32(0)))))
       .toBe("unknown publication kind");
     const otherDomain = id(5);
-    expect(reason(() => codec.decodePublication(join(ascii("moe/lit/v1/publication"), otherDomain, BACKING, u8(2), u32(189), acceptance, acceptanceSig))))
+    expect(reason(() => codec.decodePublication(join(ascii("moe/lit/v1/publication"), otherDomain, BACKING, u8(2), u32(253), acceptance, acceptanceSig, ownerSig))))
       .toBe("inconsistent domain");
+    // §4: an acceptance is both signatures; one carrying K's alone (189 bytes) does not decode, nor one past 253.
+    expect(reason(() => codec.decodePublication(oPublication(BACKING, 2, join(acceptance, acceptanceSig))))).toBe("truncated");
+    expect(reason(() => codec.decodePublication(oPublication(BACKING, 2, join(acceptance, acceptanceSig, ownerSig, u8(0))))))
+      .toBe("field too long");
   });
 });
 
@@ -430,7 +437,7 @@ describe("lit-v1 review cases", () => {
   it("refuses a publication's non-key acceptance owner, foreign domains and wrong body kinds, and an oversized input", () => {
     const smallOrder = Buffer.alloc(32); smallOrder[0] = 1;
     const accept = join(ascii("moe/lit/v1/acceptance"), DOMAIN, demandHash, smallOrder, u64(ACCEPTANCE_DEADLINE));
-    expect(reason(() => codec.decodePublication(oPublication(BACKING, 2, join(accept, acceptanceSig))))).toBe("invalid owner key");
+    expect(reason(() => codec.decodePublication(oPublication(BACKING, 2, join(accept, acceptanceSig, ownerSig))))).toBe("invalid owner key");
     const foreign = (kind: number, r: Buffer): Buffer => join(ascii("moe/lit/v1/publication"), id(5), BACKING, u8(kind), u32(r.length), r);
     expect(reason(() => codec.decodePublication(foreign(3, oRecord(oStatement(settle), settleAuthorization))))).toBe("inconsistent domain");
     expect(reason(() => codec.decodePublication(foreign(4, oRecord(oStatement(withdraw), records[4]![1]))))).toBe("inconsistent domain");
@@ -446,6 +453,7 @@ describe("lit-v1 review cases", () => {
     const moved = Buffer.from(settleAuthorization); moved.writeBigUInt64BE(ACCEPTANCE_DEADLINE + 1n, 0);
     const a = codec.settlementAuthorization({ statement: settle, authorization: moved });
     expect(ed25519.verify(a.acceptance.signature, a.acceptanceMessage, keyOf(K))).toBe(false);
+    expect(ed25519.verify(a.acceptance.ownerSignature, a.acceptanceMessage, settle.owner)).toBe(false);
     expect(ed25519.verify(a.releaseSignature, a.releaseMessage, demand.presenter)).toBe(false);
   });
 });
@@ -497,7 +505,7 @@ describe("lit-v1 conformance vectors", () => {
   const packageBytes = join(ascii("moe/lit/v1/package"), u32(packageItems.length), ...packageItems.flatMap(([kind, payload]) =>
     [u8(kind), u64(BigInt(payload.length)), payload]));
   const vectors = {
-    specification: "money-from-first-principles lit-v1.md at 7e1ddd5 (draft until adopted)",
+    specification: "money-from-first-principles lit-v1.md at a554f8a (draft until adopted)",
     configHash: hex(DOMAIN),
     keys: Object.fromEntries([K, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => [`secret${n}`, hex(secretOf(n))])),
     records: records.map(([s, authorization]) => {
@@ -511,7 +519,7 @@ describe("lit-v1 conformance vectors", () => {
     }),
     publications: [
       hex(oPublication(BACKING, 1, oRecord(oStatement(demand), ownerSigs(demand)))),
-      hex(oPublication(BACKING, 2, join(acceptance, acceptanceSig))),
+      hex(oPublication(BACKING, 2, join(acceptance, acceptanceSig, ownerSig))),
       hex(oPublication(BACKING, 3, oRecord(oStatement(settle), settleAuthorization))),
       hex(oPublication(BACKING, 4, oRecord(oStatement(withdraw), records[4]![1]))),
       hex(oPublication(BACKING, 5, oRecord(oStatement(request), ownerSigs(request)))),
@@ -519,7 +527,7 @@ describe("lit-v1 conformance vectors", () => {
     wallet: { seed: hex(seed), owner0: hex(hmac(seed)), acceptSecret: hex(walletSecret("settlement", demandHash, u64(ACCEPTANCE_DEADLINE))),
       presentSecret2: hex(walletSecret("presenter", ...demandTags, u64(1000n), u64(2000n))),
       presentSecret1: hex(walletSecret("presenter", demandTags[0]!, Buffer.alloc(32), u64(1000n), u64(2000n))) },
-    acceptance: { bytes: hex(acceptance), id: hex(hash(acceptance)), release: hex(release) },
+    acceptance: { bytes: hex(acceptance), id: hex(hash(acceptance)), signature: hex(acceptanceSig), ownerSignature: hex(ownerSig), release: hex(release) },
     chain: { segment: hex(SEGMENT), steps: chainSteps.map(s => ({ record: hex(s.record), statementHash: hex(s.statementHash),
       signatureHash: hex(s.signatureHash), spentRoot: hex(s.spentRoot), history: hex(s.history), evidence: hex(s.evidence) })) },
     snapshot: hex(chainSnapshot),

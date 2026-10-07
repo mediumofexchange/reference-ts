@@ -1601,12 +1601,20 @@ export class V3Wallet {
     const row = await this.acceptance(name, demand, deadline, packageBytes, signed, sign);
     return { domain: new Uint8Array(this.domain), demand: hexToBytes(row.demand), owner: BigInt(row.owner), deadline, signature: row.signature };
   }
-  /** Lit-v1 §§4, 8: as `accept`, the owner `acceptSecret`'s key over the demand and the deadline. */
+  /** Lit-v1 §§4, 8: as `accept`, the owner `acceptSecret`'s key over the demand and the deadline, which signs the
+   * acceptance too. Its signature is deterministic (RFC 8032), so it is derived again rather than saved. */
   async keyedAccept(name: string, demand: Uint8Array, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
     sign: BackerSigner): Promise<KeyedAcceptance> {
     requireThat(this.keyed !== undefined, "INVALID", "a pool wallet's acceptance owner is a field element");
     const row = await this.acceptance(name, demand, deadline, packageBytes, signed, sign);
-    return { domain: new Uint8Array(this.domain), demand: hexToBytes(row.demand), owner: hexToBytes(row.owner), deadline, signature: row.signature };
+    const fields = { domain: new Uint8Array(this.domain), demand: hexToBytes(row.demand), owner: hexToBytes(row.owner), deadline };
+    return { ...fields, signature: row.signature, ownerSignature: this.ownerSigned(fields) };
+  }
+  /** The saved acceptance's owner signature, derived again and checked against the saved owner (`STORAGE` otherwise). */
+  private ownerSigned(fields: Omit<KeyedAcceptance, "signature" | "ownerSignature">): Uint8Array {
+    const signature = this.keyed!.acceptSignature(this.seed, fields);
+    requireThat(verifySignatureStrict(signature, this.keyed!.acceptance(fields), fields.owner), "STORAGE", "stored acceptance does not reproduce");
+    return signature;
   }
   /** The saved acceptance under `name`, made and signed once: its demand, its owner as stored (pool-v3's a decimal field
    * element, lit-v1's a key in hex) and K's signature. */
@@ -1851,9 +1859,10 @@ export class V3Wallet {
     requireThat(typeof send === "function", "INVALID", "a venue publisher is required");
     const backing = copyUnshared(row.backing as Uint8Array), fields = { domain: new Uint8Array(this.domain),
       demand: hexToBytes(row.demand as string), deadline: BigInt(row.deadline as string), signature: copyUnshared(row.signature as Uint8Array) };
-    // Lit-v1 §4: kind 2 is the acceptance bytes and K's signature, the owner a key.
-    const bytes = this.keyed !== undefined ? this.keyed.publication(new Uint8Array(this.domain), backing,
-      { kind: 2, acceptance: { ...fields, owner: hexToBytes(row.owner as string) } }) :
+    // Lit-v1 §4: kind 2 is the acceptance bytes, K's signature and the owner key's, the owner a key.
+    const keyed = this.keyed, owner = keyed !== undefined ? hexToBytes(row.owner as string) : undefined;
+    const bytes = keyed !== undefined ? keyed.publication(new Uint8Array(this.domain), backing, { kind: 2, acceptance:
+      { ...fields, owner: owner!, ownerSignature: this.ownerSigned({ ...fields, owner: owner! }) } }) :
       encodePublication({ domain: new Uint8Array(this.domain), backing, kind: 2, acceptance: { ...fields, owner: BigInt(row.owner as string) } });
     await send.call(publisher, 4, backing, bytes);
   }
@@ -2227,11 +2236,8 @@ export class V3Wallet {
 
   /** Lit-v1 §§3–4 kind 6 and C3.5–C3.6: settle this seed's standing demand that K's acceptance answers, to the acceptance's
    * owner, the release signed by the presenter key over this settlement's own statement hash. The acceptance must verify
-   * under the obligor, be due no later than the demand and not behind the horizon, and name no key of this wallet K can
-   * see (`OWN_KEY`): an owner key of a held backing, or the presenter key of a demand it presents, which no scan marks. Its notes paid
-   * back to itself, or stranded, would end the demand with K paying nothing; refused, an acceptance published in time
-   * still reads as answered (C3.8), and the holder withdraws. The
-   * settlement's output derives from the demand's nullifiers (§3), so no disclosure count is read (§7) and at most one
+   * under the obligor and under the owner it names (§§4, 7: the owner's signature shows K holds that key, so no acceptance
+   * names a holder key K cannot sign for), and be due no later than the demand and not behind the horizon. The settlement's output derives from the demand's nullifiers (§3), so no disclosure count is read (§7) and at most one
    * settlement of a demand is admitted. In a gap (`route`) it is bound to the snapshot and its release published. */
   private async keyedSettle(name: string, acceptance: KeyedAcceptance, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
     name = alias(name); this.mutable();
@@ -2239,7 +2245,7 @@ export class V3Wallet {
     let own: KeyedAcceptance, message: Uint8Array;
     try {
       own = { domain: copyUnshared(acceptance.domain), demand: copyUnshared(acceptance.demand), owner: copyUnshared(acceptance.owner),
-        deadline: acceptance.deadline, signature: copyUnshared(acceptance.signature) };
+        deadline: acceptance.deadline, signature: copyUnshared(acceptance.signature), ownerSignature: copyUnshared(acceptance.ownerSignature) };
       message = this.keyed!.acceptance(own);
     } catch (error) {
       if (error instanceof EncodingError || error instanceof TypeError) throw new V3WalletError("INVALID", "malformed acceptance");
@@ -2247,6 +2253,7 @@ export class V3Wallet {
     }
     requireThat(same(own.domain, this.domain) && verifySignatureStrict(own.signature, message, obligor),
       "INVALID", "the acceptance does not answer a demand under the backing's obligor");
+    requireThat(verifySignatureStrict(own.ownerSignature, message, own.owner), "INVALID", "the acceptance's owner key did not sign it");
     const intent = JSON.stringify([hex(backing), hex(sha256(message))]);
     const existing = this.savedAct(name, 6, intent);
     if (existing !== undefined) return existing;
@@ -2254,19 +2261,12 @@ export class V3Wallet {
     return this.read(packageBytes, terms, view => {
       const again = this.savedAct(name, 6, intent);
       if (again !== undefined) return again;
-      const { canonical, force, notes, at, lag, observed } = view;
+      const { canonical, force, at, lag, observed } = view;
       this.current(at);
       const demand = this.standing(view, own.demand);
       requireThat(own.deadline <= demand.deadline, "INVALID", "the acceptance is due after the demand");
       requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
       const { header } = this.route(view);
-      // The presenter key of any demand this seed presents over its unspent notes, this one's included, and of every demand
-      // saved here (another backing's, or one that never stood, public all the same).
-      const presenters = [...notes.flatMap(note => [...force!.demandsWithTag(note.tag)].map(([, d]) => d)).filter(d => this.presents(d)),
-        ...this.db.prepare("SELECT record FROM saved_records WHERE kind='4'").all()
-          .map(row => this.construction.view(this.construction.decode(row.record as Uint8Array), () => undefined).demand!.value)];
-      requireThat(this.keys!.find(own.owner) === undefined && !presenters.some(d => same(own.owner, d.presenter)) &&
-        !same(own.owner, demand.presenter), "OWN_KEY", "the acceptance's owner is a key of this wallet: withdraw the demand instead");
       const nfs = demand.nullifiers ?? [];
       requireThat(nfs.length !== 0 && nfs.every(nf => !force!.hasNullifier(nf)), "ABSENT", "a demanded note is not unspent in canonical history");
       const presenter = this.presenterOf(demand);

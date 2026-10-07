@@ -7,8 +7,9 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { ByteReader, ByteWriter, compareBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { field32, key32, positive, type Opening, type Output } from "./notes.js";
 import {
-  acceptanceId, encodeRecord, encodeSettlementAuthorization, releaseBytes, statementBytes, statementHash, type SignedAcceptance, type Statement,
+  acceptanceBytes, acceptanceId, encodeRecord, encodeSettlementAuthorization, releaseBytes, statementBytes, statementHash, type Acceptance, type SignedAcceptance, type Statement,
 } from "./records.js";
+import { acceptSecret } from "./wallet-keys.js";
 import type { KeyedRequest } from "../pool/v3/construction.js";
 
 /** §8: what a payer is asked to pay, on an authenticated channel. The owner key is the receiver's for this request
@@ -98,12 +99,17 @@ export function signedWithdrawal(domain: Uint8Array, segment: Uint8Array, demand
   const statement: Statement = { domain, kind: 5, segment, demand };
   return encodeRecord({ statement, authorization: ed25519.sign(statementBytes(statement), presenter) });
 }
-/** §§3–4 kind 6: settle the acceptance's demand to its owner, K's acceptance signature carried and the release signed by
- * the presenter key's secret over this settlement's own statement hash. Neither signature is checked here. */
+/** §§4, 8: the owner key's signature over the acceptance bytes, by K's `acceptSecret` of its domain, demand and deadline. */
+export function ownerAcceptanceSignature(seed: Uint8Array, acceptance: Acceptance): Uint8Array {
+  const message = acceptanceBytes(acceptance), secret = acceptSecret(seed, acceptance.domain, acceptance.demand, acceptance.deadline);
+  try { return ed25519.sign(message, secret); } finally { secret.fill(0); }
+}
+/** §§3–4 kind 6: settle the acceptance's demand to its owner, K's and the owner's acceptance signatures carried and the
+ * release signed by the presenter key's secret over this settlement's own statement hash. No signature is checked here. */
 export function signedSettlement(domain: Uint8Array, segment: Uint8Array, acceptance: SignedAcceptance, presenter: Uint8Array): Uint8Array {
   const statement: Statement = { domain, kind: 6, segment, demand: acceptance.demand, owner: acceptance.owner };
   const release = ed25519.sign(releaseBytes(domain, acceptance.demand, acceptanceId(acceptance), statementHash(statement)), presenter);
-  return encodeRecord({ statement, authorization: encodeSettlementAuthorization(acceptance.deadline, acceptance.signature, release) });
+  return encodeRecord({ statement, authorization: encodeSettlementAuthorization(acceptance.deadline, acceptance.signature, acceptance.ownerSignature, release) });
 }
 /** §3 kind 1: an issue of `output` under `nonce`; K signs `message`, and `record` carries that signature. */
 export function unsignedIssue(domain: Uint8Array, segment: Uint8Array, output: Output, nonce: Uint8Array):

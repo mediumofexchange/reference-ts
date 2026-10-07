@@ -29,7 +29,7 @@ import {
 import { LIT_TERMS } from "./terms.js";
 import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, windowFor } from "./holdings.js";
 import {
-  copyLitPaymentRequest, signedBurn, signedDemand, signedSettlement, signedSpend, signedWithdrawal, unsignedIssue,
+  copyLitPaymentRequest, ownerAcceptanceSignature, signedBurn, signedDemand, signedSettlement, signedSpend, signedWithdrawal, unsignedIssue,
 } from "./wallet.js";
 import { acceptSecret, issueNonce, OWNER_LOOK_AHEAD, presentSecret, publicKeyOf } from "./wallet-keys.js";
 import { LIT_HEADERS, LIT_PACKAGES, LIT_TRAILS, MAX_LIT_TRAIL_RECORD_BYTES } from "./transport.js";
@@ -90,8 +90,10 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
       const ended = hex(s.demand), demand = demandOf(ended);
       const settlement = (): ReturnType<StatementView["settlement"]> => {
         const auth = settlementAuthorization(record);
+        // §§4, 7: the acceptance verifies under K and under the owner it names, which shows its signer holds that key.
         return { deadline: auth.acceptance.deadline, signed: (issuer: Uint8Array, presenter: Uint8Array): boolean =>
           verifySignatureStrict(auth.acceptance.signature, auth.acceptanceMessage, issuer) &&
+          verifySignatureStrict(auth.acceptance.ownerSignature, auth.acceptanceMessage, auth.acceptance.owner) &&
           verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, presenter) };
       };
       if (demand?.nullifiers === undefined) return { ...base, ended, needsDemand: true, settlement };
@@ -146,7 +148,7 @@ function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTar
 
 const NO_IDENTITIES: VerifierIdentities = Object.freeze({});
 const LIT_READER: ReaderFrames = Object.freeze({
-  specification: "lit-v1 7e1ddd5",
+  specification: "lit-v1 a554f8a",
   domain: litConfigHash,
   verifyConfiguration: (bytes: Uint8Array): boolean => {
     try { return compareBytes(copyUnshared(bytes), litConfigurationBytes()) === 0; } catch (error) {
@@ -233,6 +235,7 @@ const LIT_WALLET: KeyedWalletFrames = Object.freeze({
     const secret = acceptSecret(seed, domain, demand, deadline);
     try { return publicKeyOf(secret); } finally { secret.fill(0); }
   },
+  acceptSignature: ownerAcceptanceSignature,
   acceptance: acceptanceBytes,
   publication: (domain: Uint8Array, backing: Uint8Array, body: { readonly kind: 1 | 3 | 4; readonly record: Uint8Array } |
     { readonly kind: 2; readonly acceptance: SignedAcceptance }) =>
