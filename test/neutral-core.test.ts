@@ -14,7 +14,7 @@ import { directoryRoot, isEquivocation, signCommitment, type Commitment, type Sn
 // set, so deleting the transparent path or pool-v2 cannot break it. A module
 // joins the set deliberately, by adding it here.
 const NEUTRAL = [
-  "src/bytes.ts", "src/keys.ts", "src/contexts.ts",
+  "src/bytes.ts", "src/keys.ts", "src/contexts.ts", "src/file-identity.ts",
   "src/venue-error.ts", "src/venue-records.ts", "src/record-range.ts", "src/record-venue.ts",
   "src/ergo-profile.ts", "src/ergo-headers.ts", "src/ergo-supplier.ts", "src/ergo-publisher.ts", "src/ergo-synthetic.ts",
   "src/ergo.ts", "src/ergo-store.ts",

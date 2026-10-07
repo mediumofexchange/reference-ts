@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { compareBytes } from "../src/bytes.js";
+import { fileIdentity } from "../src/file-identity.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
@@ -142,7 +143,10 @@ describe("pool-v3 §14 kept walk: evidence lineage", () => {
     expect(copied).toBe(true);
     // The process "crashed" at the copy; the evidence file is then restored to before read 2.
     copyFileSync(k.evidence + ".backup", join(crash, "evidence.sqlite"));
-    const s2 = new ReplayStore(join(crash, "replay.sqlite"), { digest: join(crash, "replay.sha256") }); closers.push(s2);
+    // The copy stands for the files the crash left in place: its digest names the copy's own identity (M13e).
+    const digest = join(crash, "replay.sha256"), [root] = fs.readFileSync(digest, "utf8").split("\n");
+    fs.writeFileSync(digest, `${root}\n${fileIdentity(join(crash, "replay.sqlite"))}`);
+    const s2 = new ReplayStore(join(crash, "replay.sqlite"), { digest }); closers.push(s2);
     const e2 = evidenceAt(join(crash, "evidence.sqlite"));
     const resumed = await settled(f.read(counting(), s2, { evidence: e2, items: without4 }));
     copyFileSync(k.evidence + ".backup", join(k.dir, "fresh.sqlite"));
@@ -190,7 +194,11 @@ describe("pool-v3 §14 kept walk: interrupted and damaged", () => {
     expect(copied).toBe(true);
     const fresh = outcome(await f.read(counting()));
     expect(kept).toEqual(fresh);
-    const s2 = new ReplayStore(join(crash, "replay.sqlite"), { digest: join(crash, "replay.sha256") }); closers.push(s2);
+    // The copy stands for the files a crash left in place: its digest names the copy's own identity (M13e), as the
+    // original's named the original's; a copy whose digest names another file's is discarded (kept-state tests).
+    const digest = join(crash, "replay.sha256"), [root] = fs.readFileSync(digest, "utf8").split("\n");
+    fs.writeFileSync(digest, `${root}\n${fileIdentity(join(crash, "replay.sqlite"))}`);
+    const s2 = new ReplayStore(join(crash, "replay.sqlite"), { digest }); closers.push(s2);
     expect(s2.keptRows()).toBeGreaterThan(0);
     const e2 = evidenceAt(join(crash, "evidence.sqlite"));
     expect(outcome(await f.read(counting(), s2, { evidence: e2 }))).toEqual(fresh);
