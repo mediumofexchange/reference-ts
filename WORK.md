@@ -5,13 +5,13 @@ Updated: 2026-10-06
 ## Goal
 **Slice 14: the lit implementation** (Next 10; numbered after 13 but before it; spec `lit-v1.md`, a draft until adopted;
 [layouts decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)).
-Acceptance: the reference replays a lit trail through the shared seams (records, `state.ts`'s validity seam, frames, reader) with
-lit-v1's verdicts, hostile cases included, and conformance vectors bind every byte layout; then a decision adopts `moe/lit/v1`. Stop: adoption.
-- **M14a–b done** ([decision](decisions/2026-10.md#2026-10-05--implement-the-lit-byte-layer-and-close-four-readings-lit-v1-left-open-slice-14-m14a), spec `1bf5bfc`): `src/lit/` bytes for §§2–6, 8–9 with oracle vectors; §6 frames over pool-v3's codecs.
-- **M14c done** (PR #116, [decision](decisions/2026-10.md#2026-10-05--judge-lit-records-in-the-one-state-machine-through-a-construction-view-slice-14-m14c)): `state.ts` judges lit records in every mode through a construction view; `test/lit-state.test.ts` against an oracle.
-- **M14d done** (PR #120, [decision](decisions/2026-10.md#2026-10-06--read-lit-packages-through-the-one-package-reader-and-walk-the-construction-a-read-option-slice-14-m14d)): lit packages read through the one walk; kept lit outputs rebuilt (§10).
-- **M14e ready to merge** (PR #122 green at `25d3aab`, spec PR #15 `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)): B1, M1, M2, tests 2–4 reviewed;
-  residuals in the decision. Then adopt: lit-v1 §1 → adopted by a decision (C0a), README/rows/docs, `contexts.ts`, pin, vectors, reports.
+Acceptance: lit trails replay through the shared seams with lit-v1's verdicts, hostile cases included, and vectors bind every layout;
+an operator journal and a wallet run lit backings through the `moe` commands (direction item 1); then a decision adopts `moe/lit/v1`.
+Stop: adoption, which moved after the journal and wallet ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4).
+- **Done:** M14a–b bytes and frames (spec `1bf5bfc`), M14c the one state machine (PR #116), M14d the one reader (PR #120). **M14e ready to merge** (PR #122 green at `4e95939`, spec PR #15 `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)): conformance findings closed, residuals recorded.
+- **M14f ready to merge** (PR #123 on #122's branch, green at `6032153`, run 37514975539, whose artifact re-recorded the 12 reports; reviewed and read back): the one operator journal serves a lit scope ([decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)); unit suite 1272.
+- **Next:** M14g the lit wallet (§8 keys, scan, request, pay), the HTTP service's wire and client per construction, and `moe` dispatch on
+  the terms' construction; M14h adoption (lit-v1 §1 by a decision, C0a; README/rows/docs, `contexts.ts`, pin, vectors, reports).
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
@@ -51,7 +51,7 @@ lit-v1's verdicts, hostile cases included, and conformance vectors bind every by
    output awaiting adoption is not reported at all (only never as spendable). Review 2026-10-06: (aa) the testnet drill sweeps funding keys
    in-process only (no signal handler or `--sweep <dir>`; boxes above the indexed height read as dust); (ab) no command prints a saved
    acceptance's absolute deadline for an exact `accept --deadline +n` retry; (ac) `keepContext`'s throwaway views keep `:memory:` journals
-   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations.
+   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error).
 5. Slice 11 leftovers. Measure `moe operator serve` as its own process at 10⁵ (the depth probe's process, which also held the synthetic
    node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
    if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
@@ -93,8 +93,8 @@ lit-v1's verdicts, hostile cases included, and conformance vectors bind every by
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
+- 2026-10-06: cloud runs cannot merge (the permission classifier refuses "merge without review"): review and merge spec PR #15, then
+  PR #122, then M14f's PR (based on #122's branch; GitHub retargets it to main once #122 merges and its branch is deleted).
 
-- 2026-10-06: cloud runs cannot merge (the permission classifier refuses "merge without review"): review and merge spec PR #15, then PR #122.
-
-Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: lit packages read through the one walk and pass conformance (M14e);
-lit adoption, release assurance, holder transport, qualified storage and mainnet remain.
+Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: lit packages pass conformance (M14e) and a lit scope is served
+by the one journal (M14f); the lit wallet and commands, lit adoption, release assurance, holder transport, qualified storage and mainnet remain.

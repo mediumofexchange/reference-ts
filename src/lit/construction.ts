@@ -7,15 +7,15 @@
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
 import type {
-  Construction, FaultTarget, PublicationView, ReaderFrames, ReceiptView, RequestView, StatementView,
+  Construction, FaultTarget, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
 import type { VerifierIdentities } from "../pool/v3/configuration.js";
 import { requireReplay } from "../pool/v3/refusals.js";
 import type { Demand } from "../pool/v3/replay-store.js";
 import type { RootTerms, TermsCodec } from "../pool/v3/terms.js";
 import {
-  decodeReceipt, decodeSnapshot, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptMatchesEvent,
-  snapshotBytes, snapshotDigest, verifyReceipt,
+  decodeReceipt, decodeSnapshot, encodeReceipt, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptBytes,
+  receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt,
 } from "./commitments.js";
 import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configuration.js";
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
@@ -184,4 +184,15 @@ export const LIT: Construction<LitRecord> = Object.freeze({
     return hex(s.demand);
   },
   reader: LIT_READER,
+  journal: Object.freeze({
+    encode: encodeRecord,
+    identity: (record: LitRecord) => statementHash(record.statement),
+    configuration: litConfigurationBytes,
+    // §5: no scope root and no proof digest.
+    receipt: ({ digests, scopeRoot, ...rest }: ReceiptFieldsOf, operator: Uint8Array, sign: (message: Uint8Array) => Uint8Array): Uint8Array => {
+      if (scopeRoot !== undefined) throw new TypeError("a lit receipt names no scope root");
+      const fields = { ...rest, statementHash: digests.statementHash, signatureHash: digests.signatureHash };
+      return encodeReceipt({ ...fields, operator, signature: sign(receiptBytes(fields)) });
+    },
+  }),
 });

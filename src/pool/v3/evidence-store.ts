@@ -229,7 +229,7 @@ export class EvidenceStore {
     // A store that outlives its reads keeps one identity in its own rows; a private in-memory one has none.
     if (source === ":memory:") this.#identity = undefined;
     else {
-      // A host's database holds the journal's pool-v3 evidence; it records no construction (a lit journal is a later slice).
+      // A host's database holds its journal's evidence; it records no construction, since the journal's identity names its domain.
       this.#db.exec(IDENTITY_SCHEMA);
       this.#db.prepare("INSERT OR IGNORE INTO evidence_identity VALUES (1, ?)").run(randomBytes(16));
       this.#identity = new Uint8Array((this.#db.prepare("SELECT value FROM evidence_identity WHERE id = 1").get() as { value: Uint8Array }).value);
