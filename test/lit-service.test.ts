@@ -4,7 +4,6 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { EncodingError } from "../src/bytes.js";
 import { decodeReceipt, encodeReceipt, receiptBytes } from "../src/lit/commitments.js";
 import { litConfigHash } from "../src/lit/configuration.js";
 import { LIT } from "../src/lit/construction.js";
@@ -108,7 +107,7 @@ describe("the operator's service for a lit scope", () => {
     const f = await fixture(), record = f.issue(pub(b(41)), 3n);
     // A client expecting pool-v3 sends no lit record, and reads no lit evidence as its own.
     const v3 = new V3ServiceClient(f.url, TOKEN, { operator: pub(OPERATOR), reference });
-    await expect(v3.submit(record)).rejects.toBeInstanceOf(EncodingError);
+    await expect(v3.submit(record)).rejects.toThrow("inconsistent domain, backing or digest");
     await expect(v3.package(f.backing)).rejects.toThrow("wrong service package context");
     // The lit service reads a pool-v3 record as no record of its construction.
     const v3Record = encodeV3Record({ domain: adoptedDomain(), kind: 5, publicInputs: [...limbsOf(adoptedDomain()), ...limbsOf(b(3)), 7n, ...limbsOf(b(4))],
@@ -116,7 +115,17 @@ describe("the operator's service for a lit scope", () => {
     const raw = await fetch(new URL("/commands", f.url), { method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
       body: JSON.stringify({ version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: bytesToHex(v3Record) }) });
     expect(raw.status).toBe(400); expect(await raw.json()).toEqual({ code: "INVALID" });
-    expect(() => parseV3ServiceCommand({ version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: bytesToHex(record) })).toThrow(EncodingError);
+    // A lit record of another configuration domain is refused before the journal judges it: nothing is admitted.
+    const foreign: Statement = { domain: b(70), kind: 1, segment: f.segment, backing: f.backing, quantity: 3n, owner: pub(b(41)), nonce: b(71) };
+    const foreignRecord = encodeRecord({ statement: foreign, authorization: ed25519.sign(statementBytes(foreign), K) });
+    const refused = await fetch(new URL("/commands", f.url), { method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: bytesToHex(foreignRecord) }) });
+    expect(refused.status).toBe(400); expect(await refused.json()).toEqual({ code: "INVALID" });
+    await expect(f.client.submit(foreignRecord)).rejects.toThrow("wrong submission domain or kind");
+    // An evidence store of the other construction is refused before any request.
+    const v3Evidence = new EvidenceStore(":memory:");
+    try { await expect(f.client.sync(f.backing, v3Evidence)).rejects.toThrow("an evidence store of another construction"); } finally { v3Evidence.close(); }
+    expect(() => parseV3ServiceCommand({ version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: bytesToHex(record) })).toThrow("inconsistent domain, backing or digest");
     expect(parseV3ServiceCommand({ version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: bytesToHex(record) }, LIT).kind).toBe("submit");
     // A lit request (kind 7) is no segment admission: refused on the wire and by the client before any exchange.
     const request: Statement = { domain: DOMAIN, kind: 7, input: { backing: f.backing, value: 1n, owner: pub(b(42)), rho: b(43) }, refresh: 1n };
@@ -150,9 +159,9 @@ describe("the operator's service for a lit scope", () => {
     const v3Fields = { domain: DOMAIN, segment: f.segment, scopeRoot: 7n, position: 1n, statementHash: statement(record), historyHash: b(50),
       proofHash: b(55), signatureHash: b(51), after: 1n };
     const v3Receipt = encodeV3Receipt({ ...v3Fields, operator: pub(OPERATOR), signature: ed25519.sign(v3ReceiptBytes(v3Fields), OPERATOR) });
-    expect(() => replyFromReceipt(v3Receipt, LIT)).toThrow(EncodingError);
-    expect(() => replyFromReceipt(lit())).toThrow(EncodingError);
-    expect(() => replyFromReceipt(lit().subarray(0, 289), LIT)).toThrow(EncodingError);
+    expect(() => replyFromReceipt(v3Receipt, LIT)).toThrow("wrong context");
+    expect(() => replyFromReceipt(lit())).toThrow("wrong context");
+    expect(() => replyFromReceipt(lit().subarray(0, 289), LIT)).toThrow("truncated");
     const authority = { domain: DOMAIN, segment: f.segment, operator: pub(OPERATOR) };
     expect(LIT.journal.receipts.verify({ ...authority, scopeRoot: undefined }, decodeReceipt(lit()))).toBe(true);
     expect(LIT.journal.receipts.verify({ ...authority, scopeRoot: 0n }, decodeReceipt(lit()))).toBe(false);
@@ -178,10 +187,16 @@ describe("the operator's service for a lit scope", () => {
         signatureHash: digests.signatureHash, after: 1n, ...fields };
       return { ...r, operator: pub(OPERATOR), signature: ed25519.sign(receiptBytes(r), OPERATOR) };
     };
-    for (const answer of [forged({ signatureHash: b(61) }), forged({ segment: b(62) }), { ...forged({}), signature: new Uint8Array(64) }]) {
-      await expect(payer.submit("shop", { submit: async () => answer })).rejects.toMatchObject({ code: "INVALID" });
+    // A pool-v3 receipt the operator signed over the same fields: its signature is over pool-v3's receipt message.
+    const { operator: _o, signature: _s, ...shared } = forged({}), v3Fields = { ...shared, scopeRoot: 7n, proofHash: b(65) };
+    const v3Shaped = { ...v3Fields, operator: pub(OPERATOR), signature: ed25519.sign(v3ReceiptBytes(v3Fields), OPERATOR) };
+    for (const answer of [forged({ signatureHash: b(61) }), forged({ segment: b(62) }), forged({ statementHash: b(63) }), forged({ domain: b(64) }),
+      { ...forged({}), operator: pub(b(66)) }, { ...forged({}), signature: new Uint8Array(64) }, v3Shaped]) {
+      await expect(payer.submit("shop", { submit: async () => answer })).rejects
+        .toMatchObject({ code: "INVALID", message: "receipt does not authenticate the saved record" });
     }
-    await expect(payer.submit("shop", { submit: async () => ({ position: 2n }) as unknown as KeyedReceipt })).rejects.toMatchObject({ code: "INVALID" });
+    await expect(payer.submit("shop", { submit: async () => ({ position: 2n }) as unknown as KeyedReceipt })).rejects
+      .toMatchObject({ code: "INVALID", message: "malformed receipt" });
     expect(payer.payment("shop")!.receipt).toBeUndefined();
     const receipt = await payer.submit("shop", f.client);
     expect(receipt.position).toBe(2n);

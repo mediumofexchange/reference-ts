@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { EncodingError } from "../src/bytes.js";
 import { limbsOf } from "../src/pool/field.js";
 import { encodeReceipt, receiptBytes } from "../src/pool/v3/commitments.js";
 import { encodeEvidencePackage } from "../src/pool/v3/package.js";
@@ -140,7 +139,7 @@ describe("v3 service wire framing", () => {
     }
     // The construction's decoder takes its receipt's exact length.
     expect(() => decodeV3ServiceReply(command({ kind: "accepted", receipt: `${bytesToHex(receipt)}00` }))).toThrow(/trailing/i);
-    expect(() => decodeV3ServiceReply(command({ kind: "accepted", receipt: bytesToHex(receipt).slice(0, -2) }))).toThrow(EncodingError);
+    expect(() => decodeV3ServiceReply(command({ kind: "accepted", receipt: bytesToHex(receipt).slice(0, -2) }))).toThrow("truncated");
     expect(() => decodeV3ServiceReply(command({ kind: "committed", commitment: "00" }))).toThrow("invalid service hex");
   });
 });

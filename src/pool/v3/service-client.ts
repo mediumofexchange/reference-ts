@@ -169,6 +169,7 @@ export class V3ServiceClient {
    * one response (by default the store's file quota).
    */
   async sync(backing: Uint8Array, evidence: EvidenceStore, options: { readonly full?: boolean; readonly maxBytes?: bigint } = {}): Promise<ServedPackage> {
+    if (evidence.construction.namespace.name !== this.#construction.namespace.name) throw new TypeError("an evidence store of another construction");
     const ownBacking = identifier(backing), source = concatBytes(this.#domain, this.#venue, this.#operator);
     const receive = (after: bigint) => this.served(ownBacking, after, options.maxBytes ?? EVIDENCE_QUOTA.file, (_, parts) => evidence.take(parts));
     const after = options.full === true ? 0n : evidence.suppliedThrough(source);
