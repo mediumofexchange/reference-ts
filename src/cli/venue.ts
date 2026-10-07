@@ -216,8 +216,9 @@ export async function venueAudit(argv: readonly string[]): Promise<void> {
   const view = openView(directory);
   try {
     let witnessed: bigint;
+    // A view that failed refuses with its failure (VENUE), kept as the evidence that finality broke.
     try { witnessed = view.venue.witnessedIndex(); } catch (error) {
-      if (error instanceof VenueError) throw new CommandError("ABSENT", "the view has no settled snapshot: nothing to audit");
+      if (error instanceof VenueError && /no settled snapshot/.test(error.message)) throw new CommandError("ABSENT", "the view has no settled snapshot: nothing to audit");
       throw error;
     }
     let audited;

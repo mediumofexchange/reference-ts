@@ -501,7 +501,9 @@ customer's payment credits another's order), and crediting again a request its l
    - Every request not fulfilled at that moment is marked: the lost instance may have credited it, so `fulfill`
      refuses it (`RESTORED`) unless the holder's records outside the wallet show it was not (`--uncredited`).
    - A lit wallet reads every owner key's exposure as unknown, as one restored from its seed does (lit-v1 §8): its next
-     read of each backing exposes every index through `h + 256`, and `move-window` comes before new requests.
+     read of each backing exposes every index through `h + 256`, and `move-window` comes before new requests and before
+     a payment or burn with change. Make that read from a view at least as fresh as the lost instance's: `h` comes from
+     it, and the exposure is fixed there.
 3. A lit wallet cannot tell which requests its lost instance paid: before paying one again, ask the payee. A pool-v3
    payment is refused once its request's exact output exists.
 

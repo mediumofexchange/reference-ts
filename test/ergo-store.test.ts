@@ -269,6 +269,25 @@ describe("durable independently replayed Ergo view", () => {
     expect(() => opened(source).venue.audit()).toThrow(/section 0's objects are not those it attributes/);
   });
 
+  it("keeps a copied view's venue failure, and names a damaged header row of a copy that never settled (M13e review)", async () => {
+    const { copyFileSync, existsSync } = await import("node:fs"), { DatabaseSync } = await import("node:sqlite");
+    const { FAILURE } = await import("../src/ergo-store.js");
+    const copy = (source: string) => { const to = file(); for (const s of ["", "-wal"]) if (existsSync(source + s)) copyFileSync(source + s, to + s); return to; };
+    // A view that failed: its copy opens, audited, and still refuses with the failure, the only evidence finality broke.
+    const failed = file(), old = opened(failed); await old.venue.sync([supplier(records())]); old.journal.close();
+    const db = new DatabaseSync(failed); db.prepare("UPDATE meta SET failure=?").run(FAILURE); db.close();
+    const kept = opened(copy(failed));
+    expect(kept.journal.copied()).toBe(false);
+    expect(() => kept.venue.witnessedIndex()).toThrow(FAILURE);
+    // A view whose clock never settled: a damaged header row in its copy is a named refusal, not an unexpected error.
+    const young = file(), first = opened(young); await first.venue.sync([supplier(chain.extend(chain.anchor, 1))]); first.journal.close();
+    for (const damage of ["UPDATE headers SET score='999999'", "UPDATE headers SET parent=zeroblob(32)"]) {
+      const damaged = copy(young), changed = new DatabaseSync(damaged); changed.exec(damage); changed.close();
+      expect(() => opened(damaged), damage).toThrow(VenueError);
+      expect(() => opened(damaged), damage).toThrow(/a copied or restored view does not reproduce: Ergo view audit/);
+    }
+  });
+
   it("keeps each supplier's side-branch charge by name across a restart, so a new process grants no fresh quota", async () => {
     const path = file(), main = chain.extend(chain.anchor, 12), policy = { sideHeadersPerSupplier: 2 };
     const old = opened(path, policy); await old.venue.sync([supplier(main)]);

@@ -466,11 +466,13 @@ the retained bytes. A durable view keeps its file's identity (inode, and birth
 time where the system keeps one); one whose file is another (a copy or a
 restored backup) is audited with work as it opens, before any read, and refused
 where a row does not reproduce: remove the file and sync again from the anchor
-(slice 13 M13e). The identity is a guard: it misses a file overwritten in place,
+(slice 13 M13e). A copied view in venue failure has its header rows audited and
+keeps the failure, the only local evidence that finality broke. The identity is a guard: it misses a file overwritten in place,
 a snapshot rolled back, and on Linux a directory removed and copied back. Run
 `moe venue audit --dir <d>` (any role's directory; it reads no node and
-changes nothing, and refuses `AUDIT` naming the first row that does not
-reproduce) after those, or a disk fault. Both check the rows against the
+changes nothing, refuses `AUDIT` naming the first row that does not
+reproduce, a failed view with its failure and one that never settled as
+`ABSENT`) after those, or a disk fault. Both check the rows against the
 directory's own venue file and anchor context, which a directory taken from
 another party also supplies: the terms a party keeps name the venue, and a
 view of another venue answers nothing for them. Close the journal handle when

@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
@@ -238,6 +238,26 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     expect(receiver.request("unpaid", f.backing, 5n)).toEqual(f.unpaid);
     await expect(receiver.fulfill("invoice", f.served, f.signed)).rejects.toMatchObject({ code: "CONFLICT" });
     expect((await receiver.fulfill("second", (await f.j.package()).package, f.signed)).request).toEqual(f.second);
+  });
+
+  it("acts on nothing from a copy until its restoration is recorded, then fulfills a request it may have credited only on the holder's word (M13e)", async () => {
+    const f = await fixture();
+    f.receiver.close();
+    // The owner's backup with "second" requested; the original then credits it and is lost.
+    for (const suffix of ["", "-wal", "-shm"]) if (existsSync(f.path("receiver") + suffix)) copyFileSync(f.path("receiver") + suffix, f.path("backup") + suffix);
+    const original = track(V3Wallet.open(f.path("receiver"), f.reader)), served = await f.publish();
+    expect((await original.fulfill("second", served, f.signed)).request).toEqual(f.second);
+    original.close();
+    const copy = track(V3Wallet.open(f.path("backup"), f.reader));
+    expect(copy.isCopy()).toBe(true);
+    await expect(copy.fulfill("second", served, f.signed)).rejects.toMatchObject({ code: "COPIED" });
+    throws(() => copy.request("fresh", f.backing, 1n), expect.objectContaining({ code: "COPIED" }));
+    throws(() => copy.exportBackup(createWalletBackupKey()), expect.objectContaining({ code: "COPIED" }));
+    expect(copy.recordRestoration()).toEqual({ requests: ["second", "unpaid"] });
+    await expect(copy.fulfill("second", served, f.signed)).rejects.toMatchObject({ code: "RESTORED" });
+    expect((await copy.fulfill("second", served, f.signed, { uncredited: true })).request).toEqual(f.second);
+    expect(copy.restoredRequests()).toEqual(["unpaid"]);
+    expect(copy.request("fresh", f.backing, 1n).cm).not.toBe(f.unpaid.cm);
   });
 
   it("refuses wrong credentials, another wallet's venue, corruption, inconsistent state and occupied destinations", async () => {

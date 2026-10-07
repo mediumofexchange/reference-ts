@@ -468,8 +468,6 @@ async function handoff(argv: readonly string[]): Promise<void> {
   });
 }
 
-/** `restore --key <file> --backup <file> --digest <hex>`: a new directory holding the handoff's wallet; a rerun over a
- * complete restore is confirmed by its provenance. */
 /**
  * `restore --copy --dir <d>` (slice 13 M13e): this directory was restored from a copy or a backup, and the instance it
  * was copied from is gone. Records the restoration (`V3Wallet.recordRestoration`); the view's file, a copy too, was
@@ -484,12 +482,15 @@ async function restoreCopy(argv: readonly string[]): Promise<void> {
     print({ status: "restored", restored: "copy", copied, requests, notes: [
       "never run the instance this copy was made from again: two copies of one wallet act unaware of each other",
       "its lost instance may have credited a request it made: fulfill refuses those listed (RESTORED) unless your records outside the wallet show it did not (--uncredited)",
-      ...(keyed(directory) ? ["its next sync of each backing exposes every owner key through h + 256 (lit-v1 §8): move-window before new requests",
+      ...(keyed(directory) ? ["its next sync of each backing, from a view at least as fresh as its lost instance's, exposes every owner key " +
+        "through h + 256 (lit-v1 §8): move-window before new requests, and before a payment or burn with change",
         "it cannot tell which requests its lost instance paid: before paying one again, ask the payee"] : []),
     ] });
   });
 }
 
+/** `restore --key <file> --backup <file> --digest <hex>`: a new directory holding the handoff's wallet; a rerun over a
+ * complete restore is confirmed by its provenance. With `--copy`, `restoreCopy`. */
 async function restore(argv: readonly string[]): Promise<void> {
   if (argv.includes("--copy")) return restoreCopy(argv);
   const flags = { verifiers: "value", key: "value", backup: "value", digest: "value", "backer-key": "value" } as const;

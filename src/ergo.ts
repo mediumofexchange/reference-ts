@@ -276,9 +276,16 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     // A copied or restored view is audited before any read (slice 13 M13e): reopening checks only what is cheap.
     if (this.journal.copied()) {
       try {
-        if (this.snapshot !== undefined) this.audit({ work: true });
-        else if (this.store.audit(true) !== this.journal.headerCount()) {
-          throw new VenueError("Ergo view audit: header rows are kept on neither the best chain nor a side branch");
+        // A view with no settled snapshot, or one that failed (a block witnessed under the depth left the best chain),
+        // has its header rows audited: the failure is kept, as the only local evidence that finality broke.
+        if (this.snapshot !== undefined && this.failure === undefined) this.audit({ work: true });
+        else {
+          let headers: number;
+          try { headers = this.store.audit(true); } catch (error) {
+            if (error instanceof VenueError) throw error;
+            throw new VenueError(`Ergo view audit: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          if (headers !== this.journal.headerCount()) throw new VenueError("Ergo view audit: header rows are kept on neither the best chain nor a side branch");
         }
       } catch (error) {
         if (!(error instanceof VenueError)) throw error;

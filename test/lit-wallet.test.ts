@@ -308,6 +308,25 @@ describe("the one wallet holding lit notes", () => {
     expect(await refusal(handed.keyedFulfill("invoice", await f.served(), f.signed))).toBe("RESTORED");
   });
 
+  it("hands a restored copy holding a saved window move, read or not, to a handoff that restores (M13e review)", async () => {
+    const f = await fixture(), holder = f.open("holder");
+    await f.issue(holder.keyedRequest("fund", f.backing, 2n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    for (let i = 1; i <= 256; i++) holder.keyedRequest(`r${i}`, f.backing, 2n);
+    await holder.moveWindow("move", await f.served(), f.signed);
+    holder.close();
+    copyWallet(f.path("holder"), f.path("backup"));
+    const restored = V3Wallet.open(f.path("backup"), { construction: LIT, venue: f.venue, reference }); wallets.push(restored);
+    restored.recordRestoration();
+    // Exported before any read, its exposure unknown: the move's index is within h + 256.
+    const key = b(81), backup = restored.exportBackup(key);
+    const { walletBackupDigest } = await import("../src/pool/v3/wallet-backup.js");
+    const handed = V3Wallet.restoreBackup(f.path("handed"), { construction: LIT, venue: f.venue, reference }, backup, key, walletBackupDigest(backup));
+    wallets.push(handed);
+    expect(handed.payment("move")?.status).toBe("prepared");
+    expect(handed.restoredRequests().length).toBe(257);
+  });
+
   // --- M14g2: the acts and the window move -----------------------------------------------------------------------------
   const sign = (message: Uint8Array): Uint8Array => ed25519.sign(message, K);
 

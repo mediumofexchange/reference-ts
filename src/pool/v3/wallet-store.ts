@@ -541,7 +541,8 @@ export class V3Wallet {
           const decimal = (v: unknown) => typeof v === "string" && /^(0|[1-9][0-9]{0,19})$/.test(v);
           // A lit window move: its fee's key and price (or none) and the moved index (`keyedPayment`, `moved`).
           if (Array.isArray(intent) && intent[1] === "move") {
-            const exposed = this.ownerKeys(row.backing as Uint8Array)?.exposed;
+            // A restoration from a copy leaves exposure unknown until the next read (M13e): no index past h + 256.
+            const keys = this.ownerKeys(row.backing as Uint8Array), exposed = keys === undefined ? undefined : keys.exposed ?? keys.high + this.keyed!.lookAhead;
             ok = this.keyed !== undefined && intent.length === 5 && decimal(intent[4]) && ((intent[2] === null && intent[3] === null) ||
               (typeof intent[2] === "string" && /^[0-9a-f]{64}$/.test(intent[2]) && decimal(intent[3]))) &&
               // Its record pays the moved index's key, and the fee's where it names one, at an index the rows show exposed.
