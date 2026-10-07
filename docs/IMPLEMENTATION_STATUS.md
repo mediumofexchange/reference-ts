@@ -5,9 +5,10 @@ source setup, see the [README](../README.md). For the next development task,
 see [WORK.md](../WORK.md). Update this guide when a component or its specification
 pin changes; dated decisions retain the reasoning behind those changes.
 
-**Experimental; the API and wire format can change.** Source is the supported
-way to try the implementation. There is no published npm release, no
-deployment, and no completed security audit.
+**Experimental; the API and wire format can change.** Source, or a package
+tarball rebuilt and installed as the [release record](RELEASE.md) describes, is
+the supported way to try the implementation. There is no published npm release,
+no deployment, and no completed security audit.
 
 The pool runtime is the guarded pool-v3 runtime in `src/pool/v3/`, under the adopted configuration (pool-v3 §11.4), over the
 shared primitives in `src/pool/` (field, Poseidon2, notes, note tree, scope and
@@ -50,6 +51,16 @@ It serves by stream and incrementally (M5b.5b.2); the wallet reads from kept
 files (M5b.5c). A reader's replay verifies proofs ahead on a pool of verifier
 instances, with verdicts and first failures unchanged (M5b.6,
 [decision](../decisions/2026-10.md#2026-10-01--verify-a-trails-proofs-ahead-of-its-replay-on-a-pool-of-verifier-instances)).
+
+The [`moe` commands](POOL_V3_WALLET.md#commands) run the wallet, operator, supply reader, replica and relay from an
+installed package, with real proofs on the synthetic node and live on the testnet (slices 10–12). Holders reach a
+remote operator as a Tor [onion service](POOL_V3_WALLET.md#transport), read a [replica](POOL_V3_WALLET.md#replicas)'s
+evidence while an operator is down and have a [relay](POOL_V3_WALLET.md#relays) fund their gap acts. Release
+assurance (slice 13) adds a [release record](RELEASE.md) whose tarball CI rebuilds byte-identically on Linux and
+Windows, [separate installs](RELEASE.md#separate-installs) of each role, and restore drills: an operator restored
+from a copy returns past silence ([guide](POOL_V3_SERVICE.md#restoring-an-operator-directory)), a wallet restored
+from a copy marks its open requests ([guide](POOL_V3_WALLET.md#restoring-a-copy-of-the-directory)), and
+`moe venue audit` checks a copied view before use. WORK.md's Next 4 holds the open findings.
 
 Pool-v2 is retired: every remaining v2 check was mapped to a v3 case, a v2-only
 mechanism or a later slice
@@ -242,7 +253,7 @@ reads publications through that index before issuing adopted receipts.
 includes a fresh process that has only public evidence and independent reader
 inputs. The [local](pool-v3-recovery-store-verification.json) and
 [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) real-proof
-acceptance is retained for the current reader; WORK.md records its checked CI baseline.
+acceptance is retained for the current reader, and CI's real-proof groups rerun it.
 The separately authorized [live testnet recovery](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
 and retained public-bundle readback also passed. That live evidence is historical
 at `a72888b`; later journal changes need their own acceptance evidence.
@@ -309,7 +320,8 @@ and section, not revision, so a later revision that keeps those rules leaves
 their source identities unchanged. The pin includes venue-ergo §2's clock
 on a heavier, shorter chain (`dce3ae1`, `298cc06`) and §8's one-transaction
 condition (`01f922c`), which the v3 guard checks against `PROOF_BYTES`, and
-pool-v3's adoption (`e7f7f24`), whose manifest the runtime holds.
+pool-v3's adoption (`e7f7f24`), whose manifest the runtime holds. Later rule revisions the runtime implements
+(pool-v3 §14 at `dc51baf`, Construction C2.4.1 and C2.7.5 at `25c078e`) are pinned per rule in `docs/PROTOCOL_RULES.md`.
 `740adaa` (pool-recovery C3.4, C3.5 and C3.8) is in it; the wallet's disclosure
 count and the C3.8 reading (`dishonour.ts`) read it. Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding

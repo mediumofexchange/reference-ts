@@ -24,7 +24,10 @@ and public evidence for independent replay, and an Ergo adapter reads and
 publishes venue records under the selected profile. The
 [`moe` commands](docs/POOL_V3_WALLET.md#commands) run the wallet, operator,
 supply reader and relay from an installed package, with real proofs on a
-synthetic chain and live on the Ergo testnet. Qualified deployment storage,
+synthetic chain and live on the Ergo testnet. Lit notes (`moe/lit/v1`, the
+transparent profile) run through the same commands, and a
+[release record](docs/RELEASE.md) rebuilds the package tarball reproducibly.
+Qualified deployment storage,
 statements spending several backings and a phone-first wallet remain open. The API and
 wire format are experimental, the package is not published to npm, and no
 completed security audit or live deployment is claimed. The earlier pool-v2

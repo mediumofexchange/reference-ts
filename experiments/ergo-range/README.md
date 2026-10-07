@@ -6,8 +6,7 @@ Private probes of the Ergo venue profile, whose runtime code is in `src/`
 is run explicitly, never by `check` or CI, and reads the runtime from `dist/`,
 so run `npm ci` and `npm run build` at the repository root first (Node 24);
 the directory has no dependencies of its own. The probes read nodes with GET
-only, except the [publisher check](#runtime-publisher-on-the-testnet), which
-submits on the testnet. Do not expose a probe as an arbitrary-file or network
+only. Do not expose a probe as an arbitrary-file or network
 verification API.
 
 The fixture manifest pins the original public response bytes before parsing;
@@ -63,21 +62,6 @@ no wallet is initialized. v6.0.6 answers every request with
 local browser can read the API and use its key-free routes. These are
 practical sources for the probes, not a hardened or process-contained
 deployment.
-
-## Runtime publisher on the testnet
-
-`publisher-check.mjs` runs the runtime's `ErgoPublisher` on the own testnet
-node: three records chained in the mempool, a corrupted proof refused, a
-lost answer retried without a second transaction, and the including blocks'
-sections read back under the profile. It signs with the throwaway key in
-ignored `scratch/ergo-testnet/wallet.json` and refuses a node that does not
-report the testnet
-([publisher report](../../docs/ergo-publisher-verification.json);
-[guide](../../docs/ERGO_VENUE_PROFILE.md#runtime-venue)):
-
-```powershell
-node experiments/ergo-range/publisher-check.mjs --node http://127.0.0.1:9052 --out docs/ergo-publisher-verification.json
-```
 
 ## Hostile-input node equivalence
 
