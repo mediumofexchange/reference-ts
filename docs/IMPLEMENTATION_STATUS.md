@@ -219,8 +219,9 @@ explicit mining and synchronization witness them. Holders spend notes restored
 from the served package; a fresh seedless process verifies supply from the
 package and venue records. In synthetic mode it receives block evidence and
 holds the witnessed block pin separately ([report](pool-v3-store-verification.json)).
-The explicit `store-check.mjs --testnet` path uses the reference testnet identity
-and a fresh reader fetching its own headers/sections. The [live journal report](pool-v3-testnet-verification.json)
+The explicit `store-check.mjs --testnet` path (retired, at `09534a8`; [decision](../decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify))
+used the reference testnet identity and a fresh reader fetching its own headers/sections. The
+[live journal report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json)
 records successful public supply verification and hostile refusals; the header rules have a separate
 [historical own-node check at 6e4cea8](https://github.com/mediumofexchange/reference-ts/blob/6e4cea8/docs/ergo-testnet-header-verification.json).
 The corrected retained public bundle had a separate [standalone readback](https://github.com/mediumofexchange/reference-ts/blob/2fd0f08/docs/pool-v3-testnet-reader-verification.json),

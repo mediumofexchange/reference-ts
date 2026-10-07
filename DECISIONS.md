@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-07` [Retire the store checks' live testnet modes: the command drill is the live evidence (simplify)](decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify)
 - `2026-10-07` [Require the acceptance owner's signature in lit-v1, so K cannot answer a demand with the holder's own key (slice 14 M14g5)](decisions/2026-10.md#2026-10-07--require-the-acceptance-owners-signature-in-lit-v1-so-k-cannot-answer-a-demand-with-the-holders-own-key-slice-14-m14g5)
 - `2026-10-07` [Run lit backings through the moe commands, each directory declaring its construction (slice 14 M14g4)](decisions/2026-10.md#2026-10-07--run-lit-backings-through-the-moe-commands-each-directory-declaring-its-construction-slice-14-m14g4)
 - `2026-10-07` [Exercise lit's failure path and settle §7's acceptance owner before adoption, and give evidence availability a replica in slice 12](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)
