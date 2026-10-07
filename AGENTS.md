@@ -152,10 +152,10 @@ Preserve unrelated changes. Make logical commits, fetch/inspect upstream, integr
 rewriting others' work, satisfy protections and required checks, then merge/push under standing
 authority. Verify final commit, clean status and remote parity. Distinguish pending from passed CI
 for that revision: wait on the run, not per job, with `gh run watch <id> --interval 60 --exit-status`
-(real-proof jobs take 15–30 min; `gh pr checks --watch` exits 1 before checks are listed). Never
-bypass failed or unavailable required gates. After a verified merge, delete the merged branch
-locally and remotely, its worktrees and the slice's disposable scratch; only WORK.md's retained
-local state outlives a slice. Refused deletions go into the one deletion list under WORK.md's Open
+(real-proof jobs take about 12 min; reports-and-docs commits skip them; `gh pr checks --watch` exits 1
+before checks are listed). Never bypass failed or unavailable required gates. After a verified
+merge, delete the merged branch locally and remotely, its worktrees and the slice's disposable
+scratch; only WORK.md's retained local state outlives a slice. Refused deletions go into the one deletion list under WORK.md's Open
 questions. Prefer one complete handoff in the delivery commit; follow up only for new evidence.
 
 A slice is complete when acceptance is demonstrated, relevant hostile cases pass, material review

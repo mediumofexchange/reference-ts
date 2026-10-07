@@ -73,8 +73,9 @@ receive, verify and redeem claims under public immutable terms, with **private
 payments and publicly verifiable supply both essential.** The claim layer is
 Construction's core, the shielded pool (§C1.2). A release that runs the
 transparent profile instead does not satisfy this contract; that profile is a
-priced choice for deployments that want a lit ledger; this repository's
-implementation of it is retired.
+priced choice for deployments that want a lit ledger. The reference builds it
+beside the pool as lit notes (`moe/lit/v1`); its earlier account-ledger
+implementation is retired.
 
 The smallest supported profile: signed roots with a constant payout, no
 reliance graph, private transfers in one pool per operator, public issuance and
