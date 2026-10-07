@@ -2,7 +2,7 @@
 // synthetic Ergo node through the node REST clients (M10b item 5). The operator creates the venue, opens a backing
 // under terms a fixture obligor signs, and serves; a reader keeps the terms and the service file and reads the
 // supply at its own view's witnessed index. Serve checkpoints on the witnessed index, a second command on a
-// directory serve holds refuses BUSY, and after serve stops past the terms' silence the operator returns and adopts.
+// directory serve holds refuses BUSY, and after serve stops the directory is lost and a copy restored: it refuses COPIED, and `restore` returns past the terms' silence at a skipped sequence (M13d) and adopts.
 // Hostile cases: a shared directory, another role's directory, terms under another name, forged or without --synthetic,
 // an interrupted venue create, a publication past the spend budget, SQLite's temporary files kept in the directory.
 // M10c2b1: the wallet (holder and backer) and relay commands. A backer's wallet creates terms naming a second
@@ -32,7 +32,7 @@
 //   (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, renameSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { openView, parseVenue } from "../../../dist/cli/venue.js";
@@ -360,19 +360,34 @@ try {
     assert.equal((await moe(["reader", "supply", ...reader, backing, "--verifiers", "7"])).status, 2);
   });
 
-  await check("past the terms' silence the operator returns and adopts, then serves again", async () => {
+  await check("an operator directory restored from a copy refuses COPIED; restore signs nothing until silence, then a return " +
+    "past any sequence the lost instance can have signed, adopt takes it, and the operator serves again", async () => {
+    // The owner's backup of the stopped directory; the original is lost and the backup restored in its place (M13d).
+    const backup = join(scratch, "operator-backup");
+    cpSync(OP, backup, { recursive: true });
+    renameSync(OP, join(scratch, "operator-lost"));
+    cpSync(backup, OP, { recursive: true });
+    chmodSync(OP, 0o700);
+    await refused(["operator", "return", "--dir", OP, "--id", "return-1", "--poll-ms", POLL], "COPIED");
+    const restore = ["operator", "restore", "--dir", OP, "--id", "restore-1", "--poll-ms", POLL];
+    const early = await ok(restore, { mining: "waiting" });
+    // Before the silence boundary it records the restoration and signs nothing.
+    assert.deepEqual([early.status, early.waiting], ["restored", "silence"]);
+    await refused(["operator", "open", "--dir", OP, "--id", "genesis-2", backing, "--terms", termsFile, "--signature", signatureFile, ...SYN], "RESTORED");
     await advance(Number(SILENCE) + 4);
-    const returned = await ok(["operator", "return", "--dir", OP, "--id", "return-1", "--poll-ms", POLL], { mining: "waiting" });
+    const returned = await ok(restore, { mining: "waiting" });
     assert.equal(returned.status, "pending");
+    assert(BigInt(returned.commitment.sequence) > 1n << 16n, "the return skips past any sequence the lost instance can have signed");
     const adopted = await ok(["operator", "adopt", "--dir", OP, "--poll-ms", POLL], { mining: "waiting" });
     assert.deepEqual([adopted.status, adopted.receipts], ["final", []]);
     await refused(["reader", "supply", ...reader, backing], "UNAVAILABLE");
     const again = serve(OP);
     await again.listening;
     await ok(["reader", "service", "add", ...reader, backing, join(OP, "service.json")]);
-    const after = await supplyUntil(read => BigInt(read.checkpoint.sequence) >= BigInt(returned.commitment.sequence));
+    // Serve commits past the opening: adopting it lifted the restoration's fence.
+    const after = await supplyUntil(read => BigInt(read.checkpoint.sequence) > BigInt(returned.commitment.sequence));
     assert.equal(after.supply, "0");
-    // Kept across the return's new term: a read replaying in full at the same index answers the same.
+    // Kept across the new segment: a read replaying in full at the same index answers the same.
     await alike(after, ["reader", "supply", ...reader, backing]);
     await again.stop();
   });

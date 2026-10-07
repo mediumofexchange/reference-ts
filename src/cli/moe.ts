@@ -15,7 +15,7 @@ const USAGE = `usage: moe <role> <command> --dir <directory> ...
 roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show, service add, request, pay, freshen,
               move-window, reprove, submit, status, sync, fulfill, fulfillment, demand, withdraw, settle, presentation, publish;
               with --backer at init: venue create, terms create, issue, accept, burn, publish-acceptance)
-       operator (init, venue create, open, serve, return, adopt)
+       operator (init, venue create, open, serve, return, adopt, restore)
        reader (init, terms add|show, service add, supply, presentation)
        relay (init, publish, serve, send)
 init --construction moe/pool/v3 (the default) or moe/lit/v1 (wallet, operator, reader) names the one construction a directory serves.

@@ -335,7 +335,7 @@ describe("the operator journal over a lit scope", () => {
     const held = f.venue.witnessedIndex();
     f.venue.advance(held + 4n);
     expect(await refusal(j.submit(f.issue(f.segment, 1n, ALICE)))).toEqual(["SCHEDULE", "SILENCE"]);
-    expect(await refusal(j.return("early"))).toEqual(["STALE", undefined]);
+    expect(await refusal(j.return("early"))).toEqual(["STALE", "SILENCE"]);
     f.venue.advance(held + 6n);
     const now = f.venue.witnessedIndex();
     const presented = f.demand(f.segment, [note!], [ALICE], now - 1n, now + 30n);

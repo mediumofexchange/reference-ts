@@ -8,8 +8,10 @@
 // publish what they sign before exiting. A journal reopened over signed state
 // signs again only once the venue passes its reopening index plus the lag
 // (C2.8.2), so `return` and `adopt` sync their view until the journal takes
-// them. An operator directory is never restored from a copy: its recovery is
-// succession. The journal serves the construction the directory declares at
+// them. A directory restored from a copy or backup is recorded so by `restore`
+// (slice 13 M13d): its journal signs nothing but a return after witnessed
+// silence, past any sequence the lost instance can have signed, then `adopt`;
+// a copy opened without it refuses `COPIED`. The journal serves the construction the directory declares at
 // init (M14g4); a lit operator keeps no parameters and opens no verifier.
 import { readdirSync, rmSync } from "node:fs";
 import type { Server } from "node:http";
@@ -44,7 +46,7 @@ interface Operator {
   readonly operator: Uint8Array;
   close(): Promise<void>;
 }
-async function openOperator(directory: Directory, args: Arguments): Promise<Operator> {
+async function openOperator(directory: Directory, args: Arguments, restored = false): Promise<Operator> {
   const view = openView(directory);
   let verifier: ProofVerifier | undefined, journal: V3OperatorJournal | undefined, budget: SpendBudget | undefined;
   try {
@@ -54,7 +56,7 @@ async function openOperator(directory: Directory, args: Arguments): Promise<Oper
     const secret = readSecret(directory.file("operator.key"), "operator.key");
     try {
       journal = new V3OperatorJournal(directory.file("journal.db"), { secret, venue: view.venue, reference: view.file.reference, verifier,
-        construction: directory.construction });
+        construction: directory.construction, restored });
     } finally { secret.fill(0); }
     const opened = openPublisher(directory, journal.publisherPersistence());
     budget = opened.budget;
@@ -297,6 +299,36 @@ async function adopt(argv: readonly string[]): Promise<void> {
   } finally { await op.close(); }
 }
 
+/** `restore --id <id>`: record that this directory was restored from a copy or a backup (M13d). Its journal then signs
+ * nothing but C2b.4's return, at a sequence past any its lost instance can have signed, once the scope's silence
+ * boundary is witnessed; what was co-signed after the last witnessed commitment lapses there. A return pending in the
+ * directory is published and adopted first, as the lost instance would. Before the boundary it answers `restored`:
+ * run it again, with the same `--id`, once silence is witnessed. Every run records a restoration (a file's identity
+ * cannot tell a retry from a copy rolled back in place), so once it answers `pending` the next step is `adopt`,
+ * never `restore`. */
+async function restore(argv: readonly string[]): Promise<void> {
+  const args = parseArguments(argv, { ...POLL, id: "value" }, 0);
+  const directory = openDirectory(required(args, "dir"), "operator"), id = required(args, "id");
+  const op = await openOperator(directory, args, true);
+  try {
+    if ((await op.journal.status()).pendingReturn) {
+      await budgeted(op, () => op.journal.publish());
+      await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE", "UNAVAILABLE"], () => op.journal.adopt());
+    }
+    let signed: Commitment;
+    try { signed = await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE"], () => op.journal.return(id)); } catch (error) {
+      if (!(error instanceof V3StoreError && error.check === "SILENCE")) throw error;
+      print({ status: "restored", restoredAt: (await op.journal.status()).restoredAt, waiting: "silence",
+        notes: ["it signs nothing until the scope's silence boundary is witnessed; then run moe operator restore again with the same --id"] });
+      return;
+    }
+    const published = await budgeted(op, () => op.journal.publish());
+    print({ status: "pending", commitment: commitmentOf(signed), published: commitmentOf(published),
+      notes: ["statements co-signed after the last witnessed commitment lapse at this return; holders reprove them",
+        "once it is witnessed, moe operator adopt (never restore again), then serve"] });
+  } finally { await op.close(); }
+}
+
 export async function operator(argv: readonly string[]): Promise<void> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -306,6 +338,7 @@ export async function operator(argv: readonly string[]): Promise<void> {
     case "serve": return serve(rest);
     case "return": return returnCommand(rest);
     case "adopt": return adopt(rest);
-    default: throw new UsageError("moe operator init|venue|open|serve|return|adopt");
+    case "restore": return restore(rest);
+    default: throw new UsageError("moe operator init|venue|open|serve|return|adopt|restore");
   }
 }

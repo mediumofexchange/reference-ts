@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
@@ -22,7 +23,7 @@ import { decodeTrail } from "../src/pool/v3/trail.js";
 import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, issueTask, requestTask, settleTask,
   withdrawalRecord, type ProofTask } from "../src/pool/v3/witness.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
-import { encodeCommitment, signCommitment } from "../src/venue-records.js";
+import { encodeCommitment, isEquivocation, signCommitment } from "../src/venue-records.js";
 
 // An adopted block the opening's state refuses: no input reaches one (the reader forced each record against the
 // state the opening imports), so the test refuses through the state machine's own judgment.
@@ -57,13 +58,13 @@ describe("v3 recovery journal and independent package reader", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
-  async function fixture() {
+  async function fixture(noCommitmentDuration = 4n) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-recovery-journal-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
     const terms = encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue: venue.id, interval: 20n,
       payout: { thing: "recovery units", quantumExponent: 0, perUnit: 1n },
-      silence: { noCommitmentDuration: 4n, challengeWindow: 5n }, nonService: { duration: 2n, count: 1n, window: 5n } });
+      silence: { noCommitmentDuration, challengeWindow: 5n }, nonService: { duration: 2n, count: 1n, window: 5n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
     const funded = prepareExactOutput(b(21), domain, b(31), backing, 10n), pad = prepareExactOutput(b(21), domain, b(32), backing, 0n);
@@ -144,6 +145,164 @@ describe("v3 recovery journal and independent package reader", () => {
       .rejects.toMatchObject({ code: "REFUSED", check: "SIGNATURE" });
     await expect(f.j.submit(encodeRecord(f.settle(d, 3n)))).rejects.toMatchObject({ code: "REFUSED", check: "DEADLINE" });
     await f.j.submit(encodeRecord(f.settle(d, 4n)));
+  });
+
+  /** The fixture's journal directory copied while the journal is closed (an owner's backup), the original reopened,
+   * and a way to open the copy (M13d). */
+  async function copied(f: Awaited<ReturnType<typeof fixture>>) {
+    f.j.close();
+    const directory = f.file.slice(0, -"/journal.db".length), copy = `${directory}-copy`; directories.push(copy);
+    cpSync(directory, copy, { recursive: true });
+    const open = (file: string, restored?: boolean) => {
+      const j = new V3OperatorJournal(file, { secret: operatorSecret, venue: f.venue, reference, verifier, restored }); journals.push(j); return j;
+    };
+    return { original: open(f.file), copy: (restored?: boolean) => open(join(copy, "journal.db"), restored) };
+  }
+
+  /** The receipt verdict a reader draws from what `j` serves, judging at the venue's index. */
+  async function verdict(f: Awaited<ReturnType<typeof fixture>>, j: Journal, receipt: Uint8Array) {
+    const served = await j.package(), items = decodeEvidencePackage(served.package);
+    return (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+      { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
+  }
+  /** A venue view that takes no publication: the lost instance's commitments go unwitnessed. */
+  const dropping = (venue: FixtureVenue) => ({ get id() { return venue.id; }, lag: () => venue.lag(), witnessedIndex: () => venue.witnessedIndex(),
+    range: venue.range.bind(venue), publishRecord: async () => {} }) as unknown as FixtureVenue;
+
+  it("refuses a copied journal; a restored copy signs only a return past every sequence its lost instance signed, where the lost tail lapses (M13d)", async () => {
+    const f = await fixture(12n), { original, copy } = await copied(f);
+    original.close();
+    // The lost instance, at its own file, co-signs a demand, commits it unwitnessed and co-signs a withdrawal after.
+    const lost = new V3OperatorJournal(f.file, { secret: operatorSecret, venue: dropping(f.venue), reference, verifier }); journals.push(lost);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    const first = f.demand(f.venue.witnessedIndex()), tail = decodeReceipt(await lost.submit(encodeRecord(first)));
+    const unwitnessed = await lost.commit("later"); await lost.publish();
+    const after = decodeReceipt(await lost.submit(encodeRecord(withdrawalRecord(f.context, statementHash(first), presenterSecret))));
+    expect([tail.position, unwitnessed.sequence, after.after]).toEqual([2n, 3n, 3n]);
+    lost.close();
+    expect(() => copy()).toThrow(expect.objectContaining({ code: "COPIED" }));
+    const restored = copy(true);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    // Deny by default: nothing but the return.
+    const other = encodeRecord(f.demand(f.venue.witnessedIndex(), 20n, b(18)));
+    await expect(restored.submit(other)).rejects.toMatchObject({ code: "RESTORED" });
+    await expect(restored.commit("keep-alive")).rejects.toMatchObject({ code: "RESTORED" });
+    await expect(restored.rescope("repair", { keep: [f.backing] })).rejects.toMatchObject({ code: "RESTORED" });
+    await expect(restored.open("genesis-2", [])).rejects.toMatchObject({ code: "RESTORED" });
+    await expect(restored.return("early")).rejects.toMatchObject({ code: "STALE" });
+    // Recording the restoration again before its return keeps its index and spacing.
+    const at = (await restored.status()).restoredAt!;
+    restored.close();
+    const again = copy(true);
+    expect((await again.status()).restoredAt).toBe(at);
+    f.venue.advance(f.venue.witnessedIndex() + 16n);
+    const opening = await again.return("restored");
+    expect(opening.sequence > unwitnessed.sequence + (1n << 16n)).toBe(true);
+    expect(opening.sequence % (1n << 16n)).toBe(2n);
+    expect(isEquivocation(unwitnessed, opening)).toBe(false);
+    expect(await again.return("restored")).toEqual(opening);
+    expect((await again.status()).restoredOpening).toBe(opening.sequence);
+    await expect(again.return("second")).rejects.toMatchObject({ code: "STALE" });
+    await again.publish();
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    expect(await again.adopt()).toEqual([]);
+    expect((await again.status()).restoredAt).toBeUndefined();
+    // The lost tail lapses, the receipt given after the unwitnessed commitment included; none reads invalid.
+    for (const receipt of [tail, after]) expect(await verdict(f, again, encodeReceipt(receipt))).toMatchObject({ status: "lapsed" });
+    const next = await again.commit("served"); await again.publish();
+    expect(next.sequence).toBe(opening.sequence + 1n);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    expect((await again.package()).selection.sequence).toBe(next.sequence);
+    await again.audit();
+    // A reader served through the lost instance's in-flight commitment, inside the skip, is served from the return on.
+    let served = 0;
+    for await (const _ of (await again.serve(f.backing, unwitnessed.sequence)).parts) served++;
+    expect(served).toBeGreaterThan(0);
+    // The lost instance's commitment landing late, inside the skip, is no conflict: the record moved past it.
+    f.venue.witness(1, operator, f.venue.witnessedIndex(), encodeCommitment(unwitnessed));
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    const late = await again.commit("after-late"); await again.publish();
+    expect(late.sequence).toBe(next.sequence + 1n);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    for (const receipt of [tail, after]) expect(await verdict(f, again, encodeReceipt(receipt))).toMatchObject({ status: "lapsed" });
+    // Reopened, it reads its rows across the skip.
+    again.close();
+    const reopened = copy(); expect((await reopened.package()).selection.sequence).toBe(late.sequence); reopened.close();
+    // A skipped range that disagrees with the signed rows is damage.
+    const raw = new DatabaseSync(join(`${f.file.slice(0, -"/journal.db".length)}-copy`, "journal.db"));
+    raw.prepare("UPDATE journal_skipped SET below=below+1").run(); raw.close();
+    const damaged = copy();
+    await expect(damaged.package()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is missing" });
+    await expect(damaged.status()).rejects.toMatchObject({ code: "STORAGE", message: "a skipped range disagrees with the signed rows" });
+    // The obsolete lost instance, restarted, publishes and signs nothing under the restored return.
+    const obsolete = new V3OperatorJournal(f.file, { secret: operatorSecret, venue: f.venue, reference, verifier }); journals.push(obsolete);
+    await expect(obsolete.publish()).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(obsolete.submit(other)).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("restores a copy taken after the restoration's return was signed as a restoration of its own (M13d)", async () => {
+    const f = await fixture(12n), { original, copy } = await copied(f);
+    original.close();
+    const first = copy(true);
+    f.venue.advance(f.venue.witnessedIndex() + 16n);
+    const opening = await first.return("restored"); await first.publish();
+    first.close();
+    // A backup of the restored directory, taken now, and restored once the first has adopted and served on.
+    const directory = f.file.slice(0, -"/journal.db".length), later = `${directory}-later`; directories.push(later);
+    cpSync(`${directory}-copy`, later, { recursive: true });
+    const live = copy();
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await live.adopt();
+    live.close();
+    const second = new V3OperatorJournal(join(later, "journal.db"), { secret: operatorSecret, venue: f.venue, reference, verifier, restored: true });
+    journals.push(second);
+    expect((await second.status()).restoredOpening).toBeUndefined();
+    // The first restoration's return is adopted as any pending opening, and the fence stands.
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await second.adopt();
+    expect((await second.status()).restoredAt).toBeDefined();
+    await expect(second.commit("served")).rejects.toMatchObject({ code: "RESTORED" });
+    f.venue.advance(f.venue.witnessedIndex() + 16n);
+    // The earlier restoration's identifier answers nothing under this one.
+    await expect(second.return("restored")).rejects.toMatchObject({ code: "RESTORED" });
+    const next = await second.return("restored-again");
+    expect(next.sequence > opening.sequence + (1n << 16n)).toBe(true);
+    // Past the lost instance's band, a commitment of this key in the gap is another signer's: a conflict (invariant 22).
+    await second.publish();
+    f.venue.witness(1, operator, f.venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, next.sequence - 5n, b(9))));
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await expect(second.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("keeps a restored copy refused when the record holds a commitment it did not sign (M13d)", async () => {
+    const f = await fixture(12n), { original, copy } = await copied(f);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await original.submit(encodeRecord(f.demand(f.venue.witnessedIndex())));
+    await original.commit("later"); await original.publish(); original.close();
+    const restored = copy(true);
+    f.venue.advance(f.venue.witnessedIndex() + 16n);
+    await expect(restored.return("restored")).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(restored.publish()).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("adopts a return the copy already held as the lost instance would, keeping the fence until its own opening (M13d)", async () => {
+    const f = await fixture(12n);
+    f.venue.advance(16n);
+    const first = await f.j.return("return"); await f.j.publish();
+    const { original, copy } = await copied(f);
+    original.close();
+    const restored = copy(true);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await restored.adopt();
+    expect((await restored.status()).restoredAt).toBeDefined();
+    expect((await restored.package()).selection.sequence).toBe(first.sequence);
+    await expect(restored.commit("served")).rejects.toMatchObject({ code: "RESTORED" });
+    f.venue.advance(f.venue.witnessedIndex() + 16n);
+    const opening = await restored.return("restored"); await restored.publish();
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await restored.adopt();
+    expect((await restored.status()).restoredAt).toBeUndefined();
+    expect((await restored.package()).selection.sequence).toBe(opening.sequence);
   });
 
   it("refuses the silence horizon before retiring the tail at a witnessed boundary", async () => {
