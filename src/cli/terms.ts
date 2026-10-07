@@ -77,7 +77,7 @@ export function explain(kept: KeptTerms, venue: VenueFile, construction: Constru
   const { terms } = kept, silence = terms.silence, nonService = terms.nonService, lit = !construction.reader.proofs;
   const notes = [
     "The obligor's key K signs issuance and acceptance. If K is lost, nothing more is issued or accepted, and every later demand reads as the backer's dishonour.",
-    lit ? "These are lit notes (moe/lit/v1, a draft until adopted): everyone sees every statement's backings, values, owner keys and the spend graph linking each note to the notes made from it. A fresh key per note gives pseudonymity, not privacy."
+    lit ? "These are lit notes (moe/lit/v1): everyone sees every statement's backings, values, owner keys and the spend graph linking each note to the notes made from it. A fresh key per note gives pseudonymity, not privacy."
       : "The operator sees each statement it admits and when; the venue shows everyone each checkpoint's supply of this backing, and a demand or settlement discloses what it names (docs/POOL_V3_VISIBILITY.md).",
     silence === undefined
       ? "These terms declare no silence clause: if the operator stops serving, no gap opens and redemption waits on the operator."

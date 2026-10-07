@@ -1,4 +1,4 @@
-// The lit configuration (lit-v1 §9, a draft until adopted). It names no circuit,
+// The lit configuration (lit-v1 §9, adopted: §1). It names no circuit,
 // key, parameter or helper: its two bytes are the statement shape's bounds, and
 // its hash is the domain of every lit statement and object.
 import { sha256 } from "@noble/hashes/sha2.js";

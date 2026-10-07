@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-07` [Adopt moe/lit/v1 with §9's configuration, reading the contracts in the text pool-v3 fixes (slice 14 M14h)](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h)
 - `2026-10-07` [Retire the store checks' live testnet modes: the command drill is the live evidence (simplify)](decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify)
 - `2026-10-07` [One evidence chain for pool-v3 and lit, instantiated per construction (simplify)](decisions/2026-10.md#2026-10-07--one-evidence-chain-for-pool-v3-and-lit-instantiated-per-construction-simplify)
 - `2026-10-07` [Require the acceptance owner's signature in lit-v1, so K cannot answer a demand with the holder's own key (slice 14 M14g5)](decisions/2026-10.md#2026-10-07--require-the-acceptance-owners-signature-in-lit-v1-so-k-cannot-answer-a-demand-with-the-holders-own-key-slice-14-m14g5)

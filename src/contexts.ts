@@ -59,7 +59,7 @@
 //   moe/pool/v3/spent/leaf     a spent-root leaf
 //   moe/pool/v3/spent/node     a spent-root node
 //
-// The lit construction (lit-v1, a draft until adopted) has its own family. Its
+// The lit construction (lit-v1, adopted) has its own family. Its
 // spent root keeps pool-spent's contexts above (lit-v1 §5):
 //
 //   moe/lit/v1/config          the configuration (§9)

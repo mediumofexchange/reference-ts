@@ -1,4 +1,4 @@
-// Slice 14 M14g4: a lit backing (`moe/lit/v1`, a draft until adopted) through the `moe` commands, each a fresh process
+// Slice 14 M14g4: a lit backing through the `moe` commands, each a fresh process
 // on its own directory, over the synthetic Ergo node through the node REST clients. Lit directories declare their
 // construction at init and keep no proving parameters; nothing here proves or verifies a proof, and no process loads a
 // `@noir-lang` module. A backer's wallet creates lit terms naming an operator directory, which opens and serves them;
