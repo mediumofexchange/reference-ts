@@ -229,14 +229,21 @@ describe("a replica of a lit operator's evidence", () => {
   });
 
   it("repairs a read a source left unresolved past its mark: from nothing, then from the next source (audit 30 (au))", async () => {
-    const f = await fixture(), payer = f.open("payer");
+    const f = await fixture();
+    let payer = f.open("payer");
     await f.operator.submit(f.issue(payer.keyedRequest("fund", f.backing, 10n).owner, 10n));
     await f.commit("c1"); await f.mirror();
     // A source that sends the selection whole but leaves out an earlier dependency (here the segment's terms field,
     // which the selection's directory, snapshots and trails do not include), modelled by dropping it from the
     // wallet's file after each of that source's answers. Its mark moves past what it withheld.
     const evidenceFile = join(f.directory, "payer.db.evidence");
-    const withhold = () => { const db = new DatabaseSync(evidenceFile); db.exec("DELETE FROM segment_terms"); db.close(); };
+    // The wallet holds its evidence file open; the file is changed between handles (on Windows a second connection
+    // to an open file fails).
+    const withhold = () => {
+      payer.close();
+      const db = new DatabaseSync(evidenceFile); db.exec("DELETE FROM segment_terms"); db.close();
+      payer = f.open("payer");
+    };
     const asked: string[] = [];
     const sources = [{ url: "operator", client: f.operator, withholds: Infinity }, { url: f.url, client: f.client, withholds: 0 }];
     type Supplied = Synced | { readonly skipped: readonly Skipped[] };
