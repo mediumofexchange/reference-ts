@@ -508,7 +508,7 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 | `demand`, `withdraw`, `settle --acceptance f`, `freshen` | the acts above; `freshen` submits as `pay` does |
 | `submit <alias> <backing>`, `status <alias>`, `reprove` | submits a saved record (a rerun prints the kept receipt); reads a saved record as the last sync resolved it; re-proves a payment in the canonical segment |
 | `presentation <backing> <demand>` | C3.8's reading from public evidence |
-| `publish <alias> <backing> --out f` | a demand, withdrawal or release as a publication file for `moe relay publish`; refused unless the read shows the gap open |
+| `publish <alias> <backing> --out f` | a demand, withdrawal or release as a publication file for a relay (below); refused unless the read shows the gap open |
 | backer: `issue`, `accept <alias> <backing> <demand> --deadline n --out f`, `burn`, `publish-acceptance` | `accept` writes the acceptance as its canonical publication bytes, which the holder's `settle --acceptance` reads |
 | `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files new, outside the directory and on a file system with hard links; `o` is checked new before the wallet freezes); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
 
@@ -519,7 +519,8 @@ demand prints its absolute deadline so a rerun can name it. Evidence comes from 
 the evidence file, then, where it does not answer, from each replica added (below); or from `--package f`. Where no
 source answers, a read uses the package the last sync kept. Each read says where its evidence came from (`evidence`:
 `served`, `replica` with its URL, `kept`, `file` or `saved`) and names the sources it passed over (`skipped`). The first request or payment shows the request
-channel, thin-interval and publication-funding explanations; each demand and `freshen` says what its tags link.
+channel, thin-interval and publication-funding explanations; each demand and `freshen` says what its tags link, and each
+publication file what its relay's funding links.
 Output, refusals and exit codes follow the M10b decision (one JSON object on stdout; refusals exit 1, usage 2,
 unexpected failures 3 with their stack).
 
@@ -582,6 +583,39 @@ evidence that does not frame or assemble is passed over; the holder's own proxy 
 Evidence is public, so a replica sees only which backing a connection syncs and when, as the operator does; it sees no
 submission. A replica the holder lists that withholds while the operator is down leaves reads unresolved until the
 operator answers again or the holder lists another (Limits in the decision).
+
+### Relays
+
+A gap act leaves the wallet as a publication file, and a relay publishes it from a funding key of its own
+([M12c decision](../decisions/2026-10.md#2026-10-07--fund-a-holders-gap-act-through-a-third-partys-relay-reached-as-an-onion-service-under-one-credential-per-relay-slice-12-m12c)); the wallet directory holds none. On Ergo the transaction that carries a record spends its
+publisher's boxes, so whichever key funds an act is tied by the chain to it, to that key's other publications and to
+where its coins came from. `moe relay init --dir <r> --venue f --node <url> --budget <nanoErg>` makes a relay directory
+with a fresh funding key (fund it to the budget, no more: `serve` keeps it online) and `moe relay publish --dir <r> f`
+publishes a file from it. A relay of the holder's own links all the acts it funds to each other and to its coins;
+one relay directory per demand links only that demand's acts, each still tied to whatever funded its key.
+
+A third party's relay funds the act instead: `moe relay serve --dir <r> [--port <p>] [--onion <host>] [--poll-ms <ms>]`
+serves the relay on a loopback listener for Tor's `HiddenServicePort` and writes `relay.json` (its URL and the relay's
+one credential, `relay.token`, the same for every holder), and a holder hands it a file with
+`moe relay send <file> --to <relay.json>` through its own proxy (as [transport](#transport)). The relay judges the file as
+`publish` does (`VENUE`, `INVALID`, `CONFIGURATION`, `SUBJECT`, `EARLY` for a demand whose instant its view has not
+reached, `BUDGET`), answers `pending` with the transaction or, once witnessed, `final` with the index, and a resend
+answers the same: an agent sends until `final`, or reads the act by its own `sync`. `EARLY` passes at the relay's next
+poll; `BUSY` (one request runs and one waits) and `UNAVAILABLE` (it did not answer) are sent again. `serve` listens
+only once its view has synced, holds the directory's lock (a `relay publish` there is `BUSY`), and ends with `STORAGE`
+where its publisher's state fails to persist.
+
+The act is then tied to the relay's key and its other users' acts, never to the holder's coins. What the relay learns
+and can do: the file (exactly what the record will show everyone) and when, a little before the public; it may delay
+or withhold it. Handing the same file to a second relay at once shows both relays' funding on one record, which marks
+a holder who always uses that pair, so send to another only when the first has not had it witnessed within a bound the
+deadline allows. A relay that hands holders different `relay.json` files (another onion name or token each) can tell
+them apart and link each holder's acts to each other: take `relay.json` only from where the relay publishes it to
+everyone alike (beside the terms) and compare it with others'. The credential gates what the relay pays for, since it
+judges a file's frame, not its validity: anyone holding it can post framed garbage until the budget is spent, after
+which the relay refuses `BUDGET` to everyone until refunded, and the budget counts each transaction a rebuild sends.
+Timing still pairs an act with the sync `publish` made just before it, at whichever source served it; a send some time
+later, as the deadline allows, weakens that.
 
 ## Acceptance and remaining work
 
