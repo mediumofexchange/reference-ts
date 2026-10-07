@@ -440,7 +440,6 @@ export class V3Wallet {
   private poolRequests(): void {
     requireThat(this.construction === POOL_V3, "INVALID", "a keyed wallet takes requests by owner key");
   }
-  /** C3.8's presentation reading reads pool-v3 records (dishonour.ts): a lit wallet does not take it yet. */
   private metadata() {
     const query = this.db.prepare("SELECT * FROM wallet_identity WHERE id=1"); query.setReadBigInts(true); return query.get();
   }

@@ -268,7 +268,7 @@ export interface PublicationView {
   readonly record: Uint8Array | undefined;
 }
 /** An acceptance as C3.8's reading holds it (dishonour.ts), published on its own or carried by a release: decoded,
- * with its signatures checked only by `signed`. */
+ * with its signatures checked only by `signed`, over the bytes it was decoded from (its fields are copies). */
 export interface AcceptanceView {
   readonly demand: Uint8Array;
   readonly deadline: bigint;
@@ -409,9 +409,12 @@ function v3FaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarg
   };
 }
 
-/** C3.8's acceptance: K's strict signature over its bytes. */
-const v3Acceptance = (a: SignedAcceptance): AcceptanceView => ({ demand: a.demand, deadline: a.deadline, owner: a.owner, id: acceptanceId(a),
-  signed: obligor => verifySignatureStrict(a.signature, acceptanceBytes(a), obligor) });
+/** C3.8's acceptance: K's strict signature over its bytes, fixed when the view is made. */
+function v3Acceptance(a: SignedAcceptance): AcceptanceView {
+  const message = acceptanceBytes(a);
+  return { demand: new Uint8Array(a.demand), deadline: a.deadline, owner: a.owner, id: acceptanceId(a),
+    signed: obligor => verifySignatureStrict(a.signature, message, obligor) };
+}
 
 const V3_READER: ReaderFrames = Object.freeze({
   specification: "pool-v3 e7f7f24",

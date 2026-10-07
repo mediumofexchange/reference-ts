@@ -149,7 +149,7 @@ function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTar
 /** §4: an acceptance is K's signature and its owner key's, each strict over the acceptance bytes. */
 function litAcceptance(a: SignedAcceptance): AcceptanceView {
   const message = acceptanceBytes(a);
-  return { demand: a.demand, deadline: a.deadline, owner: a.owner, id: acceptanceId(a),
+  return { demand: new Uint8Array(a.demand), deadline: a.deadline, owner: new Uint8Array(a.owner), id: acceptanceId(a),
     signed: obligor => verifySignatureStrict(a.signature, message, obligor) && verifySignatureStrict(a.ownerSignature, message, a.owner) };
 }
 
