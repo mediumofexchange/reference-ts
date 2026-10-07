@@ -11,11 +11,11 @@ integrity to the tested tree, checked in CI; (b) installed-package interoperabil
 separate installs of that tarball; (c) backup and restore drills of each role's store (an operator restored from an older copy
 signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's open correctness findings fixed or dispositioned,
 (au) first; (e) Next 5's 10⁵ rerun. Stop: (a)–(e) merged, CI green; the 10⁶ run, live Tor and the external review stay outside.
-- **M13a ([decision](decisions/2026-10.md#2026-10-07--pin-a-releases-install-to-the-tested-tree-with-an-install-lock-and-rebuild-it-byte-identically-on-two-systems-slice-13-m13a), #143):** (a). A [release record](docs/RELEASE.md): tarball plus an install lock pinning each runtime entry by integrity,
-  `--verify`, CI's `reproducible-release` comparing Linux and Windows. Reviewed, all taken. Limits: one toolchain at a time, no registry.
+- **M13a ([decision](decisions/2026-10.md#2026-10-07--pin-a-releases-install-to-the-tested-tree-with-an-install-lock-and-rebuild-it-byte-identically-on-two-systems-slice-13-m13a), #143):** (a). A [release record](docs/RELEASE.md): tarball, install lock, `--verify`, CI's `reproducible-release` (Linux = Windows).
 - **M13b ([decision](decisions/2026-10.md#2026-10-07--repair-a-read-a-source-left-unresolved-from-nothing-then-from-the-next-source-slice-13-m13b-audit-30-au), #144):** (d)'s (au) closed: a read unresolved over a source's answer syncs it again from nothing, then passes to the next source.
-- **M13c (#145):** (b). Both command drills install the release once per party ([separate installs](docs/RELEASE.md#separate-installs)): operator,
-  replica, relays, wallets, reader, each with its own home and temp; a module resolved outside a party's install fails them. **Next:** (c), then (d).
+- **M13c (#145):** (b). Both command drills install the release once per party ([separate installs](docs/RELEASE.md#separate-installs)); a module resolved outside one fails them.
+- **M13d ([decision](decisions/2026-10.md#2026-10-07--restore-an-operator-journal-by-a-return-at-a-skipped-sequence-once-silence-is-witnessed-slice-13-m13d), #146, spec #19):** (c)'s operator: a restored journal signs only C2b.4's return past silence, at a
+  sequence 2¹⁶·(1+r) past any its lost instance signed; `moe operator restore`; a copy refuses `COPIED`. **Next:** (c)'s other roles and `venue audit`, then (d).
 
 ## Status
 - **Slices 10–12 and 14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
