@@ -18,6 +18,7 @@ roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show
        operator (init, venue create, open, serve, return, adopt, restore)
        reader (init, terms add|show, service add, supply, presentation)
        relay (init, publish, serve, send)
+       venue (audit: any role's directory, after a restore or a copy, before any other command)
 init --construction moe/pool/v3 (the default) or moe/lit/v1 (wallet, operator, reader) names the one construction a directory serves.
 serve --onion <v3 host> [--holder-port <p>] adds a holders' listener for a Tor onion service and writes holders.json; a holder
 reaches an onion URL only with NODE_USE_ENV_PROXY=1 and HTTP_PROXY naming a loopback HTTP CONNECT proxy (Tor's HTTPTunnelPort).
@@ -53,6 +54,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     else if (role === "operator") await (await import("./operator.js")).operator(rest);
     else if (role === "wallet") await (await import("./wallet.js")).wallet(rest);
     else if (role === "relay") await (await import("./relay.js")).relay(rest);
+    else if (role === "venue") await (await import("./venue.js")).venueAudit(rest);
     else throw new UsageError(USAGE);
     return 0;
   } catch (error) {
