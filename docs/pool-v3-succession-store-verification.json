@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1022
+      "elapsedMs": 951
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2419
+      "elapsedMs": 2305
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2376
+      "elapsedMs": 2320
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 808
+      "elapsedMs": 738
     }
   ],
   "transactions": [],
@@ -49,7 +49,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "2261233c042322f55531c96b723172fc487a8f7f74afbb8e2e2dcacf6086ba3a",
-    "history": "153bc6967b533e8c2a3570ac3b2f1c21aec3f380996ca4c7f3f7c3aad5233c07",
+    "history": "0a65672c25a5ec9cc5909207587e146a5a03983b50d87adff0e90ee7b16d1f81",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -107,7 +107,7 @@
       }
     ]
   },
-  "elapsedMs": 18529,
+  "elapsedMs": 17899,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -164,7 +164,7 @@
     "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
     "dist/venue-records.js": "f6ed87eab84a32d51cbd5f6cbffff22e1311103e21368bb171a391d3c4c3c39a",
-    "package-lock.json": "b07b712c75d74d6de1b5a9db2a41f044dcc1d048122b9a356cc1cfc83bf1d92e",
+    "package-lock.json": "4c40a78f216c8ddc3ec55b576a5a4f216e83afc9c702ca1d0ab7b85c1ffabd7d",
     "scripts/pool/fixtures.mjs": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
     "scripts/pool/prepare-crs.mjs": "7efbcbe292559a26225c83720b053d38d36294f47ed3d5684d2cfa478e9ad6cb",
     "scripts/pool/v3/circuits/burn.nr": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",

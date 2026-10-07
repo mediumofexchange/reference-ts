@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1107
+      "elapsedMs": 1100
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 782
+      "elapsedMs": 781
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2423
+      "elapsedMs": 2297
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2484
+      "elapsedMs": 2307
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 767
+      "elapsedMs": 747
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2408
+      "elapsedMs": 2273
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2416
+      "elapsedMs": 2278
     }
   ],
   "transactions": [],
@@ -67,8 +67,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "cc2a449df521f65c333dd5e0d73377c75fec78285cb1a944083d44d6e09bc50e",
-      "history": "b2534f54fbc9806be3b1d53b21472a0720c971c03d94b862eb43c7a99f379fdc",
+      "spentRoot": "c73f0b72a3342ca2c0ff0664dc2079d9dcfd1b5d9910569aa8fbfc90bc4478a0",
+      "history": "eede9f91c235e53682feffcfc16f7bd092f691e71907ea5ce66dcf8f97319134",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -123,8 +123,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "cc2a449df521f65c333dd5e0d73377c75fec78285cb1a944083d44d6e09bc50e",
-      "history": "b2534f54fbc9806be3b1d53b21472a0720c971c03d94b862eb43c7a99f379fdc",
+      "spentRoot": "c73f0b72a3342ca2c0ff0664dc2079d9dcfd1b5d9910569aa8fbfc90bc4478a0",
+      "history": "eede9f91c235e53682feffcfc16f7bd092f691e71907ea5ce66dcf8f97319134",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -182,7 +182,7 @@
       ]
     }
   },
-  "elapsedMs": 27148,
+  "elapsedMs": 25881,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -244,7 +244,7 @@
     "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
     "dist/venue-records.js": "f6ed87eab84a32d51cbd5f6cbffff22e1311103e21368bb171a391d3c4c3c39a",
-    "package-lock.json": "b07b712c75d74d6de1b5a9db2a41f044dcc1d048122b9a356cc1cfc83bf1d92e",
+    "package-lock.json": "4c40a78f216c8ddc3ec55b576a5a4f216e83afc9c702ca1d0ab7b85c1ffabd7d",
     "scripts/pool/fixtures.mjs": "9062b9825218adb87171f06261d3c15635efcca6925352562734ca72c2ee5878",
     "scripts/pool/prepare-crs.mjs": "7efbcbe292559a26225c83720b053d38d36294f47ed3d5684d2cfa478e9ad6cb",
     "scripts/pool/v3/circuits/burn.nr": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",
