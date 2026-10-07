@@ -163,7 +163,7 @@ separately records publication and public supply verification.
   3,368-byte tree. The v3 guard refuses an Ergo profile whose kind-4
   location cannot carry the largest publication, and the publisher takes
   only the inputs its outputs leave room for. A run of that capacity was
-  [accepted, included and read back on the testnet](ergo-publisher-verification.json)
+  [accepted, included and read back on the testnet](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/ergo-publisher-verification.json)
   ([decision](../decisions/2026-10.md#2026-10-01--check-the-one-transaction-condition-in-the-guard-and-fill-ergo-boxes-at-their-real-output-index)).
   The node's dust rule is its votable `minValuePerByte` over the full box
   bytes (360 on both networks), so a full piece box needs 1,474,560 nanoERG;
@@ -525,9 +525,9 @@ range answers. It also checks that a substituted section stops the clock,
 an honest supplier supplies the missing valid section, and altered difficulty
 bits stop the offending supplier's header pass.
 
-[`publisher-check.mjs`](../experiments/ergo-range/publisher-check.mjs) runs
-the publisher on the own testnet node under the reference-testnet identity.
-Its historical [report](ergo-publisher-verification.json) at
+The retired [`publisher-check.mjs`](https://github.com/mediumofexchange/reference-ts/blob/ca368db/experiments/ergo-range/publisher-check.mjs) ran
+the publisher on the own testnet node under the reference-testnet identity;
+the live command drill now publishes there. Its historical [report](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/ergo-publisher-verification.json) at
 [`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c) records signed commitment,
 replacement and revocation transactions, verified inclusion and depth, and
 exact record bytes, subjects and ordinals in their carrying sections.
