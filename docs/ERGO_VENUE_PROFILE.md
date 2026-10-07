@@ -462,9 +462,18 @@ kept header at least the depth above it descends from it. `audit({ work })`
 re-checks every row as a reader that never trusted them would: header linkage,
 difficulty and score (work where asked), chain selection, stray header rows,
 every section's root against its header, every object attributed again, and
-the retained bytes. Run it on a view
-restored from a backup, copied from elsewhere or after a disk fault. The caller
-still supplies the profile and anchor context. Close the journal handle when
+the retained bytes. A durable view keeps its file's identity (inode, and birth
+time where the system keeps one); one whose file is another (a copy or a
+restored backup) is audited with work as it opens, before any read, and refused
+where a row does not reproduce: remove the file and sync again from the anchor
+(slice 13 M13e). The identity is a guard: it misses a file overwritten in place,
+a snapshot rolled back, and on Linux a directory removed and copied back. Run
+`moe venue audit --dir <d>` (any role's directory; it reads no node and
+changes nothing, and refuses `AUDIT` naming the first row that does not
+reproduce) after those, or a disk fault. Both check the rows against the
+directory's own venue file and anchor context, which a directory taken from
+another party also supplies: the terms a party keeps name the venue, and a
+view of another venue answers nothing for them. Close the journal handle when
 the view is retired. A file in the old checkpoint format is refused; sync again.
 
 The view prunes complete inferior side paths that meet the best chain below

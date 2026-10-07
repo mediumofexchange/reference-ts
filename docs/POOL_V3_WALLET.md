@@ -487,6 +487,38 @@ Activating two restores of one backup, or keeping a seed-restored wallet beside
 the original, breaks the one-active-copy precondition. Freezing cannot recall
 a submission already sent, so quiesce operations before exporting.
 
+### Restoring a copy of the directory
+
+A copy of the wallet's directory (a file copy, a host backup or a snapshot) is a third path, and a hazard: the instance
+it was copied from may have acted after the copy was made, and no local row shows what
+([decision](../decisions/2026-10.md#2026-10-07--restore-a-wallet-directory-from-a-copy-by-a-recorded-restoration-and-audit-copied-views-slice-13-m13e)).
+Probes on a lit wallet showed a copy giving a new request the owner key its lost instance gave another (so one
+customer's payment credits another's order), and crediting again a request its lost instance had credited. The procedure:
+
+1. Make sure the instance the copy was made from is gone for good: two instances of one wallet act unaware of each other.
+2. Restore the whole directory and run `moe wallet restore --copy --dir <d>` before anything else
+   (`V3Wallet.recordRestoration()`). It answers the requests it marked.
+   - Every request not fulfilled at that moment is marked: the lost instance may have credited it, so `fulfill`
+     refuses it (`RESTORED`) unless the holder's records outside the wallet show it was not (`--uncredited`).
+   - A lit wallet reads every owner key's exposure as unknown, as one restored from its seed does (lit-v1 §8): its next
+     read of each backing exposes every index through `h + 256`, and `move-window` comes before new requests.
+3. A lit wallet cannot tell which requests its lost instance paid: before paying one again, ask the payee. A pool-v3
+   payment is refused once its request's exact output exists.
+
+A wallet whose database file is not the one it was made in refuses every acting operation and a new handoff (`COPIED`)
+until then; reads and `seed --show` stay open. That check compares the file's inode and, where the system keeps one, its
+birth time (not on Linux). It is a guard, not the mechanism: it misses a file overwritten in place, a snapshot rolled
+back, and on Linux a directory removed and copied back, whose files can take the freed inodes again. After any restore,
+run the step yourself. Recording it again is harmless: it marks the requests unfulfilled then, and exposes no key
+past the window. The marks travel in a handoff. The wallet's kept replay file is discarded and read again where its
+identity changed, and its Ergo view is audited as it opens ([Ergo venue](ERGO_VENUE_PROFILE.md)).
+
+Not covered: an obsolete instance that comes back beside the restored copy, or a seed restoration beside a live wallet,
+is not fenced (the one-active-copy precondition); a lit payment the lost instance had in flight at the restoration can
+still land beside a retry; and a pool-v3 wallet restored while its lost instance's release is unwitnessed in a gap can
+settle the same demand at the same disclosure count (C3.5), which a backer holding that release could use. These are the
+open items of the durable-operation gate for the wallet.
+
 ## Commands
 
 `moe wallet` wraps this library as one process per operation over a wallet directory
@@ -504,13 +536,14 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 | `request <alias> <backing> <value> [--out f]` | the exact request: its 246-byte frame (hex, and the file) and digest to hand on |
 | `pay <alias> <backing> --request f --digest d --value n` | authenticates the frame by the digest, prepares the payment and submits it |
 | `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records. `available` totals what `pay` and `burn` can spend, `presented` the available notes a demand presented, which only `freshen` moves |
-| `fulfill <alias> <backing>` / `fulfillment <alias>` | the request found paid; never replayed: a rerun exits 4 printing the saved fulfillment |
+| `fulfill <alias> <backing> [--uncredited]` / `fulfillment <alias>` | the request found paid; never replayed: a rerun exits 4 printing the saved fulfillment. `--uncredited` fulfills a request a restoration from a copy marked (below) |
 | `demand`, `withdraw`, `settle --acceptance f`, `freshen` | the acts above; `freshen` submits as `pay` does |
 | `submit <alias> <backing>`, `status <alias>`, `reprove` | submits a saved record (a rerun prints the kept receipt); reads a saved record as the last sync resolved it; re-proves a payment in the canonical segment |
 | `presentation <backing> <demand>` | C3.8's reading from public evidence |
 | `publish <alias> <backing> --out f` | a demand, withdrawal or release as a publication file for a relay (below); refused unless the read shows the gap open |
 | backer: `issue`, `accept <alias> <backing> <demand> --deadline n --out f`, `burn`, `publish-acceptance` | `accept` writes the acceptance as its canonical publication bytes, which the holder's `settle --acceptance` reads |
 | `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files new, outside the directory and on a file system with hard links; `o` is checked new before the wallet freezes); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
+| `restore --copy` | records that this directory was restored from a copy or a backup ([below](#restoring-a-copy-of-the-directory)) |
 
 Each command that reads syncs the directory's Ergo view first, in bounded passes until it is caught up, with a
 `syncing` event on stderr for each pass another follows. Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact

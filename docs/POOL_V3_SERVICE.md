@@ -241,5 +241,10 @@ receiver fulfillment independently. Its evidence is retained in the
 saved and submitted by the [v3 wallet](POOL_V3_WALLET.md); issue, burn and the
 hostile cases are still prepared by the harness. Payment requests pass between
 wallets, not through this service. The encrypted handoff (`moe wallet handoff`,
-`restore`) is drilled, and so is an operator directory restored from a copy (the pool-v3 command drill); the other roles' backup and restore drills remain open. No live
+`restore`) is drilled, and so is an operator directory restored from a copy (the pool-v3 command drill). The lit command
+drill restores a wallet, a reader and a relay from backups of their directories (M13e,
+[wallet](POOL_V3_WALLET.md#restoring-a-copy-of-the-directory)): a reader's or replica's kept replay file whose identity
+changed is read again from nothing, its view is audited as it opens, and a relay keeps no state another party relies on
+(its holders resend exact files; a restored `spend.db` misses what was spent since, and the funding key's balance is
+the hard cap). No live
 service or physical custody is qualified.
