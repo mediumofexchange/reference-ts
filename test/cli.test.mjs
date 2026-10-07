@@ -12,6 +12,10 @@ import { encodeLitTerms, LIT_TERMS } from '../src/lit/terms.js';
 import { adoptedDomain } from '../src/pool/v3/configuration.js';
 import { POOL_V3 } from '../src/pool/v3/construction.js';
 import { encodeRootTerms, V3_TERMS } from '../src/pool/v3/terms.js';
+import { decodeRecord, encodePublication as encodePoolPublication, encodeRecord } from '../src/pool/v3/records.js';
+import { tagOf } from '../src/pool/v3/recovery.js';
+import { limbsOf } from '../src/pool/field.js';
+import { EMPTY_NOTE_ROOT } from '../src/pool/note-tree.js';
 import { outside } from '../src/cli/wallet.js';
 import { parsePublicationFile, readPublication } from '../src/cli/relay.js';
 import { keptReplay } from '../src/cli/reader.js';
@@ -211,6 +215,16 @@ describe('moe constructions (slice 14 M14g4)', () => {
     const zero = new Uint8Array(32);
     expect(code(() => readPublication(encodeLitPublication({ domain: zero, backing, kind: 2, acceptance: { ...acceptance, domain: zero } })))).toBe('CONFIGURATION');
     expect(code(() => readPublication(new Uint8Array(64)))).toBe('INVALID');
+  });
+  it('reads a demand publication\'s instant, which the relay\'s EARLY check compares, under either construction', () => {
+    const backing = new Uint8Array(32).fill(2), ownerSecret = new Uint8Array(32).fill(6), presenter = ed25519.getPublicKey(new Uint8Array(32).fill(5));
+    const opening = { backing, value: 5n, owner: ed25519.getPublicKey(ownerSecret), rho: new Uint8Array(32).fill(8) };
+    const lit = LIT.wallet.demand(litConfigHash(), new Uint8Array(32).fill(4), [{ opening, secret: ownerSecret }], presenter, 31n, 90n);
+    expect(readPublication(LIT.wallet.publication(litConfigHash(), backing, { kind: 1, record: lit }))).toEqual({ backing, instant: 31n });
+    const domain = adoptedDomain(), prefix = [...limbsOf(domain), ...limbsOf(new Uint8Array(32).fill(4)), 77n];
+    const pool = decodeRecord(encodeRecord({ domain, kind: 4, publicInputs: [...prefix, ...limbsOf(backing), 5n, EMPTY_NOTE_ROOT, 0n, tagOf(101n), 0n,
+      ...limbsOf(presenter), 47n, 90n], proof: new Uint8Array(32).fill(9), authorization: new Uint8Array(), capsules: [] }));
+    expect(readPublication(encodePoolPublication({ domain, backing, kind: 1, record: pool }))).toEqual({ backing, instant: 47n });
   });
   it('keeps one construction per directory, refusing a name it does not know', () => {
     // openDirectory holds lock.db until the process exits, which Windows will not let a removal pass.

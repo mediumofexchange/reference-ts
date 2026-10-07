@@ -22,7 +22,7 @@ import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import { CommandError, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print, readJson, readRequired,
   required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { directoryVerifier } from "./backend.js";
-import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf } from "./construction.js";
+import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { keepContext, openView, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
@@ -35,8 +35,8 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
   readonly fill?: (directory: Directory, args: Arguments) => Promise<object> }): Promise<void> {
   const args = parseArguments(argv, { dir: "value", node: "values", ...(options.verifies === false ? {} : { parameters: "value" }), venue: "value",
     ...(options.budget ? { budget: "value" } : {}), ...(options.construction ? { construction: "value" } : {}), ...options.flags }, 0);
-  const named = flag(args, "construction") ?? DEFAULT_CONSTRUCTION;
-  if (!isConstructionName(named)) throw new UsageError(`--construction is one of ${CONSTRUCTION_NAMES.join(", ")}`);
+  // Refused before the directory exists, as a bad venue file is.
+  const named = initConstruction(args);
   const venueRule = typeof options.venue === "function" ? options.venue(args) : options.venue;
   const nodes = flags(args, "node");
   if (nodes.length === 0) throw new UsageError("--node is required (one or more of this directory's own node endpoints)");
@@ -44,10 +44,6 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
   const venueFile = flag(args, "venue"), parameters = flag(args, "parameters");
   if (venueFile === undefined && venueRule === "required") throw new UsageError("--venue is required");
   const construction = options.construction ? { construction: named } : {};
-  // Refused before the directory exists, as a bad venue file is.
-  if (parameters !== undefined && !constructionNamed(named).reader.proofs) {
-    throw new UsageError(`a ${named} directory keeps no proving parameters: --parameters is not taken`);
-  }
   const budget = options.budget ? integer(required(args, "budget"), "--budget", 0n, (1n << 63n) - 1n) : undefined;
   // The venue file is read before the directory exists, so a bad one leaves nothing behind.
   const venue = venueFile === undefined ? undefined : parseVenue(readJson(venueFile, "the venue file"));
@@ -71,6 +67,17 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
     shown = await options.fill?.(opened, args) ?? {};
   });
   print({ status: "created", role, directory: directory.path, ...construction, ...(venue === undefined ? {} : { venue: venue.id }), ...shown });
+}
+
+/** The construction `--construction` names at init (pool-v3's by default), refusing an unknown name and `--parameters`
+ * for a construction without proofs: checked before anything is created or read from stdin. */
+export function initConstruction(args: Arguments): ConstructionName {
+  const named = flag(args, "construction") ?? DEFAULT_CONSTRUCTION;
+  if (!isConstructionName(named)) throw new UsageError(`--construction is one of ${CONSTRUCTION_NAMES.join(", ")}`);
+  if (flag(args, "parameters") !== undefined && !constructionNamed(named).reader.proofs) {
+    throw new UsageError(`a ${named} directory keeps no proving parameters: --parameters is not taken`);
+  }
+  return named;
 }
 
 /** `terms add` and `terms show`, shared by every role that keeps terms. */
@@ -160,7 +167,12 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
     const verifier = await directoryVerifier(directory, args), construction = directory.construction;
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined;
     try {
-      try { evidence = new EvidenceStore(directory.file("evidence.db"), { construction }); } catch (error) { throw inUse(error); }
+      try { evidence = new EvidenceStore(directory.file("evidence.db"), { construction }); } catch (error) {
+        if (error instanceof TypeError && /another construction's evidence/.test(error.message)) {
+          throw new CommandError("CONSTRUCTION", `evidence.db holds another construction's evidence than this directory's ${nameOf(construction)}`);
+        }
+        throw inUse(error);
+      }
       store = keptReplay(directory, at);
       const file = flag(args, "package");
       const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);

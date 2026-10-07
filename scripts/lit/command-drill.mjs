@@ -18,10 +18,12 @@
 // Usage: node scripts/lit/command-drill.mjs   (after npm run build)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { prepareExactOutput } from "../../dist/pool/v3/capsules.js";
 import { adoptedDomain } from "../../dist/pool/v3/configuration.js";
+import { encodePaymentRequest, paymentRequestDigest } from "../../dist/pool/v3/wallet-request.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../../dist/pool/v3/terms.js";
 import { parseVenue } from "../../dist/cli/venue.js";
 import { LIT as LIT_CONSTRUCTION } from "../../dist/lit/construction.js";
@@ -218,9 +220,11 @@ try {
     assert.deepEqual([credited.status, credited.value, credited.owner], ["final", "10", funding.made.frame.slice(-64)]);
     assert.deepEqual(holdings(await ok(wallet("sync", HD, backing))), [["10", "available", 0]]);
     const invoice = await request(SH, "invoice", 3);
-    // A pool-v3 frame is no lit request.
-    const foreign = join(scratch, "foreign.request"); writeFileSync(foreign, new Uint8Array(246));
-    await refused(wallet("pay", HD, "pay-0", backing, "--request", foreign, "--digest", "00".repeat(32), "--value", "3"), "REQUEST");
+    // A pool-v3 request frame for this backing, authenticated by its own digest, is no lit request.
+    const out = prepareExactOutput(new Uint8Array(32).fill(3), adoptedDomain(), new Uint8Array(32).fill(4), Buffer.from(backing, "hex"), 3n);
+    const frame = encodePaymentRequest({ domain: adoptedDomain(), opening: out.opening, cm: out.cm, capsule: out.capsule });
+    const foreign = join(scratch, "foreign.request"); writeFileSync(foreign, frame);
+    await refused(wallet("pay", HD, "pay-0", backing, "--request", foreign, "--digest", paymentRequestDigest(frame), "--value", "3"), "REQUEST");
     const paid = await ok(wallet("pay", HD, "pay-1", backing, ...invoice.args, "--value", "3"));
     assert.deepEqual([paid.status, paid.kind, paid.value], ["pending", "payment", "3"]);
     assert.notEqual(paid.receipt, null);
@@ -239,6 +243,8 @@ try {
   await check("demand, the backer's acceptance relayed, settlement and a burn of the settled note; the reader's supply", async () => {
     const shown = await ok(wallet("demand", SH, "redeem", backing, "3", "--deadline", "+60"));
     assert.deepEqual([shown.status, shown.kind], ["pending", "demand"]);
+    // Lit-v1 §11: nothing to freshen; the notes say what a lit demand discloses.
+    assert.match(shown.notes.join(" "), /is public/); assert.doesNotMatch(shown.notes.join(" "), /freshen/);
     await refused(wallet("publish", SH, "redeem", backing, "--out", join(scratch, "early.json")), "GAP");
     await submit(SH, "redeem");
     await finalOf(SH, "redeem");
@@ -352,6 +358,9 @@ try {
     const key = join(scratch, "handoff.key"), out = join(scratch, "handoff.bin");
     const frozen = await ok(wallet("handoff", SH, "--key", key, "--out", out));
     await refused(wallet("sync", SH, backing), "FENCED");
+    // Under the other construction the handoff does not open: refused by name before any directory is made.
+    await refused(["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, "--key", key, "--backup", out, "--digest", frozen.digest], "CONSTRUCTION");
+    assert(!existsSync(H3), "a refused restore leaves no directory");
     await ok(["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT, "--key", key, "--backup", out, "--digest", frozen.digest]);
     await ok(wallet("terms add", H3, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN));
     await ok(wallet("service add", H3, backing, join(OP, "service.json")));
@@ -365,7 +374,7 @@ try {
     // Restored from its seed alone, every index through h + 256 reads as exposed (lit-v1 §8): the window is full.
     await refused(wallet("request", H2, "after", backing, "1"), "WINDOW");
     const moved = await ok(wallet("move-window", H2, "move-1", backing));
-    assert.deepEqual([moved.kind, moved.status, moved.value], ["move", "pending", "2"]);
+    assert.deepEqual([moved.kind, moved.status, moved.value], ["payment", "pending", "2"]);
     await finalOf(H2, "move-1");
     assert.deepEqual(holdings(await ok(wallet("sync", H2, backing))), before);
     const after = await ok(wallet("request", H2, "after", backing, "1"));

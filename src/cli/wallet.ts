@@ -35,7 +35,7 @@ import { adoptedDomain } from "../pool/v3/configuration.js";
 import type { Construction, KeyedAcceptance, KeyedRequest } from "../pool/v3/construction.js";
 import { decodePublication, encodePublication, type SignedAcceptance } from "../pool/v3/records.js";
 import { encodeRootTerms } from "../pool/v3/terms.js";
-import { walletBackupDigest } from "../pool/v3/wallet-backup.js";
+import { openWalletBackup, walletBackupDigest } from "../pool/v3/wallet-backup.js";
 import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest, type PaymentRequest } from "../pool/v3/wallet-request.js";
 import { V3Wallet, type Act, type BackerSigner, type LocalProver, type Payment, type WalletReceipt, type WalletView } from "../pool/v3/wallet-store.js";
 import { litConfigHash } from "../lit/configuration.js";
@@ -44,13 +44,13 @@ import { encodeLitTerms } from "../lit/terms.js";
 import { authenticateLitPaymentRequest, encodeLitPaymentRequest, litPaymentRequestDigest } from "../lit/wallet.js";
 import { startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
 import { readParameters } from "../pool/parameter-files.js";
-import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArguments, print, readOptional, readRequired, readSecret, required,
+import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArguments, print, readJson, readOptional, readRequired, readSecret, required,
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryVerifier, verifierCount } from "./backend.js";
-import { nameOf } from "./construction.js";
-import { initRole, presentationOf, requirePresentation, serviceClient, serviceCommand, termsCommand, unanswered } from "./reader.js";
+import { constructionNamed, constructions, nameOf } from "./construction.js";
+import { initConstruction, initRole, presentationOf, requirePresentation, serviceClient, serviceCommand, termsCommand, unanswered } from "./reader.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
-import { createVenue, openView, ownVenue, requireVenue, venueText, type View } from "./venue.js";
+import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
 /** Shown once, with a wallet's first request or payment (M10b item 13; docs/POOL_V3_VISIBILITY.md). */
 const FIRST_NOTES = Object.freeze([
@@ -413,7 +413,7 @@ async function restoreSeed(argv: readonly string[]): Promise<void> {
   // The arguments are checked before stdin is read, so a usage error does not wait on input.
   const checked = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", verifiers: "value", "backer-key": "value",
     construction: "value" }, 0);
-  required(checked, "dir"); required(checked, "venue");
+  required(checked, "dir"); required(checked, "venue"); initConstruction(checked);
   if (existsSync(resolve(required(checked, "dir")))) throw new CommandError("EXISTS", "restore-seed creates a new directory");
   const secret = await seedFromStdin();
   try {
@@ -472,6 +472,17 @@ async function restore(argv: readonly string[]): Promise<void> {
   }
   const bytes = readRequired(required(probe, "backup"), "the handoff"), key = readSecret(required(probe, "key"), "the handoff key");
   try {
+    // The handoff is opened before the directory exists: one of the other construction, or under wrong credentials,
+    // leaves nothing behind (the library would refuse either as INVALID only after init).
+    const named = constructionNamed(initConstruction(probe)), venue = parseVenue(readJson(required(probe, "venue"), "the venue file")).id;
+    const opens = (construction: Construction): boolean => {
+      try { openWalletBackup(bytes, key, construction.reader.domain(), venue, digest).fill(0); return true; } catch { return false; }
+    };
+    if (!opens(named)) {
+      const other = constructions().find(c => c !== named && opens(c));
+      if (other !== undefined) throw new CommandError("CONSTRUCTION", `the handoff holds a ${nameOf(other)} wallet: restore it with --construction ${nameOf(other)}`);
+      throw new CommandError("INVALID", "invalid wallet backup or recovery credentials");
+    }
     await initRole(argv, "wallet", { venue: "required", construction: true, flags, fill: async (directory, args) => {
       await withView(directory, args, (view, verifier) =>
         V3Wallet.restoreBackup(directory.file(WALLET_DB), walletOptions(directory, view, verifier), bytes, key, digest).close());
@@ -542,7 +553,7 @@ async function moveWindow(argv: readonly string[]): Promise<void> {
     const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
     const payment = await opened.wallet.moveWindow(alias, source.bytes, kept.signed, fee);
     if (payment.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
-    print({ ...paymentOut(opened.wallet.payment(alias)!), kind: "move", evidence: source.source,
+    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source,
       notes: ["This payment moves the window: it pays this wallet's own highest exposed key, so the request that named that key is closed and requests resume once it is final."] });
   });
 }
@@ -623,7 +634,11 @@ async function fulfillment(argv: readonly string[]): Promise<void> {
 }
 
 /** What a demand's tags now link (M10b item 13). */
-function demandNotes(act: Act): string[] {
+function demandNotes(directory: Directory, act: Act): string[] {
+  // Lit-v1 §11: a lit demand names notes whose openings are already public; a withdrawn demand's notes spend as any other.
+  if (keyed(directory)) {
+    return ["Everything this demand names (its notes, their owner keys and its quantity) is public, as every lit statement is. Once withdrawn or lapsed, its notes pay or burn as any other."];
+  }
   return ["Its tags become public once the operator admits it or it is published: whoever later sees these notes spent links them to this demand (C3.1). Before spending them elsewhere, freshen them.",
     ...(act.repeats.length === 0 ? [] : [`It presents again the notes of ${act.repeats.map(hex).join(", ")}, so it links to that demand.`])];
 }
@@ -635,7 +650,7 @@ async function demand(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const deadline = deadlineOf(args, opened.at!), source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
     const act = await opened.wallet.demand(alias, quantity, deadline, source.bytes, kept.signed, opened.prove);
-    print({ ...actOut(act, directory.construction), evidence: source.source, notes: demandNotes(act) });
+    print({ ...actOut(act, directory.construction), evidence: source.source, notes: demandNotes(directory, act) });
   });
 }
 
