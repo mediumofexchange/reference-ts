@@ -213,21 +213,23 @@ describe('moe constructions (slice 14 M14g4)', () => {
     expect(code(() => readPublication(new Uint8Array(64)))).toBe('INVALID');
   });
   it('keeps one construction per directory, refusing a name it does not know', () => {
+    // openDirectory holds lock.db until the process exits, which Windows will not let a removal pass.
+    const remove = path => { try { rmSync(path, { recursive: true, force: true }); } catch (error) { if (process.platform !== 'win32') throw error; } };
     const dir = mkdtempSync(join(tmpdir(), 'moe-construction-'));
     try {
       const config = construction => writeFileSync(join(dir, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'], ...construction }));
       config({ construction: 'moe/lit/v1' });
       expect(openDirectory(dir, 'reader').construction).toBe(LIT);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
+    } finally { remove(dir); }
     const other = mkdtempSync(join(tmpdir(), 'moe-construction-'));
     try {
       writeFileSync(join(other, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'] }));
       expect(openDirectory(other, 'reader').construction).toBe(POOL_V3);
-    } finally { rmSync(other, { recursive: true, force: true }); }
+    } finally { remove(other); }
     const bad = mkdtempSync(join(tmpdir(), 'moe-construction-'));
     try {
       writeFileSync(join(bad, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'], construction: 'moe/lit/v2' }));
       expect(code(() => openDirectory(bad, 'reader'))).toBe('INVALID');
-    } finally { rmSync(bad, { recursive: true, force: true }); }
+    } finally { remove(bad); }
   });
 });
