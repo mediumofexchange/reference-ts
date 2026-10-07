@@ -13,7 +13,9 @@
 // does, maps the onion name to that listener and refuses every other target, with the node direct (NO_PROXY);
 // a guard ends any holder process that connects anywhere but the proxy and the node, and a holder's sync while the
 // service is up must read served evidence. A holder without the proxy, or with a proxy that is down, refuses PROXY.
-// A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
+// A replica (M12b), a reader directory that serves, keeps the backing's evidence behind an onion name of its own; with
+// the operator stopped the holder's sync falls to it, and a reader with no operator service reads its supply from the
+// replica alone, past a replica that is down. A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
 // is final, after which it requests again. Hostile cases: pool-v3 terms into a lit directory (CONSTRUCTION), a lit
 // directory given --parameters or terms given --challenge (usage), freshen (CONSTRUCTION), a pool-v3 request frame to
 // a lit payer (REQUEST), a relay file for another venue (VENUE).
@@ -52,12 +54,16 @@ const pause = ms => new Promise(done => setTimeout(done, ms));
 const node = await serveSyntheticNode();
 // The onion service as Tor's HTTPTunnelPort reaches it: CONNECT only, the onion name to the holders' listener, a 502
 // where that does not answer, and every other target refused (Tor refuses internal addresses).
-const ONION = `${"m".repeat(55)}d.onion`, tor = { holders: 0, tunnels: 0, refused: [] };
+const ONION = `${"m".repeat(55)}d.onion`, REPLICA = `${"r".repeat(55)}d.onion`, DOWN = `${"n".repeat(55)}d.onion`;
+const tor = { holders: 0, replica: 0, tunnels: 0, refused: [] };
 const torProxy = createServer((_, response) => response.writeHead(405).end()).on("connect", (request, client, head) => {
-  if (request.url !== `${ONION}:80` || tor.holders === 0) { tor.refused.push(request.url); client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
+  // An onion service that is down answers 502, as Tor does.
+  if (request.url === `${DOWN}:80`) { client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
+  const port = request.url === `${ONION}:80` ? tor.holders : request.url === `${REPLICA}:80` ? tor.replica : 0;
+  if (port === 0) { tor.refused.push(request.url); client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
   tor.tunnels++;
   let joined = false;
-  const upstream = connect(tor.holders, "127.0.0.1", () => {
+  const upstream = connect(port, "127.0.0.1", () => {
     joined = true; client.write("HTTP/1.1 200 Connection established\r\n\r\n");
     if (head.length > 0) upstream.write(head);
     client.pipe(upstream); upstream.pipe(client);
@@ -81,16 +87,20 @@ const nextRound = async () => { await advance(Number(DEPTH) + 2); await pause(30
 
 /** One `moe` process: its exit code, stdout's JSON, stderr and its refusal. With `mining: "waiting"`, each wait it
  * logs mines one block, so the chain moves with the command's retries. */
+/** A holder's process: through the proxy, each with its own credential (Tor isolates streams by it), the node direct;
+ * the guard ends it at any other connection. */
+const holderProcess = (args, { input, proxy = torPort, proxyHost = "127.0.0.1", rss } = {}) => {
+  const holder = args[0] !== "operator";
+  const env = { ...plainEnv, MOE_DRILL_RSS: rss, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
+    HTTP_PROXY: `http://drill-${processes.length}-${process.hrtime.bigint()}:x@${proxyHost}:${proxy}`, NO_PROXY: "127.0.0.1" } : {}),
+    ...(holder ? { MOE_DRILL_PORTS: `${proxy ?? torPort},${nodePort}` } : {}) };
+  return spawn(process.execPath, ["--import", RSS_HOOK, ...(holder ? ["--import", GUARD] : []), MOE, ...args],
+    { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env });
+};
 function moe(args, { mining, input, proxy = torPort, proxyHost = "127.0.0.1" } = {}) {
   return new Promise((done, failed) => {
     const rss = join(scratch, `rss-${processes.length}-${process.hrtime.bigint()}.json`);
-    // A holder's process: through the proxy, each with its own credential (Tor isolates streams by it), the node direct.
-    const holder = args[0] !== "operator";
-    const env = { ...plainEnv, MOE_DRILL_RSS: rss, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
-      HTTP_PROXY: `http://drill-${processes.length}:x@${proxyHost}:${proxy}`, NO_PROXY: "127.0.0.1" } : {}),
-      ...(holder ? { MOE_DRILL_PORTS: `${proxy ?? torPort},${nodePort}` } : {}) };
-    const child = spawn(process.execPath, ["--import", RSS_HOOK, ...(holder ? ["--import", GUARD] : []), MOE, ...args],
-      { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env });
+    const child = holderProcess(args, { input, proxy, proxyHost, rss });
     if (input !== undefined) child.stdin.end(input);
     const out = [], err = [];
     let waits = 0;
@@ -164,10 +174,30 @@ function serve(directory) {
   } };
 }
 
+/** `moe reader serve` in the background, a holder's process behind the replica's onion name: its lines as they come,
+ * and a stop that expects its last line. */
+function replicaServe(directory) {
+  const child = holderProcess(["reader", "serve", "--dir", directory, "--onion", REPLICA, "--poll-ms", POLL],
+    { rss: join(scratch, `rss-replica-${process.hrtime.bigint()}.json`) });
+  servers.push(child);
+  const lines = [];
+  let stdout = "", stderr = "";
+  child.stdout.on("data", chunk => {
+    stdout += chunk;
+    for (let at = stdout.indexOf("\n"); at >= 0; at = stdout.indexOf("\n")) { lines.push(JSON.parse(stdout.slice(0, at))); stdout = stdout.slice(at + 1); }
+  });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+  const exited = new Promise(done => child.on("close", status => done(status)));
+  return { lines, log: () => stderr, async stop() {
+    child.kill("SIGTERM"); const status = await exited;
+    if (process.platform !== "win32") { assert.equal(status, 0, stderr); assert.equal(lines.at(-1)?.status, "stopped"); }
+  } };
+}
+
 let completed = false;
 try {
   const OP = join(scratch, "operator"), BK = join(scratch, "backer"), HD = join(scratch, "holder"), SH = join(scratch, "shop");
-  const RD = join(scratch, "reader"), RL = join(scratch, "relay"), H2 = join(scratch, "holder-seed"), H3 = join(scratch, "holder-handoff");
+  const RD = join(scratch, "reader"), RL = join(scratch, "relay"), RP = join(scratch, "replica"), RF = join(scratch, "reader-replica"), H2 = join(scratch, "holder-seed"), H3 = join(scratch, "holder-handoff");
   const nodeArgs = ["--node", node.url], venueFile = join(OP, "venue.json");
   const wallet = (verb, directory, ...rest) => ["wallet", ...verb.split(" "), "--dir", directory, ...rest];
   await advance(Number(DEPTH) + 2);
@@ -361,8 +391,21 @@ try {
     assert.equal((await settled(wallet("fulfill", SH, "invoice-2", backing), () => true)).value, "2");
   });
 
-  await check("with the operator stopped past silence, a demand and its settlement are published through the relay and read final by force; " +
-      "the operator returns and adopts", async () => {
+  let replica;
+  await check("with the operator stopped past silence, a demand and its settlement are published through the relay and read final by force, " +
+      "the holder syncing from a replica and a reader reading from it alone; the operator returns and adopts", async () => {
+    // A replica of the backing, behind its own onion name, syncing from the operator's holders' listener.
+    for (const directory of [RP, RF]) {
+      await ok(["reader", "init", "--dir", directory, "--venue", venueFile, ...nodeArgs, ...LIT]);
+      await ok(["reader", "terms", "add", "--dir", directory, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN]);
+    }
+    await ok(["reader", "service", "add", "--dir", RP, backing, join(OP, "holders.json")]);
+    await refused(["reader", "replica", "add", "--dir", RF, backing, "http://example.com/"], "INVALID");
+    // A reader with replicas only, the first of them down: it keeps no service of the operator's.
+    for (const url of [`http://${DOWN}/`, `http://${REPLICA}/`, `http://${REPLICA}/`]) await ok(["reader", "replica", "add", "--dir", RF, backing, url]);
+    assert.deepEqual(JSON.parse(readFileSync(join(RF, "replicas", `${operatorKey}.json`), "utf8")).urls, [`http://${DOWN}/`, `http://${REPLICA}/`]);
+    await ok(wallet("replica add", HD, backing, `http://${REPLICA}/`));
+    replica = replicaServe(RP);
     for (const directory of [HD, BK, SH]) await ok(wallet("sync", directory, backing));
     // The whole package as any transport could carry it, for the reader once the operator is stopped.
     const service = JSON.parse(readFileSync(join(OP, "service.json"), "utf8")), { reference } = parseVenue(JSON.parse(readFileSync(venueFile, "utf8")));
@@ -370,10 +413,21 @@ try {
       construction: LIT_CONSTRUCTION }).package(Buffer.from(backing, "hex"));
     const packageFile = join(scratch, "package.bin");
     writeFileSync(packageFile, whole.package);
+    // The replica serves once its own read finds the operator's latest selection canonical.
+    for (let round = 0; ; round++) {
+      if (replica.lines.length > 0) tor.replica = replica.lines[0].port;
+      const line = replica.lines.findLast(l => l.backing === backing && l.served !== undefined);
+      if (line?.served !== undefined && line.served !== null && BigInt(line.served) >= whole.selection.sequence) break;
+      assert(round < 40, `the replica did not serve sequence ${whole.selection.sequence}: ${JSON.stringify(replica.lines)}${replica.log()}`);
+      await nextRound();
+    }
+    assert.equal(replica.lines[0].url, `http://${REPLICA}/`);
+    assert.equal(JSON.parse(readFileSync(join(RP, "replica.json"), "utf8")).url, `http://${REPLICA}/`);
     await serving.stop();
     await advance(Number(SILENCE) + 4);
+    // The operator does not answer: the holder's sync falls to the replica.
     const shown = await ok(wallet("demand", HD, "gap", backing, "5", "--deadline", "+60"));
-    assert.equal(shown.evidence, "kept");
+    assert.deepEqual([shown.evidence, shown.replica, shown.skipped.map(s => s.code)], ["replica", `http://${REPLICA}/`, ["UNAVAILABLE"]]);
     const file = join(scratch, "gap.json");
     assert.equal((await ok(wallet("publish", HD, "gap", backing, "--out", file))).status, "written");
     await ok(["relay", "publish", "--dir", RL, file]);
@@ -381,11 +435,15 @@ try {
     const locked = await settled(wallet("sync", HD, backing), view => view.holdings[0]?.status === "locked");
     assert.equal(locked.gap, true);
     assert.equal((await ok(wallet("status", HD, "gap"))).status, "final");
-    // With the operator stopped the reader reads the package file: the demand stands by force.
+    // With the operator stopped a reader without a replica reads the package file: the demand stands by force.
     await refused(["reader", "supply", "--dir", RD, backing], "UNAVAILABLE");
     const forced = await supply("--package", packageFile);
     assert.equal(forced.force.length, 1);
     assert.equal(forced.force[0].kind, 4);
+    // A reader that never synced reads the same from the replica alone, past the replica that is down.
+    const fromReplica = await ok(["reader", "supply", "--dir", RF, backing]);
+    assert.deepEqual([fromReplica.status, fromReplica.evidence, fromReplica.replica, fromReplica.skipped, fromReplica.supply, fromReplica.force.length],
+      ["final", "replica", `http://${REPLICA}/`, [{ url: `http://${DOWN}/`, code: "UNAVAILABLE" }], forced.supply, 1]);
     const acceptance = join(scratch, "gap.acceptance");
     await ok(wallet("accept", BK, "gap-answer", backing, shown.demand, "--deadline", String(BigInt(shown.deadline) - 10n), "--out", acceptance));
     await ok(wallet("publish-acceptance", BK, "gap-answer", backing, "--out", join(scratch, "gap-answer.json")));
@@ -415,6 +473,10 @@ try {
     assert.deepEqual(holdings(backer), [["5", "available", 0]]);
     const read = await settled(["reader", "supply", "--dir", RD, backing], out => out.status === "final");
     assert.deepEqual([read.issued, read.burned, read.supply], ["10", "3", "7"]);
+    // With the operator back, the holder reads its service first; the replica follows the return.
+    assert.equal((await ok(wallet("sync", HD, backing))).evidence, "served");
+    await settled(["reader", "supply", "--dir", RF, backing], out => out.status === "final" && out.supply === "7");
+    await replica.stop();
     // A relay refuses a file for another venue.
     const other = JSON.parse(readFileSync(release, "utf8")); other.venue = "00".repeat(32);
     writeFileSync(join(scratch, "other-venue.json"), JSON.stringify(other));
