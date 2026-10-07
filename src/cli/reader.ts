@@ -6,7 +6,9 @@
 // outcome under C3.8 (`presentation`). Evidence comes from the operator's
 // service or from a package file. Reads keep their classes, walks, replay
 // state and venue answers in `replay.db` (pool-v3 §14), so a later process
-// verifies only what is new.
+// verifies only what is new. A reader directory reads the construction it
+// declares at init (M14g4); a lit reader keeps no parameters and opens no
+// verifier.
 import { mkdirSync } from "node:fs";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { readPresentation, type Presentation } from "../pool/v3/dishonour.js";
@@ -19,29 +21,44 @@ import { V3ServiceClient } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import { CommandError, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print, readJson, readRequired,
   required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
-import { openVerifier, verifierCount } from "./backend.js";
+import { directoryVerifier } from "./backend.js";
+import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { keepContext, openView, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
-/** `init` shared by every role: parameters (copied from `--parameters` or fetched), then the venue when given. */
+/** `init` shared by every role: parameters (copied from `--parameters` or fetched) where the directory verifies proofs,
+ * then the venue when given. A role that serves one construction (`construction`) takes `--construction <name>`,
+ * pool-v3's by default, and keeps it in config.json (M14g4); proving parameters are kept only for one with proofs. A
+ * role that verifies nothing (`verifies: false`, the relay) keeps none and takes no `--parameters`. */
 export async function initRole(argv: readonly string[], role: Role, options: { readonly venue: "required" | "optional" | ((args: Arguments) => "required" | "optional");
-  readonly budget?: boolean; readonly flags?: FlagSpec; readonly fill?: (directory: Directory, args: Arguments) => Promise<object> }): Promise<void> {
-  const args = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", ...(options.budget ? { budget: "value" } : {}),
-    ...options.flags }, 0);
+  readonly budget?: boolean; readonly construction?: boolean; readonly verifies?: false; readonly flags?: FlagSpec;
+  readonly fill?: (directory: Directory, args: Arguments) => Promise<object> }): Promise<void> {
+  const args = parseArguments(argv, { dir: "value", node: "values", ...(options.verifies === false ? {} : { parameters: "value" }), venue: "value",
+    ...(options.budget ? { budget: "value" } : {}), ...(options.construction ? { construction: "value" } : {}), ...options.flags }, 0);
+  const named = flag(args, "construction") ?? DEFAULT_CONSTRUCTION;
+  if (!isConstructionName(named)) throw new UsageError(`--construction is one of ${CONSTRUCTION_NAMES.join(", ")}`);
   const venueRule = typeof options.venue === "function" ? options.venue(args) : options.venue;
   const nodes = flags(args, "node");
   if (nodes.length === 0) throw new UsageError("--node is required (one or more of this directory's own node endpoints)");
   for (const node of nodes) if (!/^https?:\/\/[^\s]+$/.test(node)) throw new CommandError("INVALID", `${node} is not a node URL`);
   const venueFile = flag(args, "venue"), parameters = flag(args, "parameters");
   if (venueFile === undefined && venueRule === "required") throw new UsageError("--venue is required");
+  const construction = options.construction ? { construction: named } : {};
+  // Refused before the directory exists, as a bad venue file is.
+  if (parameters !== undefined && !constructionNamed(named).reader.proofs) {
+    throw new UsageError(`a ${named} directory keeps no proving parameters: --parameters is not taken`);
+  }
   const budget = options.budget ? integer(required(args, "budget"), "--budget", 0n, (1n << 63n) - 1n) : undefined;
   // The venue file is read before the directory exists, so a bad one leaves nothing behind.
   const venue = venueFile === undefined ? undefined : parseVenue(readJson(venueFile, "the venue file"));
   let shown: object = {};
-  const directory = await initDirectory(required(args, "dir"), { role, nodes, ...(budget === undefined ? {} : { spendBudgetNanoErg: budget.toString() }) }, async opened => {
+  const directory = await initDirectory(required(args, "dir"), { role, nodes, ...(budget === undefined ? {} : { spendBudgetNanoErg: budget.toString() }),
+    ...construction }, async opened => {
     try {
-      if (parameters !== undefined) await copyParameters(parameters, opened.path);
-      else await prepareParameters(opened.path, { log: line => process.stderr.write(`${line}\n`) });
+      if (options.verifies !== false && opened.construction.reader.proofs) {
+        if (parameters !== undefined) await copyParameters(parameters, opened.path);
+        else await prepareParameters(opened.path, { log: line => process.stderr.write(`${line}\n`) });
+      }
     } catch (error) {
       if (error instanceof Error && /^No verified /.test(error.message)) throw new CommandError("PARAMETERS", error.message);
       throw error;
@@ -53,7 +70,7 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
     }
     shown = await options.fill?.(opened, args) ?? {};
   });
-  print({ status: "created", role, directory: directory.path, ...(venue === undefined ? {} : { venue: venue.id }), ...shown });
+  print({ status: "created", role, directory: directory.path, ...construction, ...(venue === undefined ? {} : { venue: venue.id }), ...shown });
 }
 
 /** `terms add` and `terms show`, shared by every role that keeps terms. */
@@ -63,13 +80,13 @@ export function termsCommand(argv: readonly string[], role: Role): void {
     const args = parseArguments(rest, { dir: "value", terms: "value", signature: "value", synthetic: "switch" }, 1);
     const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
     const kept = authenticate(readRequired(required(args, "terms"), "terms file"), readRequired(required(args, "signature"), "signature file"),
-      hex32(args.positional[0]!, "the backing"), venue, has(args, "synthetic"));
+      hex32(args.positional[0]!, "the backing"), venue, has(args, "synthetic"), directory.construction);
     keepTerms(directory, kept);
-    print({ status: "kept", ...explain(kept, venue) });
+    print({ status: "kept", ...explain(kept, venue, directory.construction) });
   } else if (verb === "show") {
     const args = parseArguments(rest, { dir: "value" }, 1);
     const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
-    print({ status: "kept", ...explain(keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), venue) });
+    print({ status: "kept", ...explain(keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), venue, directory.construction) });
   } else throw new UsageError("terms add|show");
 }
 
@@ -96,11 +113,12 @@ export function serviceCommand(argv: readonly string[], role: Role): void {
   print({ status: "kept", operator: kept.terms.operator, url: service.url });
 }
 
-/** The client for the service of the operator the terms name; its expected identity comes from the terms and the
- * venue, never from the service file. */
+/** The client for the service of the operator the terms name; its expected identity comes from the terms, the venue
+ * and the directory's construction, never from the service file. */
 export function serviceClient(directory: Directory, kept: KeptTerms, view: View): V3ServiceClient {
   const service = parseService(readJson(directory.file(`services/${hex(kept.terms.operator)}.json`), "service file for the terms' operator (service add)"));
-  return new V3ServiceClient(service.url, service.walletToken, { operator: kept.terms.operator, reference: view.file.reference });
+  return new V3ServiceClient(service.url, service.walletToken, { operator: kept.terms.operator, reference: view.file.reference,
+    construction: directory.construction });
 }
 
 /** Whether a service call failed because the service did not answer (nothing listening, a dropped connection). */
@@ -139,21 +157,24 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
   const view = openView(directory);
   try {
     const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
-    const verifier = await openVerifier(directory, verifierCount(args));
+    const verifier = await directoryVerifier(directory, args), construction = directory.construction;
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined;
     try {
-      try { evidence = new EvidenceStore(directory.file("evidence.db")); } catch (error) { throw inUse(error); }
+      try { evidence = new EvidenceStore(directory.file("evidence.db"), { construction }); } catch (error) { throw inUse(error); }
       store = keptReplay(directory, at);
       const file = flag(args, "package");
       const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);
       let read;
-      try { read = await readFrontier(source, kept.signed, at, { verifier, venue: view.venue, reference: view.file.reference, evidence, store, answers }); } catch (error) {
+      try {
+        read = await readFrontier(source, kept.signed, at, { construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
+          reference: view.file.reference, evidence, store, answers });
+      } catch (error) {
         throw inUse(error);
       }
       // A read is final at its judging index; where the view could not read further, the output says so.
       const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
       use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled });
-    } finally { store?.close(); evidence?.close(); await verifier.close(); }
+    } finally { store?.close(); evidence?.close(); await verifier?.close(); }
   } finally { view.close(); }
 }
 
@@ -169,7 +190,7 @@ export async function supplyCommand(argv: readonly string[], role: Role): Promis
       ...(canonical === undefined ? {} : { issued: canonical.state.issued, burned: canonical.state.burned,
         supply: canonical.state.issued - canonical.state.burned, position: canonical.state.position,
         checkpoint: { operator: canonical.commitment.operator, sequence: canonical.commitment.sequence, root: canonical.commitment.root, index: canonical.index } }),
-      force: read.force.map(f => ({ index: f.index, kind: f.record.kind, sha256: sha256(f.bytes) })),
+      force: read.force.map(f => ({ index: f.index, kind: directory.construction.kind(f.record), sha256: sha256(f.bytes) })),
       faults: (read.faultEvidence ?? []).length });
   });
 }
@@ -179,9 +200,17 @@ export function presentationOf(reading: Presentation, at: bigint) {
   return { status: reading.ended !== undefined || reading.overdue !== undefined ? "final" : "pending", judgingIndex: at, ...reading };
 }
 
+/** C3.8's reading is pool-v3's alone so far: a lit directory refuses it by name. */
+export function requirePresentation(directory: Directory): void {
+  if (!directory.construction.reader.proofs) {
+    throw new CommandError("CONSTRUCTION", `C3.8's reading of a demand is not implemented for ${nameOf(directory.construction)} yet`);
+  }
+}
+
 export async function presentationCommand(argv: readonly string[], role: Role): Promise<void> {
   const args = parseArguments(argv, READ_FLAGS, 2);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
+  requirePresentation(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), demand = hex32(args.positional[1]!, "the demand");
   await frontier(directory, args, kept, true, (at, read, sync) => {
     const reading = readPresentation(read, kept.backing, kept.terms.obligor, demand);
@@ -193,7 +222,7 @@ export async function presentationCommand(argv: readonly string[], role: Role): 
 export async function reader(argv: readonly string[]): Promise<void> {
   const [command, ...rest] = argv;
   switch (command) {
-    case "init": return initRole(rest, "reader", { venue: "required" });
+    case "init": return initRole(rest, "reader", { venue: "required", construction: true });
     case "terms": return termsCommand(rest, "reader");
     case "service": return serviceCommand(rest, "reader");
     case "supply": return supplyCommand(rest, "reader");

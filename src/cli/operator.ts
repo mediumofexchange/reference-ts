@@ -9,7 +9,8 @@
 // signs again only once the venue passes its reopening index plus the lag
 // (C2.8.2), so `return` and `adopt` sync their view until the journal takes
 // them. An operator directory is never restored from a copy: its recovery is
-// succession.
+// succession. The journal serves the construction the directory declares at
+// init (M14g4); a lit operator keeps no parameters and opens no verifier.
 import { readdirSync } from "node:fs";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -22,7 +23,7 @@ import { V3OperatorJournal, V3StoreError } from "../pool/v3/store.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, event, flag, has, hex, hex32, integer, openDirectory, parseArguments, pause, pollMs, print, readRequired, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Arguments, type Directory } from "./common.js";
-import { openVerifier, verifierCount } from "./backend.js";
+import { directoryVerifier } from "./backend.js";
 import { initRole } from "./reader.js";
 import { authenticate, keepTerms, keptTerms } from "./terms.js";
 import { createVenue, fresh, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
@@ -49,17 +50,18 @@ async function openOperator(directory: Directory, args: Arguments): Promise<Oper
   try {
     // The journal reads the venue's clock as it opens: the view is brought up to date first.
     await view.syncWitnessed();
-    verifier = await openVerifier(directory, verifierCount(args));
+    verifier = await directoryVerifier(directory, args);
     const secret = readSecret(directory.file("operator.key"), "operator.key");
     try {
-      journal = new V3OperatorJournal(directory.file("journal.db"), { secret, venue: view.venue, reference: view.file.reference, verifier });
+      journal = new V3OperatorJournal(directory.file("journal.db"), { secret, venue: view.venue, reference: view.file.reference, verifier,
+        construction: directory.construction });
     } finally { secret.fill(0); }
     const opened = openPublisher(directory, journal.publisherPersistence());
     budget = opened.budget;
     view.venue.attachPublisher(opened.publisher);
     const own = journal, ownVerifier = verifier, ownBudget = budget;
     return { directory, view, journal: own, budget: ownBudget, operator: own.operatorKey,
-      async close() { own.close(); ownBudget.close(); await ownVerifier.close(); view.close(); } };
+      async close() { own.close(); ownBudget.close(); await ownVerifier?.close(); view.close(); } };
   } catch (error) {
     journal?.close(); budget?.close(); await verifier?.close(); view.close(); throw error;
   }
@@ -92,7 +94,7 @@ async function untilTaken<T>(op: Operator, args: Arguments, indices: bigint, wai
 }
 
 async function init(argv: readonly string[]): Promise<void> {
-  return initRole(argv, "operator", { venue: "optional", budget: true, fill: async directory => {
+  return initRole(argv, "operator", { venue: "optional", budget: true, construction: true, fill: async directory => {
     const secret = fresh(), funding = freshFunding();
     writeExclusive(directory.file("operator.key"), secret);
     writeExclusive(directory.file("funding.key"), funding);
@@ -119,7 +121,7 @@ async function open(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, { ...POLL, id: "value", terms: "value", signature: "value", synthetic: "switch" }, 1);
   const directory = openDirectory(required(args, "dir"), "operator"), file = requireVenue(directory), id = required(args, "id");
   const kept = authenticate(readRequired(required(args, "terms"), "terms file"), readRequired(required(args, "signature"), "signature file"),
-    hex32(args.positional[0]!, "the backing"), file, has(args, "synthetic"));
+    hex32(args.positional[0]!, "the backing"), file, has(args, "synthetic"), directory.construction);
   const secret = readSecret(directory.file("operator.key"), "operator.key"), own = ed25519.getPublicKey(secret);
   secret.fill(0);
   if (compareBytes(kept.terms.operator, own) !== 0) throw new CommandError("OPERATOR", "the terms name another operator than this directory's key");
