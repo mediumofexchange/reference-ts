@@ -2,9 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CommandError, integer, hex32, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { CommandError, integer, hex32, openDirectory, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
+import { authenticate, explain } from '../src/cli/terms.js';
+import { LIT } from '../src/lit/construction.js';
+import { litConfigHash } from '../src/lit/configuration.js';
+import { encodePublication as encodeLitPublication } from '../src/lit/records.js';
+import { encodeLitTerms, LIT_TERMS } from '../src/lit/terms.js';
+import { adoptedDomain } from '../src/pool/v3/configuration.js';
+import { POOL_V3 } from '../src/pool/v3/construction.js';
+import { encodeRootTerms, V3_TERMS } from '../src/pool/v3/terms.js';
+import { decodeRecord, encodePublication as encodePoolPublication, encodeRecord } from '../src/pool/v3/records.js';
+import { tagOf } from '../src/pool/v3/recovery.js';
+import { limbsOf } from '../src/pool/field.js';
+import { EMPTY_NOTE_ROOT } from '../src/pool/note-tree.js';
 import { outside } from '../src/cli/wallet.js';
-import { parsePublicationFile } from '../src/cli/relay.js';
+import { parsePublicationFile, readPublication } from '../src/cli/relay.js';
 import { keptReplay } from '../src/cli/reader.js';
 import { keptFileDigest, ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
@@ -170,5 +183,67 @@ describe('moe reader kept replay file', () => {
       const tampered = keptReplay(directory(dir), 10n);
       try { expect(tampered.answersThrough()).toBeUndefined(); } finally { tampered.close(); }
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('moe constructions (slice 14 M14g4)', () => {
+  const profile = ownErgoProfile({ reference: ERGO_SYNTHETIC_REFERENCE, anchor: new Uint8Array(32).fill(5), depth: 2n, scripts: SYNTHETIC_SCRIPTS });
+  const venue = parseVenue(JSON.parse(venueText(profile, 900_002n)));
+  const obligor = new Uint8Array(32).fill(41), operator = ed25519.getPublicKey(new Uint8Array(32).fill(7));
+  const fields = { obligor: ed25519.getPublicKey(obligor), operator, venue: venue.id, interval: 80n, payout: { thing: 'units', quantumExponent: 0, perUnit: 1n } };
+  const signed = (codec, terms) => ({ terms, signature: ed25519.sign(codec.rootTermsSignatureMessage(terms), obligor), backing: codec.rootTermsName(terms) });
+  const code = run => { try { run(); } catch (error) { expect(error).toBeInstanceOf(CommandError); return error.code; } return undefined; };
+  it('authenticates terms under the directory\'s construction and refuses the other construction\'s by name', () => {
+    const lit = signed(LIT_TERMS, encodeLitTerms({ ...fields, configuration: litConfigHash(), silence: { noCommitmentDuration: 16n } }));
+    const pool = signed(V3_TERMS, encodeRootTerms({ ...fields, configuration: adoptedDomain() }));
+    const kept = authenticate(lit.terms, lit.signature, lit.backing, venue, true, LIT);
+    expect(kept.terms.silence).toEqual({ noCommitmentDuration: 16n });
+    expect(explain(kept, venue, LIT)).toMatchObject({ construction: 'moe/lit/v1' });
+    expect(authenticate(pool.terms, pool.signature, pool.backing, venue, true, POOL_V3).backing).toEqual(pool.backing);
+    expect(code(() => authenticate(pool.terms, pool.signature, pool.backing, venue, true, LIT))).toBe('CONSTRUCTION');
+    expect(code(() => authenticate(lit.terms, lit.signature, lit.backing, venue, true, POOL_V3))).toBe('CONSTRUCTION');
+    expect(code(() => authenticate(new Uint8Array(40), lit.signature, lit.backing, venue, true, LIT))).toBe('INVALID');
+    // Lit's frame naming pool-v3's configuration: its construction, but not its configuration.
+    const crossed = signed(LIT_TERMS, encodeLitTerms({ ...fields, configuration: adoptedDomain() }));
+    expect(code(() => authenticate(crossed.terms, crossed.signature, crossed.backing, venue, true, LIT))).toBe('CONFIGURATION');
+  });
+  it('reads a publication under the construction whose frame it decodes in, refusing another configuration and either frame\'s garbage', () => {
+    const acceptance = { domain: litConfigHash(), demand: new Uint8Array(32).fill(3), owner: ed25519.getPublicKey(new Uint8Array(32).fill(9)), deadline: 70n,
+      signature: new Uint8Array(64).fill(1) };
+    const backing = new Uint8Array(32).fill(2);
+    expect(readPublication(encodeLitPublication({ domain: litConfigHash(), backing, kind: 2, acceptance }))).toEqual({ backing, instant: undefined });
+    const zero = new Uint8Array(32);
+    expect(code(() => readPublication(encodeLitPublication({ domain: zero, backing, kind: 2, acceptance: { ...acceptance, domain: zero } })))).toBe('CONFIGURATION');
+    expect(code(() => readPublication(new Uint8Array(64)))).toBe('INVALID');
+  });
+  it('reads a demand publication\'s instant, which the relay\'s EARLY check compares, under either construction', () => {
+    const backing = new Uint8Array(32).fill(2), ownerSecret = new Uint8Array(32).fill(6), presenter = ed25519.getPublicKey(new Uint8Array(32).fill(5));
+    const opening = { backing, value: 5n, owner: ed25519.getPublicKey(ownerSecret), rho: new Uint8Array(32).fill(8) };
+    const lit = LIT.wallet.demand(litConfigHash(), new Uint8Array(32).fill(4), [{ opening, secret: ownerSecret }], presenter, 31n, 90n);
+    expect(readPublication(LIT.wallet.publication(litConfigHash(), backing, { kind: 1, record: lit }))).toEqual({ backing, instant: 31n });
+    const domain = adoptedDomain(), prefix = [...limbsOf(domain), ...limbsOf(new Uint8Array(32).fill(4)), 77n];
+    const pool = decodeRecord(encodeRecord({ domain, kind: 4, publicInputs: [...prefix, ...limbsOf(backing), 5n, EMPTY_NOTE_ROOT, 0n, tagOf(101n), 0n,
+      ...limbsOf(presenter), 47n, 90n], proof: new Uint8Array(32).fill(9), authorization: new Uint8Array(), capsules: [] }));
+    expect(readPublication(encodePoolPublication({ domain, backing, kind: 1, record: pool }))).toEqual({ backing, instant: 47n });
+  });
+  it('keeps one construction per directory, refusing a name it does not know', () => {
+    // openDirectory holds lock.db until the process exits, which Windows will not let a removal pass.
+    const remove = path => { try { rmSync(path, { recursive: true, force: true }); } catch (error) { if (process.platform !== 'win32') throw error; } };
+    const dir = mkdtempSync(join(tmpdir(), 'moe-construction-'));
+    try {
+      const config = construction => writeFileSync(join(dir, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'], ...construction }));
+      config({ construction: 'moe/lit/v1' });
+      expect(openDirectory(dir, 'reader').construction).toBe(LIT);
+    } finally { remove(dir); }
+    const other = mkdtempSync(join(tmpdir(), 'moe-construction-'));
+    try {
+      writeFileSync(join(other, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'] }));
+      expect(openDirectory(other, 'reader').construction).toBe(POOL_V3);
+    } finally { remove(other); }
+    const bad = mkdtempSync(join(tmpdir(), 'moe-construction-'));
+    try {
+      writeFileSync(join(bad, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'], construction: 'moe/lit/v2' }));
+      expect(code(() => openDirectory(bad, 'reader'))).toBe('INVALID');
+    } finally { remove(bad); }
   });
 });

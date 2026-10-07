@@ -16,6 +16,13 @@
 // does not answer, a read uses the package its last sync kept, and the output
 // says which (`evidence`). Deadlines are witnessed indices, absolute or
 // relative to the read (`+n`).
+//
+// The wallet holds the construction the directory declares at init (M14g4).
+// A lit wallet (lit-v1 §8) proves nothing, keeps no parameters and opens no
+// verifier; its requests name an owner key (`moe/wallet/lit/v1/request`), its
+// acceptance owner is a key, it has no `freshen` (presented notes spend as any
+// other), `move-window` moves its owner-key window, and `presentation` is not
+// yet read for it.
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -25,20 +32,25 @@ import { compareBytes, EncodingError } from "../bytes.js";
 import { ERGO_SYNTHETIC_REFERENCE } from "../ergo-profile.js";
 import type { Commitment } from "../venue-records.js";
 import { adoptedDomain } from "../pool/v3/configuration.js";
-import type { Receipt } from "../pool/v3/commitments.js";
-import { decodePublication, decodeRecord, encodePublication } from "../pool/v3/records.js";
-import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../pool/v3/terms.js";
-import { walletBackupDigest } from "../pool/v3/wallet-backup.js";
-import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest } from "../pool/v3/wallet-request.js";
+import type { Construction, KeyedAcceptance, KeyedRequest } from "../pool/v3/construction.js";
+import { decodePublication, encodePublication, type SignedAcceptance } from "../pool/v3/records.js";
+import { encodeRootTerms } from "../pool/v3/terms.js";
+import { openWalletBackup, walletBackupDigest } from "../pool/v3/wallet-backup.js";
+import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest, type PaymentRequest } from "../pool/v3/wallet-request.js";
 import { V3Wallet, type Act, type BackerSigner, type LocalProver, type Payment, type WalletReceipt, type WalletView } from "../pool/v3/wallet-store.js";
+import { litConfigHash } from "../lit/configuration.js";
+import { decodePublication as decodeLitPublication } from "../lit/records.js";
+import { encodeLitTerms } from "../lit/terms.js";
+import { authenticateLitPaymentRequest, encodeLitPaymentRequest, litPaymentRequestDigest } from "../lit/wallet.js";
 import { startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
 import { readParameters } from "../pool/parameter-files.js";
-import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArguments, print, readOptional, readRequired, readSecret, required,
+import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArguments, print, readJson, readOptional, readRequired, readSecret, required,
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
-import { openVerifier, verifierCount } from "./backend.js";
-import { initRole, presentationOf, serviceClient, serviceCommand, termsCommand, unanswered } from "./reader.js";
+import { directoryVerifier, verifierCount } from "./backend.js";
+import { constructionNamed, constructions, nameOf } from "./construction.js";
+import { initConstruction, initRole, presentationOf, requirePresentation, serviceClient, serviceCommand, termsCommand, unanswered } from "./reader.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
-import { createVenue, openView, ownVenue, requireVenue, venueText, type View } from "./venue.js";
+import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
 /** Shown once, with a wallet's first request or payment (M10b item 13; docs/POOL_V3_VISIBILITY.md). */
 const FIRST_NOTES = Object.freeze([
@@ -46,7 +58,15 @@ const FIRST_NOTES = Object.freeze([
   "The operator sees each statement it admits and when. While few statements are admitted between checkpoints, a payment and its payee's next spend can pair by timing and amount, and the venue shows each checkpoint's supply.",
   "A payee learns the amount and when it was paid; an operator taking a fee learns that too. Publishing at the venue from an identified funding key identifies the publisher.",
 ]);
+/** A lit wallet's first notes (lit-v1 §§8, 11): everything a lit statement carries is public. */
+const LIT_FIRST_NOTES = Object.freeze([
+  "A lit request names a fresh owner key of this wallet: hand the frame on a private channel, and its digest over one that authenticates you; a payer checks the frame against the digest.",
+  "Lit notes are public: everyone sees each statement's backings, values, owner keys and the spend graph, so a payment shows its amount, its payer's notes and the key it pays. Only the civil identity behind a key stays unknown unless disclosed.",
+  "Publishing at the venue from an identified funding key identifies the publisher.",
+]);
 const EXPLAINED = "explained";
+/** Whether the directory holds lit-v1's keyed notes (no proofs) rather than pool-v3's. */
+const keyed = (directory: Directory): boolean => !directory.construction.reader.proofs;
 
 const commitmentOut = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
 const receiptOut = (r: WalletReceipt | undefined) => r === undefined ? null : { operator: r.operator, segment: r.segment, position: r.position };
@@ -55,9 +75,9 @@ const finalOut = (f: { readonly checkpoint: Commitment; readonly judgingIndex: b
 const statusOf = (status: "prepared" | "final" | "failed") => status === "prepared" ? "pending" : status;
 const KINDS = { 1: "issue", 3: "burn", 4: "demand", 5: "withdrawal", 6: "settlement" } as const;
 
-function actOut(act: Act) {
+function actOut(act: Act, construction: Construction) {
   // A demand's deadline, absolute, so a rerun after a lost reply can name it exactly.
-  const deadline = act.kind === 4 ? { deadline: decodeRecord(act.record).publicInputs.at(-1)! } : {};
+  const deadline = act.kind === 4 ? { deadline: construction.view(construction.decode(act.record), () => undefined).demand!.value.deadline } : {};
   return { status: statusOf(act.status), kind: KINDS[act.kind], statement: act.statement, demand: act.demand ?? null, ...deadline, repeats: act.repeats,
     inputs: act.inputs.length, receipt: receiptOut(act.receipt), final: finalOut(act.final), record: sha256(act.record) };
 }
@@ -89,13 +109,16 @@ interface Opened {
 
 const WALLET_DB = "wallet.db", PENDING = "wallet.pending";
 
+/** The wallet's options over a view: the directory's construction, and a verifier where it carries proofs. */
+const walletOptions = (directory: Directory, view: View, verifier: ProofVerifier | undefined) =>
+  ({ construction: directory.construction, venue: view.venue, reference: view.file.reference, ...(verifier === undefined ? {} : { verifier }) });
 /** The wallet database over a view: a new one only where `create` says so. */
-function walletOver(directory: Directory, view: View, verifier: ProofVerifier, create = false): V3Wallet {
+function walletOver(directory: Directory, view: View, verifier: ProofVerifier | undefined, create = false): V3Wallet {
   const path = directory.file(WALLET_DB);
   if (!create && !existsSync(path)) {
     throw new CommandError("ABSENT", "the directory has no wallet database: init with --venue, or a backer's venue create");
   }
-  const options = { venue: view.venue, reference: view.file.reference, verifier };
+  const options = walletOptions(directory, view, verifier);
   return create ? new V3Wallet(path, options) : V3Wallet.open(path, options);
 }
 
@@ -119,16 +142,17 @@ async function openWallet(directory: Directory, args: Arguments, options: { read
       at = (await view.syncWitnessed()).witnessedIndex;
     }
     let prove: LocalProver | undefined;
-    if (options.prove) {
+    // A construction without proofs proves and verifies nothing (lit: owner signatures).
+    if (options.prove && !keyed(directory)) {
       const opened = await openProver(directory, verifierCount(args));
       closeProof = opened.close; verifier = opened.prover.verifier;
       prove = task => opened.prover.prove(task);
-    } else verifier = await openVerifier(directory, verifierCount(args));
+    } else verifier = await directoryVerifier(directory, args);
     wallet = walletOver(directory, view, verifier);
     const own = wallet, ownVerifier = verifier, ownClose = closeProof;
     return { directory, view, wallet: own, at, prove, async close() {
       own.close();
-      if (ownClose !== undefined) await ownClose(); else await ownVerifier.close();
+      if (ownClose !== undefined) await ownClose(); else await ownVerifier?.close();
       view.close();
     } };
   } catch (error) {
@@ -204,14 +228,17 @@ async function withSigner<T>(directory: Directory, act: (sign: BackerSigner) => 
 function firstNotes(directory: Directory): { readonly notes?: readonly string[] } {
   if (existsSync(directory.file(EXPLAINED))) return {};
   writeExclusive(directory.file(EXPLAINED), "shown\n");
-  return { notes: FIRST_NOTES };
+  return { notes: keyed(directory) ? LIT_FIRST_NOTES : FIRST_NOTES };
 }
 
-/** A payment request read from its frame file and authenticated by the digest obtained from the receiver. */
-function requestOf(args: Arguments, prefix = "") {
-  const frame = readRequired(required(args, `${prefix}request`), "request frame");
-  try { return authenticatePaymentRequest(frame, required(args, `${prefix}digest`)); } catch (error) {
-    if (error instanceof EncodingError) throw new CommandError("REQUEST", "the request frame does not match the digest, or is not a payment request");
+/** A payment request read from its frame file and authenticated by the digest obtained from the receiver: the
+ * directory's construction's frame (lit-v1 §8's names an owner key). */
+function requestOf(directory: Directory, args: Arguments, prefix = ""): PaymentRequest | KeyedRequest {
+  const frame = readRequired(required(args, `${prefix}request`), "request frame"), digest = required(args, `${prefix}digest`);
+  try { return keyed(directory) ? authenticateLitPaymentRequest(frame, digest) : authenticatePaymentRequest(frame, digest); } catch (error) {
+    if (error instanceof EncodingError) {
+      throw new CommandError("REQUEST", `the request frame does not match the digest, or is not a ${nameOf(directory.construction)} payment request`);
+    }
     throw error;
   }
 }
@@ -254,7 +281,7 @@ function aliased(argv: readonly string[], spec: FlagSpec, positionals: number) {
 }
 
 async function init(argv: readonly string[]): Promise<void> {
-  return initRole(argv, "wallet", { venue: args => has(args, "backer") ? "optional" : "required", flags: { backer: "switch", verifiers: "value" },
+  return initRole(argv, "wallet", { venue: args => has(args, "backer") ? "optional" : "required", construction: true, flags: { backer: "switch", verifiers: "value" },
     fill: async (directory, args) => {
       let shown: object = {};
       if (has(args, "backer")) {
@@ -272,12 +299,12 @@ async function init(argv: readonly string[]): Promise<void> {
 async function createDatabase(directory: Directory, args: Arguments): Promise<void> {
   await withView(directory, args, (view, verifier) => { walletOver(directory, view, verifier, true).close(); });
 }
-/** `use` over the directory's view and a verifier, both closed after. */
-async function withView<T>(directory: Directory, args: Arguments, use: (view: View, verifier: ProofVerifier) => T): Promise<T> {
+/** `use` over the directory's view and its verifier (none for a construction without proofs), both closed after. */
+async function withView<T>(directory: Directory, args: Arguments, use: (view: View, verifier: ProofVerifier | undefined) => T): Promise<T> {
   const view = openView(directory);
   try {
-    const verifier = await openVerifier(directory, verifierCount(args));
-    try { return use(view, verifier); } finally { await verifier.close(); }
+    const verifier = await directoryVerifier(directory, args);
+    try { return use(view, verifier); } finally { await verifier?.close(); }
   } finally { view.close(); }
 }
 
@@ -310,25 +337,31 @@ function termsCreate(argv: readonly string[]): void {
   const args = parseArguments(argv, { dir: "value", operator: "value", thing: "value", "quantum-exponent": "value", "per-unit": "value",
     interval: "value", silence: "value", challenge: "value" }, 0);
   const directory = openDirectory(required(args, "dir"), "wallet"), venue = requireVenue(directory);
-  const silence = flag(args, "silence"), challenge = flag(args, "challenge");
-  if ((silence === undefined) !== (challenge === undefined)) throw new UsageError("--silence and --challenge are given together");
-  const secret = backerKey(directory);
+  const silence = flag(args, "silence"), challenge = flag(args, "challenge"), lit = keyed(directory);
+  // Pool-v3's silence clause names a challenge window; lit-v1's the duration alone (lit-v1 §9).
+  if (lit && challenge !== undefined) throw new UsageError("lit terms' silence clause names no challenge window: --challenge is not taken");
+  if (!lit && (silence === undefined) !== (challenge === undefined)) throw new UsageError("--silence and --challenge are given together");
+  const codec = directory.construction.reader.terms, secret = backerKey(directory);
   let bytes: Uint8Array, signature: Uint8Array;
   try {
     try {
-      bytes = encodeRootTerms({ obligor: ed25519.getPublicKey(secret), operator: hex32(required(args, "operator"), "--operator"),
-        configuration: adoptedDomain(), venue: venue.id, interval: integer(required(args, "interval"), "--interval", 1n),
+      const fields = { obligor: ed25519.getPublicKey(secret), operator: hex32(required(args, "operator"), "--operator"),
+        venue: venue.id, interval: integer(required(args, "interval"), "--interval", 1n),
         payout: { thing: required(args, "thing"), quantumExponent: Number(integer(flag(args, "quantum-exponent") ?? "0", "--quantum-exponent", 0n, 18n)),
-          perUnit: integer(required(args, "per-unit"), "--per-unit", 1n) },
-        ...(silence === undefined ? {} : { silence: { noCommitmentDuration: integer(silence, "--silence", 1n), challengeWindow: integer(challenge!, "--challenge", 1n) } }) });
+          perUnit: integer(required(args, "per-unit"), "--per-unit", 1n) } };
+      const duration = silence === undefined ? undefined : integer(silence, "--silence", 1n);
+      bytes = lit ? encodeLitTerms({ ...fields, configuration: litConfigHash(), ...(duration === undefined ? {} : { silence: { noCommitmentDuration: duration } }) })
+        : encodeRootTerms({ ...fields, configuration: adoptedDomain(),
+          ...(duration === undefined ? {} : { silence: { noCommitmentDuration: duration, challengeWindow: integer(challenge!, "--challenge", 1n) } }) });
     } catch (error) {
       if (error instanceof EncodingError) throw new CommandError("INVALID", `the terms are not valid root terms: ${error.message}`);
       throw error;
     }
-    signature = ed25519.sign(rootTermsSignatureMessage(bytes), secret);
+    signature = ed25519.sign(codec.rootTermsSignatureMessage(bytes), secret);
   } finally { secret.fill(0); }
   // The backer's own venue: synthetic terms are accepted where the directory's venue is the synthetic chain.
-  const kept = authenticate(bytes, signature, rootTermsName(bytes), venue, venue.profile.reference === ERGO_SYNTHETIC_REFERENCE);
+  const kept = authenticate(bytes, signature, codec.rootTermsName(bytes), venue, venue.profile.reference === ERGO_SYNTHETIC_REFERENCE,
+    directory.construction);
   keepTerms(directory, kept);
   print({ status: "kept", backing: kept.backing, terms: directory.file(`terms/${hex(kept.backing)}`), signature: directory.file(`terms/${hex(kept.backing)}.sig`) });
 }
@@ -378,14 +411,15 @@ function restoreBacker(directory: Directory, args: Arguments): object {
 /** `restore-seed`: a new directory whose wallet holds only the seed read from stdin (C4.6). */
 async function restoreSeed(argv: readonly string[]): Promise<void> {
   // The arguments are checked before stdin is read, so a usage error does not wait on input.
-  const checked = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", verifiers: "value", "backer-key": "value" }, 0);
-  required(checked, "dir"); required(checked, "venue");
+  const checked = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", verifiers: "value", "backer-key": "value",
+    construction: "value" }, 0);
+  required(checked, "dir"); required(checked, "venue"); initConstruction(checked);
   if (existsSync(resolve(required(checked, "dir")))) throw new CommandError("EXISTS", "restore-seed creates a new directory");
   const secret = await seedFromStdin();
   try {
-    await initRole(argv, "wallet", { venue: "required", flags: { verifiers: "value", "backer-key": "value" }, fill: async (directory, args) => {
+    await initRole(argv, "wallet", { venue: "required", construction: true, flags: { verifiers: "value", "backer-key": "value" }, fill: async (directory, args) => {
       await withView(directory, args, (view, verifier) =>
-        V3Wallet.restoreSeed(directory.file(WALLET_DB), { venue: view.venue, reference: view.file.reference, verifier }, secret).close());
+        V3Wallet.restoreSeed(directory.file(WALLET_DB), walletOptions(directory, view, verifier), secret).close());
       return { restored: "seed", ...restoreBacker(directory, args) };
     } });
   } finally { secret.fill(0); }
@@ -425,7 +459,7 @@ async function handoff(argv: readonly string[]): Promise<void> {
  * complete restore is confirmed by its provenance. */
 async function restore(argv: readonly string[]): Promise<void> {
   const flags = { verifiers: "value", key: "value", backup: "value", digest: "value", "backer-key": "value" } as const;
-  const probe = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", ...flags }, 0);
+  const probe = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", construction: "value", ...flags }, 0);
   const digest = required(probe, "digest");
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new UsageError("--digest is not 64 lowercase hex digits");
   if (existsSync(resolve(required(probe, "dir")))) {
@@ -438,9 +472,20 @@ async function restore(argv: readonly string[]): Promise<void> {
   }
   const bytes = readRequired(required(probe, "backup"), "the handoff"), key = readSecret(required(probe, "key"), "the handoff key");
   try {
-    await initRole(argv, "wallet", { venue: "required", flags, fill: async (directory, args) => {
+    // The handoff is opened before the directory exists: one of the other construction, or under wrong credentials,
+    // leaves nothing behind (the library would refuse either as INVALID only after init).
+    const named = constructionNamed(initConstruction(probe)), venue = parseVenue(readJson(required(probe, "venue"), "the venue file")).id;
+    const opens = (construction: Construction): boolean => {
+      try { openWalletBackup(bytes, key, construction.reader.domain(), venue, digest).fill(0); return true; } catch { return false; }
+    };
+    if (!opens(named)) {
+      const other = constructions().find(c => c !== named && opens(c));
+      if (other !== undefined) throw new CommandError("CONSTRUCTION", `the handoff holds a ${nameOf(other)} wallet: restore it with --construction ${nameOf(other)}`);
+      throw new CommandError("INVALID", "invalid wallet backup or recovery credentials");
+    }
+    await initRole(argv, "wallet", { venue: "required", construction: true, flags, fill: async (directory, args) => {
       await withView(directory, args, (view, verifier) =>
-        V3Wallet.restoreBackup(directory.file(WALLET_DB), { venue: view.venue, reference: view.file.reference, verifier }, bytes, key, digest).close());
+        V3Wallet.restoreBackup(directory.file(WALLET_DB), walletOptions(directory, view, verifier), bytes, key, digest).close());
       return { restored: "handoff", digest, ...restoreBacker(directory, args) };
     } });
   } finally { key.fill(0); }
@@ -451,10 +496,18 @@ async function request(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { out: "value" }, 3);
   const value = integer(args.positional[2]!, "the value", 1n, (1n << 64n) - 1n);
   await withWallet(directory, args, {}, async ({ wallet }) => {
-    const frame = encodePaymentRequest(wallet.request(alias, kept.backing, value)), out = flag(args, "out");
+    const lit = keyed(directory), out = flag(args, "out");
+    const frame = lit ? encodeLitPaymentRequest(wallet.keyedRequest(alias, kept.backing, value)) : encodePaymentRequest(wallet.request(alias, kept.backing, value));
     if (out !== undefined) writeSame(out, frame);
-    print({ status: "saved", backing: kept.backing, value, frame, digest: paymentRequestDigest(frame), ...firstNotes(directory) });
+    print({ status: "saved", backing: kept.backing, value, frame, digest: lit ? litPaymentRequestDigest(frame) : paymentRequestDigest(frame),
+      ...firstNotes(directory) });
   });
+}
+
+/** `--fee-request <file> --fee-digest <hex> --fee-value <n>`: a direct fee to the operator's request, or none. */
+function feeOf(directory: Directory, args: Arguments) {
+  return flag(args, "fee-request") === undefined ? undefined
+    : { request: requestOf(directory, args, "fee-"), value: integer(required(args, "fee-value"), "--fee-value", 1n, (1n << 64n) - 1n) };
 }
 
 /** `pay <alias> <backing> --request <file> --digest <hex> --value <n> [--fee-request ... --fee-digest ... --fee-value ...]`:
@@ -462,13 +515,12 @@ async function request(argv: readonly string[]): Promise<void> {
 async function pay(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { request: "value", digest: "value", value: "value", "fee-request": "value",
     "fee-digest": "value", "fee-value": "value" }, 2);
-  const value = integer(required(args, "value"), "--value", 1n, (1n << 64n) - 1n), payee = requestOf(args);
-  const fee = flag(args, "fee-request") === undefined ? undefined
-    : { request: requestOf(args, "fee-"), value: integer(required(args, "fee-value"), "--fee-value", 1n, (1n << 64n) - 1n) };
+  const value = integer(required(args, "value"), "--value", 1n, (1n << 64n) - 1n), payee = requestOf(directory, args), fee = feeOf(directory, args);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
-    const prepared = await opened.wallet.prepare(alias, { request: payee, value, ...(fee === undefined ? {} : { fee }) },
-      source.bytes, kept.signed, opened.prove!);
+    // The order is the directory's construction's: requestOf read each request in its frame.
+    const order = { request: payee, value, ...(fee === undefined ? {} : { fee }) } as Parameters<V3Wallet["prepare"]>[1];
+    const prepared = await opened.wallet.prepare(alias, order, source.bytes, kept.signed, opened.prove);
     if (prepared.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
     print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source, ...firstNotes(directory) });
   });
@@ -478,6 +530,9 @@ async function pay(argv: readonly string[]): Promise<void> {
 async function freshen(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 3);
   const demand = hex32(args.positional[2]!, "the demand");
+  if (keyed(directory)) {
+    throw new CommandError("CONSTRUCTION", "a lit wallet has no freshen: a presented lit note spends as any other (lit-v1 §8), so pay or burn it");
+  }
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
     const payment = await opened.wallet.freshen(alias, demand, source.bytes, kept.signed, opened.prove!);
@@ -487,12 +542,28 @@ async function freshen(argv: readonly string[]): Promise<void> {
   });
 }
 
+/** `move-window <alias> <backing> [--fee-request ... --fee-digest ... --fee-value ...]` (lit): once the backing's
+ * owner-key window is full, pay this wallet's smallest covering note or pair to its highest exposed key (lit-v1 §8);
+ * once final, requests resume. A wallet restored from its seed alone needs it before its first request. */
+async function moveWindow(argv: readonly string[]): Promise<void> {
+  const { args, directory, alias, kept } = aliased(argv, { "fee-request": "value", "fee-digest": "value", "fee-value": "value" }, 2);
+  if (!keyed(directory)) throw new CommandError("CONSTRUCTION", `a ${nameOf(directory.construction)} wallet has no owner-key window to move`);
+  const fee = feeOf(directory, args) as { readonly request: KeyedRequest; readonly value: bigint } | undefined;
+  await withWallet(directory, args, { sync: true }, async opened => {
+    const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
+    const payment = await opened.wallet.moveWindow(alias, source.bytes, kept.signed, fee);
+    if (payment.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
+    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source,
+      notes: ["This payment moves the window: it pays this wallet's own highest exposed key, so the request that named that key is closed and requests resume once it is final."] });
+  });
+}
+
 /** `reprove <alias> <backing>`: prove a prepared payment again in the canonical segment. */
 async function reprove(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 2);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept);
-    print({ ...paymentOut(await opened.wallet.reprove(alias, source.bytes, kept.signed, opened.prove!)), evidence: source.source });
+    print({ ...paymentOut(await opened.wallet.reprove(alias, source.bytes, kept.signed, opened.prove)), evidence: source.source });
   });
 }
 
@@ -513,7 +584,7 @@ async function status(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, {}, async ({ wallet }) => {
     const payment = wallet.payment(alias), act = payment === undefined ? wallet.act(alias) : undefined;
     if (payment === undefined && act === undefined) throw new CommandError("ABSENT", "no payment or act is saved under this alias");
-    print({ alias, ...(payment !== undefined ? paymentOut(payment) : actOut(act!)) });
+    print({ alias, ...(payment !== undefined ? paymentOut(payment) : actOut(act!, directory.construction)) });
   });
 }
 
@@ -528,15 +599,26 @@ async function sync(argv: readonly string[]): Promise<void> {
 
 const fulfillmentOut = (f: NonNullable<ReturnType<V3Wallet["fulfillment"]>>) => ({ backing: f.request.opening.backing, value: f.request.opening.value,
   cm: f.request.cm, checkpoint: commitmentOut(f.checkpoint), judgingIndex: f.judgingIndex });
+/** A lit fulfillment: the request's owner key, and the output credited to it alone (lit-v1 §8). */
+const keyedFulfillmentOut = (f: NonNullable<ReturnType<V3Wallet["keyedFulfillment"]>>) => ({ backing: f.request.backing, value: f.request.value,
+  owner: f.request.owner, cm: f.cm, checkpoint: commitmentOut(f.checkpoint), judgingIndex: f.judgingIndex });
+/** The saved fulfillment under `alias`, as the directory's construction prints it. */
+function savedFulfillment(directory: Directory, wallet: V3Wallet, alias: string): object | undefined {
+  if (keyed(directory)) { const saved = wallet.keyedFulfillment(alias); return saved === undefined ? undefined : keyedFulfillmentOut(saved); }
+  const saved = wallet.fulfillment(alias);
+  return saved === undefined ? undefined : fulfillmentOut(saved);
+}
 
 /** `fulfill <alias> <backing>`: the request found paid in the canonical frontier. Credit only on exit 0. */
 async function fulfill(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 2);
   await withWallet(directory, args, { sync: true }, async opened => {
-    const earlier = opened.wallet.fulfillment(alias);
-    if (earlier !== undefined) throw new Replayed({ status: "replay", alias, ...fulfillmentOut(earlier) });
+    const earlier = savedFulfillment(directory, opened.wallet, alias);
+    if (earlier !== undefined) throw new Replayed({ status: "replay", alias, ...earlier });
     const source = await evidence(opened, args, kept);
-    print({ status: "final", alias, ...fulfillmentOut(await opened.wallet.fulfill(alias, source.bytes, kept.signed)), evidence: source.source });
+    const credited = keyed(directory) ? keyedFulfillmentOut(await opened.wallet.keyedFulfill(alias, source.bytes, kept.signed))
+      : fulfillmentOut(await opened.wallet.fulfill(alias, source.bytes, kept.signed));
+    print({ status: "final", alias, ...credited, evidence: source.source });
   });
 }
 
@@ -545,14 +627,18 @@ async function fulfillment(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, { dir: "value", verifiers: "value" }, 1);
   const directory = openDirectory(required(args, "dir"), "wallet");
   await withWallet(directory, args, {}, async ({ wallet }) => {
-    const saved = wallet.fulfillment(args.positional[0]!);
+    const saved = savedFulfillment(directory, wallet, args.positional[0]!);
     if (saved === undefined) throw new CommandError("ABSENT", "no fulfillment is saved under this alias");
-    print({ status: "final", alias: args.positional[0]!, ...fulfillmentOut(saved) });
+    print({ status: "final", alias: args.positional[0]!, ...saved });
   });
 }
 
 /** What a demand's tags now link (M10b item 13). */
-function demandNotes(act: Act): string[] {
+function demandNotes(directory: Directory, act: Act): string[] {
+  // Lit-v1 §11: a lit demand names notes whose openings are already public; a withdrawn demand's notes spend as any other.
+  if (keyed(directory)) {
+    return ["Everything this demand names (its notes, their owner keys and its quantity) is public, as every lit statement is. Once withdrawn or lapsed, its notes pay or burn as any other."];
+  }
   return ["Its tags become public once the operator admits it or it is published: whoever later sees these notes spent links them to this demand (C3.1). Before spending them elsewhere, freshen them.",
     ...(act.repeats.length === 0 ? [] : [`It presents again the notes of ${act.repeats.map(hex).join(", ")}, so it links to that demand.`])];
 }
@@ -563,8 +649,8 @@ async function demand(argv: readonly string[]): Promise<void> {
   const quantity = integer(args.positional[2]!, "the quantity", 1n, (1n << 64n) - 1n);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const deadline = deadlineOf(args, opened.at!), source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
-    const act = await opened.wallet.demand(alias, quantity, deadline, source.bytes, kept.signed, opened.prove!);
-    print({ ...actOut(act), evidence: source.source, notes: demandNotes(act) });
+    const act = await opened.wallet.demand(alias, quantity, deadline, source.bytes, kept.signed, opened.prove);
+    print({ ...actOut(act, directory.construction), evidence: source.source, notes: demandNotes(directory, act) });
   });
 }
 
@@ -574,15 +660,17 @@ async function withdraw(argv: readonly string[]): Promise<void> {
   const id = hex32(args.positional[2]!, "the demand");
   await withWallet(directory, args, { sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
-    print({ ...actOut(await opened.wallet.withdraw(alias, id, source.bytes, kept.signed)), evidence: source.source });
+    print({ ...actOut(await opened.wallet.withdraw(alias, id, source.bytes, kept.signed), directory.construction), evidence: source.source });
   });
 }
 
-/** An acceptance file: the canonical kind-2 publication the backer's `accept` writes, for the backing named. */
-function acceptanceOf(path: string, kept: KeptTerms) {
+/** An acceptance file: the canonical kind-2 publication the backer's `accept` writes, for the backing named, in the
+ * directory's construction's frame. */
+function acceptanceOf(directory: Directory, path: string, kept: KeptTerms): SignedAcceptance | KeyedAcceptance {
+  const bytes = readRequired(path, "acceptance file");
   let publication;
-  try { publication = decodePublication(readRequired(path, "acceptance file")); } catch (error) {
-    if (error instanceof EncodingError) throw new CommandError("INVALID", "the acceptance file is not a pool-v3 acceptance publication");
+  try { publication = keyed(directory) ? decodeLitPublication(bytes) : decodePublication(bytes); } catch (error) {
+    if (error instanceof EncodingError) throw new CommandError("INVALID", `the acceptance file is not a ${nameOf(directory.construction)} acceptance publication`);
     throw error;
   }
   if (publication.kind !== 2 || compareBytes(publication.backing, kept.backing) !== 0) {
@@ -594,10 +682,10 @@ function acceptanceOf(path: string, kept: KeptTerms) {
 /** `settle <alias> <backing> --acceptance <file>`: settle this wallet's demand the backer's acceptance answers. */
 async function settle(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { acceptance: "value" }, 2);
-  const acceptance = acceptanceOf(required(args, "acceptance"), kept);
+  const acceptance = acceptanceOf(directory, required(args, "acceptance"), kept);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
-    print({ ...actOut(await opened.wallet.settle(alias, acceptance, source.bytes, kept.signed, opened.prove!)),
+    print({ ...actOut(await opened.wallet.settle(alias, acceptance, source.bytes, kept.signed, opened.prove), directory.construction),
       evidence: source.source });
   });
 }
@@ -606,6 +694,7 @@ async function settle(argv: readonly string[]): Promise<void> {
 async function presentation(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, READ, 2), { directory, kept } = open(args);
   const id = hex32(args.positional[1]!, "the demand");
+  requirePresentation(directory);
   await withWallet(directory, args, { sync: true }, async opened => {
     const source = await evidence(opened, args, kept);
     print({ ...presentationOf(await opened.wallet.presentation(id, source.bytes, kept.signed), opened.at!), evidence: source.source });
@@ -638,7 +727,7 @@ async function publish(argv: readonly string[]): Promise<void> {
     const act = opened.wallet.act(alias);
     const publication = await captured(publisher => opened.wallet.publish(alias, publisher));
     if (compareBytes(publication.subject, kept.backing) !== 0) throw new CommandError("BACKING", "the act is of another backing than the one whose gap the read judged");
-    print({ status: "written", ...publicationFile(directory, kept, out, publication), act: act === undefined ? null : actOut(act), judgingIndex: view.judgingIndex });
+    print({ status: "written", ...publicationFile(directory, kept, out, publication), act: act === undefined ? null : actOut(act, directory.construction), judgingIndex: view.judgingIndex });
   });
 }
 
@@ -655,12 +744,12 @@ async function publishAcceptance(argv: readonly string[]): Promise<void> {
 /** `issue <alias> <backing> --request <file> --digest <hex> --value <n>` (backer): issue to the exact request, signed by K. */
 async function issue(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { request: "value", digest: "value", value: "value" }, 2);
-  const value = integer(required(args, "value"), "--value", 1n, (1n << 64n) - 1n), output = requestOf(args);
+  const value = integer(required(args, "value"), "--value", 1n, (1n << 64n) - 1n), output = requestOf(directory, args);
   requireBacker(directory);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
-    const act = await withSigner(directory, sign => opened.wallet.issue(alias, output, value, source.bytes, kept.signed, opened.prove!, sign));
-    print({ ...actOut(act), evidence: source.source });
+    const act = await withSigner(directory, sign => opened.wallet.issue(alias, output, value, source.bytes, kept.signed, opened.prove, sign));
+    print({ ...actOut(act, directory.construction), evidence: source.source });
   });
 }
 
@@ -672,8 +761,15 @@ async function accept(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, { sync: true }, async opened => {
     const deadline = deadlineOf(args, opened.at!);
     const source = await evidence(opened, args, kept);
-    const acceptance = await withSigner(directory, sign => opened.wallet.accept(alias, id, deadline, source.bytes, kept.signed, sign));
-    const bytes = encodePublication({ domain: acceptance.domain, backing: kept.backing, kind: 2, acceptance });
+    let acceptance: SignedAcceptance | KeyedAcceptance, bytes: Uint8Array;
+    if (keyed(directory)) {
+      // Lit-v1 §§4, 8: the owner is `acceptSecret`'s key, the publication lit's kind 2.
+      const own = await withSigner(directory, sign => opened.wallet.keyedAccept(alias, id, deadline, source.bytes, kept.signed, sign));
+      acceptance = own; bytes = directory.construction.wallet!.publication(own.domain, kept.backing, { kind: 2, acceptance: own });
+    } else {
+      const own = await withSigner(directory, sign => opened.wallet.accept(alias, id, deadline, source.bytes, kept.signed, sign));
+      acceptance = own; bytes = encodePublication({ domain: own.domain, backing: kept.backing, kind: 2, acceptance: own });
+    }
     writeSame(out, bytes);
     print({ status: "saved", demand: acceptance.demand, deadline: acceptance.deadline, owner: acceptance.owner, out, evidence: source.source,
       notes: ["Publish the acceptance at once (publish-acceptance and a relay): it answers for C3.8 only where the venue witnesses it more than the lag before its deadline."] });
@@ -687,7 +783,7 @@ async function burn(argv: readonly string[]): Promise<void> {
   requireBacker(directory);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
-    print({ ...actOut(await opened.wallet.burn(alias, quantity, source.bytes, kept.signed, opened.prove!)),
+    print({ ...actOut(await opened.wallet.burn(alias, quantity, source.bytes, kept.signed, opened.prove), directory.construction),
       evidence: source.source });
   });
 }
@@ -706,6 +802,7 @@ export async function wallet(argv: readonly string[]): Promise<void> {
     case "request": return request(rest);
     case "pay": return pay(rest);
     case "freshen": return freshen(rest);
+    case "move-window": return moveWindow(rest);
     case "reprove": return reprove(rest);
     case "submit": return submit(rest);
     case "status": return status(rest);
@@ -721,6 +818,6 @@ export async function wallet(argv: readonly string[]): Promise<void> {
     case "issue": return issue(rest);
     case "accept": return accept(rest);
     case "burn": return burn(rest);
-    default: throw new UsageError("moe wallet init|venue|terms|service|seed|restore-seed|handoff|restore|request|pay|freshen|reprove|submit|status|sync|fulfill|fulfillment|demand|withdraw|settle|presentation|publish|publish-acceptance|issue|accept|burn");
+    default: throw new UsageError("moe wallet init|venue|terms|service|seed|restore-seed|handoff|restore|request|pay|freshen|move-window|reprove|submit|status|sync|fulfill|fulfillment|demand|withdraw|settle|presentation|publish|publish-acceptance|issue|accept|burn");
   }
 }

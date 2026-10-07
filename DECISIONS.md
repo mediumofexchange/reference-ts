@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-07` [Run lit backings through the moe commands, each directory declaring its construction (slice 14 M14g4)](decisions/2026-10.md#2026-10-07--run-lit-backings-through-the-moe-commands-each-directory-declaring-its-construction-slice-14-m14g4)
 - `2026-10-07` [Exercise lit's failure path and settle §7's acceptance owner before adoption, and give evidence availability a replica in slice 12](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)
 - `2026-10-07` [Serve a lit journal through the one service wire and client, the construction an option (slice 14 M14g3)](decisions/2026-10.md#2026-10-07--serve-a-lit-journal-through-the-one-service-wire-and-client-the-construction-an-option-slice-14-m14g3)
 - `2026-10-06` [Exclude a continuation whose opening the record moved past, and read a receipt's term end without its segment's opening (audit, area 31)](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)

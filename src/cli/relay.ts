@@ -1,5 +1,6 @@
 // `moe relay` (slice 10 M10b, item 8): publishes a holder's or backer's
 // publication file at the venue from a funding key kept apart from any wallet.
+// It verifies nothing, so it keeps no proving parameters.
 // `relay publish <file>` refuses a venue other than its own `venue.json`'s,
 // decodes the publication and requires its backing to be the subject, refuses
 // a demand whose instant its view has not reached, then publishes with its
@@ -7,7 +8,9 @@
 // publisher's pending transactions in `relay.db`. It prints the transaction its
 // publisher built last for the record (where an earlier one of the record's
 // lands instead, that one carries it). A rerun is keyed by the record: once
-// the view witnesses it, the rerun prints that index.
+// the view witnesses it, the rerun prints that index. A relay serves either
+// construction (M14g4): it reads the publication under the one whose frame it
+// decodes in and requires the configuration it names to be that one's.
 //
 // This supplies the mechanism; the duty stays open (docs/POOL_V3_VISIBILITY.md):
 // a relay of the holder's own links its gap acts to each other and to its
@@ -15,15 +18,14 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../bytes.js";
-import { adoptedDomain } from "../pool/v3/configuration.js";
-import { decodePublication } from "../pool/v3/records.js";
 import { CommandError, event, flag, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, required, UsageError,
   writeExclusive } from "./common.js";
+import { constructions } from "./construction.js";
 import { initRole } from "./reader.js";
 import { freshFunding, fundingTree, openPublisher, openView, publisherStore, requireVenue } from "./venue.js";
 
 async function init(argv: readonly string[]): Promise<void> {
-  return initRole(argv, "relay", { venue: "required", budget: true, fill: async directory => {
+  return initRole(argv, "relay", { venue: "required", budget: true, verifies: false, fill: async directory => {
     const funding = freshFunding();
     writeExclusive(directory.file("funding.key"), funding);
     const shown = { fundingTree: fundingTree(funding) };
@@ -46,6 +48,22 @@ export function parsePublicationFile(value: unknown): PublicationFile {
   return { venue: bytes(v.venue, 32), backing: bytes(v.backing, 32), kind: 4, subject: bytes(v.subject, 32), record: bytes(v.record) };
 }
 
+/** The record as a publication of the construction whose frame it decodes in, with a demand's instant. */
+export function readPublication(record: Uint8Array): { readonly backing: Uint8Array; readonly instant: bigint | undefined } {
+  for (const construction of constructions()) {
+    let view;
+    try { view = construction.reader.publication(record); } catch (error) {
+      if (error instanceof EncodingError) continue;
+      throw error;
+    }
+    if (compareBytes(view.domain, construction.reader.domain()) !== 0) throw new CommandError("CONFIGURATION", "the publication names another configuration");
+    // A demand's instant is the index its holder read at (kind 1 carries a demand record).
+    const instant = view.kind === 1 ? construction.view(construction.decode(view.record!), () => undefined).demand?.value.instant : undefined;
+    return { backing: view.backing, instant };
+  }
+  throw new CommandError("INVALID", "the record is not a publication of either construction");
+}
+
 /** `publish <file> [--wait <indices>]`: publish the file's record; with `--wait`, sync until the view witnesses it,
  * at most that many witnessed indices past the publication. */
 async function publish(argv: readonly string[]): Promise<void> {
@@ -53,15 +71,10 @@ async function publish(argv: readonly string[]): Promise<void> {
   const directory = openDirectory(required(args, "dir"), "relay"), venue = requireVenue(directory);
   const file = parsePublicationFile(readJson(args.positional[0]!, "the publication file"));
   if (compareBytes(file.venue, venue.id) !== 0) throw new CommandError("VENUE", "the publication names another venue than this relay's venue.json");
-  let publication;
-  try { publication = decodePublication(file.record); } catch (error) {
-    if (error instanceof EncodingError) throw new CommandError("INVALID", "the record is not a pool-v3 publication");
-    throw error;
-  }
+  const publication = readPublication(file.record);
   if (compareBytes(publication.backing, file.backing) !== 0 || compareBytes(file.subject, file.backing) !== 0) {
     throw new CommandError("SUBJECT", "the publication's backing is not the subject it is filed under");
   }
-  if (compareBytes(publication.domain, adoptedDomain()) !== 0) throw new CommandError("CONFIGURATION", "the publication names another configuration");
   const wait = flag(args, "wait") === undefined ? undefined : integer(flag(args, "wait")!, "--wait", 1n, 1000n);
   const view = openView(directory), store = publisherStore(directory.file("relay.db"));
   try {
@@ -74,7 +87,7 @@ async function publish(argv: readonly string[]): Promise<void> {
       const held = witnessed();
       if (held !== undefined) { print({ status: "final", record, index: held }); return; }
       // A demand's instant is the index its holder read at; one the view has not reached would be published early.
-      if (publication.kind === 1 && view.venue.witnessedIndex() < publication.record.publicInputs.at(-2)!) {
+      if (publication.instant !== undefined && view.venue.witnessedIndex() < publication.instant) {
         throw new CommandError("EARLY", "the demand's instant is past this relay's witnessed index; sync its nodes and publish again");
       }
       let sent;

@@ -13,6 +13,12 @@ export function verifierCount(args: Arguments): number {
   return value === undefined ? 2 : Number(integer(value, "--verifiers", 1n, 6n));
 }
 
+/** The directory's verifier, or none where its construction carries no proofs (lit, M14g4): such a directory keeps
+ * no parameters. */
+export async function directoryVerifier(directory: Directory, args: Arguments): Promise<ProofVerifier | undefined> {
+  return directory.construction.reader.proofs ? openVerifier(directory, verifierCount(args)) : undefined;
+}
+
 export async function openVerifier(directory: Directory, instances: number): Promise<ProofVerifier> {
   let parameters;
   try { parameters = await readParameters(directory.path); } catch (error) {

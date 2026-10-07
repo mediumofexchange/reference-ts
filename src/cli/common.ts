@@ -13,6 +13,8 @@ import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, rena
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import type { Construction } from "../pool/v3/construction.js";
+import { declared, isConstructionName, type ConstructionName } from "./construction.js";
 
 export const ROLES = Object.freeze(["wallet", "operator", "reader", "relay"] as const);
 export type Role = (typeof ROLES)[number];
@@ -98,6 +100,8 @@ export interface Config {
   readonly nodes: readonly string[];
   /** A funding directory's spend budget for its publisher, in nanoErg. */
   readonly spendBudgetNanoErg?: string;
+  /** The construction the directory serves (slice 14 M14g4); absent in a directory made before the choice: pool-v3. */
+  readonly construction?: ConstructionName;
 }
 const CONFIG = "config.json";
 
@@ -111,16 +115,18 @@ function readConfig(directory: string): Config {
   if (parsed === null || typeof parsed !== "object" || !ROLES.includes(config.role as Role) || !Array.isArray(config.nodes) ||
       !config.nodes.every(node => typeof node === "string" && /^https?:\/\/[^\s]+$/.test(node)) ||
       (config.spendBudgetNanoErg !== undefined && !(typeof config.spendBudgetNanoErg === "string" && /^(0|[1-9][0-9]{0,18})$/.test(config.spendBudgetNanoErg))) ||
-      Object.keys(parsed).some(key => !["role", "nodes", "spendBudgetNanoErg"].includes(key))) {
+      (config.construction !== undefined && !isConstructionName(config.construction)) ||
+      Object.keys(parsed).some(key => !["role", "nodes", "spendBudgetNanoErg", "construction"].includes(key))) {
     throw new CommandError("INVALID", "config.json is not a moe directory configuration");
   }
   return config as Config;
 }
 
-/** An opened data directory: its absolute path and configuration, under the process lock. */
+/** An opened data directory: its absolute path, configuration and declared construction, under the process lock. */
 export interface Directory {
   readonly path: string;
   readonly config: Config;
+  readonly construction: Construction;
   file(name: string): string;
 }
 
@@ -158,7 +164,7 @@ function lock(path: string): void {
 const held: DatabaseSync[] = [];
 
 function directory(path: string, config: Config): Directory {
-  return Object.freeze({ path, config, file: (name: string) => join(path, name) });
+  return Object.freeze({ path, config, construction: declared(config), file: (name: string) => join(path, name) });
 }
 
 function absolute(path: string): string {

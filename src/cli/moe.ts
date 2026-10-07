@@ -13,11 +13,12 @@ import { CommandError, print, Replayed, UsageError } from "./common.js";
 
 const USAGE = `usage: moe <role> <command> --dir <directory> ...
 roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show, service add, request, pay, freshen,
-              reprove, submit, status, sync, fulfill, fulfillment, demand, withdraw, settle, presentation, publish;
+              move-window, reprove, submit, status, sync, fulfill, fulfillment, demand, withdraw, settle, presentation, publish;
               with --backer at init: venue create, terms create, issue, accept, burn, publish-acceptance)
        operator (init, venue create, open, serve, return, adopt)
        reader (init, terms add|show, service add, supply, presentation)
-       relay (init, publish)`;
+       relay (init, publish)
+init --construction moe/pool/v3 (the default) or moe/lit/v1 (wallet, operator, reader) names the one construction a directory serves.`;
 
 /** The fields a refusal prints, or undefined for an unexpected failure. */
 async function refusal(error: unknown): Promise<{ code: string; check?: string; message: string } | undefined> {

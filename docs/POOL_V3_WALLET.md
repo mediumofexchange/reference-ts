@@ -522,6 +522,17 @@ channel, thin-interval and publication-funding explanations; each demand and `fr
 Output, refusals and exit codes follow the M10b decision (one JSON object on stdout; refusals exit 1, usage 2,
 unexpected failures 3 with their stack).
 
+A directory serves one construction, declared at `init --construction` and kept in config.json: `moe/pool/v3` by
+default (and for any directory made before the flag), or `moe/lit/v1`, the draft lit notes
+([M14g4 decision](../decisions/2026-10.md#2026-10-07--run-lit-backings-through-the-moe-commands-each-directory-declaring-its-construction-slice-14-m14g4)).
+Terms of the other construction refuse as `CONSTRUCTION`. A lit directory proves nothing, so it keeps no parameters
+(`--parameters` is a usage error) and opens no verifier. Its `request` frame names a fresh owner key (lit-v1 §8), and
+`fulfill` prints the output credited to it. `accept` names an acceptance key. `terms create` takes `--silence` without
+`--challenge`. `move-window <alias> <backing>` moves a full owner-key window (a seed restoration needs it before its
+first request). `freshen` and `presentation` refuse as `CONSTRUCTION`. Everything a lit statement carries is public
+(lit-v1 §11), and its explanations say so. The relay keeps no parameters and publishes either construction's
+publications. `npm run check:lit:commands` drills a lit backing on the synthetic node, its gap route included.
+
 ## Acceptance and remaining work
 
 `test/pool-v3-wallet.test.ts` ports receiver cases with oracle proofs, including

@@ -436,7 +436,8 @@ try {
     await refused(wallet("venue create", BK2, ...SYN, "--depth", DEPTH), "ABSENT");
     // A holder's wallet holds no K: the backer's commands refuse it.
     await refused(wallet("burn", HD, "x", backing2, "1"), "ROLE");
-    const relay = await ok(["relay", "init", "--dir", RL, "--venue", join(OP, "venue.json"), ...common, "--budget", BUDGET]);
+    // A relay verifies nothing and keeps no proving parameters.
+    const relay = await ok(["relay", "init", "--dir", RL, "--venue", join(OP, "venue.json"), "--node", NODE_URL, "--budget", BUDGET]);
     await fund(relay.fundingTree, FUND);
     await advance(Number(DEPTH) + 2);
   });
