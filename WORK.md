@@ -10,12 +10,12 @@ cryptography, drilled in CI with no direct path; (b) a replica, an evidence-only
 one wire, from which the operator-offline drill syncs a wallet; (c) decisions, with explanations and adversarial review, on the
 service credential (not per holder), syncs that do not tie an address to the backing they spend, and gap funding apart from
 identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement is a local-machine Open question.
-- **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), merged #136):** holders reach an operator as a Tor onion
-  service through their own loopback proxy (Node's environment proxy), refusing `PROXY` unless fetch tunnels; `serve --onion` runs a
-  holders-only listener; the lit command drill runs every holder by onion name under a direct-connection guard. Design and patch
-  reviewed (findings taken). Limits: no live Tor here (Open question); per-command isolation; undici spins on a silent proxy.
-- **Next:** M12b, the replica (an evidence-only `moe reader serve` through the one wire) and the service credential; M12c, gap funding and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`)
-  is done: [M14h](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h).
+- **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), #136):** holders reach an operator as a Tor onion service through their own proxy.
+- **M12b ([decision](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b), branch `claude/m12b-replica`):** `moe reader serve` serves kept, verified evidence with no
+  credential from the replica's own index; holders read the operator first, replicas where it does not answer; the operator's
+  credential stays service-wide. Lit drill: holder and a fresh reader read from the replica with the operator stopped. Design
+  reviewed (1 blocker, 6 majors resolved); patch review owed before merge. Limits: no per-source read retry; WAL and egress growth.
+- **Next:** M12c, gap funding (duty 2) and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`) is done: [M14h](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h).
 
 ## Status
 - **Slices 10–11 done** (slice 14 too: Goal) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
@@ -32,7 +32,7 @@ identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement i
 
 ## Next
 1. (Item numbers and letters are stable: AGENTS.md and decisions cite them.)
-2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2); duties 2–3 and the replica are slice 12 (Goal).
+2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2); duty 3 (M12a–b) and the replica (M12b) landed; duty 2 is M12c.
 3. M10c2 leftovers: synthetic index lag knob; read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
 4. Deferred review findings, taken when their files are touched (closed letters are in their decisions). (g) `journal-crash.mjs` covers
