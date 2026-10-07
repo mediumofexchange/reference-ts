@@ -11,7 +11,7 @@ one wire, from which the operator-offline drill syncs a wallet; (c) decisions, w
 service credential (not per holder), syncs that do not tie an address to the backing they spend, and gap funding apart from
 identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement is a local-machine Open question.
 - **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), #136):** holders reach an operator as a Tor onion service through their own proxy.
-- **M12b ([decision](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b), branch `claude/m12b-replica`):** `moe reader serve` serves kept, verified evidence with no
+- **M12b ([decision](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b), merged #138):** `moe reader serve` serves kept, verified evidence with no
   credential from the replica's own index; holders read the operator first, replicas where it does not answer; the operator's
   credential stays service-wide. Lit drill: holder and a fresh reader read from the replica with the operator stopped. Design
   and patch reviewed (all blockers and majors resolved). Limits: no per-source read retry; WAL and egress growth.
@@ -93,8 +93,8 @@ identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement i
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route and an M12b replica behind its own onion name (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Deletion list (2026-10-07): none open; the merged spec and code branches of M14g5a are gone from both remotes (a stale local tracking ref only).
 
-Roughly **68% done / 32% remaining** (range 58–77%), reassessed 2026-10-07 (M14h): lit notes are adopted and run through the commands,
-failure path included; an evidence replica, holder transport, release assurance, qualified storage and mainnet remain.
+Roughly **70% done / 30% remaining** (range 60–78%), reassessed 2026-10-07 (M12b): lit notes adopted, holders reach operators over Tor and
+read a replica's evidence while an operator is down; gap funding, release assurance, qualified storage and mainnet remain.
