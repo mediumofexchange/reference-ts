@@ -34,83 +34,83 @@
       "kind": 1,
       "count": 37,
       "bytes": 14656,
-      "totalMs": 37315,
-      "maxMs": 1339
+      "totalMs": 27269,
+      "maxMs": 934
     },
     {
       "kind": 2,
       "count": 39,
       "bytes": 14656,
-      "totalMs": 120580,
-      "maxMs": 3157
+      "totalMs": 77127,
+      "maxMs": 2059
     },
     {
       "kind": 4,
       "count": 2,
       "bytes": 14656,
-      "totalMs": 5168,
-      "maxMs": 2585
+      "totalMs": 3517,
+      "maxMs": 1780
     },
     {
       "kind": 6,
       "count": 1,
       "bytes": 14656,
-      "totalMs": 2587,
-      "maxMs": 2587
+      "totalMs": 1748,
+      "maxMs": 1748
     }
   ],
   "reads": {
     "payerFirstRead": {
       "statements": 37,
       "verified": 37,
-      "ms": 1574,
+      "ms": 941,
       "fetchedBytes": 565631
     },
     "payerLaterReads": [
       {
         "verified": 12,
         "asked": 4,
-        "ms": 658,
+        "ms": 403,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 628,
+        "ms": 392,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 618,
+        "ms": 380,
         "fetchedBytes": 188545
       }
     ],
     "payerRestart": {
       "verified": 0,
       "asked": 0,
-      "ms": 70,
+      "ms": 46,
       "fetchedBytes": 809
     },
     "receiver": {
       "firstReadVerified": 73,
-      "firstReadMs": 2960,
+      "firstReadMs": 1805,
       "fulfilled": 36,
-      "fulfillMs": 1460
+      "fulfillMs": 944
     },
     "payerAfterReturn": {
       "verified": 0,
       "asked": 4,
-      "ms": 121,
+      "ms": 79,
       "fetchedBytes": 48192
     },
     "restoredWallet": {
       "verified": 78,
-      "ms": 3389,
+      "ms": 2091,
       "fetchedBytes": 1205514
     },
     "journalAudit": {
-      "ms": 2050
+      "ms": 1306
     }
   },
   "readers": {
@@ -121,8 +121,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "fb58bb93bf9da7e45fc3259aae26ff75d036fccdf7f255718afde995f1f7eb2d",
-        "history": "06863d9dc1c75b48e5c7bce3cd0552ef64818d6fb7f9857bf28dd13e88036a69",
+        "spentRoot": "f349e2c5e832d5939993688b7440cb420509c262782a00d1bf32b3df618fedc4",
+        "history": "94e7886ba6ed5ddff496618db6e2965db2f868b12b6a1109ba2f6d7969a9b9f1",
         "force": [],
         "clock": {
           "duration": "16",
@@ -135,9 +135,9 @@
       },
       "verified": 73,
       "instances": 2,
-      "readMs": 2436,
-      "maxRssBytes": 470552576,
-      "heapUsedBytes": 35285752,
+      "readMs": 1516,
+      "maxRssBytes": 532090880,
+      "heapUsedBytes": 27224008,
       "fetchedBytes": 1126772
     },
     "offline": {
@@ -147,8 +147,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "fb58bb93bf9da7e45fc3259aae26ff75d036fccdf7f255718afde995f1f7eb2d",
-        "history": "06863d9dc1c75b48e5c7bce3cd0552ef64818d6fb7f9857bf28dd13e88036a69",
+        "spentRoot": "f349e2c5e832d5939993688b7440cb420509c262782a00d1bf32b3df618fedc4",
+        "history": "94e7886ba6ed5ddff496618db6e2965db2f868b12b6a1109ba2f6d7969a9b9f1",
         "force": [
           {
             "index": "23",
@@ -178,9 +178,9 @@
       },
       "verified": 3,
       "instances": 2,
-      "readMs": 384,
-      "maxRssBytes": 359383040,
-      "heapUsedBytes": 24576224,
+      "readMs": 256,
+      "maxRssBytes": 346103808,
+      "heapUsedBytes": 24311640,
       "fetchedBytes": 0
     },
     "kept": {
@@ -189,9 +189,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "baaa48dd709fa20df1eca3107028317dfe1a167eaa19ce8c132901a1aaaa2187",
-        "spentRoot": "bfe3bb550b7f02529604c8283f7adfa5fb29eb904de4aea48d7deddefd75f753",
-        "history": "51bb690127e339e3f8d68f790e1cdc01e6ffa7dc165c3a2086232396ccd0ab90",
+        "segment": "2b8cdb9f4befbad859069bcc8fb62bf798e64d9b687ea4a8214e1113bbdda3fa",
+        "spentRoot": "0ab0202713107b1527952e260c560c0432c7b4ab0c7035a6bafe14d2bdff64a8",
+        "history": "f7170e354673bc3312addd9af4559da63c37a76c89692ba115c2e48ae1ef1f26",
         "force": [
           {
             "index": "23",
@@ -221,9 +221,9 @@
       },
       "verified": 2,
       "instances": 2,
-      "readMs": 431,
-      "maxRssBytes": 355995648,
-      "heapUsedBytes": 25806384,
+      "readMs": 275,
+      "maxRssBytes": 379936768,
+      "heapUsedBytes": 25808408,
       "fetchedBytes": 79579
     },
     "scratch": {
@@ -232,9 +232,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "baaa48dd709fa20df1eca3107028317dfe1a167eaa19ce8c132901a1aaaa2187",
-        "spentRoot": "bfe3bb550b7f02529604c8283f7adfa5fb29eb904de4aea48d7deddefd75f753",
-        "history": "51bb690127e339e3f8d68f790e1cdc01e6ffa7dc165c3a2086232396ccd0ab90",
+        "segment": "2b8cdb9f4befbad859069bcc8fb62bf798e64d9b687ea4a8214e1113bbdda3fa",
+        "spentRoot": "0ab0202713107b1527952e260c560c0432c7b4ab0c7035a6bafe14d2bdff64a8",
+        "history": "f7170e354673bc3312addd9af4559da63c37a76c89692ba115c2e48ae1ef1f26",
         "force": [
           {
             "index": "23",
@@ -264,17 +264,17 @@
       },
       "verified": 78,
       "instances": 2,
-      "readMs": 2696,
-      "maxRssBytes": 585662464,
-      "heapUsedBytes": 38850176,
+      "readMs": 1634,
+      "maxRssBytes": 541118464,
+      "heapUsedBytes": 38029016,
       "fetchedBytes": 1205514
     }
   },
   "process": {
-    "maxRssBytes": 603852800,
-    "heapUsedBytes": 41880192
+    "maxRssBytes": 556892160,
+    "heapUsedBytes": 41845168
   },
-  "elapsedMs": 221570,
+  "elapsedMs": 143755,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -335,7 +335,7 @@
     "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
     "dist/venue-error.js": "0b01e9dd946d2d5d747a1a1d82e3b3d6a4c6c386710088f0eefe05aa2550466d",
     "dist/venue-records.js": "f6ed87eab84a32d51cbd5f6cbffff22e1311103e21368bb171a391d3c4c3c39a",
-    "package-lock.json": "b07b712c75d74d6de1b5a9db2a41f044dcc1d048122b9a356cc1cfc83bf1d92e",
+    "package-lock.json": "4c40a78f216c8ddc3ec55b576a5a4f216e83afc9c702ca1d0ab7b85c1ffabd7d",
     "scripts/pool/prepare-crs.mjs": "7efbcbe292559a26225c83720b053d38d36294f47ed3d5684d2cfa478e9ad6cb",
     "scripts/pool/v3/circuits/burn.nr": "28548a85406ce232303c8bd7bb8e3506337a7b3999054678f8327ce2d979845d",
     "scripts/pool/v3/circuits/demand.nr": "b48f7f86c8ee80aa5fea7e6d2ea0b709d2a95f670b3473b2a1abc7a0afd5bf9e",

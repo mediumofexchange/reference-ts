@@ -161,6 +161,33 @@ jobs:
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
 
+      # check:package's release record (scripts/release.mjs): the tarball and install lock this system built.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-record-${{ matrix.os }}
+          path: scratch/release/release-record.json
+          if-no-files-found: error
+
       # Lists retained reports whose bound sources changed (informational: an older report can stay correct history).
       - name: Retained evidence drift
         run: npm run check:evidence
+
+  # One commit builds one release on both systems: the same tarball bytes and install lock (slice 13 M13a).
+  reproducible-release:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-record-ubuntu-latest
+          path: scratch/release-ubuntu-latest
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-record-windows-latest
+          path: scratch/release-windows-latest
+      - run: node scripts/release.mjs --compare scratch/release-ubuntu-latest/release-record.json scratch/release-windows-latest/release-record.json

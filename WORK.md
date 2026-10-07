@@ -3,22 +3,22 @@
 Updated: 2026-10-07
 
 ## Goal
-**Slice 12: the holder's transport, funding and evidence sources, done** (Next 2; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)
-item 2, [2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12) item 2; visibility duties 2–3).
-Acceptance: (a) every holder command reaches an operator and nodes through a user-chosen anonymising proxy with no new
-cryptography, drilled in CI with no direct path; (b) a replica, an evidence-only role serving kept, verified evidence through the
-one wire, from which the operator-offline drill syncs a wallet; (c) decisions, with explanations and adversarial review, on the
-service credential (not per holder), syncs that do not tie an address to the backing they spend, and gap funding apart from
-identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement is a local-machine Open question.
-- **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), #136):** holders reach an operator as a Tor onion service through their own proxy.
-- **M12b ([decision](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b), #138):** `moe reader serve` serves kept, verified evidence with no credential; holders read the operator first,
-  replicas where it does not answer; the operator's credential stays service-wide. Limits: no per-source read retry; WAL growth.
-- **M12c ([decision](decisions/2026-10.md#2026-10-07--fund-a-holders-gap-act-through-a-third-partys-relay-reached-as-an-onion-service-under-one-credential-per-relay-slice-12-m12c), #140):** `moe relay serve` funds a holder's gap act from a third party's key behind its own onion
-  name, one credential per relay; `moe relay send` hands it the file through the holder's proxy. Design and patch reviewed, all taken.
-- **Next:** slice 13, release assurance (Next 6): write its goal, acceptance and stop here first. Slice 14 (lit, adopted) is done.
+**Slice 13: release assurance** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3; release gate in [production requirements](docs/PRODUCTION_REQUIREMENTS.md#release-gates)).
+Must achieve: anyone can check that a release's installed code is exactly what its reviewed commit builds and tests, and that
+the parties' stores survive the backups and restores an owner would make, before the external review. Acceptance: (a) a release
+record: the package tarball rebuilds byte-identically on Linux and Windows, and installs from it with every dependency pinned by
+integrity to the tested tree, checked in CI; (b) installed-package interoperability: operator, replica, relay and wallet from
+separate installs of that tarball; (c) backup and restore drills of each role's store (an operator restored from an older copy
+signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's open correctness findings fixed or dispositioned,
+(au) first; (e) Next 5's 10⁵ rerun. Stop: (a)–(e) merged, CI green; the 10⁶ run, live Tor and the external review stay outside.
+- **M13a ([decision](decisions/2026-10.md#2026-10-07--pin-a-releases-install-to-the-tested-tree-with-an-install-lock-and-rebuild-it-byte-identically-on-two-systems-slice-13-m13a), #143):** (a). A [release record](docs/RELEASE.md): tarball plus an install lock pinning each runtime entry by integrity;
+  `check:package` and the command drill install through it; `--verify` refuses an install missing an entry for its system;
+  CI's `reproducible-release` compares Linux and Windows. Reviewed, all taken. Limits: one toolchain at a time, no registry.
+- **Next:** (d)'s (au): after a read over served evidence ends `unresolved-evidence`, sync that source again with `full`,
+  then the replicas (the library's documented remedy, which no command takes); then (b), (c).
 
 ## Status
-- **Slices 10–11 done** (slice 14 too: Goal) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
+- **Slices 10–12 and 14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
   install with real proofs on the synthetic node and live on the testnet; the Ergo view in SQLite rows, caught up in bounded passes; every budget
   holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)) except the operator's own memory at depth and the wallet's 10⁵ points, lost to a restart (Next 5).
 - **Audits**: area 27 (state machine, [decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); area 29 (wallet, [decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)); area 31 (readers): a continuation whose opening the record moved past is excluded, or lapsed in a gap, and a receipt reads a term end and a moved-past `after` without its opening ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)); the journal not yet; area 30 (transport): a source's mark moves only past an answer that delivers its selection, and a stream's minimum rate is charged to the peer alone, on both sides ([decision](decisions/2026-10.md#2026-10-07--move-a-sources-mark-only-past-an-answer-that-delivers-its-selection-and-charge-a-streams-rate-to-the-peer-alone-audit-area-30)). Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): resumed kept walks recheck scope; a truncated `wallet.db` refuses; no failed act is published; Node floor 24.21.0. Simplify 2026-10-07: one evidence chain for both constructions (#133); the store checks' live testnet modes retired (#134).
