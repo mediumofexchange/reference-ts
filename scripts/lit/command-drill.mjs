@@ -22,8 +22,12 @@
 // directory given --parameters or terms given --challenge (usage), freshen (CONSTRUCTION), a pool-v3 request frame to
 // a lit payer (REQUEST), a relay file for another venue (VENUE).
 //
-// It runs the built `dist/cli/moe.js` (the pool-v3 command drill covers the packed install), takes about a minute, and
-// writes nothing outside its scratch directory.
+// Slice 13 M13c: each party is a machine of its own, running `moe` from its own install of the release (packed and
+// installed from its install lock, scripts/release.mjs) with its own working, home and temporary directories: the
+// operator, the backer, the holder, the shop, a reader, the replica, the relays (one party, two directories) and the
+// shop's restorations on a new machine. A command runs on the machine owning the directory it names (`relay send` on
+// the holder's), and parties meet only through the venue, the onion services and the files the drill hands across.
+// It writes nothing outside its scratch directory.
 //
 // Usage: node scripts/lit/command-drill.mjs   (after npm run build)
 import assert from "node:assert/strict";
@@ -31,7 +35,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { connect } from "node:net";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { prepareExactOutput } from "../../dist/pool/v3/capsules.js";
@@ -42,8 +46,9 @@ import { parseVenue } from "../../dist/cli/venue.js";
 import { LIT as LIT_CONSTRUCTION } from "../../dist/lit/construction.js";
 import { V3ServiceClient } from "../../dist/pool/v3/service-client.js";
 import { serveSyntheticNode } from "../pool/v3/synthetic-node.mjs";
+import { installParties, packRelease } from "../release.mjs";
 
-const root = resolve(import.meta.dirname, "../.."), MOE = join(root, "dist", "cli", "moe.js");
+const root = resolve(import.meta.dirname, "../..");
 const RSS_HOOK = new URL("../pool/v3/rss-hook.mjs", import.meta.url).href, GUARD = new URL("./direct-guard.mjs", import.meta.url).href;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const LIT = ["--construction", "moe/lit/v1"], SYN = ["--synthetic"], POLL = "100", DEPTH = "2", SILENCE = 16n;
@@ -80,6 +85,21 @@ const torPort = torProxy.address().port, nodePort = new URL(node.url).port;
 const PROXY_VARIABLES = ["http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "no_proxy", "NO_PROXY", "NODE_USE_ENV_PROXY"];
 const plainEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !PROXY_VARIABLES.includes(key)));
 let serviceUp = false;
+// Every party's machine, its own install of one packed release (M13c), and the machine owning each data directory.
+const releaseDirectory = join(scratch, "release");
+mkdirSync(releaseDirectory);
+const release = packRelease(releaseDirectory).record;
+const MACHINES = { operator: ["operator"], backer: ["backer"], holder: ["holder"], shop: ["shop"], reader: ["reader", "reader-replica"],
+  replica: ["replica"], relay: ["relay", "relay-third"], restored: ["holder-seed", "holder-handoff"] };
+const parties = installParties(releaseDirectory, join(scratch, "machines"), Object.keys(MACHINES), plainEnv);
+const OWNER = new Map(Object.entries(MACHINES).flatMap(([party, directories]) => directories.map(directory => [directory, party])));
+/** The party whose machine runs `args`: the one owning the directory it names; a holder sends to a third party's relay. */
+function partyOf(args) {
+  if (args[0] === "relay" && args[1] === "send") return "holder";
+  const at = args.indexOf("--dir"), directory = args[at + 1];
+  assert(at >= 0 && dirname(directory) === scratch && OWNER.has(basename(directory)), `moe ${args.join(" ")} names a party's directory`);
+  return OWNER.get(basename(directory));
+}
 const call = async (path, body) => {
   const response = await fetch(`${node.url}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   assert.equal(response.status, 200, await response.clone().text()); return response.json();
@@ -94,12 +114,14 @@ const nextRound = async () => { await advance(Number(DEPTH) + 2); await pause(30
 /** A holder's process: through the proxy, each with its own credential (Tor isolates streams by it), the node direct;
  * the guard ends it at any other connection. */
 const holderProcess = (args, { input, proxy = torPort, proxyHost = "127.0.0.1", rss } = {}) => {
-  const holder = args[0] !== "operator";
-  const env = { ...plainEnv, MOE_DRILL_RSS: rss, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
+  const holder = args[0] !== "operator", party = partyOf(args), machine = parties[party];
+  const env = { ...machine.env, MOE_DRILL_RSS: rss, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
     HTTP_PROXY: `http://drill-${processes.length}-${process.hrtime.bigint()}:x@${proxyHost}:${proxy}`, NO_PROXY: "127.0.0.1" } : {}),
     ...(holder ? { MOE_DRILL_PORTS: `${proxy ?? torPort},${nodePort}` } : {}) };
-  return spawn(process.execPath, ["--import", RSS_HOOK, ...(holder ? ["--import", GUARD] : []), MOE, ...args],
-    { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env });
+  const child = spawn(process.execPath, ["--import", RSS_HOOK, ...(holder ? ["--import", GUARD] : []), machine.bin, ...args],
+    { cwd: machine.cwd, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env });
+  child.party = party;
+  return child;
 };
 function moe(args, { mining, input, proxy = torPort, proxyHost = "127.0.0.1" } = {}) {
   return new Promise((done, failed) => {
@@ -120,7 +142,7 @@ function moe(args, { mining, input, proxy = torPort, proxyHost = "127.0.0.1" } =
       const stdout = Buffer.concat(out).toString(), stderr = Buffer.concat(err).toString();
       let noir = null;
       try { ({ noir } = JSON.parse(readFileSync(rss, "utf8"))); rmSync(rss); } catch { /* died before its exit handler */ }
-      processes.push({ command: args.slice(0, 2).join(" "), status, noir });
+      processes.push({ command: args.slice(0, 2).join(" "), party: child.party, status, noir });
       let json, refusal;
       try { json = stdout.trim() === "" ? undefined : JSON.parse(stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
       try { refusal = status === 1 ? JSON.parse(stderr.trim().split("\n").at(-1)) : undefined; } catch { refusal = undefined; }
@@ -155,8 +177,9 @@ const usage = async args => {
 
 /** `moe operator serve` in the background: resolves with its first line once listening, and a stop. */
 function serve(directory) {
-  const child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL,
-    "--onion", ONION], { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...plainEnv, MOE_DRILL_RSS: join(scratch, `rss-serve-${process.hrtime.bigint()}.json`) } });
+  const machine = parties[partyOf(["operator", "serve", "--dir", directory])];
+  const child = spawn(process.execPath, ["--import", RSS_HOOK, machine.bin, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL,
+    "--onion", ONION], { cwd: machine.cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...machine.env, MOE_DRILL_RSS: join(scratch, `rss-serve-${process.hrtime.bigint()}.json`) } });
   servers.push(child);
   let stdout = "", stderr = "";
   child.stderr.on("data", chunk => { stderr += chunk; });
@@ -561,7 +584,15 @@ try {
     for (const p of ended) assert.equal(p.noir, false, `${p.command} loaded @noir-lang`);
   });
 
-  console.log(JSON.stringify({ status: "passed", checks, processes: processes.length }, null, 2));
+  await check("every party ran from its own install of one release, which the shop's restorations opened on a new machine", async () => {
+    const bins = Object.values(parties).map(party => realpathSync(party.bin));
+    assert.equal(new Set(bins).size, Object.keys(MACHINES).length);
+    for (const bin of bins) assert(!bin.startsWith(root + sep + "dist" + sep) && !bin.startsWith(root + sep + "node_modules" + sep), bin);
+    for (const party of Object.keys(MACHINES)) assert(processes.some(p => p.party === party && p.status === 0), `${party} ran no command`);
+  });
+
+  console.log(JSON.stringify({ status: "passed", release: { tarball: release.tarball.integrity, installLock: release.installLock.sha256 },
+    parties: Object.keys(MACHINES), checks, processes: processes.length }, null, 2));
   completed = true;
 } finally {
   for (const child of servers) if (child.exitCode === null && child.signalCode === null) {
