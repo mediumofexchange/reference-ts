@@ -5,25 +5,29 @@
 // canonical checkpoint holding it (the index replay judged it at), a
 // publication at its own index. So the reading at any index is the record
 // through that index, and a later end never erases what an earlier index read
-// (the void is prospective; Extensions' latch reads withdrawals alike). Pure:
-// no venue, store write or wallet state.
+// (the void is prospective; Extensions' latch reads withdrawals alike). Records
+// are read through their construction's view (construction.ts), so lit-v1 reads
+// the same rules (§7: an acceptance answers only where K and its owner key both
+// signed it; a taken release cannot occur). Pure: no venue, store write or
+// wallet state.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
-import { verifySignatureStrict } from "../../keys.js";
-import { acceptanceBytes, acceptanceId, decodeRecord, type Record } from "./records.js";
-import { effectOf, recoveryEffect, tagOf, type Demand } from "./recovery.js";
+import type { Construction, StatementView } from "./construction.js";
+import type { Demand } from "./recovery.js";
 import { EvidenceRefusal } from "./refusals.js";
 import type { StoredEvent } from "./replay-store.js";
 import type { FrontierResult } from "./scope-reader.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
-/** An acceptance of the demand that verifies under K and is due no later than the demand, at the first index the
- * venue witnessed it, alone or in a release. It answers for the lapse reading where its deadline is later than that
- * index by more than the lag (C3.4, `timely`); `taken` where a release of it was taken by another demand's settlement. */
+/** An acceptance of the demand that verifies under K (and, in lit-v1, its owner key) and is due no later than the
+ * demand, at the first index the venue witnessed it, alone or in a release. It answers for the lapse reading where its
+ * deadline is later than that index by more than the lag (C3.4, `timely`); `taken` where a release of it was taken by
+ * another demand's settlement. */
 export interface WitnessedAcceptance {
   readonly id: Uint8Array;
-  readonly owner: bigint;
+  /** Pool-v3's field element, lit-v1's key. */
+  readonly owner: bigint | Uint8Array;
   readonly deadline: bigint;
   readonly witnessed: bigint;
   readonly timely: boolean;
@@ -56,16 +60,15 @@ function placed(event: StoredEvent): bigint {
   if (event.index === undefined) throw new EvidenceRefusal("unresolved-evidence");
   return event.index;
 }
-const settlementDemand = (record: Record): string | undefined => record.kind === 6 ? recoveryEffect(record).ended : undefined;
 
 /**
  * C3.8 for `demand` (its identity) over `backing`, whose terms name `obligor` as K, at the frontier read's judging
- * index. The read must list the backing's witnessed answers (`answers`). Undefined where the record through that
- * index holds no such demand of this backing: an acceptance is evidence only beside the demand it names, so a demand
- * of another scoped backing is read with that backing's terms.
+ * index, reading records and answers through `construction`. The read must list the backing's witnessed answers
+ * (`answers`). Undefined where the record through that index holds no such demand of this backing: an acceptance is
+ * evidence only beside the demand it names, so a demand of another scoped backing is read with that backing's terms.
  */
-export function readPresentation(frontier: Pick<FrontierResult, "canonical" | "force" | "answers" | "ranges">, backing: Uint8Array,
-  obligor: Uint8Array, demand: Uint8Array): Presentation | undefined {
+export function readPresentation<R>(frontier: Pick<FrontierResult<R>, "canonical" | "force" | "answers" | "ranges">, construction: Construction<R>,
+  backing: Uint8Array, obligor: Uint8Array, demand: Uint8Array): Presentation | undefined {
   const id = hex(demand), t = frontier.ranges.judgingIndex, lag = frontier.ranges.lag, state = frontier.canonical?.state;
   const kept = state?.presented(id);
   let notice: Demand | undefined = kept?.demand, witnessed = kept === undefined ? undefined : placed(kept.event);
@@ -75,36 +78,44 @@ export function readPresentation(frontier: Pick<FrontierResult, "canonical" | "f
   const history = (by: End["by"], event: StoredEvent): void => { ends.push({ by, at: placed(event), order: [0n, BigInt(event.ns), event.position] }); };
   const venue = (by: End["by"], at: bigint, i: number): void => { ends.push({ by, at, order: [1n, BigInt(i)] }); };
   if (kept?.end !== undefined) history(kept.end.kind === 6 ? "settlement" : "withdrawal", kept.end);
-  // Forced publications through t, in venue order: the demand itself, its end, and settlements of other demands.
-  for (const [i, forced] of frontier.force.entries()) {
-    const effect = recoveryEffect(forced.record);
-    if (effect.demand?.id === id) {
-      notice ??= effect.demand.value;
+  // Forced publications through t, in venue order, each viewed as force judged it: a settlement that reads its
+  // demand's nullifiers (lit-v1 §3) reads a demand forced earlier or in the canonical history, as the force state did.
+  const forcedDemands = new Map<string, Demand>(), views: StatementView[] = [];
+  for (const forced of frontier.force) {
+    const view = construction.view(forced.record, ended => forcedDemands.get(ended) ?? state?.presented(ended)?.demand);
+    if (view.demand !== undefined) forcedDemands.set(view.demand.id, view.demand.value);
+    views.push(view);
+  }
+  // The demand itself, its end, and settlements of other demands.
+  for (const [i, view] of views.entries()) {
+    const forced = frontier.force[i]!;
+    if (view.demand?.id === id) {
+      notice ??= view.demand.value;
       if (witnessed === undefined || forced.index < witnessed) witnessed = forced.index;
-    } else if (effect.ended === id) venue(forced.record.kind === 6 ? "settlement" : "withdrawal", forced.index, i);
+    } else if (view.ended === id) venue(view.kind === 6 ? "settlement" : "withdrawal", forced.index, i);
   }
   if (notice === undefined || witnessed === undefined || !same(notice.backing, backing)) return undefined;
   // C3.8's void: a tag of it spent otherwise than by its own settlement, from the index that spend was witnessed at.
   const tags = notice.tags.filter(tag => tag !== 0n);
   for (const tag of tags) {
     for (const event of state?.tagSpends(tag) ?? []) {
-      if (event.kind === 6 && settlementDemand(decodeRecord(event.settlement!)) === id) continue;
+      if (event.kind === 6 && construction.settledDemand(event.settlement!) === id) continue;
       history("void", event);
     }
   }
-  for (const [i, forced] of frontier.force.entries()) {
-    if (forced.record.kind !== 6 || settlementDemand(forced.record) === id) continue;
-    if (effectOf(forced.record).nfs.some(nf => tags.includes(tagOf(nf)))) venue("void", forced.index, i);
+  for (const [i, view] of views.entries()) {
+    if (view.kind !== 6 || view.ended === id) continue;
+    if (view.tags.some(tag => tags.includes(tag))) venue("void", frontier.force[i]!.index, i);
   }
-  // Its acceptances: K's strict signature, due no later than the demand, each at its first witnessed index.
+  // Its acceptances: signed as its construction requires, due no later than the demand, each at its first witnessed index.
   const found = new Map<string, WitnessedAcceptance>();
   for (const answer of frontier.answers) {
     const a = answer.acceptance;
-    if (!same(a.demand, demand) || a.deadline > notice.deadline || !verifySignatureStrict(a.signature, acceptanceBytes(a), obligor)) continue;
-    const key = hex(acceptanceId(a)), prior = found.get(key), taken = answer.release?.check === "TAKEN";
+    if (!same(a.demand, demand) || a.deadline > notice.deadline || !a.signed(obligor)) continue;
+    const key = hex(a.id), prior = found.get(key), taken = answer.release?.check === "TAKEN";
     if (prior === undefined) {
-      found.set(key, { id: acceptanceId(a), owner: a.owner, deadline: a.deadline, witnessed: answer.index,
-        timely: a.deadline - answer.index > lag, taken });
+      found.set(key, { id: new Uint8Array(a.id), owner: a.owner instanceof Uint8Array ? new Uint8Array(a.owner) : a.owner, deadline: a.deadline,
+        witnessed: answer.index, timely: a.deadline - answer.index > lag, taken });
     } else if (taken && !prior.taken) found.set(key, { ...prior, taken });
   }
   const acceptances = [...found.values()];

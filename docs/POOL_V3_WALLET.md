@@ -396,8 +396,8 @@ witnessed at or after its own deadline (an operator that admitted it and
 checkpointed late) sets no term K could meet (`inTerm` false, C3.3) and
 reads neither; a withdrawal or settlement admitted in time but witnessed
 after the deadline leaves the indices before its witnessing as they stood. The acceptances it
-lists are those the venue witnessed, alone or in a release, that K signed and
-that are due no later than the demand; one is timely where its deadline is
+lists are those the venue witnessed, alone or in a release, that K signed (in
+lit, its owner key too, lit-v1 §7) and that are due no later than the demand; one is timely where its deadline is
 later than its first witnessed index by more than the lag (C3.4), and one whose
 release was taken (below) reads as released. So the backer publishes each
 acceptance as it makes it (`publishAcceptance(alias, publisher)`, routed to the
@@ -529,7 +529,8 @@ Terms of the other construction refuse as `CONSTRUCTION`. A lit directory proves
 (`--parameters` is a usage error) and opens no verifier. Its `request` frame names a fresh owner key (lit-v1 §8), and
 `fulfill` prints the output credited to it. `accept` names an acceptance key. `terms create` takes `--silence` without
 `--challenge`. `move-window <alias> <backing>` moves a full owner-key window (a seed restoration needs it before its
-first request). `freshen` and `presentation` refuse as `CONSTRUCTION`. Everything a lit statement carries is public
+first request). `freshen` refuses as `CONSTRUCTION`; `presentation` reads an acceptance as an answer only where K and its
+owner key both signed it (lit-v1 §7), and a lit release discloses nothing. Everything a lit statement carries is public
 (lit-v1 §11), and its explanations say so. The relay keeps no parameters and publishes either construction's
 publications. `npm run check:lit:commands` drills a lit backing on the synthetic node, its gap route included.
 

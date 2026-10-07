@@ -4,13 +4,14 @@
 // `@noir-lang` module. A backer's wallet creates lit terms naming an operator directory, which opens and serves them;
 // the backer issues to a holder's owner-key request, the holder fulfills it and pays a shop, the shop fulfills (a rerun
 // exits 4), demands, the backer accepts and a relay publishes the acceptance, the shop settles and the backer burns the
-// settled note; a reader's supply reads the totals. A withdrawn demand's presented note pays as any other (lit has no
-// freshen). With the operator stopped past silence, a demand and its settlement are published through the relay and
-// read final by force (the holder's sync, and the reader on the kept package), then the operator returns and adopts.
+// settled note; a reader's supply reads the totals, and the shop and the reader read the demand settled under C3.8
+// (M14g5b). A withdrawn demand's presented note pays as any other (lit has no freshen) and reads withdrawn. With the
+// operator stopped past silence, a demand and its settlement are published through the relay and read final by force
+// (the holder's sync and C3.8 reading, and the reader on the kept package), then the operator returns and adopts.
 // A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
 // is final, after which it requests again. Hostile cases: pool-v3 terms into a lit directory (CONSTRUCTION), a lit
-// directory given --parameters or terms given --challenge (usage), freshen and presentation (CONSTRUCTION), a pool-v3
-// request frame to a lit payer (REQUEST), a relay file for another venue (VENUE).
+// directory given --parameters or terms given --challenge (usage), freshen (CONSTRUCTION), a pool-v3 request frame to
+// a lit payer (REQUEST), a relay file for another venue (VENUE).
 //
 // It runs the built `dist/cli/moe.js` (the pool-v3 command drill covers the packed install), takes about a minute, and
 // writes nothing outside its scratch directory.
@@ -263,9 +264,12 @@ try {
     await submit(SH, "settle-1");
     await finalOf(SH, "settle-1");
     assert.deepEqual((await ok(wallet("sync", SH, backing))).holdings, []);
-    // C3.8's reading is pool-v3's alone so far.
-    await refused(wallet("presentation", SH, backing, shown.demand), "CONSTRUCTION");
-    await refused(["reader", "presentation", "--dir", RD, backing, shown.demand], "CONSTRUCTION");
+    // C3.8 (lit-v1 §7): the relayed acceptance answers, K's and its owner key's signatures verified; the settlement ends the demand.
+    const reading = await ok(wallet("presentation", SH, backing, shown.demand));
+    assert.deepEqual([reading.status, reading.ended.by, reading.overdue, reading.acceptances.map(a => a.owner)],
+      ["final", "settlement", undefined, [accepted.owner]]);
+    const presented = await settled(["reader", "presentation", "--dir", RD, backing, shown.demand], out => out.status === "final");
+    assert.deepEqual([presented.ended.by, presented.acceptances.map(a => [a.owner, a.timely, a.taken])], ["settlement", [[accepted.owner, true, false]]]);
     assert.deepEqual(holdings(await ok(wallet("sync", BK, backing))), [["3", "available", 0]]);
     await ok(wallet("burn", BK, "retire", backing, "3"));
     await submit(BK, "retire");
@@ -288,6 +292,8 @@ try {
     await submit(HD, "w2");
     await finalOf(HD, "w2");
     assert.deepEqual(holdings(await ok(wallet("sync", HD, backing))), [["7", "available", 1]]);
+    const withdrawn = await ok(wallet("presentation", HD, backing, shown.demand));
+    assert.deepEqual([withdrawn.status, withdrawn.ended.by, withdrawn.acceptances], ["final", "withdrawal", []]);
     await refused(wallet("freshen", HD, "fresh-2", backing, shown.demand), "CONSTRUCTION");
     const invoice = await request(SH, "invoice-2", 2);
     await ok(wallet("pay", HD, "pay-2", backing, ...invoice.args, "--value", "2"));
@@ -332,6 +338,12 @@ try {
     await ok(["relay", "publish", "--dir", RL, release]);
     await settled(wallet("sync", HD, backing), view => view.holdings.length === 0);
     assert.equal((await ok(wallet("status", HD, "gap-settle"))).status, "final");
+    // C3.8 by force on the kept package: the forced settlement reads its forced demand's notes (lit-v1 §3) and ends it;
+    // the published acceptance and the release carrying it are one answer.
+    const byForce = await settled(["reader", "presentation", "--dir", RD, "--package", packageFile, backing, shown.demand],
+      out => out.ended?.by === "settlement");
+    assert.deepEqual([byForce.status, byForce.acceptances.length, byForce.acceptances[0].taken], ["final", 1, false]);
+    assert.equal((await ok(wallet("presentation", HD, backing, shown.demand))).ended.by, "settlement");
     await ok(["operator", "return", "--dir", OP, "--id", "return-1", "--poll-ms", POLL], { mining: "waiting" });
     const adopted = await ok(["operator", "adopt", "--dir", OP, "--poll-ms", POLL], { mining: "waiting" });
     assert.equal(adopted.status, "final");

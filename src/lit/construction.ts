@@ -8,7 +8,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
 import type { LitScan, ScanOutput, StateHandle } from "../pool/v3/state.js";
 import type {
-  Construction, FaultTarget, KeyedNote, KeyedReceipt, KeyedWalletFrames, Keyring, OperatorReceipt, PublicationView, ReaderFrames, ReceiptCodec, ReceiptFieldsOf,
+  AcceptanceView, AnswerView, Construction, FaultTarget, KeyedNote, KeyedReceipt, KeyedWalletFrames, Keyring, OperatorReceipt, PublicationView, ReaderFrames, ReceiptCodec, ReceiptFieldsOf,
   ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
 import type { VerifierIdentities } from "../pool/v3/configuration.js";
@@ -23,7 +23,7 @@ import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configurat
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  acceptanceBytes, arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodePublication, encodeRecord, evidencePair, hashEvidenceFields,
+  acceptanceBytes, acceptanceId, arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodePublication, encodeRecord, evidencePair, hashEvidenceFields,
   splitRecord, ownerSignaturesVerify, settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord, type SignedAcceptance,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
@@ -146,6 +146,13 @@ function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTar
   };
 }
 
+/** §4: an acceptance is K's signature and its owner key's, each strict over the acceptance bytes. */
+function litAcceptance(a: SignedAcceptance): AcceptanceView {
+  const message = acceptanceBytes(a);
+  return { demand: new Uint8Array(a.demand), deadline: a.deadline, owner: new Uint8Array(a.owner), id: acceptanceId(a),
+    signed: obligor => verifySignatureStrict(a.signature, message, obligor) && verifySignatureStrict(a.ownerSignature, message, a.owner) };
+}
+
 const NO_IDENTITIES: VerifierIdentities = Object.freeze({});
 const LIT_READER: ReaderFrames = Object.freeze({
   specification: "lit-v1 a554f8a",
@@ -186,6 +193,16 @@ const LIT_READER: ReaderFrames = Object.freeze({
   publication: (bytes: Uint8Array): PublicationView => {
     const p = decodePublication(bytes);
     return { domain: p.domain, backing: p.backing, kind: p.kind, record: p.kind === 2 ? undefined : encodeRecord(p.record) };
+  },
+  // §7: C3.8 reads an acceptance, published or carried by a release, as an answer only where both its signatures verify;
+  // a release discloses nothing, since §2's derivation replaces C3.5's count.
+  answer: (bytes: Uint8Array): AnswerView | undefined => {
+    const p = decodePublication(bytes), { domain, backing } = p;
+    if (p.kind === 2) return { domain, backing, acceptance: litAcceptance(p.acceptance), release: undefined };
+    const s = p.kind === 3 ? p.record.statement : undefined;
+    if (s?.kind !== 6) return undefined;
+    return { domain, backing, acceptance: litAcceptance(settlementAuthorization(p.record).acceptance),
+      release: { segment: Uint8Array.from(s.segment), disclosure: undefined } };
   },
   // C2b.5.2 as §7 reads it: the owner's signature in the proof's place, the input commitment an output of the state.
   request: (bytes: Uint8Array): RequestView => {

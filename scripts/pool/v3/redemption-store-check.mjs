@@ -162,7 +162,7 @@ async function acceptance(mode) {
     const releases = async demand => (await readFrontier(offline.package, signed, venue.witnessedIndex(),
       { venue, reference: drill.reference, verifier: drill.verifier, answers: true })).answers
       .filter(a => a.release !== undefined && hex(a.acceptance.demand) === hex(demand))
-      .map(a => [String(a.release.output), a.release.force, a.release.check ?? null]);
+      .map(a => [String(a.release.disclosure.output), a.release.force, a.release.check ?? null]);
     /** Publish a record built here as a wallet's `publish` would be relayed: on the fixture no earlier than the lag after `read`. */
     const relay = async (read, kind, fields) => {
       if (mode === "local" && venue.witnessedIndex() < read + lag - 1n) await advance(read + lag - 1n - venue.witnessedIndex());

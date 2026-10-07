@@ -21,8 +21,8 @@
 // A lit wallet (lit-v1 §8) proves nothing, keeps no parameters and opens no
 // verifier; its requests name an owner key (`moe/wallet/lit/v1/request`), its
 // acceptance owner is a key, it has no `freshen` (presented notes spend as any
-// other), `move-window` moves its owner-key window, and `presentation` is not
-// yet read for it.
+// other), `move-window` moves its owner-key window, and `presentation` reads an
+// acceptance only where K and its owner key both signed it (lit-v1 §7).
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -48,7 +48,7 @@ import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArgum
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryVerifier, verifierCount } from "./backend.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
-import { initConstruction, initRole, presentationOf, requirePresentation, serviceClient, serviceCommand, termsCommand, unanswered } from "./reader.js";
+import { initConstruction, initRole, presentationOf, serviceClient, serviceCommand, termsCommand, unanswered } from "./reader.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
@@ -694,7 +694,6 @@ async function settle(argv: readonly string[]): Promise<void> {
 async function presentation(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, READ, 2), { directory, kept } = open(args);
   const id = hex32(args.positional[1]!, "the demand");
-  requirePresentation(directory);
   await withWallet(directory, args, { sync: true }, async opened => {
     const source = await evidence(opened, args, kept);
     print({ ...presentationOf(await opened.wallet.presentation(id, source.bytes, kept.signed), opened.at!), evidence: source.source });
