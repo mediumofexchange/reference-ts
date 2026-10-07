@@ -82,6 +82,57 @@ function refusal(status: number, value: unknown): V3ServiceClientError {
   return new V3ServiceClientError(status, typeof code === "string" && /^[A-Z_]{1,32}$/.test(code) ? code : "UNAVAILABLE", "service request failed");
 }
 
+/** One exchange with a loopback or onion listener at `baseUrl`. `read` is given the response while the connection is
+ * held, and a call that restarts the bound (ten seconds by default): a command's reply is bounded whole, a stream between
+ * its chunks. */
+async function exchangeWith<T>(baseUrl: string, onion: boolean, path: string, token: string | undefined, body: string | undefined, type: string,
+  read: (response: Response, progress: () => void) => Promise<T>, bound = 10_000): Promise<T> {
+  const url = new URL(path, baseUrl), proxy = onion ? onionProxy(url) : undefined;
+  const abort = new AbortController(), timer = setTimeout(() => abort.abort(), bound);
+  try {
+    let response: Response;
+    try {
+      response = await fetch(url, { method: body === undefined ? "GET" : "POST",
+        ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
+        headers: { ...(token === undefined ? {} : { authorization: `Bearer ${token}` }), "content-type": "application/json", "accept-encoding": "identity" } });
+    } catch (error) {
+      // An onion request opens a connection to the proxy alone, and Tor answers an onion's failure with a status: a
+      // connection that fails is the proxy's, named rather than read as an operator that did not answer (a name with
+      // several addresses fails as an AggregateError).
+      const cause = (error as { cause?: unknown }).cause;
+      if (proxy !== undefined && error instanceof TypeError && (cause instanceof AggregateError ||
+          PROXY_UNREACHABLE.has((cause as { code?: unknown } | undefined)?.code))) throw proxyRefusal("the proxy did not answer");
+      throw error;
+    }
+    // A refusal is a bounded JSON reply on every route.
+    if ((response.status >= 300 && response.status < 400) || response.headers.get("content-type") !== (response.ok ? type : "application/json") ||
+        ![null, "identity"].includes(response.headers.get("content-encoding"))) throw new EncodingError("unexpected service response");
+    if (!response.ok) throw refusal(response.status, await json(response, MAX_V3_SERVICE_REPLY_BYTES));
+    return await read(response, () => { timer.refresh(); });
+  } finally { clearTimeout(timer); abort.abort(); }
+}
+
+/**
+ * Hand a publication file to a relay (slice 12 M12c): `POST /publications` at a loopback or v3 onion URL under the
+ * relay's one credential, answering its bounded JSON reply. An onion URL is reached only through the holder's loopback
+ * proxy, refused `PROXY` before any connection otherwise (M12a). The bound passes the relay listener's own fifteen
+ * seconds, so a publication still in flight there usually ends as a reply that did not come (an onion circuit's setup
+ * counts against this bound alone); either way the file is sent again, and the relay answers a resend as the same. The
+ * reply is the relay's word: the holder reads its act at the venue by its own read.
+ */
+export async function sendToRelay(baseUrl: string, token: string, file: unknown): Promise<unknown> {
+  let url: URL; try { url = new URL(baseUrl); } catch { throw new EncodingError("invalid relay URL"); }
+  const onion = ONION_HOST.test(url.hostname);
+  if (url.protocol !== "http:" || !(url.hostname === "127.0.0.1" || onion) || url.username || url.password || url.pathname !== "/" ||
+      url.search || url.hash || typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) {
+    throw new EncodingError("a local or onion relay URL and a 32-byte credential required");
+  }
+  if (onion) onionProxy(url);
+  const body = JSON.stringify(file);
+  if (Buffer.byteLength(body) > MAX_V3_SERVICE_REQUEST_BYTES) throw new EncodingError("request too large");
+  return exchangeWith(url.href, onion, "/publications", token, body, "application/json", response => json(response, MAX_V3_SERVICE_REPLY_BYTES), 20_000);
+}
+
 /** Local operation credentials do not select protocol authority. The caller
  * independently holds the expected operator, reference venue and construction; the
  * domain is that construction's configuration (pool-v3 §11.4's adopted one, or
@@ -114,33 +165,9 @@ export class V3ServiceClient {
     this.#venue = referenceVenue(structuredClone(expected.reference)).id;
   }
   get baseUrl(): string { return this.#baseUrl; }
-  /** One exchange. `read` is given the response while the connection is held, and a call that restarts the
-   * ten-second bound: a command's reply is bounded whole, a stream between its chunks. */
-  private async exchange<T>(path: string, token: string | undefined, body: string | undefined, type: string,
+  private exchange<T>(path: string, token: string | undefined, body: string | undefined, type: string,
     read: (response: Response, progress: () => void) => Promise<T>): Promise<T> {
-    const url = new URL(path, this.#baseUrl), proxy = this.#onion ? onionProxy(url) : undefined;
-    const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 10_000);
-    try {
-      let response: Response;
-      try {
-        response = await fetch(url, { method: body === undefined ? "GET" : "POST",
-          ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
-          headers: { ...(token === undefined ? {} : { authorization: `Bearer ${token}` }), "content-type": "application/json", "accept-encoding": "identity" } });
-      } catch (error) {
-        // An onion request opens a connection to the proxy alone, and Tor answers an onion's failure with a status: a
-        // connection that fails is the proxy's, named rather than read as an operator that did not answer (a name with
-        // several addresses fails as an AggregateError).
-        const cause = (error as { cause?: unknown }).cause;
-        if (proxy !== undefined && error instanceof TypeError && (cause instanceof AggregateError ||
-            PROXY_UNREACHABLE.has((cause as { code?: unknown } | undefined)?.code))) throw proxyRefusal("the proxy did not answer");
-        throw error;
-      }
-      // A refusal is a bounded JSON reply on every route.
-      if ((response.status >= 300 && response.status < 400) || response.headers.get("content-type") !== (response.ok ? type : "application/json") ||
-          ![null, "identity"].includes(response.headers.get("content-encoding"))) throw new EncodingError("unexpected service response");
-      if (!response.ok) throw refusal(response.status, await json(response, MAX_V3_SERVICE_REPLY_BYTES));
-      return await read(response, () => { timer.refresh(); });
-    } finally { clearTimeout(timer); abort.abort(); }
+    return exchangeWith(this.#baseUrl, this.#onion, path, token, body, type, read);
   }
   private async request(path: string, command: V3ServiceCommand, admin = false): Promise<unknown> {
     const token = admin ? this.#adminToken : this.#walletToken;

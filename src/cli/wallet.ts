@@ -6,7 +6,8 @@
 // seed. K (`backer.key`, Ed25519) is read only by `terms create`, `issue` and
 // `accept` and handed to the wallet as its signer: it never enters the wallet
 // database or a handoff. The directory holds no funding key; a gap act leaves
-// as a publication file a relay publishes (`moe relay publish`).
+// as a publication file a relay publishes (`moe relay publish`, or a third
+// party's `relay serve` the file is handed to with `moe relay send`, M12c).
 //
 // Every mutating command names the alias the library keys on, so a rerun after
 // a crash or a lost reply is the library's exact retry and prints the saved
@@ -53,17 +54,21 @@ import { initConstruction, initRole, presentationOf, replicaCommand, serviceClie
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
+/** Who funds a gap act, said with the first notes and with each publication file (slice 12 M12c). */
+const RELAY_NOTE = "A relay publishes a gap act from its own funding key, which the chain ties to every act it funds and to its coins' history: a relay of your own links your acts to each other and to where its coins came from; a third party's relay reached as an onion service (moe relay send) ties them to its other users' acts, not to your coins, but sees each act a little before the public and may delay or withhold it. Take its relay.json only where it is published to everyone alike, and send to a second relay only when the first has not had the act witnessed in time.";
 /** Shown once, with a wallet's first request or payment (M10b item 13; docs/POOL_V3_VISIBILITY.md). */
 const FIRST_NOTES = Object.freeze([
   "A request's frame links its output to whoever holds it: hand the frame on a private channel, and its digest over one that authenticates you; a payer checks the frame against the digest.",
   "The operator sees each statement it admits and when. While few statements are admitted between checkpoints, a payment and its payee's next spend can pair by timing and amount, and the venue shows each checkpoint's supply.",
   "A payee learns the amount and when it was paid; an operator taking a fee learns that too. Publishing at the venue from an identified funding key identifies the publisher.",
+  RELAY_NOTE,
 ]);
 /** A lit wallet's first notes (lit-v1 §§8, 11): everything a lit statement carries is public. */
 const LIT_FIRST_NOTES = Object.freeze([
   "A lit request names a fresh owner key of this wallet: hand the frame on a private channel, and its digest over one that authenticates you; a payer checks the frame against the digest.",
   "Lit notes are public: everyone sees each statement's backings, values, owner keys and the spend graph, so a payment shows its amount, its payer's notes and the key it pays. Only the civil identity behind a key stays unknown unless disclosed.",
   "Publishing at the venue from an identified funding key identifies the publisher.",
+  RELAY_NOTE,
 ]);
 const EXPLAINED = "explained";
 /** Whether the directory holds lit-v1's keyed notes (no proofs) rather than pool-v3's. */
@@ -728,7 +733,8 @@ async function publish(argv: readonly string[]): Promise<void> {
     const act = opened.wallet.act(alias);
     const publication = await captured(publisher => opened.wallet.publish(alias, publisher));
     if (compareBytes(publication.subject, kept.backing) !== 0) throw new CommandError("BACKING", "the act is of another backing than the one whose gap the read judged");
-    print({ status: "written", ...publicationFile(directory, kept, out, publication), act: act === undefined ? null : actOut(act, directory.construction), judgingIndex: view.judgingIndex });
+    print({ status: "written", ...publicationFile(directory, kept, out, publication), act: act === undefined ? null : actOut(act, directory.construction), judgingIndex: view.judgingIndex,
+      notes: [RELAY_NOTE] });
   });
 }
 
@@ -738,7 +744,7 @@ async function publishAcceptance(argv: readonly string[]): Promise<void> {
   const out = required(args, "out");
   await withWallet(directory, args, {}, async opened => {
     const publication = await captured(publisher => opened.wallet.publishAcceptance(alias, publisher));
-    print({ status: "written", ...publicationFile(directory, kept, out, publication) });
+    print({ status: "written", ...publicationFile(directory, kept, out, publication), notes: [RELAY_NOTE] });
   });
 }
 

@@ -531,6 +531,11 @@ export class ErgoPublisher {
     return copyBytes(this.#tree);
   }
 
+  /** Whether a persistence failure stopped this publisher: it refuses everything until reopened from durable state. */
+  get failed(): boolean {
+    return this.#failed;
+  }
+
   /** How many publications are remembered and not yet settled. */
   get unsettled(): number {
     return this.#pending.size;

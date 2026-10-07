@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-07` [Fund a holder's gap act through a third party's relay reached as an onion service, under one credential per relay (slice 12 M12c)](decisions/2026-10.md#2026-10-07--fund-a-holders-gap-act-through-a-third-partys-relay-reached-as-an-onion-service-under-one-credential-per-relay-slice-12-m12c)
 - `2026-10-07` [Serve kept, verified evidence from a replica with no credential, and keep the operator's credential service-wide (slice 12 M12b)](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b)
 - `2026-10-07` [Reach an operator as an onion service through the holder's own proxy, and serve holders on a listener of their own (slice 12 M12a)](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a)
 - `2026-10-07` [Adopt moe/lit/v1 with §9's configuration, reading the contracts in the text pool-v3 fixes (slice 14 M14h)](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h)

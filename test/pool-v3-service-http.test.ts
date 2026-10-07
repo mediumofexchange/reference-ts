@@ -185,3 +185,91 @@ describe("v3 service HTTP trust boundary", () => {
       .toEqual({ status: 400, body: { code: "REFUSED" } });
   });
 });
+
+describe("relay HTTP trust boundary (slice 12 M12c)", () => {
+  let createRelayService: typeof import("../src/pool/v3/service-http.js").createRelayService;
+  let sendToRelay: typeof import("../src/pool/v3/service-client.js").sendToRelay;
+  const servers: Server[] = [];
+  beforeAll(async () => {
+    ({ createRelayService } = await import("../src/pool/v3/service-http.js"));
+    ({ sendToRelay } = await import("../src/pool/v3/service-client.js"));
+  });
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => {
+      server.closeAllConnections(); server.close(() => resolve());
+    })));
+  });
+  class Refusal extends Error { constructor(readonly code: string) { super(code); } }
+  const FILE = { schema: "moe-publication-1", record: "01" };
+  async function relay() {
+    const take = vi.fn(async (file: unknown, gone: () => boolean) => ({ status: "pending", file, gone: gone() }));
+    const server = createRelayService(TOKEN, take, error => error instanceof Refusal ?
+      { status: error.code === "EARLY" ? 409 : 400, code: error.code } : undefined);
+    const failures: unknown[] = [];
+    server.on("relayError", error => failures.push(error));
+    servers.push(server);
+    await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    return { take, failures, url: `http://127.0.0.1:${(server.address() as { port: number }).port}/` };
+  }
+  async function post(url: string, path: string, body: unknown, token = TOKEN) {
+    const response = await fetch(new URL(path, url), { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: typeof body === "string" ? body : JSON.stringify(body), signal: AbortSignal.timeout(5000) });
+    return { status: response.status, body: await response.json() };
+  }
+
+  it("starts only with a 32-byte credential", () => {
+    for (const token of ["bad", "AA".repeat(32), TOKEN.slice(2)]) {
+      expect(() => createRelayService(token, async () => ({}), () => undefined)).toThrow("a 32-byte credential required");
+    }
+  });
+
+  it("takes a publication file on its one route under its one credential, and nothing else reaches take", async () => {
+    const r = await relay();
+    expect(await post(r.url, "/publications", FILE)).toEqual({ status: 200, body: { status: "pending", file: FILE, gone: false } });
+    expect(await post(r.url, "/publications", FILE, "33".repeat(32))).toEqual({ status: 401, body: { code: "UNAUTHORIZED" } });
+    expect(await post(r.url, "/commands", FILE)).toEqual({ status: 404, body: { code: "NOT_FOUND" } });
+    const get = await fetch(new URL("/publications", r.url), { headers: { authorization: `Bearer ${TOKEN}` } });
+    expect([get.status, await get.json()]).toEqual([404, { code: "NOT_FOUND" }]);
+    for (const body of ["{", " ".repeat(300_001)]) expect(await post(r.url, "/publications", body)).toEqual({ status: 400, body: { code: "INVALID" } });
+    expect(r.take).toHaveBeenCalledTimes(1);
+    // Once answered, the request reads as gone: work queued behind it for nobody would spend nothing.
+    expect(r.take.mock.calls[0]![1]()).toBe(true);
+  });
+
+  it("refuses a duplicate or lower-case credential before reading the body", async () => {
+    const r = await relay(), body = JSON.stringify(FILE);
+    const raw = (headers: string[]) => new Promise<{ status: number | undefined; body: unknown }>((resolve, reject) => {
+      const request = httpRequest(new URL("/publications", r.url), { method: "POST", headers: ["Host", new URL(r.url).host, "Connection", "close",
+        ...headers, "Content-Type", "application/json", "Content-Length", String(Buffer.byteLength(body))] }, response => {
+        const chunks: Buffer[] = [];
+        response.on("data", chunk => chunks.push(Buffer.from(chunk)));
+        response.on("end", () => { try { resolve({ status: response.statusCode, body: JSON.parse(Buffer.concat(chunks).toString("utf8")) }); } catch (error) { reject(error); } });
+        response.on("error", reject);
+      });
+      request.on("error", reject); request.setTimeout(5000, () => request.destroy(new Error("stalled"))); request.end(body);
+    });
+    expect(await raw(["Authorization", `Bearer ${TOKEN}`, "Authorization", `Bearer ${TOKEN}`])).toEqual({ status: 401, body: { code: "UNAUTHORIZED" } });
+    expect(await raw(["Authorization", `bearer ${TOKEN}`])).toEqual({ status: 401, body: { code: "UNAUTHORIZED" } });
+    expect(r.take).not.toHaveBeenCalled();
+  });
+
+  it("answers a named refusal by its code and anything else as UNAVAILABLE, told to the owner", async () => {
+    const r = await relay();
+    r.take.mockRejectedValueOnce(new Refusal("EARLY"));
+    expect(await post(r.url, "/publications", FILE)).toEqual({ status: 409, body: { code: "EARLY" } });
+    r.take.mockRejectedValueOnce(new Error(`node failure ${TOKEN}`));
+    expect(await post(r.url, "/publications", FILE)).toEqual({ status: 503, body: { code: "UNAVAILABLE" } });
+    expect(r.failures.map(error => (error as Error).message)).toEqual([`node failure ${TOKEN}`]);
+  });
+
+  it("a send reaches only a loopback or onion URL with a credential, and carries the relay's refusal code", async () => {
+    const r = await relay();
+    expect(await sendToRelay(r.url, TOKEN, FILE)).toEqual({ status: "pending", file: FILE, gone: false });
+    await expect(sendToRelay(r.url, "33".repeat(32), FILE)).rejects.toMatchObject({ status: 401, code: "UNAUTHORIZED" });
+    for (const url of [r.url.replace("127.0.0.1", "localhost"), `${r.url}publications`, "https://127.0.0.1:1/", "http://user:x@127.0.0.1:1/"]) {
+      await expect(sendToRelay(url, TOKEN, FILE)).rejects.toThrow("a local or onion relay URL and a 32-byte credential required");
+    }
+    await expect(sendToRelay(r.url, "bad", FILE)).rejects.toThrow("a local or onion relay URL and a 32-byte credential required");
+    expect(r.take).toHaveBeenCalledTimes(1);
+  });
+});

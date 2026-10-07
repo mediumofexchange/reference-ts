@@ -15,7 +15,9 @@
 // service is up must read served evidence. A holder without the proxy, or with a proxy that is down, refuses PROXY.
 // A replica (M12b), a reader directory that serves, keeps the backing's evidence behind an onion name of its own; with
 // the operator stopped the holder's sync falls to it, and a reader with no operator service reads its supply from the
-// replica alone, past a replica that is down. A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
+// replica alone, past a replica that is down. The holder hands its gap demand and release to a third party's relay
+// (M12c), `relay serve` behind an onion name of its own, with `relay send` through the proxy: the holder funds nothing;
+// a send without the proxy, with a wrong credential or for another venue is refused. A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
 // is final, after which it requests again. Hostile cases: pool-v3 terms into a lit directory (CONSTRUCTION), a lit
 // directory given --parameters or terms given --challenge (usage), freshen (CONSTRUCTION), a pool-v3 request frame to
 // a lit payer (REQUEST), a relay file for another venue (VENUE).
@@ -55,11 +57,12 @@ const node = await serveSyntheticNode();
 // The onion service as Tor's HTTPTunnelPort reaches it: CONNECT only, the onion name to the holders' listener, a 502
 // where that does not answer, and every other target refused (Tor refuses internal addresses).
 const ONION = `${"m".repeat(55)}d.onion`, REPLICA = `${"r".repeat(55)}d.onion`, DOWN = `${"n".repeat(55)}d.onion`;
-const tor = { holders: 0, replica: 0, tunnels: 0, refused: [] };
+const RELAY = `${"l".repeat(55)}d.onion`;
+const tor = { holders: 0, replica: 0, relay: 0, tunnels: 0, refused: [] };
 const torProxy = createServer((_, response) => response.writeHead(405).end()).on("connect", (request, client, head) => {
   // An onion service that is down answers 502, as Tor does.
   if (request.url === `${DOWN}:80`) { client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
-  const port = request.url === `${ONION}:80` ? tor.holders : request.url === `${REPLICA}:80` ? tor.replica : 0;
+  const port = request.url === `${ONION}:80` ? tor.holders : request.url === `${REPLICA}:80` ? tor.replica : request.url === `${RELAY}:80` ? tor.relay : 0;
   if (port === 0) { tor.refused.push(request.url); client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
   tor.tunnels++;
   let joined = false;
@@ -174,11 +177,10 @@ function serve(directory) {
   } };
 }
 
-/** `moe reader serve` in the background, a holder's process behind the replica's onion name: its lines as they come,
- * and a stop that expects its last line. */
-function replicaServe(directory) {
-  const child = holderProcess(["reader", "serve", "--dir", directory, "--onion", REPLICA, "--poll-ms", POLL],
-    { rss: join(scratch, `rss-replica-${process.hrtime.bigint()}.json`) });
+/** `moe reader serve` (a replica) or `moe relay serve` in the background, a process behind its own onion name: its
+ * lines as they come, and a stop that expects its last line. */
+function background(args, rss) {
+  const child = holderProcess(args, { rss: join(scratch, `rss-${rss}-${process.hrtime.bigint()}.json`) });
   servers.push(child);
   const lines = [];
   let stdout = "", stderr = "";
@@ -193,11 +195,13 @@ function replicaServe(directory) {
     if (process.platform !== "win32") { assert.equal(status, 0, stderr); assert.equal(lines.at(-1)?.status, "stopped"); }
   } };
 }
+const replicaServe = directory => background(["reader", "serve", "--dir", directory, "--onion", REPLICA, "--poll-ms", POLL], "replica");
+const relayServe = directory => background(["relay", "serve", "--dir", directory, "--onion", RELAY, "--poll-ms", POLL], "relay");
 
 let completed = false;
 try {
   const OP = join(scratch, "operator"), BK = join(scratch, "backer"), HD = join(scratch, "holder"), SH = join(scratch, "shop");
-  const RD = join(scratch, "reader"), RL = join(scratch, "relay"), RP = join(scratch, "replica"), RF = join(scratch, "reader-replica"), H2 = join(scratch, "holder-seed"), H3 = join(scratch, "holder-handoff");
+  const RD = join(scratch, "reader"), RL = join(scratch, "relay"), RP = join(scratch, "replica"), RF = join(scratch, "reader-replica"), RT = join(scratch, "relay-third"), H2 = join(scratch, "holder-seed"), H3 = join(scratch, "holder-handoff");
   const nodeArgs = ["--node", node.url], venueFile = join(OP, "venue.json");
   const wallet = (verb, directory, ...rest) => ["wallet", ...verb.split(" "), "--dir", directory, ...rest];
   await advance(Number(DEPTH) + 2);
@@ -245,6 +249,8 @@ try {
     await usage(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET, "--parameters", scratch]);
     const relay = await ok(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET]);
     await fund(relay.fundingTree, FUND);
+    // A third party's relay, which serves holders (M12c).
+    await fund((await ok(["relay", "init", "--dir", RT, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET])).fundingTree, FUND);
     await advance(Number(DEPTH) + 2);
   });
 
@@ -392,7 +398,7 @@ try {
   });
 
   let replica;
-  await check("with the operator stopped past silence, a demand and its settlement are published through the relay and read final by force, " +
+  await check("with the operator stopped past silence, a demand and its release are handed to a third party's relay and read final by force, " +
       "the holder syncing from a replica and a reader reading from it alone; the operator returns and adopts", async () => {
     // A replica of the backing, behind its own onion name, syncing from the operator's holders' listener.
     for (const directory of [RP, RF]) {
@@ -428,10 +434,26 @@ try {
     // The operator does not answer: the holder's sync falls to the replica.
     const shown = await ok(wallet("demand", HD, "gap", backing, "5", "--deadline", "+60"));
     assert.deepEqual([shown.evidence, shown.replica, shown.skipped.map(s => s.code)], ["replica", `http://${REPLICA}/`, ["UNAVAILABLE"]]);
-    const file = join(scratch, "gap.json");
-    assert.equal((await ok(wallet("publish", HD, "gap", backing, "--out", file))).status, "written");
-    await ok(["relay", "publish", "--dir", RL, file]);
-    await settled(["relay", "publish", "--dir", RL, file], out => out.status === "final");
+    const file = join(scratch, "gap.json"), written = await ok(wallet("publish", HD, "gap", backing, "--out", file));
+    assert.equal(written.status, "written");
+    assert.match(written.notes.join(" "), /a third party's relay reached as an onion service \(moe relay send\) ties them to its other users' acts, not to your coins/);
+    // The holder hands the demand to a third party's relay behind its own onion name: the relay's key funds it.
+    const relaying = relayServe(RT);
+    for (let round = 0; relaying.lines.length === 0; round++) { assert(round < 100, `relay serve did not listen${relaying.log()}`); await pause(100); }
+    assert.deepEqual([relaying.lines[0].status, relaying.lines[0].url], ["serving", `http://${RELAY}/`]);
+    tor.relay = relaying.lines[0].port;
+    const relayFile = join(RT, "relay.json"), handed = JSON.parse(readFileSync(relayFile, "utf8"));
+    assert.deepEqual(Object.keys(handed).sort(), ["token", "url"]);
+    // Without the proxy the send refuses before any connection; a wrong credential is refused by the relay.
+    await refused(["relay", "send", file, "--to", relayFile], "PROXY", { proxy: null });
+    writeFileSync(join(scratch, "wrong-relay.json"), JSON.stringify({ ...handed, token: "11".repeat(32) }));
+    await refused(["relay", "send", file, "--to", join(scratch, "wrong-relay.json")], "UNAUTHORIZED");
+    const first = await ok(["relay", "send", file, "--to", relayFile]);
+    assert.deepEqual([first.status, first.record, first.relay], ["pending", written.record, `http://${RELAY}/`]);
+    assert.match(first.transaction, /^[0-9a-f]{64}$/);
+    // An exact resend before it is witnessed answers the same transaction.
+    assert.equal((await ok(["relay", "send", file, "--to", relayFile])).transaction, first.transaction);
+    await settled(["relay", "send", file, "--to", relayFile], out => out.status === "final");
     const locked = await settled(wallet("sync", HD, backing), view => view.holdings[0]?.status === "locked");
     assert.equal(locked.gap, true);
     assert.equal((await ok(wallet("status", HD, "gap"))).status, "final");
@@ -452,7 +474,7 @@ try {
     await ok(wallet("settle", HD, "gap-settle", backing, "--acceptance", acceptance));
     const release = join(scratch, "gap-settle.json");
     await ok(wallet("publish", HD, "gap-settle", backing, "--out", release));
-    await ok(["relay", "publish", "--dir", RL, release]);
+    assert.equal((await ok(["relay", "send", release, "--to", relayFile])).status, "pending");
     await settled(wallet("sync", HD, backing), view => view.holdings.length === 0);
     assert.equal((await ok(wallet("status", HD, "gap-settle"))).status, "final");
     // C3.8 by force on the kept package: the forced settlement reads its forced demand's notes (lit-v1 §3) and ends it;
@@ -477,10 +499,13 @@ try {
     assert.equal((await ok(wallet("sync", HD, backing))).evidence, "served");
     await settled(["reader", "supply", "--dir", RF, backing], out => out.status === "final" && out.supply === "7");
     await replica.stop();
-    // A relay refuses a file for another venue.
+    // A relay refuses a file for another venue, published or handed to it; the served relay published from its own key alone.
     const other = JSON.parse(readFileSync(release, "utf8")); other.venue = "00".repeat(32);
     writeFileSync(join(scratch, "other-venue.json"), JSON.stringify(other));
     await refused(["relay", "publish", "--dir", RL, join(scratch, "other-venue.json")], "VENUE");
+    await refused(["relay", "send", join(scratch, "other-venue.json"), "--to", relayFile], "VENUE");
+    assert.equal((await ok(["relay", "send", release, "--to", relayFile])).status, "final");
+    await relaying.stop();
   });
 
   await check("a handoff restores the shop's wallet; a seed restoration finds its holdings, moves its full window and requests again", async () => {

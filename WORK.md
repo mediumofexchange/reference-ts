@@ -11,11 +11,11 @@ one wire, from which the operator-offline drill syncs a wallet; (c) decisions, w
 service credential (not per holder), syncs that do not tie an address to the backing they spend, and gap funding apart from
 identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement is a local-machine Open question.
 - **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), #136):** holders reach an operator as a Tor onion service through their own proxy.
-- **M12b ([decision](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b), merged #138):** `moe reader serve` serves kept, verified evidence with no
-  credential from the replica's own index; holders read the operator first, replicas where it does not answer; the operator's
-  credential stays service-wide. Lit drill: holder and a fresh reader read from the replica with the operator stopped. Design
-  and patch reviewed (all blockers and majors resolved). Limits: no per-source read retry; WAL and egress growth.
-- **Next:** M12c, gap funding (duty 2) and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`) is done: [M14h](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h).
+- **M12b ([decision](decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b), #138):** `moe reader serve` serves kept, verified evidence with no credential; holders read the operator first,
+  replicas where it does not answer; the operator's credential stays service-wide. Limits: no per-source read retry; WAL growth.
+- **M12c ([decision](decisions/2026-10.md#2026-10-07--fund-a-holders-gap-act-through-a-third-partys-relay-reached-as-an-onion-service-under-one-credential-per-relay-slice-12-m12c), PR open):** `moe relay serve` funds a holder's gap act from a third party's key behind its own onion
+  name, one credential per relay; `moe relay send` hands it the file through the holder's proxy. Design and patch reviewed, all taken.
+- **Next:** merge M12c once CI (its pool-v3 drill group above all) is green; then slice 13. Slice 14 (lit, adopted) is done.
 
 ## Status
 - **Slices 10–11 done** (slice 14 too: Goal) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
@@ -32,7 +32,7 @@ identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement i
 
 ## Next
 1. (Item numbers and letters are stable: AGENTS.md and decisions cite them.)
-2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2); duty 3 (M12a–b) and the replica (M12b) landed; duty 2 is M12c.
+2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: all landed (M10c2, M12a–c), each with its limits. M12c levers if a deployment needs them: a relay budget per window of witnessed indices, a check that a release names a witnessed demand.
 3. M10c2 leftovers: synthetic index lag knob; read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
 4. Deferred review findings, taken when their files are touched (closed letters are in their decisions). (g) `journal-crash.mjs` covers
@@ -93,8 +93,8 @@ identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement i
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route and an M12b replica behind its own onion name (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Deletion list (2026-10-07): none open; the merged spec and code branches of M14g5a are gone from both remotes (a stale local tracking ref only).
 
-Roughly **70% done / 30% remaining** (range 60–78%), reassessed 2026-10-07 (M12b): lit notes adopted, holders reach operators over Tor and
-read a replica's evidence while an operator is down; gap funding, release assurance, qualified storage and mainnet remain.
+Roughly **72% done / 28% remaining** (range 62–79%), reassessed 2026-10-07 (M12c): lit notes adopted, holders reach operators over Tor,
+read a replica's evidence while an operator is down and have a third party's relay fund their gap acts; release assurance, qualified storage and mainnet remain.
