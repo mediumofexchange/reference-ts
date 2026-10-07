@@ -958,8 +958,7 @@ describe("the v3 operator journal", () => {
 
   it("serves a reader's later sync only what is new, over HTTP, and its reads equal a read of the whole package", async () => {
     const { j, venue } = await opened(), { client, requests } = await service(j);
-    // Each source has its own mark: the operator's evidence at this URL (M12b).
-    const evidence = new EvidenceStore(), source = concatBytes(domain, venueId, operator, new TextEncoder().encode(client.baseUrl)), records = [issue(), payment(), burning()];
+    const evidence = new EvidenceStore(), source = concatBytes(domain, venueId, operator), records = [issue(), payment(), burning()];
     const read = async (served: ServedPackage, kept?: EvidenceStore) => (await readPackage(served.package,
       { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue, reference, ...(kept === undefined ? {} : { evidence: kept }) })).state!;

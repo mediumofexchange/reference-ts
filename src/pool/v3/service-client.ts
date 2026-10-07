@@ -214,11 +214,11 @@ export class V3ServiceClient {
 
   /**
    * Bring `evidence`, the party's own evidence store, up to the service's latest served commitment for
-   * `backing` (pool-v3 §14, incremental retrieval). The store records the sequence this source (the expected
-   * operator's evidence at this URL: the operator's service or a replica) was kept through, and the request names
-   * it, so the source sends only later objects and, for each trail, its head and the records after what the store
-   * holds. Each source has its own mark, so one that withholds what it states as served costs only its own later
-   * syncs. Where those parts do not assemble over what the store holds, everything is fetched once more from
+   * `backing` (pool-v3 §14, incremental retrieval). The store records the sequence this source was kept through,
+   * and the request names it, so the source sends only later objects and, for each trail, its head and the records
+   * after what the store holds. The source is the expected operator's service, at whatever URL, or a replica (a client
+   * with no credential) at this URL: a replica serves after a sequence it served before what it kept since (M12b), so
+   * its mark is its own, and one that withholds what it states as served costs only its own later syncs. Where those parts do not assemble over what the store holds, everything is fetched once more from
    * nothing; `full` asks for that outright, which also replaces retained evidence that storage damaged. A source
    * whose selection is below the mark sends nothing new, and the mark stays. Returns the selection and the read's own
    * package (the configuration and the selected commitment) to read with that store.
@@ -229,7 +229,8 @@ export class V3ServiceClient {
    */
   async sync(backing: Uint8Array, evidence: EvidenceStore, options: { readonly full?: boolean; readonly maxBytes?: bigint } = {}): Promise<ServedPackage> {
     if (evidence.construction.namespace.name !== this.#construction.namespace.name) throw new TypeError("an evidence store of another construction");
-    const ownBacking = identifier(backing), source = concatBytes(this.#domain, this.#venue, this.#operator, new TextEncoder().encode(this.#baseUrl));
+    const ownBacking = identifier(backing), operator = concatBytes(this.#domain, this.#venue, this.#operator);
+    const source = this.#walletToken === undefined ? concatBytes(operator, new TextEncoder().encode(this.#baseUrl)) : operator;
     const receive = (after: bigint) => this.served(ownBacking, after, options.maxBytes ?? EVIDENCE_QUOTA.file,
       (served, parts) => evidence.take(parts, served.selection.operator));
     let after = options.full === true ? 0n : evidence.suppliedThrough(source);

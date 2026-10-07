@@ -174,7 +174,7 @@ describe("a replica of a lit operator's evidence", () => {
     const f = await fixture();
     const path = join(f.directory, "earlier.db"), earlier = new EvidenceStore(path, { construction: LIT });
     await f.operator.sync(f.backing, earlier);
-    const source = Buffer.concat([DOMAIN, f.venue.id, pub(OPERATOR), Buffer.from(f.operator.baseUrl)]);
+    const source = Buffer.concat([DOMAIN, f.venue.id, pub(OPERATOR)]);
     expect(earlier.suppliedThrough(source)).toBeGreaterThan(0n);
     earlier.close();
     const shared = new EvidenceStore(path, { construction: LIT, shared: true }); closing.push(shared);
