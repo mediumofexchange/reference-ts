@@ -48,7 +48,8 @@ import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArgum
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryVerifier, verifierCount } from "./backend.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
-import { initConstruction, initRole, presentationOf, serviceClient, serviceCommand, termsCommand, unanswered } from "./reader.js";
+import { initConstruction, initRole, presentationOf, replicaCommand, serviceClient, serviceCommand, syncSources, termsCommand, unanswered,
+  type Skipped } from "./reader.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
@@ -170,26 +171,27 @@ async function withWallet<T>(directory: Directory, args: Arguments, options: { r
   try { return await act(opened); } finally { await opened.close(); }
 }
 
-/** The evidence a read takes: `--package <file>`, or the operator's service synced into the wallet's evidence file;
- * where the service does not answer, the package its last sync kept. A `saved` payment or act needs none: its rerun
- * is the library's exact retry. */
+/** The evidence a read takes: `--package <file>`, or its sources synced into the wallet's evidence file (the operator's
+ * service, then, where it does not answer, each replica added: M12b); where none answers, the package its last sync
+ * kept. A `saved` payment or act needs none: its rerun is the library's exact retry. Outputs name the source as
+ * `evidence` (`served`, `replica` with its URL, `kept`, `file` or `saved`) and the sources passed over. */
 async function evidence(opened: Opened, args: Arguments, kept: KeptTerms, saved = false):
-  Promise<{ readonly bytes: Uint8Array; readonly source: "saved" | "file" | "served" | "kept" }> {
+  Promise<{ readonly bytes: Uint8Array; readonly source: "saved" | "file" | "served" | "replica" | "kept"; readonly from?: object }> {
   if (saved) return { bytes: new Uint8Array(), source: "saved" };
   const file = flag(args, "package");
   if (file !== undefined) return { bytes: readRequired(file, "package file"), source: "file" };
-  const last = opened.directory.file(`packages/${hex(kept.backing)}`), client = serviceClient(opened.directory, kept, opened.view);
-  try {
-    const bytes = (await opened.wallet.supply(store => client.sync(kept.backing, store))).package;
+  const last = opened.directory.file(`packages/${hex(kept.backing)}`);
+  const synced = await syncSources(opened.directory, kept, opened.view, client => opened.wallet.supply(store => client.sync(kept.backing, store)));
+  const passed = (skipped: readonly Skipped[]) => skipped.length > 0 ? { skipped } : {};
+  if ("served" in synced) {
+    const bytes = synced.served.package;
     mkdirSync(opened.directory.file("packages"), { recursive: true, mode: 0o700 });
     writeReplace(last, bytes);
-    return { bytes, source: "served" };
-  } catch (error) {
-    if (!unanswered(error)) throw error;
-    const bytes = readOptional(last);
-    if (bytes === undefined) throw new CommandError("UNAVAILABLE", "the operator's service did not answer and no earlier sync kept a package");
-    return { bytes, source: "kept" };
+    return { bytes, source: synced.origin, from: { ...(synced.origin === "replica" ? { replica: synced.url } : {}), ...passed(synced.skipped) } };
   }
+  const bytes = readOptional(last);
+  if (bytes === undefined) throw new CommandError("UNAVAILABLE", "no source answered and no earlier sync kept a package");
+  return { bytes, source: "kept", from: passed(synced.skipped) };
 }
 
 /** A service that submits through the operator's service named in the terms. */
@@ -522,7 +524,7 @@ async function pay(argv: readonly string[]): Promise<void> {
     const order = { request: payee, value, ...(fee === undefined ? {} : { fee }) } as Parameters<V3Wallet["prepare"]>[1];
     const prepared = await opened.wallet.prepare(alias, order, source.bytes, kept.signed, opened.prove);
     if (prepared.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
-    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source, ...firstNotes(directory) });
+    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source, ...source.from, ...firstNotes(directory) });
   });
 }
 
@@ -537,7 +539,7 @@ async function freshen(argv: readonly string[]): Promise<void> {
     const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
     const payment = await opened.wallet.freshen(alias, demand, source.bytes, kept.signed, opened.prove!);
     if (payment.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
-    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source,
+    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source, ...source.from,
       notes: [`This payment spends the notes demand ${hex(demand)} presented into one fresh note: it shows it came from that demand's notes and links no two demands.`] });
   });
 }
@@ -553,7 +555,7 @@ async function moveWindow(argv: readonly string[]): Promise<void> {
     const source = await evidence(opened, args, kept, opened.wallet.payment(alias) !== undefined);
     const payment = await opened.wallet.moveWindow(alias, source.bytes, kept.signed, fee);
     if (payment.status === "prepared") await opened.wallet.submit(alias, submitter(opened, kept));
-    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source,
+    print({ ...paymentOut(opened.wallet.payment(alias)!), evidence: source.source, ...source.from,
       notes: ["This payment moves the window: it pays this wallet's own highest exposed key, so the request that named that key is closed and requests resume once it is final."] });
   });
 }
@@ -563,7 +565,7 @@ async function reprove(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, {}, 2);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept);
-    print({ ...paymentOut(await opened.wallet.reprove(alias, source.bytes, kept.signed, opened.prove)), evidence: source.source });
+    print({ ...paymentOut(await opened.wallet.reprove(alias, source.bytes, kept.signed, opened.prove)), evidence: source.source, ...source.from });
   });
 }
 
@@ -593,7 +595,7 @@ async function sync(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, READ, 1), { directory, kept } = open(args);
   await withWallet(directory, args, { sync: true }, async opened => {
     const source = await evidence(opened, args, kept);
-    print({ ...viewOut(await opened.wallet.sync(source.bytes, kept.signed)), evidence: source.source });
+    print({ ...viewOut(await opened.wallet.sync(source.bytes, kept.signed)), evidence: source.source, ...source.from });
   });
 }
 
@@ -618,7 +620,7 @@ async function fulfill(argv: readonly string[]): Promise<void> {
     const source = await evidence(opened, args, kept);
     const credited = keyed(directory) ? keyedFulfillmentOut(await opened.wallet.keyedFulfill(alias, source.bytes, kept.signed))
       : fulfillmentOut(await opened.wallet.fulfill(alias, source.bytes, kept.signed));
-    print({ status: "final", alias, ...credited, evidence: source.source });
+    print({ status: "final", alias, ...credited, evidence: source.source, ...source.from });
   });
 }
 
@@ -650,7 +652,7 @@ async function demand(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const deadline = deadlineOf(args, opened.at!), source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
     const act = await opened.wallet.demand(alias, quantity, deadline, source.bytes, kept.signed, opened.prove);
-    print({ ...actOut(act, directory.construction), evidence: source.source, notes: demandNotes(directory, act) });
+    print({ ...actOut(act, directory.construction), evidence: source.source, ...source.from, notes: demandNotes(directory, act) });
   });
 }
 
@@ -660,7 +662,7 @@ async function withdraw(argv: readonly string[]): Promise<void> {
   const id = hex32(args.positional[2]!, "the demand");
   await withWallet(directory, args, { sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
-    print({ ...actOut(await opened.wallet.withdraw(alias, id, source.bytes, kept.signed), directory.construction), evidence: source.source });
+    print({ ...actOut(await opened.wallet.withdraw(alias, id, source.bytes, kept.signed), directory.construction), evidence: source.source, ...source.from });
   });
 }
 
@@ -686,7 +688,7 @@ async function settle(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
     print({ ...actOut(await opened.wallet.settle(alias, acceptance, source.bytes, kept.signed, opened.prove), directory.construction),
-      evidence: source.source });
+      evidence: source.source, ...source.from });
   });
 }
 
@@ -696,7 +698,7 @@ async function presentation(argv: readonly string[]): Promise<void> {
   const id = hex32(args.positional[1]!, "the demand");
   await withWallet(directory, args, { sync: true }, async opened => {
     const source = await evidence(opened, args, kept);
-    print({ ...presentationOf(await opened.wallet.presentation(id, source.bytes, kept.signed), opened.at!), evidence: source.source });
+    print({ ...presentationOf(await opened.wallet.presentation(id, source.bytes, kept.signed), opened.at!), evidence: source.source, ...source.from });
   });
 }
 
@@ -748,7 +750,7 @@ async function issue(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
     const act = await withSigner(directory, sign => opened.wallet.issue(alias, output, value, source.bytes, kept.signed, opened.prove, sign));
-    print({ ...actOut(act, directory.construction), evidence: source.source });
+    print({ ...actOut(act, directory.construction), evidence: source.source, ...source.from });
   });
 }
 
@@ -770,7 +772,7 @@ async function accept(argv: readonly string[]): Promise<void> {
       acceptance = own; bytes = encodePublication({ domain: own.domain, backing: kept.backing, kind: 2, acceptance: own });
     }
     writeSame(out, bytes);
-    print({ status: "saved", demand: acceptance.demand, deadline: acceptance.deadline, owner: acceptance.owner, out, evidence: source.source,
+    print({ status: "saved", demand: acceptance.demand, deadline: acceptance.deadline, owner: acceptance.owner, out, evidence: source.source, ...source.from,
       notes: ["Publish the acceptance at once (publish-acceptance and a relay): it answers for C3.8 only where the venue witnesses it more than the lag before its deadline."] });
   });
 }
@@ -783,7 +785,7 @@ async function burn(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
     const source = await evidence(opened, args, kept, opened.wallet.act(alias) !== undefined);
     print({ ...actOut(await opened.wallet.burn(alias, quantity, source.bytes, kept.signed, opened.prove), directory.construction),
-      evidence: source.source });
+      evidence: source.source, ...source.from });
   });
 }
 
@@ -794,6 +796,7 @@ export async function wallet(argv: readonly string[]): Promise<void> {
     case "venue": return venueCommand(rest);
     case "terms": return rest[0] === "create" ? termsCreate(rest.slice(1)) : termsCommand(rest, "wallet");
     case "service": return serviceCommand(rest, "wallet");
+    case "replica": return replicaCommand(rest, "wallet");
     case "seed": return seed(rest);
     case "restore-seed": return restoreSeed(rest);
     case "handoff": return handoff(rest);
@@ -817,6 +820,6 @@ export async function wallet(argv: readonly string[]): Promise<void> {
     case "issue": return issue(rest);
     case "accept": return accept(rest);
     case "burn": return burn(rest);
-    default: throw new UsageError("moe wallet init|venue|terms|service|seed|restore-seed|handoff|restore|request|pay|freshen|move-window|reprove|submit|status|sync|fulfill|fulfillment|demand|withdraw|settle|presentation|publish|publish-acceptance|issue|accept|burn");
+    default: throw new UsageError("moe wallet init|venue|terms|service|replica|seed|restore-seed|handoff|restore|request|pay|freshen|move-window|reprove|submit|status|sync|fulfill|fulfillment|demand|withdraw|settle|presentation|publish|publish-acceptance|issue|accept|burn");
   }
 }

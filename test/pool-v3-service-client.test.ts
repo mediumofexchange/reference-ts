@@ -132,20 +132,28 @@ describe("bounded v3 local service client", () => {
   });
 
   it("keeps served parts in the caller's store, records the signed sequence, and refuses a part it does not read", async () => {
-    const source = Buffer.concat([domain, localVenueIdentity(reference.label, reference.lag), operator]), object = b(30);
+    // The operator's service has one mark at whatever URL; a replica (no credential) has its own per URL (M12b).
+    const operatorSource = Buffer.concat([domain, localVenueIdentity(reference.label, reference.lag), operator]), object = b(30);
+    const source = (url?: string) => url === undefined ? operatorSource : Buffer.concat([operatorSource, Buffer.from(url)]);
     const store = new EvidenceStore(), good = { ...served(), parts: [{ package: encodeEvidencePackage([{ kind: 4, payload: object }]) }] };
-    expect(await new V3ServiceClient(await serving(good), TOKEN, expected()).sync(backing, store)).toEqual({ selection: good.selection, package: good.package });
-    expect([store.suppliedThrough(source), store.retained().snapshot(sha256(object))]).toEqual([1n, object]);
+    const goodUrl = await serving(good);
+    expect(await new V3ServiceClient(goodUrl, TOKEN, expected()).sync(backing, store)).toEqual({ selection: good.selection, package: good.package });
+    expect([store.suppliedThrough(source()), store.retained().snapshot(sha256(object))]).toEqual([1n, object]);
     // A selection with no parts is a complete answer: nothing is new.
-    const empty = new EvidenceStore();
-    await new V3ServiceClient(await serving(served()), TOKEN, expected()).sync(backing, empty);
-    expect(empty.suppliedThrough(source)).toBe(1n);
+    const empty = new EvidenceStore(), emptyUrl = await serving(served());
+    await new V3ServiceClient(emptyUrl, TOKEN, expected()).sync(backing, empty);
+    expect(empty.suppliedThrough(source())).toBe(1n);
+    // A replica's mark is its own: the operator's is not asked of it, nor its of the operator.
+    const replicaStore = new EvidenceStore();
+    await new V3ServiceClient(emptyUrl, undefined, expected()).sync(backing, replicaStore);
+    expect([replicaStore.suppliedThrough(source()), replicaStore.suppliedThrough(source(emptyUrl))]).toEqual([0n, 1n]);
+    replicaStore.close();
     // A kind no v3 reader reads refuses the sync, and another context is refused before any part is kept: no sequence is recorded.
     const other = new EvidenceStore(), unread = { ...served(), parts: [{ package: encodeEvidencePackage([{ kind: 9, payload: object }]) }] };
-    await expect(new V3ServiceClient(await serving(unread), TOKEN, expected()).sync(backing, other)).rejects.toMatchObject({ status: "unsupported-scope" });
-    await expect(new V3ServiceClient(await serving({ ...good, selection: { ...good.selection, venue: b(26) } }), TOKEN, expected()).sync(backing, other))
-      .rejects.toThrow("wrong service package context");
-    expect([other.suppliedThrough(source), other.retained().snapshot(sha256(object))]).toEqual([0n, undefined]);
+    const unreadUrl = await serving(unread), wrongUrl = await serving({ ...good, selection: { ...good.selection, venue: b(26) } });
+    await expect(new V3ServiceClient(unreadUrl, TOKEN, expected()).sync(backing, other)).rejects.toMatchObject({ status: "unsupported-scope" });
+    await expect(new V3ServiceClient(wrongUrl, TOKEN, expected()).sync(backing, other)).rejects.toThrow("wrong service package context");
+    expect([other.suppliedThrough(source()), other.retained().snapshot(sha256(object))]).toEqual([0n, undefined]);
     for (const opened of [store, empty, other]) opened.close();
   });
 

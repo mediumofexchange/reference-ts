@@ -516,8 +516,9 @@ Each command that reads syncs the directory's Ergo view first, in bounded passes
 `syncing` event on stderr for each pass another follows. Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact
 retry and prints the saved result; a deadline is a witnessed index, absolute or `+n` from the read, and a saved
 demand prints its absolute deadline so a rerun can name it. Evidence comes from the operator's service, synced into
-the evidence file, or from `--package f`; where the service does not answer, a read uses the package the last sync
-kept and says so (`evidence: "kept"`), as a holder does in a gap. The first request or payment shows the request
+the evidence file, then, where it does not answer, from each replica added (below); or from `--package f`. Where no
+source answers, a read uses the package the last sync kept. Each read says where its evidence came from (`evidence`:
+`served`, `replica` with its URL, `kept`, `file` or `saved`) and names the sources it passed over (`skipped`). The first request or payment shows the request
 channel, thin-interval and publication-funding explanations; each demand and `freshen` says what its tags link.
 Output, refusals and exit codes follow the M10b decision (one JSON object on stdout; refusals exit 1, usage 2,
 unexpected failures 3 with their stack).
@@ -563,6 +564,24 @@ which backing the spend moves in a multi-backing scope. To part them, `sync` wit
 front (Node's `socks5:` support is experimental and writes a warning to the stderr agents read). The onion listener's
 sixteen connections are open to anyone who knows the name: Tor's `HiddenServicePoWDefensesEnabled` and
 `HiddenServiceMaxStreams` are the operator's levers against a client that holds them.
+
+### Replicas
+
+A replica keeps a backing's evidence where the operator is not ([M12b decision](../decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b)). Any reader directory becomes one
+with `moe reader serve --dir <r> [--port <p>] [--onion <host>] [--poll-ms <ms>]`: each round it syncs its kept backings
+from its own sources, reads each frontier as `supply` does (proofs verified), and serves the selection its read found
+canonical, with no credential, from what `evidence.db` holds, so it keeps serving while the operator is down and across
+its own restarts. It writes `replica.json` (its URL; with `--onion` the name Tor serves for its port) and prints one line
+once listening, one per backing whose served sequence moved or whose read was not served, and one once stopped; a
+round's refusal is a `refused` event on stderr. It holds the directory's lock while it runs, so terms and replicas are
+added with it stopped. A holder or reader keeps replicas with `replica add <backing> <url>` (a loopback or v3 onion URL, no
+token; added again, nothing changes) and reads them in the order added when the operator's service does not answer,
+refuses or sends evidence that does not frame, or when it keeps none (where no replica answers, the operator's refusal
+stands): a reader of replicas alone needs no `service add`. A replica that does not answer, refuses or sends
+evidence that does not frame or assemble is passed over; the holder's own proxy missing still refuses as `PROXY`.
+Evidence is public, so a replica sees only which backing a connection syncs and when, as the operator does; it sees no
+submission. A replica the holder lists that withholds while the operator is down leaves reads unresolved until the
+operator answers again or the holder lists another (Limits in the decision).
 
 ## Acceptance and remaining work
 

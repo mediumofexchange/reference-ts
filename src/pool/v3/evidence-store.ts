@@ -44,6 +44,8 @@ import { EvidenceRefusal } from "./refusals.js";
 import { FileInUse } from "./replay-store.js";
 import type { TrailSink } from "./trail.js";
 
+/** What one served package part holds before it is sent: a bound on the memory serving takes, not on what is served. */
+export const SERVED_PART_ITEMS = 1024, SERVED_PART_BYTES = 1_048_576;
 /** A whole item's local per-object budget; a trail is bounded per record instead. */
 export const MAX_ITEM_BYTES = 1_048_576n;
 /** The bytes one batch may take by default: a party's storage quota, never a protocol bound. A file is
@@ -169,11 +171,26 @@ const IDENTITY_SCHEMA = `CREATE TABLE IF NOT EXISTS evidence_identity (id INTEGE
 const CONSTRUCTION_SCHEMA = `CREATE TABLE IF NOT EXISTS evidence_construction (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
   INSERT OR IGNORE INTO evidence_construction SELECT 1, 'moe/pool/v3' WHERE EXISTS (SELECT 1 FROM chain) OR EXISTS (SELECT 1 FROM object)
     OR EXISTS (SELECT 1 FROM segment_head);`;
+/** A replica's served index (slice 12 M12b), beside layout 4's tables, made when a file is first opened `shared`: each
+ * directory and snapshot kept from an operator's evidence, and each kept trail's top, with the sequence of the replica's
+ * first served selection of that operator taken after it was kept (null until one is). The replica assigns the
+ * sequences itself, when its own read of a selection is final, so no supplier's statement sets one. `served_selection`
+ * holds each backing's served read, `served_operator` the highest selection served per operator. `served` reads them. */
+const SERVED_SCHEMA = `CREATE TABLE IF NOT EXISTS served_object (operator BLOB, kind INTEGER, hash BLOB, sequence INTEGER,
+    PRIMARY KEY(operator, kind, hash)) WITHOUT ROWID;
+  CREATE INDEX IF NOT EXISTS served_object_sequence ON served_object(operator, sequence, kind, hash);
+  CREATE TABLE IF NOT EXISTS served_top (operator BLOB, segment BLOB, evidence BLOB, position INTEGER NOT NULL, sequence INTEGER,
+    PRIMARY KEY(operator, segment, evidence)) WITHOUT ROWID;
+  CREATE INDEX IF NOT EXISTS served_top_sequence ON served_top(operator, segment, sequence, position);
+  CREATE TABLE IF NOT EXISTS served_selection (backing BLOB PRIMARY KEY, package BLOB NOT NULL) WITHOUT ROWID;
+  CREATE TABLE IF NOT EXISTS served_operator (operator BLOB PRIMARY KEY, sequence INTEGER NOT NULL) WITHOUT ROWID;`;
 /** Lineage rows kept: a kept walk whose mark is older is resumed no more, and its next read judges every checkpoint once. */
 const LINEAGE_KEPT = 65_536n;
 
 /** A kept position a trail is assembled after: its chain value and the frame bytes of its records. */
 interface Base { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array; readonly size: bigint }
+/** A trail's row sink, and the furthest position it kept. */
+type KeptRows = TrailSink & { top(): TrailTip | undefined };
 
 export class EvidenceStore {
   /** The construction whose frames its packages and trails are read by (slice 14 M14d); a party's file records it. */
@@ -182,6 +199,8 @@ export class EvidenceStore {
   readonly #q: Record<string, StatementSync>;
   readonly #quota: bigint;
   readonly #hosted: boolean;
+  /** Whether what it takes is indexed for serving: a file a replica opened `shared` once (M12b). */
+  readonly #indexed: boolean;
   readonly #identity: Uint8Array | undefined;
   #busy = false;
   #savepoints = 0;
@@ -193,7 +212,10 @@ export class EvidenceStore {
    * A host's open connection (one that reads integers as BigInt) places the store in the host's database
    * instead, as an operator's journal does (store.ts): the host owns durability and closing, its layout names
    * this one, and what the host keeps of its own (`keep`, `keepHead`, `append`) joins the host's open transaction. */
-  constructor(source: string | DatabaseSync = ":memory:", options: { readonly maxBatchBytes?: bigint; readonly construction?: Construction } = {}) {
+  constructor(source: string | DatabaseSync = ":memory:", options: { readonly maxBatchBytes?: bigint; readonly construction?: Construction;
+    /** A file read by `served` streams on connections of their own while this one takes (a replica, M12b): WAL, so each
+     * stream reads one committed state and no take waits for a stream. Other parties keep the rollback journal. */
+    readonly shared?: boolean } = {}) {
     this.construction = options.construction ?? POOL_V3 as Construction;
     const quota = options.maxBatchBytes ?? (source === ":memory:" ? EVIDENCE_QUOTA.memory : EVIDENCE_QUOTA.file);
     if (typeof quota !== "bigint" || quota < 0n) throw new TypeError("invalid evidence quota");
@@ -207,7 +229,7 @@ export class EvidenceStore {
       this.#db = new DatabaseSync(source, { readBigInts: true }); this.#hosted = false;
       // A file that is no database, or that another connection holds, leaves no handle open on it.
       try {
-        this.#db.exec("PRAGMA journal_mode=TRUNCATE; PRAGMA synchronous=FULL;");
+        this.#db.exec(`PRAGMA journal_mode=${options.shared === true ? "WAL" : "TRUNCATE"}; PRAGMA synchronous=FULL;`);
         const version = (this.#db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
         if (version === 0n) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
         else if (version !== BigInt(SCHEMA_VERSION)) throw new TypeError("the evidence file has another layout");
@@ -234,6 +256,11 @@ export class EvidenceStore {
       this.#db.prepare("INSERT OR IGNORE INTO evidence_identity VALUES (1, ?)").run(randomBytes(16));
       this.#identity = new Uint8Array((this.#db.prepare("SELECT value FROM evidence_identity WHERE id = 1").get() as { value: Uint8Array }).value);
     }
+    // A replica's index, made when its file is first opened `shared`; from then on every open of that file indexes what it
+    // takes. A file kept before holds unindexed evidence: its suppliers' marks are cleared once, so each next sync is whole.
+    const indexed = !this.#hosted && this.#db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'served_object'").get() !== undefined;
+    if (!this.#hosted && !indexed && options.shared === true) this.#db.exec(`BEGIN; ${SERVED_SCHEMA}; DELETE FROM supplier; COMMIT;`);
+    this.#indexed = indexed || (!this.#hosted && options.shared === true);
     this.#q = Object.fromEntries(Object.entries({
       batch: "INSERT INTO batch VALUES (NULL) RETURNING id",
       item: "INSERT INTO item VALUES (?, ?, ?, ?)",
@@ -259,10 +286,135 @@ export class EvidenceStore {
       at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
       supplied: "SELECT sequence FROM supplier WHERE source = ?",
       supply: "INSERT INTO supplier VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET sequence = excluded.sequence",
+      ...(this.#indexed ? {
+        // An indexed object keeps the sequence it was first served under; a chain value fixes its position (§7).
+        indexObject: "INSERT OR IGNORE INTO served_object VALUES (?, ?, ?, NULL)",
+        indexTop: "INSERT OR IGNORE INTO served_top VALUES (?, ?, ?, ?, NULL)",
+      } : {}),
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
   }
 
   close(): void { if (!this.#hosted && this.#db.isOpen) this.#db.close(); }
+
+  /**
+   * A replica's served read for `backing` (M12b): from now on it serves the selection of `operator` at `sequence`, whose
+   * own package (configuration and commitment) is `ownPackage`. Where `sequence` is above every selection of that
+   * operator served before, every object and trail top of its evidence kept since is indexed under it in the same
+   * transaction, so a reader served through an earlier selection of this replica is served all of them after it; at the
+   * highest one served already, the backing's selection moves and what is pending waits for a higher one; below it,
+   * nothing is kept (false). The caller's own read of that selection was final over what the file holds. Kept in the
+   * file whose index serves it, so a file lost or restored from a copy loses or restores both.
+   */
+  keepSelection(backing: Uint8Array, ownPackage: Uint8Array, operator: Uint8Array, sequence: bigint): boolean {
+    if (!this.#indexed) throw new TypeError("a replica's evidence file is opened shared");
+    if (this.#busy) throw new Error("an import is already open on this store");
+    if (typeof sequence !== "bigint" || sequence < 1n || sequence >= 1n << 63n || !(operator instanceof Uint8Array) || operator.length !== 32) {
+      throw new TypeError("invalid served selection");
+    }
+    const by = copyBytes(operator);
+    return this.#transaction(() => {
+      const highest = (this.#db.prepare("SELECT sequence FROM served_operator WHERE operator = ?").get(by) as { sequence: bigint } | undefined)?.sequence;
+      if (highest !== undefined && sequence < highest) return false;
+      if (highest === undefined || sequence > highest) {
+        this.#db.prepare("UPDATE served_object SET sequence = ? WHERE operator = ? AND sequence IS NULL").run(sequence, by);
+        this.#db.prepare("UPDATE served_top SET sequence = ? WHERE operator = ? AND sequence IS NULL").run(sequence, by);
+        this.#db.prepare("INSERT INTO served_operator VALUES (?, ?) ON CONFLICT(operator) DO UPDATE SET sequence = excluded.sequence").run(by, sequence);
+      }
+      this.#db.prepare("INSERT INTO served_selection VALUES (?, ?) ON CONFLICT(backing) DO UPDATE SET package = excluded.package")
+        .run(copyBytes(backing), copyBytes(ownPackage));
+      return true;
+    });
+  }
+  /** The served reads `keepSelection` kept. */
+  selections(): { readonly backing: Uint8Array; readonly package: Uint8Array }[] {
+    if (!this.#indexed) return [];
+    return (this.#db.prepare("SELECT backing, package FROM served_selection ORDER BY backing").all() as { backing: Uint8Array; package: Uint8Array }[])
+      .map(row => ({ backing: bytes(row.backing), package: bytes(row.package) }));
+  }
+
+  /**
+   * What a replica's file serves a reader served through `after`, one of its own earlier selections of `operator`, for
+   * the selection at `through` (slice 12 M12b): every directory and snapshot indexed after `after` through `through`, in
+   * §12 packages of the journal's part bounds; then each trail top so indexed that no other served top reaches, as its
+   * head and the records after the furthest top indexed at or below `after` where the trail passes through it, else
+   * whole, and none where that top already reaches it. Every top is served, not the furthest of a segment alone, so a
+   * longer fork a supplier sent never displaces the trail the replica's read used. A reader's mark above every selection
+   * this file served came from a file it no longer is (lost, or restored from a copy): it is served from nothing. Storage
+   * damage ends the stream short of its end mark, so the reader keeps its mark and reads elsewhere.
+   *
+   * Read on a connection of its own in one read transaction, opened when the first part is asked for and closed when
+   * the parts end or are abandoned, so a take on the party's connection neither shows through nor waits (`shared`).
+   */
+  static async *served(path: string, construction: Construction, operator: Uint8Array, through: bigint, after: bigint): AsyncIterable<EvidencePart> {
+    if (typeof through !== "bigint" || typeof after !== "bigint" || through < 1n || through >= 1n << 63n || after < 0n || after >= 1n << 64n ||
+        !(operator instanceof Uint8Array) || operator.length !== 32) {
+      throw new TypeError("invalid served sequence");
+    }
+    const by = copyBytes(operator);
+    const db = new DatabaseSync(path, { readBigInts: true, readOnly: true });
+    try {
+      db.exec("BEGIN");
+      const highest = (db.prepare("SELECT sequence FROM served_operator WHERE operator = ?").get(by) as { sequence: bigint } | undefined)?.sequence ?? 0n;
+      const from = after <= through ? after : after <= highest ? through : 0n;
+      const q = Object.fromEntries(Object.entries({
+        object: "SELECT payload FROM object WHERE kind = ? AND hash = ?",
+        head: "SELECT header FROM segment_head WHERE segment = ?",
+        headTerm: "SELECT terms, signature FROM segment_terms WHERE segment = ? AND i = ?",
+        step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
+        entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
+        at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
+      }).map(([name, sql]) => [name, db.prepare(sql)]));
+      const evidence = new EvidenceBatch(construction, db, q, 0n, 0n);
+      const batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
+      let held = 0;
+      const packed = (): EvidencePart => {
+        const items = [...batch.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash));
+        batch.clear(); held = 0;
+        return { package: construction.reader.package.encodeEvidencePackage(items) };
+      };
+      // In (sequence, kind, hash) order from a mark no row at `from` passes (kinds are below 9).
+      const page = db.prepare(`SELECT sequence, kind, hash FROM served_object WHERE operator = ? AND (sequence, kind, hash) > (?, ?, ?) AND sequence <= ?
+        ORDER BY sequence, kind, hash LIMIT 256`);
+      for (let mark: [bigint, bigint, Uint8Array] = [from, 9n, new Uint8Array()]; ;) {
+        const rows = page.all(by, ...mark, through) as { sequence: bigint; kind: bigint; hash: Uint8Array }[];
+        if (rows.length === 0) break;
+        for (const row of rows) {
+          mark = [row.sequence, row.kind, bytes(row.hash)];
+          const kind = row.kind === 3n ? 3 : 4, payload = evidence.object(kind, mark[2]);
+          // Damage ends the stream short of its end mark, so the reader keeps its mark and asks another source.
+          if (payload === undefined) throw new EvidenceRefusal("unresolved-evidence");
+          batch.set(`${kind}:${bytesToHex(mark[2])}`, { kind, payload, hash: mark[2] }); held += payload.length;
+          if (batch.size >= SERVED_PART_ITEMS || held >= SERVED_PART_BYTES) yield packed();
+        }
+      }
+      if (batch.size > 0) yield packed();
+      // Each segment's tops indexed in range, furthest first; one that a served top or the reader's base reaches is left out.
+      const tops = db.prepare(`SELECT segment, evidence, position FROM served_top WHERE operator = ? AND sequence > ? AND sequence <= ?
+        ORDER BY segment, position DESC`).all(by, from, through) as { segment: Uint8Array; evidence: Uint8Array; position: bigint }[];
+      const below = db.prepare("SELECT evidence, position FROM served_top WHERE operator = ? AND segment = ? AND sequence <= ? ORDER BY position DESC LIMIT 1");
+      const reached = async (trails: readonly StoredTrail[], position: bigint, value: Uint8Array): Promise<boolean> => {
+        for (const held of trails) if (held.length >= position && await held.reaches(position, value) !== undefined) return true;
+        return false;
+      };
+      let segment: Uint8Array | undefined, served: StoredTrail[] = [], base: TrailTip | undefined, baseTrail: StoredTrail | undefined;
+      for (const row of tops) {
+        if (segment === undefined || !same(segment, bytes(row.segment))) {
+          segment = bytes(row.segment); served = [];
+          const held = from === 0n ? undefined : below.get(by, segment, from) as { evidence: Uint8Array; position: bigint } | undefined;
+          base = held === undefined ? undefined : { segment, position: held.position, evidence: bytes(held.evidence) };
+          baseTrail = base === undefined ? undefined : evidence.trail(segment, base.evidence);
+        }
+        const value = bytes(row.evidence), trail = evidence.trail(segment, value);
+        if (trail === undefined || trail.length !== row.position) throw new EvidenceRefusal("unresolved-evidence");
+        // A reader served through `from` holds a top its base's trail passes through.
+        if (await reached([...served, ...(baseTrail === undefined ? [] : [baseTrail])], trail.length, value)) continue;
+        served.push(trail);
+        const part = (base === undefined ? undefined : await trailPart(trail, base, construction)) ?? await trailPart(trail, undefined, construction);
+        if (part !== undefined) yield part;
+      }
+      db.exec("COMMIT");
+    } finally { db.close(); }
+  }
 
   /** The retained evidence alone, as a read uses it, with no package of its own. */
   retained(): EvidenceBatch { return this.#batch(); }
@@ -313,12 +465,12 @@ export class EvidenceStore {
    * PackageLimitError for a whole item past its budget or a batch past the quota, keeping nothing. */
   importBytes(input: Uint8Array): EvidenceBatch { return this.#importBytes(input, 0n); }
 
-  /** `importBytes`, its batch charged from `spent` on. */
-  #importBytes(input: Uint8Array, spent: bigint): EvidenceBatch {
+  /** `importBytes`, its batch charged from `spent` on; each kept directory and snapshot tagged with `tag`, where given. */
+  #importBytes(input: Uint8Array, spent: bigint, tag?: Uint8Array): EvidenceBatch {
     // The size is known, so the count and each length are checked against it before any payload.
     const own = copyUnshared(input);
     return this.#transaction(() => {
-      const batch = this.#batch(spent), feed = new FrameFeed(this.construction.reader.package.packageReader(this.#sink(batch), { maxItemBytes: MAX_ITEM_BYTES, total: BigInt(own.length) }));
+      const batch = this.#batch(spent), feed = new FrameFeed(this.construction.reader.package.packageReader(this.#sink(batch, tag), { maxItemBytes: MAX_ITEM_BYTES, total: BigInt(own.length) }));
       feed.feed(own); feed.end();
       return batch;
     });
@@ -363,9 +515,10 @@ export class EvidenceStore {
     return (await this.#importTrail(source, options, 0n)).kept;
   }
 
-  /** `importTrail`, its batch charged from `spent` on; resolves what it kept and the charge it reached. */
+  /** `importTrail`, its batch charged from `spent` on, its top tagged with `tag` where given and kept; resolves what it
+   * kept and the charge it reached. */
   async #importTrail(source: Uint8Array | Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
-    options: { readonly after?: TrailTip | undefined; readonly size?: bigint | undefined }, spent: bigint): Promise<{ kept: boolean; charged: bigint }> {
+    options: { readonly after?: TrailTip | undefined; readonly size?: bigint | undefined }, spent: bigint, tag?: Uint8Array): Promise<{ kept: boolean; charged: bigint }> {
     const streamed = !(source instanceof Uint8Array), own = streamed ? undefined : copyUnshared(source);
     const size = own === undefined ? options.size : BigInt(own.length);
     if (typeof size !== "bigint" || size < 0n) throw new TypeError("a streamed trail states its byte length");
@@ -383,7 +536,7 @@ export class EvidenceStore {
       }
       const batch = this.#batch(spent);
       batch.charge(ITEM_ROW_BYTES, PackageLimitError);
-      const receiver = this.#trail(batch, size, base);
+      const receiver = this.#trail(batch, size, base, tag);
       if (own !== undefined) receiver.data(own);
       else for await (const chunk of source as AsyncIterable<Uint8Array>) receiver.data(chunk);
       receiver.end(new Uint8Array(32));
@@ -396,18 +549,24 @@ export class EvidenceStore {
    * dropped at once, and a trail as `importTrail` assembles it. Resolves false where some trail was not kept;
    * the other parts stay, since each is authenticated only when a read uses it. The party's quota bounds
    * all the parts together as it bounds one package, rows charged as well as bytes: a part whose stated size
-   * does not fit what is left is refused before it is read, and one whose rows pass it while being kept. */
-  async take(parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>): Promise<boolean> {
+   * does not fit what is left is refused before it is read, and one whose rows pass it while being kept.
+   *
+   * `operator`, where given, is the operator whose evidence the parts are: a replica's file indexes each kept directory,
+   * snapshot and trail top under it, in the transaction that keeps it, for its next served selection (`keepSelection`).
+   * Other files ignore it. */
+  async take(parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>, operator?: Uint8Array): Promise<boolean> {
+    if (operator !== undefined && (!(operator instanceof Uint8Array) || operator.length !== 32)) throw new TypeError("invalid operator");
+    const own = operator === undefined || !this.#indexed ? undefined : copyBytes(operator);
     let kept = true, charged = 0n;
     for await (const part of parts) {
       if (charged + ("package" in part ? BigInt(part.package.length) : part.trail.size) > this.#quota) {
         throw new PackageLimitError("the reader's evidence quota is exhausted");
       }
       if ("package" in part) {
-        const batch = this.#importBytes(part.package, charged);
+        const batch = this.#importBytes(part.package, charged, own);
         charged = batch.charged; batch.release();
       } else {
-        const trail = await this.#importTrail(part.trail.chunks, { after: part.trail.after, size: part.trail.size }, charged);
+        const trail = await this.#importTrail(part.trail.chunks, { after: part.trail.after, size: part.trail.size }, charged, own);
         charged = trail.charged; if (!trail.kept) kept = false;
       }
     }
@@ -456,7 +615,7 @@ export class EvidenceStore {
     } };
   }
 
-  #sink(batch: EvidenceBatch): PackageSink {
+  #sink(batch: EvidenceBatch, tag?: Uint8Array): PackageSink {
     let seq = 0;
     return {
       stream: (kind, length): PayloadSink | undefined => {
@@ -464,7 +623,7 @@ export class EvidenceStore {
         batch.charge(ITEM_ROW_BYTES, PackageLimitError);
         if (kind !== 6) return undefined;
         this.#q.item!.run(batch.id, seq++, 6, null);
-        return this.#trail(batch, length, undefined);
+        return this.#trail(batch, length, undefined, tag);
       },
       item: (kind, payload, hash) => {
         batch.charge(BigInt(payload.length), PackageLimitError);
@@ -475,23 +634,27 @@ export class EvidenceStore {
           try { decodeEvidenceDirectory(payload); } catch (error) { if (!(error instanceof EncodingError)) throw error; return; }
         }
         // A copy supplied again replaces the kept one, so evidence damaged in storage is repaired by resupply.
-        if (kind === 3 || kind === 4) this.#q.keep!.run(kind, hash, payload);
+        if (kind === 3 || kind === 4) {
+          this.#q.keep!.run(kind, hash, payload);
+          if (tag !== undefined) this.#q.indexObject!.run(tag, kind, hash);
+        }
       },
     };
   }
 
   /** One trail's rows inside its own savepoint: a trail that does not frame (§10.1) is no evidence and leaves none. */
-  #trail(batch: EvidenceBatch, length: bigint, base: Base | undefined): PayloadSink & { kept(): boolean } {
+  #trail(batch: EvidenceBatch, length: bigint, base: Base | undefined, tag?: Uint8Array): PayloadSink & { kept(): boolean } {
     const name = `trail_${this.#savepoints++}`;
     this.#db.exec(`SAVEPOINT ${name}`);
-    let feed: FrameFeed<void> | undefined, kept = false;
+    let feed: FrameFeed<void> | undefined, kept = false, rows: KeptRows | undefined;
     const drop = (error: unknown): void => {
       if (!(error instanceof EncodingError)) throw error;
       feed = undefined;
       this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
     };
     try {
-      feed = new FrameFeed(this.construction.reader.trail.trailReader(this.#rows(batch, base), length + (base?.size ?? 0n),
+      rows = this.#rows(batch, base);
+      feed = new FrameFeed(this.construction.reader.trail.trailReader(rows, length + (base?.size ?? 0n),
         base === undefined ? {} : { retained: { events: base.position, bytes: base.size } }));
     } catch (error) { drop(error); }
     return {
@@ -504,6 +667,8 @@ export class EvidenceStore {
         // A savepoint dropped at the start or midway is already released.
         if (feed === undefined) return;
         try { feed.end(); } catch (error) { drop(error); return; }
+        const top = rows?.top();
+        if (tag !== undefined && top !== undefined) this.#q.indexTop!.run(tag, top.segment, top.evidence, top.position);
         this.#db.exec(`RELEASE ${name}`);
         kept = true;
       },
@@ -514,11 +679,13 @@ export class EvidenceStore {
   /** A trail's rows. The evidence chain runs over the longest prefix whose records give their digests (pool-v3 §5:
    * those that decode; lit-v1 §6: those that split); only that prefix can serve a checkpoint (§12.1), so later
    * records are not kept. */
-  #rows(batch: EvidenceBatch, base: Base | undefined): TrailSink {
+  #rows(batch: EvidenceBatch, base: Base | undefined): KeptRows {
     const q = this.#q, construction = this.construction;
     let segment: Uint8Array | undefined, entries: readonly SegmentEntry[] = [];
-    let chain: Uint8Array | undefined, size = base?.size ?? 0n;
+    let chain: Uint8Array | undefined, size = base?.size ?? 0n, top: TrailTip | undefined = base;
     return {
+      /** The furthest position kept, where the frame ended whole. */
+      top: () => top,
       header: header => {
         segment = sha256(header);
         // The recurrence continues only within its own segment, whose seed began the kept chain.
@@ -527,6 +694,8 @@ export class EvidenceStore {
         entries = construction.reader.header.decodeSegmentHeader(header).entries;
         q.putHead!.run(segment, header);
         chain = base?.evidence ?? construction.genesisEvidence(segment);
+        // A head alone serves a snapshot at the seed.
+        top ??= { segment, position: 0n, evidence: chain };
       },
       terms: (i, terms, signature) => { this.#keepTerms(segment!, entries, i, terms, signature); },
       count: () => {},
@@ -545,6 +714,7 @@ export class EvidenceStore {
         // The chain value fixes every record through its position, so a kept row under it holds these bytes
         // unless storage damaged it; the supplied copy repairs it.
         q.record!.run(chain, segment!, previous, position, size, record);
+        top = { segment: segment!, position, evidence: chain };
       },
     };
   }

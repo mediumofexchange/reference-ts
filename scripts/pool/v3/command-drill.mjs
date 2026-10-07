@@ -347,7 +347,9 @@ try {
     const offline = await ok(["reader", "supply", ...reader, backing, "--package", packageFile, "--verifiers", "1"]);
     // Live, blocks arrive after serve stopped: the package file is read at the later index, to the same answer.
     const index = LIVE ? { judgingIndex: undefined } : {};
-    assert.deepEqual({ ...offline, sync: undefined, ...index }, { ...viaService, sync: undefined, ...index });
+    // Each read names its source (M12b): the file, and the service before it.
+    assert.deepEqual([offline.evidence, viaService.evidence], ["file", "served"]);
+    assert.deepEqual({ ...offline, sync: undefined, evidence: undefined, ...index }, { ...viaService, sync: undefined, evidence: undefined, ...index });
     assert(BigInt(offline.judgingIndex) >= BigInt(viaService.judgingIndex));
     assert.equal((await moe(["reader", "supply", ...reader, backing, "--verifiers", "7"])).status, 2);
   });
