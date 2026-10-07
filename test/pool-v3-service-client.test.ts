@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer, type RequestListener, type Server } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -199,6 +199,26 @@ describe("bounded v3 local service client", () => {
     await expect(new V3ServiceClient(error, TOKEN, expected()).package(backing)).rejects.toMatchObject({ code: "UNAVAILABLE", status: 503 });
     const refused = await endpoint((_, response) => { response.writeHead(409, { "content-type": "application/json" }); response.end(JSON.stringify({ code: "FENCED" })); });
     await expect(new V3ServiceClient(refused, TOKEN, expected()).package(backing)).rejects.toMatchObject({ code: "FENCED", status: 409 });
+  });
+
+  it("stops waiting on a source that drips evidence below the minimum rate, as a source that did not answer", async () => {
+    // A valid selection, then a trail of a terabyte, one byte at a time: each byte comes within the stall bound, and
+    // the clock moves three seconds per byte, so the waits pass fifteen seconds.
+    const head: Uint8Array[] = [];
+    for await (const chunk of servedFrames({ ...served(), parts: [{ trail: { size: 1n << 40n, chunks: [] } }] })) {
+      head.push(chunk);
+      if (head.length === 2) break;
+    }
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const url = await endpoint((request, response) => {
+        request.resume(); response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
+        for (const chunk of head) response.write(chunk);
+        const tick = setInterval(() => { vi.setSystemTime(Date.now() + 3_000); response.write(Uint8Array.of(0x70)); }, 5);
+        response.once("close", () => clearInterval(tick));
+      });
+      await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toMatchObject({ name: "TimeoutError" });
+    } finally { vi.useRealTimers(); }
   });
 
   it("aborts a real server that stalls after response headers", async () => {

@@ -5,7 +5,7 @@ import { POOL_V3, type Construction, type OperatorReceipt } from "./construction
 import { EVIDENCE_QUOTA, wholePackage, type EvidenceStore } from "./evidence-store.js";
 import { referenceVenue, type VenueReference } from "./guard.js";
 import { PackageLimitError } from "./package.js";
-import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, V3_SERVICE_PROFILE,
+import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, servedTooSlow, V3_SERVICE_PROFILE,
   MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES, type V3ServiceCommand } from "./service-wire.js";
 import type { ServedPackage } from "./store.js";
 
@@ -218,12 +218,17 @@ export class V3ServiceClient {
     take: Parameters<typeof readServed<T>>[1]): Promise<{ readonly served: ServedPackage; readonly taken: T }> {
     if (typeof maxBytes !== "bigint" || maxBytes < 0n) throw new TypeError("invalid evidence budget");
     return this.exchange(`/evidence?backing=${hex(backing)}&after=${after}`, this.#walletToken, undefined, "application/octet-stream", (response, progress) => {
+      // Each chunk restarts the bound on a stall; the time spent waiting for chunks bounds a drip, as the server bounds
+      // its peers. A source slower than that did not answer.
       const bounded = async function* (): AsyncIterable<Uint8Array> {
-        let total = 0n;
+        let total = 0n, waited = 0, asked = Date.now();
         for await (const chunk of chunksOf(response)) {
+          waited += Date.now() - asked;
           progress(); total += BigInt(chunk.length);
           if (total > maxBytes) throw new PackageLimitError("served evidence exceeds the reader's budget");
+          if (servedTooSlow(waited, Number(total))) throw new DOMException("the source served evidence below the minimum rate", "TimeoutError");
           yield chunk;
+          asked = Date.now();
         }
       };
       return readServed(bounded(), (served, parts) => {

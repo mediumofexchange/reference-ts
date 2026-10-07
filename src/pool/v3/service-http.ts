@@ -5,7 +5,7 @@ import { hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { V3OperatorJournal, V3StoreError, type ServedEvidence } from "./store.js";
 import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
-  parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, servedFrames } from "./service-wire.js";
+  parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, servedFrames, servedTooSlow } from "./service-wire.js";
 
 /** Without an admin credential the service is a holders' listener (M12a): submission and evidence only, for an onion
  * service's port, so the operator's own commands never face the network that reaches it. */
@@ -39,8 +39,8 @@ function failure(error: unknown): { status: number; code: string } {
   return { status: 503, code: "UNAVAILABLE" };
 }
 
-/** Evidence streams served at once, of the sixteen connections; and the slowest peer a stream waits for. */
-const MAX_EVIDENCE_STREAMS = 8, MIN_EVIDENCE_BYTES_PER_MS = 64;
+/** Evidence streams served at once, of the sixteen connections. */
+const MAX_EVIDENCE_STREAMS = 8;
 
 /** What serves evidence by the one wire: an operator's journal, or a replica's kept evidence (M12b). `after` is a
  * sequence of the operator's; a source that holds no selection for the backing refuses as the journal does. */
@@ -90,17 +90,22 @@ function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { coun
       response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
       // The parts are read from rows as the peer takes them. A failure after the headers ends the
       // connection short of the stream's end mark, which a receiver refuses; the server's owner is told
-      // by an "evidenceError" event. A peer slower than the minimum rate is cut off.
-      const started = Date.now(); let sent = 0;
+      // by an "evidenceError" event. A peer slower than the minimum rate is cut off: only the time its writes wait for
+      // the peer counts, never the time the source takes to read its rows.
+      let sent = 0, waited = 0;
       try {
         for await (const chunk of servedFrames(served)) {
           if (response.destroyed) return;
-          if (!response.write(chunk)) await new Promise<void>(resolve => {
-            const done = (): void => { response.off("drain", done); response.off("close", done); resolve(); };
-            response.once("drain", done); response.once("close", done);
-          });
+          if (!response.write(chunk)) {
+            const asked = Date.now();
+            await new Promise<void>(resolve => {
+              const done = (): void => { response.off("drain", done); response.off("close", done); resolve(); };
+              response.once("drain", done); response.once("close", done);
+            });
+            waited += Date.now() - asked;
+          }
           sent += chunk.length;
-          if (Date.now() - started > 15_000 + sent / MIN_EVIDENCE_BYTES_PER_MS) { response.destroy(); return; }
+          if (servedTooSlow(waited, sent)) { response.destroy(); return; }
           timer.refresh();
         }
         response.end();

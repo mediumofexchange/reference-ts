@@ -987,7 +987,8 @@ export async function wholePackage(own: Uint8Array, parts: Iterable<EvidencePart
       if (part.trail.after !== undefined) throw new EncodingError("a whole package takes whole trails");
       const chunks: Uint8Array[] = [];
       for await (const chunk of part.trail.chunks) chunks.push(chunk);
-      add(6, concatBytes(...chunks));
+      // A source chooses how many chunks it sends: copied in one pass, never spread as arguments.
+      add(6, new Uint8Array(Buffer.concat(chunks)));
     }
   }
   return encodeEvidencePackage([...items.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash)));
