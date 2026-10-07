@@ -178,3 +178,35 @@ export function createV3EvidenceService(source: V3EvidenceSource): Server {
   });
   return bounded(server);
 }
+
+/** A relay's refusal of a publication file: the status and code its listener answers. */
+export interface RelayRefusal { readonly status: number; readonly code: string }
+/**
+ * A relay's listener (slice 12 M12c): `POST /publications` alone, on a loopback port, under the relay's one credential
+ * (never per holder: one per holder would link that holder's acts, which a third party's relay exists to part from
+ * its funding). `take` judges the publication file and publishes it, answering its reply; it is told whether the
+ * request is gone (its connection closed or timed out), so work queued for nobody spends nothing. `refused` names a thrown
+ * refusal's status and code, and anything else is `UNAVAILABLE`, told to the owner by a "relayError" event. Behind an
+ * onion service every peer is the loopback Tor daemon. The listener's bounds are the operator's and the replica's.
+ */
+export function createRelayService(token: string, take: (file: unknown, gone: () => boolean) => Promise<object>,
+  refused: (error: unknown) => RelayRefusal | undefined): Server {
+  if (typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) throw new EncodingError("a 32-byte credential required");
+  const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
+    const { send } = exchange(response);
+    if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) { request.resume(); send(403, { code: "LOCAL_ONLY" }); return; }
+    const count = request.rawHeaders.filter((header, i) => i % 2 === 0 && header.toLowerCase() === "authorization").length;
+    if (count !== 1 || !matches(request.headers.authorization, token)) { request.resume(); send(401, { code: "UNAUTHORIZED" }); return; }
+    try {
+      if (request.method !== "POST" || request.url !== "/publications") { request.resume(); send(404, { code: "NOT_FOUND" }); return; }
+      send(200, await take(await readBody(request), () => response.destroyed || response.writableEnded));
+    } catch (error) {
+      request.resume();
+      const known = error instanceof EncodingError ? { status: 400, code: "INVALID" } : refused(error);
+      if (known === undefined) server.emit("relayError", error);
+      const rejected = known ?? { status: 503, code: "UNAVAILABLE" };
+      send(rejected.status, { code: rejected.code });
+    }
+  });
+  return bounded(server);
+}
