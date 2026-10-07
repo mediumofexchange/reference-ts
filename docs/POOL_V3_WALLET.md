@@ -517,7 +517,10 @@ Each command that reads syncs the directory's Ergo view first, in bounded passes
 retry and prints the saved result; a deadline is a witnessed index, absolute or `+n` from the read, and a saved
 demand prints its absolute deadline so a rerun can name it. Evidence comes from the operator's service, synced into
 the evidence file, then, where it does not answer, from each replica added (below); or from `--package f`. Where no
-source answers, a read uses the package the last sync kept. Each read says where its evidence came from (`evidence`:
+source answers, a read uses the package the last sync kept. A read left `unresolved-evidence` over a source's answer
+syncs that source again from nothing and reads again; where that read is still unresolved, the source is passed over
+as `UNRESOLVED` and the next is asked from nothing, so a source that sent its selection but withheld an earlier
+dependency cannot strand the wallet past its mark ([decision](../decisions/2026-10.md#2026-10-07--repair-a-read-a-source-left-unresolved-from-nothing-then-from-the-next-source-slice-13-m13b-audit-30-au)). `reader supply`, `presentation` and a replica's rounds read the same way. Each read says where its evidence came from (`evidence`:
 `served`, `replica` with its URL, `kept`, `file` or `saved`) and names the sources it passed over (`skipped`). The first request or payment shows the request
 channel, thin-interval and publication-funding explanations; each demand and `freshen` says what its tags link, and each
 publication file what its relay's funding links.

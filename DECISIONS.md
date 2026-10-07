@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-07` [Repair a read a source left unresolved: from nothing, then from the next source (slice 13 M13b, audit 30 (au))](decisions/2026-10.md#2026-10-07--repair-a-read-a-source-left-unresolved-from-nothing-then-from-the-next-source-slice-13-m13b-audit-30-au)
 - `2026-10-07` [Pin a release's install to the tested tree with an install lock, and rebuild it byte-identically on two systems (slice 13 M13a)](decisions/2026-10.md#2026-10-07--pin-a-releases-install-to-the-tested-tree-with-an-install-lock-and-rebuild-it-byte-identically-on-two-systems-slice-13-m13a)
 - `2026-10-07` [Move a source's mark only past an answer that delivers its selection, and charge a stream's rate to the peer alone (audit, area 30)](decisions/2026-10.md#2026-10-07--move-a-sources-mark-only-past-an-answer-that-delivers-its-selection-and-charge-a-streams-rate-to-the-peer-alone-audit-area-30)
 - `2026-10-07` [Fund a holder's gap act through a third party's relay reached as an onion service, under one credential per relay (slice 12 M12c)](decisions/2026-10.md#2026-10-07--fund-a-holders-gap-act-through-a-third-partys-relay-reached-as-an-onion-service-under-one-credential-per-relay-slice-12-m12c)
