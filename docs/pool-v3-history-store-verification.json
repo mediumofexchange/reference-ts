@@ -34,83 +34,83 @@
       "kind": 1,
       "count": 37,
       "bytes": 14656,
-      "totalMs": 37005,
-      "maxMs": 1271
+      "totalMs": 37312,
+      "maxMs": 1285
     },
     {
       "kind": 2,
       "count": 39,
       "bytes": 14656,
-      "totalMs": 119357,
-      "maxMs": 3073
+      "totalMs": 121065,
+      "maxMs": 3169
     },
     {
       "kind": 4,
       "count": 2,
       "bytes": 14656,
-      "totalMs": 5154,
-      "maxMs": 2579
+      "totalMs": 5191,
+      "maxMs": 2598
     },
     {
       "kind": 6,
       "count": 1,
       "bytes": 14656,
-      "totalMs": 2578,
-      "maxMs": 2578
+      "totalMs": 2599,
+      "maxMs": 2599
     }
   ],
   "reads": {
     "payerFirstRead": {
       "statements": 37,
       "verified": 37,
-      "ms": 1506,
+      "ms": 1587,
       "fetchedBytes": 565631
     },
     "payerLaterReads": [
       {
         "verified": 12,
         "asked": 4,
-        "ms": 608,
+        "ms": 646,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 615,
+        "ms": 619,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 592,
+        "ms": 610,
         "fetchedBytes": 188545
       }
     ],
     "payerRestart": {
       "verified": 0,
       "asked": 0,
-      "ms": 61,
+      "ms": 63,
       "fetchedBytes": 809
     },
     "receiver": {
       "firstReadVerified": 73,
-      "firstReadMs": 2859,
+      "firstReadMs": 2926,
       "fulfilled": 36,
-      "fulfillMs": 1444
+      "fulfillMs": 1492
     },
     "payerAfterReturn": {
       "verified": 0,
       "asked": 4,
-      "ms": 113,
+      "ms": 120,
       "fetchedBytes": 48192
     },
     "restoredWallet": {
       "verified": 78,
-      "ms": 3307,
+      "ms": 3377,
       "fetchedBytes": 1205514
     },
     "journalAudit": {
-      "ms": 2011
+      "ms": 2067
     }
   },
   "readers": {
@@ -121,8 +121,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "823fb507ccd7191c767eb27660ab851996724bab96e3d7c0b1f33f9c94b473ac",
-        "history": "36700b8c29310d0a94db59fbdd72d272bbad23b96da108cc9f59e97053c1edc0",
+        "spentRoot": "8c1517873d2233d89fcfc19291543ed56b837c2276ee6560df2632d2c71817a2",
+        "history": "e9013c34962d3c668444fb8657e2e9f22b5a6a48489fb46c7be742da13bb7a61",
         "force": [],
         "clock": {
           "duration": "16",
@@ -135,9 +135,9 @@
       },
       "verified": 73,
       "instances": 2,
-      "readMs": 2339,
-      "maxRssBytes": 582033408,
-      "heapUsedBytes": 31579608,
+      "readMs": 2408,
+      "maxRssBytes": 550756352,
+      "heapUsedBytes": 33540192,
       "fetchedBytes": 1126772
     },
     "offline": {
@@ -147,8 +147,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "823fb507ccd7191c767eb27660ab851996724bab96e3d7c0b1f33f9c94b473ac",
-        "history": "36700b8c29310d0a94db59fbdd72d272bbad23b96da108cc9f59e97053c1edc0",
+        "spentRoot": "8c1517873d2233d89fcfc19291543ed56b837c2276ee6560df2632d2c71817a2",
+        "history": "e9013c34962d3c668444fb8657e2e9f22b5a6a48489fb46c7be742da13bb7a61",
         "force": [
           {
             "index": "23",
@@ -178,9 +178,9 @@
       },
       "verified": 3,
       "instances": 2,
-      "readMs": 378,
-      "maxRssBytes": 332845056,
-      "heapUsedBytes": 24336392,
+      "readMs": 382,
+      "maxRssBytes": 373739520,
+      "heapUsedBytes": 24426408,
       "fetchedBytes": 0
     },
     "kept": {
@@ -189,9 +189,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "3e084aefdf338428527acb5d35e1d35640276b2f1cbc6d91113d44aa08f5494e",
-        "spentRoot": "b9b78fd91feb8fb6eab05f38e7caf25103b0a011c015997d75408692b417ad6b",
-        "history": "9494d0ac684007e93063632a83df5afc40007fe6bfc3da8fbe5619bb480fd1d8",
+        "segment": "d49e5ae13898da382ac552610e70a56df680a2fba1401d85f1bf7a7dc4d1f5f0",
+        "spentRoot": "5849e4ac5de93f82f28adca2a4f1b761d141699f006355f2bcc96227385aa707",
+        "history": "9eb6e40da8bc494ef4bbcd1c12014f8171a3e18e278d1cfb81c6c028ac67b08f",
         "force": [
           {
             "index": "23",
@@ -221,9 +221,9 @@
       },
       "verified": 2,
       "instances": 2,
-      "readMs": 420,
-      "maxRssBytes": 379265024,
-      "heapUsedBytes": 25713104,
+      "readMs": 435,
+      "maxRssBytes": 379228160,
+      "heapUsedBytes": 24872744,
       "fetchedBytes": 79579
     },
     "scratch": {
@@ -232,9 +232,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "3e084aefdf338428527acb5d35e1d35640276b2f1cbc6d91113d44aa08f5494e",
-        "spentRoot": "b9b78fd91feb8fb6eab05f38e7caf25103b0a011c015997d75408692b417ad6b",
-        "history": "9494d0ac684007e93063632a83df5afc40007fe6bfc3da8fbe5619bb480fd1d8",
+        "segment": "d49e5ae13898da382ac552610e70a56df680a2fba1401d85f1bf7a7dc4d1f5f0",
+        "spentRoot": "5849e4ac5de93f82f28adca2a4f1b761d141699f006355f2bcc96227385aa707",
+        "history": "9eb6e40da8bc494ef4bbcd1c12014f8171a3e18e278d1cfb81c6c028ac67b08f",
         "force": [
           {
             "index": "23",
@@ -264,17 +264,17 @@
       },
       "verified": 78,
       "instances": 2,
-      "readMs": 2599,
-      "maxRssBytes": 553603072,
-      "heapUsedBytes": 32109408,
+      "readMs": 2681,
+      "maxRssBytes": 555249664,
+      "heapUsedBytes": 37964040,
       "fetchedBytes": 1205514
     }
   },
   "process": {
-    "maxRssBytes": 577744896,
-    "heapUsedBytes": 53542040
+    "maxRssBytes": 621088768,
+    "heapUsedBytes": 41627744
   },
-  "elapsedMs": 218361,
+  "elapsedMs": 221914,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -309,14 +309,14 @@
     "dist/pool/v3/programs.js": "7f3fc7114320498c51795f287effcbd4a482a00aa64fd32f46dfe33c89a2f4f2",
     "dist/pool/v3/prover.js": "40a871f168e03040490dea985c3d0892cb72e548f2848a87b15b8f59f050fa90",
     "dist/pool/v3/reader.js": "719e61965f3b2ba04a32f1474b4e77679c97868025eb6302777de79db3632eb8",
-    "dist/pool/v3/receipt-state.js": "5fbaaed0b60850a58aaa96d7f715a8a57a4c2912e92cd310274c422dd3506e90",
+    "dist/pool/v3/receipt-state.js": "110ba6ab1d5e2125c0ae3660a7596de8d4f2e18b77d34d252800c3b90a741cc5",
     "dist/pool/v3/records.js": "93adfd8958036966e071e376b94baf6c676312e5f39cac4cacb478e2cad33898",
     "dist/pool/v3/recovery.js": "9edbfd461d586425dcf61ab12aeb6d17a0727e3b427d3439c4768ed88cc267d4",
     "dist/pool/v3/redemption.js": "23a5cc869d6a0eb5ff687a4ff6c96f8d5682500565db40dec22228ffffb18abd",
     "dist/pool/v3/refusals.js": "1363aa5da32970180f6f25b2bb74caeb5eb504706cfbbb41f5e4aeef20213821",
     "dist/pool/v3/replay-store.js": "2096188ab02e888bf61a3fde25f99b98e00d8aed729ede61c9d8481bc74c6cb9",
     "dist/pool/v3/scope-evidence.js": "756dd7a2d4e4d3a7720178761382ca572b8450724ae31dfa51262b3e0befa26d",
-    "dist/pool/v3/scope-reader.js": "5b61547a3320b7af34df6e6a9543f90bedf7566a259fda4d610cc549e1a334c5",
+    "dist/pool/v3/scope-reader.js": "dd2b8b7f9c4b29407d4a78a5fd55a8611161bfe28af676cf6d84fb40577e864d",
     "dist/pool/v3/service-client.js": "76fbaf2b2729945899e0799c28eac5a42cccb50c1ef65e49a480550ad73adecd",
     "dist/pool/v3/service-http.js": "7a9eff7a46070a2a165077e6bf9a83229f7da4b621b4c5af8382eadd61e5a955",
     "dist/pool/v3/service-wire.js": "b9928faffde6a4477c502584a3732765fdaea293ed5f45d4ba1d9a7361ce69ca",
@@ -383,14 +383,14 @@
     "src/pool/v3/programs.ts": "90bcb494e6d71242a52d4612246f62ed7e6eb2a1c1f1b183232c6a15fba53bac",
     "src/pool/v3/prover.ts": "e08dfbccd8c92ecfeb1b35e992fd4f42d1e5914cdfb5c06dafe8496425076a01",
     "src/pool/v3/reader.ts": "1a1c509f35bd473b97b023de950fe1235cb01c6ff7ce5238849eb8306a4bc690",
-    "src/pool/v3/receipt-state.ts": "a45ea011ad62ee59aa6282bc9c6f401a0301a8958cd4a5d377a669fc96392fd2",
+    "src/pool/v3/receipt-state.ts": "59679d3416943cc7bef1de0ab4993391511c1b8a9ea434d39740934013a125a6",
     "src/pool/v3/records.ts": "0b46e880f05c6776cda9f8918a8383cc0a8b4b4eb81beddf29331a1749108c32",
     "src/pool/v3/recovery.ts": "cceafc2b3a067b8fc0cc23be4e95e53beb278a891f9a434f451454452112968b",
     "src/pool/v3/redemption.ts": "7445c3db89a2263d720a2fdb552ae9c8991fdf3ddf086bcc3dc7507e89f26899",
     "src/pool/v3/refusals.ts": "945d5fcdecced3e225fb91df656130e4235eaa504e8e981d176991bd32a598c5",
     "src/pool/v3/replay-store.ts": "de7cf042a4a5c4e2e41aa200e25dfe826b5c7c23cfb85cf3c692df33b6ab7518",
     "src/pool/v3/scope-evidence.ts": "b37ae977f1f5c1c5d61ec5d444794c24397907115e6ae9a9f0309ceb4542a879",
-    "src/pool/v3/scope-reader.ts": "28f269715aca44b807de5eb38776866fd2d761287b8f32a1f9cf92baf5624162",
+    "src/pool/v3/scope-reader.ts": "ad4bfdf83172cdd6b6a779300b625b48c1476fcfb8778b14f7b933122c9b2800",
     "src/pool/v3/service-client.ts": "4e41fc62553316b86c8002b44aa9ab9cb6e096d8f061a6fc08d24e1120f21b9e",
     "src/pool/v3/service-http.ts": "c0fb983594ae5903f349ebb7ca5f3d0e601ee4b57f45a1cabe376fe86f517b0d",
     "src/pool/v3/service-wire.ts": "ad23b26d4183db467906e05c192dbdffee696217721e3dbd9c57923c2ca7315a",

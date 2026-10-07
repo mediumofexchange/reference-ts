@@ -288,20 +288,26 @@ export async function checkImports({ codec, verifier, configurationBytes, domain
     const payer = await replayLocalPackage({ ...payload, seed: payerSeed }, verifier, codec);
     assert.deepEqual(payer.candidates, []);
   });
-  await test("every missing imported directory, snapshot or trail refuses with no partial restoration", async () => {
+  await test("every missing imported directory, snapshot or trail refuses with no partial restoration; an opening the record moved past excludes its continuations", async () => {
     for (const key of ["directories", "snapshots", "trails"]) {
       const missing = structuredClone(payload); missing.package[key] = [];
       const answer = await replayLocalPackage({ ...missing, seed: receiverSeed }, verifier, codec);
       assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
     }
-    // A continuation with no held opening is unresolved, so a later operator
-    // cannot treat it as excluded and roll back to its remembered A state.
-    const stale = checkpoint(segment(operatorSecret, toA.link, 3n, reference(a1)), 3n, 14n);
-    for (const missing of [structuredClone(payload), compose([...history, stale])]) {
-      missing.venue.records = missing.venue.records.filter(r => !same(r.record, encodeCommitment(b0.commitment)));
-      const answer = await replayLocalPackage(missing, verifier, codec);
-      assert.equal(answer.status, "unresolved-evidence"); assert.equal(answer.audit, null); assert.deepEqual(answer.candidates, []);
-    }
+    // B's continuations of an opening the record moved past (C2.3.3) are excluded: that segment never opened, so no
+    // reader finalized their payments. The chain importing them is excluded, and A's next opening imports the last
+    // valid state, its own a1 (C2.10.11).
+    const unopened = records => records.filter(r => !same(r.record, encodeCommitment(b0.commitment)));
+    const moved = structuredClone(payload); moved.venue.records = unopened(moved.venue.records);
+    await reject(moved, "IMPORT");
+    const resumed = compose([...history, checkpoint(segment(operatorSecret, toA.link, 3n, reference(a1)), 3n, 14n)]);
+    resumed.venue.records = unopened(resumed.venue.records);
+    const answer = await replayLocalPackage(resumed, verifier, codec);
+    assert.equal(answer.status, "selected-local-replay", `${answer.status} ${answer.check}`);
+    // Under the silence clause b1 and b2 lie in a gap open since a1, so they are lapsed: lapse is judged first.
+    const unopenedClass = silence ? ["lapsed", null] : ["excluded", "OPENING"];
+    assert.deepEqual(answer.audit.range.carrying.map(c => [c.class, c.check ?? null]),
+      [["valid", null], ["valid", null], unopenedClass, unopenedClass, ["valid", null]]);
   });
   await test("stale, unheld and remembered pre-replacement imports cannot replace the required canonical predecessor", async () => {
     for (const opening of [reference(b1), { ...reference(b2), sequence: 99n }, reference(a1)]) {

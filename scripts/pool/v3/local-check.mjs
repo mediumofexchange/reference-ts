@@ -751,10 +751,10 @@ try {
     const earlierSegment = { sequence: 1n, at: 6n, directory: [{ name: silentName(5n), digest: b(86) }] };
     await settled(silentPackage({ duration: 5n, headerSequence: 2n, openingAtIndex: 7n, checkpoints: [checkpoint(3n, 8n)], extra: [earlierSegment] }), "unresolved-evidence");
     await settled(silentPackage({ checkpoints: [checkpoint(3n, 3n), checkpoint(4n, 15n, undefined, true)] }), "unresolved-evidence");
-    // An opening carrying nothing for the backing is a contradiction the record proves; an opening the record does
-    // not hold is missing evidence; without ranges the clock is not read.
+    // An opening carrying nothing for the backing is a contradiction the record proves; so is an opening the record
+    // does not hold below a held sequence, one it moved past (C2.3.3); without ranges the clock is not read.
     await settled(silentPackage({ opens: "other" }), "invalid-local-replay", "OPENING");
-    await settled(silentPackage({ opens: false }), "unresolved-evidence");
+    await settled(silentPackage({ opens: false }), "invalid-local-replay", "OPENING");
     const { venue: _unread, ...noVenue } = silentPackage();
     await settled(noVenue, "unsupported-scope");
     // The portable package reads the same clock.

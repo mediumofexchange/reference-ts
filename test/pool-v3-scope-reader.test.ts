@@ -4,7 +4,7 @@ import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
 import { compareBytes } from "../src/bytes.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
-import { directoryRoot, encodeCommitment, signCommitment, type Commitment } from "../src/venue-records.js";
+import { directoryRoot, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
@@ -37,10 +37,11 @@ const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items
 
 /** One operator opens a segment scoping two backings and issues into the first;
  * a successor segment may then import the first backing alone. */
-async function twoBackings() {
-  const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
+async function twoBackings(silence?: bigint, witnessed = 10n) {
+  const venue = FixtureVenue.reference(label, lag, witnessed), operatorStore = new ReplayStore();
   const termsOf = (thing: string): RootTerms => ({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
-    payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)) });
+    payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)),
+    ...(silence === undefined ? {} : { silence: { noCommitmentDuration: silence, challengeWindow: 5n } }) });
   const backings = ["scope test x", "scope test y"].map(thing => {
     const fields = termsOf(thing), terms = encodeRootTerms(fields);
     return { fields, name: rootTermsName(terms), signed: { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) } };
@@ -59,15 +60,16 @@ async function twoBackings() {
   const add = (kind: number, payload: Uint8Array) => {
     if (!items.some(item => item.kind === kind && compareBytes(item.payload, payload) === 0)) items.push({ kind, payload });
   };
-  /** Commit the current state; `alter` may drop or change the directory's snapshots. */
-  function checkpoint(sequence: bigint, index: bigint, alter = (snapshots: ReturnType<typeof snapshotsNow>) => snapshots): Commitment {
+  /** Commit the current state, witnessed at `index` (none: signed and served, never witnessed); `alter` may drop
+   * or change the directory's snapshots. */
+  function checkpoint(sequence: bigint, index: bigint | undefined, alter = (snapshots: ReturnType<typeof snapshotsNow>) => snapshots): Commitment {
     const snapshots = alter(snapshotsNow());
     const directory = snapshots.map(snapshot => ({ name: snapshot.backing, digest: snapshotDigest(snapshot) }));
     for (const snapshot of snapshots) add(4, snapshotBytes(snapshot));
     add(3, encodeEvidenceDirectory(directory));
     add(6, encodeTrail({ header: segmentBytes(current.header), terms: current.scoped.map(item => item.signed), records: current.records }));
     const commitment = signCommitment(operatorSecret, sequence, directoryRoot(directory));
-    venue.witness(1, operator, index, encodeCommitment(commitment));
+    if (index !== undefined) venue.witness(1, operator, index, encodeCommitment(commitment));
     return commitment;
   }
   function snapshotsNow() {
@@ -109,7 +111,16 @@ async function twoBackings() {
   }
   /** An empty successor opening scoping the first backing alone, importing `predecessor`. */
   const successor = (sequence: bigint, predecessor: Commitment) => { current = open([x], sequence, predecessor, current.state); };
-  return { venue, x, y, items, checkpoint, issue, issued, replayInto, successor, selection, read, receipt };
+  /** An empty opening scoping both backings that imports nothing: a repair where no checkpoint is valid. */
+  const fresh = (sequence: bigint) => { current = open(backings, sequence); };
+  /** Witness at `index` the replacement of `x`'s first operator, effective from `effective`. */
+  const replaceX = (index: bigint, effective: bigint) => {
+    const fields = { role: ROLE_OPERATOR, successor: ed25519.getPublicKey(b(9)), predecessor: x.name, effective,
+      signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+    const message = replacementMessage(x.name, fields);
+    venue.witness(2, x.name, index, encodeReplacement(x.name, { ...fields, signature: ed25519.sign(message, b(6)), successorSignature: ed25519.sign(message, b(9)) }));
+  };
+  return { venue, x, y, items, checkpoint, issue, issued, replayInto, successor, fresh, replaceX, selection, read, receipt };
 }
 
 describe("multi-backing scope reader", () => {
@@ -211,6 +222,67 @@ describe("multi-backing scope reader", () => {
     for (const backing of [f.x.name, f.y.name]) {
       expect((await f.read(backing, latest, [{ kind: 10, payload: receipt }])).receipt).toMatchObject({ status: "final", includedAt: [{ sequence: "3" }] });
     }
+  });
+
+  it("excludes a continuation whose segment opening the record moved past, so a repair opening reads (C2.3.3, C2.10.11)", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, undefined); // the opening: signed and served, never witnessed
+    await f.issue(5n, 101n);
+    const continuation = f.checkpoint(2n, 3n);
+    for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, continuation)).rejects.toMatchObject({ check: "OPENING" });
+    // The record is complete, so this is a verdict and the operator's repair opening reads past it.
+    f.fresh(3n);
+    const repair = stateOf(await f.read(f.x.name, f.checkpoint(3n, 4n)));
+    expect(repair.carrying.map(item => [item.sequence, item.class, item.check])).toEqual([["2", "excluded", "OPENING"], ["3", "valid", undefined]]);
+    expect([repair.state.issued, repair.state.position]).toEqual([0n, 0n]);
+  });
+
+  it("lapses an unopened continuation witnessed while a scoped gap is open, judging lapse before validity (C2.10.11)", async () => {
+    for (const [silence, expected] of [[4n, { status: "lapsed-selection", clock: { duration: "4", snapshotIndex: "1", gap: "11", open: true } }],
+      [20n, { check: "OPENING" }]] as const) {
+      const f = await twoBackings(silence, 20n);
+      f.checkpoint(1n, 1n);
+      f.fresh(2n); f.checkpoint(2n, undefined); // a second segment's opening, never witnessed
+      await f.issue(5n, 101n);
+      const continuation = f.checkpoint(3n, 12n); // c(12) = 1: the gap is open under a duration of 4, not of 20
+      await expect(f.read(f.x.name, continuation)).rejects.toMatchObject(expected);
+    }
+  });
+
+  it("lapses a receipt whose `after` the record moved past without holding it (C2.10.9b, C2b.4)", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, undefined);
+    await f.issue(5n, 101n);
+    const receipt = f.receipt(1n);
+    f.fresh(2n);
+    const repair = f.checkpoint(2n, 3n);
+    for (const backing of [f.x.name, f.y.name]) {
+      expect((await f.read(backing, repair, [{ kind: 10, payload: receipt }])).receipt).toMatchObject({ status: "lapsed", sequence: "moved-past",
+        lapse: { kind: "moved-past" } });
+    }
+  });
+
+  it("abandons a receipt on a continuation of a segment that never opened at the operator's next scope change (C2.10.9b)", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, undefined);
+    await f.issue(5n, 101n);
+    f.checkpoint(2n, 3n); // held, and excluded: its opening was never held
+    const receipt = f.receipt(2n);
+    f.fresh(3n);
+    const next = f.checkpoint(3n, 4n);
+    expect((await f.read(f.x.name, next, [{ kind: 10, payload: receipt }])).receipt).toMatchObject({ status: "abandoned", sequence: "held",
+      abandonedAt: { sequence: "3" } });
+  });
+
+  it("lapses a receipt of a segment whose opening was witnessed after a scoped term ended (C2.10.9b)", async () => {
+    const f = await twoBackings();
+    f.replaceX(1n, 6n); // effective at the lead floor, index + 2·lag + 1
+    const opening = f.checkpoint(1n, 7n); // lapsed for its whole scope: x's first term ended at 6
+    await f.issue(5n, 101n);
+    const receipt = f.receipt(1n);
+    expect((await f.read(f.x.name, opening, [{ kind: 10, payload: receipt }])).receipt).toMatchObject({ status: "lapsed",
+      lapse: { kind: "scope-boundary", at: "6" } });
+    await expect(f.read(f.x.name, opening)).rejects.toMatchObject({ status: "lapsed-selection" });
   });
 
   it("rolls back a checkpoint excluded for a sibling's totals, so the next one resumes without extra work", async () => {
