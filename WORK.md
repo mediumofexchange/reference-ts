@@ -11,16 +11,14 @@ integrity to the tested tree, checked in CI; (b) installed-package interoperabil
 separate installs of that tarball; (c) backup and restore drills of each role's store (an operator restored from an older copy
 signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's open correctness findings fixed or dispositioned,
 (au) first; (e) Next 5's 10⁵ rerun. Stop: (a)–(e) merged, CI green; the 10⁶ run, live Tor and the external review stay outside.
-- **M13a ([decision](decisions/2026-10.md#2026-10-07--pin-a-releases-install-to-the-tested-tree-with-an-install-lock-and-rebuild-it-byte-identically-on-two-systems-slice-13-m13a), #143):** (a). A [release record](docs/RELEASE.md): the tarball plus an install lock pinning each runtime entry by
-  integrity (`scripts/release.mjs`); `check:package` and the command drill install through it, `--verify` refuses an
-  install missing an entry for its system (npm ci drops a failing optional one silently); CI's `reproducible-release`
-  compares Linux and Windows records. Reviewed; major and minors taken. Limits: one toolchain at a time, no registry path.
+- **M13a ([decision](decisions/2026-10.md#2026-10-07--pin-a-releases-install-to-the-tested-tree-with-an-install-lock-and-rebuild-it-byte-identically-on-two-systems-slice-13-m13a), #143):** (a). A [release record](docs/RELEASE.md): tarball plus an install lock pinning each runtime entry by integrity;
+  `check:package` and the command drill install through it; `--verify` refuses an install missing an entry for its system;
+  CI's `reproducible-release` compares Linux and Windows. Reviewed, all taken. Limits: one toolchain at a time, no registry.
 - **Next:** (d)'s (au): after a read over served evidence ends `unresolved-evidence`, sync that source again with `full`,
   then the replicas (the library's documented remedy, which no command takes); then (b), (c).
-- Slice 12 (transport, replica, relay; M12a–c, #136–#140) and slice 14 (lit, adopted) are done.
 
 ## Status
-- **Slices 10–11 done** (slice 14 too: Goal) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
+- **Slices 10–12 and 14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
   install with real proofs on the synthetic node and live on the testnet; the Ergo view in SQLite rows, caught up in bounded passes; every budget
   holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)) except the operator's own memory at depth and the wallet's 10⁵ points, lost to a restart (Next 5).
 - **Audits**: area 27 (state machine, [decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); area 29 (wallet, [decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)); area 31 (readers): a continuation whose opening the record moved past is excluded, or lapsed in a gap, and a receipt reads a term end and a moved-past `after` without its opening ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)); the journal not yet; area 30 (transport): a source's mark moves only past an answer that delivers its selection, and a stream's minimum rate is charged to the peer alone, on both sides ([decision](decisions/2026-10.md#2026-10-07--move-a-sources-mark-only-past-an-answer-that-delivers-its-selection-and-charge-a-streams-rate-to-the-peer-alone-audit-area-30)). Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): resumed kept walks recheck scope; a truncated `wallet.db` refuses; no failed act is published; Node floor 24.21.0. Simplify 2026-10-07: one evidence chain for both constructions (#133); the store checks' live testnet modes retired (#134).
