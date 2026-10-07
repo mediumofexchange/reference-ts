@@ -10,9 +10,9 @@ journal and a wallet run lit backings through the `moe` commands (direction item
 - **Done and merged (2026-10-07):** M14a–b bytes and frames, M14c state machine (#116), M14d reader (#120), M14e conformance (#122,
   [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)),
   M14f journal (#123, [decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)), M14g1 wallet notes, keys and payments (#125, [decision](decisions/2026-10.md#2026-10-06--hold-lit-notes-in-the-one-wallet-with-owner-keys-per-backing-found-under-a-doubling-window-slice-14-m14g)),
-  M14g2 acts and the window move (#126, [decision](decisions/2026-10.md#2026-10-06--take-lits-acts-and-8s-window-move-in-the-one-wallet-presented-notes-spending-as-any-other-slice-14-m14g2)); spec #15 and #16 merged
-  (money-from-first-principles `3af6abe`; #16's merge review moved §8's restoration to every restored backing's keys in each trail, `272810c`, which the scan already does).
-- **Next:** M14g3 service wire/client per construction; M14g4 `moe` dispatch; M14h adoption.
+  M14g2 acts and the window move (#126, [decision](decisions/2026-10.md#2026-10-06--take-lits-acts-and-8s-window-move-in-the-one-wallet-presented-notes-spending-as-any-other-slice-14-m14g2)); spec #15–#16 merged (`3af6abe`).
+- **M14g3** (`claude/m14g3-lit-service`): service wire, server and client read through the construction, one profile; one receipt codec
+  per construction serves the wallet too ([decision](decisions/2026-10.md#2026-10-07--serve-a-lit-journal-through-the-one-service-wire-and-client-the-construction-an-option-slice-14-m14g3)). Stop: merged after review. **Next:** M14g4 `moe` dispatch; M14h adoption.
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)

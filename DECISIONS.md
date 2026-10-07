@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-07` [Serve a lit journal through the one service wire and client, the construction an option (slice 14 M14g3)](decisions/2026-10.md#2026-10-07--serve-a-lit-journal-through-the-one-service-wire-and-client-the-construction-an-option-slice-14-m14g3)
 - `2026-10-06` [Exclude a continuation whose opening the record moved past, and read a receipt's term end without its segment's opening (audit, area 31)](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)
 - `2026-10-06` [Take lit's acts and §8's window move in the one wallet, presented notes spending as any other (slice 14 M14g2)](decisions/2026-10.md#2026-10-06--take-lits-acts-and-8s-window-move-in-the-one-wallet-presented-notes-spending-as-any-other-slice-14-m14g2)
 - `2026-10-06` [Hold lit notes in the one wallet, with owner keys per backing found under a doubling window (slice 14 M14g)](decisions/2026-10.md#2026-10-06--hold-lit-notes-in-the-one-wallet-with-owner-keys-per-backing-found-under-a-doubling-window-slice-14-m14g)
