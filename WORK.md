@@ -10,11 +10,11 @@ cryptography, drilled in CI with no direct path; (b) a replica, an evidence-only
 one wire, from which the operator-offline drill syncs a wallet; (c) decisions, with explanations and adversarial review, on the
 service credential (not per holder), syncs that do not tie an address to the backing they spend, and gap funding apart from
 identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement is a local-machine Open question.
-- **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), `claude/m12a-transport`):** holders reach an operator as a Tor onion
+- **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), merged #136):** holders reach an operator as a Tor onion
   service through their own loopback proxy (Node's environment proxy), refusing `PROXY` unless fetch tunnels; `serve --onion` runs a
   holders-only listener; the lit command drill runs every holder by onion name under a direct-connection guard. Design and patch
   reviewed (findings taken). Limits: no live Tor here (Open question); per-command isolation; undici spins on a silent proxy.
-- **Then:** M12b, the replica and its credential; M12c, gap funding and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`)
+- **Next:** M12b, the replica (an evidence-only `moe reader serve` through the one wire) and the service credential; M12c, gap funding and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`)
   is done: [M14h](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h).
 
 ## Status
