@@ -505,7 +505,7 @@ describe("lit-v1 conformance vectors", () => {
   const packageBytes = join(ascii("moe/lit/v1/package"), u32(packageItems.length), ...packageItems.flatMap(([kind, payload]) =>
     [u8(kind), u64(BigInt(payload.length)), payload]));
   const vectors = {
-    specification: "money-from-first-principles lit-v1.md at a554f8a (draft until adopted)",
+    specification: "money-from-first-principles lit-v1.md at 80a4ea1 (adopted)",
     configHash: hex(DOMAIN),
     keys: Object.fromEntries([K, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => [`secret${n}`, hex(secretOf(n))])),
     records: records.map(([s, authorization]) => {

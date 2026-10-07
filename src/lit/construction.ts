@@ -155,7 +155,7 @@ function litAcceptance(a: SignedAcceptance): AcceptanceView {
 
 const NO_IDENTITIES: VerifierIdentities = Object.freeze({});
 const LIT_READER: ReaderFrames = Object.freeze({
-  specification: "lit-v1 a554f8a",
+  specification: "lit-v1 80a4ea1",
   domain: litConfigHash,
   verifyConfiguration: (bytes: Uint8Array): boolean => {
     try { return compareBytes(copyUnshared(bytes), litConfigurationBytes()) === 0; } catch (error) {

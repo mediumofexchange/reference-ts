@@ -16,7 +16,8 @@ import { LOCAL_REFERENCE, localVenueIdentity, type RecordVenue } from "../../rec
 import { PROOF_BYTES } from "./configuration.js";
 import { publicationBound } from "./records.js";
 
-/** The configuration's longest publication: venue-ergo §8 requires it to fit one transaction at an Ergo venue's kind-4 location. */
+/** Pool-v3's longest publication: venue-ergo §8 requires a configuration's to fit one transaction at an Ergo venue's kind-4
+ * location. Lit-v1's is 569 bytes (lit-v1 §10), so a location carrying this carries it; the guard checks this one for both. */
 const LONGEST_PUBLICATION = publicationBound(PROOF_BYTES);
 
 /** A reference venue's identity preimage, as the caller independently holds it. */

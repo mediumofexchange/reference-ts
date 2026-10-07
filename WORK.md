@@ -3,17 +3,14 @@
 Updated: 2026-10-07
 
 ## Goal
-**Slice 14: the lit implementation** (Next 10; order 14, 12, 13; spec `lit-v1.md`, a draft until adopted;
-[layouts decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)).
-Acceptance: lit trails replay through the shared seams with lit-v1's verdicts (hostile cases), vectors bind every layout; an operator
-journal and a wallet run lit backings through the `moe` commands, failure path included (gap route, return and adoption, C3.8's reading);
-then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4; [direction 2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)).
-- **Done and merged (2026-10-07; decisions M14a–M14g5a in [2026-10](decisions/2026-10.md)):** M14a–b bytes and frames, M14c state machine (#116),
-  M14d reader (#120), M14e conformance (#122), M14f journal (#123), M14g1–g2 wallet (#125–#126), M14g3 service wire (#127), M14g4 commands
-  with a synthetic-node lit drill, gap route included (#129); M14g5a owner signature (#130; spec #15–#17, `a554f8a`). M14g5b (#131): C3.8 for lit,
-  records through the construction's view and answers through its `answer` frame (§7: K's and the owner key's signatures), drilled by force too.
-- **Next:** M14h adoption: a decision that `moe/lit/v1` is adopted once nothing can move a byte or verdict (lit-v1 §1 draft status; spec first,
-  fresh review, C0a), with a last read of lit-v1 against the code (vectors, §§3–9) for any open byte question.
+**Slice 14 (lit notes) is done: `moe/lit/v1` is adopted** ([M14h decision](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h);
+spec #18, `80a4ea1`). Lit trails replay through the shared seams with lit-v1's verdicts, vectors bind every layout, and an operator journal and a
+wallet run lit backings through the `moe` commands on the synthetic node, failure path included. M14a–M14g5b: PRs #116–#131 (decisions in
+[2026-10](decisions/2026-10.md)); M14h: a fresh conformance read ([archive](decisions/archive/2026-10-07-lit-v1-adoption-conformance-read.md))
+found no byte or verdict divergence, and a fresh review of the adoption text. Limits: no lit backing on a live venue; §12's costs unmeasured.
+- **Next: slice 12** (Next 2; order 12, then 13): the holder's transport, funding and evidence sources. Write its goal, acceptance and stop here
+  first, from the [direction of 2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)
+  item 2; cheapest decisive probe first (clients through a SOCKS5 proxy such as Tor, then the replica's evidence read).
 
 ## Status
 - **Slices 10–11 done** (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
@@ -77,7 +74,7 @@ then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2
    tied to what the venue newly holds and serving a reader only the segments its checkpoints name. Past the smallest profile: statements
    spending several backings, adding an original-term backing to a live scope, single-backing openings' |E| over-reserve; a phone-first wallet
    (a venue range source proportional to the subject's records, a new venue identity, then a succinct relation).
-10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)): lit notes first (slice 14, Goal); offline, accumulator, Chaumian after release.
+10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)): lit notes first (slice 14, adopted); offline, accumulator, Chaumian after release.
 11. **Agent-first surfaces** (AGENTS.md direction): every command, wallet and service answer serves agents managing backings and wallets and autonomous AIs (one JSON object and coded exits exist, M10b); check each new lit command against it.
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
    Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probe: OP_RETURN outputs over 83 bytes by pool over 2,016
@@ -96,5 +93,5 @@ then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2
 - Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Deletion list (2026-10-07): none open; the merged spec and code branches of M14g5a are gone from both remotes (a stale local tracking ref only).
 
-Roughly **67% done / 33% remaining** (range 57–76%), reassessed 2026-10-07 (M14g5b): lit runs through the commands with C3.8's reading, by force
-included; lit's adoption, an evidence replica, holder transport, release assurance, qualified storage and mainnet remain.
+Roughly **68% done / 32% remaining** (range 58–77%), reassessed 2026-10-07 (M14h): lit notes are adopted and run through the commands,
+failure path included; an evidence replica, holder transport, release assurance, qualified storage and mainnet remain.

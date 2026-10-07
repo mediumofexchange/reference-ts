@@ -523,7 +523,7 @@ Output, refusals and exit codes follow the M10b decision (one JSON object on std
 unexpected failures 3 with their stack).
 
 A directory serves one construction, declared at `init --construction` and kept in config.json: `moe/pool/v3` by
-default (and for any directory made before the flag), or `moe/lit/v1`, the draft lit notes
+default (and for any directory made before the flag), or `moe/lit/v1`, the adopted lit notes
 ([M14g4 decision](../decisions/2026-10.md#2026-10-07--run-lit-backings-through-the-moe-commands-each-directory-declaring-its-construction-slice-14-m14g4)).
 Terms of the other construction refuse as `CONSTRUCTION`. A lit directory proves nothing, so it keeps no parameters
 (`--parameters` is a usage error) and opens no verifier. Its `request` frame names a fresh owner key (lit-v1 §8), and

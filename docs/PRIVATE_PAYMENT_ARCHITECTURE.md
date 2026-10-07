@@ -34,10 +34,10 @@ Record readers are tied to the captured view. Refresh after record changes,
 including same-index revocation; a previously valid snapshot is not current
 permission to serve. Validation owns external bytes before callbacks.
 
-## Lit construction (draft)
+## Lit construction
 
-The transparent profile's construction, `moe/lit/v1` ([lit-v1](https://github.com/mediumofexchange/money-from-first-principles/blob/272810c/lit-v1.md),
-a draft until adopted), is built in `src/lit/` beside the pool, through the pool's seams (WORK.md's slice 14).
+The transparent profile's construction, `moe/lit/v1` ([lit-v1](https://github.com/mediumofexchange/money-from-first-principles/blob/80a4ea1/lit-v1.md),
+adopted with its §9 configuration), is built in `src/lit/` beside the pool, through the pool's seams (WORK.md's slice 14).
 
 | Component | Implemented boundary | Still outside it |
 |---|---|---|
