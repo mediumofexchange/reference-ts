@@ -372,7 +372,7 @@ describe("v3 payer custody over restored holdings", () => {
     const fields = { ...receipt, proofHash: b(1) }, other = { ...fields, signature: ed25519.sign(receiptBytes(fields), operatorSecret) };
     await expect(f.payer.submit("shop", { submit: async () => other })).rejects.toMatchObject({ code: "INVALID" });
     expect(f.payer.payment("shop")!.receipt).toBeUndefined();
-    expect(encodeReceipt(await f.payer.submit("shop", f.service))).toEqual(encodeReceipt(receipt));
+    expect(encodeReceipt(await f.payer.submit("shop", f.service) as Receipt)).toEqual(encodeReceipt(receipt));
   });
 
   it("reconciles a payment final across operator takeover and pays from an imported note in the successor segment", async () => {

@@ -6,25 +6,31 @@
 // and output are its standing demand's, which the store keeps with the demand. The namespace keeps no note tree.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
+import type { LitScan, ScanOutput, StateHandle } from "../pool/v3/state.js";
 import type {
-  Construction, FaultTarget, PublicationView, ReaderFrames, ReceiptView, RequestView, StatementView,
+  Construction, FaultTarget, KeyedNote, KeyedWalletFrames, Keyring, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
 import type { VerifierIdentities } from "../pool/v3/configuration.js";
 import { requireReplay } from "../pool/v3/refusals.js";
 import type { Demand } from "../pool/v3/replay-store.js";
 import type { RootTerms, TermsCodec } from "../pool/v3/terms.js";
 import {
-  decodeReceipt, decodeSnapshot, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptMatchesEvent,
-  snapshotBytes, snapshotDigest, verifyReceipt,
+  decodeReceipt, decodeSnapshot, encodeReceipt, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptBytes,
+  receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt,
 } from "./commitments.js";
 import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configuration.js";
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  arithmeticHolds, decodePublication, decodeRecord, encodeRecord, evidencePair, hashEvidenceFields, ownerSignaturesVerify,
-  settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord,
+  acceptanceBytes, arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodePublication, encodeRecord, evidencePair, hashEvidenceFields,
+  splitRecord, ownerSignaturesVerify, settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord, type SignedAcceptance,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
+import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, windowFor } from "./holdings.js";
+import {
+  copyLitPaymentRequest, signedBurn, signedDemand, signedSettlement, signedSpend, signedWithdrawal, unsignedIssue,
+} from "./wallet.js";
+import { acceptSecret, issueNonce, OWNER_LOOK_AHEAD, presentSecret, publicKeyOf } from "./wallet-keys.js";
 import { LIT_HEADERS, LIT_PACKAGES, LIT_TRAILS, MAX_LIT_TRAIL_RECORD_BYTES } from "./transport.js";
 import { verifySignatureStrict } from "../keys.js";
 
@@ -96,6 +102,30 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
   }
 }
 
+/** Output `i` of a judged lit record as a wallet reads it (§8): its opening, rebuilt from the statement and checked
+ * against the view's commitment, and a settlement's acceptance. */
+function litScanOutput(record: LitRecord, _view: StatementView, cm: bigint, i: number, demand: Demand | undefined): ScanOutput {
+  const s = record.statement, domain = s.domain;
+  let opening: Opening, acceptance: LitScan["acceptance"];
+  switch (s.kind) {
+    case 1: { const output = { backing: s.backing, value: s.quantity, owner: s.owner }; opening = { ...output, rho: issueRho(output, s.nonce) }; break; }
+    case 2: case 3: {
+      const nfs = s.inputs.map(input => noteNullifier(noteCommitment(domain, input)));
+      opening = { ...s.outputs[i]!, rho: spendRho(nfs, i) }; break;
+    }
+    case 6: {
+      // §3: the demand's backing and quantity to the settlement's owner, over the demand's nullifiers in input order.
+      if (demand?.nullifiers === undefined) throw new TypeError("a settlement's output needs its demand");
+      opening = { backing: demand.backing, value: demand.quantity, owner: s.owner, rho: spendRho(demand.nullifiers.map(bytesOf), 0) };
+      acceptance = { demand: Uint8Array.from(s.demand), deadline: settlementAuthorization(record).acceptance.deadline }; break;
+    }
+    default: throw new TypeError("a lit record of this kind creates no output");
+  }
+  if (keyOf(noteCommitment(domain, opening)) !== cm) throw new TypeError("a scanned output is not the view's");
+  return { cm, lit: { backing: Uint8Array.from(opening.backing), value: opening.value, owner: Uint8Array.from(opening.owner),
+    rho: Uint8Array.from(opening.rho), acceptance } };
+}
+
 /** §6's fault-evidence target: its intrinsic failures (`ARITHMETIC`, owners' and K's `SIGNATURE`), each one §9.1 may
  * exclude by. No verifier is asked; the demand's keys a withdrawal or settlement needs are state, so none is reported. */
 function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarget {
@@ -115,7 +145,7 @@ function litFaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTar
 
 const NO_IDENTITIES: VerifierIdentities = Object.freeze({});
 const LIT_READER: ReaderFrames = Object.freeze({
-  specification: "lit-v1 1bf5bfc",
+  specification: "lit-v1 7e1ddd5",
   domain: litConfigHash,
   verifyConfiguration: (bytes: Uint8Array): boolean => {
     try { return compareBytes(copyUnshared(bytes), litConfigurationBytes()) === 0; } catch (error) {
@@ -145,7 +175,11 @@ const LIT_READER: ReaderFrames = Object.freeze({
       verify: ({ domain, operator }) => verifyReceipt({ domain, segment: receipt.segment, operator }, receipt),
       matches: event => receiptMatchesEvent(receipt, event) };
   },
-  digests: (record: Uint8Array) => ({ ...evidencePair(decodeRecord(record)), proofHash: new Uint8Array(0) }),
+  // §6: the pair needs only §3's split, so a record that splits authenticates whether or not it decodes, and fails replay.
+  digests: (bytes: Uint8Array) => {
+    const { statement, authorization } = splitRecord(bytes);
+    return { ...hashEvidenceFields(statement, authorization), proofHash: new Uint8Array(0) };
+  },
   publication: (bytes: Uint8Array): PublicationView => {
     const p = decodePublication(bytes);
     return { domain: p.domain, backing: p.backing, kind: p.kind, record: p.kind === 2 ? undefined : encodeRecord(p.record) };
@@ -159,6 +193,59 @@ const LIT_READER: ReaderFrames = Object.freeze({
       holds: () => ownerSignaturesVerify(record) };
   },
   fault: litFaultTarget,
+});
+
+/** A keyring this construction made. */
+function owned(keyring: Keyring): OwnerKeys {
+  if (!(keyring instanceof OwnerKeys)) throw new TypeError("a lit wallet reads lit owner keys");
+  return keyring;
+}
+/** §8's keyed wallet, as the one wallet (pool/v3/wallet-store.ts) reads it (slice 14 M14g). */
+const LIT_WALLET: KeyedWalletFrames = Object.freeze({
+  lookAhead: OWNER_LOOK_AHEAD,
+  window: windowFor,
+  keyring: (seed: Uint8Array, domain: Uint8Array) => new OwnerKeys(seed, domain),
+  witness: (seed: Uint8Array, domain: Uint8Array, windows: ReadonlyMap<string, bigint>, keyring: Keyring) =>
+    litWitness(seed, domain, windows, owned(keyring)),
+  notes: (seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle, keyring: Keyring, spent?: boolean) =>
+    litNotes(seed, domain, backing, state, owned(keyring), spent),
+  found: (seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring) => foundIndices(seed, domain, state, owned(keyring)),
+  ownFunded,
+  noteSecret: (seed: Uint8Array, domain: Uint8Array, keyring: Keyring, note: KeyedNote) => noteSecret(seed, domain, owned(keyring), note),
+  presentSecret,
+  request: copyLitPaymentRequest,
+  spend: signedSpend,
+  burn: signedBurn,
+  demand: signedDemand,
+  withdraw: signedWithdrawal,
+  settle: signedSettlement,
+  issueNonce: (seed: Uint8Array, domain: Uint8Array, output: Output) => issueNonce(seed, domain, output.backing, output.owner, output.value),
+  issue: (domain: Uint8Array, segment: Uint8Array, output: Output, nonce: Uint8Array) => {
+    const { message, record } = unsignedIssue(domain, segment, output, nonce);
+    return { message, cm: keyOf(noteCommitment(domain, { ...output, rho: issueRho(output, nonce) })), record };
+  },
+  ownIssue: (seed: Uint8Array, domain: Uint8Array, opening: Opening) => {
+    const output = { backing: opening.backing, value: opening.value, owner: opening.owner };
+    return compareBytes(issueRho(output, issueNonce(seed, domain, output.backing, output.owner, output.value)), opening.rho) === 0;
+  },
+  acceptOwner: (seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint) => {
+    const secret = acceptSecret(seed, domain, demand, deadline);
+    try { return publicKeyOf(secret); } finally { secret.fill(0); }
+  },
+  acceptance: acceptanceBytes,
+  publication: (domain: Uint8Array, backing: Uint8Array, body: { readonly kind: 1 | 3 | 4; readonly record: Uint8Array } |
+    { readonly kind: 2; readonly acceptance: SignedAcceptance }) =>
+    encodePublication(body.kind === 2 ? { domain, backing, kind: 2, acceptance: body.acceptance } :
+      { domain, backing, kind: body.kind, record: decodeRecord(body.record) }),
+  spendOf: (bytes: Uint8Array) => {
+    const s = decodeRecord(bytes).statement;
+    if (s.kind !== 2) throw new EncodingError("not a spend");
+    return { segment: s.segment, inputs: s.inputs, outputs: s.outputs };
+  },
+  outputs: (domain: Uint8Array, bytes: Uint8Array) =>
+    derivedOutputs(decodeRecord(bytes).statement).map(opening => ({ cm: keyOf(noteCommitment(domain, opening)), opening })),
+  commitment: (domain: Uint8Array, opening: Opening) => keyOf(noteCommitment(domain, opening)),
+  receipt: Object.freeze({ decode: decodeReceipt, encode: encodeReceipt, verify: verifyReceipt }),
 });
 
 /** Lit-v1: §3 records, §2's derived outputs, §5's chains with the evidence pair and no note root, no note tree. */
@@ -179,5 +266,18 @@ export const LIT: Construction<LitRecord> = Object.freeze({
     if (s.kind !== 6) throw new TypeError("not a settlement");
     return hex(s.demand);
   },
+  scanOutput: litScanOutput,
   reader: LIT_READER,
+  wallet: LIT_WALLET,
+  journal: Object.freeze({
+    encode: encodeRecord,
+    identity: (record: LitRecord) => statementHash(record.statement),
+    configuration: litConfigurationBytes,
+    // §5: no scope root and no proof digest.
+    receipt: ({ digests, scopeRoot, ...rest }: ReceiptFieldsOf, operator: Uint8Array, sign: (message: Uint8Array) => Uint8Array): Uint8Array => {
+      if (scopeRoot !== undefined) throw new TypeError("a lit receipt names no scope root");
+      const fields = { ...rest, statementHash: digests.statementHash, signatureHash: digests.signatureHash };
+      return encodeReceipt({ ...fields, operator, signature: sign(receiptBytes(fields)) });
+    },
+  }),
 });

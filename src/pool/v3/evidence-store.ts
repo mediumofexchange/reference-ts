@@ -96,6 +96,8 @@ export interface TrailEvidence {
   /** The kept records of the snapshot's segment that reproduce the snapshot's evidence hash (at 0, the seed),
    * where the segment's head scopes its backing; later records are not its evidence. */
   served(expected: ExpectedSnapshot, snapshot: Snapshot): StoredTrail | undefined;
+  /** The kept records of `segment` through the chain value `evidence` (at its seed, none). */
+  trail(segment: Uint8Array, evidence: Uint8Array): StoredTrail | undefined;
 }
 /** A retained store's identity and where its lineage stood when a batch began: one row per batch, each the hash of
  * the one before and fresh randomness, committed with what the batch kept. A store restored from an earlier copy
@@ -227,7 +229,7 @@ export class EvidenceStore {
     // A store that outlives its reads keeps one identity in its own rows; a private in-memory one has none.
     if (source === ":memory:") this.#identity = undefined;
     else {
-      // A host's database holds the journal's pool-v3 evidence; it records no construction (a lit journal is a later slice).
+      // A host's database holds its journal's evidence; it records no construction, since the journal's identity names its domain.
       this.#db.exec(IDENTITY_SCHEMA);
       this.#db.prepare("INSERT OR IGNORE INTO evidence_identity VALUES (1, ?)").run(randomBytes(16));
       this.#identity = new Uint8Array((this.#db.prepare("SELECT value FROM evidence_identity WHERE id = 1").get() as { value: Uint8Array }).value);
@@ -509,8 +511,9 @@ export class EvidenceStore {
     };
   }
 
-  /** A trail's rows. The evidence chain runs over the longest prefix whose records decode (§5); only
-   * that prefix can serve a checkpoint (§12.1), so later records are not kept. */
+  /** A trail's rows. The evidence chain runs over the longest prefix whose records give their digests (pool-v3 §5:
+   * those that decode; lit-v1 §6: those that split); only that prefix can serve a checkpoint (§12.1), so later
+   * records are not kept. */
   #rows(batch: EvidenceBatch, base: Base | undefined): TrailSink {
     const q = this.#q, construction = this.construction;
     let segment: Uint8Array | undefined, entries: readonly SegmentEntry[] = [];

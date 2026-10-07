@@ -4,7 +4,8 @@
 // input commitments), its recovery effect and its checks in the proof's place. Every mode rule, ordering,
 // continuity, revocation, supply, lock and uniqueness check stays in state.ts and recovery.ts, once. This file
 // holds pool-v3's adapter; lit-v1's is src/lit/construction.ts. The readers (package-reader.ts, scope-reader.ts,
-// reader.ts) read a construction's frames beside it (`reader`, slice 14 M14d).
+// reader.ts) read a construction's frames beside it (`reader`, slice 14 M14d); the operator journal (store.ts) also writes
+// its records, receipts and configuration item (`journal`, M14f).
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
@@ -14,10 +15,10 @@ import { NOTE_TREE_CAPACITY } from "../note-tree.js";
 import { ScopeTree } from "../scope.js";
 import { authorizationFaults, type AuthorizationFault } from "./authorization-evidence.js";
 import {
-  decodeReceipt, decodeSnapshot, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptMatchesEvent,
-  snapshotBytes, snapshotDigest, verifyReceipt, type Snapshot,
+  decodeReceipt, decodeSnapshot, encodeReceipt, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptBytes,
+  receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt, type Snapshot,
 } from "./commitments.js";
-import { adoptedDomain, requireConfigurationVerifier, verifyConfiguration, type VerifierIdentities } from "./configuration.js";
+import { adoptedConfigurationBytes, adoptedDomain, requireConfigurationVerifier, verifyConfiguration, type VerifierIdentities } from "./configuration.js";
 import { decodeFaultEvidence, verifyFaultEvidence, type ExpectedSnapshot } from "./fault-evidence.js";
 import { V3_HEADERS, type SegmentHeader, type SegmentHeaderCodec } from "./headers.js";
 import { V3_PACKAGES, type PackageCodec } from "./package.js";
@@ -28,7 +29,7 @@ import {
 import { effectOf, recoveryEffect, tagOf } from "./recovery.js";
 import { requireReplay } from "./refusals.js";
 import { POOL_V3_NAMESPACE, type Demand, type NamespaceConstruction } from "./replay-store.js";
-import type { ProofCheck, ReceiptEvent, StateView } from "./state.js";
+import type { ProofCheck, ReceiptEvent, ScanOutput, StateHandle, StateView, WitnessPredicate } from "./state.js";
 import { V3_TERMS, type RootTerms, type TermsCodec } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, V3_TRAILS, type TrailCodec } from "./trail.js";
 
@@ -94,8 +95,145 @@ export interface Construction<R = unknown> {
   readonly capacity: bigint | undefined;
   /** The demand a stored settlement record ends (C3.8's taken release). */
   settledDemand(bytes: Uint8Array): string;
+  /** Output `i` (commitment `cm`) of a judged record as a wallet's witness predicate reads it (slice 14 M14g); `demand`
+   * is the standing demand a settlement ends. */
+  scanOutput(record: R, view: StatementView, cm: bigint, i: number, demand: Demand | undefined): ScanOutput;
   /** The frames and objects the readers read (slice 14 M14d). */
   readonly reader: ReaderFrames;
+  /** What an operator's journal writes besides (slice 14 M14f). */
+  readonly journal: JournalFrames<R>;
+  /** What the one wallet (wallet-store.ts) reads and builds for a construction whose notes are held by owner keys
+   * (lit-v1 §8, slice 14 M14g); pool-v3's wallet path is the wallet's own, so it names none. */
+  readonly wallet?: KeyedWalletFrames | undefined;
+}
+
+/** A note's public opening where openings are public (lit-v1 §2). */
+export interface KeyedOpening {
+  readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array; readonly rho: Uint8Array;
+}
+/** An output as a statement carries it: backing, value and owner key. */
+export interface KeyedOutput { readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array }
+/** A request by owner key (lit-v1 §8): the backing, the quantity and this request's own key. */
+export interface KeyedRequest {
+  readonly domain: Uint8Array; readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array;
+}
+/** How a note is a wallet's: an owner key of a backing and index, or a settlement's acceptance (lit-v1 §8). */
+export type KeyedOwner = { readonly backing: Uint8Array; readonly index: bigint; readonly acceptance?: never } |
+  { readonly backing?: never; readonly index?: never; readonly acceptance: { readonly demand: Uint8Array; readonly deadline: bigint } };
+/** A wallet's note found by its key: its opening, commitment, nullifier and tag (C3.3), how it is the wallet's, and the
+ * namespace and position of the statement that created it. */
+export interface KeyedNote {
+  readonly opening: KeyedOpening;
+  readonly cm: bigint;
+  readonly nf: bigint;
+  readonly tag: bigint;
+  readonly owner: KeyedOwner;
+  readonly ns: number;
+  readonly position: bigint;
+  readonly local: boolean;
+}
+/** A wallet's owner keys by backing and index (public keys derived once per handle; secrets derived when spent). */
+export interface Keyring {
+  key(backing: Uint8Array, index: bigint): Uint8Array;
+  /** The caller zeroes it after use. */
+  secret(backing: Uint8Array, index: bigint): Uint8Array;
+  /** The backing and index whose key is `owner`, among those derived (each held backing's window, from a read's scan). */
+  find(owner: Uint8Array): { readonly backing: Uint8Array; readonly index: bigint } | undefined;
+  close(): void;
+}
+/** K's acceptance where an acceptance owner is a key (lit-v1 §4): the demand, the owner, the deadline and K's signature. */
+export interface KeyedAcceptance {
+  readonly domain: Uint8Array; readonly demand: Uint8Array; readonly owner: Uint8Array; readonly deadline: bigint; readonly signature: Uint8Array;
+}
+/** A receipt of a construction without a scope root or proof digest (lit-v1 §5). */
+export interface KeyedReceipt {
+  readonly domain: Uint8Array; readonly segment: Uint8Array; readonly position: bigint; readonly statementHash: Uint8Array;
+  readonly historyHash: Uint8Array; readonly signatureHash: Uint8Array; readonly after: bigint;
+  readonly operator: Uint8Array; readonly signature: Uint8Array;
+}
+/** A note to spend: its opening and its owner's secret (the caller zeroes it). */
+export interface KeyedInput { readonly opening: KeyedOpening; readonly secret: Uint8Array }
+/** What the one wallet reads and builds for a construction whose notes are held by owner keys (lit-v1 §8). */
+export interface KeyedWalletFrames {
+  /** §8's look-ahead: 256 indices. */
+  readonly lookAhead: bigint;
+  /** The scan window of a backing whose found index is `h` (−1 for none). */
+  window(h: bigint): bigint;
+  keyring(seed: Uint8Array, domain: Uint8Array): Keyring;
+  /** The replay's witness predicate over each held backing's window (hex name to window). */
+  witness(seed: Uint8Array, domain: Uint8Array, windows: ReadonlyMap<string, bigint>, keyring: Keyring): WitnessPredicate;
+  /** The wallet's unspent notes of `backing` (spent ones too with `spent`) in a state replayed with its predicate, each
+   * mark checked against its output and the seed's keys (KeptStateMismatch otherwise). */
+  notes(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle, keyring: Keyring, spent?: boolean): KeyedNote[];
+  /** Per held backing (hex): §8's `h` and the highest index found in an output of it, spent ones included. */
+  found(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring): Map<string, { readonly reached: bigint; readonly top: bigint }>;
+  /** Whether the note's creating statement consumed notes, all of them the wallet's own. */
+  ownFunded(state: StateHandle, note: KeyedNote): boolean;
+  /** The note's spend secret, checked against its owner (KeptStateMismatch otherwise). */
+  noteSecret(seed: Uint8Array, domain: Uint8Array, keyring: Keyring, note: KeyedNote): Uint8Array;
+  /** A demand's presenter secret from its tags in input order, instant and deadline. */
+  presentSecret(seed: Uint8Array, domain: Uint8Array, tags: readonly Uint8Array[], instant: bigint, deadline: bigint): Uint8Array;
+  /** An owned request checked against the payer's agreed domain, backing and amount; EncodingError otherwise. */
+  request(input: KeyedRequest, expected: { readonly domain: Uint8Array; readonly backing: Uint8Array; readonly value: bigint }): KeyedRequest;
+  /** A spend's record signed by each input's owner in input order. */
+  spend(domain: Uint8Array, segment: Uint8Array, inputs: readonly KeyedInput[], outputs: readonly KeyedOutput[]): Uint8Array;
+  /** A burn of `quantity` from `inputs`, the rest to `change` (none where nothing is left), signed by their owners. */
+  burn(domain: Uint8Array, segment: Uint8Array, quantity: bigint, inputs: readonly KeyedInput[], change: KeyedOutput | undefined): Uint8Array;
+  /** A demand presenting `inputs` under `presenter` (a key), signed by their owners. */
+  demand(domain: Uint8Array, segment: Uint8Array, inputs: readonly KeyedInput[], presenter: Uint8Array, instant: bigint, deadline: bigint): Uint8Array;
+  /** A withdrawal of `demand` signed by the presenter secret (the caller zeroes it). */
+  withdraw(domain: Uint8Array, segment: Uint8Array, demand: Uint8Array, presenter: Uint8Array): Uint8Array;
+  /** A settlement of the acceptance's demand to its owner, the release signed by the presenter secret (the caller zeroes it). */
+  settle(domain: Uint8Array, segment: Uint8Array, acceptance: KeyedAcceptance, presenter: Uint8Array): Uint8Array;
+  /** K's issue nonce for `output`, from the backer wallet's seed (lit-v1 §8 leaves the derivation to K). */
+  issueNonce(seed: Uint8Array, domain: Uint8Array, output: KeyedOutput): Uint8Array;
+  /** An issue of `output` under `nonce`: the bytes K signs, the derived output's commitment, and the record carrying K's signature. */
+  issue(domain: Uint8Array, segment: Uint8Array, output: KeyedOutput, nonce: Uint8Array):
+    { readonly message: Uint8Array; readonly cm: bigint; record(signature: Uint8Array): Uint8Array };
+  /** Whether an output with this opening is one this seed's issue nonce derives (lit-v1 §8: an issue the wallet made). */
+  ownIssue(seed: Uint8Array, domain: Uint8Array, opening: KeyedOpening): boolean;
+  /** K's acceptance owner for `demand` and `deadline`: `acceptSecret`'s key (lit-v1 §8). */
+  acceptOwner(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array;
+  /** The acceptance bytes K signs (lit-v1 §4); EncodingError where a field is malformed. */
+  acceptance(acceptance: Omit<KeyedAcceptance, "signature">): Uint8Array;
+  /** Publication kind 1, 3 or 4 of a demand, settlement or withdrawal record, or kind 2 of an acceptance, routed to `backing`. */
+  publication(domain: Uint8Array, backing: Uint8Array, body: { readonly kind: 1 | 3 | 4; readonly record: Uint8Array } |
+    { readonly kind: 2; readonly acceptance: KeyedAcceptance }): Uint8Array;
+  /** A spend record's segment, inputs and outputs; EncodingError where the bytes are no spend. */
+  spendOf(bytes: Uint8Array): { readonly segment: Uint8Array; readonly inputs: readonly KeyedOpening[]; readonly outputs: readonly KeyedOutput[] };
+  /** A record's derived outputs in statement order, each with its commitment (a settlement's needs its demand: none here). */
+  outputs(domain: Uint8Array, bytes: Uint8Array): { readonly cm: bigint; readonly opening: KeyedOpening }[];
+  /** A note's commitment from its opening. */
+  commitment(domain: Uint8Array, opening: KeyedOpening): bigint;
+  readonly receipt: {
+    decode(bytes: Uint8Array): KeyedReceipt;
+    encode(receipt: KeyedReceipt): Uint8Array;
+    verify(authority: { readonly domain: Uint8Array; readonly segment: Uint8Array; readonly operator: Uint8Array }, receipt: KeyedReceipt): boolean;
+  };
+}
+
+/** A receipt's fields (§7.2) as the journal names them for any construction: pool-v3's name its scope root and the
+ * record's evidence triple, lit-v1's neither the scope root nor a proof digest (lit-v1 §5). */
+export interface ReceiptFieldsOf {
+  readonly domain: Uint8Array;
+  readonly segment: Uint8Array;
+  /** Pool-v3's scope root; undefined for a construction whose segment identity binds its scope. */
+  readonly scopeRoot: bigint | undefined;
+  readonly position: bigint;
+  readonly digests: EvidenceDigests;
+  readonly historyHash: Uint8Array;
+  readonly after: bigint;
+}
+/** What an operator's journal (store.ts) writes of a construction besides the frames the readers read (slice 14 M14f). */
+export interface JournalFrames<R = unknown> {
+  /** A decoded record's canonical bytes, which the journal admits and keeps. */
+  encode(record: R): Uint8Array;
+  /** Its statement identity, by which an exact replay is answered (invariant 26). */
+  identity(record: R): Uint8Array;
+  /** The configuration bytes a package's kind-1 item carries: a fresh copy. */
+  configuration(): Uint8Array;
+  /** The receipt record for `fields` under `operator`'s key; `sign` signs the receipt message with its secret. */
+  receipt(fields: ReceiptFieldsOf, operator: Uint8Array, sign: (message: Uint8Array) => Uint8Array): Uint8Array;
 }
 
 /** A receipt (§7.2) as a receipt walk reads it: the fields every construction's receipt names, and its checks. */
@@ -276,6 +414,19 @@ export const POOL_V3: Construction<Record> = Object.freeze({
   nextEvidence: nextEvidenceHash,
   capacity: NOTE_TREE_CAPACITY,
   settledDemand: (bytes: Uint8Array) => recoveryEffect(decodeRecord(bytes)).ended!,
+  // A capsule output, or a settlement's (C4.7), whose owner the record's acceptance names.
+  scanOutput: (record: Record, view: StatementView, cm: bigint, i: number): ScanOutput =>
+    (record.kind === 6 ? { cm, settlement: record } : { cm, capsule: view.capsules[i] }),
   reader: V3_READER,
+  journal: Object.freeze({
+    encode: encodeRecord,
+    identity: (record: Record) => statementHash(record),
+    configuration: adoptedConfigurationBytes,
+    receipt: ({ digests, scopeRoot, ...rest }: ReceiptFieldsOf, operator: Uint8Array, sign: (message: Uint8Array) => Uint8Array): Uint8Array => {
+      if (scopeRoot === undefined) throw new TypeError("a pool-v3 receipt names its scope root");
+      const fields = { ...rest, scopeRoot, statementHash: digests.statementHash, proofHash: digests.proofHash, signatureHash: digests.signatureHash };
+      return encodeReceipt({ ...fields, operator, signature: sign(receiptBytes(fields)) });
+    },
+  }),
 });
 

@@ -1,5 +1,5 @@
-// A lit wallet's key derivation (lit-v1 §8): owner keys by index, K's
-// acceptance owners and presenter keys, each a 32-byte Ed25519 private seed
+// A lit wallet's key derivation (lit-v1 §8): owner keys by backing and index, K's
+// acceptance owners, presenter keys and issue nonces, each a 32-byte Ed25519 private seed (a nonce is 32 bytes)
 // (RFC 8032) under one of three HKDF-SHA256 roots of the wallet seed. Index
 // allocation, the look-ahead window and restoration are the wallet's.
 import { createHmac, hkdfSync } from "node:crypto";
@@ -12,6 +12,7 @@ const MAX_U64 = (1n << 64n) - 1n;
 const OWNER_INFO = utf8Encoder.encode("moe/wallet/lit/v1/owner");
 const SETTLEMENT_INFO = utf8Encoder.encode("moe/wallet/lit/v1/settlement");
 const PRESENTER_INFO = utf8Encoder.encode("moe/wallet/lit/v1/presenter");
+const ISSUE_INFO = utf8Encoder.encode("moe/wallet/lit/v1/issue");
 /** Restoration's look-ahead: owner indices are scanned until this many consecutive ones appear in no output. */
 export const OWNER_LOOK_AHEAD = 256n;
 
@@ -26,10 +27,16 @@ function hmac(key: Uint8Array, message: Uint8Array): Uint8Array {
   return new Uint8Array(createHmac("sha256", key).update(message).digest());
 }
 
-/** `ownerSecret_i = HMAC-SHA256(ownerRoot, u64 i)`. */
-export function ownerSecret(seed: Uint8Array, domain: Uint8Array, index: bigint): Uint8Array {
-  const w = new ByteWriter(); w.u64(u64(index, "owner index"));
-  return hmac(root(seed, domain, OWNER_INFO), w.finish());
+/** `ownerSecret = HMAC-SHA256(ownerRoot, backing || u64 i)`: owner indices are per backing. */
+export function ownerSecret(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, index: bigint): Uint8Array {
+  return ownerSecretAt(ownerRoot(seed, domain), backing, index);
+}
+/** `ownerRoot`, for deriving many owner secrets from one root (a wallet's scan). */
+export function ownerRoot(seed: Uint8Array, domain: Uint8Array): Uint8Array { return root(seed, domain, OWNER_INFO); }
+/** `ownerSecret` for `backing` and `index` under an `ownerRoot`. */
+export function ownerSecretAt(ownerRootIn: Uint8Array, backing: Uint8Array, index: bigint): Uint8Array {
+  const w = new ByteWriter(); w.key32(field32(backing, "backing"), "backing"); w.u64(u64(index, "owner index"));
+  return hmac(field32(ownerRootIn, "owner root"), w.finish());
 }
 /** K's `acceptSecret = HMAC-SHA256(settlementRoot, demand || u64 acceptanceDeadline)`. */
 export function acceptSecret(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array {
@@ -49,6 +56,15 @@ export function presentSecret(seed: Uint8Array, domain: Uint8Array, tags: readon
   w.key32(own[0]!, "tag 1"); w.key32(own[1] ?? new Uint8Array(32), "tag 2");
   w.u64(u64(instant, "instant")); w.u64(u64(deadline, "deadline"));
   return hmac(root(seed, domain, PRESENTER_INFO), w.finish());
+}
+/** K's issue nonce (§8 leaves the derivation to K; slice 14 M14g2): `HMAC-SHA256(issueRoot, backing || owner || u64
+ * quantity)` under `issueRoot = HKDF-SHA256(seed, salt=domain, info="moe/wallet/lit/v1/issue")`. One issuance per backing,
+ * request key and quantity: an issue signed again for a new segment, or by a wallet restored from the seed, has the same
+ * output, so at most one is admitted (§2). */
+export function issueNonce(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, owner: Uint8Array, quantity: bigint): Uint8Array {
+  const w = new ByteWriter(); w.key32(field32(backing, "backing"), "backing"); w.key32(field32(owner, "owner"), "owner");
+  w.u64(u64(quantity, "quantity"));
+  return hmac(root(seed, domain, ISSUE_INFO), w.finish());
 }
 /** The key (§1) of a derived secret: an Ed25519 public key is canonical and, from a hashed seed, never of small order. */
 export function publicKeyOf(secret: Uint8Array): Uint8Array {

@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToField, fieldToBytes, identifierOf, limbsOf } from "../src/pool/field.js";
-import { decodeReceipt, encodeReceipt } from "../src/pool/v3/commitments.js";
+import { decodeReceipt, encodeReceipt, type Receipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeSettlementAuthorization, releaseBytes, settlementAuthorization,
@@ -267,7 +267,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // A receipt naming a position the canonical checkpoint already holds, written directly: an operator that committed
     // other statements there contradicted it, which no honest journal in this fixture does.
     const db = new DatabaseSync(join(f.directory, "holder.db"));
-    db.prepare("UPDATE saved_records SET receipt=? WHERE alias='d1'").run(encodeReceipt({ ...receipt, position: 1n })); db.close();
+    db.prepare("UPDATE saved_records SET receipt=? WHERE alias='d1'").run(encodeReceipt({ ...receipt as Receipt, position: 1n })); db.close();
     f.venue.advance(at + 2n * lag + 1n);
     const view = await f.holder.sync(f.served(), f.signed);
     expect([f.holder.act("d1")!.status, view.holdings.map(h => h.status)]).toEqual(["failed", ["available", "available"]]);

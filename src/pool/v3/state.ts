@@ -20,13 +20,13 @@
 // A record is read through its construction's view (construction.ts, slice 14 M14c): pool-v3's records here,
 // lit-v1's beside them, judged by these same rules. A namespace replays one construction, which its handle carries.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { compareBytes } from "../../bytes.js";
+import { compareBytes, EncodingError } from "../../bytes.js";
 import { isField, VALUE_BOUND } from "../field.js";
 import { EMPTY_NOTE_ROOT, type NotePath } from "../note-tree.js";
 import { POOL_V3, type Construction, type StatementView } from "./construction.js";
 import type { EvidenceDigests, Record } from "./records.js";
 import { checkRecovery, type Demand, type RecoveryView } from "./recovery.js";
-import { EvidenceRefusal, requireReplay } from "./refusals.js";
+import { EvidenceRefusal, ReplayRefusal, requireReplay } from "./refusals.js";
 import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals, WitnessMark } from "./replay-store.js";
 import type { VerifierIdentities } from "./configuration.js";
 import type { RootTerms } from "./terms.js";
@@ -63,8 +63,17 @@ export interface StateView extends RecoveryView {
   presentedWithTag(tag: bigint): readonly (readonly [string, Demand])[];
 }
 
-/** An output a receiver may scan: its capsule, or for a settlement the record naming its owner. */
-export interface ScanOutput { readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record }
+/** An output a receiver may scan: its capsule, or for a settlement the record naming its owner (pool-v3); or, where
+ * openings are public (lit-v1 §2), its opening (`lit`). A construction names it (`Construction.scanOutput`). */
+export interface ScanOutput {
+  readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record; readonly lit?: LitScan | undefined;
+}
+/** A lit output as a wallet reads it (lit-v1 §8): its opening and, for a settlement's output, the demand and acceptance
+ * deadline `acceptSecret` derives from. */
+export interface LitScan {
+  readonly backing: Uint8Array; readonly value: bigint; readonly owner: Uint8Array; readonly rho: Uint8Array;
+  readonly acceptance: { readonly demand: Uint8Array; readonly deadline: bigint } | undefined;
+}
 /** Which outputs a replay keeps incremental witnesses for (a wallet's own), and the mark kept with each: undefined
  * for an output it passes over. The identity it declares names it in kept state (§14), so it must fix exactly which
  * outputs the predicate accepts and their marks; an undeclared one is named per object. */
@@ -396,7 +405,15 @@ export function judgeAdopted<R = Record>(state: SegmentState, bytes: Uint8Array,
 function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentReplay): { readonly check: boolean; readonly view: StatementView; finish(): Judged<unknown> } {
   const construction = state.construction;
   const position = state.position, mode = modeAt(replay, position), adopted = replay.block[Number(position)];
-  const record = construction.decode(bytes), kind = construction.kind(record);
+  // An authenticated record that does not decode fails replay at its position (lit-v1 §6: its evidence pair needs only
+  // the split). A pool record never reaches here undecoded: its evidence triple needs the decode (§10.1), and admission
+  // decodes before judging.
+  let record: unknown;
+  try { record = construction.decode(bytes); } catch (error) {
+    if (error instanceof EncodingError) throw new ReplayRefusal("MALFORMED");
+    throw error;
+  }
+  const kind = construction.kind(record);
   // A request (kind 7) decodes but is never a history event (§7): a trail carrying one fails replay (§10.1).
   requireReplay([1, 2, 3, 4, 5, 6].includes(kind), "KIND");
   // §7: advancing past 2^64 − 1 refuses before any state is read or the u64 position framed.
@@ -404,7 +421,6 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
   // Every mode judges at a witnessed index (in admission, the horizon); an untyped caller cannot omit it.
   if (typeof replay.index !== "bigint") throw new TypeError("a record is judged at a witnessed index");
   if (mode === "admission" && kind >= 4 && replay.lag === undefined) throw new TypeError("recovery admission needs the venue's lag");
-  if (replay.witness !== undefined && !construction.namespace.tree) throw new TypeError("a construction without a note tree keeps no witness");
   const view = construction.view(record, id => state.demand(id));
   const demandId = view.ended, demand = demandId === undefined ? undefined : state.demand(demandId);
   // The backing the record is judged under: its demand's where it reads one, else the first it names, else the selected.
@@ -462,10 +478,12 @@ export function applyJudged(state: SegmentState, judged: Judged<unknown>, replay
   const tags = kind === 4 ? demand!.value.tags.filter(tag => tag !== 0n) :
     kind === 5 ? judged.demand?.tags.filter(tag => tag !== 0n) ?? [] : view.tags;
   const touched = kind === 4 ? hex(identity) : judged.demandId;
-  const scan = (cm: bigint, i: number): ScanOutput => (kind === 6 ? { cm, settlement: judged.record as Record } : { cm, capsule: view.capsules[i] });
+  const scan = (cm: bigint, i: number): ScanOutput => construction.scanOutput(judged.record, view, cm, i, judged.demand);
+  // A pool mark's nullifier is a field element; a construction without a note tree keys SHA-256 digests (lit-v1 §2).
+  const nullifier = construction.namespace.tree ? isField : (nf: unknown) => typeof nf === "bigint" && nf >= 0n && nf < 1n << 256n;
   const markOf = (output: ScanOutput): WitnessMark | undefined => {
     const mark: unknown = replay.witness?.(output);
-    if (mark !== undefined && !(typeof mark === "object" && mark !== null && isField((mark as WitnessMark).nf) && (mark as WitnessMark).note instanceof Uint8Array)) {
+    if (mark !== undefined && !(typeof mark === "object" && mark !== null && nullifier((mark as WitnessMark).nf) && (mark as WitnessMark).note instanceof Uint8Array)) {
       throw new TypeError("a witness predicate returns a mark { nf, note } or undefined");
     }
     return mark as WitnessMark | undefined;
