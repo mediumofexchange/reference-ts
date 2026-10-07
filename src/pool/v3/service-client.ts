@@ -1,13 +1,10 @@
 import { bytesToHex as hex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { decodeCommitment, verifyCommitment, type Commitment } from "../../venue-records.js";
-import { identifierOf } from "../field.js";
-import { decodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
-import { adoptedDomain } from "./configuration.js";
+import { POOL_V3, type Construction, type OperatorReceipt } from "./construction.js";
 import { EVIDENCE_QUOTA, wholePackage, type EvidenceStore } from "./evidence-store.js";
 import { referenceVenue, type VenueReference } from "./guard.js";
-import { decodeEvidencePackage, PackageLimitError } from "./package.js";
-import { decodeRecord, statementHash } from "./records.js";
+import { PackageLimitError } from "./package.js";
 import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, V3_SERVICE_PROFILE,
   MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES, type V3ServiceCommand } from "./service-wire.js";
 import type { ServedPackage } from "./store.js";
@@ -16,7 +13,9 @@ const same = (a: Uint8Array, b: Uint8Array) => compareBytes(a, b) === 0;
 function identifier(bytes: Uint8Array): Uint8Array {
   const own = copyUnshared(bytes); if (own.length !== 32) throw new EncodingError("expected a 32-byte service identity"); return own;
 }
-export interface ServiceIdentity { readonly operator: Uint8Array; readonly reference: VenueReference }
+/** What the caller expects of the service: its operator, its reference venue and the construction its scope declares
+ * (pool-v3's by default, or lit-v1's: slice 14 M14g3). */
+export interface ServiceIdentity { readonly operator: Uint8Array; readonly reference: VenueReference; readonly construction?: Construction | undefined }
 export class V3ServiceClientError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); this.name = "V3ServiceClientError"; }
 }
@@ -46,13 +45,15 @@ function refusal(status: number, value: unknown): V3ServiceClientError {
 }
 
 /** Local operation credentials do not select protocol authority. The caller
- * independently holds the expected operator and reference venue; the domain is the
- * adopted configuration's (pool-v3 §11.4), never the caller's. Finality
- * still requires the existing reader and independent venue. */
+ * independently holds the expected operator, reference venue and construction; the
+ * domain is that construction's configuration (pool-v3 §11.4's adopted one, or
+ * lit-v1's), never the service's. Records, receipts and packages are read through
+ * that construction. Finality still requires the existing reader and independent venue. */
 export class V3ServiceClient {
   readonly #baseUrl: string;
   readonly #walletToken: string;
   readonly #adminToken: string | undefined;
+  readonly #construction: Construction;
   readonly #domain: Uint8Array;
   readonly #operator: Uint8Array;
   readonly #venue: Uint8Array;
@@ -64,7 +65,8 @@ export class V3ServiceClient {
       throw new EncodingError("local URL and distinct 32-byte credentials required");
     }
     this.#baseUrl = url.href; this.#walletToken = walletToken; this.#adminToken = adminToken;
-    this.#domain = adoptedDomain(); this.#operator = identifier(expected.operator);
+    this.#construction = expected.construction ?? POOL_V3 as Construction;
+    this.#domain = this.#construction.reader.domain(); this.#operator = identifier(expected.operator);
     this.#venue = referenceVenue(structuredClone(expected.reference)).id;
   }
   get baseUrl(): string { return this.#baseUrl; }
@@ -87,23 +89,24 @@ export class V3ServiceClient {
   private async request(path: string, command: V3ServiceCommand, admin = false): Promise<unknown> {
     const token = admin ? this.#adminToken : this.#walletToken;
     if (token === undefined) throw new V3ServiceClientError(403, "ADMIN_REQUIRED", "admin credential required");
-    const body = JSON.stringify(parseV3ServiceCommand(command));
+    const body = JSON.stringify(parseV3ServiceCommand(command, this.#construction));
     if (Buffer.byteLength(body) > MAX_V3_SERVICE_REQUEST_BYTES) throw new EncodingError("request too large");
     return this.exchange(path, token, body, "application/json", response => json(response, MAX_V3_SERVICE_REPLY_BYTES));
   }
   /** Authenticates ordinary acceptance in the record's source segment, not
    * adoption into another segment. Exact retries can attest different original
    * proof bytes; this method binds statement identity, not the retry's proof. */
-  async submit(recordBytes: Uint8Array): Promise<Receipt> {
-    const bytes = copyUnshared(recordBytes), record = decodeRecord(bytes);
-    if (record.kind === 7 || !same(record.domain, this.#domain)) throw new EncodingError("wrong submission domain or kind");
-    const p = record.publicInputs, authority = { domain: this.#domain, operator: this.#operator,
-      segment: identifierOf(p[2]!, p[3]!), scopeRoot: p[4]! };
+  async submit(recordBytes: Uint8Array): Promise<OperatorReceipt> {
+    const c = this.#construction, bytes = copyUnshared(recordBytes), record = c.decode(bytes);
+    // A request (kind 7) is no segment admission, and no view is built of one.
+    const view = c.kind(record) === 7 ? undefined : c.view(record, () => undefined);
+    if (view === undefined || !same(view.domain, this.#domain)) throw new EncodingError("wrong submission domain or kind");
+    const authority = { domain: this.#domain, operator: this.#operator, segment: view.segment, scopeRoot: view.scope };
     const reply = decodeV3ServiceReply(await this.request("/commands", {
-      version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: hex(bytes) }));
+      version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: hex(bytes) }), c);
     if (reply.kind !== "accepted") throw new EncodingError("unexpected service reply");
-    const receipt = decodeReceipt(hexToBytes(reply.receipt));
-    if (!verifyReceipt(authority, receipt) || !same(receipt.statementHash, statementHash(record))) {
+    const codec = c.journal.receipts, receipt = codec.decode(hexToBytes(reply.receipt));
+    if (!codec.verify(authority, receipt) || !same(receipt.statementHash, view.identity)) {
       throw new EncodingError("receipt does not authenticate the submitted statement");
     }
     return receipt;
@@ -144,7 +147,7 @@ export class V3ServiceClient {
         if (!same(s.domain, this.#domain) || !same(s.operator, this.#operator) || !same(s.venue, this.#venue) || !same(s.backing, backing)) {
           throw new EncodingError("wrong service package context");
         }
-        const signed = decodeEvidencePackage(served.package).filter(item => item.kind === 2).map(item => decodeCommitment(item.payload));
+        const signed = this.#construction.reader.package.decodeEvidencePackage(served.package).filter(item => item.kind === 2).map(item => decodeCommitment(item.payload));
         if (signed.length !== 1 || !verifyCommitment(signed[0]!) || !same(signed[0]!.operator, s.operator) || signed[0]!.sequence !== s.sequence ||
             !same(signed[0]!.root, s.root) || s.sequence >= 1n << 63n) throw new EncodingError("wrong commitment authority");
         return take(served, parts);
@@ -180,7 +183,7 @@ export class V3ServiceClient {
    * response is bounded by `maxBytes` (by default an in-memory store's quota), so it does not serve a long history;
    * assembling it holds about three times what was received at its peak (`wholePackage`). */
   async package(backing: Uint8Array, maxBytes: bigint = EVIDENCE_QUOTA.memory): Promise<ServedPackage> {
-    const result = await this.served(identifier(backing), 0n, maxBytes, (served, parts) => wholePackage(served.package, parts));
+    const result = await this.served(identifier(backing), 0n, maxBytes, (served, parts) => wholePackage(served.package, parts, this.#construction));
     return { selection: result.served.selection, package: result.taken };
   }
 }

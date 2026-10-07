@@ -233,7 +233,8 @@ export interface JournalStatus {
 
 export class V3OperatorJournal {
   private readonly db: DatabaseSync;
-  private readonly construction: Construction;
+  /** The construction the journal serves (its frames name the configuration domain). */
+  readonly construction: Construction;
   private readonly frames: ReaderFrames;
   private readonly domain: Uint8Array;
   private readonly secret: Uint8Array;

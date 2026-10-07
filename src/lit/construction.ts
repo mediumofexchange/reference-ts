@@ -8,7 +8,8 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
 import type { LitScan, ScanOutput, StateHandle } from "../pool/v3/state.js";
 import type {
-  Construction, FaultTarget, KeyedNote, KeyedWalletFrames, Keyring, PublicationView, ReaderFrames, ReceiptFieldsOf, ReceiptView, RequestView, StatementView,
+  Construction, FaultTarget, KeyedNote, KeyedReceipt, KeyedWalletFrames, Keyring, OperatorReceipt, PublicationView, ReaderFrames, ReceiptCodec, ReceiptFieldsOf,
+  ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
 import type { VerifierIdentities } from "../pool/v3/configuration.js";
 import { requireReplay } from "../pool/v3/refusals.js";
@@ -245,7 +246,6 @@ const LIT_WALLET: KeyedWalletFrames = Object.freeze({
   outputs: (domain: Uint8Array, bytes: Uint8Array) =>
     derivedOutputs(decodeRecord(bytes).statement).map(opening => ({ cm: keyOf(noteCommitment(domain, opening)), opening })),
   commitment: (domain: Uint8Array, opening: Opening) => keyOf(noteCommitment(domain, opening)),
-  receipt: Object.freeze({ decode: decodeReceipt, encode: encodeReceipt, verify: verifyReceipt }),
 });
 
 /** Lit-v1: §3 records, §2's derived outputs, §5's chains with the evidence pair and no note root, no note tree. */
@@ -279,5 +279,12 @@ export const LIT: Construction<LitRecord> = Object.freeze({
       const fields = { ...rest, statementHash: digests.statementHash, signatureHash: digests.signatureHash };
       return encodeReceipt({ ...fields, operator, signature: sign(receiptBytes(fields)) });
     },
+    // §5: the segment identity binds the scope, so an authority naming a scope root is another construction's.
+    receipts: Object.freeze({
+      decode: decodeReceipt,
+      encode: (receipt: OperatorReceipt) => encodeReceipt(receipt as KeyedReceipt),
+      verify: ({ scopeRoot, ...authority }: Parameters<ReceiptCodec["verify"]>[0], receipt: OperatorReceipt) =>
+        scopeRoot === undefined && verifyReceipt(authority, receipt as KeyedReceipt),
+    }),
   }),
 });

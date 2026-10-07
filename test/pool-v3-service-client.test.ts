@@ -4,7 +4,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
 import { LOCAL_REFERENCE, localVenueIdentity } from "../src/record-venue.js";
-import { encodeReceipt, receiptBytes, type ReceiptFields } from "../src/pool/v3/commitments.js";
+import { encodeReceipt, receiptBytes, type Receipt, type ReceiptFields } from "../src/pool/v3/commitments.js";
 import { adoptedDomain } from "../src/pool/v3/configuration.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
@@ -73,7 +73,7 @@ describe("bounded v3 local service client", () => {
     const replayUrl = await responding(replyFromReceipt(receipt()));
     const changed = record(); changed.proof.fill(10);
     const retried = await new V3ServiceClient(replayUrl, TOKEN, expected()).submit(encodeRecord(changed));
-    expect(retried.proofHash).not.toEqual(evidenceHashes(changed).proofHash);
+    expect((retried as Receipt).proofHash).not.toEqual(evidenceHashes(changed).proofHash);
   });
 
   it("rejects signed receipts for another statement, segment, scope, domain or operator and invalid signatures", async () => {
