@@ -151,8 +151,8 @@ describe("bounded v3 local service client", () => {
 
   it("rejects remote or ambiguous URLs and malformed credentials before a request", () => {
     for (const url of ["https://127.0.0.1/", "http://example.com/", "http://127.0.0.1/path", "http://127.0.0.1/?token=x",
-      "http://user:pass@127.0.0.1/", "http://localhost/"]) {
-      expect(() => new V3ServiceClient(url, TOKEN, expected())).toThrow("local URL and distinct 32-byte credentials required");
+      "http://user:pass@127.0.0.1/", "http://localhost/", "http://example.onion/", `https://${"a".repeat(55)}d.onion/`]) {
+      expect(() => new V3ServiceClient(url, TOKEN, expected())).toThrow("a local or onion URL and distinct 32-byte credentials required");
     }
     expect(() => new V3ServiceClient("http://127.0.0.1/", TOKEN, expected(), TOKEN)).toThrow("distinct 32-byte credentials required");
     expect(() => new V3ServiceClient("http://127.0.0.1/", "bad", expected())).toThrow("distinct 32-byte credentials required");
