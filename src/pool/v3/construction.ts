@@ -11,7 +11,6 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { verifySignatureStrict } from "../../keys.js";
 import { identifierOf } from "../field.js";
-import { NOTE_TREE_CAPACITY } from "../note-tree.js";
 import { ScopeTree } from "../scope.js";
 import { authorizationFaults, type AuthorizationFault } from "./authorization-evidence.js";
 import {
@@ -91,8 +90,6 @@ export interface Construction<R = unknown> {
   genesisEvidence(segment: Uint8Array): Uint8Array;
   nextHistory(previous: Uint8Array, identity: Uint8Array, noteRoot: bigint, spentRoot: Uint8Array, position: bigint): Uint8Array;
   nextEvidence(previous: Uint8Array, digests: EvidenceDigests, position: bigint): Uint8Array;
-  /** The outputs a namespace may hold, where its note tree bounds them. */
-  readonly capacity: bigint | undefined;
   /** The demand a stored settlement record ends (C3.8's taken release). */
   settledDemand(bytes: Uint8Array): string;
   /** Output `i` (commitment `cm`) of a judged record as a wallet's witness predicate reads it (slice 14 M14g); `demand`
@@ -467,7 +464,6 @@ export const POOL_V3: Construction<Record> = Object.freeze({
   genesisEvidence: genesisEvidenceHash,
   nextHistory: nextHistoryHash,
   nextEvidence: nextEvidenceHash,
-  capacity: NOTE_TREE_CAPACITY,
   settledDemand: (bytes: Uint8Array) => recoveryEffect(decodeRecord(bytes)).ended!,
   // A capsule output, or a settlement's (C4.7), whose owner the record's acceptance names.
   scanOutput: (record: Record, view: StatementView, cm: bigint, i: number): ScanOutput =>

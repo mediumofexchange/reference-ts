@@ -22,7 +22,7 @@
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { isField, VALUE_BOUND } from "../field.js";
-import { EMPTY_NOTE_ROOT, type NotePath } from "../note-tree.js";
+import { EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY, type NotePath } from "../note-tree.js";
 import { POOL_V3, type Construction, type StatementView } from "./construction.js";
 import type { EvidenceDigests, Record } from "./records.js";
 import { checkRecovery, type Demand, type RecoveryView } from "./recovery.js";
@@ -461,7 +461,7 @@ function judgmentOf(state: SegmentState, bytes: Uint8Array, replay: SegmentRepla
         ...(replay.lag === undefined ? {} : { lag: replay.lag }), door: mode === "admission" && kind >= 4 });
     }
     checkUniqueEffects(view.nfs, view.outputs, state);
-    if (construction.capacity !== undefined) requireReplay(state.leaves + BigInt(view.outputs.length) <= construction.capacity, "CAPACITY");
+    if (construction.namespace.tree) requireReplay(state.leaves + BigInt(view.outputs.length) <= NOTE_TREE_CAPACITY, "CAPACITY");
     return { bytes, record, view, identity, at, evidence, digests, backing: key, demand, demandId, position };
   } };
 }
