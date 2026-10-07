@@ -234,13 +234,48 @@ export const unanswered = (error: unknown): boolean =>
   (error instanceof TypeError && (error.message === "fetch failed" || error.message === "terminated")) ||
   (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
 
-/** The package its sources supply over what `evidence` retains; none answering is unavailable evidence. */
-async function served(directory: Directory, kept: KeptTerms, view: View, evidence: EvidenceStore, except: readonly string[] = []): Promise<Synced> {
-  const synced = await syncSources(directory, kept, view, client => client.sync(kept.backing, evidence), except);
-  if (!("served" in synced)) {
-    throw new CommandError("UNAVAILABLE", `no source answered: ${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ") || "none kept"}`);
+/** Whether a read failed for evidence its store does not hold. */
+const unresolvedEvidence = (error: unknown): boolean => error instanceof EvidenceRefusal && error.status === "unresolved-evidence";
+
+/**
+ * Read over what the sources supply, and repair a source that withheld (audit 30 (au)). A source's mark moves once its
+ * answer holds the selection (`V3ServiceClient.sync`), so a source that sent the selection whole but left out an earlier
+ * dependency (an opening checkpoint's directory, what an opening took, a terms field) moved its mark past it, and later
+ * syncs from it ask only after that mark. Where `use` ends `unresolved-evidence` over a source's answer, the read is the
+ * library's remedy (`V3Wallet.supply`): that source is synced once more from nothing (`full`, which also replaces what
+ * storage damaged) and read again; where that read is still unresolved, the source is passed over as `UNRESOLVED` and
+ * the next source is asked from nothing, until one resolves. A read that no source can resolve keeps the last
+ * refusal. `supply` syncs from the sources not in `except`, from nothing when `full`; `use` receives what it
+ * supplied, with every source passed over named in `skipped`.
+ */
+export async function readRepaired<T>(
+  supply: (options: { readonly full: boolean; readonly except: readonly string[] }) => Promise<Synced | { readonly skipped: readonly Skipped[] }>,
+  use: (synced: Synced | { readonly skipped: readonly Skipped[] }) => Promise<T>): Promise<T> {
+  const except: string[] = [], unresolved: Skipped[] = [];
+  let full = false, refusal: unknown;
+  for (;;) {
+    const supplied = await supply({ full, except }), synced = { ...supplied, skipped: [...unresolved, ...supplied.skipped] };
+    if (refusal !== undefined && !("served" in synced)) throw refusal;
+    try { return await use(synced); } catch (error) {
+      if (!("served" in synced) || !unresolvedEvidence(error)) throw error;
+      refusal = error;
+      if (!full) full = true;
+      else { except.push(synced.url); unresolved.push({ url: synced.url, code: "UNRESOLVED" }); }
+    }
   }
-  return synced;
+}
+
+/** Read over the package its sources supply into `evidence`, repaired as `readRepaired` says; none answering is
+ * unavailable evidence. `except` are URLs never asked (a replica's own). */
+async function served<T>(directory: Directory, kept: KeptTerms, view: View, evidence: EvidenceStore, use: (synced: Synced) => Promise<T>,
+  except: readonly string[] = []): Promise<T> {
+  return readRepaired(options => syncSources(directory, kept, view, client => client.sync(kept.backing, evidence, { full: options.full }),
+    [...except, ...options.except]), async synced => {
+    if (!("served" in synced)) {
+      throw new CommandError("UNAVAILABLE", `no source answered: ${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ") || "none kept"}`);
+    }
+    return use(synced);
+  });
 }
 
 /** The directory's kept replay file (pool-v3 §14), vouched for by `replay.db.sha256`: one that fails its digest is
@@ -258,6 +293,10 @@ export function keptReplay(directory: Directory, at: bigint): ReplayStore {
 const inUse = (error: unknown): unknown => error instanceof FileInUse ?
   new CommandError("STORAGE", `another process holds this reader's ${error.file}`) : error;
 
+/** Where a served read's evidence came from, as outputs name it. */
+const originOf = (supplied: Synced): object => ({ evidence: supplied.origin, ...(supplied.origin === "replica" ? { replica: supplied.url } : {}),
+  ...(supplied.skipped.length > 0 ? { skipped: supplied.skipped } : {}) });
+
 /** Sync the view, then read the backing's frontier at its witnessed index over the package `--package` names or
  * the operator's service supplies into `evidence.db`, resting on what earlier reads kept in `replay.db`. `use` takes
  * the read while the kept file is open: the canonical state is read from it. */
@@ -270,21 +309,22 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined;
     try {
       evidence = openEvidence(directory);
-      store = keptReplay(directory, at);
-      const file = flag(args, "package"), supplied = file === undefined ? await served(directory, kept, view, evidence) : undefined;
-      const source = supplied === undefined ? readRequired(file!, "package file") : supplied.served.package;
-      const origin = supplied === undefined ? { evidence: "file" } : { evidence: supplied.origin, ...(supplied.origin === "replica" ? { replica: supplied.url } : {}),
-        ...(supplied.skipped.length > 0 ? { skipped: supplied.skipped } : {}) };
-      let read;
-      try {
-        read = await readFrontier(source, kept.signed, at, { construction: directory.construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
-          reference: view.file.reference, evidence, store, answers });
-      } catch (error) {
-        throw inUse(error);
-      }
+      const opened = { evidence, store: store = keptReplay(directory, at) };
       // A read is final at its judging index; where the view could not read further, the output says so.
       const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
-      use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled }, origin);
+      const readOver = async (source: Uint8Array, origin: object) => {
+        let read;
+        try {
+          read = await readFrontier(source, kept.signed, at, { construction: directory.construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
+            reference: view.file.reference, ...opened, answers });
+        } catch (error) {
+          throw inUse(error);
+        }
+        use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled }, origin);
+      };
+      const file = flag(args, "package");
+      if (file !== undefined) await readOver(readRequired(file, "package file"), { evidence: "file" });
+      else await served(directory, kept, view, evidence, supplied => readOver(supplied.served.package, originOf(supplied)));
     } finally { store?.close(); evidence?.close(); await verifier?.close(); }
   } finally { view.close(); }
 }
@@ -393,23 +433,23 @@ async function serve(argv: readonly string[]): Promise<void> {
       if (stopping) return;
       try {
         const kept = keptTerms(directory, backing, venue), before = replica.selection(backing)?.selection.sequence;
-        const supplied = await served(directory, kept, view, evidence!, [local, url]);
-        const store = keptReplay(directory, at);
-        let read;
-        try {
-          read = await readFrontier(supplied.served.package, kept.signed, at, { construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
-            reference: view.file.reference, evidence: evidence!, store, answers: false });
-        } finally { store.close(); }
-        // Served only where its own read found the selection canonical: it holds what a read of it needs.
-        const canonical = read.canonical?.commitment, selected = supplied.served.selection;
-        const final = canonical !== undefined && canonical.sequence === selected.sequence && compareBytes(canonical.operator, selected.operator) === 0 &&
-          compareBytes(canonical.root, selected.root) === 0 && replica.keep(supplied.served);
-        const now = replica.selection(backing)?.selection.sequence;
-        if (now !== before || !final) {
-          print({ ...supplyOf(kept, at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null }, { evidence: supplied.origin,
-            ...(supplied.origin === "replica" ? { replica: supplied.url } : {}), ...(supplied.skipped.length > 0 ? { skipped: supplied.skipped } : {}) }, directory),
-            served: now ?? null });
-        }
+        await served(directory, kept, view, evidence!, async supplied => {
+          const store = keptReplay(directory, at);
+          let read;
+          try {
+            read = await readFrontier(supplied.served.package, kept.signed, at, { construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
+              reference: view.file.reference, evidence: evidence!, store, answers: false });
+          } finally { store.close(); }
+          // Served only where its own read found the selection canonical: it holds what a read of it needs.
+          const canonical = read.canonical?.commitment, selected = supplied.served.selection;
+          const final = canonical !== undefined && canonical.sequence === selected.sequence && compareBytes(canonical.operator, selected.operator) === 0 &&
+            compareBytes(canonical.root, selected.root) === 0 && replica.keep(supplied.served);
+          const now = replica.selection(backing)?.selection.sequence;
+          if (now !== before || !final) {
+            print({ ...supplyOf(kept, at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null }, originOf(supplied), directory),
+              served: now ?? null });
+          }
+        }, [local, url]);
       } catch (error) {
         const code = roundRefusal(error);
         if (code === undefined) throw error;
