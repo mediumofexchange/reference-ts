@@ -13,6 +13,7 @@ import { randomBytes } from "node:crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
+import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { DEFAULT_ERGO_DEPTH, ErgoVenue, ergoAnchorContext, syncCaughtUp, type ErgoCatchUpReport } from "../ergo.js";
 import { parseErgoHeader } from "../ergo-headers.js";
@@ -25,7 +26,9 @@ import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "..
 import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
-import { CommandError, event, readJson, readOptional, readSecret, writeExclusive, writeReplace, type Directory } from "./common.js";
+import { VenueError } from "../venue-error.js";
+import { CommandError, event, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive, writeReplace,
+  type Directory } from "./common.js";
 
 const KINDS: readonly RecordKind[] = [1, 2, 3, 4];
 const NODE_TIMEOUT_MS = 30_000;
@@ -199,6 +202,35 @@ export function openView(directory: Directory): View {
   } catch (error) { journal.close(); throw error; }
 }
 
+/**
+ * `moe venue audit --dir <d>` (slice 13): any role's view re-checked as a reader that never trusted its rows would
+ * (`ErgoVenue.audit` with work): run it on a directory restored from a backup or copied from elsewhere, or after a
+ * disk fault, before any other command. Reopening checks only what is cheap. It reads no node and changes nothing; a
+ * row that does not reproduce refuses `AUDIT`, naming the first. A directory whose view never synced has nothing
+ * to audit (`ABSENT`).
+ */
+export async function venueAudit(argv: readonly string[]): Promise<void> {
+  if (argv[0] !== "audit") throw new UsageError("moe venue audit --dir <directory>");
+  const args = parseArguments(argv.slice(1), { dir: "value" }, 0), directory = openDirectory(required(args, "dir"), "any");
+  if (!existsSync(directory.file("venue.db"))) throw new CommandError("ABSENT", "the directory keeps no view (venue.db): nothing to audit");
+  const view = openView(directory);
+  try {
+    let witnessed: bigint;
+    // A view that failed refuses with its failure (VENUE), kept as the evidence that finality broke.
+    try { witnessed = view.venue.witnessedIndex(); } catch (error) {
+      if (error instanceof VenueError && /no settled snapshot/.test(error.message)) throw new CommandError("ABSENT", "the view has no settled snapshot: nothing to audit");
+      throw error;
+    }
+    let audited;
+    try { audited = view.venue.audit({ work: true }); } catch (error) {
+      if (error instanceof VenueError) throw new CommandError("AUDIT", error.message);
+      throw error;
+    }
+    print({ status: "audited", role: directory.config.role, venue: bytesToHex(view.file.id), witnessedIndex: witnessed,
+      headers: audited.headers, sections: audited.sections, objects: audited.objects });
+  } finally { view.close(); }
+}
+
 /** The directory's node endpoints as publishing suppliers, each submission first passing the spend budget. */
 export function publishingSuppliers(directory: Directory, budget: SpendBudget): ErgoPublishingSupplier[] {
   return directory.config.nodes.map((url, i) => {
@@ -268,7 +300,8 @@ export const fundingTree = (secret: Uint8Array): Uint8Array => payToPublicKeyTre
  * guard judges it: before each broadcast the signed transaction is replayed on an offline mempool funded with the
  * key's unspent boxes, and what it takes from the key (fees and record boxes' minimums) is reserved in `spend.db`
  * before it is sent, so a refused or uncertain broadcast keeps its reservation. A transaction past the budget is
- * refused (`BUDGET`); an exact resubmission of one already reserved passes.
+ * refused (`BUDGET`); an exact resubmission of one already reserved passes. A `spend.db` restored from a copy misses
+ * what was spent since it was made; the funding key's balance stays the hard cap (slice 13 M13e).
  */
 export class SpendBudget {
   private readonly db: DatabaseSync;

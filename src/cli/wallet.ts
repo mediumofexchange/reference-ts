@@ -468,9 +468,31 @@ async function handoff(argv: readonly string[]): Promise<void> {
   });
 }
 
+/**
+ * `restore --copy --dir <d>` (slice 13 M13e): this directory was restored from a copy or a backup, and the instance it
+ * was copied from is gone. Records the restoration (`V3Wallet.recordRestoration`); the view's file, a copy too, was
+ * audited as it opened. Run it before anything else, also after an in-place overwrite or a snapshot rollback, which
+ * the wallet cannot see.
+ */
+async function restoreCopy(argv: readonly string[]): Promise<void> {
+  const args = parseArguments(argv, { dir: "value", copy: "switch", verifiers: "value" }, 0);
+  const directory = openDirectory(required(args, "dir"), "wallet");
+  await withWallet(directory, args, {}, async ({ wallet }) => {
+    const copied = wallet.isCopy(), { requests } = wallet.recordRestoration();
+    print({ status: "restored", restored: "copy", copied, requests, notes: [
+      "never run the instance this copy was made from again: two copies of one wallet act unaware of each other",
+      "its lost instance may have credited a request it made: fulfill refuses those listed (RESTORED) unless your records outside the wallet show it did not (--uncredited)",
+      ...(keyed(directory) ? ["its next sync of each backing, from a view at least as fresh as its lost instance's, exposes every owner key " +
+        "through h + 256 (lit-v1 §8): move-window before new requests, and before a payment or burn with change",
+        "it cannot tell which requests its lost instance paid: before paying one again, ask the payee"] : []),
+    ] });
+  });
+}
+
 /** `restore --key <file> --backup <file> --digest <hex>`: a new directory holding the handoff's wallet; a rerun over a
- * complete restore is confirmed by its provenance. */
+ * complete restore is confirmed by its provenance. With `--copy`, `restoreCopy`. */
 async function restore(argv: readonly string[]): Promise<void> {
+  if (argv.includes("--copy")) return restoreCopy(argv);
   const flags = { verifiers: "value", key: "value", backup: "value", digest: "value", "backer-key": "value" } as const;
   const probe = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", construction: "value", ...flags }, 0);
   const digest = required(probe, "digest");
@@ -629,13 +651,14 @@ function savedFulfillment(directory: Directory, wallet: V3Wallet, alias: string)
 
 /** `fulfill <alias> <backing>`: the request found paid in the canonical frontier. Credit only on exit 0. */
 async function fulfill(argv: readonly string[]): Promise<void> {
-  const { args, directory, alias, kept } = aliased(argv, {}, 2);
+  const { args, directory, alias, kept } = aliased(argv, { uncredited: "switch" }, 2);
+  const options = { uncredited: has(args, "uncredited") };
   await withWallet(directory, args, { sync: true }, async opened => {
     const earlier = savedFulfillment(directory, opened.wallet, alias);
     if (earlier !== undefined) throw new Replayed({ status: "replay", alias, ...earlier });
     await withEvidence(opened, args, kept, false, async source => {
-      const credited = keyed(directory) ? keyedFulfillmentOut(await opened.wallet.keyedFulfill(alias, source.bytes, kept.signed))
-        : fulfillmentOut(await opened.wallet.fulfill(alias, source.bytes, kept.signed));
+      const credited = keyed(directory) ? keyedFulfillmentOut(await opened.wallet.keyedFulfill(alias, source.bytes, kept.signed, options))
+        : fulfillmentOut(await opened.wallet.fulfill(alias, source.bytes, kept.signed, options));
       print({ status: "final", alias, ...credited, evidence: source.source, ...source.from });
     });
   });

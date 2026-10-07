@@ -25,6 +25,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { createHash, hash, randomBytes } from "node:crypto";
 import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { fileIdentity } from "../../file-identity.js";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
 import { EMPTY_NOTE_ROOT, EMPTY_NOTE_SUBTREE, NOTE_TREE_DEPTH, noteNode, type NotePath } from "../note-tree.js";
@@ -434,8 +435,12 @@ function headerPageSize(path: string): number | undefined {
 /** The digest a closed kept file gives (§14's check on opening), or undefined where its header names no page size. */
 export function keptFileDigest(path: string): string | undefined {
   const size = headerPageSize(path);
-  return size === undefined ? undefined : PageDigest.of(path, size).root();
+  return size === undefined ? undefined : vouched(path, PageDigest.of(path, size));
 }
+/** The digest file's text: the page digest and the kept file's identity (slice 13 M13e). §14 wants the digest in
+ * storage only the reader writes; a directory copied whole carries both files, and the copy's other identity leaves
+ * its kept state discarded and replayed. */
+const vouched = (path: string, pages: PageDigest): string => `${pages.root()}\n${fileIdentity(path)}`;
 /** Replace a small file durably: a crash leaves the old contents or the new, never a torn one. */
 function replaceFile(path: string, text: string): void {
   const partial = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.partial`, fd = openSync(partial, "w");
@@ -461,7 +466,7 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
     const size = headerPageSize(path);
     if (version !== BigInt(SCHEMA_VERSION) || size === undefined || !existsSync(digest)) return undefined;
     const pages = PageDigest.of(path, size);
-    return readFileSync(digest, "utf8") === pages.root() ? pages : undefined;
+    return readFileSync(digest, "utf8") === vouched(path, pages) ? pages : undefined;
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.
     if (error instanceof FileInUse) throw error;
@@ -624,7 +629,7 @@ export class ReplayStore {
       if (checkpoint.busy !== 0n || checkpoint.log !== checkpoint.checkpointed) throw new FileInUse("kept replay file");
       this.#pages!.update(path, this.#unhashed);
       this.#unhashed.clear();
-      replaceFile(this.#kept!.digest, this.#pages!.root());
+      replaceFile(this.#kept!.digest, vouched(path, this.#pages!));
     }
     this.#digestedAt = changes; this.#sinceKeep = 0;
   }

@@ -250,6 +250,44 @@ describe("durable independently replayed Ergo view", () => {
     }
   });
 
+  it("audits a view copied from another file before any read, and refuses one whose rows do not reproduce (slice 13 M13e)", async () => {
+    const { copyFileSync, existsSync } = await import("node:fs"), { DatabaseSync } = await import("node:sqlite");
+    const source = file(), old = opened(source), blocks = records(); await old.venue.sync([supplier(blocks)]); old.journal.close();
+    const copy = (to: string) => { for (const suffix of ["", "-wal"]) if (existsSync(source + suffix)) copyFileSync(source + suffix, to + suffix); return to; };
+    // A faithful copy is audited once, as it opens, and is then the view's own file.
+    const faithful = copy(file()), first = opened(faithful);
+    expect(first.journal.copied()).toBe(false);
+    expect(first.venue.witnessedIndex()).toBe(7n);
+    first.journal.close();
+    expect(opened(faithful).journal.copied()).toBe(false);
+    // A copy whose rows another hand changed, with no work redone, opens nowhere.
+    const changed = copy(file()), db = new DatabaseSync(changed);
+    db.exec("UPDATE objects SET record=zeroblob(length(record)) WHERE idx=0"); db.close();
+    expect(() => opened(changed)).toThrow(/a copied or restored view does not reproduce: .*section 0's objects .* sync again from the anchor/);
+    // The same change in the view's own file passes reopening, which checks only what is cheap; `audit` finds it.
+    const own = new DatabaseSync(source); own.exec("UPDATE objects SET record=zeroblob(length(record)) WHERE idx=0"); own.close();
+    expect(() => opened(source).venue.audit()).toThrow(/section 0's objects are not those it attributes/);
+  });
+
+  it("keeps a copied view's venue failure, and names a damaged header row of a copy that never settled (M13e review)", async () => {
+    const { copyFileSync, existsSync } = await import("node:fs"), { DatabaseSync } = await import("node:sqlite");
+    const { FAILURE } = await import("../src/ergo-store.js");
+    const copy = (source: string) => { const to = file(); for (const s of ["", "-wal"]) if (existsSync(source + s)) copyFileSync(source + s, to + s); return to; };
+    // A view that failed: its copy opens, audited, and still refuses with the failure, the only evidence finality broke.
+    const failed = file(), old = opened(failed); await old.venue.sync([supplier(records())]); old.journal.close();
+    const db = new DatabaseSync(failed); db.prepare("UPDATE meta SET failure=?").run(FAILURE); db.close();
+    const kept = opened(copy(failed));
+    expect(kept.journal.copied()).toBe(false);
+    expect(() => kept.venue.witnessedIndex()).toThrow(FAILURE);
+    // A view whose clock never settled: a damaged header row in its copy is a named refusal, not an unexpected error.
+    const young = file(), first = opened(young); await first.venue.sync([supplier(chain.extend(chain.anchor, 1))]); first.journal.close();
+    for (const damage of ["UPDATE headers SET score='999999'", "UPDATE headers SET parent=zeroblob(32)"]) {
+      const damaged = copy(young), changed = new DatabaseSync(damaged); changed.exec(damage); changed.close();
+      expect(() => opened(damaged), damage).toThrow(VenueError);
+      expect(() => opened(damaged), damage).toThrow(/a copied or restored view does not reproduce: Ergo view audit/);
+    }
+  });
+
   it("keeps each supplier's side-branch charge by name across a restart, so a new process grants no fresh quota", async () => {
     const path = file(), main = chain.extend(chain.anchor, 12), policy = { sideHeadersPerSupplier: 2 };
     const old = opened(path, policy); await old.venue.sync([supplier(main)]);

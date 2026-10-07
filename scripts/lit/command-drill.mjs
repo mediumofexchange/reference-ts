@@ -29,12 +29,17 @@
 // the holder's), and parties meet only through the venue, the onion services and the files the drill hands across.
 // It writes nothing outside its scratch directory.
 //
+// Slice 13 M13e: the shop's restored wallet, the reader and the relay are lost and their backups restored in place: the
+// wallet refuses to act (COPIED) until `restore --copy`, after which its next read exposes every owner key through
+// h + 256 and it refuses the request its lost instance credited (RESTORED); the reader reads the same supply over its
+// copied view and replay file; `venue audit` refuses a view changed in place (AUDIT); the relay publishes again.
+//
 // Usage: node scripts/lit/command-drill.mjs   (after npm run build)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { connect } from "node:net";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
@@ -574,6 +579,55 @@ try {
     assert.equal(after.status, "saved");
     // A wallet whose window still takes new keys has none to move.
     assert.match((await refused(wallet("move-window", HD, "move-0", backing), "CONFLICT")).message, /window is not full/);
+  });
+
+  await check("a wallet, a reader and a relay restored from backups of their directories (M13e): the wallet acts on nothing until " +
+    "its restoration is recorded, then never names a key its lost instance exposed and refuses a request that instance may have " +
+    "credited; the reader reads and the relay publishes again; venue audit finds a view changed in place", async () => {
+    const backups = join(scratch, "backups"); mkdirSync(backups);
+    const backup = directory => { const to = join(backups, basename(directory)); cpSync(directory, to, { recursive: true }); return to; };
+    // T0: the shop's invoice is out, and the owners back up the shop's wallet, the reader and the relay.
+    const invoice = await request(H3, "invoice-3", 1);
+    const saved = [[H3, backup(H3)], [RD, backup(RD)], [RL, backup(RL)]];
+    // Past T0 the shop's lost instance gives another request a key, is paid the invoice and credits it.
+    const lost = await request(H3, "order-A", 1);
+    await ok(wallet("pay", BK, "pay-3", backing, ...invoice.args, "--value", "1"));
+    await finalOf(BK, "pay-3");
+    assert.equal((await settled(wallet("fulfill", H3, "invoice-3", backing), () => true)).value, "1");
+    const current = await supply();
+    // The originals are lost; each backup is restored in its place (the lost directories are kept aside, so the copies'
+    // files are new ones).
+    for (const [directory, from] of saved) {
+      renameSync(directory, `${directory}-lost`); cpSync(from, directory, { recursive: true }); chmodSync(directory, 0o700);
+    }
+    await refused(wallet("request", H3, "order-B", backing, "1"), "COPIED");
+    const restored = await ok(["wallet", "restore", "--copy", "--dir", H3]);
+    assert.deepEqual([restored.status, restored.copied, restored.requests], ["restored", true, ["invoice-3"]]);
+    assert.match(restored.notes.join(" "), /move-window before new requests/);
+    await refused(wallet("fulfill", H3, "invoice-3", backing), "RESTORED");
+    // Its next read exposes every key through h + 256 (lit-v1 §8): the key order-A took is never named again.
+    await ok(wallet("sync", H3, backing));
+    await refused(wallet("request", H3, "order-B", backing, "1"), "WINDOW");
+    await ok(wallet("move-window", H3, "move-2", backing));
+    await finalOf(H3, "move-2");
+    const next = await request(H3, "order-B", 1);
+    assert.notEqual(next.made.frame.slice(-64), lost.made.frame.slice(-64));
+    // The reader's copied view is audited as it opens and its copied replay file read again: the same supply.
+    const read = await supply();
+    assert.deepEqual([read.status, read.issued, read.burned, read.supply], [current.status, current.issued, current.burned, current.supply]);
+    // A view changed in place keeps its file: reopening checks only what is cheap, and venue audit reads every row.
+    const audited = await ok(["venue", "audit", "--dir", RD]);
+    assert.deepEqual([audited.status, audited.role], ["audited", "reader"]);
+    assert(BigInt(audited.objects) > 0n, JSON.stringify(audited));
+    const view = new DatabaseSync(join(RD, "venue.db"));
+    view.exec("UPDATE objects SET record=zeroblob(length(record)) WHERE idx=(SELECT min(idx) FROM objects)"); view.close();
+    assert.match((await refused(["venue", "audit", "--dir", RD], "AUDIT")).message, /Ergo view audit: section \d+'s objects are not those it attributes/);
+    // Its remedy: remove the view, which syncs again from the anchor.
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(join(RD, `venue.db${suffix}`), { force: true });
+    assert.equal((await supply()).supply, current.supply);
+    assert.equal((await ok(["venue", "audit", "--dir", RD])).status, "audited");
+    // The restored relay answers a publication it made before as final, from its own view.
+    assert.equal((await ok(["relay", "publish", "--dir", RL, join(scratch, "answer.json")])).status, "final");
     await serving.stop();
   });
 

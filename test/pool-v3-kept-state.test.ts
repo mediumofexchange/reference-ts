@@ -4,7 +4,7 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -210,13 +210,16 @@ describe("pool-v3 §14 kept classes across reads", () => {
     store.close();
   });
 
-  it("discards a corrupted, truncated, undigested or stale-digest file and reads in full", async () => {
-    for (const damage of ["corrupt", "truncate", "undigested", "stale"] as const) {
+  it("discards a corrupted, truncated, undigested, stale-digest or copied file and reads in full", async () => {
+    for (const damage of ["corrupt", "truncate", "undigested", "stale", "copied"] as const) {
       const f = fixture(), kept = files();
       await f.first();
       const store = opened(kept.path, kept);
       await f.read(counting(), store); store.close();
-      if (damage === "corrupt") {
+      // A copy of the file with its digest (another directory's, or a backup restored): its digest names another
+      // file's identity (slice 13 M13e).
+      if (damage === "copied") { copyFileSync(kept.path, `${kept.path}.copy`); rmSync(kept.path); renameSync(`${kept.path}.copy`, kept.path); }
+      else if (damage === "corrupt") {
         const bytes = readFileSync(kept.path), at = Math.floor(bytes.length / 2); bytes[at] = bytes[at]! ^ 1; writeFileSync(kept.path, bytes);
       } else if (damage === "truncate") truncateSync(kept.path, Math.floor(statSync(kept.path).size / 2));
       else if (damage === "undigested") rmSync(kept.digest);

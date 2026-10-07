@@ -172,14 +172,14 @@ function absolute(path: string): string {
   return isAbsolute(path) ? path : resolve(path);
 }
 
-/** Open an existing directory of `role`. */
-export function openDirectory(dir: string, role: Role): Directory {
+/** Open an existing directory of `role`, or of any role for a command every directory takes (`moe venue audit`). */
+export function openDirectory(dir: string, role: Role | "any"): Directory {
   const path = absolute(dir);
   requirePrivate(path);
   prepare(path);
   lock(path);
   const config = readConfig(path);
-  if (config.role !== role) throw new CommandError("ROLE", `the directory is a ${config.role} directory, not a ${role} directory`);
+  if (role !== "any" && config.role !== role) throw new CommandError("ROLE", `the directory is a ${config.role} directory, not a ${role} directory`);
   return directory(path, config);
 }
 
