@@ -654,7 +654,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await f.holder.sync(f.served(), f.signed);
     expect(f.holder.act("late")!.status).toBe("failed");
     const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, answers: true });
-    expect(read.answers.map(a => [a.release?.output, a.release?.force, a.release?.check]))
+    expect(read.answers.map(a => [a.release?.disclosure?.output, a.release?.force, a.release?.check]))
       .toEqual([[decodeRecord(late.record).publicInputs[14], false, "DEADLINE"]]);
     expect(read.force.map(x => x.record.kind)).toEqual([4]);
     // Another party's settlement of this demand to another output, with a release no presenter signed, is
@@ -677,7 +677,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     // The reader lists every release with its verdict: the late and the forged one without force, the last with it.
     const after = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, answers: true });
     expect(after.force.map(x => x.record.kind)).toEqual([4, 6]);
-    expect(after.answers.map(a => [a.release?.output, a.release?.force])).toEqual([[l[14], false], [l[14]! + 1n, false], [s[14], true]]);
+    expect(after.answers.map(a => [a.release?.disclosure?.output, a.release?.force])).toEqual([[l[14], false], [l[14]! + 1n, false], [s[14], true]]);
   });
 
   it("counts a release published under terms without silence, and refuses a second settlement at one count", async () => {
@@ -915,7 +915,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const releaseAt = f.venue.witnessedIndex();
     await f.relay(f.holder, "settle", releaseAt);
     const read = await readFrontier(f.served(), f.signed, f.venue.witnessedIndex(), { venue: f.venue, reference, verifier, answers: true });
-    expect(read.answers.filter(a => a.release !== undefined).map(a => [a.release!.output, a.release!.force, a.release!.check]))
+    expect(read.answers.filter(a => a.release !== undefined).map(a => [a.release!.disclosure!.output, a.release!.force, a.release!.check]))
       .toEqual([[release[14], true, undefined], [release[14], false, "TAKEN"]]);
     // The holder's timely acceptance reads as released: past the deadline the demand is the backer's failure, not a lapse.
     f.venue.advance(deadline + 1n);

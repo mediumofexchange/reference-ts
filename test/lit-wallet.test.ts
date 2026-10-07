@@ -8,7 +8,7 @@ import { decodeReceipt } from "../src/lit/commitments.js";
 import { litConfigHash } from "../src/lit/configuration.js";
 import { LIT } from "../src/lit/construction.js";
 import { noteCommitment, noteNullifier, noteTag } from "../src/lit/notes.js";
-import { acceptanceBytes, decodePublication, decodeRecord, encodeRecord, statementBytes, type Statement } from "../src/lit/records.js";
+import { acceptanceBytes, decodePublication, decodeRecord, encodePublication, encodeRecord, statementBytes, type Statement } from "../src/lit/records.js";
 import { encodeLitTerms, litTermsName, litTermsSignatureMessage, type LitRootTerms } from "../src/lit/terms.js";
 import { decodeLitPackage, decodeLitSegmentHeader, decodeLitTrail, litSegmentIdentity } from "../src/lit/transport.js";
 import { acceptSecret, issueNonce, ownerSecret, presentSecret } from "../src/lit/wallet-keys.js";
@@ -125,9 +125,8 @@ describe("the one wallet holding lit notes", () => {
     expect(receiver.keyedFulfillment("invoice")).toEqual(credited);
     expect(await refusal(receiver.keyedFulfill("invoice", await f.served(), f.signed))).toBe("CONFLICT");
     expect(values(await receiver.sync(await f.served(), f.signed))).toEqual([[4n, "available"]]);
-    // A pool request on a lit wallet, and the presentation reading lit does not take yet, refuse by name.
+    // A pool request on a lit wallet refuses by name.
     expect(await refusal(() => receiver.request("pool", f.backing, 1n))).toBe("INVALID");
-    expect(await refusal(receiver.presentation(b(1), await f.served(), f.signed))).toBe("INVALID");
   });
 
   it("credits no request with an output of the wallet's own notes", async () => {
@@ -343,6 +342,50 @@ describe("the one wallet holding lit notes", () => {
     expect(values(await holder.sync(await f.served(), f.signed))).toEqual([]);
     expect([holder.act("d")!.status, holder.act("s")!.status]).toEqual(["final", "final"]);
     expect(values(await backer.sync(await f.served(), f.signed))).toEqual([[8n, "available"]]);
+  });
+
+  it("reads C3.8 over lit: only an acceptance K and its owner key both signed answers a demand (§7), so K cannot escape dishonour", async () => {
+    const f = await fixture(), holder = f.open("holder"), backer = f.open("backer");
+    for (const [name, value] of [["five", 5n], ["three", 3n], ["two", 2n]] as const) await f.issue(holder.keyedRequest(name, f.backing, value));
+    await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 40n, demands: Statement[] = [], ids: Uint8Array[] = [];
+    for (const [name, value] of [["d5", 5n], ["d3", 3n], ["d2", 2n]] as const) {
+      const made = await holder.demand(name, value, deadline, await f.served(), f.signed);
+      await holder.submit(name, f.service); ids.push(made.demand!); demands.push(decodeRecord(made.record).statement);
+    }
+    await f.checkpoint();
+    const read = async (id: Uint8Array) => holder.presentation(id, await f.served(), f.signed);
+    expect(await read(ids[0]!)).toMatchObject({ backing: f.backing, quantity: 5n, deadline, inTerm: true, ended: undefined, overdue: undefined, acceptances: [] });
+    expect(await refusal(read(b(1)))).toBe("ABSENT");
+    // K signs acceptances of d5 naming keys of the holder's it can see (an input's owner, the presenter key), and signs
+    // for them itself: published and timely, but their owner keys did not sign them, so none answers.
+    const d5 = demands[0] as Extract<Statement, { kind: 4 }>;
+    const publish = (acceptance: { demand: Uint8Array; owner: Uint8Array; deadline: bigint; signature: Uint8Array; ownerSignature: Uint8Array }) =>
+      f.venue.publishRecord(4, f.backing, encodePublication({ domain: DOMAIN, backing: f.backing, kind: 2, acceptance: { domain: DOMAIN, ...acceptance } }));
+    const byK = (demand: Uint8Array, owner: Uint8Array, ownerSecret: Uint8Array = K) => {
+      const bytes = acceptanceBytes({ domain: DOMAIN, demand, owner, deadline: deadline - 10n });
+      return { demand, owner, deadline: deadline - 10n, signature: ed25519.sign(bytes, K), ownerSignature: ed25519.sign(bytes, ownerSecret) };
+    };
+    await publish(byK(ids[0]!, d5.inputs[0]!.owner)); await publish(byK(ids[0]!, d5.presenter));
+    // d3: K's own acceptance through its wallet (owner `acceptSecret`'s key), published and never settled.
+    const answer = await backer.keyedAccept("a3", ids[1]!, deadline - 10n, await f.served(), f.signed, sign);
+    await backer.publishAcceptance("a3", f.venue);
+    // d2: an acceptance naming K itself carries two equal signatures and is valid (§7); the holder settles it.
+    const own = byK(ids[2]!, pub(K));
+    await publish(own);
+    await holder.settle("s2", { domain: DOMAIN, ...own }, await f.served(), f.signed);
+    await holder.submit("s2", f.service); await f.checkpoint();
+    const settled = await read(ids[2]!);
+    expect(settled).toMatchObject({ ended: { by: "settlement" }, overdue: undefined });
+    expect(settled.acceptances.map(a => [a.owner, a.timely, a.taken])).toEqual([[pub(K), true, false]]);
+
+    f.venue.advance(deadline + 5n); await f.checkpoint();
+    const t = f.venue.witnessedIndex(), dishonoured = await read(ids[0]!), lapsed = await read(ids[1]!);
+    expect(dishonoured).toMatchObject({ ended: undefined, overdue: { reading: "dishonour", from: deadline + 1n, through: t }, acceptances: [] });
+    expect(lapsed).toMatchObject({ ended: undefined, overdue: { reading: "lapse", from: deadline + 1n, through: t } });
+    expect(lapsed.acceptances.map(a => [a.owner, a.deadline, a.timely, a.taken])).toEqual([[answer.owner, deadline - 10n, true, false]]);
+    expect((await read(ids[2]!)).ended).toEqual(settled.ended);
   });
 
   it("withdraws a demand, after which its notes pay as any other; publishes lit frames; has nothing to freshen", async () => {

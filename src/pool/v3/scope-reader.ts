@@ -18,9 +18,9 @@ import { linkInForce, RangeLimitError, type HeldCommitment, type RangeEntry } fr
 import type { RecordVenue } from "../../record-venue.js";
 import { VenueError } from "../../venue-error.js";
 import type { Commitment } from "../../venue-records.js";
-import { identifierOf, VALUE_BOUND } from "../field.js";
+import { VALUE_BOUND } from "../field.js";
 import type { Snapshot } from "./commitments.js";
-import { POOL_V3, type Construction } from "./construction.js";
+import type { AcceptanceView, Construction, ReleaseView } from "./construction.js";
 import type { SegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
@@ -28,7 +28,7 @@ import type { WalkEvidence } from "./evidence-store.js";
 import { keptContext, keptStateHolds, lastValidOf, readRecordView, replayTrail, ReplayResult, type CarryingVerdict, type FaultObserver,
   type ReaderSelection, type RecordView, type ReplayContext, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
-import { decodePublication, settlementAuthorization, type Record, type SignedAcceptance } from "./records.js";
+import type { Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import { KeptStateMismatch, type ImportEntry, type ReplayStore, type WalkBase, type WalkForce, type WalkVerdict } from "./replay-store.js";
@@ -57,12 +57,9 @@ export interface CanonicalCheckpoint {
 }
 /** A forced publication's record, decoded by its construction: pool-v3's `Record` by default, a lit read's `LitRecord`. */
 export interface ForcedPublication<R = Record> { readonly index: bigint; readonly record: R; readonly bytes: Uint8Array }
-/** A release (publication kind 3) as an answer carries it: the segment its settlement names, the output it discloses
- * with its `rho_out`, the presenter's signature with the exact message it must sign (C3.6), and its force verdict
- * (none where no gap could open: the backing declares no silence). The proof is not kept. */
-export interface WitnessedRelease {
-  readonly segment: Uint8Array; readonly output: bigint; readonly rho: bigint;
-  readonly releaseMessage: Uint8Array; readonly releaseSignature: Uint8Array;
+/** A release (publication kind 3) as an answer carries it (construction.ts `ReleaseView`), with its force verdict
+ * (none where no gap could open: the backing declares no silence). */
+export interface WitnessedRelease extends ReleaseView {
   /** Whether it had force; otherwise the check that refused it, `TAKEN` for a release taken by another demand's settlement (C3.8). */
   readonly force: boolean; readonly check: string | undefined;
 }
@@ -71,7 +68,7 @@ export interface WitnessedRelease {
  * resolves the demand it names, which C3.8's reader holds beside it (C2b.3.2). */
 export interface WitnessedAnswer {
   readonly index: bigint; readonly ordinal: bigint;
-  readonly acceptance: SignedAcceptance;
+  readonly acceptance: AcceptanceView;
   readonly release: WitnessedRelease | undefined;
 }
 export interface PublicationVerdict { readonly index: string; readonly ordinal: string; force: boolean; check?: string }
@@ -481,8 +478,6 @@ async function selectedRead(context: ImportContext, evidence: WalkEvidence, walk
  * backing's forced publications and the clock. */
 export async function classifyScopeFrontier<R = Record>(context: FrontierContext, record: RecordVenue, evidence: WalkEvidence): Promise<FrontierResult<R>> {
   const { selection, terms, construction } = context;
-  // A holder's answers read pool-v3's releases (C3.5's disclosure, C3.8); lit's are the lit wallet's (WORK.md slice 14).
-  if (context.answers === true && construction !== POOL_V3 as Construction) throw new TypeError("a lit read lists no answers");
   const walk = scopeWalk(context, record, evidence);
   return closing(walk, async () => { try {
     const view = await walk.viewFor(selection.backing, terms), canonical = await walk.latest(selection.backing, terms);
@@ -496,16 +491,12 @@ export async function classifyScopeFrontier<R = Record>(context: FrontierContext
       .map(p => [`${p.index}:${p.ordinal}`, p]));
     const answers: WitnessedAnswer[] = [];
     for (const entry of context.answers === true ? view.publications() : []) {
-      let publication;
       try {
-        publication = decodePublication(entry.record);
-        if (!same(publication.domain, selection.domain) || !same(publication.backing, selection.backing)) continue;
-        if (publication.kind === 2) { answers.push({ index: entry.index, ordinal: entry.ordinal, acceptance: publication.acceptance, release: undefined }); continue; }
-        if (publication.kind !== 3) continue;
-        const { acceptance, releaseMessage, releaseSignature } = settlementAuthorization(publication.record), p = publication.record.publicInputs;
-        const verdict = verdicts.get(`${entry.index}:${entry.ordinal}`);
-        answers.push({ index: entry.index, ordinal: entry.ordinal, acceptance, release: { segment: identifierOf(p[2]!, p[3]!), output: p[14]!,
-          rho: p[9]!, releaseMessage, releaseSignature, force: verdict?.force === true, check: verdict?.check } });
+        const answer = construction.reader.answer(entry.record);
+        if (answer === undefined || !same(answer.domain, selection.domain) || !same(answer.backing, selection.backing)) continue;
+        const verdict = answer.release === undefined ? undefined : verdicts.get(`${entry.index}:${entry.ordinal}`);
+        answers.push({ index: entry.index, ordinal: entry.ordinal, acceptance: answer.acceptance,
+          release: answer.release === undefined ? undefined : { ...answer.release, force: verdict?.force === true, check: verdict?.check } });
       } catch (error) {
         if (error instanceof EncodingError) continue;
         throw error;

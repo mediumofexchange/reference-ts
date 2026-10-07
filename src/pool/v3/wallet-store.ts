@@ -441,9 +441,6 @@ export class V3Wallet {
     requireThat(this.construction === POOL_V3, "INVALID", "a keyed wallet takes requests by owner key");
   }
   /** C3.8's presentation reading reads pool-v3 records (dishonour.ts): a lit wallet does not take it yet. */
-  private poolOnly(): void {
-    requireThat(this.construction === POOL_V3, "INVALID", "a keyed wallet does not take this reading yet");
-  }
   private metadata() {
     const query = this.db.prepare("SELECT * FROM wallet_identity WHERE id=1"); query.setReadBigInts(true); return query.get();
   }
@@ -815,8 +812,9 @@ export class V3Wallet {
   private disclosures(view: Frontier, demand: Uint8Array, presenter: Uint8Array, segment: Uint8Array): bigint {
     const outputs = new Set<bigint>();
     for (const { acceptance, release } of view.result.answers) {
-      if (release !== undefined && !release.force && same(acceptance.demand, demand) && same(release.segment, segment) &&
-          verifySignatureStrict(release.releaseSignature, release.releaseMessage, presenter)) outputs.add(release.output);
+      const disclosure = release?.disclosure;
+      if (disclosure !== undefined && !release!.force && same(acceptance.demand, demand) && same(release!.segment, segment) &&
+          verifySignatureStrict(disclosure.releaseSignature, disclosure.releaseMessage, presenter)) outputs.add(disclosure.output);
     }
     return BigInt(outputs.size);
   }
@@ -1873,10 +1871,10 @@ export class V3Wallet {
    * the holder, the backer or a stranger; it writes nothing and decides no saved act. `ABSENT` where the record holds
    * no such demand of this backing. */
   async presentation(demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms): Promise<Presentation> {
-    this.mutable(); this.poolOnly();
+    this.mutable();
     const { obligor, own } = this.termsOf(signed), id = identifier(demand);
     return this.read(packageBytes, own, view => {
-      const reading = readPresentation(view.result, view.backing, obligor, id);
+      const reading = readPresentation(view.result, this.construction, view.backing, obligor, id);
       requireThat(reading !== undefined, "ABSENT", "the demand is not in this backing's record");
       return reading;
     }, true);

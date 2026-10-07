@@ -25,6 +25,7 @@ import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { FAULT_LIMITS } from "../src/pool/v3/fault-observer.js";
 import type { SegmentHeader } from "../src/pool/v3/headers.js";
 import { encodeEvidenceDirectory, type EvidenceItem } from "../src/pool/v3/package.js";
+import { readPresentation } from "../src/pool/v3/dishonour.js";
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { keptStateHolds } from "../src/pool/v3/reader.js";
 import { keptFileDigest, ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -149,7 +150,7 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
       statement: bytes.subarray(4, 4 + length), authorization: bytes.subarray(8 + length),
       suffix: records.slice(Number(position)).map(r => evidencePair(LIT.decode(r))) }, FAULT_LIMITS.maxSuffixEntries);
   }
-  const publish = (index: bigint, kind: 1 | 5, bytes: Uint8Array): void =>
+  const publish = (index: bigint, kind: 1 | 3 | 5, bytes: Uint8Array): void =>
     venue.witness(4, backing, index, encodePublication({ domain: DOMAIN, backing, kind, record: LIT.decode(bytes) }));
   const successor = (sequence: bigint, predecessor: Commitment): void => { current = open(sequence, predecessor, current.state); };
   /** The current trail as a reader's evidence store serves it, cut at its last record. */
@@ -266,7 +267,7 @@ describe("lit packages through the one reader (M14d)", () => {
     }
   });
 
-  it("forces a demand published past the silence duration, and refuses a forged one by its check (C2b.3.2, §7)", async () => {
+  it("forces a demand published past the silence duration, refuses a forged one by its check, and reads C3.8 by force (C2b.3.2, §7)", async () => {
     const f = litScope({ silence: { noCommitmentDuration: 5n } });
     f.checkpoint(1n, 1n);
     const issued = f.issue(10n, ALICE); await f.admit(issued);
@@ -295,8 +296,41 @@ describe("lit packages through the one reader (M14d)", () => {
     const unread = await readFrontier<LitRecord>(g.pack(), g.signed, 200n, { construction: LIT, reference, venue: g.venue });
     expect(unread.ranges.publications.map(p => [p.index, p.ordinal, p.force, "check" in p])).toEqual([["20", "0", false, false], ["20", "1", false, false]]);
     expect(unread.force).toHaveLength(0);
-    // A holder's answers read pool-v3's releases; a lit read lists none.
-    await expect(readFrontier(f.pack(), f.signed, 200n, { construction: LIT, reference, venue: f.venue, answers: true })).rejects.toThrow(TypeError);
+    // C3.8 by force (M14g5b): K publishes an acceptance of the honest demand to BOB's key, which BOB signed too, and one
+    // to the presenter key that K signed for twice; the presenter's release (kind 3) settles it by force, reading the
+    // forced demand's notes (§3). Only the first answers, once though witnessed twice (§7); a lit release discloses nothing.
+    const id = statementHash(LIT.decode(honest).statement), answerTo = (owner: Uint8Array, ownerSigner: Uint8Array) => {
+      const acceptance = { domain: DOMAIN, demand: id, owner: pub(owner), deadline: 90n }, bytes = acceptanceBytes(acceptance);
+      f.venue.witness(4, f.backing, 21n, encodePublication({ domain: DOMAIN, backing: f.backing, kind: 2,
+        acceptance: { ...acceptance, signature: ed25519.sign(bytes, K), ownerSignature: ed25519.sign(bytes, ownerSigner) } }));
+    };
+    answerTo(PRESENTER, K); answerTo(BOB, BOB);
+    f.publish(22n, 3, f.settle(honest, BOB, 90n));
+    const answered = await readFrontier<LitRecord>(f.pack(), f.signed, 200n, { construction: LIT, reference, venue: f.venue, answers: true });
+    expect(answered.force.map(x => x.record.statement.kind)).toEqual([4, 6]);
+    expect(answered.answers.map(a => [a.index, a.acceptance.owner, a.release?.force, a.release?.disclosure]))
+      .toEqual([[21n, pub(PRESENTER), undefined, undefined], [21n, pub(BOB), undefined, undefined], [22n, pub(BOB), true, undefined]]);
+    const reading = readPresentation(answered, LIT, f.backing, pub(K), id);
+    expect(reading).toMatchObject({ quantity: 10n, deadline: 100n, witnessed: 20n, inTerm: true, ended: { by: "settlement", at: 22n }, overdue: undefined });
+    expect(reading!.acceptances.map(a => [a.owner, a.witnessed, a.timely, a.taken])).toEqual([[pub(BOB), 21n, true, false]]);
+    // Read under another K nothing answers; a demand the record does not hold, or of another backing, has no reading.
+    expect(readPresentation(answered, LIT, f.backing, pub(MALLORY), id)!.acceptances).toEqual([]);
+    expect(readPresentation(answered, LIT, f.backing, pub(K), b(77))).toBeUndefined();
+    expect(readPresentation(answered, LIT, b(55), pub(K), id)).toBeUndefined();
+    // C3.8's void by force: once the first demand's deadline passed unanswered, a second demand of the same note stands by
+    // force and its forced settlement spends the note's tag, which the settlement reads only from that forced demand.
+    const h = litScope({ silence: { noCommitmentDuration: 5n } });
+    h.checkpoint(1n, 1n);
+    const coin = h.issue(10n, ALICE); await h.admit(coin);
+    h.checkpoint(2n, 2n);
+    const [only] = h.outputsOf(coin), first = h.demand([only!], [ALICE], 18n, 100n), second = h.demand([only!], [ALICE], 107n, 150n);
+    h.publish(20n, 1, first); h.publish(110n, 1, second); h.publish(112n, 3, h.settle(second, BOB, 140n));
+    const voided = await readFrontier<LitRecord>(h.pack(), h.signed, 200n, { construction: LIT, reference, venue: h.venue, answers: true });
+    expect(voided.force.map(x => [x.index, x.record.statement.kind])).toEqual([[20n, 4], [110n, 4], [112n, 6]]);
+    expect(readPresentation(voided, LIT, h.backing, pub(K), statementHash(LIT.decode(first).statement))).toMatchObject({
+      ended: { by: "void", at: 112n }, overdue: { reading: "dishonour", from: 101n, through: 111n }, acceptances: [] });
+    expect(readPresentation(voided, LIT, h.backing, pub(K), statementHash(LIT.decode(second).statement))).toMatchObject({
+      ended: { by: "settlement", at: 112n }, overdue: undefined });
   });
 
   it("counts a request whose owner signs it and whose note is an output of the canonical state (C2b.5.2, §7)", async () => {

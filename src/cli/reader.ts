@@ -212,20 +212,12 @@ export function presentationOf(reading: Presentation, at: bigint) {
   return { status: reading.ended !== undefined || reading.overdue !== undefined ? "final" : "pending", judgingIndex: at, ...reading };
 }
 
-/** C3.8's reading is pool-v3's alone so far: a lit directory refuses it by name. */
-export function requirePresentation(directory: Directory): void {
-  if (!directory.construction.reader.proofs) {
-    throw new CommandError("CONSTRUCTION", `C3.8's reading of a demand is not implemented for ${nameOf(directory.construction)} yet`);
-  }
-}
-
 export async function presentationCommand(argv: readonly string[], role: Role): Promise<void> {
   const args = parseArguments(argv, READ_FLAGS, 2);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
-  requirePresentation(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), demand = hex32(args.positional[1]!, "the demand");
   await frontier(directory, args, kept, true, (at, read, sync) => {
-    const reading = readPresentation(read, kept.backing, kept.terms.obligor, demand);
+    const reading = readPresentation(read, directory.construction, kept.backing, kept.terms.obligor, demand);
     if (reading === undefined) throw new CommandError("ABSENT", "the demand is not in this backing's record");
     print({ ...presentationOf(reading, at), sync });
   });

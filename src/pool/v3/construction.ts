@@ -23,8 +23,8 @@ import { decodeFaultEvidence, verifyFaultEvidence, type ExpectedSnapshot } from 
 import { V3_HEADERS, type SegmentHeader, type SegmentHeaderCodec } from "./headers.js";
 import { V3_PACKAGES, type PackageCodec } from "./package.js";
 import {
-  decodePublication, decodeRecord, decodeStatement, encodeRecord, evidenceHashes, hashEvidenceFields, settlementAuthorization, statementBytes,
-  statementHash, withdrawalBytes, type EvidenceDigests, type Record, type Statement,
+  acceptanceBytes, acceptanceId, decodePublication, decodeRecord, decodeStatement, encodeRecord, evidenceHashes, hashEvidenceFields, settlementAuthorization,
+  statementBytes, statementHash, withdrawalBytes, type EvidenceDigests, type Record, type SignedAcceptance, type Statement,
 } from "./records.js";
 import { effectOf, recoveryEffect, tagOf } from "./recovery.js";
 import { requireReplay } from "./refusals.js";
@@ -267,6 +267,31 @@ export interface PublicationView {
   readonly kind: 1 | 2 | 3 | 4 | 5;
   readonly record: Uint8Array | undefined;
 }
+/** An acceptance as C3.8's reading holds it (dishonour.ts), published on its own or carried by a release: decoded,
+ * with its signatures checked only by `signed`. */
+export interface AcceptanceView {
+  readonly demand: Uint8Array;
+  readonly deadline: bigint;
+  /** Pool-v3's field element, lit-v1's key. */
+  readonly owner: bigint | Uint8Array;
+  readonly id: Uint8Array;
+  /** Whether it is an acceptance under K at all: K's strict signature, and lit-v1's owner key's as well (§§4, 7). */
+  signed(obligor: Uint8Array): boolean;
+}
+/** A release (publication kind 3) as an answer carries it, besides its force verdict: the segment its settlement names
+ * and, in pool-v3, C3.5's disclosure (the output with its `rho_out`, the presenter's signature with the exact message
+ * it must sign). Lit-v1 has none (§7: §2's derivation replaces C3.5's count). The proof is not kept. */
+export interface ReleaseView {
+  readonly segment: Uint8Array;
+  readonly disclosure: { readonly output: bigint; readonly rho: bigint; readonly releaseMessage: Uint8Array; readonly releaseSignature: Uint8Array } | undefined;
+}
+/** A publication of kind 2 (an acceptance) or 3 (a release carrying one), routed to `backing`. */
+export interface AnswerView {
+  readonly domain: Uint8Array;
+  readonly backing: Uint8Array;
+  readonly acceptance: AcceptanceView;
+  readonly release: ReleaseView | undefined;
+}
 /** A request (publication kind 5) as C2b.5.2's count reads it. */
 export interface RequestView {
   /** The statement identity (hex): variants of one statement count once. */
@@ -321,6 +346,8 @@ export interface ReaderFrames {
   digests(record: Uint8Array): EvidenceDigests;
   /** EncodingError where the bytes are no publication. */
   publication(bytes: Uint8Array): PublicationView;
+  /** A publication's answer where it is of kind 2 or 3, undefined for another kind; EncodingError where malformed. */
+  answer(bytes: Uint8Array): AnswerView | undefined;
   /** A request record's view (kind 7); EncodingError where it is none. */
   request(record: Uint8Array): RequestView;
   /** EncodingError where malformed; FaultEvidenceLimitError past the suffix budget. */
@@ -382,6 +409,10 @@ function v3FaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarg
   };
 }
 
+/** C3.8's acceptance: K's strict signature over its bytes. */
+const v3Acceptance = (a: SignedAcceptance): AcceptanceView => ({ demand: a.demand, deadline: a.deadline, owner: a.owner, id: acceptanceId(a),
+  signed: obligor => verifySignatureStrict(a.signature, acceptanceBytes(a), obligor) });
+
 const V3_READER: ReaderFrames = Object.freeze({
   specification: "pool-v3 e7f7f24",
   domain: adoptedDomain,
@@ -404,6 +435,14 @@ const V3_READER: ReaderFrames = Object.freeze({
   publication: (bytes: Uint8Array): PublicationView => {
     const p = decodePublication(bytes);
     return { domain: p.domain, backing: p.backing, kind: p.kind, record: p.kind === 2 ? undefined : encodeRecord(p.record) };
+  },
+  answer: (bytes: Uint8Array): AnswerView | undefined => {
+    const p = decodePublication(bytes), { domain, backing } = p;
+    if (p.kind === 2) return { domain, backing, acceptance: v3Acceptance(p.acceptance), release: undefined };
+    if (p.kind !== 3) return undefined;
+    const { acceptance, releaseMessage, releaseSignature } = settlementAuthorization(p.record), q = p.record.publicInputs;
+    return { domain, backing, acceptance: v3Acceptance(acceptance),
+      release: { segment: identifierOf(q[2]!, q[3]!), disclosure: { output: q[14]!, rho: q[9]!, releaseMessage, releaseSignature } } };
   },
   request: (bytes: Uint8Array): RequestView => {
     const record = decodeRecord(bytes);
