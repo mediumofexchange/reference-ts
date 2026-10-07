@@ -59,11 +59,9 @@ signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's o
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
    never reached (step-back doubling overruns the fetch budget on known headers; pre-existing); a node POST (`unspentBoxes`, `submit`) on
    a connection the node closed as idle is not sent again (M11b9 sends GETs once more; availability only, the publisher resends exact
-   bytes); `moe venue audit` for restored views (release assurance's backup drills). Levers (Poseidon2 on Barretenberg, a 10⁶
-   first-sync run) only if a budget fails.
-6. **Slice 13**, release assurance, after 12 (Next 4's open correctness findings close in it at the latest): reproducible builds of the
-   package and its artifacts, installed-package interoperability, backup and restore drills within the standing authority. Security reviews
-   until then: separate AI instances (fresh reviewers, rolling audits); the external review once the product is complete (2026-10-01).
+   bytes). Levers (Poseidon2 on Barretenberg, a 10⁶ first-sync run) only if a budget fails.
+6. **Slice 13**, release assurance: the Goal above. Security reviews until the external review (once the product is complete, 2026-10-01):
+   separate AI instances (fresh reviewers, rolling audits).
 7. CI's real-proof checks run in five parallel groups (12 min, not 43) and skip for report/unread-doc commits ([decision](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)); lever: split the drill
    or local replay. M10e2 left: the harness's proof-free cases in vitest with stand-in proofs; narrow the optional `StoredEvent.index`/`judgedIndex` when touched.
    Root-cause a Windows hang: PR #114 run 37350884943 attempt 1 timed out (30 s, vitest worker RPC too) in `pool-v3-replay-store` keep-point tests and `cli.test.mjs:158`; green on re-run.
@@ -94,7 +92,7 @@ signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's o
 
 ## Open questions
 - Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
-- Deletion list (2026-10-07): none open; the merged spec and code branches of M14g5a are gone from both remotes (a stale local tracking ref only).
+- Deletion list (2026-10-07): none open.
 
 Roughly **72% done / 28% remaining** (range 62–79%), reassessed 2026-10-07 (M12c): lit notes adopted, holders reach operators over Tor,
 read a replica's evidence while an operator is down and have a third party's relay fund their gap acts; release assurance, qualified storage and mainnet remain.
