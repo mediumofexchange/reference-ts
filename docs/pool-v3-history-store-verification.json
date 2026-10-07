@@ -34,83 +34,83 @@
       "kind": 1,
       "count": 37,
       "bytes": 14656,
-      "totalMs": 31725,
-      "maxMs": 1105
+      "totalMs": 40620,
+      "maxMs": 1370
     },
     {
       "kind": 2,
       "count": 39,
       "bytes": 14656,
-      "totalMs": 104386,
-      "maxMs": 2735
+      "totalMs": 131975,
+      "maxMs": 3415
     },
     {
       "kind": 4,
       "count": 2,
       "bytes": 14656,
-      "totalMs": 4466,
-      "maxMs": 2234
+      "totalMs": 5691,
+      "maxMs": 2846
     },
     {
       "kind": 6,
       "count": 1,
       "bytes": 14656,
-      "totalMs": 2216,
-      "maxMs": 2216
+      "totalMs": 2844,
+      "maxMs": 2844
     }
   ],
   "reads": {
     "payerFirstRead": {
       "statements": 37,
       "verified": 37,
-      "ms": 1472,
+      "ms": 1563,
       "fetchedBytes": 565631
     },
     "payerLaterReads": [
       {
         "verified": 12,
         "asked": 4,
-        "ms": 774,
+        "ms": 627,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 498,
+        "ms": 606,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 619,
+        "ms": 607,
         "fetchedBytes": 188545
       }
     ],
     "payerRestart": {
       "verified": 0,
       "asked": 0,
-      "ms": 49,
+      "ms": 59,
       "fetchedBytes": 809
     },
     "receiver": {
       "firstReadVerified": 73,
-      "firstReadMs": 2567,
+      "firstReadMs": 2955,
       "fulfilled": 36,
-      "fulfillMs": 1282
+      "fulfillMs": 1368
     },
     "payerAfterReturn": {
       "verified": 0,
       "asked": 4,
-      "ms": 102,
+      "ms": 107,
       "fetchedBytes": 48192
     },
     "restoredWallet": {
       "verified": 78,
-      "ms": 2912,
+      "ms": 3433,
       "fetchedBytes": 1205514
     },
     "journalAudit": {
-      "ms": 1687
+      "ms": 2095
     }
   },
   "readers": {
@@ -121,8 +121,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "91e6fda89169a2535cd732fecf8f563cbf998cb976faf2ec8389eff9a1e855b3",
-        "history": "77639058d6a285434d50f981a48804221bc16f07b5d3bfa86bc0fdfe21496e76",
+        "spentRoot": "4719377a2087a3893880087a0d2c273cf78e73005f06c768798cf6291ebfd348",
+        "history": "65c872726863d3bad668104620a25c4770225a861894c7233ee147aa5a541def",
         "force": [],
         "clock": {
           "duration": "16",
@@ -135,9 +135,9 @@
       },
       "verified": 73,
       "instances": 2,
-      "readMs": 1874,
-      "maxRssBytes": 528343040,
-      "heapUsedBytes": 31934096,
+      "readMs": 2354,
+      "maxRssBytes": 529371136,
+      "heapUsedBytes": 27202488,
       "fetchedBytes": 1126772
     },
     "offline": {
@@ -147,8 +147,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "91e6fda89169a2535cd732fecf8f563cbf998cb976faf2ec8389eff9a1e855b3",
-        "history": "77639058d6a285434d50f981a48804221bc16f07b5d3bfa86bc0fdfe21496e76",
+        "spentRoot": "4719377a2087a3893880087a0d2c273cf78e73005f06c768798cf6291ebfd348",
+        "history": "65c872726863d3bad668104620a25c4770225a861894c7233ee147aa5a541def",
         "force": [
           {
             "index": "23",
@@ -178,9 +178,9 @@
       },
       "verified": 3,
       "instances": 2,
-      "readMs": 314,
-      "maxRssBytes": 349921280,
-      "heapUsedBytes": 24251776,
+      "readMs": 385,
+      "maxRssBytes": 374374400,
+      "heapUsedBytes": 24418104,
       "fetchedBytes": 0
     },
     "kept": {
@@ -189,9 +189,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "fb25f4a5d3fe9a2d0ab6aa3ad2c41b881b46682e5abb899a6425ae92fd9d1ce6",
-        "spentRoot": "c4c70250870d7a3654eaeb7468c3917673476dc565bd0578acbf0124b029cd88",
-        "history": "00872720c6a970b93dd53eb39c7d19b28b1ed437f967a4151b5ae921b4924656",
+        "segment": "5d75fe96d7f24a820e9ca294d90114eea3a969434d5da657e346ed8398685683",
+        "spentRoot": "d19c4251d6d1d31a56a47ac44070ded361b7c9a7c6b210addab6e4bc563f82b8",
+        "history": "bd774e89f44579e43a9164d1f14b80c379dd296cfced104e6172aae19c99cf7b",
         "force": [
           {
             "index": "23",
@@ -221,9 +221,9 @@
       },
       "verified": 2,
       "instances": 2,
-      "readMs": 355,
-      "maxRssBytes": 388448256,
-      "heapUsedBytes": 25736760,
+      "readMs": 430,
+      "maxRssBytes": 373239808,
+      "heapUsedBytes": 24677464,
       "fetchedBytes": 79579
     },
     "scratch": {
@@ -232,9 +232,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "fb25f4a5d3fe9a2d0ab6aa3ad2c41b881b46682e5abb899a6425ae92fd9d1ce6",
-        "spentRoot": "c4c70250870d7a3654eaeb7468c3917673476dc565bd0578acbf0124b029cd88",
-        "history": "00872720c6a970b93dd53eb39c7d19b28b1ed437f967a4151b5ae921b4924656",
+        "segment": "5d75fe96d7f24a820e9ca294d90114eea3a969434d5da657e346ed8398685683",
+        "spentRoot": "d19c4251d6d1d31a56a47ac44070ded361b7c9a7c6b210addab6e4bc563f82b8",
+        "history": "bd774e89f44579e43a9164d1f14b80c379dd296cfced104e6172aae19c99cf7b",
         "force": [
           {
             "index": "23",
@@ -264,17 +264,17 @@
       },
       "verified": 78,
       "instances": 2,
-      "readMs": 2117,
-      "maxRssBytes": 620449792,
-      "heapUsedBytes": 38805544,
+      "readMs": 2567,
+      "maxRssBytes": 543404032,
+      "heapUsedBytes": 37506312,
       "fetchedBytes": 1205514
     }
   },
   "process": {
-    "maxRssBytes": 572104704,
-    "heapUsedBytes": 44378096
+    "maxRssBytes": 562630656,
+    "heapUsedBytes": 54218120
   },
-  "elapsedMs": 195993,
+  "elapsedMs": 237127,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -298,7 +298,7 @@
     "dist/pool/v3/configuration.js": "7af6147f90d70c7c03372751ae6f7be172c836adcf9d7197c8daac36d7caabc5",
     "dist/pool/v3/construction.js": "e9619cb645cd7431854ac7a68e7a425ea033b7998c7e7689a2b3bac83e021b7b",
     "dist/pool/v3/dishonour.js": "1249116e99716fceeffc75c3c851cffa6a1166a9a33938b37ff178b76d11bda2",
-    "dist/pool/v3/evidence-store.js": "41cbe14f5342c90adcd4eae2c7ae6cbba55333153862ac8ac6320c5da038f96d",
+    "dist/pool/v3/evidence-store.js": "d56764c329387570af870d5e2e899e19d9b49c05e7e577a01248ed3a6a43ed9a",
     "dist/pool/v3/fault-evidence.js": "076cf2386ef5835a39057102b1c31b542d6619973ecd755354aa52f617bbcbea",
     "dist/pool/v3/fault-observer.js": "b5653c2af4b994fb837c7b8689e5073efc1e1b78f3113978fc5d139b5318868e",
     "dist/pool/v3/guard.js": "5bd8bf806aa9101d10fcca922ea1ec68050ce517d9d5dcbf4d1768e515630c0f",
@@ -318,11 +318,11 @@
     "dist/pool/v3/replay-store.js": "2096188ab02e888bf61a3fde25f99b98e00d8aed729ede61c9d8481bc74c6cb9",
     "dist/pool/v3/scope-evidence.js": "756dd7a2d4e4d3a7720178761382ca572b8450724ae31dfa51262b3e0befa26d",
     "dist/pool/v3/scope-reader.js": "b71428c951c57c890b9abf6cecac2916f9e22edc1a8ba755b09fe5e732a57ef8",
-    "dist/pool/v3/service-client.js": "0d3318c11ae56c1b07fc549198f227afe74a34c8ebc4bc88fab34da4510a3995",
-    "dist/pool/v3/service-http.js": "63305397865a26d556f0e7e86fa599e1bee06ce48e0e9a98ae4816c2473aab6d",
+    "dist/pool/v3/service-client.js": "87e16848cfaad3e5b67a5b5168ca41ec38e7e5c4a5880dc58e507f179f6f5ea2",
+    "dist/pool/v3/service-http.js": "adbece24e2331d20f9a8b7f9eec0500410894a72e2195443a8966e3b2fa6f516",
     "dist/pool/v3/service-wire.js": "2990ead4d79ca4d702b1b22e12098ef1e4ee4138dcfa9d47c7cdca0034c772e5",
     "dist/pool/v3/state.js": "62c8d90c0c42ada7e4cc67715d17f6f8de8e46fda9bd34ac88e083db6134dcbd",
-    "dist/pool/v3/store.js": "f0d637bbec79c8e37e7dc8e807ed826ac0543588c3b197ea45675e76be400cfd",
+    "dist/pool/v3/store.js": "6e677c23f57f264b48ea2b4e7f95f268422116c7a8087e2404cf9932c2a1b00d",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
@@ -372,7 +372,7 @@
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
     "src/pool/v3/construction.ts": "0373985686d4f275a73be934c834a7a916f949a0f9aaa39499f84c524098dabe",
     "src/pool/v3/dishonour.ts": "4c894cbf1537c972b6e814dee94e13213ba3e51eaa81ffe93e97f5a357e3600c",
-    "src/pool/v3/evidence-store.ts": "453fd0224e4f39ed9b309d72ba8f98f921df1e00fdd17a66bf8197e5d3ae3939",
+    "src/pool/v3/evidence-store.ts": "dcfd87f7d67f7af71dc66bc7bd1f14a3b0ea2d617cc76435a86a6b3d037d2cd9",
     "src/pool/v3/fault-evidence.ts": "3bf052fb0fde8516d30ddc4879345d9e8447fef0a9633aa51e26f4774bb92f6b",
     "src/pool/v3/fault-observer.ts": "7a7492584ced10a483257789edd282b974469fe2260815b3dba9758eed0f41c0",
     "src/pool/v3/guard.ts": "b56cd815362a7e45c60fafe21013c11adb450010361b3306b041cfba4f729504",
@@ -393,11 +393,11 @@
     "src/pool/v3/replay-store.ts": "de7cf042a4a5c4e2e41aa200e25dfe826b5c7c23cfb85cf3c692df33b6ab7518",
     "src/pool/v3/scope-evidence.ts": "b37ae977f1f5c1c5d61ec5d444794c24397907115e6ae9a9f0309ceb4542a879",
     "src/pool/v3/scope-reader.ts": "7181c770c1c01bf897ddb2ff2387bfe390d7b2b3a3a4177e531bfcaa4680b852",
-    "src/pool/v3/service-client.ts": "0323cb58f84707051b86ea9cc649af5320f17d28417f283fe53ccab6078f686c",
-    "src/pool/v3/service-http.ts": "dcb961436881219d8d5d996e723581a97c277f5cb8f2706fa083d3aeeb11fe41",
+    "src/pool/v3/service-client.ts": "caf41e438f4c0d5d92584ef31ab86a81f9116d1daaa23b1a2565199c86fa1b35",
+    "src/pool/v3/service-http.ts": "5cb6e166fbd2c4f35434079a441997be8094a211d978274c2919947a71a02a48",
     "src/pool/v3/service-wire.ts": "c0514e538596f289bf9bd5724aa256d0465159a5d7f89367536d61fa37034baf",
     "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
-    "src/pool/v3/store.ts": "74db2ba10d9b9c975eb2abbb63baaf001a6656e58edd460e0dc4bbea60ba5771",
+    "src/pool/v3/store.ts": "9e7e2bb3e609e79f626bfce294c4cee27a0e2f63d0e09e1755312057393149a6",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
     "src/pool/v3/trail.ts": "7cf64e03a6d0ecc2ab50580cd789b8fd7e4b4fc610de3d1a76746b5111003a9e",
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
