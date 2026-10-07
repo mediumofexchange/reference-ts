@@ -168,6 +168,8 @@ export interface KeyedWalletFrames {
   found(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring): Map<string, { readonly reached: bigint; readonly top: bigint }>;
   /** Whether the note's creating statement consumed notes, all of them the wallet's own. */
   ownFunded(state: StateHandle, note: KeyedNote): boolean;
+  /** Whether a statement consuming notes of the wallet that `saved` does not name created exactly `output` (slice 13 M13f). */
+  paidByOwn(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring, output: KeyedOutput, saved: (nf: bigint) => boolean): boolean;
   /** The note's spend secret, checked against its owner (KeptStateMismatch otherwise). */
   noteSecret(seed: Uint8Array, domain: Uint8Array, keyring: Keyring, note: KeyedNote): Uint8Array;
   /** A demand's presenter secret from its tags in input order, instant and deadline. */

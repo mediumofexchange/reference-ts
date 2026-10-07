@@ -128,9 +128,9 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const s = decodeRecord(settled.record);
     expect(s.kind).toBe(6);
     expect(settlementAuthorization(s).acceptance).toMatchObject({ owner: acceptance.owner, deadline: acceptance.deadline });
-    // rho_out is the seed's derivation over the inputs, the segment and a zero disclosure count.
+    // rho_out is the seed's derivation over the inputs, the segment, the acceptance and a zero disclosure count.
     expect(s.publicInputs[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.publicInputs.slice(12, 14),
-      identifierOf(s.publicInputs[2]!, s.publicInputs[3]!), 0n));
+      identifierOf(s.publicInputs[2]!, s.publicInputs[3]!), acceptanceId(acceptance), 0n));
     await f.holder.submit("settle", f.service);
     await f.publish();
     expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
@@ -246,17 +246,18 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const first = await f.backer.accept("a1", demand.demand!, f.venue.witnessedIndex() + lag + 3n, f.served(), f.signed, sign);
     await f.holder.settle("s1", first, f.served(), f.signed, prove);
     await f.holder.submit("s1", f.service);
-    // Past the acceptance deadline with no checkpoint yet: still pending, so no second settlement at its disclosure count.
+    // Past the acceptance deadline with no checkpoint yet: still pending, not failed. A second settlement under another
+    // acceptance names an output of its own (M13f), and the admitted first one fails it.
     f.venue.advance(first.deadline + 1n);
     const pending = (await f.j.package()).package;
     await f.holder.sync(pending, f.signed);
     expect(f.holder.act("s1")!.status).toBe("prepared");
     const second = await f.backer.accept("a2", demand.demand!, f.venue.witnessedIndex() + 20n, pending, f.signed, sign);
-    await expect(f.holder.settle("s2", second, pending, f.signed, prove)).rejects.toMatchObject({ code: "CONFLICT",
-      message: expect.stringContaining("prepared at this disclosure count") });
+    const s2 = await f.holder.settle("s2", second, pending, f.signed, prove);
+    expect(decodeRecord(s2.record).publicInputs[9]).not.toBe(decodeRecord(f.holder.act("s1")!.record).publicInputs[9]);
     await f.publish();
     expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
-    expect(f.holder.act("s1")!.status).toBe("final");
+    expect([f.holder.act("s1")!.status, f.holder.act("s2")!.status]).toEqual(["final", "failed"]);
   });
 
   it("judges a receipted demand by the door's window again once a checkpoint at its position omits it (C2.10.9b, audit 29)", async () => {
@@ -363,7 +364,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const s = decodeRecord(again.record).publicInputs, o = decodeRecord(old.record).publicInputs, segment = identifierOf(s[2]!, s[3]!);
     expect(segment).not.toEqual(identifierOf(o[2]!, o[3]!));
     expect(s.slice(12, 14)).toEqual(o.slice(12, 14));
-    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 0n));
+    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, acceptanceId(acceptance), 0n));
     expect(s[14]).not.toBe(o[14]);
     const next = await restored.submit("again", { submit: async bytes => decodeReceipt(await successor.submit(bytes)) });
     expect(next.operator).toEqual(successorKey);
@@ -473,7 +474,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const settleAt = f.venue.witnessedIndex(), settled = await f.holder.settle("settle", acceptance, f.served(), f.signed, prove);
     const s = decodeRecord(settled.record).publicInputs;
     expect(identifierOf(s[2]!, s[3]!)).toEqual(segment);
-    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 0n));
+    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, acceptanceId(acceptance), 0n));
     await f.relay(f.holder, "settle", settleAt);
     expect((await f.holder.sync(f.served(), f.signed)).holdings.map(h => h.value).sort()).toEqual([4n, 6n]);
     expect(f.holder.act("settle")!.status).toBe("final");
@@ -669,7 +670,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const settleAt = f.venue.witnessedIndex(), again = await f.holder.settle("again", later, f.served(), f.signed, prove);
     const s = decodeRecord(again.record).publicInputs, l = decodeRecord(late.record).publicInputs, segment = identifierOf(s[2]!, s[3]!);
     expect(s.slice(12, 14)).toEqual(l.slice(12, 14));
-    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, 1n));
+    expect(s[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, s.slice(12, 14), segment, acceptanceId(later), 1n));
     expect(s[14]).not.toBe(l[14]);
     await f.relay(f.holder, "again", settleAt);
     expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
@@ -680,7 +681,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(after.answers.map(a => [a.release?.disclosure?.output, a.release?.force])).toEqual([[l[14], false], [l[14]! + 1n, false], [s[14], true]]);
   });
 
-  it("counts a release published under terms without silence, and refuses a second settlement at one count", async () => {
+  it("counts a release published under terms without silence, and gives each acceptance at one count its own output", async () => {
     const f = await fixture([10n]);
     await f.holder.sync(f.served(), f.signed);
     const deadline = f.venue.witnessedIndex() + 30n;
@@ -690,9 +691,10 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const first = await f.backer.accept("first", demand.demand!, deadline - 2n, f.served(), f.signed, sign);
     const second = await f.backer.accept("second", demand.demand!, deadline - 1n, f.served(), f.signed, sign);
     const s0 = await f.holder.settle("s0", first, f.served(), f.signed, prove);
-    // rho_out reads no acceptance: a second settlement at the same count would disclose with the first.
-    await expect(f.holder.settle("s0b", second, f.served(), f.signed, prove))
-      .rejects.toMatchObject({ code: "CONFLICT", message: "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it" });
+    // rho_out reads the acceptance (M13f): a second settlement at the same count names an output the first's release
+    // does not disclose.
+    const s0b = await f.holder.settle("s0b", second, f.served(), f.signed, prove);
+    expect(decodeRecord(s0b.record).publicInputs[9]).not.toBe(decodeRecord(s0.record).publicInputs[9]);
     // Only an act a venue record carries is published.
     await expect(f.backer.publish("issue-0", f.venue)).rejects.toMatchObject({ code: "INVALID",
       message: "only a demand, a withdrawal or a release is published" });
@@ -701,14 +703,45 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     const s1 = await f.holder.settle("s1", second, f.served(), f.signed, prove);
     const p0 = decodeRecord(s0.record).publicInputs, p1 = decodeRecord(s1.record).publicInputs, segment = identifierOf(p1[2]!, p1[3]!);
     expect(identifierOf(p0[2]!, p0[3]!)).toEqual(segment);
-    expect(p1[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, p1.slice(12, 14), segment, 1n));
-    expect(p1[9]).not.toBe(p0[9]);
+    expect(p1[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, p1.slice(12, 14), segment, acceptanceId(second), 1n));
+    expect([p0[9], decodeRecord(s0b.record).publicInputs[9]]).not.toContain(p1[9]);
     await f.holder.submit("s1", f.service); await f.publish();
     expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
-    expect([f.holder.act("s1")!.status, f.holder.act("s0")!.status]).toEqual(["final", "failed"]);
+    expect([f.holder.act("s1")!.status, f.holder.act("s0")!.status, f.holder.act("s0b")!.status]).toEqual(["final", "failed", "failed"]);
   });
 
-  it("publishes no failed settlement, whose release would disclose the output a later one at its count names (C3.5)", async () => {
+  it("derives a fresh rho_out for a demand presenting again an earlier demand's notes, whose release disclosed its own (C3.5)", async () => {
+    const f = await fixture([10n]);
+    await f.holder.sync(f.served(), f.signed);
+    const deadline = f.venue.witnessedIndex() + 30n;
+    const first = await f.holder.demand("first", 10n, deadline, f.served(), f.signed, prove);
+    await f.holder.submit("first", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    const a1 = await f.backer.accept("a1", first.demand!, deadline - 2n, f.served(), f.signed, sign);
+    const s1 = await f.holder.settle("s1", a1, f.served(), f.signed, prove);
+    // The release discloses s1's output with no force (no gap can open), so K holds its rho_out.
+    await f.holder.publish("s1", f.venue);
+    await f.holder.withdraw("back", first.demand!, f.served(), f.signed); await f.holder.submit("back", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed);
+    expect([f.holder.act("back")!.status, f.holder.act("s1")!.status]).toEqual(["final", "failed"]);
+    // The same notes, presented again by a new demand in the same segment, start a new count at zero.
+    const second = await f.holder.demand("second", 10n, f.venue.witnessedIndex() + 30n, f.served(), f.signed, prove);
+    expect([second.repeats, second.inputs]).toEqual([[first.demand], first.inputs]);
+    await f.holder.submit("second", f.service); await f.publish();
+    await f.holder.sync(f.served(), f.signed); await f.backer.sync(f.served(), f.signed);
+    const a2 = await f.backer.accept("a2", second.demand!, f.venue.witnessedIndex() + 20n, f.served(), f.signed, sign);
+    const s2 = await f.holder.settle("s2", a2, f.served(), f.signed, prove);
+    const p1 = decodeRecord(s1.record).publicInputs, p2 = decodeRecord(s2.record).publicInputs, segment = identifierOf(p2[2]!, p2[3]!);
+    expect([identifierOf(p1[2]!, p1[3]!), p1.slice(12, 14)]).toEqual([segment, p2.slice(12, 14)]);
+    // Were rho_out read without the acceptance (naming its demand), K would compute s2's output from s1's and insert it first.
+    expect(p2[9]).not.toBe(p1[9]);
+    expect(p2[9]).toBe(settlementRho(f.holder.recoverySeed(), domain, p2.slice(12, 14), segment, acceptanceId(a2), 0n));
+    await f.holder.submit("s2", f.service); await f.publish();
+    expect((await f.holder.sync(f.served(), f.signed)).holdings).toEqual([]);
+    expect(f.holder.act("s2")!.status).toBe("final");
+  });
+
+  it("publishes no failed settlement, and settles under a later acceptance at the same count to an output of its own (C3.5)", async () => {
     const f = await fixture([10n]);
     await f.holder.sync(f.served(), f.signed);
     const deadline = f.venue.witnessedIndex() + 40n;
@@ -723,7 +756,7 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     expect(f.holder.act("s1")!.status).toBe("failed");
     const later = await f.backer.accept("later", demand.demand!, f.venue.witnessedIndex() + 20n, f.served(), f.signed, sign);
     const s2 = await f.holder.settle("s2", later, f.served(), f.signed, prove);
-    expect(decodeRecord(s2.record).publicInputs[9]).toBe(decodeRecord(s1.record).publicInputs[9]);
+    expect(decodeRecord(s2.record).publicInputs[9]).not.toBe(decodeRecord(s1.record).publicInputs[9]);
     await expect(f.holder.publish("s1", f.venue)).rejects.toMatchObject({ code: "CONFLICT", message: "a failed act is not published" });
     await f.holder.submit("s2", f.service); await f.publish();
     await f.holder.sync(f.served(), f.signed);

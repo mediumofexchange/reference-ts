@@ -63,10 +63,10 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 /** A lit key (a SHA-256 digest held as a bigint, lit-v1 §2) as its 32 bytes. */
 const keyBytesOf = (key: bigint): Uint8Array => hexToBytes(key.toString(16).padStart(64, "0"));
-const PROFILE = "moe/wallet/v3/9", KEYED_PROFILE = "moe/wallet/keyed/2", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/10", KEYED_PROFILE = "moe/wallet/keyed/2", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
-    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW" | "OWN_KEY" | "CLOSED" | "COPIED" | "RESTORED", message: string) { super(message); this.name = "V3WalletError"; }
+    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW" | "OWN_KEY" | "CLOSED" | "COPIED" | "RESTORED" | "FORKED", message: string) { super(message); this.name = "V3WalletError"; }
 }
 function requireThat(ok: boolean, code: V3WalletError["code"], message: string): asserts ok {
   if (!ok) throw new V3WalletError(code, message);
@@ -85,7 +85,9 @@ function identifier(value: Uint8Array): Uint8Array {
  * record under one alias namespace, with the notes it reserves, the output openings and zero input a reproof
  * rebuilds it from, and the records a reproof superseded. `wallet_file` keeps the identity of the file the wallet was
  * made in, never exported; `receiver_restored` names the requests a restoration from a copy left unfulfilled, which
- * its lost instance may have credited (slice 13 M13e). */
+ * its lost instance may have credited (slice 13 M13e). `held_notes` are each backing's unspent notes at its latest read
+ * (`held_read`), and `wallet_fork` the evidence that another instance of the seed acted (`watch`, slice 13 M13f);
+ * neither is exported. */
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS wallet_identity (id INTEGER PRIMARY KEY CHECK(id=1),
     profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL, seen TEXT NOT NULL) STRICT;
@@ -107,7 +109,10 @@ const SCHEMA = `
     owner TEXT NOT NULL, signature BLOB NOT NULL, backing BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
   CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;
   CREATE TABLE IF NOT EXISTS wallet_file (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL) STRICT;
-  CREATE TABLE IF NOT EXISTS receiver_restored (alias TEXT PRIMARY KEY REFERENCES receiver_requests(alias)) STRICT;`;
+  CREATE TABLE IF NOT EXISTS receiver_restored (alias TEXT PRIMARY KEY REFERENCES receiver_requests(alias)) STRICT;
+  CREATE TABLE IF NOT EXISTS held_notes (backing BLOB NOT NULL, nf TEXT NOT NULL, cm TEXT NOT NULL, PRIMARY KEY(backing, nf)) STRICT;
+  CREATE TABLE IF NOT EXISTS held_read (backing BLOB PRIMARY KEY, at TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS wallet_fork (id INTEGER PRIMARY KEY CHECK(id=1), evidence TEXT NOT NULL) STRICT;`;
 /** A lit wallet's owner-index state per backing (lit-v1 §8): its highest exposed index, NULL where a wallet restored from
  * its seed alone (`seeded`) has not read the backing yet (its first read exposes every index through `high + 256`), the
  * highest index §8's restoration rule reaches (`h`), and the highest index any read found; −1 for none. */
@@ -256,6 +261,8 @@ export interface WalletView {
   readonly holdings: readonly Holding[];
   /** This seed's demands standing in that view, saved here or not: one a lost wallet made is found from the seed. */
   readonly demands: readonly StandingDemand[];
+  /** The evidence that another instance of this seed acted, where a read found some (`FORKED`, slice 13 M13f). */
+  readonly forked?: string;
 }
 
 /** K's strict Ed25519 signature over exact bytes, from a signer the backer holds. K's secret never enters the
@@ -569,23 +576,33 @@ export class V3Wallet {
     return this.db.prepare("SELECT export FROM wallet_custody WHERE id=1").get()?.export !== null;
   }
   /** Every operation that could change or act on wallet state: after an export
-   * only its restored copy may, so nothing reaches a service or prover here. */
-  private mutable(): void {
+   * only its restored copy may, so nothing reaches a service or prover here. One that only observes (`supply`,
+   * `sync`, `presentation`) still runs where another instance of the seed was seen acting (`watch`); nothing else does. */
+  private mutable(observe = false): void {
     this.active();
     this.own();
     requireThat(!this.frozen(), "FENCED", "wallet was exported; only its restored copy may act");
+    if (!observe) this.unforked();
+  }
+  /** M13f: a wallet that has seen another instance of its seed act acts on nothing until its owner records a
+   * restoration, stating that this is now the only instance. */
+  private unforked(): void {
+    const evidence = this.fork();
+    requireThat(evidence === undefined, "FORKED", `another instance of this wallet's seed has acted: ${evidence}. Stop every ` +
+      "other copy for good (or, if the seed was stolen, move the funds once this is the only one), then record a restoration " +
+      "(moe wallet restore --copy) before acting again");
   }
   /** M13e: a copy acts on nothing, and exports nothing new, until its restoration is recorded. */
   private own(): void {
     requireThat(this.copied === undefined, "COPIED", "this wallet's file is not the one it was made in: if it is a copy or a " +
       "restored backup, record its restoration (moe wallet restore --copy), which closes what its lost instance may have done");
   }
-  private transaction<T>(action: () => T, whileFrozen = false): T {
+  private transaction<T>(action: () => T, mode: "act" | "observe" | "frozen" = "act"): T {
     this.active();
     this.db.exec("BEGIN IMMEDIATE");
     let committing = false;
     try {
-      if (whileFrozen) this.active(); else this.mutable();
+      if (mode === "frozen") this.active(); else this.mutable(mode === "observe");
       const result = action(); committing = true; this.db.exec("COMMIT"); return result;
     }
     catch (error) {
@@ -652,9 +669,9 @@ export class V3Wallet {
    * would wait for the turn it holds.
    */
   async supply<T>(transport: (evidence: EvidenceStore) => Promise<T>): Promise<T> {
-    this.mutable();
+    this.mutable(true);
     requireThat(typeof transport === "function", "INVALID", "an evidence transport is required");
-    return this.inTurn(async () => { this.mutable(); return transport(this.evidence()); });
+    return this.inTurn(async () => { this.mutable(true); return transport(this.evidence()); });
   }
 
   /** Independently read the terms' backing at the venue's current witnessed
@@ -665,25 +682,28 @@ export class V3Wallet {
    * the view synchronously, inside the read's turn: the state it reads is the
    * kept file's, which a later read moves on. The caller's bytes are copied
    * before the first await. */
-  private async read<T>(packageBytes: Uint8Array, signed: SignedTerms, use: (view: Frontier) => T, answers = false): Promise<T> {
+  private async read<T>(packageBytes: Uint8Array, signed: SignedTerms, use: (view: Frontier) => T, answers = false, observe = false): Promise<T> {
     const bytes = copyUnshared(packageBytes), terms = { terms: copyUnshared(signed.terms), signature: copyUnshared(signed.signature) };
     const backing = this.construction.reader.terms.rootTermsName(terms.terms);
     return this.inTurn(async () => {
       for (let again = false; ; again = true) {
         let view: Frontier;
         try {
-          this.mutable();
+          this.mutable(observe);
           view = await this.frontier(bytes, terms, backing, answers);
         } catch (error) {
           // A replaced or exported handle says so, whatever its read met once another handle held the files.
-          if (!(error instanceof V3WalletError)) this.mutable();
+          if (!(error instanceof V3WalletError)) this.mutable(observe);
           if (error instanceof FileInUse) {
             throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
           }
           throw error;
         }
-        // The read awaited: a handle replaced or exported meanwhile answers nothing from it.
-        this.mutable();
+        // The read awaited: a handle replaced or exported meanwhile answers nothing from it. What the read shows of
+        // another instance of the seed is kept before anything acts on it.
+        this.mutable(observe);
+        this.watch(view);
+        this.mutable(observe);
         try {
           return use(view);
         } catch (error) {
@@ -739,7 +759,7 @@ export class V3Wallet {
     if (this.ownerKeys(backing) !== undefined) return;
     this.transaction(() => {
       if (this.ownerKeys(backing) === undefined) this.db.prepare("INSERT INTO owner_keys VALUES(?,?,'-1','-1')").run(backing, this.seeded() ? null : "-1");
-    });
+    }, "observe");
   }
   /** Each held backing's window (lit-v1 §8 scan), by hex name. */
   private windows(): Map<string, bigint> {
@@ -759,6 +779,11 @@ export class V3Wallet {
         const name = row.backing as Uint8Array, keys = this.ownerKeys(name)!, seen = found.get(hex(name));
         const high = seen !== undefined && seen.reached > keys.high ? seen.reached : keys.high;
         const top = seen !== undefined && seen.top > keys.found ? seen.top : keys.found;
+        // M13f: a wallet persists an index before exposing its key, and a payer pays only a key it was given, so an
+        // own key paid above every index this wallet exposed and found was exposed by another instance of the seed.
+        if (keys.exposed !== undefined && top > keys.found && top > keys.exposed) {
+          this.forked(`an output of backing ${hex(name)} pays its owner key at index ${top}, above every index this wallet exposed (${keys.exposed})`);
+        }
         if (this.keyed!.window(high) > this.keyed!.window(keys.high)) grew = true;
         this.db.prepare("UPDATE owner_keys SET high=?, found=? WHERE backing=?").run(high.toString(), top.toString(), name);
       }
@@ -767,7 +792,7 @@ export class V3Wallet {
         if (keys.exposed === undefined) this.db.prepare("UPDATE owner_keys SET exposed=? WHERE backing=?").run((keys.high + this.keyed!.lookAhead).toString(), backing);
       }
       return grew;
-    });
+    }, "observe");
   }
   /** The canonical segment's header, if a new statement for it could still be
    * admitted: no scoped backing's operator term has ended (one ending ends the
@@ -845,12 +870,6 @@ export class V3Wallet {
     }
     return BigInt(outputs.size);
   }
-  /** A settlement of `demand` this wallet holds prepared with `rho`: `rho_out` reads no acceptance or owner, so a
-   * second one at the same count would disclose with the first, from which K computes it for any owner (C3.5). */
-  private pendingSettlement(demand: string, rho: bigint): boolean {
-    return this.db.prepare("SELECT record FROM saved_records WHERE kind='6' AND demand=? AND status='prepared'").all(demand)
-      .some(row => decodeRecord(row.record as Uint8Array).publicInputs[9] === rho);
-  }
   /** A payment's fate, read from its construction's view: pool-v3's four outputs, lit-v1's derived ones. final: all its
    * outputs are in canonical history, imports included (own change/zero outputs are fresh, lit's derive from its
    * nullifiers, and a reproof spends the same nullifiers into the same commitments, so only this payment creates
@@ -874,7 +893,48 @@ export class V3Wallet {
       for (const { alias: name, status } of rows) update.run(status, status === "final" ? checkpoint : null,
         status === "final" ? at.toString() : null, name);
       this.saw(at);
-    });
+    }, "observe");
+  }
+  /**
+   * M13f: keep what a read shows of another instance of this seed acting (Next 4 (av)). A note this wallet held at its
+   * previous read of the backing is now spent, in canonical history or with force, by a statement no spending record
+   * of this wallet names: a payment, a burn or a settlement saves its inputs before it is submitted, so a handle of this
+   * same file never trips it, while only a holder of the seed can spend the note. (A lit read also checks its keys:
+   * `found`.) The evidence is kept and every acting operation refuses `FORKED` until a restoration is recorded; the
+   * held set is then replaced by this read's notes. A view older than the backing's last read changes nothing, and a
+   * wallet's first read of a backing (new, restored from its seed or a handoff, or after a restoration) is the baseline.
+   */
+  private watch(view: Frontier): void {
+    const { backing, at, force, notes } = view;
+    if (force === undefined) return;
+    this.transaction(() => {
+      const last = this.db.prepare("SELECT at FROM held_read WHERE backing=?").get(backing)?.at as string | undefined;
+      if (last !== undefined && at < BigInt(last)) return;
+      const taken = this.db.prepare("SELECT nf, cm FROM held_notes WHERE backing=? ORDER BY rowid").all(backing)
+        .find(row => force.hasNullifier(BigInt(row.nf as string)) && !this.savedSpend(BigInt(row.nf as string)));
+      if (taken !== undefined) {
+        this.forked(`the note ${taken.cm as string} of backing ${hex(backing)}, held at this wallet's read at index ${last}, is ` +
+          `spent by a statement this wallet did not make (read at index ${at})`);
+      }
+      this.db.prepare("DELETE FROM held_notes WHERE backing=?").run(backing);
+      const hold = this.db.prepare("INSERT OR IGNORE INTO held_notes VALUES(?,?,?)");
+      for (const note of notes) hold.run(backing, note.nf.toString(), note.cm.toString());
+      this.db.prepare("INSERT INTO held_read VALUES(?,?) ON CONFLICT(backing) DO UPDATE SET at=excluded.at").run(backing, at.toString());
+    }, "observe");
+  }
+  /** Whether a payment, a burn or a settlement this wallet saved consumes `nf`: a demand presents its notes, spending none. */
+  private savedSpend(nf: bigint): boolean {
+    return this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE i.nf=?
+      AND a.kind IN ('2','3','6')`).get(nf.toString()) !== undefined;
+  }
+  /** Inside a write transaction: keep the first evidence that another instance of the seed acted. */
+  private forked(evidence: string): void {
+    this.db.prepare("INSERT OR IGNORE INTO wallet_fork VALUES(1,?)").run(evidence);
+  }
+  /** The evidence that another instance of this seed acted, until a restoration is recorded (M13f). */
+  fork(): string | undefined {
+    this.active();
+    return this.db.prepare("SELECT evidence FROM wallet_fork WHERE id=1").get()?.evidence as string | undefined;
   }
   /** The newest witnessed index this wallet decided from (`resolve`) or saved at, for `current`. */
   private seen(): bigint { return BigInt(this.db.prepare("SELECT seen FROM wallet_identity WHERE id=1").get()!.seen as string); }
@@ -1058,6 +1118,8 @@ export class V3Wallet {
         this.db.prepare("UPDATE owner_wallet SET seeded='1'").run();
         this.db.prepare("UPDATE owner_keys SET exposed=NULL").run();
       }
+      // M13f: this is now the only instance; its next read of each backing is the baseline the fence watches from.
+      this.db.exec("DELETE FROM wallet_fork; DELETE FROM held_notes; DELETE FROM held_read;");
       const file = fileIdentity(this.path);
       this.db.prepare("INSERT INTO wallet_file VALUES(1,?) ON CONFLICT(id) DO UPDATE SET identity=excluded.identity").run(file);
       this.db.exec("COMMIT");
@@ -1105,6 +1167,7 @@ export class V3Wallet {
           return bytes;
         }
         this.own();
+        this.unforked();
         // Exact definitions, not only names: any other shape could export, freeze and then never restore.
         const stored = new Map(this.db.prepare("SELECT name, sql FROM sqlite_schema WHERE type='table'").all()
           .map(row => [row.name as string, String(row.sql).replace(/\s+/g, " ").trim()]));
@@ -1130,7 +1193,7 @@ export class V3Wallet {
           this.db.prepare("UPDATE wallet_custody SET export=? WHERE id=1").run(bytes);
           return bytes;
         } finally { plaintext.fill(0); }
-      }, true);
+      }, "frozen");
     } finally { ownedKey.fill(0); }
   }
 
@@ -1327,15 +1390,15 @@ export class V3Wallet {
    * prepared after its segment stopped being canonical needs `reprove`; an act
    * whose segment ended fails and is made again under a new alias. */
   async sync(packageBytes: Uint8Array, signed: SignedTerms): Promise<WalletView> {
-    this.mutable();
+    this.mutable(true);
     return this.read(packageBytes, signed, view => {
       const { backing, at, lag, observed, canonical, force, notes } = view;
       const decided = canonical !== undefined && force !== undefined ? this.resolutions(backing, canonical, force, at, lag, view.clock) : [];
       observed.check();
       if (canonical !== undefined) this.resolve(decided, encodeCommitment(canonical.commitment), at);
       return { backing, judgingIndex: at, checkpoint: canonical?.commitment, gap: gapOpen(view), holdings: this.holdingsOf(notes, force, at),
-        demands: this.demandsOf(view) };
-    });
+        demands: this.demandsOf(view), ...(this.fork() === undefined ? {} : { forked: this.fork()! }) };
+    }, false, true);
   }
 
   /** pool-fees C1.2.3–5: pay one exact request, and optionally one exact fee
@@ -1575,9 +1638,6 @@ export class V3Wallet {
       const bytes = typeof built === "function" ? built() : built, statement = hex(this.statementOf(bytes));
       requireThat(this.db.prepare("SELECT 1 FROM saved_records WHERE statement=?").get(statement) === undefined, "CONFLICT",
         "another alias saved this statement");
-      // Lit-v1 has no disclosure count: a settlement's output derives from its demand's nullifiers (§7).
-      requireThat(kind !== 6 || this.keyed !== undefined || !this.pendingSettlement(demand!, decodeRecord(bytes).publicInputs[9]!), "CONFLICT",
-        "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it");
       this.db.prepare("INSERT INTO saved_records VALUES(?,?,?,?,?,?,?,?,NULL,'prepared',NULL,NULL,NULL,?,?)").run(name, String(kind), intent,
         statement, bytes, backing, operator, demand ?? null, at.toString(), repeats === undefined || repeats.length === 0 ? null : JSON.stringify(repeats));
       for (const nf of inputs) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(nf.toString(), name);
@@ -1742,7 +1802,7 @@ export class V3Wallet {
   /** C3.5–C3.6: settle this seed's demand that the backer's acceptance answers (`standing`: a demand saved here,
    * or one a lost wallet made, found from the seed): the demand's own notes in its positions into one output of
    * its quantity to the acceptance's owner, with `rho_out` derived from the seed, the input nullifiers, the
-   * canonical segment and the disclosure count, and the release signed by the presenter. The acceptance must
+   * canonical segment, the acceptance and the demand's disclosure count, and the release signed by the presenter. The acceptance must
    * verify under the terms' obligor, be due no later than the demand and stand at the horizon. The disclosure
    * count is read from the venue record (`disclosures`), so a release witnessed without force is followed by a
    * settlement of a new output, and a wallet rebuilt from its seed re-proves the same one. In a gap (`route`) the
@@ -1784,10 +1844,9 @@ export class V3Wallet {
         { ...placed[0]!, note: prepareExactOutput(this.seed, this.domain, paddingRequestId(this.seed, this.domain, placed[0]!.note.nf),
           backing, 0n) });
       const count = this.disclosures(view, own.demand, demand.presenter, canonical!.segment);
-      const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, count);
+      const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, acceptanceId(own), count);
       const opening = { backing, value: demand.quantity, owner: own.owner, rho }, cm = commitmentOf(this.domain, opening);
       requireThat(!force!.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
-      requireThat(!this.pendingSettlement(key, rho), "CONFLICT", "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it");
       observed.check();
       return { header, inputs, output: { opening, cm }, at, demand, nfs: placed.map(i => i.note.nf) };
     }, true);
@@ -1882,9 +1941,10 @@ export class V3Wallet {
   }
   /** Submit a saved payment's or act's exact record (one alias namespace); keep the first operator receipt that
    * signs its statement in the record's own segment. A receipt is pending operator liability (C2.10.9), not
-   * finality; `sync` decides that from evidence. */
+   * finality; `sync` decides that from evidence. It sends exact saved bytes and signs nothing, so it runs where another
+   * instance of the seed was seen acting (M13f). */
   async submit(name: string, service: WalletService): Promise<WalletReceipt> {
-    name = alias(name); this.mutable();
+    name = alias(name); this.mutable(true);
     const row = this.db.prepare("SELECT * FROM saved_records WHERE alias=?").get(name);
     requireThat(row !== undefined, "UNKNOWN", "unknown payment or act");
     const saved = this.saved(name, row);
@@ -1900,7 +1960,7 @@ export class V3Wallet {
       // superseded record as evidence of that operator's acceptance (C2.10.9).
       this.db.prepare("UPDATE saved_superseded SET receipt=? WHERE alias=? AND statement=? AND receipt IS NULL").run(bytes, name, statement);
       return false;
-    });
+    }, "observe");
     requireThat(current, "CONFLICT", "the payment was re-proven during submission");
     return this.saved(name, this.db.prepare("SELECT * FROM saved_records WHERE alias=?").get(name)!).receipt!;
   }
@@ -1908,9 +1968,10 @@ export class V3Wallet {
    * venue, routed to the act's backing, exactly as saved: a retry republishes the same bytes, which are the same
    * publication. The venue decides nothing; `sync` reads the act final once the publication has force. One
    * published outside an open gap has no force, and a release witnessed without force discloses its output and
-   * counts towards the next settlement's disclosure count. Venue refusals surface as the publisher's `VenueError`. */
+   * counts towards the next settlement's disclosure count. Venue refusals surface as the publisher's `VenueError`.
+   * Exact saved bytes, so it runs where another instance of the seed was seen acting (M13f). */
   async publish(name: string, publisher: RecordPublisher): Promise<void> {
-    name = alias(name); this.mutable();
+    name = alias(name); this.mutable(true);
     const row = this.db.prepare("SELECT kind,record,backing,status FROM saved_records WHERE alias=? AND kind!='2'").get(name);
     requireThat(row !== undefined, "UNKNOWN", "unknown act");
     const kind = ({ "4": 1, "6": 3, "5": 4 } as const)[row.kind as string];
@@ -1931,7 +1992,7 @@ export class V3Wallet {
    * where its deadline is later than the index the venue witnesses it at by more than the lag, so a backer publishes
    * as it accepts. The holder's release still decides settlement; an acceptance nobody published reads as no answer. */
   async publishAcceptance(name: string, publisher: RecordPublisher): Promise<void> {
-    name = alias(name); this.mutable();
+    name = alias(name); this.mutable(true);
     const row = this.db.prepare("SELECT * FROM backer_acceptances WHERE alias=?").get(name);
     requireThat(row !== undefined, "UNKNOWN", "unknown acceptance");
     const send = publisher?.publishRecord;
@@ -1952,13 +2013,13 @@ export class V3Wallet {
    * the holder, the backer or a stranger; it writes nothing and decides no saved act. `ABSENT` where the record holds
    * no such demand of this backing. */
   async presentation(demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms): Promise<Presentation> {
-    this.mutable();
+    this.mutable(true);
     const { obligor, own } = this.termsOf(signed), id = identifier(demand);
     return this.read(packageBytes, own, view => {
       const reading = readPresentation(view.result, this.construction, view.backing, obligor, id);
       requireThat(reading !== undefined, "ABSENT", "the demand is not in this backing's record");
       return reading;
-    }, true);
+    }, true, true);
   }
 
   // --- Lit-v1 (slice 14 M14g): requests by owner key, payments signed by the notes' owners ---------------------------
@@ -2117,6 +2178,11 @@ export class V3Wallet {
       requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
       this.current(at);
       const header = this.admissible(view);
+      // M13f: a lit request names only a key, so no door refuses paying it twice. A statement of this seed that this wallet
+      // did not save (its lost instance's, or one from before a restoration from the seed) may already have paid it.
+      const orders = [{ backing, value, owner: payee.owner }, ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }])];
+      requireThat(orders.every(output => !this.keyed!.paidByOwn(this.seed, this.domain, canonical.state, this.keys!, output, nf => this.savedSpend(nf))),
+        "CONFLICT", "a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
       const holdings = this.holdingsOf(notes, force, at);
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
       const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);

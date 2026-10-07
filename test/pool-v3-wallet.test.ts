@@ -198,7 +198,13 @@ describe.skipIf(!supported)("durable v3 receiver requests and current fulfillmen
     const settlement = authorizeSettlement(record(settleTask(f.context, f.inputs, output, id)), acceptance, presenterSecret);
     f.venue.advance(8n);
     f.venue.witness(4, f.backing, 8n, encodePublication({ domain, backing: f.backing, kind: 3, record: settlement }));
-    await expect(f.wallet.fulfill("invoice", f.served.package, f.signed)).rejects.toMatchObject({ code: "SPENT" });
+    // The read before held the paid note, which a statement this wallet never made now spends (M13f).
+    await expect(f.wallet.fulfill("invoice", f.served.package, f.signed)).rejects.toMatchObject({ code: "FORKED" });
+    expect(f.wallet.fork()).toMatch(/is spent by a statement this wallet did not make/);
+    // Once the owner records that this is the only instance, the read reaches the spend itself.
+    expect(f.wallet.recordRestoration().requests).toEqual(["invoice"]);
+    expect(f.wallet.fork()).toBeUndefined();
+    await expect(f.wallet.fulfill("invoice", f.served.package, f.signed, { uncredited: true })).rejects.toMatchObject({ code: "SPENT" });
     expect(f.wallet.fulfillment("invoice")).toBeUndefined();
   });
 
