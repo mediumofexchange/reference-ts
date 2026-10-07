@@ -134,9 +134,12 @@ describe("v3 service wire framing", () => {
     }
     expect(() => parseV3ServiceCommand(command({ kind: "submit", record: `${bytesToHex(record)}00` }))).toThrow(/trailing/i);
     expect(() => parseV3ServiceCommand(command({ kind: "submit", record: bytesToHex(refresh) }))).toThrow("a request is not a segment admission");
-    for (const value of ["", `${bytesToHex(receipt)}00`, bytesToHex(receipt).toUpperCase()]) {
+    for (const value of ["", bytesToHex(receipt).toUpperCase(), "00".repeat(513)]) {
       expect(() => decodeV3ServiceReply(command({ kind: "accepted", receipt: value }))).toThrow("invalid service hex");
     }
+    // The construction's decoder takes its receipt's exact length.
+    expect(() => decodeV3ServiceReply(command({ kind: "accepted", receipt: `${bytesToHex(receipt)}00` }))).toThrow(/trailing/i);
+    expect(() => decodeV3ServiceReply(command({ kind: "accepted", receipt: bytesToHex(receipt).slice(0, -2) }))).toThrow("truncated");
     expect(() => decodeV3ServiceReply(command({ kind: "committed", commitment: "00" }))).toThrow("invalid service hex");
   });
 });

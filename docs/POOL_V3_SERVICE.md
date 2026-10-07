@@ -20,19 +20,24 @@ Credentials grant local operations, never protocol authorization or finality.
 | `GET /evidence` | `?backing=` with 64 lowercase hex digits naming a backing the served commitment carries, then `&after=` with the decimal sequence the reader's evidence was served through (0 for none) | a byte stream: selection metadata naming that backing, the read's own package, then the evidence parts served after that sequence |
 
 Every successful command reply also carries version 1 and the same profile. Byte fields
-are lowercase hex. Commit identifiers match `[A-Za-z0-9._:-]{1,128}`. Records
-retain their canonical v3 encoding; segment-free kind-7 requests are not segment
-admissions. Unexpected fields, malformed UTF-8, compressed bodies and oversized
-envelopes refuse. The transport signs no JSON and adds no protocol bytes.
+are lowercase hex. Commit identifiers match `[A-Za-z0-9._:-]{1,128}`. Records,
+receipts and packages keep the canonical bytes of the journal's construction:
+pool-v3's, or lit-v1's for a lit scope. One profile serves both, since each of
+them names its configuration domain
+([M14g3](../decisions/2026-10.md#2026-10-07--serve-a-lit-journal-through-the-one-service-wire-and-client-the-construction-an-option-slice-14-m14g3)).
+Kind-7 requests are not segment admissions. Unexpected fields, malformed UTF-8,
+compressed bodies and oversized envelopes refuse. The transport signs no JSON
+and adds no protocol bytes.
 
 The client is `V3ServiceClient(baseUrl, walletToken, expected, adminToken?)` from
-`service-client.ts`. `expected` independently supplies the operator and
-reference venue preimage; the domain is the adopted configuration's. Only an HTTP `127.0.0.1` root URL is
+`service-client.ts`. `expected` independently supplies the operator, the
+reference venue preimage and the construction (pool-v3's by default, or
+`LIT`). The domain is that construction's configuration. Only an HTTP `127.0.0.1` root URL is
 accepted. Identity inputs and submitted bytes are copied. These modules are
 subpath APIs, not root exports.
 
 `submit(record)` checks the receipt signature, expected domain/operator, source
-segment, scope and statement identity under
+segment, scope (a lit receipt names none, lit-v1 §5) and statement identity under
 [pool-v3 §7.2](https://github.com/mediumofexchange/money-from-first-principles/blob/786f962/pool-v3.md#72-receipts-bind-the-exact-event-evidence).
 An exact statement retry can supply a different valid proof and still receives
 the original receipt. Its proof digest need not equal the retry's proof digest.
@@ -133,6 +138,10 @@ mutation isolation, wrong context, transport limits and stalled client response.
 sync fetches only the new checkpoint's objects and the records after the
 first, a read over the kept evidence equals a read of the whole package, and
 a store that lacks what its recorded sequence implies is served again.
+`test/lit-service.test.ts` runs a lit journal behind this service: the client
+reads lit-v1's receipts and packages, refuses forged receipts and the other
+construction's records, receipts and evidence, and a lit wallet pays, syncs
+and is credited through it.
 The server timeout followed by eventual journal completion has source review,
 but no direct timed acceptance case.
 

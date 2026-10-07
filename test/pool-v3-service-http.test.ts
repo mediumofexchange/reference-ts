@@ -4,6 +4,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
 import { encodeReceipt, receiptBytes } from "../src/pool/v3/commitments.js";
+import { POOL_V3 } from "../src/pool/v3/construction.js";
 import { encodeRecord } from "../src/pool/v3/records.js";
 import { signCommitment } from "../src/venue-records.js";
 import { readServed, V3_SERVICE_PROFILE } from "../src/pool/v3/service-wire.js";
@@ -36,7 +37,7 @@ describe("v3 service HTTP trust boundary", () => {
   });
   async function fixture() {
     const commitment = signCommitment(secret, 2n, b(9));
-    const journal = { configurationDomain: domain.slice(), submit: vi.fn(async (_bytes: Uint8Array) => receipt.slice()),
+    const journal = { configurationDomain: domain.slice(), construction: POOL_V3, submit: vi.fn(async (_bytes: Uint8Array) => receipt.slice()),
       commit: vi.fn(async (_id: string) => commitment), publish: vi.fn(async () => commitment),
       serve: vi.fn(async (_backing: Uint8Array, _after: bigint): Promise<ServedEvidence> => ({
         selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12),

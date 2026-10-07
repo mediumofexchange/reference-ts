@@ -3,7 +3,6 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
-import { decodeRecord } from "./records.js";
 import { V3OperatorJournal, V3StoreError } from "./store.js";
 import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
   parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, servedFrames } from "./service-wire.js";
@@ -49,7 +48,8 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
   if (![walletToken, adminToken].every(token => typeof token === "string" && /^[0-9a-f]{64}$/.test(token)) || walletToken === adminToken) {
     throw new EncodingError("distinct 32-byte credentials required");
   }
-  const domain = journal.configurationDomain;
+  // The journal's construction reads every command and reply (slice 14 M14g3).
+  const domain = journal.configurationDomain, construction = journal.construction;
   let streams = 0;
   const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
     response.setHeader("content-type", "application/json"); response.setHeader("cache-control", "no-store");
@@ -111,13 +111,15 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
         return;
       }
       if (request.method === "POST" && request.url === "/commands") {
-        const command = parseV3ServiceCommand(await readBody(request));
+        const command = parseV3ServiceCommand(await readBody(request), construction);
         if (command.kind !== "submit" && !admin) { send(403, { code: "ADMIN_REQUIRED" }); return; }
         let reply;
         if (command.kind === "submit") {
           const bytes = hexToBytes(command.record);
-          if (compareBytes(decodeRecord(bytes).domain, domain) !== 0) throw new EncodingError("wrong construction domain");
-          reply = replyFromReceipt(await journal.submit(bytes));
+          if (compareBytes(construction.view(construction.decode(bytes), () => undefined).domain, domain) !== 0) {
+            throw new EncodingError("wrong construction domain");
+          }
+          reply = replyFromReceipt(await journal.submit(bytes), construction);
         } else if (command.kind === "commit") reply = replyFromCommitment("committed", await journal.commit(command.id));
         else reply = replyFromCommitment("published", await journal.publish());
         send(200, reply); return;

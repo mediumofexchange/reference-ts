@@ -32,17 +32,17 @@ import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue
 import { identifierOf, isField, isValue } from "../field.js";
 import { commitmentOf, ownerOf } from "../notes.js";
 import { deriveSettlementOwnerSecret, prepareExactOutput, type PreparedOutput } from "./capsules.js";
-import { decodeReceipt, encodeReceipt, verifyReceipt, type Receipt } from "./commitments.js";
+import type { Receipt } from "./commitments.js";
 import { adoptedDomain, requireConfigurationVerifier } from "./configuration.js";
 import { requireReferenceVenue } from "./guard.js";
 import { EvidenceStore } from "./evidence-store.js";
 import type { SegmentHeader } from "./headers.js";
 import { inputOf, ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { readFrontier, type ReadOptions } from "./package-reader.js";
-import { POOL_V3, type Construction, type KeyedAcceptance, type KeyedInput, type KeyedNote, type KeyedOutput, type KeyedReceipt, type KeyedRequest, type KeyedWalletFrames,
-  type Keyring } from "./construction.js";
+import { POOL_V3, type Construction, type KeyedAcceptance, type KeyedInput, type KeyedNote, type KeyedOutput, type KeyedRequest, type KeyedWalletFrames,
+  type Keyring, type OperatorReceipt } from "./construction.js";
 import type { SignedTerms } from "./reader.js";
-import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeRecord, evidenceHashes, settlementAuthorization,
+import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeRecord, settlementAuthorization,
   statementBytes, statementHash, type Record, type SignedAcceptance } from "./records.js";
 import { paddingRequestId, presenterSecret, settlementRho } from "./redemption.js";
 import { FileInUse, KeptStateMismatch, ReplayStore, type Demand } from "./replay-store.js";
@@ -216,7 +216,7 @@ export interface Payment {
   readonly superseded: readonly { readonly record: Uint8Array; readonly receipt: WalletReceipt | undefined }[];
 }
 /** An operator's receipt for a saved record, of the wallet's construction (lit-v1 §5 names no scope root or proof digest). */
-export type WalletReceipt = Receipt | KeyedReceipt;
+export type WalletReceipt = OperatorReceipt;
 /** An operator service as the wallet submits to it: its receipt, of the wallet's construction. */
 export interface WalletService { submit(record: Uint8Array): Promise<WalletReceipt> }
 /** A note of this seed. `presented` names the demands of this seed that present it (item 9 of the M10b decision, C3.1):
@@ -1209,7 +1209,7 @@ export class V3Wallet {
       fee: fee === null || fee === undefined ? undefined : { cm: BigInt(fee), value: BigInt(feeValue!) }, freshens, inputs: saved.inputs, status: saved.status,
       receipt: saved.receipt, final: saved.final,
       superseded: this.db.prepare("SELECT record,receipt FROM saved_superseded WHERE alias=? ORDER BY rowid").all(name).map(old =>
-        ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : decodeReceipt(old.receipt as Uint8Array) })) };
+        ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : this.receiptFrom(old.receipt as Uint8Array) })) };
   }
   /** A saved lit payment: its payee and fee outputs are the statement's first and second derived outputs. A freshen's
    * payee is this seed's note of its demand's notes' sum, and a window move's this seed's note at the moved index. */
@@ -1226,7 +1226,7 @@ export class V3Wallet {
         ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : this.receiptFrom(old.receipt as Uint8Array) })) };
   }
   /** A stored receipt of the wallet's construction. */
-  private receiptFrom(bytes: Uint8Array): WalletReceipt { return this.keyed !== undefined ? this.keyed.receipt.decode(bytes) : decodeReceipt(bytes); }
+  private receiptFrom(bytes: Uint8Array): WalletReceipt { return this.construction.journal.receipts.decode(bytes); }
   /** A saved record's statement identity, by the wallet's construction. */
   private statementOf(bytes: Uint8Array): Uint8Array {
     return this.construction.journal.identity(this.construction.decode(bytes));
@@ -1775,38 +1775,22 @@ export class V3Wallet {
     return this.saveAct(name, 3, intent, bytes, backing, header.operator, undefined, nfs, at);
   }
 
-  /** The operator's receipt for a saved record: it must sign this exact statement, proof and authorization. */
+  /** The operator's receipt for a saved record, of the wallet's construction: it must sign this exact statement, proof
+   * (pool-v3's; lit-v1's receipt names none, §5) and authorization in the record's own segment and scope. */
   private async receiptOf(saved: { readonly record: Uint8Array; readonly statement: Uint8Array }, operator: Uint8Array,
     service: WalletService): Promise<WalletReceipt> {
-    if (this.keyed !== undefined) return this.keyedReceiptOf(saved, operator, service);
-    const record = decodeRecord(saved.record), p = record.publicInputs;
-    const answer = await service.submit(new Uint8Array(saved.record)) as Receipt;
-    let receipt: Receipt;
-    try { receipt = decodeReceipt(encodeReceipt(answer)); } catch (error) {
-      if (error instanceof EncodingError) throw new V3WalletError("INVALID", "malformed receipt");
-      throw error;
-    }
-    // Only this record's exact proof and authorization can be the admitted event (C2.10.9a).
-    const digests = evidenceHashes(record);
-    requireThat(verifyReceipt({ domain: this.domain, segment: identifierOf(p[2]!, p[3]!), scopeRoot: p[4]!,
-      operator }, receipt) && same(receipt.statementHash, saved.statement) &&
-      same(receipt.proofHash, digests.proofHash) && same(receipt.signatureHash, digests.signatureHash),
-      "INVALID", "receipt does not authenticate the saved record");
-    return receipt;
-  }
-  /** A lit operator's receipt (lit-v1 §5): it must sign this exact statement and authorization in the record's segment. */
-  private async keyedReceiptOf(saved: { readonly record: Uint8Array; readonly statement: Uint8Array }, operator: Uint8Array,
-    service: WalletService): Promise<KeyedReceipt> {
-    const record = this.construction.decode(saved.record), segment = this.construction.view(record, () => undefined).segment;
-    const signatureHash = this.construction.reader.digests(saved.record).signatureHash;
+    const view = this.construction.view(this.construction.decode(saved.record), () => undefined);
+    const digests = this.construction.reader.digests(saved.record), codec = this.construction.journal.receipts;
     const answer = await service.submit(new Uint8Array(saved.record));
-    let receipt: KeyedReceipt;
-    try { receipt = this.keyed!.receipt.decode(this.keyed!.receipt.encode(answer as KeyedReceipt)); } catch (error) {
+    let receipt: WalletReceipt;
+    try { receipt = codec.decode(codec.encode(answer)); } catch (error) {
       if (error instanceof EncodingError || error instanceof TypeError) throw new V3WalletError("INVALID", "malformed receipt");
       throw error;
     }
-    requireThat(this.keyed!.receipt.verify({ domain: this.domain, segment, operator }, receipt) && same(receipt.statementHash, saved.statement) &&
-      same(receipt.signatureHash, signatureHash), "INVALID", "receipt does not authenticate the saved record");
+    // Only this record's exact proof and authorization can be the admitted event (C2.10.9a).
+    requireThat(codec.verify({ domain: this.domain, segment: view.segment, scopeRoot: view.scope, operator }, receipt) &&
+      same(receipt.statementHash, saved.statement) && same((receipt as Partial<Receipt>).proofHash ?? new Uint8Array(0), digests.proofHash) &&
+      same(receipt.signatureHash, digests.signatureHash), "INVALID", "receipt does not authenticate the saved record");
     return receipt;
   }
   /** Submit a saved payment's or act's exact record (one alias namespace); keep the first operator receipt that
@@ -1820,7 +1804,7 @@ export class V3Wallet {
     if (saved.receipt !== undefined) return saved.receipt;
     const receipt = await this.receiptOf(saved, row.operator as Uint8Array, service);
     const current = this.transaction(() => {
-      const statement = hex(saved.statement), bytes = this.keyed !== undefined ? this.keyed.receipt.encode(receipt as KeyedReceipt) : encodeReceipt(receipt as Receipt);
+      const statement = hex(saved.statement), bytes = this.construction.journal.receipts.encode(receipt);
       if (this.db.prepare("SELECT 1 FROM saved_records WHERE alias=? AND statement=?").get(name, statement) !== undefined) {
         this.db.prepare("UPDATE saved_records SET receipt=? WHERE alias=? AND receipt IS NULL").run(bytes, name);
         return true;

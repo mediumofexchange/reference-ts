@@ -16,7 +16,7 @@ import { ScopeTree } from "../scope.js";
 import { authorizationFaults, type AuthorizationFault } from "./authorization-evidence.js";
 import {
   decodeReceipt, decodeSnapshot, encodeReceipt, genesisEvidenceHash, genesisHistoryHash, nextEvidenceHash, nextHistoryHash, receiptBytes,
-  receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt, type Snapshot,
+  receiptMatchesEvent, snapshotBytes, snapshotDigest, verifyReceipt, type Receipt, type Snapshot,
 } from "./commitments.js";
 import { adoptedConfigurationBytes, adoptedDomain, requireConfigurationVerifier, verifyConfiguration, type VerifierIdentities } from "./configuration.js";
 import { decodeFaultEvidence, verifyFaultEvidence, type ExpectedSnapshot } from "./fault-evidence.js";
@@ -205,11 +205,6 @@ export interface KeyedWalletFrames {
   outputs(domain: Uint8Array, bytes: Uint8Array): { readonly cm: bigint; readonly opening: KeyedOpening }[];
   /** A note's commitment from its opening. */
   commitment(domain: Uint8Array, opening: KeyedOpening): bigint;
-  readonly receipt: {
-    decode(bytes: Uint8Array): KeyedReceipt;
-    encode(receipt: KeyedReceipt): Uint8Array;
-    verify(authority: { readonly domain: Uint8Array; readonly segment: Uint8Array; readonly operator: Uint8Array }, receipt: KeyedReceipt): boolean;
-  };
 }
 
 /** A receipt's fields (§7.2) as the journal names them for any construction: pool-v3's name its scope root and the
@@ -234,6 +229,20 @@ export interface JournalFrames<R = unknown> {
   configuration(): Uint8Array;
   /** The receipt record for `fields` under `operator`'s key; `sign` signs the receipt message with its secret. */
   receipt(fields: ReceiptFieldsOf, operator: Uint8Array, sign: (message: Uint8Array) => Uint8Array): Uint8Array;
+  /** The receipt records it writes, as a submitter reads them: the service's reply and a wallet's kept receipt (slice 14 M14g3). */
+  readonly receipts: ReceiptCodec;
+}
+/** An operator's receipt record (§7.2) of either construction: pool-v3's names its scope root and proof digest, lit-v1's neither (lit-v1 §5). */
+export type OperatorReceipt = Receipt | KeyedReceipt;
+/** A construction's receipt codec, as a submitter reads the receipt an operator returns. */
+export interface ReceiptCodec {
+  /** EncodingError where the bytes are no receipt of this construction. */
+  decode(bytes: Uint8Array): OperatorReceipt;
+  encode(receipt: OperatorReceipt): Uint8Array;
+  /** Whether `operator` signed it under `domain` in `segment`, under `scopeRoot` where the construction's receipts name one
+   * (pool-v3) and none where they do not (lit-v1). */
+  verify(authority: { readonly domain: Uint8Array; readonly segment: Uint8Array; readonly scopeRoot: bigint | undefined; readonly operator: Uint8Array },
+    receipt: OperatorReceipt): boolean;
 }
 
 /** A receipt (§7.2) as a receipt walk reads it: the fields every construction's receipt names, and its checks. */
@@ -427,6 +436,12 @@ export const POOL_V3: Construction<Record> = Object.freeze({
       const fields = { ...rest, scopeRoot, statementHash: digests.statementHash, proofHash: digests.proofHash, signatureHash: digests.signatureHash };
       return encodeReceipt({ ...fields, operator, signature: sign(receiptBytes(fields)) });
     },
+    receipts: Object.freeze({
+      decode: decodeReceipt,
+      encode: (receipt: OperatorReceipt) => encodeReceipt(receipt as Receipt),
+      verify: ({ scopeRoot, ...authority }: Parameters<ReceiptCodec["verify"]>[0], receipt: OperatorReceipt) =>
+        scopeRoot !== undefined && verifyReceipt({ ...authority, scopeRoot }, receipt as Receipt),
+    }),
   }),
 });
 

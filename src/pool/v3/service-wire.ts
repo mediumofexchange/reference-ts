@@ -1,17 +1,22 @@
-// Local application envelopes. Protocol records keep their existing v3 bytes;
+// Local application envelopes. Protocol records keep their construction's bytes;
 // JSON is never signed and package metadata is never verification authority.
+// One profile serves either construction (slice 14 M14g3): the records,
+// receipts and packages it carries are the journal's construction's, read
+// through its codecs, and every one names its configuration domain.
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { EncodingError } from "../../bytes.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
-import { decodeReceipt, encodeReceipt } from "./commitments.js";
+import { POOL_V3, type Construction } from "./construction.js";
 import type { EvidencePart, TrailTip } from "./evidence-store.js";
-import { decodeRecord, encodeRecord } from "./records.js";
 import type { ServedEvidence, ServedPackage } from "./store.js";
 
 export const V3_SERVICE_PROFILE = "pool-store/v3";
 export const MAX_V3_SERVICE_REQUEST_BYTES = 300_000;
 export const MAX_V3_SERVICE_REPLY_BYTES = 4096;
 const MAX_RECORD_BYTES = 135_000;
+/** A receipt's bytes: pool-v3's are 355, lit-v1's 290; the construction's decoder takes its exact length. */
+const MAX_RECEIPT_BYTES = 512;
+const v3 = POOL_V3 as Construction;
 type Obj = Record<string, unknown>;
 function object(value: unknown): Obj {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new EncodingError("expected object");
@@ -41,13 +46,14 @@ export type V3ServiceReply =
   | { version: 1; profile: typeof V3_SERVICE_PROFILE; kind: "accepted"; receipt: string }
   | { version: 1; profile: typeof V3_SERVICE_PROFILE; kind: "committed" | "published"; commitment: string };
 
-export function parseV3ServiceCommand(value: unknown): V3ServiceCommand {
+/** A command, its record of `construction` (pool-v3's by default). */
+export function parseV3ServiceCommand(value: unknown, construction: Construction = v3): V3ServiceCommand {
   const r = envelope(value);
   if (r.kind === "submit") {
     fields(r, ["version", "profile", "kind", "record"]);
-    const bytes = hex(r.record, MAX_RECORD_BYTES), record = decodeRecord(bytes);
-    if (record.kind === 7) throw new EncodingError("a request is not a segment admission");
-    if (bytesToHex(encodeRecord(record)) !== r.record) throw new EncodingError("noncanonical record");
+    const bytes = hex(r.record, MAX_RECORD_BYTES), record = construction.decode(bytes);
+    if (construction.kind(record) === 7) throw new EncodingError("a request is not a segment admission");
+    if (bytesToHex(construction.journal.encode(record)) !== r.record) throw new EncodingError("noncanonical record");
     return { version: 1, profile: V3_SERVICE_PROFILE, kind: "submit", record: bytesToHex(bytes) };
   }
   if (r.kind === "commit") {
@@ -61,12 +67,13 @@ export function parseV3ServiceCommand(value: unknown): V3ServiceCommand {
   throw new EncodingError("unsupported service command");
 }
 
-export function decodeV3ServiceReply(value: unknown): V3ServiceReply {
+/** A reply, its receipt of `construction` (pool-v3's by default). */
+export function decodeV3ServiceReply(value: unknown, construction: Construction = v3): V3ServiceReply {
   const r = envelope(value);
   if (r.kind === "accepted") {
     fields(r, ["version", "profile", "kind", "receipt"]);
-    const bytes = hex(r.receipt, 355, true);
-    if (bytesToHex(encodeReceipt(decodeReceipt(bytes))) !== r.receipt) throw new EncodingError("noncanonical receipt");
+    const bytes = hex(r.receipt, MAX_RECEIPT_BYTES), codec = construction.journal.receipts;
+    if (bytesToHex(codec.encode(codec.decode(bytes))) !== r.receipt) throw new EncodingError("noncanonical receipt");
     return { version: 1, profile: V3_SERVICE_PROFILE, kind: "accepted", receipt: bytesToHex(bytes) };
   }
   if (r.kind === "committed" || r.kind === "published") {
@@ -78,8 +85,8 @@ export function decodeV3ServiceReply(value: unknown): V3ServiceReply {
   throw new EncodingError("unsupported service reply");
 }
 
-export function replyFromReceipt(bytes: Uint8Array): V3ServiceReply {
-  return decodeV3ServiceReply({ version: 1, profile: V3_SERVICE_PROFILE, kind: "accepted", receipt: bytesToHex(bytes) });
+export function replyFromReceipt(bytes: Uint8Array, construction: Construction = v3): V3ServiceReply {
+  return decodeV3ServiceReply({ version: 1, profile: V3_SERVICE_PROFILE, kind: "accepted", receipt: bytesToHex(bytes) }, construction);
 }
 export function replyFromCommitment(kind: "committed" | "published", commitment: Commitment): V3ServiceReply {
   return decodeV3ServiceReply({ version: 1, profile: V3_SERVICE_PROFILE, kind, commitment: bytesToHex(encodeCommitment(commitment)) });
