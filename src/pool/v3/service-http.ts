@@ -7,7 +7,9 @@ import { V3OperatorJournal, V3StoreError } from "./store.js";
 import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
   parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, servedFrames } from "./service-wire.js";
 
-export interface V3ServiceCredentials { readonly walletToken: string; readonly adminToken: string }
+/** Without an admin credential the service is a holders' listener (M12a): submission and evidence only, for an onion
+ * service's port, so the operator's own commands never face the network that reaches it. */
+export interface V3ServiceCredentials { readonly walletToken: string; readonly adminToken?: string | undefined }
 function matches(header: string | undefined, token: string): boolean {
   const actual = Buffer.from(header ?? ""), expected = Buffer.from(`Bearer ${token}`);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
@@ -40,12 +42,14 @@ function failure(error: unknown): { status: number; code: string } {
 /** Evidence streams served at once, of the sixteen connections; and the slowest peer a stream waits for. */
 const MAX_EVIDENCE_STREAMS = 8, MIN_EVIDENCE_BYTES_PER_MS = 64;
 
-/** Bind to 127.0.0.1. The server also refuses non-loopback connections.
+/** Bind to 127.0.0.1. The server also refuses non-loopback connections. Behind an onion service every peer is the
+ * loopback Tor daemon, so that listener takes no admin credential and has its own sixteen connections.
  * Credentials permit operations; protocol proofs/signatures remain authoritative.
  * Connection timeouts never cancel or roll back accepted journal operations. */
 export function createV3Service(journal: V3OperatorJournal, credentials: V3ServiceCredentials): Server {
   const { walletToken, adminToken } = credentials;
-  if (![walletToken, adminToken].every(token => typeof token === "string" && /^[0-9a-f]{64}$/.test(token)) || walletToken === adminToken) {
+  if (![walletToken, ...(adminToken === undefined ? [] : [adminToken])].every(token => typeof token === "string" && /^[0-9a-f]{64}$/.test(token)) ||
+      walletToken === adminToken) {
     throw new EncodingError("distinct 32-byte credentials required");
   }
   // The journal's construction reads every command and reply (slice 14 M14g3).
@@ -71,7 +75,7 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
       request.resume(); send(403, { code: "LOCAL_ONLY" }); return;
     }
     const count = request.rawHeaders.filter((header, i) => i % 2 === 0 && header.toLowerCase() === "authorization").length;
-    const admin = count === 1 && matches(request.headers.authorization, adminToken);
+    const admin = count === 1 && adminToken !== undefined && matches(request.headers.authorization, adminToken);
     if (!admin && !(count === 1 && matches(request.headers.authorization, walletToken))) {
       request.resume(); send(401, { code: "UNAUTHORIZED" }); return;
     }

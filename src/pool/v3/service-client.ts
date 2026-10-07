@@ -39,6 +39,43 @@ async function json(response: Response, maximum: number): Promise<unknown> {
   try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))) as unknown; }
   catch { throw new EncodingError("invalid service JSON or UTF-8"); }
 }
+/** A v3 onion service's host: 56 base32 characters, the last its version byte's (3). Tor checks the checksum. */
+const ONION_HOST = /^[a-z2-7]{55}d\.onion$/;
+const LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
+const proxyRefusal = (message: string) => new V3ServiceClientError(0, "PROXY", message);
+/** Whether `NO_PROXY` exempts `url`, as Node 24's bundled undici (`EnvHttpProxyAgent`, 7.29.1) matches it: entries split
+ * on commas and whitespace, a lone `*` exempts every host, `.x` and `*.x` read as `x`, which matches the host and its
+ * subdomains, and an entry's `:port` limits it to that port. */
+export function proxyExempts(url: URL, noProxy: string): boolean {
+  const entries = noProxy.split(/[,\s]/).filter(entry => entry !== "").map(entry => {
+    const parsed = /^(.+):(\d+)$/.exec(entry);
+    return { host: (parsed ? parsed[1]! : entry).replace(/^\*?\./, "").toLowerCase(), port: parsed ? Number.parseInt(parsed[2]!, 10) : 0 };
+  });
+  if (entries.length === 0) return false;
+  if (noProxy === "*") return true;
+  const host = url.hostname.toLowerCase(), port = Number.parseInt(url.port, 10) || 80;
+  return entries.some(entry => (entry.port === 0 || entry.port === port) && (host === entry.host || host.endsWith(`.${entry.host}`)));
+}
+/** The proxy `fetch` tunnels an onion URL through, or a PROXY refusal before any connection, so an onion name never
+ * reaches a resolver: Node's environment proxy is on (`NODE_USE_ENV_PROXY=1` or `--use-env-proxy` installed undici's
+ * `EnvHttpProxyAgent` as the global dispatcher), the proxy for `http:` (`http_proxy`, else `HTTP_PROXY`, as undici
+ * reads them) is a loopback `http:` proxy such as Tor's `HTTPTunnelPort`, and `NO_PROXY` does not exempt the host. A
+ * remote proxy could answer for the onion and take the bearer credential. */
+export function onionProxy(url: URL, env: NodeJS.ProcessEnv = process.env): URL {
+  const dispatcher = (globalThis as Record<symbol, unknown>)[Symbol.for("undici.globalDispatcher.1")];
+  if ((dispatcher as { constructor?: { name?: unknown } } | undefined)?.constructor?.name !== "EnvHttpProxyAgent") {
+    throw proxyRefusal("an onion service needs Node's environment proxy: NODE_USE_ENV_PROXY=1 and HTTP_PROXY");
+  }
+  const configured = env.http_proxy ?? env.HTTP_PROXY;
+  if (!configured) throw proxyRefusal("an onion service needs a proxy for http: URLs (http_proxy, else HTTP_PROXY)");
+  let proxy: URL;
+  try { proxy = new URL(configured); } catch { throw proxyRefusal("the http: proxy is not a URL"); }
+  if (proxy.protocol !== "http:" || !LOOPBACK_HOSTS.includes(proxy.hostname)) {
+    throw proxyRefusal("an onion service needs a loopback http: proxy, such as Tor's HTTPTunnelPort");
+  }
+  if (proxyExempts(url, env.no_proxy ?? env.NO_PROXY ?? "")) throw proxyRefusal("NO_PROXY exempts the onion service from the proxy");
+  return proxy;
+}
 function refusal(status: number, value: unknown): V3ServiceClientError {
   const code = value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>)["code"] : undefined;
   return new V3ServiceClientError(status, typeof code === "string" && /^[A-Z_]{1,32}$/.test(code) ? code : "UNAVAILABLE", "service request failed");
@@ -53,17 +90,22 @@ export class V3ServiceClient {
   readonly #baseUrl: string;
   readonly #walletToken: string;
   readonly #adminToken: string | undefined;
+  readonly #onion: boolean;
   readonly #construction: Construction;
   readonly #domain: Uint8Array;
   readonly #operator: Uint8Array;
   readonly #venue: Uint8Array;
   constructor(baseUrl: string, walletToken: string, expected: ServiceIdentity, adminToken?: string) {
     let url: URL; try { url = new URL(baseUrl); } catch { throw new EncodingError("invalid service URL"); }
-    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password ||
+    const onion = ONION_HOST.test(url.hostname);
+    // An onion service is a holder's: its admin credential never leaves the operator's loopback (M12a).
+    if (url.protocol !== "http:" || !(url.hostname === "127.0.0.1" || onion) || url.username || url.password ||
         url.pathname !== "/" || url.search || url.hash || !/^[0-9a-f]{64}$/.test(walletToken) ||
-        (adminToken !== undefined && (!/^[0-9a-f]{64}$/.test(adminToken) || adminToken === walletToken))) {
-      throw new EncodingError("local URL and distinct 32-byte credentials required");
+        (adminToken !== undefined && (onion || !/^[0-9a-f]{64}$/.test(adminToken) || adminToken === walletToken))) {
+      throw new EncodingError("a local or onion URL and distinct 32-byte credentials required");
     }
+    if (onion) onionProxy(url);
+    this.#onion = onion;
     this.#baseUrl = url.href; this.#walletToken = walletToken; this.#adminToken = adminToken;
     this.#construction = expected.construction ?? POOL_V3 as Construction;
     this.#domain = this.#construction.reader.domain(); this.#operator = identifier(expected.operator);
@@ -74,11 +116,21 @@ export class V3ServiceClient {
    * ten-second bound: a command's reply is bounded whole, a stream between its chunks. */
   private async exchange<T>(path: string, token: string, body: string | undefined, type: string,
     read: (response: Response, progress: () => void) => Promise<T>): Promise<T> {
+    const url = new URL(path, this.#baseUrl), proxy = this.#onion ? onionProxy(url) : undefined;
     const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 10_000);
     try {
-      const response = await fetch(new URL(path, this.#baseUrl), { method: body === undefined ? "GET" : "POST",
-        ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "accept-encoding": "identity" } });
+      let response: Response;
+      try {
+        response = await fetch(url, { method: body === undefined ? "GET" : "POST",
+          ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "accept-encoding": "identity" } });
+      } catch (error) {
+        // A proxy that is not running is named, not read as an operator that did not answer.
+        const cause = (error as { cause?: { code?: unknown; port?: unknown } }).cause;
+        if (proxy !== undefined && error instanceof TypeError && cause?.code === "ECONNREFUSED" &&
+            cause.port === (Number.parseInt(proxy.port, 10) || 80)) throw proxyRefusal("the proxy did not answer");
+        throw error;
+      }
       // A refusal is a bounded JSON reply on every route.
       if ((response.status >= 300 && response.status < 400) || response.headers.get("content-type") !== (response.ok ? type : "application/json") ||
           ![null, "identity"].includes(response.headers.get("content-encoding"))) throw new EncodingError("unexpected service response");

@@ -173,20 +173,27 @@ export function servePollsOn(error: unknown): error is CommandError | V3StoreErr
 }
 
 /**
- * `serve --interval <n> [--port <p>]`: run the loopback service and, on each poll, sync the view and act on the
+ * `serve --interval <n> [--port <p>] [--onion <host> [--holder-port <p>]]`: run the loopback service and, on each poll, sync the view and act on the
  * witnessed index (M10b item 7): publish the latest signed commitment while the venue does not hold it; with it
  * held and no return pending, commit (command id `serve:<index>`) and publish when statements were admitted since
  * it and `interval` indices have passed since it was signed, or, at the latest, half the window the journal commits
  * in after the venue witnessed it: the least silence duration of the served terms less the lag. At most one
  * commitment is in flight. Writes `service.json` (the URL and the service-wide wallet token, to hand to holders)
  * and prints one line once listening and one once stopped; a refused budget or a transaction the node's index cannot
- * replay yet is logged and tried again on the next poll. Stops on SIGTERM or SIGINT.
+ * replay yet is logged and tried again on the next poll. Stops on SIGTERM or SIGINT. With `--onion`, the v3 onion
+ * service name Tor serves for this operator, a second loopback listener (`--holder-port`, which Tor's `HiddenServicePort`
+ * names) serves holders only, with no admin credential and its own connections, and `holders.json` names the onion URL
+ * with the wallet token, to hand to holders (M12a).
  */
 async function serve(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, { ...POLL, interval: "value", port: "value" }, 0);
+  const args = parseArguments(argv, { ...POLL, interval: "value", port: "value", onion: "value", "holder-port": "value" }, 0);
   const directory = openDirectory(required(args, "dir"), "operator");
   const interval = integer(required(args, "interval"), "--interval", 1n, 1n << 32n);
   const port = Number(integer(flag(args, "port") ?? "0", "--port", 0n, 65535n)), ms = pollMs(args);
+  const onion = flag(args, "onion"), holderPort = flag(args, "holder-port");
+  if (onion !== undefined && !/^[a-z2-7]{55}d\.onion$/.test(onion)) throw new UsageError("--onion takes a v3 onion host: 56 base32 characters and .onion");
+  if (holderPort !== undefined && onion === undefined) throw new UsageError("--holder-port needs --onion");
+  const holdersAt = Number(integer(holderPort ?? "0", "--holder-port", 0n, 65535n));
   const op = await openOperator(directory, args), journal = op.journal;
   const silence = servedSilence(directory, op.operator), lag = op.view.venue.lag(), queue = serialized();
   // The service's journal commands take their turn with the schedule's, so neither meets the other's BUSY or a
@@ -200,19 +207,25 @@ async function serve(argv: readonly string[]): Promise<void> {
   } });
   const walletToken = readToken(directory, "wallet.token");
   const server: Server = createV3Service(queued, { walletToken, adminToken: readToken(directory, "admin.token") });
+  const holders: Server | undefined = onion === undefined ? undefined : createV3Service(queued, { walletToken });
+  const listen = (s: Server, at: number) => new Promise<void>((done, failed) => { s.once("error", failed); s.listen(at, "127.0.0.1", () => done()); });
   try {
-    await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(port, "127.0.0.1", () => done()); });
+    await listen(server, port);
+    if (holders !== undefined) await listen(holders, holdersAt);
   } catch (error) {
+    await new Promise<void>(done => { if (server.listening) server.close(() => done()); else done(); });
     await op.close();
-    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CommandError("UNAVAILABLE", `port ${port} is in use`);
+    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CommandError("UNAVAILABLE", `port ${(error as { port?: number }).port ?? port} is in use`);
     throw error;
   }
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   writeReplace(directory.file("service.json"), `${JSON.stringify({ url, walletToken }, null, 2)}\n`);
+  const holderService = holders === undefined ? undefined : { url: `http://${onion}/`, port: (holders.address() as AddressInfo).port };
+  if (holderService !== undefined) writeReplace(directory.file("holders.json"), `${JSON.stringify({ url: holderService.url, walletToken }, null, 2)}\n`);
   let stopping = false, pendingNoted = false, wake: (() => void) | undefined;
   const stop = () => { stopping = true; wake?.(); };
   process.once("SIGTERM", stop); process.once("SIGINT", stop);
-  print({ status: "serving", url, operator: op.operator, interval, silence: silence ?? null });
+  print({ status: "serving", url, operator: op.operator, interval, silence: silence ?? null, ...(holderService === undefined ? {} : { holders: holderService }) });
   const tick = async (): Promise<void> => {
     const synced = await op.view.sync(), stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined);
     if (synced.unresolvedIndex !== undefined || stalled.length > 0) {
@@ -249,7 +262,7 @@ async function serve(argv: readonly string[]): Promise<void> {
       if (!stopping) await new Promise<void>(done => { wake = done; setTimeout(done, ms); });
     }
   } finally {
-    await new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); });
+    for (const s of holders === undefined ? [server] : [server, holders]) await new Promise<void>(done => { s.closeAllConnections(); s.close(() => done()); });
     await queue(async () => {});
     await op.close();
   }

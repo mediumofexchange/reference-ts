@@ -35,14 +35,14 @@ describe("v3 service HTTP trust boundary", () => {
       server.closeAllConnections(); server.close(() => resolve());
     })));
   });
-  async function fixture() {
+  async function fixture(credentials: { walletToken: string; adminToken?: string } = { walletToken: TOKEN, adminToken: ADMIN }) {
     const commitment = signCommitment(secret, 2n, b(9));
     const journal = { configurationDomain: domain.slice(), construction: POOL_V3, submit: vi.fn(async (_bytes: Uint8Array) => receipt.slice()),
       commit: vi.fn(async (_id: string) => commitment), publish: vi.fn(async () => commitment),
       serve: vi.fn(async (_backing: Uint8Array, _after: bigint): Promise<ServedEvidence> => ({
         selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12),
         parts: [{ package: b(13) }, { trail: { size: 200_000n, chunks: [new Uint8Array(200_000).fill(7)] } }] })) };
-    const server = createV3Service(journal as unknown as V3OperatorJournal, { walletToken: TOKEN, adminToken: ADMIN });
+    const server = createV3Service(journal as unknown as V3OperatorJournal, credentials);
     servers.push(server);
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
@@ -62,6 +62,18 @@ describe("v3 service HTTP trust boundary", () => {
       { walletToken: TOKEN, adminToken: "AA".repeat(32) }, { walletToken: TOKEN.slice(2), adminToken: ADMIN }]) {
       expect(() => createV3Service(journal, credentials)).toThrow("distinct 32-byte credentials required");
     }
+  });
+
+  it("serves holders only without an admin credential: an onion service's listener (M12a)", async () => {
+    const f = await fixture({ walletToken: TOKEN }), submission = command({ kind: "submit", record: bytesToHex(record()) });
+    expect((await raw(f.url, submission)).status).toBe(200);
+    expect(await raw(f.url, command({ kind: "commit", id: "checkpoint" }))).toEqual({ status: 403, body: { code: "ADMIN_REQUIRED" } });
+    expect(await raw(f.url, command({ kind: "publish" }))).toEqual({ status: 403, body: { code: "ADMIN_REQUIRED" } });
+    // No admin credential opens it: the operator's admin token is a stranger's here.
+    expect(await raw(f.url, command({ kind: "publish" }), ADMIN)).toEqual({ status: 401, body: { code: "UNAUTHORIZED" } });
+    expect(f.journal.commit).not.toHaveBeenCalled(); expect(f.journal.publish).not.toHaveBeenCalled();
+    const response = await fetch(new URL(`/evidence?backing=${"0b".repeat(32)}&after=0`, f.url), { headers: { authorization: `Bearer ${TOKEN}` } });
+    expect(response.status).toBe(200); await response.arrayBuffer();
   });
 
   it("authorizes wallet submit/evidence and reserves commit/publish for the admin credential", async () => {

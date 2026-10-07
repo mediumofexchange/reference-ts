@@ -534,6 +534,36 @@ owner key both signed it (lit-v1 §7), and a lit release discloses nothing. Ever
 (lit-v1 §11), and its explanations say so. The relay keeps no parameters and publishes either construction's
 publications. `npm run check:lit:commands` drills a lit backing on the synthetic node, its gap route included.
 
+### Transport
+
+A holder reaches an operator that is not on its own machine as a Tor onion service
+([M12a decision](../decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a)).
+The operator runs `moe operator serve --onion <host> --holder-port <p>` with Tor's `HiddenServicePort 80 127.0.0.1:<p>`:
+a second loopback listener serves holders only (submission and evidence, no admin credential, sixteen connections of
+its own), and `holders.json` names `http://<host>/` with the wallet token, to hand to holders for `service add`.
+Every `moe` command speaks HTTP through Node's `fetch`, so it takes Node's environment proxy:
+
+```sh
+NODE_USE_ENV_PROXY=1 HTTP_PROXY=http://<isolation>:x@127.0.0.1:9080 NO_PROXY=127.0.0.1 moe wallet sync --dir w <backing>
+```
+
+with Tor's `HTTPTunnelPort 9080`. An onion URL refuses as `PROXY`, before any connection and so before any name lookup,
+unless `fetch` will tunnel it through a loopback `http:` proxy: the environment proxy on (`NODE_USE_ENV_PROXY=1` or
+`--use-env-proxy`), `http_proxy` (or, where it is unset, `HTTP_PROXY`) such a proxy, and `NO_PROXY` not exempting it;
+a proxy that does not answer refuses as `PROXY` too. A remote proxy is refused because it could answer for the onion
+and take the wallet token. A malformed `HTTP_PROXY` stops Node before `moe` runs. `NO_PROXY=127.0.0.1` keeps a local
+node direct (Tor refuses connections to internal addresses); a remote node goes through the same proxy. `init` fetches
+the proving parameters, so run it under the same environment or copy them with `--parameters`.
+
+Tor gives each distinct proxy credential its own circuit (`IsolateSOCKSAuth`, on by default), and each command is one
+process over one backing, so a fresh `<isolation>` per command keeps commands apart. Within one command the operator
+still sees what one circuit carries: `pay`, `freshen` and `move-window` sync the backing and then submit, which shows
+which backing the spend moves in a multi-backing scope. To part them, `sync` with one credential and then
+`pay … --package <dir>/packages/<backing>` with another, at another time. A SOCKS-only proxy needs an HTTP tunnel in
+front (Node's `socks5:` support is experimental and writes a warning to the stderr agents read). The onion listener's
+sixteen connections are open to anyone who knows the name: Tor's `HiddenServicePoWDefensesEnabled` and
+`HiddenServiceMaxStreams` are the operator's levers against a client that holds them.
+
 ## Acceptance and remaining work
 
 `test/pool-v3-wallet.test.ts` ports receiver cases with oracle proofs, including
