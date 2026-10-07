@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1313
+      "elapsedMs": 1336
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1009
+      "elapsedMs": 1015
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2605
+      "elapsedMs": 2659
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2597
+      "elapsedMs": 2644
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2585
+      "elapsedMs": 2632
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1404
+      "elapsedMs": 1416
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2586
+      "elapsedMs": 2626
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2587
+      "elapsedMs": 2633
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2586
+      "elapsedMs": 2638
     }
   ],
   "transactions": [],
@@ -77,13 +77,13 @@
     "position": "4",
     "adoptionIndex": "24",
     "spentRoot": "5f374bcb11033eb9d6497b5c89ab72fac42592b033d4e3ebe9804e5102bca7c0",
-    "history": "280f3a6c3f7644f69dae8977a23b5317cacf0e078d6091ca0716bebd3dc27acd",
+    "history": "16ef49c68aa754b9ec546b2640a10b3c923a85214dc29f18ccabdea586049226",
     "canonicalIndex": "25",
     "force": [
       {
         "index": "21",
         "kind": 4,
-        "sha256": "d3891310651464a0350598792d933b5bee178cefbd2b1b2a6bd79279f90ee8d7"
+        "sha256": "ce931f7a9396b951cb9dadc5c06c4f770b318b96893c205f7d0f47cbd45163cb"
       },
       {
         "index": "22",
@@ -93,12 +93,12 @@
       {
         "index": "23",
         "kind": 4,
-        "sha256": "3528f3fccf882d95da77f8ec2c8ce85e08c7dcc0369a39c8dbf05b6e4beb48aa"
+        "sha256": "67e643dcf30b78e593bb848f05413bc8e776516dde38b1f0172877cde0560d20"
       },
       {
         "index": "24",
         "kind": 6,
-        "sha256": "9b5821ea257a604c8b74225e66fed5a398d7fe963a2f7708b8780c89e473a147"
+        "sha256": "d46f3afb2c3cbcd10fd64184a58bb37a468b535421e034fa10f9b43b37c99952"
       }
     ],
     "clock": {
@@ -119,13 +119,13 @@
       "snapshotIndex": "24"
     }
   },
-  "elapsedMs": 34148,
+  "elapsedMs": 34631,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
     "dist/ergo-headers.js": "c92133bc2c437b7e199f12689bd5c2bd98167327ab6e7c7cc7e47028d819df5c",
     "dist/ergo-profile.js": "3913b613a2664a0fdfc5677e8dea0b77f861c8d3dda563ded7e1200e3e4cee81",
-    "dist/ergo-publisher.js": "41f26ff08349bc0f8f595519b9566e0f708a65dd4d385a32edff21a29fbd0067",
+    "dist/ergo-publisher.js": "4777a0bf661c5ae06c882030c0c6745ff42230fefe4064a03d6304287961eae8",
     "dist/ergo-store.js": "d762da95dcc7d7d19b75169b9116a0ef8ec4f788d47ae9df3984647e2f62f207",
     "dist/ergo-supplier.js": "43fb57b48737439888fdbcbfbafbc7f613db5c6fb959767af90b0899d7d92d2a",
     "dist/ergo-synthetic.js": "6888728d3d42d27880ecf777b8f5717e4ac355dc516452b4fb3307e826ae17d7",
@@ -200,7 +200,7 @@
     "src/contexts.ts": "c6baef31ad45dd6a9fc0e85b00d0a3d3ce26f374f739208fae0637398b132651",
     "src/ergo-headers.ts": "c0e21dead5c9a54db64761279504313458e0d6a3c8cf35e4f0651aede2fd7dd0",
     "src/ergo-profile.ts": "5ba30d70a8d7b04f920b6145006cc2fcda11d9e2f5a1152d00d97600baa96009",
-    "src/ergo-publisher.ts": "09b2d8044abb0c83165b01d8ea5613f38d33a4c0ee322494e8d00ab5cfc1e08d",
+    "src/ergo-publisher.ts": "1969c16fa4550e59871acd2eedba9944d822bfedf5726332d1be1b3f63ff2f0e",
     "src/ergo-store.ts": "51b6f791405bc0336089a648f7982079402c07bf9701c24e82195964ac943ee5",
     "src/ergo-supplier.ts": "f76d4fc69efa9683b8440122b555a65d47011f6b0dc282fcf4ff2bfe28d5b863",
     "src/ergo-synthetic.ts": "73c8f3555ebfc0c5a462ff071ec646d3e128701a84bd79f633d4f60e769bbb8d",

@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1322
+      "elapsedMs": 1298
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1006
+      "elapsedMs": 1008
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3102
+      "elapsedMs": 3183
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3076
+      "elapsedMs": 3145
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 994
+      "elapsedMs": 999
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3068
+      "elapsedMs": 3129
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3068
+      "elapsedMs": 3140
     }
   ],
   "transactions": [
@@ -110,8 +110,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "3933ce80fca0204e338a8c45e1789980ca71f572ac115a63af365039151ea9ec",
-      "history": "eee94cf5281a1733bdf600d1cc801d91da488912be5f4495f64a35845adcf950",
+      "spentRoot": "2131917c9d0a2c63b48f6f18b8ebe4f2332782b68e11e2c4494775dc8292d39a",
+      "history": "a67a83a91e10969a94ec199ad50393e76db2e0a0c76a9eaeb7dc48fb934cffda",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -166,8 +166,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "3933ce80fca0204e338a8c45e1789980ca71f572ac115a63af365039151ea9ec",
-      "history": "eee94cf5281a1733bdf600d1cc801d91da488912be5f4495f64a35845adcf950",
+      "spentRoot": "2131917c9d0a2c63b48f6f18b8ebe4f2332782b68e11e2c4494775dc8292d39a",
+      "history": "a67a83a91e10969a94ec199ad50393e76db2e0a0c76a9eaeb7dc48fb934cffda",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -225,13 +225,13 @@
       ]
     }
   },
-  "elapsedMs": 38373,
+  "elapsedMs": 39373,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
     "dist/ergo-headers.js": "c92133bc2c437b7e199f12689bd5c2bd98167327ab6e7c7cc7e47028d819df5c",
     "dist/ergo-profile.js": "3913b613a2664a0fdfc5677e8dea0b77f861c8d3dda563ded7e1200e3e4cee81",
-    "dist/ergo-publisher.js": "41f26ff08349bc0f8f595519b9566e0f708a65dd4d385a32edff21a29fbd0067",
+    "dist/ergo-publisher.js": "4777a0bf661c5ae06c882030c0c6745ff42230fefe4064a03d6304287961eae8",
     "dist/ergo-store.js": "d762da95dcc7d7d19b75169b9116a0ef8ec4f788d47ae9df3984647e2f62f207",
     "dist/ergo-supplier.js": "43fb57b48737439888fdbcbfbafbc7f613db5c6fb959767af90b0899d7d92d2a",
     "dist/ergo-synthetic.js": "6888728d3d42d27880ecf777b8f5717e4ac355dc516452b4fb3307e826ae17d7",
@@ -311,7 +311,7 @@
     "src/contexts.ts": "c6baef31ad45dd6a9fc0e85b00d0a3d3ce26f374f739208fae0637398b132651",
     "src/ergo-headers.ts": "c0e21dead5c9a54db64761279504313458e0d6a3c8cf35e4f0651aede2fd7dd0",
     "src/ergo-profile.ts": "5ba30d70a8d7b04f920b6145006cc2fcda11d9e2f5a1152d00d97600baa96009",
-    "src/ergo-publisher.ts": "09b2d8044abb0c83165b01d8ea5613f38d33a4c0ee322494e8d00ab5cfc1e08d",
+    "src/ergo-publisher.ts": "1969c16fa4550e59871acd2eedba9944d822bfedf5726332d1be1b3f63ff2f0e",
     "src/ergo-store.ts": "51b6f791405bc0336089a648f7982079402c07bf9701c24e82195964ac943ee5",
     "src/ergo-supplier.ts": "f76d4fc69efa9683b8440122b555a65d47011f6b0dc282fcf4ff2bfe28d5b863",
     "src/ergo-synthetic.ts": "73c8f3555ebfc0c5a462ff071ec646d3e128701a84bd79f633d4f60e769bbb8d",
