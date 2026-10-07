@@ -43,6 +43,7 @@ async function json(response: Response, maximum: number): Promise<unknown> {
 const ONION_HOST = /^[a-z2-7]{55}d\.onion$/;
 const LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
 const proxyRefusal = (message: string) => new V3ServiceClientError(0, "PROXY", message);
+const PROXY_UNREACHABLE: ReadonlySet<unknown> = new Set(["ECONNREFUSED", "EADDRNOTAVAIL", "EAFNOSUPPORT", "ENETUNREACH", "EHOSTUNREACH"]);
 /** Whether `NO_PROXY` exempts `url`, as Node 24's bundled undici (`EnvHttpProxyAgent`, 7.29.1) matches it: entries split
  * on commas and whitespace, a lone `*` exempts every host, `.x` and `*.x` read as `x`, which matches the host and its
  * subdomains, and an entry's `:port` limits it to that port. */
@@ -125,10 +126,12 @@ export class V3ServiceClient {
           ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "accept-encoding": "identity" } });
       } catch (error) {
-        // A proxy that is not running is named, not read as an operator that did not answer.
-        const cause = (error as { cause?: { code?: unknown; port?: unknown } }).cause;
-        if (proxy !== undefined && error instanceof TypeError && cause?.code === "ECONNREFUSED" &&
-            cause.port === (Number.parseInt(proxy.port, 10) || 80)) throw proxyRefusal("the proxy did not answer");
+        // An onion request opens a connection to the proxy alone, and Tor answers an onion's failure with a status: a
+        // connection that fails is the proxy's, named rather than read as an operator that did not answer (a name with
+        // several addresses fails as an AggregateError).
+        const cause = (error as { cause?: unknown }).cause;
+        if (proxy !== undefined && error instanceof TypeError && (cause instanceof AggregateError ||
+            PROXY_UNREACHABLE.has((cause as { code?: unknown } | undefined)?.code))) throw proxyRefusal("the proxy did not answer");
         throw error;
       }
       // A refusal is a bounded JSON reply on every route.

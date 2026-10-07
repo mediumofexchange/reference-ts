@@ -538,7 +538,7 @@ publications. `npm run check:lit:commands` drills a lit backing on the synthetic
 
 A holder reaches an operator that is not on its own machine as a Tor onion service
 ([M12a decision](../decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a)).
-The operator runs `moe operator serve --onion <host> --holder-port <p>` with Tor's `HiddenServicePort 80 127.0.0.1:<p>`:
+The operator runs `moe operator serve --dir <d> --interval <n> --onion <host> --holder-port <p>` with Tor's `HiddenServicePort 80 127.0.0.1:<p>`:
 a second loopback listener serves holders only (submission and evidence, no admin credential, sixteen connections of
 its own), and `holders.json` names `http://<host>/` with the wallet token, to hand to holders for `service add`.
 Every `moe` command speaks HTTP through Node's `fetch`, so it takes Node's environment proxy:

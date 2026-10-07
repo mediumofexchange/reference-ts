@@ -68,7 +68,9 @@ describe("onion services through the environment proxy (M12a)", () => {
     ["an empty no_proxy hides NO_PROXY=*", () => ({ NODE_USE_ENV_PROXY: "1", HTTP_PROXY: P(), no_proxy: "", NO_PROXY: "*" }), true],
     ["NO_PROXY for a local node", () => ({ NODE_USE_ENV_PROXY: "1", HTTP_PROXY: P(), NO_PROXY: "127.0.0.1,localhost" }), true],
   ];
-  it.each(cases)("accepts exactly where fetch tunnels: %s", async (_, env, tunnels) => {
+  // Windows' environment is case-insensitive: a child keeps one of http_proxy and HTTP_PROXY, so these cannot arise.
+  const caseSensitive = new Set(["an empty http_proxy hides HTTP_PROXY", "an empty no_proxy hides NO_PROXY=*"]);
+  it.each(cases.filter(([name]) => process.platform !== "win32" || !caseSensitive.has(name)))("accepts exactly where fetch tunnels: %s", async (_, env, tunnels) => {
     const seen = await observed(env());
     expect(seen.tunnelled).toBe(tunnels);
     expect(judged(env(), seen.name)).toBe(tunnels ? "accepted" : "PROXY");

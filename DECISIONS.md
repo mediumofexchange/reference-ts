@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-07` [Reach an operator as an onion service through the holder's own proxy, and serve holders on a listener of their own (slice 12 M12a)](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a)
 - `2026-10-07` [Adopt moe/lit/v1 with §9's configuration, reading the contracts in the text pool-v3 fixes (slice 14 M14h)](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h)
 - `2026-10-07` [Retire the store checks' live testnet modes: the command drill is the live evidence (simplify)](decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify)
 - `2026-10-07` [One evidence chain for pool-v3 and lit, instantiated per construction (simplify)](decisions/2026-10.md#2026-10-07--one-evidence-chain-for-pool-v3-and-lit-instantiated-per-construction-simplify)

@@ -9,7 +9,7 @@ const connect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function (...args) {
   const first = Array.isArray(args[0]) ? args[0][0] : args[0];
   const options = typeof first === "object" && first !== null ? first : { port: first, host: args[1] };
-  if (options.path === undefined && !allowed.has(Number(options.port))) {
+  if (typeof options.path !== "string" && !allowed.has(Number(options.port))) {
     process.stderr.write(`direct-guard: a direct connection to ${options.host ?? "localhost"}:${options.port}\n`);
     process.exit(97);
   }

@@ -81,13 +81,13 @@ const nextRound = async () => { await advance(Number(DEPTH) + 2); await pause(30
 
 /** One `moe` process: its exit code, stdout's JSON, stderr and its refusal. With `mining: "waiting"`, each wait it
  * logs mines one block, so the chain moves with the command's retries. */
-function moe(args, { mining, input, proxy = torPort } = {}) {
+function moe(args, { mining, input, proxy = torPort, proxyHost = "127.0.0.1" } = {}) {
   return new Promise((done, failed) => {
     const rss = join(scratch, `rss-${processes.length}-${process.hrtime.bigint()}.json`);
     // A holder's process: through the proxy, each with its own credential (Tor isolates streams by it), the node direct.
     const holder = args[0] !== "operator";
     const env = { ...plainEnv, MOE_DRILL_RSS: rss, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
-      HTTP_PROXY: `http://drill-${processes.length}:x@127.0.0.1:${proxy}`, NO_PROXY: "127.0.0.1" } : {}),
+      HTTP_PROXY: `http://drill-${processes.length}:x@${proxyHost}:${proxy}`, NO_PROXY: "127.0.0.1" } : {}),
       ...(holder ? { MOE_DRILL_PORTS: `${proxy ?? torPort},${nodePort}` } : {}) };
     const child = spawn(process.execPath, ["--import", RSS_HOOK, ...(holder ? ["--import", GUARD] : []), MOE, ...args],
       { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env });
@@ -114,12 +114,17 @@ function moe(args, { mining, input, proxy = torPort } = {}) {
     });
   });
 }
+/** While the service is up, a holder's read takes it from the service, through the proxy, never from what it kept. */
+const served = (args, result) => {
+  if (serviceUp && result.status === 0 && args[0] === "wallet" && ["sync", "fulfill"].includes(args[1])) {
+    assert.equal(result.json.evidence, "served", `moe ${args.join(" ")}`);
+  }
+};
 const ok = async (args, options) => {
   const result = await moe(args, options);
   assert.equal(result.status, 0, `moe ${args.join(" ")}: ${result.stderr}`);
   assert.equal(result.stdout.split("\n").filter(line => line !== "").length, 1, result.stdout);
-  // While the service is up, a holder's read takes it from the service, through the proxy, never from what it kept.
-  if (serviceUp && args[0] === "wallet" && ["sync", "fulfill"].includes(args[1])) assert.equal(result.json.evidence, "served", `moe ${args.join(" ")}`);
+  served(args, result);
   return result.json;
 };
 const refused = async (args, code, options) => {
@@ -143,9 +148,11 @@ function serve(directory) {
   child.stderr.on("data", chunk => { stderr += chunk; });
   const exited = new Promise(done => child.on("close", status => done(status)));
   const listening = new Promise((done, failed) => {
+    let listened = false;
     child.stdout.on("data", chunk => {
       stdout += chunk;
-      if (!stdout.includes("\n")) return;
+      if (listened || !stdout.includes("\n")) return;
+      listened = true;
       const line = JSON.parse(stdout.split("\n")[0]);
       assert.equal(line.holders.url, `http://${ONION}/`); tor.holders = line.holders.port; serviceUp = true; done(line);
     });
@@ -216,6 +223,7 @@ try {
     for (let round = 0; ; round++) {
       await nextRound();
       const result = await moe(args);
+      served(args, result);
       if (result.status === 0 && until(result.json)) return result.json;
       assert(round < rounds, `moe ${args.join(" ")} did not settle: ${result.stdout}${result.stderr}`);
     }
@@ -254,7 +262,10 @@ try {
     assert.match((await refused(wallet("sync", HD, backing), "PROXY", { proxy: null })).message, /environment proxy/);
     const closed = createServer(); await new Promise(done => closed.listen(0, "127.0.0.1", done));
     const deadPort = closed.address().port; await new Promise(done => closed.close(done));
-    assert.match((await refused(wallet("sync", HD, backing), "PROXY", { proxy: deadPort })).message, /proxy did not answer/);
+    // Named as `localhost`, the proxy may have two addresses: both refusing is the proxy's failure too.
+    for (const proxyHost of ["127.0.0.1", "localhost"]) {
+      assert.match((await refused(wallet("sync", HD, backing), "PROXY", { proxy: deadPort, proxyHost })).message, /proxy did not answer/);
+    }
     const funding = await request(HD, "fund", 10);
     // Lit-v1 §8's frame: tag, domain, backing, value and owner key.
     assert.equal(funding.made.frame.length, 2 * (25 + 32 + 32 + 8 + 32));

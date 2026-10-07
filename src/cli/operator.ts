@@ -11,7 +11,7 @@
 // them. An operator directory is never restored from a copy: its recovery is
 // succession. The journal serves the construction the directory declares at
 // init (M14g4); a lit operator keeps no parameters and opens no verifier.
-import { readdirSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -208,7 +208,9 @@ async function serve(argv: readonly string[]): Promise<void> {
   const walletToken = readToken(directory, "wallet.token");
   const server: Server = createV3Service(queued, { walletToken, adminToken: readToken(directory, "admin.token") });
   const holders: Server | undefined = onion === undefined ? undefined : createV3Service(queued, { walletToken });
-  const listen = (s: Server, at: number) => new Promise<void>((done, failed) => { s.once("error", failed); s.listen(at, "127.0.0.1", () => done()); });
+  const listen = (s: Server, at: number) => new Promise<void>((done, failed) => {
+    s.once("error", failed); s.listen(at, "127.0.0.1", () => { s.off("error", failed); done(); });
+  });
   try {
     await listen(server, port);
     if (holders !== undefined) await listen(holders, holdersAt);
@@ -221,7 +223,9 @@ async function serve(argv: readonly string[]): Promise<void> {
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   writeReplace(directory.file("service.json"), `${JSON.stringify({ url, walletToken }, null, 2)}\n`);
   const holderService = holders === undefined ? undefined : { url: `http://${onion}/`, port: (holders.address() as AddressInfo).port };
+  // A holders' file from an earlier run names a listener this one does not run.
   if (holderService !== undefined) writeReplace(directory.file("holders.json"), `${JSON.stringify({ url: holderService.url, walletToken }, null, 2)}\n`);
+  else rmSync(directory.file("holders.json"), { force: true });
   let stopping = false, pendingNoted = false, wake: (() => void) | undefined;
   const stop = () => { stopping = true; wake?.(); };
   process.once("SIGTERM", stop); process.once("SIGINT", stop);

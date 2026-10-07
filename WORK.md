@@ -10,10 +10,10 @@ cryptography, drilled in CI with no direct path; (b) a replica, an evidence-only
 one wire, from which the operator-offline drill syncs a wallet; (c) decisions, with explanations and adversarial review, on the
 service credential (not per holder), syncs that do not tie an address to the backing they spend, and gap funding apart from
 identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement is a local-machine Open question.
-- **M12a (in progress, `claude/m12a-transport`):** onion services through Node's environment proxy (HTTP CONNECT, such as Tor's
-  `HTTPTunnelPort`); the service client takes `http://<v3>.onion/` only when fetch tunnels, refusing `PROXY` otherwise; the lit
-  command drill runs holders by onion name through a CONNECT-only proxy. Probe: the drill passes proxied (+4%, one run each);
-  undici 7.29.1 spins on a proxy that closes a CONNECT without a status, until each request's deadline. Design under fresh review.
+- **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), `claude/m12a-transport`):** holders reach an operator as a Tor onion
+  service through their own loopback proxy (Node's environment proxy), refusing `PROXY` unless fetch tunnels; `serve --onion` runs a
+  holders-only listener; the lit command drill runs every holder by onion name under a direct-connection guard. Design and patch
+  reviewed (findings taken). Limits: no live Tor here (Open question); per-command isolation; undici spins on a silent proxy.
 - **Then:** M12b, the replica and its credential; M12c, gap funding and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`)
   is done: [M14h](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h).
 
@@ -93,7 +93,7 @@ identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement i
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Deletion list (2026-10-07): none open; the merged spec and code branches of M14g5a are gone from both remotes (a stale local tracking ref only).
 
 Roughly **68% done / 32% remaining** (range 58–77%), reassessed 2026-10-07 (M14h): lit notes are adopted and run through the commands,
