@@ -159,6 +159,33 @@ describe("v3 service HTTP trust boundary", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it("cuts off a peer that keeps reading below the minimum rate", async () => {
+    const f = await fixture(), told: unknown[] = [];
+    f.server.on("evidenceError", error => told.push(error));
+    // Sixteen MiB, past what the sockets buffer, so the server's writes wait on the peer.
+    f.journal.serve.mockResolvedValueOnce({ selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12),
+      parts: [{ trail: { size: 16n << 20n, chunks: (function* () { for (let i = 0; i < 256; i++) yield new Uint8Array(65_536).fill(7); })() } }] });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const got = await new Promise<{ bytes: number; ended: string }>(resolve => {
+        let bytes = 0;
+        const request = httpRequest(new URL(`/evidence?backing=${"0b".repeat(32)}&after=0`, f.url), { headers: { authorization: `Bearer ${TOKEN}` } }, response => {
+          response.pause();
+          // The peer reads a little every few milliseconds while a minute passes on the clock each time: always reading, never fast enough.
+          const tick = setInterval(() => { vi.setSystemTime(Date.now() + 60_000); const chunk = response.read(65_536) as Buffer | null; if (chunk !== null) bytes += chunk.length; }, 5);
+          const done = (ended: string) => { clearInterval(tick); resolve({ bytes, ended }); };
+          response.once("end", () => done("end")); response.once("error", () => done("cut")); response.once("aborted", () => done("cut"));
+          response.once("close", () => done(response.complete ? "end" : "cut"));
+        });
+        request.once("error", () => resolve({ bytes: 0, ended: "cut" }));
+        request.end();
+      });
+      expect(got.ended).toBe("cut");
+      expect(got.bytes).toBeLessThan(16 << 20);
+      expect(told).toEqual([]);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("rejects wrong and duplicate authorization before invoking the journal", async () => {
     const f = await fixture(), body = JSON.stringify(command({ kind: "publish" }));
     expect(await raw(f.url, body, "33".repeat(32))).toEqual({ status: 401, body: { code: "UNAUTHORIZED" } });

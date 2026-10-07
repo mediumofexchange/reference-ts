@@ -220,16 +220,18 @@ describe("bounded v3 local service client", () => {
       head.push(chunk);
       if (head.length === 2) break;
     }
+    // The clock moves only while it is faked: a tick after the test ends never installs a frozen clock for the next.
+    let faking = true;
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       const url = await endpoint((request, response) => {
         request.resume(); response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
         for (const chunk of head) response.write(chunk);
-        const tick = setInterval(() => { vi.setSystemTime(Date.now() + 3_000); response.write(Uint8Array.of(0x70)); }, 5);
+        const tick = setInterval(() => { if (faking) vi.setSystemTime(Date.now() + 3_000); response.write(Uint8Array.of(0x70)); }, 5);
         response.once("close", () => clearInterval(tick));
       });
       await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toMatchObject({ name: "TimeoutError" });
-    } finally { vi.useRealTimers(); }
+    } finally { faking = false; vi.useRealTimers(); }
   });
 
   it("aborts a real server that stalls after response headers", async () => {
