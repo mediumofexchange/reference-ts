@@ -62,7 +62,7 @@ import { decodeCommitment, encodeCommitment, signCommitment, verifyCommitment, t
 import { scopeSchedule } from "../schedule.js";
 import type { Snapshot } from "./commitments.js";
 import { POOL_V3, type Construction, type ReaderFrames } from "./construction.js";
-import { EvidenceStore, MAX_ITEM_BYTES, trailPart, wholePackage, type EvidenceBatch, type EvidencePart, type TrailTip } from "./evidence-store.js";
+import { EvidenceStore, MAX_ITEM_BYTES, SERVED_PART_BYTES, SERVED_PART_ITEMS, trailPart, wholePackage, type EvidenceBatch, type EvidencePart, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
@@ -77,8 +77,6 @@ import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, 
 import type { RootTerms } from "./terms.js";
 
 const PROFILE = "pool-store/v3/7";
-/** What one served package part holds before it is sent: a bound on the memory serving takes, not on what is served. */
-const PART_ITEMS = 1024, PART_BYTES = 1_048_576;
 /** Signed rows read at a time while serving. */
 const SERVE_PAGE = 256n;
 const U64 = 1n << 64n;
@@ -1279,7 +1277,7 @@ export class V3OperatorJournal {
         const hash = sha256(payload), key = `${kind}:${bytesToHex(hash)}`;
         if (!batch.has(key)) { batch.set(key, { kind, payload, hash }); held += payload.length; }
       };
-      const full = (): boolean => batch.size >= PART_ITEMS || held >= PART_BYTES;
+      const full = (): boolean => batch.size >= SERVED_PART_ITEMS || held >= SERVED_PART_BYTES;
       const packed = (): EvidencePart => {
         const items = [...batch.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash));
         batch.clear(); held = 0;

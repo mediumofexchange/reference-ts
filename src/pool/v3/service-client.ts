@@ -89,20 +89,21 @@ function refusal(status: number, value: unknown): V3ServiceClientError {
  * that construction. Finality still requires the existing reader and independent venue. */
 export class V3ServiceClient {
   readonly #baseUrl: string;
-  readonly #walletToken: string;
+  /** Undefined for a replica's evidence-only listener, which takes no credential (M12b). */
+  readonly #walletToken: string | undefined;
   readonly #adminToken: string | undefined;
   readonly #onion: boolean;
   readonly #construction: Construction;
   readonly #domain: Uint8Array;
   readonly #operator: Uint8Array;
   readonly #venue: Uint8Array;
-  constructor(baseUrl: string, walletToken: string, expected: ServiceIdentity, adminToken?: string) {
+  constructor(baseUrl: string, walletToken: string | undefined, expected: ServiceIdentity, adminToken?: string) {
     let url: URL; try { url = new URL(baseUrl); } catch { throw new EncodingError("invalid service URL"); }
     const onion = ONION_HOST.test(url.hostname);
     // An onion service is a holder's: its admin credential never leaves the operator's loopback (M12a).
     if (url.protocol !== "http:" || !(url.hostname === "127.0.0.1" || onion) || url.username || url.password ||
-        url.pathname !== "/" || url.search || url.hash || !/^[0-9a-f]{64}$/.test(walletToken) ||
-        (adminToken !== undefined && (onion || !/^[0-9a-f]{64}$/.test(adminToken) || adminToken === walletToken))) {
+        url.pathname !== "/" || url.search || url.hash || (walletToken !== undefined && !/^[0-9a-f]{64}$/.test(walletToken)) ||
+        (adminToken !== undefined && (onion || walletToken === undefined || !/^[0-9a-f]{64}$/.test(adminToken) || adminToken === walletToken))) {
       throw new EncodingError("a local or onion URL and distinct 32-byte credentials required");
     }
     if (onion) onionProxy(url);
@@ -115,7 +116,7 @@ export class V3ServiceClient {
   get baseUrl(): string { return this.#baseUrl; }
   /** One exchange. `read` is given the response while the connection is held, and a call that restarts the
    * ten-second bound: a command's reply is bounded whole, a stream between its chunks. */
-  private async exchange<T>(path: string, token: string, body: string | undefined, type: string,
+  private async exchange<T>(path: string, token: string | undefined, body: string | undefined, type: string,
     read: (response: Response, progress: () => void) => Promise<T>): Promise<T> {
     const url = new URL(path, this.#baseUrl), proxy = this.#onion ? onionProxy(url) : undefined;
     const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 10_000);
@@ -124,7 +125,7 @@ export class V3ServiceClient {
       try {
         response = await fetch(url, { method: body === undefined ? "GET" : "POST",
           ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
-          headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "accept-encoding": "identity" } });
+          headers: { ...(token === undefined ? {} : { authorization: `Bearer ${token}` }), "content-type": "application/json", "accept-encoding": "identity" } });
       } catch (error) {
         // An onion request opens a connection to the proxy alone, and Tor answers an onion's failure with a status: a
         // connection that fails is the proxy's, named rather than read as an operator that did not answer (a name with
@@ -143,7 +144,8 @@ export class V3ServiceClient {
   }
   private async request(path: string, command: V3ServiceCommand, admin = false): Promise<unknown> {
     const token = admin ? this.#adminToken : this.#walletToken;
-    if (token === undefined) throw new V3ServiceClientError(403, "ADMIN_REQUIRED", "admin credential required");
+    if (token === undefined) throw new V3ServiceClientError(403, admin ? "ADMIN_REQUIRED" : "UNAUTHORIZED", admin ? "admin credential required" :
+      "a replica serves evidence only");
     const body = JSON.stringify(parseV3ServiceCommand(command, this.#construction));
     if (Buffer.byteLength(body) > MAX_V3_SERVICE_REQUEST_BYTES) throw new EncodingError("request too large");
     return this.exchange(path, token, body, "application/json", response => json(response, MAX_V3_SERVICE_REPLY_BYTES));
@@ -212,12 +214,14 @@ export class V3ServiceClient {
 
   /**
    * Bring `evidence`, the party's own evidence store, up to the service's latest served commitment for
-   * `backing` (pool-v3 §14, incremental retrieval). The store records the sequence this service's evidence
-   * was kept through, and the request names it, so the service sends only later objects and, for each trail,
-   * its head and the records after what the store holds. Where those parts do not assemble over what the
-   * store holds, everything is fetched once more from nothing; `full` asks for that outright, which also
-   * replaces retained evidence that storage damaged. Returns the selection and the read's own package (the
-   * configuration and the selected commitment) to read with that store.
+   * `backing` (pool-v3 §14, incremental retrieval). The store records the sequence this source (the expected
+   * operator's evidence at this URL: the operator's service or a replica) was kept through, and the request names
+   * it, so the source sends only later objects and, for each trail, its head and the records after what the store
+   * holds. Each source has its own mark, so one that withholds what it states as served costs only its own later
+   * syncs. Where those parts do not assemble over what the store holds, everything is fetched once more from
+   * nothing; `full` asks for that outright, which also replaces retained evidence that storage damaged. A source
+   * whose selection is below the mark sends nothing new, and the mark stays. Returns the selection and the read's own
+   * package (the configuration and the selected commitment) to read with that store.
    *
    * Evidence transport only. Metadata never selects the reader's authority, judging index, finality,
    * current balance or spendability; what is kept is authenticated when a read uses it. `maxBytes` bounds
@@ -225,13 +229,15 @@ export class V3ServiceClient {
    */
   async sync(backing: Uint8Array, evidence: EvidenceStore, options: { readonly full?: boolean; readonly maxBytes?: bigint } = {}): Promise<ServedPackage> {
     if (evidence.construction.namespace.name !== this.#construction.namespace.name) throw new TypeError("an evidence store of another construction");
-    const ownBacking = identifier(backing), source = concatBytes(this.#domain, this.#venue, this.#operator);
-    const receive = (after: bigint) => this.served(ownBacking, after, options.maxBytes ?? EVIDENCE_QUOTA.file, (_, parts) => evidence.take(parts));
-    const after = options.full === true ? 0n : evidence.suppliedThrough(source);
+    const ownBacking = identifier(backing), source = concatBytes(this.#domain, this.#venue, this.#operator, new TextEncoder().encode(this.#baseUrl));
+    const receive = (after: bigint) => this.served(ownBacking, after, options.maxBytes ?? EVIDENCE_QUOTA.file,
+      (served, parts) => evidence.take(parts, served.selection.operator));
+    let after = options.full === true ? 0n : evidence.suppliedThrough(source);
     let result = await receive(after);
-    if (!result.taken && after > 0n) result = await receive(0n);
+    if (!result.taken && after > 0n) result = await receive(after = 0n);
     if (!result.taken) throw new EncodingError("served evidence does not assemble");
-    evidence.supplied(source, result.served.selection.sequence);
+    const sequence = result.served.selection.sequence;
+    evidence.supplied(source, sequence > after ? sequence : after);
     return result.served;
   }
 

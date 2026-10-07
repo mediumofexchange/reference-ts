@@ -1,9 +1,9 @@
 // Node 24 loopback transport for an already locally activated reference journal.
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
-import { V3OperatorJournal, V3StoreError } from "./store.js";
+import { V3OperatorJournal, V3StoreError, type ServedEvidence } from "./store.js";
 import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
   parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, servedFrames } from "./service-wire.js";
 
@@ -42,6 +42,73 @@ function failure(error: unknown): { status: number; code: string } {
 /** Evidence streams served at once, of the sixteen connections; and the slowest peer a stream waits for. */
 const MAX_EVIDENCE_STREAMS = 8, MIN_EVIDENCE_BYTES_PER_MS = 64;
 
+/** What serves evidence by the one wire: an operator's journal, or a replica's kept evidence (M12b). `after` is a
+ * sequence of the operator's; a source that holds no selection for the backing refuses as the journal does. */
+export interface V3EvidenceSource { serve(backing: Uint8Array, after: bigint): Promise<ServedEvidence> }
+
+/** Every loopback peer: behind an onion service, the Tor daemon. */
+const LOOPBACK: readonly string[] = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
+/** A listener's lifetime bounds on a request and its reply, shared by the operator's and a replica's. */
+function bounded(server: Server): Server {
+  server.headersTimeout = 10_000; server.requestTimeout = 15_000;
+  server.maxHeadersCount = 32; server.maxConnections = 16;
+  return server;
+}
+/** The reply helpers both listeners use: JSON headers, one exchange per connection and the bound on its lifetime. A
+ * caller's verification blocks its event loop between requests, so an idle connection the server has timed out
+ * meanwhile would be reused before the caller sees it closed. Journal work keeps its owner and can finish after the
+ * caller loses the reply; served evidence has no size to bound its time by: a write restarts the bound. */
+function exchange(response: ServerResponse) {
+  response.setHeader("content-type", "application/json"); response.setHeader("cache-control", "no-store");
+  response.setHeader("connection", "close");
+  const send = (status: number, value: unknown, maximum = MAX_V3_SERVICE_REPLY_BYTES) => {
+    const body = JSON.stringify(value);
+    if (Buffer.byteLength(body) > maximum) throw new EncodingError("response too large");
+    if (!response.destroyed && !response.writableEnded) { response.writeHead(status); response.end(body); }
+  };
+  const timer = setTimeout(() => response.destroy(), 15_000);
+  response.once("close", () => clearTimeout(timer));
+  return { send, timer };
+}
+/** The one evidence route, `GET /evidence?backing=<hex>&after=<n>`: undefined where the request is another, else
+ * once the stream has ended or been cut off. A multi-backing scope serves each holder's backing by name (C2.10.3);
+ * `after` is the sequence the reader's evidence was served through, and only what came after it is served. */
+function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { count: number }, request: IncomingMessage, response: ServerResponse,
+  send: (status: number, value: unknown) => void, timer: NodeJS.Timeout): Promise<void> | undefined {
+  const asked = request.method === "GET" ? /^\/evidence\?backing=([0-9a-f]{64})&after=(0|[1-9][0-9]{0,19})$/.exec(request.url ?? "") : null;
+  if (asked === null) return undefined;
+  return (async () => {
+    const after = BigInt(asked[2]!);
+    if (after >= 1n << 64n) throw new EncodingError("invalid served sequence");
+    // Streams leave connections for commands: a slow reader cannot take them all.
+    if (streams.count >= MAX_EVIDENCE_STREAMS) { request.resume(); send(409, { code: "BUSY" }); return; }
+    streams.count++;
+    try {
+      const served = await source.serve(hexToBytes(asked[1]!), after);
+      request.resume();
+      if (response.destroyed) return;
+      response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
+      // The parts are read from rows as the peer takes them. A failure after the headers ends the
+      // connection short of the stream's end mark, which a receiver refuses; the server's owner is told
+      // by an "evidenceError" event. A peer slower than the minimum rate is cut off.
+      const started = Date.now(); let sent = 0;
+      try {
+        for await (const chunk of servedFrames(served)) {
+          if (response.destroyed) return;
+          if (!response.write(chunk)) await new Promise<void>(resolve => {
+            const done = (): void => { response.off("drain", done); response.off("close", done); resolve(); };
+            response.once("drain", done); response.once("close", done);
+          });
+          sent += chunk.length;
+          if (Date.now() - started > 15_000 + sent / MIN_EVIDENCE_BYTES_PER_MS) { response.destroy(); return; }
+          timer.refresh();
+        }
+        response.end();
+      } catch (error) { response.destroy(); server.emit("evidenceError", error); }
+    } finally { streams.count--; }
+  })();
+}
+
 /** Bind to 127.0.0.1. The server also refuses non-loopback connections. Behind an onion service every peer is the
  * loopback Tor daemon, so that listener takes no admin credential and has its own sixteen connections.
  * Credentials permit operations; protocol proofs/signatures remain authoritative.
@@ -54,24 +121,10 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
   }
   // The journal's construction reads every command and reply (slice 14 M14g3).
   const domain = journal.configurationDomain, construction = journal.construction;
-  let streams = 0;
+  const streams = { count: 0 };
   const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
-    response.setHeader("content-type", "application/json"); response.setHeader("cache-control", "no-store");
-    // One exchange per connection. A caller's verification blocks its event loop between requests, so an idle
-    // connection this server has timed out meanwhile would be reused before the caller sees it closed.
-    response.setHeader("connection", "close");
-    const send = (status: number, value: unknown, maximum = MAX_V3_SERVICE_REPLY_BYTES) => {
-      const body = JSON.stringify(value);
-      if (Buffer.byteLength(body) > maximum) throw new EncodingError("response too large");
-      if (!response.destroyed && !response.writableEnded) { response.writeHead(status); response.end(body); }
-    };
-    // Bound request/response lifetime after headers, even while work is pending.
-    // Journal work keeps its owner and can finish after the caller loses the reply.
-    // Served evidence has no size to bound its time by: a write restarts the bound, within a minimum rate.
-    const timer = setTimeout(() => response.destroy(), 15_000);
-    response.once("close", () => clearTimeout(timer));
-    const remote = request.socket.remoteAddress;
-    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote ?? "")) {
+    const { send, timer } = exchange(response);
+    if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) {
       request.resume(); send(403, { code: "LOCAL_ONLY" }); return;
     }
     const count = request.rawHeaders.filter((header, i) => i % 2 === 0 && header.toLowerCase() === "authorization").length;
@@ -80,40 +133,8 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
       request.resume(); send(401, { code: "UNAUTHORIZED" }); return;
     }
     try {
-      // A multi-backing scope serves each holder's backing by name (C2.10.3). `after` is the sequence the
-      // reader's evidence was served through; the journal then serves only what came after it.
-      const asked = request.method === "GET" ? /^\/evidence\?backing=([0-9a-f]{64})&after=(0|[1-9][0-9]{0,19})$/.exec(request.url ?? "") : null;
-      if (asked !== null) {
-        const after = BigInt(asked[2]!);
-        if (after >= 1n << 64n) throw new EncodingError("invalid served sequence");
-        // Streams leave connections for commands: a slow reader cannot take them all.
-        if (streams >= MAX_EVIDENCE_STREAMS) { request.resume(); send(409, { code: "BUSY" }); return; }
-        streams++;
-        try {
-          const served = await journal.serve(hexToBytes(asked[1]!), after);
-          request.resume();
-          if (response.destroyed) return;
-          response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
-          // The parts are read from rows as the peer takes them. A failure after the headers ends the
-          // connection short of the stream's end mark, which a receiver refuses; the server's owner is told
-          // by an "evidenceError" event. A peer slower than the minimum rate is cut off.
-          const started = Date.now(); let sent = 0;
-          try {
-            for await (const chunk of servedFrames(served)) {
-              if (response.destroyed) return;
-              if (!response.write(chunk)) await new Promise<void>(resolve => {
-                const done = (): void => { response.off("drain", done); response.off("close", done); resolve(); };
-                response.once("drain", done); response.once("close", done);
-              });
-              sent += chunk.length;
-              if (Date.now() - started > 15_000 + sent / MIN_EVIDENCE_BYTES_PER_MS) { response.destroy(); return; }
-              timer.refresh();
-            }
-            response.end();
-          } catch (error) { response.destroy(); server.emit("evidenceError", error); }
-        } finally { streams--; }
-        return;
-      }
+      const streamed = evidenceRoute(server, journal, streams, request, response, send, timer);
+      if (streamed !== undefined) { await streamed; return; }
       if (request.method === "POST" && request.url === "/commands") {
         const command = parseV3ServiceCommand(await readBody(request), construction);
         if (command.kind !== "submit" && !admin) { send(403, { code: "ADMIN_REQUIRED" }); return; }
@@ -133,7 +154,27 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
       request.resume(); const rejected = failure(error); send(rejected.status, { code: rejected.code });
     }
   });
-  server.headersTimeout = 10_000; server.requestTimeout = 15_000;
-  server.maxHeadersCount = 32; server.maxConnections = 16;
-  return server;
+  return bounded(server);
+}
+
+/**
+ * A replica's listener (slice 12 M12b): the evidence route alone, on a loopback port, with no credential. Published
+ * evidence is retrievable by a stranger (Construction), so it gates nothing and identifies nobody; every other request
+ * is `NOT_FOUND`. Behind an onion service every peer is the loopback Tor daemon. The listener's bounds are the
+ * operator's: sixteen connections, eight streams, a minimum rate.
+ */
+export function createV3EvidenceService(source: V3EvidenceSource): Server {
+  const streams = { count: 0 };
+  const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
+    const { send, timer } = exchange(response);
+    if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) { request.resume(); send(403, { code: "LOCAL_ONLY" }); return; }
+    try {
+      const streamed = evidenceRoute(server, source, streams, request, response, send, timer);
+      if (streamed !== undefined) { await streamed; return; }
+      request.resume(); send(404, { code: "NOT_FOUND" });
+    } catch (error) {
+      request.resume(); const rejected = failure(error); send(rejected.status, { code: rejected.code });
+    }
+  });
+  return bounded(server);
 }

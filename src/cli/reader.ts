@@ -4,23 +4,31 @@
 // own view's witnessed index: issued, burned, position, the canonical
 // checkpoint and the publications with force (`supply`), or one demand's
 // outcome under C3.8 (`presentation`). Evidence comes from the operator's
-// service or from a package file. Reads keep their classes, walks, replay
-// state and venue answers in `replay.db` (pool-v3 §14), so a later process
-// verifies only what is new. A reader directory reads the construction it
-// declares at init (M14g4); a lit reader keeps no parameters and opens no
-// verifier.
-import { mkdirSync } from "node:fs";
+// service, a replica's or a package file. Reads keep their classes, walks,
+// replay state and venue answers in `replay.db` (pool-v3 §14), so a later
+// process verifies only what is new. A reader directory reads the construction
+// it declares at init (M14g4); a lit reader keeps no parameters and opens no
+// verifier. `serve` makes it a replica (slice 12 M12b): it keeps each backing's
+// evidence and serves it, with no credential, through the one wire.
+import { mkdirSync, readdirSync } from "node:fs";
+import type { AddressInfo } from "node:net";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { readPresentation, type Presentation } from "../pool/v3/dishonour.js";
 import { EvidenceStore } from "../pool/v3/evidence-store.js";
+import { PackageLimitError } from "../pool/v3/package.js";
+import { EvidenceRefusal } from "../pool/v3/refusals.js";
+import { selectionOf, V3Replica } from "../pool/v3/replica.js";
+import { createV3EvidenceService } from "../pool/v3/service-http.js";
+import type { ServedPackage } from "../pool/v3/store.js";
+import { compareBytes, EncodingError } from "../bytes.js";
 import type { FaultResult } from "../pool/v3/fault-observer.js";
 import { readFrontier } from "../pool/v3/package-reader.js";
 import { FileInUse, ReplayStore } from "../pool/v3/replay-store.js";
 import type { FrontierResult } from "../pool/v3/scope-reader.js";
-import { V3ServiceClient } from "../pool/v3/service-client.js";
+import { V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
-import { CommandError, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print, readJson, readRequired,
-  required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
+import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, pause, pollMs, print,
+  readJson, readOptional, readRequired, required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { directoryVerifier } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
@@ -131,17 +139,99 @@ export function serviceClient(directory: Directory, kept: KeptTerms, view: View)
     construction: directory.construction });
 }
 
+/** A replica's URL: the loopback or v3 onion forms a service file takes, with no credential (M12b). */
+function parseReplicaUrl(value: string): string {
+  if (!SERVICE_URL.test(value)) throw new CommandError("INVALID", "a replica URL is http://127.0.0.1:<port>/ or a v3 onion's http://<host>/");
+  return value;
+}
+/** The replica URLs kept for an operator, in the order added. */
+function replicaUrls(directory: Directory, operator: Uint8Array): string[] {
+  const held = readOptional(directory.file(`replicas/${hex(operator)}.json`));
+  if (held === undefined) return [];
+  const value = JSON.parse(new TextDecoder().decode(held)) as { urls?: unknown };
+  if (!Array.isArray(value.urls) || !value.urls.every(url => typeof url === "string")) throw new CommandError("INVALID", "the replicas file is not { urls }");
+  return value.urls.map(url => parseReplicaUrl(url as string));
+}
+
+/** `replica add <backing> <url>`: keep a replica of the operator the terms name, after those added before. Its evidence
+ * is read before the operator's service. Adding a URL kept already changes nothing. */
+export function replicaCommand(argv: readonly string[], role: Role): void {
+  const [verb, ...rest] = argv;
+  if (verb !== "add") throw new UsageError("replica add");
+  const args = parseArguments(rest, { dir: "value" }, 2);
+  const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
+  const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), url = parseReplicaUrl(args.positional[1]!);
+  const urls = replicaUrls(directory, kept.terms.operator);
+  if (!urls.includes(url)) {
+    mkdirSync(directory.file("replicas"), { recursive: true, mode: 0o700 });
+    writeReplace(directory.file(`replicas/${hex(kept.terms.operator)}.json`), `${JSON.stringify({ urls: [...urls, url] }, null, 2)}\n`);
+  }
+  print({ status: "kept", operator: kept.terms.operator, replicas: [...new Set([...urls, url])] });
+}
+
+/** Where a read's evidence came from: a replica, the operator's service, a package file, or (a wallet) the package its
+ * last sync kept or a saved retry's none. */
+export type EvidenceOrigin = "replica" | "served" | "file" | "kept" | "saved";
+/** A replica passed over, and why. */
+export interface Skipped { readonly url: string; readonly code: string }
+
+/** Whether a replica's failure passes the read on to the next source: it did not answer, refused, or sent evidence that
+ * does not frame, assemble or fit the budget. The holder's own proxy that is not there (the client's `PROXY`, status 0)
+ * stops the read, as for the operator; a replica's reply naming `PROXY` is its refusal. */
+export const passedOver = (error: unknown): string | undefined =>
+  unanswered(error) ? "UNAVAILABLE" :
+  error instanceof V3ServiceClientError ? (error.code === "PROXY" && error.status === 0 ? undefined : error.code) :
+  error instanceof EncodingError ? "INVALID" : error instanceof EvidenceRefusal || error instanceof PackageLimitError ? "EVIDENCE" : undefined;
+
+/** A sync from a source: where it came from, and the replicas passed over before it. */
+export interface Synced {
+  readonly served: ServedPackage; readonly origin: "replica" | "served"; readonly url: string; readonly skipped: readonly Skipped[];
+}
+
+/**
+ * Sync `kept`'s backing into the party's evidence store from its sources, in order (M12b): the operator's service
+ * (`service add`), then, where it does not answer or none is kept, each replica of the terms' operator as added. A
+ * replica that fails as `passedOver` names is skipped and reported. Undefined where no source answered (a wallet then
+ * reads its kept package). The operator's other refusals are the caller's. `except` are URLs never asked (a replica's
+ * own). Each source keeps its own mark in the store (`V3ServiceClient.sync`), so one source's answer never tells
+ * another what to leave out.
+ */
+export async function syncSources(directory: Directory, kept: KeptTerms, view: View,
+  sync: (client: V3ServiceClient) => Promise<ServedPackage>, except: readonly string[] = []): Promise<Synced | { readonly skipped: readonly Skipped[] }> {
+  const skipped: Skipped[] = [], identity = { operator: kept.terms.operator, reference: view.file.reference, construction: directory.construction };
+  const replicas = replicaUrls(directory, kept.terms.operator).filter(url => !except.includes(url));
+  // A reader with replicas need not keep the operator's service.
+  if (replicas.length === 0 || readOptional(directory.file(`services/${hex(kept.terms.operator)}.json`)) !== undefined) {
+    const client = serviceClient(directory, kept, view);
+    if (!except.includes(client.baseUrl)) {
+      try { return { served: await sync(client), origin: "served", url: client.baseUrl, skipped }; } catch (error) {
+        if (!unanswered(error)) throw error;
+        skipped.push({ url: client.baseUrl, code: "UNAVAILABLE" });
+      }
+    }
+  }
+  for (const url of replicas) {
+    try { return { served: await sync(new V3ServiceClient(url, undefined, identity)), origin: "replica", url, skipped }; } catch (error) {
+      const code = passedOver(error);
+      if (code === undefined) throw error;
+      skipped.push({ url, code });
+    }
+  }
+  return { skipped };
+}
+
 /** Whether a service call failed because the service did not answer (nothing listening, a dropped connection). */
 export const unanswered = (error: unknown): boolean =>
   (error instanceof TypeError && (error.message === "fetch failed" || error.message === "terminated")) ||
   (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
 
-/** The service's package over what `evidence` retains; a service that does not answer is unavailable evidence. */
-async function served(client: V3ServiceClient, backing: Uint8Array, evidence: EvidenceStore): Promise<Uint8Array> {
-  try { return (await client.sync(backing, evidence)).package; } catch (error) {
-    if (unanswered(error)) throw new CommandError("UNAVAILABLE", "the operator's service did not answer");
-    throw error;
+/** The package its sources supply over what `evidence` retains; none answering is unavailable evidence. */
+async function served(directory: Directory, kept: KeptTerms, view: View, evidence: EvidenceStore, except: readonly string[] = []): Promise<Synced> {
+  const synced = await syncSources(directory, kept, view, client => client.sync(kept.backing, evidence), except);
+  if (!("served" in synced)) {
+    throw new CommandError("UNAVAILABLE", `no source answered: ${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ") || "none kept"}`);
   }
+  return synced;
 }
 
 /** The directory's kept replay file (pool-v3 §14), vouched for by `replay.db.sha256`: one that fails its digest is
@@ -163,34 +253,41 @@ const inUse = (error: unknown): unknown => error instanceof FileInUse ?
  * the operator's service supplies into `evidence.db`, resting on what earlier reads kept in `replay.db`. `use` takes
  * the read while the kept file is open: the canonical state is read from it. */
 async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, answers: boolean,
-  use: (at: bigint, read: FrontierResult & FaultResult, sync: object) => void): Promise<void> {
+  use: (at: bigint, read: FrontierResult & FaultResult, sync: object, origin: object) => void): Promise<void> {
   const view = openView(directory);
   try {
     const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
-    const verifier = await directoryVerifier(directory, args), construction = directory.construction;
+    const verifier = await directoryVerifier(directory, args);
     let evidence: EvidenceStore | undefined, store: ReplayStore | undefined;
     try {
-      try { evidence = new EvidenceStore(directory.file("evidence.db"), { construction }); } catch (error) {
-        if (error instanceof TypeError && /another construction's evidence/.test(error.message)) {
-          throw new CommandError("CONSTRUCTION", `evidence.db holds another construction's evidence than this directory's ${nameOf(construction)}`);
-        }
-        throw inUse(error);
-      }
+      evidence = openEvidence(directory);
       store = keptReplay(directory, at);
-      const file = flag(args, "package");
-      const source = file !== undefined ? readRequired(file, "package file") : await served(serviceClient(directory, kept, view), kept.backing, evidence);
+      const file = flag(args, "package"), supplied = file === undefined ? await served(directory, kept, view, evidence) : undefined;
+      const source = supplied === undefined ? readRequired(file!, "package file") : supplied.served.package;
+      const origin = supplied === undefined ? { evidence: "file" } : { evidence: supplied.origin, ...(supplied.origin === "replica" ? { replica: supplied.url } : {}),
+        ...(supplied.skipped.length > 0 ? { skipped: supplied.skipped } : {}) };
       let read;
       try {
-        read = await readFrontier(source, kept.signed, at, { construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
+        read = await readFrontier(source, kept.signed, at, { construction: directory.construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
           reference: view.file.reference, evidence, store, answers });
       } catch (error) {
         throw inUse(error);
       }
       // A read is final at its judging index; where the view could not read further, the output says so.
       const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
-      use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled });
+      use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled }, origin);
     } finally { store?.close(); evidence?.close(); await verifier?.close(); }
   } finally { view.close(); }
+}
+
+/** The directory's evidence file, under its construction; `shared` for a replica's (M12b). */
+function openEvidence(directory: Directory, shared = false): EvidenceStore {
+  try { return new EvidenceStore(directory.file("evidence.db"), { construction: directory.construction, shared }); } catch (error) {
+    if (error instanceof TypeError && /another construction's evidence/.test(error.message)) {
+      throw new CommandError("CONSTRUCTION", `evidence.db holds another construction's evidence than this directory's ${nameOf(directory.construction)}`);
+    }
+    throw inUse(error);
+  }
 }
 
 const READ_FLAGS = { dir: "value", package: "value", verifiers: "value" } as const;
@@ -199,15 +296,18 @@ export async function supplyCommand(argv: readonly string[], role: Role): Promis
   const args = parseArguments(argv, READ_FLAGS, 1);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue);
-  await frontier(directory, args, kept, false, (at, read, sync) => {
-    const canonical = read.canonical;
-    print({ status: canonical === undefined ? "unavailable" : "final", backing: kept.backing, judgingIndex: at, sync,
+  await frontier(directory, args, kept, false, (at, read, sync, origin) => print(supplyOf(kept, at, read, sync, origin, directory)));
+}
+
+/** A supply read's output, as `supply` prints it and a replica's rounds report it. */
+function supplyOf(kept: KeptTerms, at: bigint, read: FrontierResult & FaultResult, sync: object, origin: object, directory: Directory): object {
+  const canonical = read.canonical;
+  return { status: canonical === undefined ? "unavailable" : "final", backing: kept.backing, judgingIndex: at, sync, ...origin,
       ...(canonical === undefined ? {} : { issued: canonical.state.issued, burned: canonical.state.burned,
         supply: canonical.state.issued - canonical.state.burned, position: canonical.state.position,
         checkpoint: { operator: canonical.commitment.operator, sequence: canonical.commitment.sequence, root: canonical.commitment.root, index: canonical.index } }),
       force: read.force.map(f => ({ index: f.index, kind: directory.construction.kind(f.record), sha256: sha256(f.bytes) })),
-      faults: (read.faultEvidence ?? []).length });
-  });
+      faults: (read.faultEvidence ?? []).length };
 }
 
 /** A demand's reading under C3.8 at its judging index: final once ended or overdue, pending while it stands. */
@@ -219,11 +319,102 @@ export async function presentationCommand(argv: readonly string[], role: Role): 
   const args = parseArguments(argv, READ_FLAGS, 2);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), demand = hex32(args.positional[1]!, "the demand");
-  await frontier(directory, args, kept, true, (at, read, sync) => {
+  await frontier(directory, args, kept, true, (at, read, sync, origin) => {
     const reading = readPresentation(read, directory.construction, kept.backing, kept.terms.obligor, demand);
     if (reading === undefined) throw new CommandError("ABSENT", "the demand is not in this backing's record");
-    print({ ...presentationOf(reading, at), sync });
+    print({ ...presentationOf(reading, at), sync, ...origin });
   });
+}
+
+/** The backings whose terms the directory keeps, in name order. */
+function keptBackings(directory: Directory): Uint8Array[] {
+  let names: string[];
+  try { names = readdirSync(directory.file("terms")); } catch { return []; }
+  return names.filter(name => /^[0-9a-f]{64}$/.test(name)).sort().map(name => hex32(name, "a kept backing"));
+}
+
+/** What a replica's round reports instead of stopping: a source that did not answer or refused, evidence that does not
+ * frame, assemble or fit, a verifier or replay file another process holds. */
+const roundRefusal = (error: unknown): string | undefined =>
+  error instanceof CommandError ? error.code : passedOver(error);
+
+/**
+ * `serve [--port <p>] [--onion <host>] [--poll-ms <ms>]` (slice 12 M12b): make this reader a replica. Each round syncs
+ * the view, then for each kept backing syncs its evidence from its sources (its replicas, then the operator's service;
+ * never itself) into `evidence.db` and reads the frontier as `supply` does, proofs verified. A read that is final over a
+ * selection its source's mark reached becomes that backing's served selection. It serves `GET /evidence` through the one
+ * wire on a loopback listener with no credential (published evidence is retrievable by a stranger), from what
+ * `evidence.db` holds, so it keeps serving while the operator is down, across restarts. Writes `replica.json` (the URL
+ * to hand to holders; with `--onion`, the v3 onion name Tor serves for this port) and prints one line once listening,
+ * one per backing whose served sequence moved, and one once stopped; a round's refusal is an event on stderr. Stops on
+ * SIGTERM or SIGINT.
+ */
+async function serve(argv: readonly string[]): Promise<void> {
+  const args = parseArguments(argv, { dir: "value", verifiers: "value", "poll-ms": "value", port: "value", onion: "value" }, 0);
+  const directory = openDirectory(required(args, "dir"), "reader"), venue = requireVenue(directory), construction = directory.construction;
+  const port = Number(integer(flag(args, "port") ?? "0", "--port", 0n, 65535n)), ms = pollMs(args), onion = flag(args, "onion");
+  if (onion !== undefined && !/^[a-z2-7]{55}d\.onion$/.test(onion)) throw new UsageError("--onion takes a v3 onion host: 56 base32 characters and .onion");
+  const view = openView(directory);
+  let evidence: EvidenceStore | undefined, verifier: Awaited<ReturnType<typeof directoryVerifier>> | undefined;
+  try {
+    verifier = await directoryVerifier(directory, args);
+    evidence = openEvidence(directory, true);
+  } catch (error) { await verifier?.close(); evidence?.close(); view.close(); throw error; }
+  const replica = new V3Replica(directory.file("evidence.db"), evidence, view.venue.id);
+  const server = createV3EvidenceService(replica);
+  try {
+    await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(port, "127.0.0.1", () => { server.off("error", failed); done(); }); });
+  } catch (error) {
+    await verifier?.close(); evidence.close(); view.close();
+    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CommandError("UNAVAILABLE", `port ${port} is in use`);
+    throw error;
+  }
+  const local = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`, url = onion === undefined ? local : `http://${onion}/`;
+  writeReplace(directory.file("replica.json"), `${JSON.stringify({ url }, null, 2)}\n`);
+  let stopping = false, wake: (() => void) | undefined;
+  const stop = () => { stopping = true; wake?.(); };
+  process.once("SIGTERM", stop); process.once("SIGINT", stop);
+  print({ status: "serving", url, port: (server.address() as AddressInfo).port, backings: keptBackings(directory).map(hex),
+    served: keptBackings(directory).map(backing => ({ backing, sequence: replica.selection(backing)?.selection.sequence ?? null })) });
+  const round = async (): Promise<void> => {
+    const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
+    for (const backing of keptBackings(directory)) {
+      if (stopping) return;
+      try {
+        const kept = keptTerms(directory, backing, venue), before = replica.selection(backing)?.selection.sequence;
+        const supplied = await served(directory, kept, view, evidence!, [local, url]);
+        const store = keptReplay(directory, at);
+        let read;
+        try {
+          read = await readFrontier(supplied.served.package, kept.signed, at, { construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
+            reference: view.file.reference, evidence: evidence!, store, answers: false });
+        } finally { store.close(); }
+        // Served only where its own read found the selection canonical: it holds what a read of it needs.
+        const final = read.canonical !== undefined && read.canonical.commitment.sequence === supplied.served.selection.sequence &&
+          compareBytes(read.canonical.commitment.operator, supplied.served.selection.operator) === 0 && replica.keep(supplied.served);
+        const now = replica.selection(backing)?.selection.sequence;
+        if (now !== before || !final) {
+          print({ ...supplyOf(kept, at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null }, { evidence: supplied.origin,
+            ...(supplied.origin === "replica" ? { replica: supplied.url } : {}), ...(supplied.skipped.length > 0 ? { skipped: supplied.skipped } : {}) }, directory),
+            served: now ?? null });
+        }
+      } catch (error) {
+        const code = roundRefusal(error);
+        if (code === undefined) throw error;
+        event({ event: "refused", backing, code, message: (error as Error).message });
+      }
+    }
+  };
+  try {
+    while (!stopping) {
+      await round();
+      if (!stopping) await new Promise<void>(done => { wake = done; setTimeout(done, ms); });
+    }
+  } finally {
+    await new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); });
+    await verifier?.close(); evidence.close(); view.close();
+  }
+  print({ status: "stopped" });
 }
 
 export async function reader(argv: readonly string[]): Promise<void> {
@@ -234,6 +425,8 @@ export async function reader(argv: readonly string[]): Promise<void> {
     case "service": return serviceCommand(rest, "reader");
     case "supply": return supplyCommand(rest, "reader");
     case "presentation": return presentationCommand(rest, "reader");
-    default: throw new UsageError("moe reader init|terms|service|supply|presentation");
+    case "replica": return replicaCommand(rest, "reader");
+    case "serve": return serve(rest);
+    default: throw new UsageError("moe reader init|terms|service|replica|supply|presentation|serve");
   }
 }
