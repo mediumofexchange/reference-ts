@@ -7,10 +7,12 @@ Updated: 2026-10-06
 [layouts decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)).
 Acceptance: lit trails replay through the shared seams with lit-v1's verdicts (hostile cases), vectors bind every layout; an operator
 journal and a wallet run lit backings through the `moe` commands (direction item 1); then a decision adopts `moe/lit/v1`. Stop: adoption, after the journal and wallet ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4).
-- **Done:** M14a–b bytes and frames (spec `1bf5bfc`), M14c the one state machine (PR #116), M14d the one reader (PR #120). **M14e ready to merge** (PR #122 green at `4e95939`, spec PR #15 `7e1ddd5`, [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)): conformance findings closed, residuals recorded.
-- **M14f ready to merge** (PR #123 on #122's branch, green at `6032153`, run 37514975539, whose artifact re-recorded the 12 reports; reviewed and read back): the one operator journal serves a lit scope ([decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)); unit suite 1272.
-- **M14g1** (PR #125 on #123's branch, green at `f583308`, run 37540982373, whose artifact re-recorded the 12 reports; spec `claude/lit-v1-backing-keys` on #15, §8 keys per backing; [decision](decisions/2026-10.md#2026-10-06--hold-lit-notes-in-the-one-wallet-with-owner-keys-per-backing-found-under-a-doubling-window-slice-14-m14g); reviews taken): the one wallet holds lit notes via `Construction.wallet` (`keyedRequest`, doubling-window scan, owner-signed `prepare`/`reprove`, `keyedFulfill` once).
-- **M14g2** (PR #126 on #125's branch, green at `492b63b`, run 37548971628, whose artifact re-recorded the 12 reports; unit suite 1288; [decision](decisions/2026-10.md#2026-10-06--take-lits-acts-and-8s-window-move-in-the-one-wallet-presented-notes-spending-as-any-other-slice-14-m14g2); design and patch reviews taken): issue (seed-derived nonce), burn, demand, `keyedAccept`, settle (`OWN_KEY`), withdraw, publish, `moveWindow` (`CLOSED`); no lit freshen. Next: M14g3 service wire/client per construction; M14g4 `moe` dispatch; M14h adoption (C0a; docs, pin, vectors, reports).
+- **Done and merged (2026-10-07):** M14a–b bytes and frames, M14c state machine (#116), M14d reader (#120), M14e conformance (#122,
+  [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)),
+  M14f journal (#123, [decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)), M14g1 wallet notes, keys and payments (#125, [decision](decisions/2026-10.md#2026-10-06--hold-lit-notes-in-the-one-wallet-with-owner-keys-per-backing-found-under-a-doubling-window-slice-14-m14g)),
+  M14g2 acts and the window move (#126, [decision](decisions/2026-10.md#2026-10-06--take-lits-acts-and-8s-window-move-in-the-one-wallet-presented-notes-spending-as-any-other-slice-14-m14g2)); spec #15 and #16 merged
+  (money-from-first-principles `3af6abe`; #16's merge review moved §8's restoration to every restored backing's keys in each trail, `272810c`, which the scan already does).
+- **Next:** audit #124 (merge main into it; doc/report conflicts); M14g3 service wire/client per construction; M14g4 `moe` dispatch; M14h adoption.
 
 ## Status
 - **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
@@ -92,8 +94,7 @@ journal and a wallet run lit backings through the `moe` commands (direction item
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- 2026-10-06, maintainer's direction: runs put changes up for review as PRs and the maintainer merges. Up for review, in order: spec #15,
-  #122, #123, audit #124 (doc/report conflicts expected), spec #16, #125, #126 (each stacked on the one before).
+- None. Runs review through other instances and merge (maintainer's direction 2026-10-07; autorun preamble "Delivery").
 
-Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-06: lit packages pass conformance (M14e) and a lit scope is served
-by the one journal (M14f); the lit wallet and commands, lit adoption, release assurance, holder transport, qualified storage and mainnet remain.
+Roughly **67% done / 33% remaining** (range 57–76%), reassessed 2026-10-07: the one wallet holds lit notes and takes every lit act (M14g1–g2),
+merged with M14e–f; the lit service wire and commands, lit adoption, release assurance, holder transport, qualified storage and mainnet remain.
