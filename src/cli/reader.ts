@@ -204,9 +204,9 @@ export async function syncSources(directory: Directory, kept: KeptTerms, view: V
   sync: (client: V3ServiceClient) => Promise<ServedPackage>, except: readonly string[] = []): Promise<Synced | { readonly skipped: readonly Skipped[] }> {
   const skipped: Skipped[] = [], identity = { operator: kept.terms.operator, reference: view.file.reference, construction: directory.construction };
   let refusal: unknown;
-  const replicas = replicaUrls(directory, kept.terms.operator).filter(url => !except.includes(url));
-  // A reader with replicas need not keep the operator's service.
-  if (replicas.length === 0 || readOptional(directory.file(`services/${hex(kept.terms.operator)}.json`)) !== undefined) {
+  const added = replicaUrls(directory, kept.terms.operator), replicas = added.filter(url => !except.includes(url));
+  // A reader with replicas need not keep the operator's service (all of them passed over included).
+  if (added.length === 0 || readOptional(directory.file(`services/${hex(kept.terms.operator)}.json`)) !== undefined) {
     const client = serviceClient(directory, kept, view);
     if (!except.includes(client.baseUrl)) {
       try { return { served: await sync(client), origin: "served", url: client.baseUrl, skipped }; } catch (error) {
@@ -237,30 +237,79 @@ export const unanswered = (error: unknown): boolean =>
 /** Whether a read failed for evidence its store does not hold. */
 const unresolvedEvidence = (error: unknown): boolean => error instanceof EvidenceRefusal && error.status === "unresolved-evidence";
 
+/** The sources whose answer from nothing a read found still unresolved, each at the selection sequence it served then,
+ * for one backing: `readRepaired` asks such a source from nothing again only once its selection moves. */
+export interface RepairRecord {
+  unresolvedAt(url: string): bigint | undefined;
+  record(url: string, sequence: bigint | undefined): void;
+}
+
+/** The directory's repair record for `backing`, kept in `unresolved.json` so that each command and each replica round
+ * reads what the last one found. A record that does not parse is no record: it costs one more answer from nothing. */
+export function repairRecord(directory: Directory, backing: Uint8Array): RepairRecord {
+  const file = directory.file("unresolved.json"), name = hex(backing);
+  const all = (): Record<string, Record<string, string>> => {
+    try {
+      const parsed = JSON.parse(new TextDecoder().decode(readOptional(file) ?? new TextEncoder().encode("{}")));
+      return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch { return {}; }
+  };
+  return {
+    unresolvedAt(url) {
+      const text = all()[name]?.[url];
+      return typeof text === "string" && /^(0|[1-9][0-9]{0,19})$/.test(text) ? BigInt(text) : undefined;
+    },
+    record(url, sequence) {
+      const records = all(), own = { ...(typeof records[name] === "object" && records[name] !== null ? records[name] : {}) };
+      if (sequence === undefined) { if (!(url in own)) return; delete own[url]; } else own[url] = String(sequence);
+      if (Object.keys(own).length === 0) delete records[name]; else records[name] = own;
+      writeReplace(file, `${JSON.stringify(records, null, 2)}\n`);
+    },
+  };
+}
+
 /**
  * Read over what the sources supply, and repair a source that withheld (audit 30 (au)). A source's mark moves once its
  * answer holds the selection (`V3ServiceClient.sync`), so a source that sent the selection whole but left out an earlier
  * dependency (an opening checkpoint's directory, what an opening took, a terms field) moved its mark past it, and later
- * syncs from it ask only after that mark. Where `use` ends `unresolved-evidence` over a source's answer, the read is the
- * library's remedy (`V3Wallet.supply`): that source is synced once more from nothing (`full`, which also replaces what
- * storage damaged) and read again; where that read is still unresolved, the source is passed over as `UNRESOLVED` and
- * the next source is asked from nothing, until one resolves. A read that no source can resolve keeps the last
- * refusal. `supply` syncs from the sources not in `except`, from nothing when `full`; `use` receives what it
- * supplied, with every source passed over named in `skipped`.
+ * syncs from it ask only after that mark. Where `use` ends `unresolved-evidence` over a source's answer, the read takes
+ * the library's remedy (`V3Wallet.supply`): that source is synced once more from nothing (`full`, which also replaces
+ * what storage damaged) and read again; where that read is still unresolved, the source is passed over as `UNRESOLVED`
+ * and the next source is asked, until one resolves. Each source is asked from nothing at most once per selection it
+ * serves: `record` keeps the selection at which its answer from nothing stayed unresolved, and while it serves that
+ * selection it is asked only after its mark and, still unresolved, passed over at once. So a read that stays unresolved
+ * (every source withholding, or the holder's own venue view or storage failing, which reads the same) costs one answer
+ * from nothing per source and selection, not one per command or round. A read that no source can resolve refuses with
+ * the sources passed over named. `supply` syncs from the sources not in `except`, from nothing where `full` says so;
+ * `use` receives what it supplied, with every source passed over named in `skipped`.
  */
 export async function readRepaired<T>(
-  supply: (options: { readonly full: boolean; readonly except: readonly string[] }) => Promise<Synced | { readonly skipped: readonly Skipped[] }>,
-  use: (synced: Synced | { readonly skipped: readonly Skipped[] }) => Promise<T>): Promise<T> {
-  const except: string[] = [], unresolved: Skipped[] = [];
-  let full = false, refusal: unknown;
+  supply: (options: { readonly full: (url: string) => boolean; readonly except: readonly string[] }) => Promise<Synced | { readonly skipped: readonly Skipped[] }>,
+  use: (synced: Synced | { readonly skipped: readonly Skipped[] }) => Promise<T>, record: RepairRecord): Promise<T> {
+  const except: string[] = [], unresolved: Skipped[] = [], fromNothing = new Set<string>();
+  let repairing = false, refusal: EvidenceRefusal | undefined;
+  // Once a read is unresolved, a source not yet asked from nothing at a recorded selection is asked from nothing.
+  const full = (url: string) => fromNothing.has(url) || repairing && record.unresolvedAt(url) === undefined;
   for (;;) {
     const supplied = await supply({ full, except }), synced = { ...supplied, skipped: [...unresolved, ...supplied.skipped] };
-    if (refusal !== undefined && !("served" in synced)) throw refusal;
-    try { return await use(synced); } catch (error) {
+    if (refusal !== undefined && !("served" in synced)) {
+      const final = new EvidenceRefusal(refusal.status);
+      final.message = `${refusal.status}: no source resolved the read (${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ")})`;
+      throw final;
+    }
+    let wasFull = false;
+    if ("served" in synced) wasFull = full(synced.url);
+    try {
+      const result = await use(synced);
+      if ("served" in synced) record.record(synced.url, undefined);
+      return result;
+    } catch (error) {
       if (!("served" in synced) || !unresolvedEvidence(error)) throw error;
-      refusal = error;
-      if (!full) full = true;
-      else { except.push(synced.url); unresolved.push({ url: synced.url, code: "UNRESOLVED" }); }
+      refusal = error as EvidenceRefusal; repairing = true;
+      const sequence = synced.served.selection.sequence, url = synced.url;
+      if (!wasFull && record.unresolvedAt(url) !== sequence) { record.record(url, undefined); fromNothing.add(url); continue; }
+      if (wasFull) record.record(url, sequence);
+      except.push(url); unresolved.push({ url, code: "UNRESOLVED" });
     }
   }
 }
@@ -269,13 +318,13 @@ export async function readRepaired<T>(
  * unavailable evidence. `except` are URLs never asked (a replica's own). */
 async function served<T>(directory: Directory, kept: KeptTerms, view: View, evidence: EvidenceStore, use: (synced: Synced) => Promise<T>,
   except: readonly string[] = []): Promise<T> {
-  return readRepaired(options => syncSources(directory, kept, view, client => client.sync(kept.backing, evidence, { full: options.full }),
+  return readRepaired(options => syncSources(directory, kept, view, client => client.sync(kept.backing, evidence, { full: options.full(client.baseUrl) }),
     [...except, ...options.except]), async synced => {
     if (!("served" in synced)) {
       throw new CommandError("UNAVAILABLE", `no source answered: ${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ") || "none kept"}`);
     }
     return use(synced);
-  });
+  }, repairRecord(directory, kept.backing));
 }
 
 /** The directory's kept replay file (pool-v3 §14), vouched for by `replay.db.sha256`: one that fails its digest is

@@ -49,7 +49,7 @@ import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArgum
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryVerifier, verifierCount } from "./backend.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
-import { initConstruction, initRole, presentationOf, readRepaired, replicaCommand, serviceClient, serviceCommand, syncSources, termsCommand, unanswered,
+import { initConstruction, initRole, presentationOf, readRepaired, repairRecord, replicaCommand, serviceClient, serviceCommand, syncSources, termsCommand, unanswered,
   type Skipped } from "./reader.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
@@ -192,7 +192,7 @@ async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms,
   const last = opened.directory.file(`packages/${hex(kept.backing)}`);
   const passed = (skipped: readonly Skipped[]) => skipped.length > 0 ? { skipped } : {};
   return readRepaired(options => syncSources(opened.directory, kept, opened.view,
-    client => opened.wallet.supply(store => client.sync(kept.backing, store, { full: options.full })), options.except), async synced => {
+    client => opened.wallet.supply(store => client.sync(kept.backing, store, { full: options.full(client.baseUrl) })), options.except), async synced => {
     if ("served" in synced) {
       const bytes = synced.served.package;
       mkdirSync(opened.directory.file("packages"), { recursive: true, mode: 0o700 });
@@ -202,7 +202,7 @@ async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms,
     const bytes = readOptional(last);
     if (bytes === undefined) throw new CommandError("UNAVAILABLE", "no source answered and no earlier sync kept a package");
     return use({ bytes, source: "kept", from: passed(synced.skipped) });
-  });
+  }, repairRecord(opened.directory, kept.backing));
 }
 
 /** A service that submits through the operator's service named in the terms. */
