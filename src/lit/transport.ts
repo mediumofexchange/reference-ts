@@ -21,10 +21,10 @@ export const MAX_LIT_TRAIL_RECORD_BYTES = 2 * (4 + MAX_TARGET_FIELD_BYTES);
 export const LIT_TRAILS = trailCodec({ context: LIT_TRAIL_CONTEXT, headerContext: LIT_SEGMENT_CONTEXT,
   maxRecordBytes: MAX_LIT_TRAIL_RECORD_BYTES, maxTermsBytes: MAX_LIT_TERMS_BYTES });
 const trail = LIT_TRAILS;
-export const litTrailReader = trail.trailReader, litTrailHead = trail.trailHead, encodeLitTrail = trail.encodeTrail,
+export const encodeLitTrail = trail.encodeTrail,
   decodeLitTrail = trail.decodeTrail;
 
 export const LIT_PACKAGES = packageCodec(LIT_PACKAGE_CONTEXT);
 const evidence = LIT_PACKAGES;
-export const litPackageReader = evidence.packageReader, encodeLitPackage = evidence.encodeEvidencePackage,
+export const encodeLitPackage = evidence.encodeEvidencePackage,
   decodeLitPackage = evidence.decodeEvidencePackage;

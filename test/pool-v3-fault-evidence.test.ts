@@ -188,6 +188,12 @@ describe("v3 portable fault evidence", () => {
       claimedOverLimit.set(u32(f.MAX_TARGET_FIELD_BYTES + 1), offset);
       expect(() => f.decodeFaultEvidence(claimedOverLimit, 0n)).toThrow(EncodingError);
     }
+    // §9 as adopted judges an over-long frame by its own checks: no pre-copy resource refusal (lit-v1 §6 has one).
+    const largest = new Uint8Array(f.MAX_TARGET_FIELD_BYTES);
+    const full = f.encodeFaultEvidence({ ...terminal, statement: largest, proof: largest, authorization: largest }, 0n);
+    const overLong = Buffer.concat([full, Uint8Array.of(0)]);
+    expect(() => f.decodeFaultEvidence(overLong, 0n)).toThrow(EncodingError);
+    expect(() => f.decodeFaultEvidence(overLong, 0n)).toThrow("wrong suffix byte length");
   });
 
   it("has no protocol suffix cap and applies the exact caller-selected boundary", () => {
