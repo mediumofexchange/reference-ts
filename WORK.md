@@ -11,8 +11,12 @@ integrity to the tested tree, checked in CI; (b) installed-package interoperabil
 separate installs of that tarball; (c) backup and restore drills of each role's store (an operator restored from an older copy
 signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's open correctness findings fixed or dispositioned,
 (au) first; (e) Next 5's 10⁵ rerun. Stop: (a)–(e) merged, CI green; the 10⁶ run, live Tor and the external review stay outside.
-- **M13a (this run):** (a). Probe 2026-10-07: two clean Linux builds give one tarball (sha1 061e667); a consumer's install
-  resolves `pako` 3.0.2, not the tested 3.0.1, and a shipped shrinkwrap does not change that for a tarball install.
+- **M13a ([decision](decisions/2026-10.md#2026-10-07--pin-a-releases-install-to-the-tested-tree-with-an-install-lock-and-rebuild-it-byte-identically-on-two-systems-slice-13-m13a), #143):** (a). A [release record](docs/RELEASE.md): the tarball plus an install lock pinning each runtime entry by
+  integrity (`scripts/release.mjs`); `check:package` and the command drill install through it, `--verify` refuses an
+  install missing an entry for its system (npm ci drops a failing optional one silently); CI's `reproducible-release`
+  compares Linux and Windows records. Reviewed; major and minors taken. Limits: one toolchain at a time, no registry path.
+- **Next:** (d)'s (au): after a read over served evidence ends `unresolved-evidence`, sync that source again with `full`,
+  then the replicas (the library's documented remedy, which no command takes); then (b), (c).
 - Slice 12 (transport, replica, relay; M12a–c, #136–#140) and slice 14 (lit, adopted) are done.
 
 ## Status
