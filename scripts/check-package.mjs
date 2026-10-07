@@ -1,13 +1,13 @@
-// Exercise exactly the tarball a consumer would install, outside this checkout.
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+// Exercise exactly the tarball a consumer would install, outside this checkout, from the release's install lock
+// (scripts/release.mjs): scratch/release keeps the tarball, the lock and the release record for CI's comparison.
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve, join, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { packRelease } from './release.mjs';
 
 const scratch = resolve('scratch');
-mkdirSync(scratch, { recursive: true });
-const directory = mkdtempSync(join(scratch, 'package-check-'));
-const npm = process.env.npm_execpath;
-if (!npm) throw new Error('Run through npm run check:package');
+const directory = join(scratch, 'release');
+if (!process.env.npm_execpath) throw new Error('Run through npm run check:package');
 function run(args, cwd) {
   const result = spawnSync(process.execPath, args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 120_000 });
   if (result.error || result.status !== 0) {
@@ -15,18 +15,17 @@ function run(args, cwd) {
   }
   return result.stdout;
 }
+rmSync(directory, { recursive: true, force: true });
+mkdirSync(directory, { recursive: true });
+const consumer = directory;
 try {
-  const packed = JSON.parse(run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', directory], process.cwd()));
-  if (packed[0].files.some(file => file.path.startsWith('experiments/'))) {
+  const { record, files } = packRelease(directory);
+  if (files.some(path => path.startsWith('experiments/'))) {
     throw new Error('Research code must not ship as a supported package API');
   }
-  if (packed[0].files.some(file => file.path.startsWith('src/'))) {
+  if (files.some(path => path.startsWith('src/'))) {
     throw new Error('The package ships built modules, not sources');
   }
-  const consumer = join(directory, 'consumer');
-  mkdirSync(consumer);
-  writeFileSync(join(consumer, 'package.json'), JSON.stringify({ name: 'moe-package-consumer', private: true, type: 'module' }));
-  run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund', join(directory, packed[0].filename)], consumer);
   writeFileSync(join(consumer, 'check.mjs'), `
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -103,8 +102,10 @@ assert.equal(core.ErgoVenue, undefined);
 console.log('Built tarball consumer: imports, canonical round trip, signature and the moe bin passed');
 `);
   process.stdout.write(run([join(consumer, 'check.mjs')], consumer));
+  console.log(`Release record: ${record.tarball.file} ${record.tarball.integrity}, install lock ${record.installLock.sha256} (scratch/release)`);
 } finally {
+  // The record, tarball and install lock stay; the installed tree and the consumer check go.
   const target = resolve(directory);
   if (!target.startsWith(scratch + sep)) throw new Error('unsafe scratch cleanup');
-  rmSync(target, { recursive: true, force: true });
+  for (const name of ['node_modules', 'check.mjs']) rmSync(join(target, name), { recursive: true, force: true });
 }

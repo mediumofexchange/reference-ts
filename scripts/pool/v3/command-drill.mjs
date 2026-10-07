@@ -28,8 +28,7 @@
 // Usage: node scripts/pool/v3/command-drill.mjs [--testnet --authorized-testnet]
 //   (after npm run build and scripts/pool/prepare-crs.mjs)
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -49,6 +48,7 @@ import { payToPublicKeyTree } from "../../../dist/ergo-publisher.js";
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
+import { packRelease } from "../../release.mjs";
 
 const root = resolve(import.meta.dirname, "../../.."), RSS_HOOK = new URL("./rss-hook.mjs", import.meta.url).href;
 const hex = bytes => Buffer.from(bytes).toString("hex");
@@ -81,25 +81,15 @@ mkdirSync(join(root, "scratch"), { recursive: true });
 const scratch = realpathSync(mkdtempSync(join(realpathSync(join(root, "scratch")), "command-drill-")));
 const checks = [], processes = [], servers = [];
 
-/** The package exactly as a consumer installs it: packed, installed into a fresh directory outside the checkout's
- * dependency tree, and its `moe` run from there. */
+/** The package exactly as a release installs it: packed, installed from its install lock into a fresh directory outside
+ * the checkout's dependency tree (scripts/release.mjs), and its `moe` run from there. */
 function installPacked() {
-  const npm = process.env.npm_execpath, consumer = join(scratch, "consumer");
-  const run = (args, cwd) => {
-    const result = npm === undefined ? spawnSync("npm", args, { cwd, encoding: "utf8", windowsHide: true, shell: process.platform === "win32", timeout: 300_000 })
-      : spawnSync(process.execPath, [npm, ...args], { cwd, encoding: "utf8", windowsHide: true, timeout: 300_000 });
-    assert.equal(result.status, 0, `npm ${args.join(" ")}: ${result.error?.message ?? result.stderr}`);
-    return result.stdout;
-  };
-  const [packed] = JSON.parse(run(["pack", "--json", "--ignore-scripts", "--pack-destination", scratch], root));
+  const consumer = join(scratch, "consumer");
   mkdirSync(consumer);
-  writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "moe-drill-consumer", private: true, type: "module" }));
-  run(["install", "--ignore-scripts", "--no-audit", "--no-fund", join(scratch, packed.filename)], consumer);
-  const bin = join(consumer, "node_modules", "@mediumofexchange", "reference", "dist", "cli", "moe.js");
+  const { record, bin } = packRelease(consumer);
   assert(statSync(bin).isFile(), "the packed install carries the moe bin");
-  // The consumer resolves the package's dependency ranges itself: its lockfile names what the commands ran on.
-  const consumerLock = createHash("sha256").update(readFileSync(join(consumer, "package-lock.json"))).digest("hex");
-  return { bin, tarballBytes: statSync(join(scratch, packed.filename)).size, files: packed.entryCount, consumerLock };
+  // The install lock names what the commands ran on.
+  return { bin, tarballBytes: record.tarball.bytes, files: record.tarball.entries, consumerLock: record.installLock.sha256 };
 }
 const packed = installPacked(), MOE = packed.bin;
 const check = async (label, fn) => { await fn(); checks.push(label); process.stderr.write(`passed: ${label}\n`); };
