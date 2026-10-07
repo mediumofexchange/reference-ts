@@ -15,6 +15,7 @@ import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.
 import { EvidenceRefusal } from "../src/pool/v3/refusals.js";
 import { V3ServiceClient, V3ServiceClientError } from "../src/pool/v3/service-client.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
+import type { RepairRecord, Skipped, Synced } from "../src/cli/reader.js";
 import type { V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 
@@ -34,13 +35,14 @@ describe("a replica of a lit operator's evidence", () => {
   let service: typeof import("../src/pool/v3/service-http.js");
   let V3Replica: typeof import("../src/pool/v3/replica.js").V3Replica;
   let passedOver: typeof import("../src/cli/reader.js").passedOver;
+  let readRepaired: typeof import("../src/cli/reader.js").readRepaired;
   const closing: { close(): void }[] = [], servers: Server[] = [], directories: string[] = [], scratch = resolve("scratch");
   beforeAll(async () => {
     ({ V3OperatorJournal } = await import("../src/pool/v3/store.js"));
     ({ V3Wallet } = await import("../src/pool/v3/wallet-store.js"));
     service = await import("../src/pool/v3/service-http.js");
     ({ V3Replica } = await import("../src/pool/v3/replica.js"));
-    ({ passedOver } = await import("../src/cli/reader.js"));
+    ({ passedOver, readRepaired } = await import("../src/cli/reader.js"));
   });
   afterEach(async () => {
     await Promise.all(servers.splice(0).map(server => new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); })));
@@ -224,5 +226,82 @@ describe("a replica of a lit operator's evidence", () => {
     expect(passedOver(new EncodingError("truncated served evidence"))).toBe("INVALID");
     expect(passedOver(new EvidenceRefusal("unresolved-evidence"))).toBe("EVIDENCE");
     expect(passedOver(new Error("a programming failure"))).toBeUndefined();
+  });
+
+  it("repairs a read a source left unresolved past its mark: from nothing, then from the next source (audit 30 (au))", async () => {
+    const f = await fixture();
+    let payer = f.open("payer");
+    await f.operator.submit(f.issue(payer.keyedRequest("fund", f.backing, 10n).owner, 10n));
+    await f.commit("c1"); await f.mirror();
+    // A source that sends the selection whole but leaves out an earlier dependency (here the segment's terms field,
+    // which the selection's directory, snapshots and trails do not include), modelled by dropping it from the
+    // wallet's file after each of that source's answers. Its mark moves past what it withheld.
+    const evidenceFile = join(f.directory, "payer.db.evidence");
+    // The wallet holds its evidence file open; the file is changed between handles (on Windows a second connection
+    // to an open file fails).
+    const withhold = () => {
+      payer.close();
+      const db = new DatabaseSync(evidenceFile); db.exec("DELETE FROM segment_terms"); db.close();
+      payer = f.open("payer");
+    };
+    const asked: string[] = [];
+    const sources = [{ url: "operator", client: f.operator, withholds: Infinity }, { url: f.url, client: f.client, withholds: 0 }];
+    type Supplied = Synced | { readonly skipped: readonly Skipped[] };
+    const supply = (withheld: Map<string, number>) => async (options: { readonly full: (url: string) => boolean; readonly except: readonly string[] }): Promise<Supplied> => {
+      const source = sources.find(s => !options.except.includes(s.url));
+      if (source === undefined) return { skipped: [] };
+      const full = options.full(source.url);
+      asked.push(`${source.url}${full ? " full" : ""}`);
+      const served = await payer.supply(store => source.client.sync(f.backing, store, { full }));
+      const left = withheld.get(source.url) ?? source.withholds;
+      if (left > 0) { withhold(); withheld.set(source.url, left - 1); }
+      return { served, origin: source.url === "operator" ? "served" : "replica", url: source.url, skipped: [] };
+    };
+    const read = (synced: Supplied) => {
+      if (!("served" in synced)) throw new Error("no source");
+      return payer.sync(synced.served.package, f.signed).then(view => ({ view, skipped: synced.skipped, url: synced.url }));
+    };
+    // Without the repair the read stays unresolved over the withheld field, whatever later syncs from that source send.
+    const plain = await supply(new Map())({ full: () => false, except: [] });
+    await expect(read(plain)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    // The record of sources whose answer from nothing stayed unresolved, at the selection they served (in a directory,
+    // unresolved.json).
+    const recorded = new Map<string, bigint>();
+    const record: RepairRecord = { unresolvedAt: url => recorded.get(url), record: (url, sequence) => { if (sequence === undefined) recorded.delete(url); else recorded.set(url, sequence); } };
+    // The operator withholds on every answer: synced again from nothing, still unresolved, it is passed over as
+    // UNRESOLVED, and the replica, asked from nothing, resolves the read.
+    asked.length = 0;
+    const repaired = await readRepaired(supply(new Map()), read, record);
+    expect(asked).toEqual(["operator", "operator full", `${f.url} full`]);
+    expect(repaired.url).toBe(f.url);
+    expect(repaired.skipped).toEqual([{ url: "operator", code: "UNRESOLVED" }]);
+    expect(repaired.view.holdings.map(h => h.value)).toEqual([10n]);
+    const selection = repaired.view.checkpoint!.sequence;
+    expect([...recorded]).toEqual([["operator", selection]]);
+    // A source that lost the field once is repaired by its own answer from nothing.
+    withhold(); sources[0]!.withholds = 0; asked.length = 0;
+    recorded.clear();
+    const once = await readRepaired(supply(new Map([["operator", 1]])), read, record);
+    expect(asked).toEqual(["operator", "operator full"]);
+    expect([once.url, once.skipped]).toEqual(["operator", []]);
+    // No source left: the refusal names the sources passed over, and each one's selection is recorded. The next read
+    // asks each only after its mark while it serves that selection: no answer from nothing again.
+    sources[0]!.withholds = Infinity; sources[1]!.withholds = Infinity; asked.length = 0;
+    await expect(readRepaired(supply(new Map()), read, record)).rejects.toMatchObject({ status: "unresolved-evidence",
+      message: `unresolved-evidence: no source resolved the read (operator UNRESOLVED, ${f.url} UNRESOLVED); removing the directory's unresolved.json asks every source from nothing again` });
+    expect(asked).toEqual(["operator", "operator full", `${f.url} full`]);
+    expect([...recorded]).toEqual([["operator", selection], [f.url, selection]]);
+    asked.length = 0;
+    await expect(readRepaired(supply(new Map()), read, record)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    expect(asked).toEqual(["operator", f.url]);
+    // A source whose selection moved is asked from nothing once more, and a read that resolves clears its record.
+    sources[0]!.withholds = 0; await f.commit("c2"); asked.length = 0;
+    expect((await readRepaired(supply(new Map()), read, record)).url).toBe("operator");
+    expect(asked).toEqual(["operator", "operator full"]);
+    expect([...recorded]).toEqual([[f.url, selection]]);
+    asked.length = 0;
+    await expect(readRepaired(supply(new Map()), async () => { throw new EvidenceRefusal("unsupported-scope"); }, record))
+      .rejects.toMatchObject({ status: "unsupported-scope" });
+    expect(asked).toEqual(["operator"]);
   });
 });

@@ -32,6 +32,7 @@ import { createServer } from "node:http";
 import { connect } from "node:net";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { prepareExactOutput } from "../../dist/pool/v3/capsules.js";
 import { adoptedDomain } from "../../dist/pool/v3/configuration.js";
@@ -379,7 +380,7 @@ try {
     assert.deepEqual([read.status, read.issued, read.burned, read.supply], ["final", "10", "3", "7"]);
   });
 
-  await check("a withdrawn demand's presented note pays as any other; lit has no freshen", async () => {
+  await check("a withdrawn demand's presented note pays as any other; lit has no freshen; a read the evidence file leaves unresolved syncs again from nothing", async () => {
     const shown = await ok(wallet("demand", HD, "d2", backing, "7", "--deadline", "+60"));
     await submit(HD, "d2");
     await finalOf(HD, "d2");
@@ -395,6 +396,13 @@ try {
     await finalOf(HD, "pay-2");
     assert.deepEqual(holdings(await ok(wallet("sync", HD, backing))), [["5", "available", 0]]);
     assert.equal((await settled(wallet("fulfill", SH, "invoice-2", backing), () => true)).value, "2");
+    // A dependency the evidence file lacks past its mark (the segment's terms, as a source that withheld them leaves
+    // it): the command's read is unresolved, syncs the operator again from nothing and resolves (audit 30 (au)).
+    const file = join(HD, "wallet.db.evidence"), db = new DatabaseSync(file);
+    db.exec("DELETE FROM segment_terms"); db.close();
+    const repaired = await ok(wallet("sync", HD, backing));
+    assert.deepEqual([holdings(repaired), repaired.evidence, repaired.skipped], [[["5", "available", 0]], "served", undefined]);
+    assert.equal(existsSync(join(HD, "unresolved.json")), false);
   });
 
   let replica;
