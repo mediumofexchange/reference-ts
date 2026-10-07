@@ -84,7 +84,7 @@ describe("real-proof gate", () => {
 describe("real-proof groups", () => {
   // The serial check:pool:v3 before CI split it into groups; nothing may drop out.
   const serial = [
-    "testnet-budget.mjs --check", "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
+    "testnet.mjs --check", "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
     "recovery-store-check.mjs", "recovery-store-check.mjs --ergo", "succession-store-check.mjs", "succession-store-check.mjs --ergo",
     "scope-store-check.mjs", "scope-store-check.mjs --ergo", "redemption-store-check.mjs", "redemption-store-check.mjs --ergo",
     "command-drill.mjs", "local-check.mjs",

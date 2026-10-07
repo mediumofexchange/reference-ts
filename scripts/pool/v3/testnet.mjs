@@ -1,34 +1,23 @@
-// Explicit live-testnet harness support. Reader trust inputs are held beside
-// the keys, outside the evidence package; no funding secret enters a reader.
+// Live-testnet support for the command drill (command-drill.mjs --testnet
+// --authorized-testnet): the own node's state and plain transfers from the
+// retained testnet wallet. `--check` checks the transfers offline, without a
+// node or wallet.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
-import { ErgoVenue, ergoAnchorContext } from "../../../dist/ergo.js";
-import { parseErgoHeader } from "../../../dist/ergo-headers.js";
-import { ERGO_TESTNET_REFERENCE, MINER_FEE_TREE_HEX, ownErgoProfile } from "../../../dist/ergo-profile.js";
-import { DEFAULT_ERGO_FEE, ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof } from "../../../dist/ergo-publisher.js";
+import { MINER_FEE_TREE_HEX } from "../../../dist/ergo-profile.js";
+import { DEFAULT_ERGO_FEE, ergoNodePublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof } from "../../../dist/ergo-publisher.js";
 import { MempoolNode, plainBox } from "../../../dist/ergo-synthetic.js";
-import { ergoNodeSupplier, parseNodeJson } from "../../../dist/ergo-supplier.js";
-import { decodeRangeAnswer } from "../../../dist/record-range.js";
-import { encodeCommitment } from "../../../dist/venue-records.js";
-import { recordReader, RANGE_LIMITS } from "./local-replay.mjs";
+import { parseNodeJson } from "../../../dist/ergo-supplier.js";
 
 export const TESTNET_ENDPOINT = "http://127.0.0.1:9052";
 export const TESTNET_DEPTH = 2n;
-export const TESTNET_EVIDENCE_KIND = "ergo-venue-live-testnet";
-export const TESTNET_LIMITS = Object.freeze({ requestMs: 30_000, responseBytes: 64 * 1024 * 1024,
-  maxBlocks: 4096, publicationWaitMs: 1_200_000, runMs: 7_200_000, workerMs: 300_000, pollMs: 10_000 });
-const policy = Object.freeze({ headersPerSupplier: TESTNET_LIMITS.maxBlocks, headersPerRequest: 500,
-  sideHeadersPerSupplier: TESTNET_LIMITS.maxBlocks, sectionBytesPerSync: 256 * 1024 * 1024,
-  retainedBytes: 64 * 1024 * 1024, supplierTimeoutMs: TESTNET_LIMITS.requestMs });
+export const TESTNET_LIMITS = Object.freeze({ requestMs: 30_000, publicationWaitMs: 1_200_000, pollMs: 10_000 });
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const bytes = text => { assert.match(text, /^[0-9a-f]{64}$/); return new Uint8Array(Buffer.from(text, "hex")); };
 const pause = () => new Promise(resolve => setTimeout(resolve, TESTNET_LIMITS.pollMs));
-const supplierFor = () => ergoNodeSupplier(TESTNET_ENDPOINT, { name: "own live testnet node",
-  timeoutMs: TESTNET_LIMITS.requestMs, maxResponseBytes: TESTNET_LIMITS.responseBytes });
 
 export async function testnetInfo() {
   const response = await fetch(`${TESTNET_ENDPOINT}/info`, { signal: AbortSignal.timeout(TESTNET_LIMITS.requestMs) });
@@ -46,60 +35,6 @@ export async function testnetInfo() {
   assert(typeof info.get("headersHeight") === "bigint" && info.get("headersHeight") >= info.get("fullHeight") &&
     info.get("headersHeight") - info.get("fullHeight") <= TESTNET_DEPTH, "own testnet node is not synced");
   return info;
-}
-
-function profileAt(anchor) {
-  const location = kind => payToPublicKeyTree(secp256k1.getPublicKey(
-    createHash("sha256").update(`moe/experiment/pool-v3-testnet/location/${kind}`).digest(), true));
-  return ownErgoProfile({ reference: ERGO_TESTNET_REFERENCE, anchor, depth: TESTNET_DEPTH,
-    scripts: { 1: location(1), 2: location(2), 3: location(3), 4: location(4) } });
-}
-async function headerAt(supplier, height) {
-  const headers = await supplier.headers(height, height);
-  assert.equal(headers.length, 1, "testnet header unavailable");
-  const header = parseErgoHeader(headers[0]); assert(header && header.height === height);
-  return header;
-}
-async function anchorReadback(supplier, profile, height) {
-  assert.equal(hex((await headerAt(supplier, height)).id), hex(profile.anchor), "testnet anchor left the current chain");
-}
-
-/** Validate the harness-owned file, reconstruct the fixed scripts/profile. */
-export function readTestnetSelection(file) {
-  const data = JSON.parse(readFileSync(file, "utf8"));
-  assert.equal(data.schema, "moe-v3-testnet-reader-1"); assert.equal(data.endpoint, TESTNET_ENDPOINT);
-  assert.equal(data.depth, "2"); assert.equal(data.context, ERGO_TESTNET_REFERENCE);
-  assert.match(data.anchorHeight, /^[0-9]+$/); assert.match(data.judgingIndex, /^[0-9]+$/);
-  const anchorHeight = BigInt(data.anchorHeight), judgingIndex = BigInt(data.judgingIndex);
-  assert(anchorHeight >= 1025n && judgingIndex < BigInt(TESTNET_LIMITS.maxBlocks - 3));
-  const profile = profileAt(bytes(data.anchor));
-  return { profile, anchorHeight, judgingIndex,
-    ...(data.withheldHeader === undefined ? {} : { withheldHeader: bytes(data.withheldHeader) }) };
-}
-
-/** The same actual node adapter for positive and hostile readers. Pin and
- * withholding choices are reader-owned, never accepted from IPC/package data. */
-export async function testnetRecord(selection, pin) {
-  const venue = await testnetVenue(selection, pin);
-  return venue === undefined ? undefined : recordReader(venue, TESTNET_EVIDENCE_KIND);
-}
-
-/** A fresh runtime venue at the independently held reader selection and pin. */
-export async function testnetVenue(selection, pin) {
-  assert(pin instanceof Uint8Array && pin.length === 32);
-  const { profile, anchorHeight, judgingIndex, withheldHeader } = selection;
-  const supplier = supplierFor();
-  await testnetInfo(); await anchorReadback(supplier, profile, anchorHeight);
-  const context = await ergoAnchorContext(supplier, profile.anchor, anchorHeight);
-  const tip = anchorHeight + 1n + judgingIndex + profile.depth;
-  const capped = { name: supplier.name, tipHeight: async () => tip,
-    headers: (from, to) => supplier.headers(from, to < tip ? to : tip),
-    section: id => withheldHeader !== undefined && hex(id) === hex(withheldHeader) ? Promise.resolve(undefined) : supplier.section(id) };
-  const venue = new ErgoVenue(profile, context, policy);
-  const synced = await venue.sync([capped]);
-  if (synced.witnessedHeaderId === undefined || hex(synced.witnessedHeaderId) !== hex(pin) ||
-      synced.witnessedIndex !== judgingIndex || synced.unresolvedIndex !== undefined) return undefined;
-  return venue;
 }
 
 /** The retained testnet wallet's secret (scratch/ergo-testnet/wallet.json), checked against its tree. */
@@ -191,7 +126,7 @@ export async function testnetConfirmations(id) {
 }
 
 /**
- * Live drills only: a plain transfer (buildPlainTransfer) over the own testnet node's listing of the key's boxes,
+ * The live command drill only: a plain transfer (buildPlainTransfer) over the own testnet node's listing of the key's boxes,
  * read once the index has caught up, replayed offline, then submitted. Returns the transaction id (hex) and what left
  * the key, or undefined when a sweep finds only dust.
  */
@@ -234,76 +169,7 @@ export async function checkPlainTransfer() {
   return { status: "passed", checks: ["pay", "box above the height left out", "chained pay", "sweep", "dust sweep", "uncovered outputs", "altered bytes"] };
 }
 
-/** Live writer, only constructed by store-check --testnet. */
-export async function openTestnet({ authorizeSubmission } = {}) {
-  assert(authorizeSubmission === undefined || typeof authorizeSubmission === "function");
-  const started = Date.now(), info = await testnetInfo(), supplier = supplierFor();
-  const anchorHeight = info.get("fullHeight") - TESTNET_DEPTH;
-  const anchor = await headerAt(supplier, anchorHeight), profile = profileAt(anchor.id);
-  const context = await ergoAnchorContext(supplier, profile.anchor, anchorHeight);
-  await anchorReadback(supplier, profile, anchorHeight);
-  const secretKey = testnetWalletKey();
-  const submitted = [], nodePublisher = ergoNodePublisher(TESTNET_ENDPOINT);
-  const counting = { name: nodePublisher.name, unspentBoxes: tree => nodePublisher.unspentBoxes(tree), hasBox: id => nodePublisher.hasBox(id),
-    submit: async (signed, id) => {
-      if (authorizeSubmission !== undefined) await authorizeSubmission({ signed: new Uint8Array(signed), id: new Uint8Array(id),
-        tree: publisher.tree, boxes: await nodePublisher.unspentBoxes(publisher.tree) });
-      submitted.push(hex(id)); return nodePublisher.submit(signed, id);
-    } };
-  const publisher = new ErgoPublisher({ secretKey, suppliers: [counting] });
-  const venue = new ErgoVenue(profile, context, policy, publisher);
-  let last;
-  async function sync() {
-    assert(Date.now() - started < TESTNET_LIMITS.runMs, "testnet run time budget");
-    const full = (await testnetInfo()).get("fullHeight");
-    assert(full - anchorHeight < BigInt(TESTNET_LIMITS.maxBlocks), "testnet header budget");
-    await anchorReadback(supplier, profile, anchorHeight);
-    // The full tip, not the possibly-ahead header tip, bounds available sections.
-    last = await venue.sync([{ name: supplier.name, tipHeight: async () => full,
-      headers: (from, to) => supplier.headers(from, to < full ? to : full), section: id => supplier.section(id) }]);
-    assert.equal(last.unresolvedIndex, undefined, "live testnet section unavailable");
-    return last;
-  }
-  const bootstrapDeadline = Date.now() + TESTNET_LIMITS.publicationWaitMs;
-  while ((await sync()).witnessedHeaderId === undefined) {
-    assert(Date.now() < bootstrapDeadline, "testnet first witnessed block wait budget"); await pause();
-  }
-  return { venue, profile, publisher, submitted, anchorHeight, context, sync,
-    reference: { context: ERGO_TESTNET_REFERENCE, profile },
-    get pin() { return last.witnessedHeaderId; },
-    get tipHeight() { return last.tipHeight; },
-    selection() { return { profile, anchorHeight, judgingIndex: venue.witnessedIndex() }; },
-    readerConfig() { return { schema: "moe-v3-testnet-reader-1", endpoint: TESTNET_ENDPOINT,
-      context: ERGO_TESTNET_REFERENCE, depth: profile.depth.toString(), anchor: hex(profile.anchor),
-      anchorHeight: anchorHeight.toString(), judgingIndex: venue.witnessedIndex().toString() }; },
-    headerId: async index => (await headerAt(supplier, anchorHeight + 1n + index)).id,
-    async waitUntil(index) {
-      assert(typeof index === "bigint" && index >= 0n);
-      const deadline = Date.now() + TESTNET_LIMITS.publicationWaitMs;
-      for (;;) {
-        await sync(); if (venue.witnessedIndex() >= index) return;
-        assert(Date.now() < deadline, "testnet witnessed index wait budget"); await pause();
-      }
-    },
-    async waitForRecord(kind, subject, bytes) {
-      const deadline = Date.now() + TESTNET_LIMITS.publicationWaitMs, encoded = hex(bytes);
-      for (;;) {
-        await sync();
-        const request = { venue: venue.id, kind, subject, fromIndex: 0n, toIndex: venue.witnessedIndex() };
-        const answer = decodeRangeAnswer(venue.range(request, RANGE_LIMITS), request, RANGE_LIMITS);
-        const entry = answer.entries.find(entry => hex(entry.record) === encoded);
-        if (entry !== undefined) return entry.index;
-        assert(Date.now() < deadline, "testnet record inclusion and depth wait budget"); await pause();
-      }
-    },
-    async waitFor(commitment) {
-      const deadline = Date.now() + TESTNET_LIMITS.publicationWaitMs, encoded = hex(encodeCommitment(commitment));
-      for (;;) {
-        await sync();
-        const request = { venue: venue.id, kind: 1, subject: commitment.operator, fromIndex: 0n, toIndex: venue.witnessedIndex() };
-        const answer = decodeRangeAnswer(venue.range(request, RANGE_LIMITS), request, RANGE_LIMITS);
-        if (answer.entries.some(entry => hex(entry.record) === encoded)) return;
-        assert(Date.now() < deadline, "testnet commitment inclusion and depth wait budget"); await pause();
-      }
-    } };
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === import.meta.filename) {
+  assert.deepEqual(process.argv.slice(2), ["--check"], "testnet.mjs runs only its offline --check");
+  process.stdout.write(JSON.stringify(await checkPlainTransfer()) + "\n");
 }

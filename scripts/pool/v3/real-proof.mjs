@@ -18,7 +18,7 @@ const v3 = "scripts/pool/v3";
 
 /** Every real-proof script in the serial order, its group and the reports it writes (repository paths). */
 export const SCRIPTS = Object.freeze([
-  { group: "stores", script: `${v3}/testnet-budget.mjs`, args: ["--check"], reports: [] },
+  { group: "stores", script: `${v3}/testnet.mjs`, args: ["--check"], reports: [] },
   { group: "history", script: `${v3}/check.mjs`, args: [], reports: ["scratch/pool-v3-results.json"] },
   { group: "history", script: `${v3}/store-check.mjs`, args: ["--ergo"], reports: ["scratch/pool-v3-store-results.json"] },
   { group: "history", script: `${v3}/history-store-check.mjs`, args: [], reports: ["docs/pool-v3-history-store-verification.json"] },
