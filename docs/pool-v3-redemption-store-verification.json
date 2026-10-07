@@ -22,133 +22,133 @@
       "name": "backer: sync undefined, issue issue, submit issue",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1326
+      "elapsedMs": 1071
     },
     {
       "name": "holder: sync undefined, prepare pay, submit pay",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3278
+      "elapsedMs": 2804
     },
     {
       "name": "shop: sync undefined, demand redeem, submit redeem",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 3069
+      "elapsedMs": 2507
     },
     {
       "name": "shop: sync undefined, settle settle, submit settle",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2984
+      "elapsedMs": 2496
     },
     {
       "name": "backer: sync undefined, burn retire, submit retire",
       "kind": 3,
       "bytes": 14656,
-      "elapsedMs": 2826
+      "elapsedMs": 2348
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1311
+      "elapsedMs": 1073
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1018
+      "elapsedMs": 857
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1009
+      "elapsedMs": 858
     },
     {
       "name": "backer: sync undefined, issue issue-4, submit issue-4, issue issue-5, submit issue-5, issue issue-t0, submit issue-t0, issue issue-t1, submit issue-t1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1016
+      "elapsedMs": 857
     },
     {
       "name": "holder: sync undefined, demand four, submit four, demand five, submit five",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2808
+      "elapsedMs": 2346
     },
     {
       "name": "holder: sync undefined, demand four, submit four, demand five, submit five",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2643
+      "elapsedMs": 2228
     },
     {
       "name": "restored: sync undefined, settle settle-4, submit settle-4, withdraw back-5, submit back-5",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 3048
+      "elapsedMs": 2503
     },
     {
       "name": "holder: sync undefined, settle lost-4",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2877
+      "elapsedMs": 2316
     },
     {
       "name": "holder: demand gap, publish gap",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 3004
+      "elapsedMs": 2494
     },
     {
       "name": "holder: settle gap-settle, publish gap-settle",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 3017
+      "elapsedMs": 2498
     },
     {
       "name": "holder: demand hostile, publish hostile",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 3046
+      "elapsedMs": 2508
     },
     {
       "name": "holder: sync undefined, settle late",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2832
+      "elapsedMs": 2326
     },
     {
       "name": "holder: sync undefined, settle again",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 3001
+      "elapsedMs": 2500
     },
     {
       "name": "taker demand 0",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2825
+      "elapsedMs": 2364
     },
     {
       "name": "taker demand 1",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2633
+      "elapsedMs": 2232
     },
     {
       "name": "taken release",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2613
+      "elapsedMs": 2229
     },
     {
       "name": "taking settlement",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2623
+      "elapsedMs": 2234
     }
   ],
   "processes": [
@@ -156,294 +156,294 @@
       "role": "holder",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3100
+      "elapsedMs": 2592
     },
     {
       "role": "backer",
       "steps": "sync,issue,submit",
       "retry": false,
-      "elapsedMs": 4863
+      "elapsedMs": 4078
     },
     {
       "role": "backer",
       "steps": "issue,act",
       "retry": true,
-      "elapsedMs": 2987
+      "elapsedMs": 2425
     },
     {
       "role": "shop",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3055
+      "elapsedMs": 2518
     },
     {
       "role": "holder",
       "steps": "sync,prepare,submit",
       "retry": false,
-      "elapsedMs": 6914
+      "elapsedMs": 6339
     },
     {
       "role": "shop",
       "steps": "fulfill,sync",
       "retry": false,
-      "elapsedMs": 3511
+      "elapsedMs": 2843
     },
     {
       "role": "holder",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3373
+      "elapsedMs": 2786
     },
     {
       "role": "backer",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3399
+      "elapsedMs": 2755
     },
     {
       "role": "shop",
       "steps": "sync,demand,submit",
       "retry": false,
-      "elapsedMs": 6448
+      "elapsedMs": 5214
     },
     {
       "role": "shop",
       "steps": "demand,act",
       "retry": true,
-      "elapsedMs": 3000
+      "elapsedMs": 2420
     },
     {
       "role": "shop",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3431
+      "elapsedMs": 2736
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 3451
+      "elapsedMs": 2747
     },
     {
       "role": "backer",
       "steps": "accept",
       "retry": true,
-      "elapsedMs": 3010
+      "elapsedMs": 2414
     },
     {
       "role": "shop",
       "steps": "sync,settle,submit",
       "retry": false,
-      "elapsedMs": 6375
+      "elapsedMs": 5214
     },
     {
       "role": "shop",
       "steps": "settle,act",
       "retry": true,
-      "elapsedMs": 3002
+      "elapsedMs": 2454
     },
     {
       "role": "shop",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3390
+      "elapsedMs": 2733
     },
     {
       "role": "holder",
       "steps": "sync,presentation",
       "retry": false,
-      "elapsedMs": 3521
+      "elapsedMs": 2829
     },
     {
       "role": "backer",
       "steps": "sync,burn,submit",
       "retry": false,
-      "elapsedMs": 6482
+      "elapsedMs": 5300
     },
     {
       "role": "backer",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3376
+      "elapsedMs": 2725
     },
     {
       "role": "holder",
       "steps": "request,request",
       "retry": false,
-      "elapsedMs": 3046
+      "elapsedMs": 2465
     },
     {
       "role": "backer",
       "steps": "sync,issue,submit,issue,submit,issue,submit,issue,submit",
       "retry": false,
-      "elapsedMs": 8180
+      "elapsedMs": 6707
     },
     {
       "role": "holder",
       "steps": "sync,demand,submit,demand,submit",
       "retry": false,
-      "elapsedMs": 9526
+      "elapsedMs": 7999
     },
     {
       "role": "restored",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3971
+      "elapsedMs": 3330
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 3618
+      "elapsedMs": 2931
     },
     {
       "role": "restored",
       "steps": "sync,settle,submit,withdraw,submit",
       "retry": false,
-      "elapsedMs": 6558
+      "elapsedMs": 5299
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6382
+      "elapsedMs": 5131
     },
     {
       "role": "restored",
       "steps": "sync,act,act",
       "retry": false,
-      "elapsedMs": 3443
+      "elapsedMs": 2776
     },
     {
       "role": "holder",
       "steps": "sync,act,act,presentation",
       "retry": false,
-      "elapsedMs": 3494
+      "elapsedMs": 2834
     },
     {
       "role": "holder",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3152
+      "elapsedMs": 2516
     },
     {
       "role": "backer",
       "steps": "sync",
       "retry": false,
-      "elapsedMs": 3440
+      "elapsedMs": 2756
     },
     {
       "role": "holder",
       "steps": "request",
       "retry": false,
-      "elapsedMs": 3018
+      "elapsedMs": 2427
     },
     {
       "role": "backer",
       "steps": "issue",
       "retry": false,
-      "elapsedMs": 3095
+      "elapsedMs": 2543
     },
     {
       "role": "holder",
       "steps": "demand,publish",
       "retry": false,
-      "elapsedMs": 6134
+      "elapsedMs": 5030
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3281
+      "elapsedMs": 2698
     },
     {
       "role": "backer",
       "steps": "sync,accept",
       "retry": false,
-      "elapsedMs": 3338
+      "elapsedMs": 2691
     },
     {
       "role": "holder",
       "steps": "settle,publish",
       "retry": false,
-      "elapsedMs": 6170
+      "elapsedMs": 5043
     },
     {
       "role": "holder",
       "steps": "sync,act,presentation",
       "retry": false,
-      "elapsedMs": 3338
+      "elapsedMs": 2726
     },
     {
       "role": "backer",
       "steps": "burn",
       "retry": false,
-      "elapsedMs": 3306
+      "elapsedMs": 2704
     },
     {
       "role": "holder",
       "steps": "demand,publish",
       "retry": false,
-      "elapsedMs": 6182
+      "elapsedMs": 5146
     },
     {
       "role": "backer",
       "steps": "sync,accept",
       "retry": false,
-      "elapsedMs": 3344
+      "elapsedMs": 2707
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6210
+      "elapsedMs": 5069
     },
     {
       "role": "holder",
       "steps": "publish",
       "retry": false,
-      "elapsedMs": 2975
+      "elapsedMs": 2432
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3308
+      "elapsedMs": 2722
     },
     {
       "role": "backer",
       "steps": "sync,accept,publishAcceptance",
       "retry": false,
-      "elapsedMs": 3362
+      "elapsedMs": 3105
     },
     {
       "role": "holder",
       "steps": "sync,settle",
       "retry": false,
-      "elapsedMs": 6170
+      "elapsedMs": 5091
     },
     {
       "role": "holder",
       "steps": "publish",
       "retry": false,
-      "elapsedMs": 3006
+      "elapsedMs": 2442
     },
     {
       "role": "holder",
       "steps": "sync,act",
       "retry": false,
-      "elapsedMs": 3340
+      "elapsedMs": 2735
     },
     {
       "role": "backer",
       "steps": "sync,presentation,presentation",
       "retry": false,
-      "elapsedMs": 3581
+      "elapsedMs": 3032
     }
   ],
   "transactions": [],
   "maxPackageBytes": 79489,
-  "elapsedMs": 235478,
+  "elapsedMs": 192641,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -471,7 +471,7 @@
     "dist/pool/v3/configuration.js": "7af6147f90d70c7c03372751ae6f7be172c836adcf9d7197c8daac36d7caabc5",
     "dist/pool/v3/construction.js": "e9619cb645cd7431854ac7a68e7a425ea033b7998c7e7689a2b3bac83e021b7b",
     "dist/pool/v3/dishonour.js": "1249116e99716fceeffc75c3c851cffa6a1166a9a33938b37ff178b76d11bda2",
-    "dist/pool/v3/evidence-store.js": "d56764c329387570af870d5e2e899e19d9b49c05e7e577a01248ed3a6a43ed9a",
+    "dist/pool/v3/evidence-store.js": "fd91f921ddbdf18230595fa89ac03f081c6a0d76748343db970ae3adfab2dae8",
     "dist/pool/v3/fault-evidence.js": "076cf2386ef5835a39057102b1c31b542d6619973ecd755354aa52f617bbcbea",
     "dist/pool/v3/fault-observer.js": "b5653c2af4b994fb837c7b8689e5073efc1e1b78f3113978fc5d139b5318868e",
     "dist/pool/v3/guard.js": "5bd8bf806aa9101d10fcca922ea1ec68050ce517d9d5dcbf4d1768e515630c0f",
@@ -491,9 +491,9 @@
     "dist/pool/v3/replay-store.js": "2096188ab02e888bf61a3fde25f99b98e00d8aed729ede61c9d8481bc74c6cb9",
     "dist/pool/v3/scope-evidence.js": "756dd7a2d4e4d3a7720178761382ca572b8450724ae31dfa51262b3e0befa26d",
     "dist/pool/v3/scope-reader.js": "b71428c951c57c890b9abf6cecac2916f9e22edc1a8ba755b09fe5e732a57ef8",
-    "dist/pool/v3/service-client.js": "4fe96202a43ef438b1e2a560656d3343344b1e8503d495276f1799a1bc2ffad5",
-    "dist/pool/v3/service-http.js": "a35026e9b4bbf68c056e9193970f9f8c21babecea2021e9852149a872d794021",
-    "dist/pool/v3/service-wire.js": "2990ead4d79ca4d702b1b22e12098ef1e4ee4138dcfa9d47c7cdca0034c772e5",
+    "dist/pool/v3/service-client.js": "5758c82d2017a27c6f8fae01798e8dc05bdc7769dd571559d5a40024068d8fc9",
+    "dist/pool/v3/service-http.js": "68fea8df1dd82d2085797f386e45eb3cafd1d4e04b0ebc3d4b29cc5967402118",
+    "dist/pool/v3/service-wire.js": "c0be6e4c68ec48fa722cae05b4cd2edab454bed14523d95a4d494a98fc3aed28",
     "dist/pool/v3/state.js": "62c8d90c0c42ada7e4cc67715d17f6f8de8e46fda9bd34ac88e083db6134dcbd",
     "dist/pool/v3/store.js": "6e677c23f57f264b48ea2b4e7f95f268422116c7a8087e2404cf9932c2a1b00d",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
@@ -555,7 +555,7 @@
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
     "src/pool/v3/construction.ts": "0373985686d4f275a73be934c834a7a916f949a0f9aaa39499f84c524098dabe",
     "src/pool/v3/dishonour.ts": "4c894cbf1537c972b6e814dee94e13213ba3e51eaa81ffe93e97f5a357e3600c",
-    "src/pool/v3/evidence-store.ts": "dcfd87f7d67f7af71dc66bc7bd1f14a3b0ea2d617cc76435a86a6b3d037d2cd9",
+    "src/pool/v3/evidence-store.ts": "58027cd81cd961acd1e39da883f93625ac4ad196229597d62e10fcc71f19585d",
     "src/pool/v3/fault-evidence.ts": "3bf052fb0fde8516d30ddc4879345d9e8447fef0a9633aa51e26f4774bb92f6b",
     "src/pool/v3/fault-observer.ts": "7a7492584ced10a483257789edd282b974469fe2260815b3dba9758eed0f41c0",
     "src/pool/v3/guard.ts": "b56cd815362a7e45c60fafe21013c11adb450010361b3306b041cfba4f729504",
@@ -576,9 +576,9 @@
     "src/pool/v3/replay-store.ts": "de7cf042a4a5c4e2e41aa200e25dfe826b5c7c23cfb85cf3c692df33b6ab7518",
     "src/pool/v3/scope-evidence.ts": "b37ae977f1f5c1c5d61ec5d444794c24397907115e6ae9a9f0309ceb4542a879",
     "src/pool/v3/scope-reader.ts": "7181c770c1c01bf897ddb2ff2387bfe390d7b2b3a3a4177e531bfcaa4680b852",
-    "src/pool/v3/service-client.ts": "1da8c6cb3585a44e91e7cb3c499564c8363c8cbdd90cd66de0b4ad5d0c69326c",
-    "src/pool/v3/service-http.ts": "41d181c4efc9037d1026df0e96ec71ff79c0765a8d9befe6f0e0e16f205a0a4f",
-    "src/pool/v3/service-wire.ts": "c0514e538596f289bf9bd5724aa256d0465159a5d7f89367536d61fa37034baf",
+    "src/pool/v3/service-client.ts": "399ac3ee148fdd78e79a7b14ae0ff7c4fe3d2e38f84c9c4c474f571076e17599",
+    "src/pool/v3/service-http.ts": "adc48f3a5f500c6db8b80f331f0ecc7984da5735058568f2bb457ac11836f184",
+    "src/pool/v3/service-wire.ts": "5ddd4884383e58f3789e3d7bdbc6eb2a8754342036e84e1f643fc019b6ed99f6",
     "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
     "src/pool/v3/store.ts": "9e7e2bb3e609e79f626bfce294c4cee27a0e2f63d0e09e1755312057393149a6",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
