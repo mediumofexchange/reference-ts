@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
@@ -57,13 +57,13 @@ describe("v3 recovery journal and independent package reader", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
-  async function fixture() {
+  async function fixture(noCommitmentDuration = 4n) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "v3-recovery-journal-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
     const terms = encodeRootTerms({ obligor: issuer, operator, configuration: domain, venue: venue.id, interval: 20n,
       payout: { thing: "recovery units", quantumExponent: 0, perUnit: 1n },
-      silence: { noCommitmentDuration: 4n, challengeWindow: 5n }, nonService: { duration: 2n, count: 1n, window: 5n } });
+      silence: { noCommitmentDuration, challengeWindow: 5n }, nonService: { duration: 2n, count: 1n, window: 5n } });
     const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) }, backing = rootTermsName(terms);
     const context = { domain, header: { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing, link: backing }] } };
     const funded = prepareExactOutput(b(21), domain, b(31), backing, 10n), pad = prepareExactOutput(b(21), domain, b(32), backing, 0n);
@@ -144,6 +144,44 @@ describe("v3 recovery journal and independent package reader", () => {
       .rejects.toMatchObject({ code: "REFUSED", check: "SIGNATURE" });
     await expect(f.j.submit(encodeRecord(f.settle(d, 3n)))).rejects.toMatchObject({ code: "REFUSED", check: "DEADLINE" });
     await f.j.submit(encodeRecord(f.settle(d, 4n)));
+  });
+
+  /** The fixture's journal directory copied while the journal is closed, and the original and copy reopened. */
+  async function copied(f: Awaited<ReturnType<typeof fixture>>) {
+    f.j.close();
+    const directory = f.file.slice(0, -"/journal.db".length), copy = `${directory}-copy`; directories.push(copy);
+    cpSync(directory, copy, { recursive: true });
+    const open = (file: string) => { const j = new V3OperatorJournal(file, { secret: operatorSecret, venue: f.venue, reference, verifier }); journals.push(j); return j; };
+    return { original: open(f.file), copy: () => open(join(copy, "journal.db")) };
+  }
+
+  it("PROBE: an older copy whose original co-signed a tail it lost", async () => {
+    const f = await fixture(12n), { original, copy } = await copied(f);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    const first = decodeReceipt(await original.submit(encodeRecord(f.demand(f.venue.witnessedIndex()))));
+    original.close();
+    const restored = copy();
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    let second;
+    try { second = decodeReceipt(await restored.submit(encodeRecord(f.demand(f.venue.witnessedIndex(), 20n, b(18))))); }
+    catch (error) { console.log("PROBE A copy refused", (error as any).code, (error as Error).message); return; }
+    console.log("PROBE A", { firstPosition: first.position, secondPosition: second.position, sameSegment: hex(first.segment) === hex(second.segment),
+      sameStatement: hex(first.statementHash) === hex(second.statementHash) });
+  });
+
+  it("PROBE: an older copy whose original committed later, then silence", async () => {
+    const f = await fixture(12n), { original, copy } = await copied(f);
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    await original.submit(encodeRecord(f.demand(f.venue.witnessedIndex())));
+    await original.commit("later"); await original.publish(); original.close();
+    const restored = copy();
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    try { await restored.submit(encodeRecord(f.demand(f.venue.witnessedIndex(), 20n, b(18)))); console.log("PROBE B copy co-signed"); }
+    catch (error) { console.log("PROBE B submit refused", (error as any).code, (error as Error).message); }
+    f.venue.advance(f.venue.witnessedIndex() + 16n);
+    try { const opening = await restored.return("restored-return"); console.log("PROBE B return", opening.sequence);
+      await restored.publish(); console.log("PROBE B adopt", (await restored.adopt()).length); }
+    catch (error) { console.log("PROBE B return refused", (error as any).code, (error as Error).message); }
   });
 
   it("refuses the silence horizon before retiring the tail at a witnessed boundary", async () => {
