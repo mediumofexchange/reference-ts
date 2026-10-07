@@ -273,6 +273,19 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     if (store === undefined) throw new Error("the anchor context authenticated once and not again");
     this.store = store;
     this.restore(state);
+    // A copied or restored view is audited before any read (slice 13 M13e): reopening checks only what is cheap.
+    if (this.journal.copied()) {
+      try {
+        if (this.snapshot !== undefined) this.audit({ work: true });
+        else if (this.store.audit(true) !== this.journal.headerCount()) {
+          throw new VenueError("Ergo view audit: header rows are kept on neither the best chain nor a side branch");
+        }
+      } catch (error) {
+        if (!(error instanceof VenueError)) throw error;
+        throw new VenueError(`a copied or restored view does not reproduce: ${error.message}; remove its file and sync again from the anchor`);
+      }
+      this.journal.audited();
+    }
   }
 
   /** Attach once after opening the owning operator journal's outbox. */

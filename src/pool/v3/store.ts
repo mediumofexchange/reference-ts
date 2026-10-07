@@ -48,12 +48,12 @@
 // lit-v1 §9's) and only on a reference venue (guard.ts). Time is the venue's witnessed index.
 // SQLite fences handles of this journal; it cannot fence another database or
 // a copied key.
-import { statSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { fileIdentity } from "../../file-identity.js";
 import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
 import { RangeLimitError, replacementChain, type ChainLink, type HeldCommitment, type RangeAnswer, type RangeEntry,
   type ReplacementChain } from "../../record-range.js";
@@ -242,16 +242,6 @@ export interface JournalStatus {
   readonly restoredOpening?: bigint;
 }
 
-/** The database file's identity: its inode, and its birth time where the filesystem keeps one (not the device, which
- * a remount can change). A fresh copy, or a file restored to another disk or machine, has another (M13d). A file
- * overwritten in place, or a filesystem or machine snapshot rolled back, keeps it: detection is a guard, and a
- * restoration is the owner's to record (`restored`). */
-function fileIdentity(path: string): string {
-  const { ino, birthtimeNs } = statSync(path, { bigint: true });
-  // Linux reports a birth time only through statx; without it libuv reports the change time, which every write moves.
-  return BIRTH_TIME && birthtimeNs !== 0n ? `${ino}:${birthtimeNs}` : `${ino}`;
-}
-const BIRTH_TIME = !["linux", "android"].includes(process.platform);
 /** A restored journal's opening skips 2^16 sequences per spacing step (M13d): far above the few a lost instance's
  * one-in-flight rules can leave unwitnessed past the record's latest, and two restorations' openings, each with its
  * own random spacing, at least that far apart. */

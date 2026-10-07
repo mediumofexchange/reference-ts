@@ -299,7 +299,8 @@ export const fundingTree = (secret: Uint8Array): Uint8Array => payToPublicKeyTre
  * guard judges it: before each broadcast the signed transaction is replayed on an offline mempool funded with the
  * key's unspent boxes, and what it takes from the key (fees and record boxes' minimums) is reserved in `spend.db`
  * before it is sent, so a refused or uncertain broadcast keeps its reservation. A transaction past the budget is
- * refused (`BUDGET`); an exact resubmission of one already reserved passes.
+ * refused (`BUDGET`); an exact resubmission of one already reserved passes. A `spend.db` restored from a copy misses
+ * what was spent since it was made; the funding key's balance stays the hard cap (slice 13 M13e).
  */
 export class SpendBudget {
   private readonly db: DatabaseSync;

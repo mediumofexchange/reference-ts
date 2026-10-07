@@ -2,7 +2,9 @@
 // exact requests and pays from its own restored holdings of one backing, whose
 // canonical segment may scope several (C2.10). Node 24,
 // plaintext local custody: database/WAL/host backups require protected storage and
-// one active copy; the offline handoff is encrypted and freezes its source. A saved fulfillment or final payment is historical local
+// one active copy; the offline handoff is encrypted and freezes its source. A copy
+// or restored backup refuses to act (COPIED) until its restoration is recorded
+// (`recordRestoration`, slice 13 M13e). A saved fulfillment or final payment is historical local
 // accounting, never a second credit or permission to spend. Request
 // authentication and independent public-evidence retention are caller
 // obligations; this module supplies neither transport nor physical
@@ -26,6 +28,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
+import { fileIdentity } from "../../file-identity.js";
 import { verifySignatureStrict } from "../../keys.js";
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
@@ -60,10 +63,10 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 /** A lit key (a SHA-256 digest held as a bigint, lit-v1 §2) as its 32 bytes. */
 const keyBytesOf = (key: bigint): Uint8Array => hexToBytes(key.toString(16).padStart(64, "0"));
-const PROFILE = "moe/wallet/v3/8", KEYED_PROFILE = "moe/wallet/keyed/1", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/9", KEYED_PROFILE = "moe/wallet/keyed/2", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
-    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW" | "OWN_KEY" | "CLOSED", message: string) { super(message); this.name = "V3WalletError"; }
+    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW" | "OWN_KEY" | "CLOSED" | "COPIED" | "RESTORED", message: string) { super(message); this.name = "V3WalletError"; }
 }
 function requireThat(ok: boolean, code: V3WalletError["code"], message: string): asserts ok {
   if (!ok) throw new V3WalletError(code, message);
@@ -80,7 +83,9 @@ function identifier(value: Uint8Array): Uint8Array {
  * stored definitions (whitespace aside), so a database of any other shape
  * refuses before its source freezes. Every record the wallet builds, a payment (kind 2) or an act, is one saved
  * record under one alias namespace, with the notes it reserves, the output openings and zero input a reproof
- * rebuilds it from, and the records a reproof superseded. */
+ * rebuilds it from, and the records a reproof superseded. `wallet_file` keeps the identity of the file the wallet was
+ * made in, never exported; `receiver_restored` names the requests a restoration from a copy left unfulfilled, which
+ * its lost instance may have credited (slice 13 M13e). */
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS wallet_identity (id INTEGER PRIMARY KEY CHECK(id=1),
     profile TEXT NOT NULL, domain TEXT NOT NULL, venue TEXT NOT NULL, seed BLOB NOT NULL, owner INTEGER NOT NULL, seen TEXT NOT NULL) STRICT;
@@ -100,7 +105,9 @@ const SCHEMA = `
     record BLOB NOT NULL, receipt BLOB) STRICT;
   CREATE TABLE IF NOT EXISTS backer_acceptances (alias TEXT PRIMARY KEY, demand TEXT NOT NULL, deadline TEXT NOT NULL,
     owner TEXT NOT NULL, signature BLOB NOT NULL, backing BLOB NOT NULL, UNIQUE(demand, deadline)) STRICT;
-  CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;`;
+  CREATE TABLE IF NOT EXISTS wallet_custody (id INTEGER PRIMARY KEY CHECK(id=1), export BLOB, restored_from TEXT) STRICT;
+  CREATE TABLE IF NOT EXISTS wallet_file (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS receiver_restored (alias TEXT PRIMARY KEY REFERENCES receiver_requests(alias)) STRICT;`;
 /** A lit wallet's owner-index state per backing (lit-v1 §8): its highest exposed index, NULL where a wallet restored from
  * its seed alone (`seeded`) has not read the backing yet (its first read exposes every index through `high + 256`), the
  * highest index §8's restoration rule reaches (`h`), and the highest index any read found; −1 for none. */
@@ -121,6 +128,7 @@ const TABLES = [
   ["saved_outputs", ["cm", "alias", "value", "owner", "rho"]],
   ["saved_superseded", ["statement", "alias", "record", "receipt"]],
   ["backer_acceptances", ["alias", "demand", "deadline", "owner", "signature", "backing"]],
+  ["receiver_restored", ["alias"]],
 ] as const;
 /** A wallet file's layout by construction (slice 14 M14g): its profile, schema and exported tables. A lit wallet's
  * receiver rows name each request's owner key (`cm`) and index (`request_id`, a u64), and a fulfillment the output it
@@ -165,6 +173,9 @@ function ownOptions(options: WalletOptions) {
     venue, reference: ownReference };
   return { construction, layout: POOL_LAYOUT, domain: adoptedDomain(), venueId, reader };
 }
+/** `uncredited`: the holder confirms, from records outside the wallet, that a request a restoration marked was not
+ * credited by the wallet's lost instance (slice 13 M13e). */
+export interface FulfillOptions { readonly uncredited?: boolean }
 /** The canonical checkpoint and witnessed index a request was found paid at. Its evidence is what the
  * wallet's evidence file retains; nothing here stores or proves that evidence. */
 export interface Fulfillment {
@@ -374,6 +385,9 @@ export class V3Wallet {
   private turn: Promise<void> = Promise.resolve();
   private closed = false;
   private poisoned = false;
+  /** This file's identity where the wallet was made in another (a copy or a restored backup), until its restoration is
+   * recorded (slice 13 M13e). */
+  private copied: string | undefined;
 
   /** An existing wallet only: a database with no identity (a file truncated or replaced outside the wallet) is
    * refused, never filled with a fresh seed, so a lost wallet never comes back as a new one. */
@@ -429,6 +443,10 @@ export class V3Wallet {
       this.seed = identifier(meta.seed as Uint8Array); this.owner = meta.owner + 1n;
       this.keys = this.keyed?.keyring(this.seed, this.domain);
       this.db.prepare("UPDATE wallet_identity SET owner=? WHERE id=1").run(this.owner);
+      // M13e: a file the wallet was not made in is a copy, which acts on nothing until its restoration is recorded.
+      const file = fileIdentity(path), kept = this.db.prepare("SELECT identity FROM wallet_file WHERE id=1").get()?.identity;
+      if (kept === undefined) this.db.prepare("INSERT INTO wallet_file VALUES(1,?)").run(file);
+      else if (kept !== file) this.copied = file;
       this.db.exec("COMMIT");
     } catch (error) {
       try { this.db.exec("ROLLBACK"); } catch { /* preserve error */ }
@@ -476,7 +494,9 @@ export class V3Wallet {
     // A pool fulfillment names its request's exact output; a lit one the output it credited to its request's key.
     const lit = this.layout === KEYED_LAYOUT;
     requireThat(this.db.prepare("PRAGMA foreign_key_check").all().length === 0 && this.db.prepare(`SELECT 1 FROM receiver_fulfilled f
-      LEFT JOIN receiver_requests r ON r.alias=f.alias${lit ? "" : " AND r.cm=f.cm"} WHERE r.alias IS NULL`).get() === undefined,
+      LEFT JOIN receiver_requests r ON r.alias=f.alias${lit ? "" : " AND r.cm=f.cm"} WHERE r.alias IS NULL`).get() === undefined &&
+      // A restoration marks only requests it found unfulfilled, and fulfilling one clears its mark.
+      this.db.prepare("SELECT 1 FROM receiver_restored WHERE alias IN (SELECT alias FROM receiver_fulfilled)").get() === undefined,
       "INVALID", "backup state has unmatched references");
     if (lit) {
       // Well-formed owner-index rows, and each request naming its backing's key at an index the rows show exposed: a
@@ -494,7 +514,8 @@ export class V3Wallet {
         for (const row of this.db.prepare("SELECT request_id, backing, value, cm FROM receiver_requests").all()) {
           const id = row.request_id as Uint8Array, backing = row.backing as Uint8Array;
           const index = id.length === 40 && same(id.subarray(0, 32), backing) ? new DataView(id.buffer, id.byteOffset + 32).getBigUint64(0) : undefined;
-          const exposed = this.ownerKeys(backing)?.exposed;
+          // A restoration from a copy leaves exposure unknown until the next read (M13e): no index past h + 256.
+          const keys = this.ownerKeys(backing), exposed = keys === undefined ? undefined : keys.exposed ?? keys.high + this.keyed!.lookAhead;
           requireThat(index !== undefined && exposed !== undefined && index <= exposed && row.cm === hex(owners.key(backing, index)) &&
             typeof row.value === "string" && /^[1-9][0-9]{0,19}$/.test(row.value) && isValue(BigInt(row.value)), "INVALID", "backup state has a malformed keyed request");
         }
@@ -550,7 +571,13 @@ export class V3Wallet {
    * only its restored copy may, so nothing reaches a service or prover here. */
   private mutable(): void {
     this.active();
+    this.own();
     requireThat(!this.frozen(), "FENCED", "wallet was exported; only its restored copy may act");
+  }
+  /** M13e: a copy acts on nothing, and exports nothing new, until its restoration is recorded. */
+  private own(): void {
+    requireThat(this.copied === undefined, "COPIED", "this wallet's file is not the one it was made in: if it is a copy or a " +
+      "restored backup, record its restoration (moe wallet restore --copy), which closes what its lost instance may have done");
   }
   private transaction<T>(action: () => T, whileFrozen = false): T {
     this.active();
@@ -1004,6 +1031,56 @@ export class V3Wallet {
     return { frozen: row.export !== null, ...(row.restored_from === null ? {} : { restoredFrom: row.restored_from as string }) };
   }
 
+  /**
+   * Record that this database was restored from a copy or a backup (slice 13 M13e): run once the instance it was copied
+   * from is gone, before anything else; on a copy that identity did not catch (overwritten in place, a snapshot rolled
+   * back) too. The lost instance may have acted after the copy was made, and no local row shows what. In one
+   * transaction:
+   * - this file becomes the wallet's own, so it acts again (`COPIED` until then);
+   * - a lit wallet reads every owner key's exposure as unknown, as one restored from its seed does (lit-v1 §8), so its
+   *   next read of each backing exposes every index through `h + 256` and it never names a key the lost instance gave
+   *   another request;
+   * - every request not fulfilled here is marked restored: the lost instance may have credited it, which public evidence
+   *   cannot show, so `fulfill` refuses it (`RESTORED`) unless the holder confirms from records outside the wallet that
+   *   it was not credited.
+   * Recording again is harmless and marks the requests unfulfilled then. Answers the requests it marked.
+   */
+  recordRestoration(): { readonly requests: readonly string[] } {
+    this.active();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.active();
+      const open = this.db.prepare(`SELECT alias FROM receiver_requests WHERE alias NOT IN (SELECT alias FROM receiver_fulfilled)
+        ORDER BY rowid`).all().map(row => row.alias as string);
+      for (const name of open) this.db.prepare("INSERT OR IGNORE INTO receiver_restored VALUES(?)").run(name);
+      if (this.layout === KEYED_LAYOUT) {
+        this.db.prepare("UPDATE owner_wallet SET seeded='1'").run();
+        this.db.prepare("UPDATE owner_keys SET exposed=NULL").run();
+      }
+      const file = fileIdentity(this.path);
+      this.db.prepare("INSERT INTO wallet_file VALUES(1,?) ON CONFLICT(id) DO UPDATE SET identity=excluded.identity").run(file);
+      this.db.exec("COMMIT");
+      this.copied = undefined;
+      return { requests: open };
+    } catch (error) {
+      try { this.db.exec("ROLLBACK"); } catch { /* preserve error */ }
+      throw error;
+    }
+  }
+  /** A request a restoration marked is fulfilled only on the holder's word that its lost instance did not credit it. */
+  private uncredited(name: string, options: FulfillOptions): void {
+    requireThat(options.uncredited === true || this.db.prepare("SELECT 1 FROM receiver_restored WHERE alias=?").get(name) === undefined,
+      "RESTORED", "this request predates the wallet's restoration from a copy, and its lost instance may have credited it: " +
+      "fulfill it only if records outside the wallet show it was not (--uncredited)");
+  }
+  /** Whether this database is a copy whose restoration is not yet recorded. */
+  isCopy(): boolean { this.active(); return this.copied !== undefined; }
+  /** The requests a restoration marked that are not yet fulfilled. */
+  restoredRequests(): readonly string[] {
+    this.active();
+    return this.db.prepare("SELECT alias FROM receiver_restored ORDER BY rowid").all().map(row => row.alias as string);
+  }
+
   /** Offline handoff of the complete local state: the seed, labels, requests,
    * fulfillments, payments, reservations, openings, receipts and superseded
    * records, sealed under the caller's random 32-byte key. The export and the
@@ -1026,6 +1103,7 @@ export class V3Wallet {
           catch { throw new V3WalletError("INVALID", "invalid wallet backup or recovery credentials"); }
           return bytes;
         }
+        this.own();
         // Exact definitions, not only names: any other shape could export, freeze and then never restore.
         const stored = new Map(this.db.prepare("SELECT name, sql FROM sqlite_schema WHERE type='table'").all()
           .map(row => [row.name as string, String(row.sql).replace(/\s+/g, " ").trim()]));
@@ -1160,11 +1238,12 @@ export class V3Wallet {
    * The evidence read is what the wallet's evidence file retains; the caller
    * must arrange independent retention of it and of the authenticated venue
    * evidence, since keeping a copy cannot guarantee availability. */
-  async fulfill(name: string, packageBytes: Uint8Array, signed: SignedTerms): Promise<Fulfillment> {
+  async fulfill(name: string, packageBytes: Uint8Array, signed: SignedTerms, options: FulfillOptions = {}): Promise<Fulfillment> {
     this.poolRequests();
     name = alias(name); this.mutable();
     const note = this.prepared(name);
     requireThat(this.fulfillment(name) === undefined, "CONFLICT", "request already fulfilled");
+    this.uncredited(name, options);
     const { backing, own } = this.termsOf(signed);
     requireThat(same(backing, note.opening.backing), "INVALID", "terms do not name requested backing");
     await this.read(packageBytes, own, ({ terms, at, observed, canonical, force }) => {
@@ -1180,8 +1259,10 @@ export class V3Wallet {
       this.transaction(() => {
         requireThat(this.db.prepare("SELECT 1 FROM receiver_fulfilled WHERE alias=? OR cm=?").get(name, note.cm.toString()) === undefined,
           "CONFLICT", "request or payment already fulfilled");
+        this.uncredited(name, options);
         this.db.prepare("INSERT INTO receiver_fulfilled VALUES(?,?,?,?,?,?)").run(name, note.cm.toString(), checkpoint,
           at.toString(), terms.terms, terms.signature);
+        this.db.prepare("DELETE FROM receiver_restored WHERE alias=?").run(name);
         this.saw(at);
       });
     });
@@ -1944,12 +2025,13 @@ export class V3Wallet {
    * witnessed current index. An unspent output of the canonical state to the request's key, of its backing and quantity,
    * not locked by a standing demand, whose statement did not consume notes all of them this wallet's own, and not
    * credited to another request; its commitment is credited to this request alone before the result is returned. */
-  async keyedFulfill(name: string, packageBytes: Uint8Array, signed: SignedTerms): Promise<KeyedFulfillment> {
+  async keyedFulfill(name: string, packageBytes: Uint8Array, signed: SignedTerms, options: FulfillOptions = {}): Promise<KeyedFulfillment> {
     requireThat(this.keyed !== undefined, "INVALID", "a pool wallet takes exact-output requests");
     name = alias(name); this.mutable();
     const saved = this.keyedRequestRow(name);
     requireThat(saved !== undefined, "UNKNOWN", "unknown request");
     requireThat(this.keyedFulfillment(name) === undefined, "CONFLICT", "request already fulfilled");
+    this.uncredited(name, options);
     const { backing, own } = this.termsOf(signed), { request, index } = saved;
     requireThat(same(backing, request.backing), "INVALID", "terms do not name requested backing");
     await this.read(packageBytes, own, ({ terms, at, observed, canonical, force, notes }) => {
@@ -1972,7 +2054,9 @@ export class V3Wallet {
       this.transaction(() => {
         requireThat(this.db.prepare("SELECT 1 FROM receiver_fulfilled WHERE alias=? OR cm=?").get(name, note.cm.toString()) === undefined,
           "CONFLICT", "request or payment already fulfilled");
+        this.uncredited(name, options);
         this.db.prepare("INSERT INTO receiver_fulfilled VALUES(?,?,?,?,?,?)").run(name, note.cm.toString(), checkpoint, at.toString(), terms.terms, terms.signature);
+        this.db.prepare("DELETE FROM receiver_restored WHERE alias=?").run(name);
         this.saw(at);
       });
     });

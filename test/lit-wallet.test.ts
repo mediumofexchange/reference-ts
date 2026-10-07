@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -241,6 +241,71 @@ describe("the one wallet holding lit notes", () => {
     await restored.submit("move", f.service); await f.checkpoint();
     await restored.sync(await f.served(), f.signed);
     expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 957n)))).toBe(true);
+  });
+
+  // --- Slice 13 M13e: a wallet restored from a copy of its files ------------------------------------------------------
+  /** A plain copy of a closed wallet's database and side files, as an owner's backup takes it. */
+  const copyWallet = (from: string, to: string) => {
+    for (const suffix of ["", "-wal", "-shm", ".evidence", ".replay", ".replay.sha256"]) {
+      if (existsSync(from + suffix)) copyFileSync(from + suffix, to + suffix);
+    }
+  };
+
+  it("acts on nothing from a copy until its restoration is recorded, which never names a key the lost instance exposed " +
+    "and fulfills a request it may have credited only on the holder's word", async () => {
+    const f = await fixture(), payer = f.open("payer");
+    await f.issue(payer.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    let shop = f.open("shop");
+    const invoice = shop.keyedRequest("invoice", f.backing, 4n);
+    await shop.sync(await f.served(), f.signed); shop.close();
+    // The owner's backup, after which the original exposes another key, is paid and credits the invoice, and is lost.
+    copyWallet(f.path("shop"), f.path("backup"));
+    shop = V3Wallet.open(f.path("shop"), { construction: LIT, venue: f.venue, reference }); wallets.push(shop);
+    const lost = shop.keyedRequest("order-A", f.backing, 4n);
+    await payer.prepare("pay", { request: invoice, value: 4n }, await f.served(), f.signed);
+    await payer.submit("pay", f.service); await f.checkpoint();
+    expect((await shop.keyedFulfill("invoice", await f.served(), f.signed)).request.value).toBe(4n);
+    shop.close();
+
+    const restored = V3Wallet.open(f.path("backup"), { construction: LIT, venue: f.venue, reference }); wallets.push(restored);
+    expect(restored.isCopy()).toBe(true);
+    expect(await refusal(() => restored.keyedRequest("order-B", f.backing, 4n))).toBe("COPIED");
+    expect(await refusal(() => restored.exportBackup(b(79)))).toBe("COPIED");
+    expect(await refusal(restored.keyedFulfill("invoice", await f.served(), f.signed))).toBe("COPIED");
+    // Reads stay open.
+    expect(restored.recoverySeed().length).toBe(32);
+    expect(restored.recordRestoration()).toEqual({ requests: ["invoice"] });
+    expect(restored.isCopy()).toBe(false);
+    // Before its first read the backing's exposure is unknown; that read exposes every index through h + 256 (lit-v1 §8),
+    // so the key the lost instance gave order-A is never given again.
+    expect(await refusal(() => restored.keyedRequest("order-B", f.backing, 4n))).toBe("WINDOW");
+    await restored.sync(await f.served(), f.signed);
+    expect(await refusal(() => restored.keyedRequest("order-B", f.backing, 4n))).toBe("WINDOW");
+    expect(same(lost.owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 1n)))).toBe(true);
+    // The invoice the lost instance credited is refused, and credited only on the holder's word.
+    expect(await refusalOf(restored.keyedFulfill("invoice", await f.served(), f.signed))).toMatch(/^RESTORED: .*--uncredited/);
+    expect(restored.restoredRequests()).toEqual(["invoice"]);
+    expect((await restored.keyedFulfill("invoice", await f.served(), f.signed, { uncredited: true })).request.value).toBe(4n);
+    expect(restored.restoredRequests()).toEqual([]);
+    // Recording again on the wallet's own file changes no key it exposed.
+    expect(restored.recordRestoration()).toEqual({ requests: [] });
+    await restored.sync(await f.served(), f.signed);
+    expect(await refusal(() => restored.keyedRequest("order-B", f.backing, 4n))).toBe("WINDOW");
+  });
+
+  it("hands a restoration's marks to an encrypted backup's restored copy", async () => {
+    const f = await fixture(), shop = f.open("shop");
+    shop.keyedRequest("invoice", f.backing, 4n); shop.close();
+    copyWallet(f.path("shop"), f.path("backup"));
+    const restored = V3Wallet.open(f.path("backup"), { construction: LIT, venue: f.venue, reference }); wallets.push(restored);
+    restored.recordRestoration();
+    const key = b(80), backup = restored.exportBackup(key);
+    const { walletBackupDigest } = await import("../src/pool/v3/wallet-backup.js");
+    const handed = V3Wallet.restoreBackup(f.path("handed"), { construction: LIT, venue: f.venue, reference }, backup, key, walletBackupDigest(backup));
+    wallets.push(handed);
+    expect(handed.isCopy()).toBe(false);
+    expect(handed.restoredRequests()).toEqual(["invoice"]);
+    expect(await refusal(handed.keyedFulfill("invoice", await f.served(), f.signed))).toBe("RESTORED");
   });
 
   // --- M14g2: the acts and the window move -----------------------------------------------------------------------------

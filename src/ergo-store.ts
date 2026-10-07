@@ -5,6 +5,7 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared } from "./bytes.js";
+import { fileIdentity } from "./file-identity.js";
 import type { ErgoHeaderRow, ErgoHeaderRows } from "./ergo-headers.js";
 import type { AttributedObject, ErgoTransactionView } from "./ergo-profile.js";
 import { RangeLimitError, type RangeLimits, type RecordKind } from "./record-range.js";
@@ -195,6 +196,9 @@ export class ErgoVenueJournal {
   private readonly identity: string;
   private rows: JournalHeaderRows | undefined;
   private closed = false;
+  /** The identity of the file this view was kept in, where it is another file's (a copy or a restored backup), until
+   * the view that attaches the journal has audited every row (slice 13 M13e). */
+  private copiedFrom: { readonly path: string; readonly identity: string } | undefined;
 
   constructor(path: string, venueId: Uint8Array, memory?: typeof IN_MEMORY) {
     const durable = memory !== IN_MEMORY;
@@ -204,6 +208,7 @@ export class ErgoVenueJournal {
     this.identity = ErgoVenueJournal.identityOf(venueId);
     this.db = new DatabaseSync(durable ? path : ":memory:", { timeout: 5000 });
     this.owner = this.open(durable);
+    if (durable) this.judgeFile(path);
   }
   /** A private in-memory database: a view without a journal keeps the same rows, for as long as it lives. */
   static memory(venueId: Uint8Array): ErgoVenueJournal {
@@ -258,6 +263,25 @@ export class ErgoVenueJournal {
       try { this.db.exec("ROLLBACK"); } catch { /* preserve cause */ }
       this.db.close(); throw error;
     }
+  }
+  /** A durable view keeps its file's identity: a file it was not made in is a copy, which `ErgoVenue` audits before any
+   * read, recording the identity only once the audit passes (slice 13 M13e). */
+  private judgeFile(path: string): void {
+    try {
+      this.db.exec("CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL) STRICT");
+      const identity = fileIdentity(path), kept = this.db.prepare("SELECT identity FROM file WHERE id=1").get()?.identity;
+      if (kept === undefined) this.db.prepare("INSERT INTO file VALUES(1,?)").run(identity);
+      else if (kept !== identity) this.copiedFrom = { path, identity };
+    } catch (error) { this.db.close(); throw error; }
+  }
+  /** Whether this view's file is a copy not yet audited. */
+  copied(): boolean { return this.copiedFrom !== undefined; }
+  /** After an audit of every row: this file is the view's own from now on. */
+  audited(): void {
+    this.assertOwner();
+    if (this.copiedFrom === undefined) return;
+    this.db.prepare("UPDATE file SET identity=? WHERE id=1").run(this.copiedFrom.identity);
+    this.copiedFrom = undefined;
   }
   private meta() {
     const q = this.db.prepare("SELECT * FROM meta WHERE id=1"); q.setReadBigInts(true); return q.get();

@@ -33,7 +33,7 @@ const record = (task: ProofTask): Record => ({ domain, kind: task.kind, publicIn
   proof: b(task.kind), authorization: new Uint8Array(), capsules: task.capsules });
 const prove: LocalProver = async task => record(task);
 const TABLES = ["receiver_requests", "receiver_fulfilled", "saved_records", "saved_inputs", "saved_outputs", "saved_superseded", "backer_acceptances"];
-const COLUMNS = [5, 6, 15, 2, 5, 4, 5];
+const COLUMNS = [5, 6, 15, 2, 5, 4, 5, 1];
 /** The specific refusal, not merely a throw. */
 function throws(action: () => unknown, shape: unknown): void {
   let thrown: unknown;
