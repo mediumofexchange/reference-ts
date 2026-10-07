@@ -520,8 +520,9 @@ the evidence file, then, where it does not answer, from each replica added (belo
 source answers, a read uses the package the last sync kept. A read left `unresolved-evidence` over a source's answer
 syncs that source again from nothing and reads again; where that read is still unresolved, the source is passed over
 as `UNRESOLVED` and the next is asked from nothing, so a source that sent its selection but withheld an earlier
-dependency cannot strand the wallet past its mark; each source is asked from nothing at most once per selection it serves,
-recorded per backing in `unresolved.json` ([decision](../decisions/2026-10.md#2026-10-07--repair-a-read-a-source-left-unresolved-from-nothing-then-from-the-next-source-slice-13-m13b-audit-30-au)). `reader supply`, `presentation` and a replica's rounds read the same way. Each read says where its evidence came from (`evidence`:
+dependency cannot strand the wallet past its mark; each source is asked from nothing at most once per rising selection it serves,
+recorded per backing in `unresolved.json` (removing it asks every source from nothing again, the remedy the refusal names
+for a backing whose selection no longer moves or a file damaged since) ([decision](../decisions/2026-10.md#2026-10-07--repair-a-read-a-source-left-unresolved-from-nothing-then-from-the-next-source-slice-13-m13b-audit-30-au)). `reader supply`, `presentation` and a replica's rounds read the same way. Each read says where its evidence came from (`evidence`:
 `served`, `replica` with its URL, `kept`, `file` or `saved`) and names the sources it passed over (`skipped`). The first request or payment shows the request
 channel, thin-interval and publication-funding explanations; each demand and `freshen` says what its tags link, and each
 publication file what its relay's funding links.

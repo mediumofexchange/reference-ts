@@ -281,7 +281,7 @@ describe("a replica of a lit operator's evidence", () => {
     // asks each only after its mark while it serves that selection: no answer from nothing again.
     sources[0]!.withholds = Infinity; sources[1]!.withholds = Infinity; asked.length = 0;
     await expect(readRepaired(supply(new Map()), read, record)).rejects.toMatchObject({ status: "unresolved-evidence",
-      message: `unresolved-evidence: no source resolved the read (operator UNRESOLVED, ${f.url} UNRESOLVED)` });
+      message: `unresolved-evidence: no source resolved the read (operator UNRESOLVED, ${f.url} UNRESOLVED); removing the directory's unresolved.json asks every source from nothing again` });
     expect(asked).toEqual(["operator", "operator full", `${f.url} full`]);
     expect([...recorded]).toEqual([["operator", selection], [f.url, selection]]);
     asked.length = 0;
