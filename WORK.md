@@ -3,23 +3,23 @@
 Updated: 2026-10-07
 
 ## Goal
-**Slice 14: the lit implementation** (Next 10; numbered after 13 but before it; spec `lit-v1.md`, a draft until adopted;
+**Slice 14: the lit implementation** (Next 10; order 14, 12, 13; spec `lit-v1.md`, a draft until adopted;
 [layouts decision](decisions/2026-10.md#2026-10-05--fix-the-lit-constructions-bytes-outputs-derived-by-every-reader-owner-signatures-over-the-statement-the-pools-frames-without-a-proof-digest-next-10)).
 Acceptance: lit trails replay through the shared seams with lit-v1's verdicts (hostile cases), vectors bind every layout; an operator
-journal and a wallet run lit backings through the `moe` commands (direction item 1); then a decision adopts `moe/lit/v1`. Stop: adoption, after the journal and wallet ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4).
-- **Done and merged (2026-10-07):** M14a–b bytes and frames, M14c state machine (#116), M14d reader (#120), M14e conformance (#122,
-  [decision](decisions/2026-10.md#2026-10-06--exclude-a-lit-record-that-splits-but-does-not-decode-rebuild-kept-imports-and-vector-every-layout-slice-14-m14e)),
-  M14f journal (#123, [decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f)), M14g1 wallet notes, keys and payments (#125, [decision](decisions/2026-10.md#2026-10-06--hold-lit-notes-in-the-one-wallet-with-owner-keys-per-backing-found-under-a-doubling-window-slice-14-m14g)),
-  M14g2 acts and the window move (#126, [decision](decisions/2026-10.md#2026-10-06--take-lits-acts-and-8s-window-move-in-the-one-wallet-presented-notes-spending-as-any-other-slice-14-m14g2)); spec #15–#16 merged (`3af6abe`).
-- **M14g3 merged** (#127): service wire, server and client read through the construction, one profile; one receipt codec per
-  construction serves the wallet too ([decision](decisions/2026-10.md#2026-10-07--serve-a-lit-journal-through-the-one-service-wire-and-client-the-construction-an-option-slice-14-m14g3)). **Next:** M14g4 `moe` dispatch on the terms' construction (operator journal, wallet, client `construction`); M14h adoption.
+journal and a wallet run lit backings through the `moe` commands, failure path included (gap route, return and adoption, C3.8's reading);
+then a decision adopts `moe/lit/v1`. Stop: adoption ([M14f decision](decisions/2026-10.md#2026-10-06--serve-a-lit-scope-from-the-one-operator-journal-the-construction-an-option-slice-14-m14f) item 4; [direction 2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)).
+- **Done and merged (2026-10-07; decisions M14a–M14g3 in [2026-10](decisions/2026-10.md)):** M14a–b bytes and frames, M14c state machine (#116),
+  M14d reader (#120), M14e conformance (#122), M14f journal (#123), M14g1 wallet notes, keys and payments (#125), M14g2 acts and the window
+  move (#126), M14g3 service wire, server and client through the construction, one receipt codec per construction (#127); spec #15–#16 (`3af6abe`).
+- **Next:** M14g4 `moe` dispatch on the terms' construction (operator journal, wallet, client `construction`),
+  accepted by a synthetic-node drill of a lit backing: every act and a supply read, then the gap route with the operator stopped (relay
+  publish, force read) and a return and adoption. M14g5: settle (am) as a lit-v1 draft clarification (spec first, fresh review), then lit
+  `presentation` (C3.8). M14h adoption, once nothing can move a byte or verdict.
 
 ## Status
-- **Slice 10 done** (PRs #69–#91, #117, decisions [M10a](decisions/2026-10.md#2026-10-02--ship-the-six-compiled-relations-in-the-package-and-require-every-readers-verifier-to-name-them-slice-10-m10a)–[M10d](decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands)
-  run from an `npm pack` install with real proofs on the synthetic node and live on the testnet (`command-drill.mjs --testnet`); no testnet difficulty floor (measured).
-- **Slice 11 done** (PRs #92–#95, #97–#99, #101–#106, #108, #109, #111; decisions M11a–M11b12 in [2026-10](decisions/2026-10.md)): the Ergo view in SQLite rows, Next 4's
-  (k)–(n), (s), (v), (w) closed, a view caught up in bounded passes; every budget holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)).
-  Gaps: the operator's own memory at depth (Next 5); the wallet's 10⁵ points, lost to a container restart.
+- **Slices 10–11 done** (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
+  install with real proofs on the synthetic node and live on the testnet; the Ergo view in SQLite rows, caught up in bounded passes; every budget
+  holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)) except the operator's own memory at depth and the wallet's 10⁵ points, lost to a restart (Next 5).
 - **Audits**: area 27 (state machine, [decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); area 29 (wallet, [decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)); area 31 (readers): a continuation whose opening the record moved past is excluded, or lapsed in a gap, and a receipt reads a term end and a moved-past `after` without its opening ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)); the journal not yet. Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): resumed kept walks recheck scope; a truncated `wallet.db` refuses; no failed act is published; Node floor 24.21.0.
 
 ## Evidence
@@ -31,8 +31,9 @@ journal and a wallet run lit backings through the `moe` commands (direction item
 
 ## Next
 1. (Item numbers and letters are stable: AGENTS.md and decisions cite them.)
-2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2). **Slice 12** ([direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)):
-   duties 2–3 (transport, a credential not per holder, syncs, gap funding); first probe: clients through a SOCKS5 proxy such as Tor.
+2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2). **Slice 12** ([direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)), after 14:
+   duties 2–3 (transport, a credential not per holder, syncs, gap funding); first probe: clients through a SOCKS5 proxy such as Tor. Also
+   a replica ([2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)): an evidence-only role serving kept, verified evidence through the one wire; the operator-offline drill syncs from it.
 3. M10c2 leftovers: synthetic index lag knob; read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
 4. Deferred review findings, taken when their files are touched (closed letters are in their decisions). (g) `journal-crash.mjs` covers
@@ -51,9 +52,9 @@ journal and a wallet run lit backings through the `moe` commands (direction item
    output awaiting adoption is not reported at all (only never as spendable). Review 2026-10-06: (aa) the testnet drill sweeps funding keys
    in-process only (no signal handler or `--sweep <dir>`; boxes above the indexed height read as dust); (ab) no command prints a saved
    acceptance's absolute deadline for an exact `accept --deadline +n` retry; (ac) `keepContext`'s throwaway views keep `:memory:` journals
-   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error). M14g1 review: (al) a keyed scan's identity names every held backing's window (one replay of every held scope per new backing or grown window; old namespaces kept). M14g2: (am) lit-v1 §7 question: read an acceptance naming the demand's presenter or an input owner key as no answer under C3.8 (K escapes dishonour otherwise); (an) no lit gap-route act or `presentation` yet; a remade lit burn takes a new change index.
+   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error). M14g1 review: (al) a keyed scan's identity names every held backing's window (one replay of every held scope per new backing or grown window; old namespaces kept). M14g2: (am) lit-v1 §7 question: an acceptance whose owner is the holder's key (the presenter, an input owner, or any key K links) reads as answered under C3.8, so K escapes dishonour; M14g5 chooses (no answer for keys a reader can tell, or the owner key's signature in the acceptance, a byte change); (an) no lit gap-route act or `presentation` yet (M14g4–g5); a remade lit burn takes a new change index.
    Audit 31 ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)): (ag) the package reader's scope from the selected snapshot (§7.1); (ah) own snapshot before term lapse; (ai) an undecodable committed snapshot surfaces as `EncodingError`; (aj) the non-service count rereads every publication and keeps every request; (ak) the replay identity names the backing, so a sibling's read replays again.
-5. Slice 11 leftovers. Measure `moe operator serve` as its own process at 10⁵ (the depth probe's process, which also held the synthetic
+5. Slice 11 leftovers. One design-point rerun, in slice 13 at the latest: `moe operator serve` as its own process at 10⁵, and the wallet's first sync and steady state at 10⁵ (the depth probe's process, which also held the synthetic
    node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
    if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
@@ -65,8 +66,7 @@ journal and a wallet run lit backings through the `moe` commands (direction item
    package and its artifacts, installed-package interoperability, backup and restore drills within the standing authority. Security reviews
    until then: separate AI instances (fresh reviewers, rolling audits); the external review once the product is complete (2026-10-01).
 7. CI's real-proof checks run in five parallel groups (12 min, not 43) and skip for report/unread-doc commits ([decision](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)); lever: split the drill
-   or local replay. Proposed AGENTS.md wording: "(real-proof jobs take 15–30 min;" → "(real-proof jobs take about 12 min; reports-and-docs commits skip them;".
-   M10e2 left: the harness's proof-free cases in vitest with stand-in proofs; narrow the optional `StoredEvent.index`/`judgedIndex` when touched.
+   or local replay. M10e2 left: the harness's proof-free cases in vitest with stand-in proofs; narrow the optional `StoredEvent.index`/`judgedIndex` when touched.
    Root-cause a Windows hang: PR #114 run 37350884943 attempt 1 timed out (30 s, vitest worker RPC too) in `pool-v3-replay-store` keep-point tests and `cli.test.mjs:158`; green on re-run.
 8. On touching affected files: fold `fulfill` into `sync`; shared byte helpers/caller ownership; Ergo section versus transaction charging;
    served-trail caller-object cache; drop the explicit `vite` dev pin at the next dependency change; test a second commit refused while one is in
@@ -94,7 +94,7 @@ journal and a wallet run lit backings through the `moe` commands (direction item
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- None. Runs review through other instances and merge (maintainer's direction 2026-10-07; autorun preamble "Delivery").
+- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 
-Roughly **67% done / 33% remaining** (range 57–76%), reassessed 2026-10-07: the one wallet holds lit notes and takes every lit act (M14g1–g2),
-merged with M14e–f; the lit service wire and commands, lit adoption, release assurance, holder transport, qualified storage and mainnet remain.
+Roughly **65% done / 35% remaining** (range 55–74%), reassessed 2026-10-07 (direction check): the lit service wire is merged; the lit commands,
+failure path and adoption, an evidence replica (not counted before), holder transport, release assurance, qualified storage and mainnet remain.
