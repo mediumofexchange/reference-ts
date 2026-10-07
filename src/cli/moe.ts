@@ -18,7 +18,9 @@ roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show
        operator (init, venue create, open, serve, return, adopt)
        reader (init, terms add|show, service add, supply, presentation)
        relay (init, publish)
-init --construction moe/pool/v3 (the default) or moe/lit/v1 (wallet, operator, reader) names the one construction a directory serves.`;
+init --construction moe/pool/v3 (the default) or moe/lit/v1 (wallet, operator, reader) names the one construction a directory serves.
+serve --onion <v3 host> [--holder-port <p>] adds a holders' listener for a Tor onion service and writes holders.json; a holder
+reaches an onion URL only with NODE_USE_ENV_PROXY=1 and HTTP_PROXY naming a loopback HTTP CONNECT proxy (Tor's HTTPTunnelPort).`;
 
 /** The fields a refusal prints, or undefined for an unexpected failure. */
 async function refusal(error: unknown): Promise<{ code: string; check?: string; message: string } | undefined> {

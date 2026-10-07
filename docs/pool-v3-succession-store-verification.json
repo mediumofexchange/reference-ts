@@ -22,19 +22,19 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1285
+      "elapsedMs": 1295
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3116
+      "elapsedMs": 3119
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3082
+      "elapsedMs": 3090
     },
     {
       "name": "A revoked issue refused",
@@ -49,7 +49,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "2261233c042322f55531c96b723172fc487a8f7f74afbb8e2e2dcacf6086ba3a",
-    "history": "8b7421d5fa07b919dfd0bab0efa2f07eacbef0ce523deb6aafa5525733357087",
+    "history": "691f448bd7b833f8ae2fbf5f6f20a5c04054496f6c0cd2782e78be6ec854fd47",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -107,7 +107,7 @@
       }
     ]
   },
-  "elapsedMs": 24114,
+  "elapsedMs": 24271,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",

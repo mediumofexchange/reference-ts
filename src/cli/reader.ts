@@ -99,11 +99,14 @@ export function termsCommand(argv: readonly string[], role: Role): void {
 
 /** A service file: the operator's service URL and its service-wide wallet token, never per holder. */
 interface ServiceFile { readonly url: string; readonly walletToken: string }
+/** The operator's loopback service, or its holders' listener as a v3 onion service (M12a), which the client reaches only
+ * through a loopback proxy. */
+const SERVICE_URL = /^http:\/\/(127\.0\.0\.1:[0-9]{1,5}|[a-z2-7]{55}d\.onion(:[0-9]{1,5})?)\/$/;
 function parseService(value: unknown): ServiceFile {
   const v = value as Partial<ServiceFile>;
   if (value === null || typeof value !== "object" || Object.keys(value).sort().join() !== "url,walletToken" ||
-      typeof v.url !== "string" || !/^http:\/\/[^\s]+$/.test(v.url) || typeof v.walletToken !== "string" || !/^[0-9a-f]{64}$/.test(v.walletToken)) {
-    throw new CommandError("INVALID", "the service file is not { url, walletToken }");
+      typeof v.url !== "string" || !SERVICE_URL.test(v.url) || typeof v.walletToken !== "string" || !/^[0-9a-f]{64}$/.test(v.walletToken)) {
+    throw new CommandError("INVALID", "the service file is not { url, walletToken } with a loopback or v3 onion URL");
   }
   return { url: v.url, walletToken: v.walletToken };
 }

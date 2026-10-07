@@ -3,17 +3,22 @@
 Updated: 2026-10-07
 
 ## Goal
-**Slice 14 (lit notes) is done: `moe/lit/v1` is adopted** ([M14h decision](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h);
-spec #18, `80a4ea1`). Lit trails replay through the shared seams with lit-v1's verdicts, vectors bind every layout, and an operator journal and a
-wallet run lit backings through the `moe` commands on the synthetic node, failure path included. M14a–M14g5b: PRs #116–#131 (decisions in
-[2026-10](decisions/2026-10.md)); M14h: a fresh conformance read ([archive](decisions/archive/2026-10-07-lit-v1-adoption-conformance-read.md))
-found no byte or verdict divergence, and a fresh review of the adoption text. Limits: no lit backing on a live venue; §12's costs unmeasured.
-- **Next: slice 12** (Next 2; order 12, then 13): the holder's transport, funding and evidence sources. Write its goal, acceptance and stop here
-  first, from the [direction of 2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)
-  item 2; cheapest decisive probe first (clients through a SOCKS5 proxy such as Tor, then the replica's evidence read).
+**Slice 12: the holder's transport, funding and evidence sources** (Next 2; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)
+item 2, [2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12) item 2; visibility duties 2–3).
+Acceptance: (a) every holder command reaches an operator and nodes through a user-chosen anonymising proxy with no new
+cryptography, drilled in CI with no direct path; (b) a replica, an evidence-only role serving kept, verified evidence through the
+one wire, from which the operator-offline drill syncs a wallet; (c) decisions, with explanations and adversarial review, on the
+service credential (not per holder), syncs that do not tie an address to the backing they spend, and gap funding apart from
+identified coins. Stop: (a)–(c) merged with CI green; a live Tor measurement is a local-machine Open question.
+- **M12a ([decision](decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a), `claude/m12a-transport`):** holders reach an operator as a Tor onion
+  service through their own loopback proxy (Node's environment proxy), refusing `PROXY` unless fetch tunnels; `serve --onion` runs a
+  holders-only listener; the lit command drill runs every holder by onion name under a direct-connection guard. Design and patch
+  reviewed (findings taken). Limits: no live Tor here (Open question); per-command isolation; undici spins on a silent proxy.
+- **Then:** M12b, the replica and its credential; M12c, gap funding and the explanations. Slice 14 (lit, adopted at spec `80a4ea1`)
+  is done: [M14h](decisions/2026-10.md#2026-10-07--adopt-moelitv1-with-9s-configuration-reading-the-contracts-in-the-text-pool-v3-fixes-slice-14-m14h).
 
 ## Status
-- **Slices 10–11 done** (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
+- **Slices 10–11 done** (slice 14 too: Goal) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
   install with real proofs on the synthetic node and live on the testnet; the Ergo view in SQLite rows, caught up in bounded passes; every budget
   holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)) except the operator's own memory at depth and the wallet's 10⁵ points, lost to a restart (Next 5).
 - **Audits**: area 27 (state machine, [decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); area 29 (wallet, [decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)); area 31 (readers): a continuation whose opening the record moved past is excluded, or lapsed in a gap, and a receipt reads a term end and a moved-past `after` without its opening ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)); the journal not yet. Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): resumed kept walks recheck scope; a truncated `wallet.db` refuses; no failed act is published; Node floor 24.21.0. Simplify 2026-10-07: one evidence chain for both constructions (#133); the store checks' live testnet modes retired (#134).
@@ -27,9 +32,7 @@ found no byte or verdict divergence, and a fresh review of the adoption text. Li
 
 ## Next
 1. (Item numbers and letters are stable: AGENTS.md and decisions cite them.)
-2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2). **Slice 12** ([direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance)), after 14:
-   duties 2–3 (transport, a credential not per holder, syncs, gap funding); first probe: clients through a SOCKS5 proxy such as Tor. Also
-   a replica ([2026-10-07](decisions/2026-10.md#2026-10-07--exercise-lits-failure-path-and-settle-7s-acceptance-owner-before-adoption-and-give-evidence-availability-a-replica-in-slice-12)): an evidence-only role serving kept, verified evidence through the one wire; the operator-offline drill syncs from it.
+2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: `freshen`, relay, explanations landed (M10c2); duties 2–3 and the replica are slice 12 (Goal).
 3. M10c2 leftovers: synthetic index lag knob; read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
 4. Deferred review findings, taken when their files are touched (closed letters are in their decisions). (g) `journal-crash.mjs` covers
@@ -90,7 +93,7 @@ found no byte or verdict divergence, and a fresh review of the adoption text. Li
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Deletion list (2026-10-07): none open; the merged spec and code branches of M14g5a are gone from both remotes (a stale local tracking ref only).
 
 Roughly **68% done / 32% remaining** (range 58–77%), reassessed 2026-10-07 (M14h): lit notes are adopted and run through the commands,

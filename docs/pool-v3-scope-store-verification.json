@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1292
+      "elapsedMs": 1342
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1013
+      "elapsedMs": 1010
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3102
+      "elapsedMs": 3137
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3075
+      "elapsedMs": 3084
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 993
+      "elapsedMs": 998
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3071
+      "elapsedMs": 3079
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3068
+      "elapsedMs": 3072
     }
   ],
   "transactions": [],
@@ -67,8 +67,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "a24035c82e1cc81f88aeb3a9d885409d9ff30719398619cc4e86308d0b7f28c0",
-      "history": "6412ec49b25233bf9a7432e0d1a23e9b801385e88060affad92ace03d8e5ed48",
+      "spentRoot": "b446d30e62d0c454fa1dfabf9625d9a92360b6c7d9e8c4368d79b54f46667d8a",
+      "history": "10f5249e49468ba081bc06fefd0f58a43a240cef48ed940af6b89eef588f6d4d",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -123,8 +123,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "a24035c82e1cc81f88aeb3a9d885409d9ff30719398619cc4e86308d0b7f28c0",
-      "history": "6412ec49b25233bf9a7432e0d1a23e9b801385e88060affad92ace03d8e5ed48",
+      "spentRoot": "b446d30e62d0c454fa1dfabf9625d9a92360b6c7d9e8c4368d79b54f46667d8a",
+      "history": "10f5249e49468ba081bc06fefd0f58a43a240cef48ed940af6b89eef588f6d4d",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -182,7 +182,7 @@
       ]
     }
   },
-  "elapsedMs": 34949,
+  "elapsedMs": 35202,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",

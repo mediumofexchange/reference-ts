@@ -6,8 +6,13 @@ It also rejects non-loopback peers. Operator keys, activation, recovery and
 venue configuration stay with the local journal owner. This is a guarded
 reference service, with no public deployment or production configuration claim.
 
+Created without an admin credential (`createV3Service(journal, { walletToken })`), the service serves holders only:
+submission and evidence, with sixteen connections of its own. `moe operator serve --onion <host>` runs one beside the
+operator's own for a Tor onion service, whose every peer is the loopback Tor daemon, so the loopback check no longer
+keeps the network out there; the admin credential never reaches that listener ([M12a](../decisions/2026-10.md#2026-10-07--reach-an-operator-as-an-onion-service-through-the-holders-own-proxy-and-serve-holders-on-a-listener-of-their-own-slice-12-m12a)).
+
 `createV3Service(journal, { walletToken, adminToken })` requires distinct random
-32-byte credentials encoded as lowercase hex. Exactly one `Authorization:
+32-byte credentials (the admin one only for the operator's own listener, below) encoded as lowercase hex. Exactly one `Authorization:
 Bearer …` header is required. The wallet credential permits submission and
 evidence retrieval; the admin credential additionally permits commit and publish.
 Credentials grant local operations, never protocol authorization or finality.

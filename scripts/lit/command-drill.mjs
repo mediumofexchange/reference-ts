@@ -8,6 +8,11 @@
 // (M14g5b). A withdrawn demand's presented note pays as any other (lit has no freshen) and reads withdrawn. With the
 // operator stopped past silence, a demand and its settlement are published through the relay and read final by force
 // (the holder's sync and C3.8 reading, and the reader on the kept package), then the operator returns and adopts.
+// Every holder process (wallet, reader, relay) reaches the operator only as an onion service (M12a): `serve --onion` adds
+// a holders' listener, and holders run with Node's environment proxy naming a CONNECT-only proxy here that, as Tor
+// does, maps the onion name to that listener and refuses every other target, with the node direct (NO_PROXY);
+// a guard ends any holder process that connects anywhere but the proxy and the node, and a holder's sync while the
+// service is up must read served evidence. A holder without the proxy, or with a proxy that is down, refuses PROXY.
 // A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
 // is final, after which it requests again. Hostile cases: pool-v3 terms into a lit directory (CONSTRUCTION), a lit
 // directory given --parameters or terms given --challenge (usage), freshen (CONSTRUCTION), a pool-v3 request frame to
@@ -19,6 +24,8 @@
 // Usage: node scripts/lit/command-drill.mjs   (after npm run build)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
+import { connect } from "node:net";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -32,7 +39,7 @@ import { V3ServiceClient } from "../../dist/pool/v3/service-client.js";
 import { serveSyntheticNode } from "../pool/v3/synthetic-node.mjs";
 
 const root = resolve(import.meta.dirname, "../.."), MOE = join(root, "dist", "cli", "moe.js");
-const RSS_HOOK = new URL("../pool/v3/rss-hook.mjs", import.meta.url).href;
+const RSS_HOOK = new URL("../pool/v3/rss-hook.mjs", import.meta.url).href, GUARD = new URL("./direct-guard.mjs", import.meta.url).href;
 const hex = bytes => Buffer.from(bytes).toString("hex");
 const LIT = ["--construction", "moe/lit/v1"], SYN = ["--synthetic"], POLL = "100", DEPTH = "2", SILENCE = 16n;
 const FUND = 1_000_000_000n, BUDGET = "50000000";
@@ -43,6 +50,26 @@ const check = async (label, fn) => { await fn(); checks.push(label); process.std
 const pause = ms => new Promise(done => setTimeout(done, ms));
 
 const node = await serveSyntheticNode();
+// The onion service as Tor's HTTPTunnelPort reaches it: CONNECT only, the onion name to the holders' listener, a 502
+// where that does not answer, and every other target refused (Tor refuses internal addresses).
+const ONION = `${"m".repeat(55)}d.onion`, tor = { holders: 0, tunnels: 0, refused: [] };
+const torProxy = createServer((_, response) => response.writeHead(405).end()).on("connect", (request, client, head) => {
+  if (request.url !== `${ONION}:80` || tor.holders === 0) { tor.refused.push(request.url); client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
+  tor.tunnels++;
+  let joined = false;
+  const upstream = connect(tor.holders, "127.0.0.1", () => {
+    joined = true; client.write("HTTP/1.1 200 Connection established\r\n\r\n");
+    if (head.length > 0) upstream.write(head);
+    client.pipe(upstream); upstream.pipe(client);
+  });
+  upstream.on("error", () => { if (!joined) client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); else client.destroy(); });
+  client.on("error", () => upstream.destroy()); client.on("close", () => upstream.destroy());
+});
+await new Promise(done => torProxy.listen(0, "127.0.0.1", done));
+const torPort = torProxy.address().port, nodePort = new URL(node.url).port;
+const PROXY_VARIABLES = ["http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "no_proxy", "NO_PROXY", "NODE_USE_ENV_PROXY"];
+const plainEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !PROXY_VARIABLES.includes(key)));
+let serviceUp = false;
 const call = async (path, body) => {
   const response = await fetch(`${node.url}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   assert.equal(response.status, 200, await response.clone().text()); return response.json();
@@ -54,11 +81,16 @@ const nextRound = async () => { await advance(Number(DEPTH) + 2); await pause(30
 
 /** One `moe` process: its exit code, stdout's JSON, stderr and its refusal. With `mining: "waiting"`, each wait it
  * logs mines one block, so the chain moves with the command's retries. */
-function moe(args, { mining, input } = {}) {
+function moe(args, { mining, input, proxy = torPort, proxyHost = "127.0.0.1" } = {}) {
   return new Promise((done, failed) => {
     const rss = join(scratch, `rss-${processes.length}-${process.hrtime.bigint()}.json`);
-    const child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, ...args],
-      { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...process.env, MOE_DRILL_RSS: rss } });
+    // A holder's process: through the proxy, each with its own credential (Tor isolates streams by it), the node direct.
+    const holder = args[0] !== "operator";
+    const env = { ...plainEnv, MOE_DRILL_RSS: rss, ...(holder && proxy !== null ? { NODE_USE_ENV_PROXY: "1",
+      HTTP_PROXY: `http://drill-${processes.length}:x@${proxyHost}:${proxy}`, NO_PROXY: "127.0.0.1" } : {}),
+      ...(holder ? { MOE_DRILL_PORTS: `${proxy ?? torPort},${nodePort}` } : {}) };
+    const child = spawn(process.execPath, ["--import", RSS_HOOK, ...(holder ? ["--import", GUARD] : []), MOE, ...args],
+      { cwd: scratch, windowsHide: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env });
     if (input !== undefined) child.stdin.end(input);
     const out = [], err = [];
     let waits = 0;
@@ -82,14 +114,21 @@ function moe(args, { mining, input } = {}) {
     });
   });
 }
+/** While the service is up, a holder's read takes it from the service, through the proxy, never from what it kept. */
+const served = (args, result) => {
+  if (serviceUp && result.status === 0 && args[0] === "wallet" && ["sync", "fulfill"].includes(args[1])) {
+    assert.equal(result.json.evidence, "served", `moe ${args.join(" ")}`);
+  }
+};
 const ok = async (args, options) => {
   const result = await moe(args, options);
   assert.equal(result.status, 0, `moe ${args.join(" ")}: ${result.stderr}`);
   assert.equal(result.stdout.split("\n").filter(line => line !== "").length, 1, result.stdout);
+  served(args, result);
   return result.json;
 };
-const refused = async (args, code) => {
-  const result = await moe(args);
+const refused = async (args, code, options) => {
+  const result = await moe(args, options);
   assert.equal(result.status, 1, `moe ${args.join(" ")} exited ${result.status}: ${result.stderr}`);
   assert.equal(result.refusal?.code, code, result.stderr);
   return result.refusal;
@@ -102,18 +141,25 @@ const usage = async args => {
 
 /** `moe operator serve` in the background: resolves with its first line once listening, and a stop. */
 function serve(directory) {
-  const child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL],
-    { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MOE_DRILL_RSS: join(scratch, `rss-serve-${process.hrtime.bigint()}.json`) } });
+  const child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, "operator", "serve", "--dir", directory, "--interval", "2", "--poll-ms", POLL,
+    "--onion", ONION], { cwd: scratch, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...plainEnv, MOE_DRILL_RSS: join(scratch, `rss-serve-${process.hrtime.bigint()}.json`) } });
   servers.push(child);
   let stdout = "", stderr = "";
   child.stderr.on("data", chunk => { stderr += chunk; });
   const exited = new Promise(done => child.on("close", status => done(status)));
   const listening = new Promise((done, failed) => {
-    child.stdout.on("data", chunk => { stdout += chunk; if (stdout.includes("\n")) done(JSON.parse(stdout.split("\n")[0])); });
+    let listened = false;
+    child.stdout.on("data", chunk => {
+      stdout += chunk;
+      if (listened || !stdout.includes("\n")) return;
+      listened = true;
+      const line = JSON.parse(stdout.split("\n")[0]);
+      assert.equal(line.holders.url, `http://${ONION}/`); tor.holders = line.holders.port; serviceUp = true; done(line);
+    });
     exited.then(status => failed(new Error(`serve exited ${status}: ${stderr}`)));
   });
   return { listening, log: () => stderr, async stop() {
-    child.kill("SIGTERM"); const status = await exited;
+    serviceUp = false; child.kill("SIGTERM"); const status = await exited;
     if (process.platform !== "win32") assert.equal(status, 0, stderr);
   } };
 }
@@ -131,6 +177,9 @@ try {
     await usage(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, "--construction", "moe/lit/v2"]);
     await usage(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, ...LIT, "--parameters", scratch]);
     const init = await ok(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, ...LIT]);
+    // A holders' listener needs a v3 onion name.
+    await usage(["operator", "serve", "--dir", OP, "--interval", "2", "--holder-port", "1"]);
+    await usage(["operator", "serve", "--dir", OP, "--interval", "2", "--onion", `${"m".repeat(56)}.onion`]);
     assert.deepEqual([init.status, init.construction], ["created", "moe/lit/v1"]);
     assert.equal(JSON.parse(readFileSync(join(OP, "config.json"), "utf8")).construction, "moe/lit/v1");
     operatorKey = init.operator;
@@ -174,6 +223,7 @@ try {
     for (let round = 0; ; round++) {
       await nextRound();
       const result = await moe(args);
+      served(args, result);
       if (result.status === 0 && until(result.json)) return result.json;
       assert(round < rounds, `moe ${args.join(" ")} did not settle: ${result.stdout}${result.stderr}`);
     }
@@ -205,8 +255,17 @@ try {
 
   await check("issue to an owner-key request, its fulfillment, a payment with change and the payee's fulfillment (a rerun exits 4)", async () => {
     await serving.listening;
-    for (const directory of [BK, HD, SH]) await ok(wallet("service add", directory, backing, join(OP, "service.json")));
-    await ok(["reader", "service", "add", "--dir", RD, backing, join(OP, "service.json")]);
+    for (const directory of [BK, HD, SH]) await ok(wallet("service add", directory, backing, join(OP, "holders.json")));
+    await ok(["reader", "service", "add", "--dir", RD, backing, join(OP, "holders.json")]);
+    // An onion service without the environment proxy refuses before any connection (the guard allows none to the
+    // service); with the proxy down, it is named rather than read as an operator that did not answer.
+    assert.match((await refused(wallet("sync", HD, backing), "PROXY", { proxy: null })).message, /environment proxy/);
+    const closed = createServer(); await new Promise(done => closed.listen(0, "127.0.0.1", done));
+    const deadPort = closed.address().port; await new Promise(done => closed.close(done));
+    // Named as `localhost`, the proxy may have two addresses: both refusing is the proxy's failure too.
+    for (const proxyHost of ["127.0.0.1", "localhost"]) {
+      assert.match((await refused(wallet("sync", HD, backing), "PROXY", { proxy: deadPort, proxyHost })).message, /proxy did not answer/);
+    }
     const funding = await request(HD, "fund", 10);
     // Lit-v1 §8's frame: tag, domain, backing, value and owner key.
     assert.equal(funding.made.frame.length, 2 * (25 + 32 + 32 + 8 + 32));
@@ -349,8 +408,8 @@ try {
     assert.equal(adopted.status, "final");
     serving = serve(OP);
     await serving.listening;
-    for (const directory of [BK, HD, SH]) await ok(wallet("service add", directory, backing, join(OP, "service.json")));
-    await ok(["reader", "service", "add", "--dir", RD, backing, join(OP, "service.json")]);
+    for (const directory of [BK, HD, SH]) await ok(wallet("service add", directory, backing, join(OP, "holders.json")));
+    await ok(["reader", "service", "add", "--dir", RD, backing, join(OP, "holders.json")]);
     // The settlement paid K's acceptance key: the backer finds the settled note, as outside the gap.
     const backer = await settled(wallet("sync", BK, backing), view => view.status === "final" && !view.gap && view.holdings.length > 0);
     assert.deepEqual(holdings(backer), [["5", "available", 0]]);
@@ -375,13 +434,13 @@ try {
     assert(!existsSync(H3), "a refused restore leaves no directory");
     await ok(["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT, "--key", key, "--backup", out, "--digest", frozen.digest]);
     await ok(wallet("terms add", H3, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN));
-    await ok(wallet("service add", H3, backing, join(OP, "service.json")));
+    await ok(wallet("service add", H3, backing, join(OP, "holders.json")));
     assert.deepEqual(holdings(await ok(wallet("sync", H3, backing))), before);
     assert.deepEqual((await ok(wallet("fulfillment", H3, "invoice"))).value, "3", "the handoff carries the fulfillments");
     // A second copy of the seed, for the drill only (one active copy is the holder's precondition).
     await ok(["wallet", "restore-seed", "--dir", H2, "--venue", venueFile, ...nodeArgs, ...LIT], { input: `${seed}\n` });
     await ok(wallet("terms add", H2, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN));
-    await ok(wallet("service add", H2, backing, join(OP, "service.json")));
+    await ok(wallet("service add", H2, backing, join(OP, "holders.json")));
     assert.deepEqual(holdings(await ok(wallet("sync", H2, backing))), before);
     // Restored from its seed alone, every index through h + 256 reads as exposed (lit-v1 §8): the window is full.
     await refused(wallet("request", H2, "after", backing, "1"), "WINDOW");
@@ -394,6 +453,11 @@ try {
     // A wallet whose window still takes new keys has none to move.
     assert.match((await refused(wallet("move-window", HD, "move-0", backing), "CONFLICT")).message, /window is not full/);
     await serving.stop();
+  });
+
+  await check("holders reached the operator only as an onion service, through the proxy", async () => {
+    assert(tor.tunnels > 30, `${tor.tunnels} tunnels`);
+    assert.deepEqual(tor.refused, []);
   });
 
   await check("no lit process loads a @noir-lang module", async () => {
@@ -409,6 +473,7 @@ try {
     const exited = new Promise(done => child.once("close", done)); child.kill("SIGTERM"); await exited;
   }
   await node.close();
+  await new Promise(done => { torProxy.closeAllConnections(); torProxy.close(done); });
   if (completed) { assert(scratch.startsWith(realpathSync(join(root, "scratch")) + sep)); rmSync(scratch, { recursive: true, force: true }); }
   else process.stderr.write(`lit command drill scratch retained after failure: ${scratch}\n`);
 }
