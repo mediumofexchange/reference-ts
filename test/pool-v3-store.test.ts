@@ -1004,8 +1004,9 @@ describe("the v3 operator journal", () => {
     // A store that lacks what its recorded sequence implies is served again from nothing, once.
     const lost = new EvidenceStore(); lost.supplied(source, 3n);
     const before = requests.length, again = await client.sync(backing, lost);
-    expect(requests.slice(before).map(r => r.url.split("&")[1])).toEqual(["after=3"]);
-    await expect(read(again, lost)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    // Nothing new after 3 leaves the selection's directory, snapshots and trails out of the store, so it asks from nothing.
+    expect(requests.slice(before).map(r => r.url.split("&")[1])).toEqual(["after=3", "after=0"]);
+    expect([(await read(again, lost)).position, lost.suppliedThrough(source)]).toEqual([3n, 4n]);
     const two = new EvidenceStore(); two.supplied(source, 2n);
     const from = requests.length, refetched = await client.sync(backing, two);
     expect(requests.slice(from).map(r => r.url.split("&")[1])).toEqual(["after=2", "after=0"]);

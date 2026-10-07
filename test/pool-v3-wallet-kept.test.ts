@@ -192,15 +192,17 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
       expect(f.counts.verified).toBe(4);
     }
 
-    // Evidence rows lost while the file's mark stands: an ordinary sync brings nothing, the read stays unresolved,
-    // and a full sync repairs it. A kept class is judged on the evidence again, so the kept state alone reads nothing.
-    f.payer.close();
-    const db = new DatabaseSync(evidence); db.exec("DELETE FROM chain"); db.close();
-    f.payer = f.open("payer");
-    await expect(f.synced(f.payer)).rejects.toMatchObject({ status: "unresolved-evidence" });
-    f.counts.verified = 0;
-    expect(holdings((await f.synced(f.payer, { full: true })).view)).toEqual(holdings(second.view));
-    expect(f.counts.verified).toBe(0);
+    // Evidence rows lost while the file's mark stands: the store no longer holds the selection's trails, so an ordinary
+    // sync asks from nothing and repairs it. A kept class is judged on the evidence again, so the kept state alone reads
+    // nothing; a full sync asks from nothing outright.
+    for (const options of [{}, { full: true }]) {
+      f.payer.close();
+      const db = new DatabaseSync(evidence); db.exec("DELETE FROM chain"); db.close();
+      f.payer = f.open("payer");
+      f.counts.verified = 0;
+      expect(holdings((await f.synced(f.payer, options)).view)).toEqual(holdings(second.view));
+      expect(f.counts.verified).toBe(0);
+    }
 
     // An evidence file another connection holds is in use, not unreadable: the wallet says so, keeps no handle
     // on it and opens it once it is free.
