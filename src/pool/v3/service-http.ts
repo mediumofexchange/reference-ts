@@ -10,8 +10,10 @@ import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
 /** Without an admin credential the service is a holders' listener (M12a): submission and evidence only, for an onion
  * service's port, so the operator's own commands never face the network that reaches it. */
 export interface V3ServiceCredentials { readonly walletToken: string; readonly adminToken?: string | undefined }
-function matches(header: string | undefined, token: string): boolean {
-  const actual = Buffer.from(header ?? ""), expected = Buffer.from(`Bearer ${token}`);
+/** Whether the request carries `token` as its one Authorization header: Node keeps only the first of several. */
+function bearer(request: IncomingMessage, token: string): boolean {
+  if (request.rawHeaders.filter((header, i) => i % 2 === 0 && header.toLowerCase() === "authorization").length !== 1) return false;
+  const actual = Buffer.from(request.headers.authorization ?? ""), expected = Buffer.from(`Bearer ${token}`);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 async function readBody(request: IncomingMessage): Promise<unknown> {
@@ -132,9 +134,8 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
     if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) {
       request.resume(); send(403, { code: "LOCAL_ONLY" }); return;
     }
-    const count = request.rawHeaders.filter((header, i) => i % 2 === 0 && header.toLowerCase() === "authorization").length;
-    const admin = count === 1 && adminToken !== undefined && matches(request.headers.authorization, adminToken);
-    if (!admin && !(count === 1 && matches(request.headers.authorization, walletToken))) {
+    const admin = adminToken !== undefined && bearer(request, adminToken);
+    if (!admin && !bearer(request, walletToken)) {
       request.resume(); send(401, { code: "UNAUTHORIZED" }); return;
     }
     try {
@@ -200,8 +201,7 @@ export function createRelayService(token: string, take: (file: unknown, gone: ()
   const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
     const { send } = exchange(response);
     if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) { request.resume(); send(403, { code: "LOCAL_ONLY" }); return; }
-    const count = request.rawHeaders.filter((header, i) => i % 2 === 0 && header.toLowerCase() === "authorization").length;
-    if (count !== 1 || !matches(request.headers.authorization, token)) { request.resume(); send(401, { code: "UNAUTHORIZED" }); return; }
+    if (!bearer(request, token)) { request.resume(); send(401, { code: "UNAUTHORIZED" }); return; }
     try {
       if (request.method !== "POST" || request.url !== "/publications") { request.resume(); send(404, { code: "NOT_FOUND" }); return; }
       send(200, await take(await readBody(request), () => response.destroyed || response.writableEnded));
