@@ -162,6 +162,47 @@ and reads its state from rows without verifying a proof again; it refuses
 stored state that does not reproduce its own tip and the last signed snapshot.
 Operation failures expose bounded codes rather than internal error text.
 
+## Restoring an operator directory
+
+An operator directory restored from a copy or a backup holds a book its lost instance may have extended. That instance
+may have co-signed statements after its last commitment, and signed commitments the venue never witnessed; no record
+shows either ([decision](../decisions/2026-10.md#2026-10-07--restore-an-operator-journal-by-a-return-at-a-skipped-sequence-once-silence-is-witnessed-slice-13-m13d),
+Construction C2.4.1). Resuming on it would co-sign other statements at the same positions. The procedure:
+
+1. Stop the instance being replaced, or be sure it is gone. Two live instances of one key cannot see each other.
+2. Restore the whole directory, never `journal.db` alone. Leave out any `journal.db-wal` or `journal.db-shm` newer
+   than the database.
+3. Run `moe operator restore --dir <d> --id <id>`.
+   - It records the restoration. From then on the journal signs nothing but C2b.4's return, once the scope's silence
+     boundary is witnessed, at a sequence at least 2¹⁶ past its own and the record's latest; the step is random per
+     restoration.
+   - Before the boundary it answers `{ "status": "restored", "waiting": "silence" }`. Run it again once silence is
+     witnessed. It then signs and publishes the return and answers `pending`.
+   - What was co-signed after the last witnessed commitment lapses there; holders resubmit it.
+4. Run `moe operator adopt` once the return is witnessed, then `serve`.
+
+Every other signing command refuses `RESTORED` until `adopt` takes that return.
+
+A journal whose database file is not the one it was made in refuses `COPIED`; the remedy is `restore`. The journal
+compares the file's inode, and its birth time where the filesystem keeps one. That catches a fresh copy or a restore to
+another disk or machine. It misses a file overwritten in place and a filesystem or machine snapshot rolled back: after
+either, run `restore` before anything else. A directory that was only moved is refused the same way and costs one
+return.
+
+An instance that comes back after the restoration publishes nothing under the restored return (`CONFLICT`).
+
+Limits:
+- A restoration costs the silence duration, and C2b.6's no-commitment grade is earned meanwhile.
+- A backing whose terms declare no silence clause never has a gap to return from.
+- A restored copy behind a commitment the record holds and the copy did not sign stays refused `CONFLICT`.
+- For both of the last two, recovery is succession under a successor term; where the terms allow none, the outage is
+  permanent.
+- A repair before silence (C2.10.9a) would avoid the wait, but C2.10.9 forbids excusing live receipts by a new
+  segment; it is a lever for a later version.
+- Run `restore` once per restoration. After its return is signed, running it again from the same directory answers
+  that return. A copy taken after that is a restoration of its own: it adopts the earlier return as the lost instance
+  would, then waits for silence again.
+
 ## Acceptance and remaining work
 
 The three `test/pool-v3-service-*.test.ts` files cover strict framing, roles,
@@ -192,5 +233,5 @@ receiver fulfillment independently. Its evidence is retained in the
 saved and submitted by the [v3 wallet](POOL_V3_WALLET.md); issue, burn and the
 hostile cases are still prepared by the harness. Payment requests pass between
 wallets, not through this service. The encrypted handoff (`moe wallet handoff`,
-`restore`) is drilled; qualified backup and restore drills remain open. No live
+`restore`) is drilled, and so is an operator directory restored from a copy (the pool-v3 command drill); the other roles' backup and restore drills remain open. No live
 service or physical custody is qualified.
