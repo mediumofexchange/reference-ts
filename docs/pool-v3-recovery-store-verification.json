@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1089
+      "elapsedMs": 1311
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 857
+      "elapsedMs": 1003
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2229
+      "elapsedMs": 2605
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2236
+      "elapsedMs": 2589
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2218
+      "elapsedMs": 2587
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1200
+      "elapsedMs": 1403
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2211
+      "elapsedMs": 2581
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2215
+      "elapsedMs": 2583
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2214
+      "elapsedMs": 2589
     }
   ],
   "transactions": [],
@@ -77,13 +77,13 @@
     "position": "4",
     "adoptionIndex": "24",
     "spentRoot": "5f374bcb11033eb9d6497b5c89ab72fac42592b033d4e3ebe9804e5102bca7c0",
-    "history": "d340dd073430245ded0f7b2ac399ae15f51b1e155d663d07f19ab1314b32ecfb",
+    "history": "c3355bbb08e9a401bd1a8e149761aabd904b3535313843343efe99dc27fc1705",
     "canonicalIndex": "25",
     "force": [
       {
         "index": "21",
         "kind": 4,
-        "sha256": "b07942f88860c28cf8d6520d47c7a43919e335080d505c8eec0b53896c1c45c0"
+        "sha256": "2dd436c07643783996b90224d8087e914cd1d02c0261a6373305e1efcac271dd"
       },
       {
         "index": "22",
@@ -93,12 +93,12 @@
       {
         "index": "23",
         "kind": 4,
-        "sha256": "805048dcdc8a0a0c4461b65a658989f9af95391ba94adcf0fb5fd47f6bf3c9a0"
+        "sha256": "029d82958f7d455917985b6f901834d360ff02e1590a4c2958d163433f2eb9d8"
       },
       {
         "index": "24",
         "kind": 6,
-        "sha256": "aaf9b3881335bc1da6aac6e953be15f78904c888df50a9f0b8f981eae93f8f6a"
+        "sha256": "dff565030e86660235191c12d85222c4211c2a0f9eed13df4e4ee6c1c8677c97"
       }
     ],
     "clock": {
@@ -119,7 +119,7 @@
       "snapshotIndex": "24"
     }
   },
-  "elapsedMs": 29200,
+  "elapsedMs": 34441,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "04381e8f7475a3835938fb8ee89717925780b3e1dec044ba25bbe4273a5211da",
@@ -222,7 +222,7 @@
     "src/pool/v3/capsules.ts": "95b7c258cf66913ff9a7ffff37c59de453279149b62dbfd4e38519604858505d",
     "src/pool/v3/commitments.ts": "23dbabca0a95179e92ff5fb276de0f94948458b4d749b7da37ac43c115c8593b",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
-    "src/pool/v3/construction.ts": "c282ae5fd48fe3d510fc8f1fffb35695a9f08f10e648f418b8574bcec808fe17",
+    "src/pool/v3/construction.ts": "7b176dea8777d90f9340072dd990aee5c05a47259f2c74b104e1ae7dc69ed5fc",
     "src/pool/v3/evidence-store.ts": "453fd0224e4f39ed9b309d72ba8f98f921df1e00fdd17a66bf8197e5d3ae3939",
     "src/pool/v3/fault-evidence.ts": "ada8e79acac5b0d642da0e691834c3da5bd6c4fd0faed70d447b409c57a2ec57",
     "src/pool/v3/fault-observer.ts": "7a7492584ced10a483257789edd282b974469fe2260815b3dba9758eed0f41c0",

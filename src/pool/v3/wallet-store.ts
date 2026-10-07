@@ -23,6 +23,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { verifySignatureStrict } from "../../keys.js";
@@ -38,7 +39,7 @@ import { EvidenceStore } from "./evidence-store.js";
 import type { SegmentHeader } from "./headers.js";
 import { inputOf, ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { readFrontier, type ReadOptions } from "./package-reader.js";
-import { POOL_V3, type Construction, type KeyedInput, type KeyedNote, type KeyedOutput, type KeyedReceipt, type KeyedRequest, type KeyedWalletFrames,
+import { POOL_V3, type Construction, type KeyedAcceptance, type KeyedInput, type KeyedNote, type KeyedOutput, type KeyedReceipt, type KeyedRequest, type KeyedWalletFrames,
   type Keyring } from "./construction.js";
 import type { SignedTerms } from "./reader.js";
 import { acceptanceBytes, acceptanceId, decodeRecord, encodePublication, encodeRecord, evidenceHashes, settlementAuthorization,
@@ -62,7 +63,7 @@ const keyBytesOf = (key: bigint): Uint8Array => hexToBytes(key.toString(16).padS
 const PROFILE = "moe/wallet/v3/8", KEYED_PROFILE = "moe/wallet/keyed/1", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
-    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW", message: string) { super(message); this.name = "V3WalletError"; }
+    "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW" | "OWN_KEY" | "CLOSED", message: string) { super(message); this.name = "V3WalletError"; }
 }
 function requireThat(ok: boolean, code: V3WalletError["code"], message: string): asserts ok {
   if (!ok) throw new V3WalletError(code, message);
@@ -439,9 +440,9 @@ export class V3Wallet {
   private poolRequests(): void {
     requireThat(this.construction === POOL_V3, "INVALID", "a keyed wallet takes requests by owner key");
   }
-  /** The redemption acts, freshen and the presentation reading: a lit wallet takes them in M14g2. */
+  /** C3.8's presentation reading reads pool-v3 records (dishonour.ts): a lit wallet does not take it yet. */
   private poolOnly(): void {
-    requireThat(this.construction === POOL_V3, "INVALID", "a keyed wallet does not take this act yet");
+    requireThat(this.construction === POOL_V3, "INVALID", "a keyed wallet does not take this reading yet");
   }
   private metadata() {
     const query = this.db.prepare("SELECT * FROM wallet_identity WHERE id=1"); query.setReadBigInts(true); return query.get();
@@ -511,7 +512,8 @@ export class V3Wallet {
     requireThat(this.db.prepare(`SELECT 1 FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE a.status='prepared'
       AND a.kind!='6' GROUP BY i.nf HAVING COUNT(*) > 1`).get() === undefined, "INVALID", "backup state reserves a note twice");
     // Shapes `act` and `payment` read: a demand's repeats are demand identities; a freshen has one positive output.
-    for (const row of this.db.prepare("SELECT alias,kind,intent,repeats FROM saved_records WHERE repeats IS NOT NULL OR kind='2'").all()) {
+    let moveKeys: Keyring | undefined;
+    try { for (const row of this.db.prepare("SELECT alias,kind,intent,repeats,record,backing FROM saved_records WHERE repeats IS NOT NULL OR kind='2'").all()) {
       let ok: boolean;
       try {
         if (row.kind === "4") {
@@ -519,13 +521,27 @@ export class V3Wallet {
           ok = Array.isArray(ids) && ids.length > 0 && ids.every(id => typeof id === "string" && /^[0-9a-f]{64}$/.test(id));
         } else {
           const intent = JSON.parse(row.intent as string) as unknown[];
+          const decimal = (v: unknown) => typeof v === "string" && /^(0|[1-9][0-9]{0,19})$/.test(v);
+          // A lit window move: its fee's key and price (or none) and the moved index (`keyedPayment`, `moved`).
+          if (Array.isArray(intent) && intent[1] === "move") {
+            const exposed = this.ownerKeys(row.backing as Uint8Array)?.exposed;
+            ok = this.keyed !== undefined && intent.length === 5 && decimal(intent[4]) && ((intent[2] === null && intent[3] === null) ||
+              (typeof intent[2] === "string" && /^[0-9a-f]{64}$/.test(intent[2]) && decimal(intent[3]))) &&
+              // Its record pays the moved index's key, and the fee's where it names one, at an index the rows show exposed.
+              exposed !== undefined && BigInt(intent[4] as string) <= exposed &&
+              this.keyed.outputs(this.domain, row.record as Uint8Array).map(o => hex(o.opening.owner)).join() ===
+                [hex((moveKeys ??= this.keyed.keyring(seed, this.domain)).key(row.backing as Uint8Array, BigInt(intent[4] as string))),
+                  ...(intent[2] === null ? [] : [intent[2]])].join();
+            requireThat(ok, "INVALID", "backup state has a malformed saved record");
+            continue;
+          }
           ok = !Array.isArray(intent) || intent[1] !== "freshen" || (intent.length === 3 && typeof intent[2] === "string" &&
             /^[0-9a-f]{64}$/.test(intent[2]) && this.db.prepare("SELECT COUNT(*) AS n FROM saved_outputs WHERE alias=? AND value!='0'")
               .get(row.alias as string)!.n === 1);
         }
       } catch { ok = false; }
       requireThat(ok, "INVALID", "backup state has a malformed saved record");
-    }
+    } } finally { moveKeys?.close(); }
   }
   private active(): void {
     requireThat(!this.closed && !this.poisoned, "STORAGE", "wallet is closed or needs reopening");
@@ -761,9 +777,14 @@ export class V3Wallet {
   /** Whether this seed presents `demand`: its presenter key is the seed's derivation over its own notice (C3.3).
    * Only this seed derives that key, so a demand found in public evidence is recognized with no saved state. */
   private presents(demand: Demand): boolean {
-    const secret = this.keyed !== undefined ? this.keyed.presentSecret(this.seed, this.domain, demand.tags.filter(tag => tag !== 0n).map(keyBytesOf),
-      demand.instant, demand.deadline) : presenterSecret(this.seed, this.domain, demand.tags, demand.instant, demand.deadline);
+    const secret = this.presenterOf(demand);
     try { return same(ed25519.getPublicKey(secret), demand.presenter); } finally { secret.fill(0); }
+  }
+  /** The seed's presenter secret over a demand's notice (the caller zeroes it): pool-v3's over its tags with zero padding,
+   * lit-v1's over its notes' tags in input order (§8). */
+  private presenterOf(demand: Pick<Demand, "tags" | "instant" | "deadline">): Uint8Array {
+    return this.keyed !== undefined ? this.keyed.presentSecret(this.seed, this.domain, demand.tags.filter(tag => tag !== 0n).map(keyBytesOf),
+      demand.instant, demand.deadline) : presenterSecret(this.seed, this.domain, demand.tags, demand.instant, demand.deadline);
   }
   /** This seed's demand `id` standing over the view's backing (admitted, or with force in a gap). Withdrawing and
    * settling need one, so its notice is read from the view, never from a saved record. */
@@ -805,14 +826,15 @@ export class V3Wallet {
     return this.db.prepare("SELECT record FROM saved_records WHERE kind='6' AND demand=? AND status='prepared'").all(demand)
       .some(row => decodeRecord(row.record as Uint8Array).publicInputs[9] === rho);
   }
-  /** A payment's fate. final: all four outputs are in canonical history, imports included (own change/zero outputs
-   * are fresh, and a reproof spends the same nullifiers into the same commitments, so only this payment creates
+  /** A payment's fate, read from its construction's view: pool-v3's four outputs, lit-v1's derived ones. final: all its
+   * outputs are in canonical history, imports included (own change/zero outputs are fresh, lit's derive from its
+   * nullifiers, and a reproof spends the same nullifiers into the same commitments, so only this payment creates
    * them in whichever segment admitted it); failed: a reserved input was spent otherwise, or one of its outputs
    * exists without the rest. A statement's outputs enter history together, so another statement created that one
    * (a payee or fee recipient handing its request to two payers, or paying itself), and every door refuses an output
    * already created: no record of this payment, reproved or not, can be admitted. */
-  private paid(name: string, record: Record, canonical: CanonicalCheckpoint, force: ForceState) {
-    const outputs = record.publicInputs.slice(9, 13);
+  private paid(name: string, bytes: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState) {
+    const outputs = this.construction.view(this.construction.decode(bytes), () => undefined).outputs;
     if (outputs.every(cm => canonical.state.hasOutput(cm))) return "final" as const;
     return outputs.some(cm => force.hasOutput(cm)) || this.spent(name, force) ? "failed" as const : undefined;
   }
@@ -861,38 +883,33 @@ export class V3Wallet {
       .some(r => r.status === "final" || decided.get(r.alias as string) === "final");
     for (const row of rows) {
       // A view older than the one the record was built from is not the record's history: it decides no failure.
-      const name = row.alias as string, stale = at < BigInt(row.judged as string);
-      if (this.keyed !== undefined) {
-        // A lit wallet saves payments only (M14g1): decided by their derived outputs, as the pool's by its four.
-        const status = this.keyedPaid(name, row.record as Uint8Array, canonical, force);
-        if (status !== undefined && status !== row.status && !(stale && status === "failed")) decided.set(name, status);
-        continue;
-      }
-      const record = decodeRecord(row.record as Uint8Array), p = record.publicInputs;
-      const statement = statementHash(record), demand = row.demand as string | null;
+      const name = row.alias as string, stale = at < BigInt(row.judged as string), demand = row.demand as string | null;
       if (row.kind === "2") {
-        const status = this.paid(name, record, canonical, force);
+        const status = this.paid(name, row.record as Uint8Array, canonical, force);
         if (status !== undefined && status !== row.status && !(stale && status === "failed")) decided.set(name, status);
         continue;
       }
-      const admitted = canonical.state.hasEvent(statement) || (record.kind >= 4 && force.isEffective(hex(statement)));
-      const dead = !same(identifierOf(p[2]!, p[3]!), canonical.segment), pending = row.receipt !== null &&
-        decodeReceipt(row.receipt as Uint8Array).position > canonical.state.position && (clock == null || clock.boundary === null);
+      // Every act is read through its construction's view (slice 14 M14g2): its segment, outputs, notice and deadline.
+      const view = this.construction.view(this.construction.decode(row.record as Uint8Array), id => force.demand(id)), kind = view.kind;
+      const admitted = canonical.state.hasEvent(view.identity) || (kind >= 4 && force.isEffective(hex(view.identity)));
+      const dead = !same(view.segment, canonical.segment), pending = row.receipt !== null &&
+        this.receiptFrom(row.receipt as Uint8Array).position > canonical.state.position && (clock == null || clock.boundary === null);
       let status: "final" | "failed" | undefined;
       if (admitted) status = "final";
       else if (row.status === "failed" || stale) continue;
-      else if (record.kind === 4) {
+      else if (kind === 4) {
         // A relayed publication is witnessed at an index w ≥ at, so C3.3's window (w − 2·lag ≤ instant) is closed
         // for good once at > instant + 2·lag. An operator reading behind the venue is covered by failed → final.
         status = ended(demand!, "5") || ended(demand!, "6") ? "final" :
-          dead || (!pending && at > p[14]! + 2n * lag) || spent(name) ? "failed" : undefined;
+          dead || (!pending && at > view.demand!.value.instant + 2n * lag) || spent(name) ? "failed" : undefined;
       } else if (dead) status = "failed";
-      else switch (record.kind) {
-        case 1: status = canonical.state.hasOutput(p[8]!) ? "failed" : undefined; break;
+      else switch (kind) {
+        case 1: status = canonical.state.hasOutput(view.outputs[0]!) ? "failed" : undefined; break;
         case 3: status = spent(name) ? "failed" : undefined; break;
         case 5: status = ended(demand!, "6") || force.demand(demand!) === undefined ? "failed" : undefined; break;
-        case 6: status = force.demand(demand!) === undefined || force.hasOutput(p[14]!) || spent(name) ||
-          (!pending && at > settlementAuthorization(record).acceptance.deadline) ? "failed" : undefined; break;
+        // A settlement whose demand stands names its output (lit-v1 derives it from the demand's nullifiers).
+        case 6: status = force.demand(demand!) === undefined || force.hasOutput(view.outputs[0]!) || spent(name) ||
+          (!pending && at > view.settlement().deadline) ? "failed" : undefined; break;
       }
       if (status !== undefined) decided.set(name, status);
     }
@@ -1194,32 +1211,25 @@ export class V3Wallet {
       superseded: this.db.prepare("SELECT record,receipt FROM saved_superseded WHERE alias=? ORDER BY rowid").all(name).map(old =>
         ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : decodeReceipt(old.receipt as Uint8Array) })) };
   }
-  /** A saved lit payment: its payee and fee outputs are the statement's first and second derived outputs. */
+  /** A saved lit payment: its payee and fee outputs are the statement's first and second derived outputs. A freshen's
+   * payee is this seed's note of its demand's notes' sum, and a window move's this seed's note at the moved index. */
   private keyedPayment(name: string, row: { readonly [column: string]: unknown }): Payment {
-    const intent = JSON.parse(row.intent as string) as [string, "keyed", string, string, string | null, string | null];
-    const saved = this.saved(name, row), outputs = this.keyedOutputs(saved.record);
-    return { record: saved.record, statement: saved.statement, payee: outputs[0]!, value: BigInt(intent[3]),
-      fee: intent[4] === null ? undefined : { cm: outputs[1]!, value: BigInt(intent[5]!) }, freshens: undefined, inputs: saved.inputs,
+    const intent = JSON.parse(row.intent as string) as (string | null)[];
+    const saved = this.saved(name, row), outputs = this.keyed!.outputs(this.domain, saved.record);
+    const [payee, second] = outputs, priced = intent[1] === "keyed" ? intent[4] !== null : intent[1] === "move" && intent[2] !== null;
+    return { record: saved.record, statement: saved.statement, payee: payee!.cm,
+      value: intent[1] === "keyed" ? BigInt(intent[3]!) : payee!.opening.value,
+      fee: priced ? { cm: second!.cm, value: second!.opening.value } : undefined,
+      freshens: intent[1] === "freshen" ? hexToBytes(intent[2]!) : undefined, inputs: saved.inputs,
       status: saved.status, receipt: saved.receipt, final: saved.final,
       superseded: this.db.prepare("SELECT record,receipt FROM saved_superseded WHERE alias=? ORDER BY rowid").all(name).map(old =>
         ({ record: copyUnshared(old.record as Uint8Array), receipt: old.receipt === null ? undefined : this.receiptFrom(old.receipt as Uint8Array) })) };
-  }
-  /** A lit record's derived output commitments, in statement order (lit-v1 §2). */
-  private keyedOutputs(bytes: Uint8Array): bigint[] {
-    return this.keyed!.outputs(this.domain, bytes).map(o => o.cm);
   }
   /** A stored receipt of the wallet's construction. */
   private receiptFrom(bytes: Uint8Array): WalletReceipt { return this.keyed !== undefined ? this.keyed.receipt.decode(bytes) : decodeReceipt(bytes); }
   /** A saved record's statement identity, by the wallet's construction. */
   private statementOf(bytes: Uint8Array): Uint8Array {
     return this.construction.journal.identity(this.construction.decode(bytes));
-  }
-  /** A lit payment's fate, read as `paid` reads the pool's: final once all its derived outputs are in canonical history
-   * (only this payment's nullifiers derive them, §2), failed once one exists without the rest or an input was spent otherwise. */
-  private keyedPaid(name: string, bytes: Uint8Array, canonical: CanonicalCheckpoint, force: ForceState) {
-    const outputs = this.keyedOutputs(bytes);
-    if (outputs.every(cm => canonical.state.hasOutput(cm))) return "final" as const;
-    return outputs.some(cm => force.hasOutput(cm)) || this.spent(name, force) ? "failed" as const : undefined;
   }
   /** The fields a payment and an act share, read from a saved record's row. */
   private saved(name: string, row: { readonly [column: string]: unknown }) {
@@ -1348,8 +1358,10 @@ export class V3Wallet {
    * (kind 2) under service: saved, submitted, reproved and resolved as one, and refused where admission is closed
    * (SILENCE, an ended term), where a demand presenting the notes again is the remedy. Its intent binds the backing
    * and the demand; an exact alias retry returns the saved record without evidence or proving. */
-  async freshen(name: string, demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Payment> {
-    name = alias(name); this.mutable(); this.poolOnly();
+  async freshen(name: string, demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms, prove?: LocalProver): Promise<Payment> {
+    // Lit-v1's tags hide nothing (§2): a presented note pays and burns as any other, so lit has nothing to freshen.
+    requireThat(this.keyed === undefined, "INVALID", "a lit note needs no freshen: pay or burn it as any other");
+    name = alias(name); this.mutable();
     const { backing, own } = this.termsOf(signed), key = hex(identifier(demand));
     const intent = JSON.stringify([hex(backing), "freshen", key]);
     const existing = this.savedPayment(name, intent);
@@ -1401,7 +1413,7 @@ export class V3Wallet {
       const { canonical, force, notes, at, observed } = view;
       requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
       requireThat(at >= BigInt(row.judged as string), "CHANGED_VIEW", "the venue view is older than the saved record's");
-      const status = this.paid(name, old, canonical, force);
+      const status = this.paid(name, saved.record, canonical, force);
       if (status !== undefined) {
         observed.check();
         this.resolve([{ alias: name, status }], encodeCommitment(canonical.commitment), at);
@@ -1467,19 +1479,25 @@ export class V3Wallet {
     requireThat(row.kind === String(kind) && row.intent === intent, "CONFLICT", "alias names another act");
     return this.act(name);
   }
-  /** Save a proven or signed act once: a concurrent exact call that saved first wins, and its record is kept. */
-  private saveAct(name: string, kind: Act["kind"], intent: string, bytes: Uint8Array, backing: Uint8Array, operator: Uint8Array,
-    demand: string | undefined, inputs: readonly bigint[], at: bigint, repeats?: readonly string[]): Act {
-    const record = decodeRecord(bytes), statement = hex(statementHash(record));
+  /** Save a proven or signed act once: a concurrent exact call that saved first wins, and its record is kept. `built`
+   * is the record, or builds it inside the saving transaction (a lit burn's change index is allocated there). */
+  private saveAct(name: string, kind: Act["kind"], intent: string, built: Uint8Array | (() => Uint8Array), backing: Uint8Array,
+    operator: Uint8Array, demand: string | undefined, inputs: readonly bigint[], at: bigint, repeats?: readonly string[]): Act {
     this.transaction(() => {
       if (this.savedAct(name, kind, intent) !== undefined) return;
       // A settlement takes its demand's notes whatever else reserves them: while the demand stands its lock refuses any
       // other spend of them at the door (C3.7), and the settlement's admission fails every other record that spends one.
       requireThat(kind === 6 || inputs.every(nf => !this.reserved(nf)), "CONFLICT", "an input is reserved by another payment or act");
-      if (kind === 3 || kind === 4) this.requireUnpresented(inputs, repeats);
+      // Lit-v1's tags hide nothing (§2), so a presented note links nothing new: only pool-v3 keeps C3.1's rule.
+      if ((kind === 3 || kind === 4) && this.keyed === undefined) this.requireUnpresented(inputs, repeats);
+      // A lit request key is issued to once (§8): checked again here, where two calls racing to save would both pass a check
+      // made before their reads.
+      if (kind === 1 && this.keyed !== undefined) this.requireUnissued((JSON.parse(intent) as string[])[2]!);
+      const bytes = typeof built === "function" ? built() : built, statement = hex(this.statementOf(bytes));
       requireThat(this.db.prepare("SELECT 1 FROM saved_records WHERE statement=?").get(statement) === undefined, "CONFLICT",
         "another alias saved this statement");
-      requireThat(kind !== 6 || !this.pendingSettlement(demand!, record.publicInputs[9]!), "CONFLICT",
+      // Lit-v1 has no disclosure count: a settlement's output derives from its demand's nullifiers (§7).
+      requireThat(kind !== 6 || this.keyed !== undefined || !this.pendingSettlement(demand!, decodeRecord(bytes).publicInputs[9]!), "CONFLICT",
         "another settlement of this demand is prepared at this disclosure count; publish it, or sync to resolve it");
       this.db.prepare("INSERT INTO saved_records VALUES(?,?,?,?,?,?,?,?,NULL,'prepared',NULL,NULL,NULL,?,?)").run(name, String(kind), intent,
         statement, bytes, backing, operator, demand ?? null, at.toString(), repeats === undefined || repeats.length === 0 ? null : JSON.stringify(repeats));
@@ -1502,9 +1520,11 @@ export class V3Wallet {
   }
   /** pool-v3 §3.1: issue the exact request's value to its output, authorized by K through `sign` (§5). The
    * record is saved before it is returned; an exact alias retry returns it without evidence, proving or signing. */
-  async issue(name: string, request: PaymentRequest, value: bigint, packageBytes: Uint8Array, signed: SignedTerms,
-    prove: LocalProver, sign: BackerSigner): Promise<Act> {
-    name = alias(name); this.mutable(); this.poolOnly();
+  async issue(name: string, request: PaymentRequest | KeyedRequest, value: bigint, packageBytes: Uint8Array, signed: SignedTerms,
+    prove: LocalProver | undefined, sign: BackerSigner): Promise<Act> {
+    if (this.keyed !== undefined) return this.keyedIssue(name, request as KeyedRequest, value, packageBytes, signed, sign);
+    request = request as PaymentRequest;
+    name = alias(name); this.mutable();
     const { backing, obligor, own } = this.termsOf(signed);
     const output = copyPaymentRequest(request, { domain: this.domain, backing, value });
     const intent = JSON.stringify([hex(backing), output.cm.toString(), value.toString()]);
@@ -1533,8 +1553,9 @@ export class V3Wallet {
    * presenter key and any zero padding are derived from the seed and the notice, so a retry or a rebuilt wallet
    * names the same demand. The notes stay reserved while it is prepared and are then held by its lock (C3.7). */
   async demand(name: string, quantity: bigint, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
-    prove: LocalProver): Promise<Act> {
-    name = alias(name); this.mutable(); this.poolOnly();
+    prove?: LocalProver): Promise<Act> {
+    if (this.keyed !== undefined) return this.keyedDemand(name, quantity, deadline, packageBytes, signed);
+    name = alias(name); this.mutable();
     const { backing, own } = this.termsOf(signed);
     requireThat(isValue(quantity) && quantity > 0n && isValue(deadline), "INVALID", "invalid demand");
     const intent = JSON.stringify([hex(backing), quantity.toString(), deadline.toString()]);
@@ -1576,15 +1597,29 @@ export class V3Wallet {
    * backer's settled note is found by `sync` from the seed once a settlement with this acceptance takes effect. */
   async accept(name: string, demand: Uint8Array, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
     sign: BackerSigner): Promise<SignedAcceptance> {
-    name = alias(name); this.mutable(); this.poolOnly();
+    requireThat(this.keyed === undefined, "INVALID", "a keyed wallet's acceptance owner is a key (keyedAccept)");
+    const row = await this.acceptance(name, demand, deadline, packageBytes, signed, sign);
+    return { domain: new Uint8Array(this.domain), demand: hexToBytes(row.demand), owner: BigInt(row.owner), deadline, signature: row.signature };
+  }
+  /** Lit-v1 §§4, 8: as `accept`, the owner `acceptSecret`'s key over the demand and the deadline. */
+  async keyedAccept(name: string, demand: Uint8Array, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
+    sign: BackerSigner): Promise<KeyedAcceptance> {
+    requireThat(this.keyed !== undefined, "INVALID", "a pool wallet's acceptance owner is a field element");
+    const row = await this.acceptance(name, demand, deadline, packageBytes, signed, sign);
+    return { domain: new Uint8Array(this.domain), demand: hexToBytes(row.demand), owner: hexToBytes(row.owner), deadline, signature: row.signature };
+  }
+  /** The saved acceptance under `name`, made and signed once: its demand, its owner as stored (pool-v3's a decimal field
+   * element, lit-v1's a key in hex) and K's signature. */
+  private async acceptance(name: string, demand: Uint8Array, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms,
+    sign: BackerSigner): Promise<{ readonly demand: string; readonly owner: string; readonly signature: Uint8Array }> {
+    name = alias(name); this.mutable();
     const { backing, obligor, own } = this.termsOf(signed), id = identifier(demand), key = hex(id);
     requireThat(isValue(deadline), "INVALID", "invalid acceptance deadline");
-    const saved = (): SignedAcceptance | undefined => {
+    const saved = () => {
       const row = this.db.prepare("SELECT * FROM backer_acceptances WHERE alias=?").get(name);
       if (row === undefined) return undefined;
       requireThat(row.demand === key && row.deadline === deadline.toString(), "CONFLICT", "alias names another acceptance");
-      return { domain: new Uint8Array(this.domain), demand: new Uint8Array(id), owner: BigInt(row.owner as string), deadline,
-        signature: copyUnshared(row.signature as Uint8Array) };
+      return { demand: key, owner: row.owner as string, signature: copyUnshared(row.signature as Uint8Array) };
     };
     const existing = saved();
     if (existing !== undefined) return existing;
@@ -1592,8 +1627,15 @@ export class V3Wallet {
       .get(key, deadline.toString()) === undefined, "CONFLICT", "another alias saved this acceptance");
     taken();
     requireThat(typeof sign === "function", "INVALID", "a backer signer is required");
-    const owner = ownerOf(deriveSettlementOwnerSecret(this.seed, this.domain, id, deadline).value);
-    requireThat(owner !== 0n, "STORAGE", "the derived owner is zero");
+    let owner: string, message: Uint8Array;
+    if (this.keyed !== undefined) {
+      const ownerKey = this.keyed.acceptOwner(this.seed, this.domain, id, deadline);
+      owner = hex(ownerKey); message = this.keyed.acceptance({ domain: new Uint8Array(this.domain), demand: new Uint8Array(id), owner: ownerKey, deadline });
+    } else {
+      const value = ownerOf(deriveSettlementOwnerSecret(this.seed, this.domain, id, deadline).value);
+      requireThat(value !== 0n, "STORAGE", "the derived owner is zero");
+      owner = value.toString(); message = acceptanceBytes({ domain: new Uint8Array(this.domain), demand: new Uint8Array(id), owner: value, deadline });
+    }
     await this.read(packageBytes, own, ({ force, at, lag, observed }) => {
       const standing = force?.demand(key);
       requireThat(standing !== undefined && same(standing.backing, backing), "ABSENT", "the demand does not stand in canonical history");
@@ -1601,12 +1643,11 @@ export class V3Wallet {
       requireThat(deadline > at + lag, "INVALID", "the acceptance deadline is not later than the horizon");
       observed.check();
     });
-    const acceptance = { domain: new Uint8Array(this.domain), demand: new Uint8Array(id), owner, deadline };
-    const signature = await this.backerSignature(sign, acceptanceBytes(acceptance), obligor);
+    const signature = await this.backerSignature(sign, message, obligor);
     this.transaction(() => {
       if (this.db.prepare("SELECT 1 FROM backer_acceptances WHERE alias=?").get(name) !== undefined) return;
       taken();
-      this.db.prepare("INSERT INTO backer_acceptances VALUES(?,?,?,?,?,?)").run(name, key, deadline.toString(), owner.toString(), signature, backing);
+      this.db.prepare("INSERT INTO backer_acceptances VALUES(?,?,?,?,?,?)").run(name, key, deadline.toString(), owner, signature, backing);
     });
     return saved()!;
   }
@@ -1619,8 +1660,11 @@ export class V3Wallet {
    * count is read from the venue record (`disclosures`), so a release witnessed without force is followed by a
    * settlement of a new output, and a wallet rebuilt from its seed re-proves the same one. In a gap (`route`) the
    * settlement is bound to the snapshot and its release is published (`publish`). Saved before it is returned. */
-  async settle(name: string, acceptance: SignedAcceptance, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Act> {
-    name = alias(name); this.mutable(); this.poolOnly();
+  async settle(name: string, acceptance: SignedAcceptance | KeyedAcceptance, packageBytes: Uint8Array, signed: SignedTerms,
+    prove?: LocalProver): Promise<Act> {
+    if (this.keyed !== undefined) return this.keyedSettle(name, acceptance as KeyedAcceptance, packageBytes, signed);
+    acceptance = acceptance as SignedAcceptance;
+    name = alias(name); this.mutable();
     const { backing, obligor, own: terms } = this.termsOf(signed);
     const own = { domain: copyUnshared(acceptance.domain), demand: identifier(acceptance.demand), owner: acceptance.owner,
       deadline: acceptance.deadline, signature: copyUnshared(acceptance.signature) };
@@ -1677,7 +1721,7 @@ export class V3Wallet {
    * gap (`route`) the withdrawal is published (`publish`). Once the withdrawal is final the demand's notes are
    * available again; they are presented (C3.1): `freshen` moves them to a fresh note, and `demand` may present them again. */
   async withdraw(name: string, demand: Uint8Array, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
-    name = alias(name); this.mutable(); this.poolOnly();
+    name = alias(name); this.mutable();
     const { backing, own } = this.termsOf(signed), id = identifier(demand), key = hex(id);
     const intent = JSON.stringify([hex(backing), key]);
     const existing = this.savedAct(name, 5, intent);
@@ -1688,21 +1732,24 @@ export class V3Wallet {
       const notice = this.standing(view, id);
       const { header } = this.route(view);
       view.observed.check();
-      return { header, at: view.at, notice };
+      return { header, segment: view.canonical!.segment, at: view.at, notice };
     });
     if (planned === undefined) return this.act(name)!;
     const { notice } = planned;
-    const presenter = presenterSecret(this.seed, this.domain, notice.tags, notice.instant, notice.deadline);
+    const presenter = this.presenterOf(notice);
     try {
-      const bytes = encodeRecord(withdrawalRecord({ domain: this.domain, header: planned.header }, id, presenter));
+      // Lit-v1 §3: the presenter key signs the kind-5 statement for the canonical segment.
+      const bytes = this.keyed !== undefined ? this.keyed.withdraw(this.domain, planned.segment, id, presenter) :
+        encodeRecord(withdrawalRecord({ domain: this.domain, header: planned.header }, id, presenter));
       return this.saveAct(name, 5, intent, bytes, backing, planned.header.operator, key, [], planned.at);
     } finally { presenter.fill(0); }
   }
 
   /** pool-v3 §3.3: burn `quantity` from this seed's available notes (the smallest covering note or pair), the rest
    * returned as one fresh change output. The backer burns the notes settlements paid it where its terms say so. */
-  async burn(name: string, quantity: bigint, packageBytes: Uint8Array, signed: SignedTerms, prove: LocalProver): Promise<Act> {
-    name = alias(name); this.mutable(); this.poolOnly();
+  async burn(name: string, quantity: bigint, packageBytes: Uint8Array, signed: SignedTerms, prove?: LocalProver): Promise<Act> {
+    if (this.keyed !== undefined) return this.keyedBurn(name, quantity, packageBytes, signed);
+    name = alias(name); this.mutable();
     const { backing, own } = this.termsOf(signed);
     requireThat(isValue(quantity) && quantity > 0n, "INVALID", "invalid burn quantity");
     const intent = JSON.stringify([hex(backing), quantity.toString()]);
@@ -1792,7 +1839,7 @@ export class V3Wallet {
    * published outside an open gap has no force, and a release witnessed without force discloses its output and
    * counts towards the next settlement's disclosure count. Venue refusals surface as the publisher's `VenueError`. */
   async publish(name: string, publisher: RecordPublisher): Promise<void> {
-    name = alias(name); this.mutable(); this.poolOnly();
+    name = alias(name); this.mutable();
     const row = this.db.prepare("SELECT kind,record,backing,status FROM saved_records WHERE alias=? AND kind!='2'").get(name);
     requireThat(row !== undefined, "UNKNOWN", "unknown act");
     const kind = ({ "4": 1, "6": 3, "5": 4 } as const)[row.kind as string];
@@ -1803,8 +1850,9 @@ export class V3Wallet {
     requireThat(row.status !== "failed", "CONFLICT", "a failed act is not published");
     const send = publisher?.publishRecord;
     requireThat(typeof send === "function", "INVALID", "a venue publisher is required");
-    const backing = copyUnshared(row.backing as Uint8Array);
-    const bytes = encodePublication({ domain: new Uint8Array(this.domain), backing, kind, record: decodeRecord(row.record as Uint8Array) });
+    const backing = copyUnshared(row.backing as Uint8Array), record = copyUnshared(row.record as Uint8Array);
+    const bytes = this.keyed !== undefined ? this.keyed.publication(new Uint8Array(this.domain), backing, { kind, record }) :
+      encodePublication({ domain: new Uint8Array(this.domain), backing, kind, record: decodeRecord(record) });
     await send.call(publisher, 4, backing, bytes);
   }
   /** C3.4: publish the backer's saved acceptance under `name` at the backing's venue (publication kind 2), routed to
@@ -1812,15 +1860,18 @@ export class V3Wallet {
    * where its deadline is later than the index the venue witnesses it at by more than the lag, so a backer publishes
    * as it accepts. The holder's release still decides settlement; an acceptance nobody published reads as no answer. */
   async publishAcceptance(name: string, publisher: RecordPublisher): Promise<void> {
-    name = alias(name); this.mutable(); this.poolOnly();
+    name = alias(name); this.mutable();
     const row = this.db.prepare("SELECT * FROM backer_acceptances WHERE alias=?").get(name);
     requireThat(row !== undefined, "UNKNOWN", "unknown acceptance");
     const send = publisher?.publishRecord;
     requireThat(typeof send === "function", "INVALID", "a venue publisher is required");
-    const backing = copyUnshared(row.backing as Uint8Array), acceptance = { domain: new Uint8Array(this.domain),
-      demand: hexToBytes(row.demand as string), owner: BigInt(row.owner as string), deadline: BigInt(row.deadline as string),
-      signature: copyUnshared(row.signature as Uint8Array) };
-    await send.call(publisher, 4, backing, encodePublication({ domain: new Uint8Array(this.domain), backing, kind: 2, acceptance }));
+    const backing = copyUnshared(row.backing as Uint8Array), fields = { domain: new Uint8Array(this.domain),
+      demand: hexToBytes(row.demand as string), deadline: BigInt(row.deadline as string), signature: copyUnshared(row.signature as Uint8Array) };
+    // Lit-v1 §4: kind 2 is the acceptance bytes and K's signature, the owner a key.
+    const bytes = this.keyed !== undefined ? this.keyed.publication(new Uint8Array(this.domain), backing,
+      { kind: 2, acceptance: { ...fields, owner: hexToBytes(row.owner as string) } }) :
+      encodePublication({ domain: new Uint8Array(this.domain), backing, kind: 2, acceptance: { ...fields, owner: BigInt(row.owner as string) } });
+    await send.call(publisher, 4, backing, bytes);
   }
 
   /** C3.8: demand `demand`'s outcome over the terms' backing at the venue's current witnessed index, read from public
@@ -1877,6 +1928,8 @@ export class V3Wallet {
       const saved = this.keyedRequestRow(name);
       if (saved !== undefined) {
         requireThat(same(saved.request.backing, ownBacking) && saved.request.value === value, "CONFLICT", "request parameters changed");
+        // §8: a window move to this key closed the request; a payment already made to it is still credited.
+        requireThat(!this.moved(ownBacking, saved.index), "CLOSED", "a window move paid this wallet at the request's key: make a new request");
         return saved.request;
       }
       const index = this.allocate(ownBacking), owner = this.keys!.key(ownBacking, index), id = new Uint8Array(40);
@@ -1937,11 +1990,13 @@ export class V3Wallet {
   }
 
   /** Whether the note's creating statement consumed notes, all of them this wallet's own (lit-v1 §8): marked by its
-   * scan, or reserved by a payment or act saved here. Both are local custody: a mark withheld from the kept replay file
+   * scan, or reserved by a payment or act saved here; or is an issue this wallet's seed made. Both are local custody: a mark withheld from the kept replay file
    * under a re-recorded digest is still caught where the wallet saved the payment. */
   private selfPaid(state: CanonicalCheckpoint["state"], note: KeyedNote): boolean {
     if (this.keyed!.ownFunded(state, note)) return true;
     const consumed = state.store.consumedAt(note.ns, note.position), saved = this.db.prepare("SELECT 1 FROM saved_inputs WHERE nf=?");
+    // An issue consumes none: it is this wallet's own where this seed's issue nonce derives it (§8, M14g2).
+    if (consumed.length === 0) return this.keyed!.ownIssue(this.seed, this.domain, note.opening);
     return consumed.length > 0 && consumed.every(nf => state.store.marked(state.ns, state.position, nf) || saved.get(nf.toString()) !== undefined);
   }
   /** Each selected lit note's opening and owner secret (the caller zeroes the secrets): read before any write, so a mark
@@ -1988,32 +2043,40 @@ export class V3Wallet {
       this.current(at);
       const header = this.admissible(view);
       const holdings = this.holdingsOf(notes, force, at);
-      const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available" && holdings[i]!.presented.length === 0);
+      const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
       const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
-      const inputs = this.keyedInputs(selected);
-      try {
-        // The venue view behind this decision is checked before the durable write.
-        observed.check();
-        this.transaction(() => {
-          requireThat(this.savedPayment(name, intent) === undefined, "CONFLICT", "alias was saved concurrently");
-          requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
-          this.requireUnpresented(selected.map(note => note.nf));
-          requireThat(theirs.every(owner => taken.get(owner) === undefined), "CONFLICT", "request is already in a saved payment");
-          const outputs: KeyedOutput[] = [{ backing, value, owner: payee.owner },
-            ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }])];
-          if (sum > total) outputs.push({ backing, value: sum - total, owner: this.keys!.key(backing, this.allocate(backing)) });
-          const bytes = this.keyed!.spend(this.domain, canonical.segment, inputs, outputs);
-          const statement = hex(this.statementOf(bytes));
-          this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,NULL,'prepared',NULL,NULL,NULL,?,NULL)").run(name, intent, statement,
-            bytes, backing, header.operator, at.toString());
-          for (const note of selected) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(note.nf.toString(), name);
-          for (const { cm, opening: o } of this.keyed!.outputs(this.domain, bytes)) {
-            this.db.prepare("INSERT INTO saved_outputs VALUES(?,?,?,?,?)").run(cm.toString(), name, o.value.toString(), hex(o.owner), hex(o.rho));
-          }
-        });
-      } finally { for (const input of inputs) input.secret.fill(0); }
-      return this.payment(name)!;
+      return this.keyedSave(name, intent, view, header.operator, selected, () => [{ backing, value, owner: payee.owner },
+        ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }]),
+        ...(sum > total ? [{ backing, value: sum - total, owner: this.keys!.key(backing, this.allocate(backing)) }] : [])], theirs);
     });
+  }
+  /** Sign a lit spend of `selected` into the outputs `outputs` builds and save it under `name` with its reservations, in
+   * the read's turn with no await: `outputs` runs inside the saving transaction, so a change index it allocates is saved
+   * with the record, or not at all. `theirs` are payees' keys no other saved payment names. A presented note is spent as
+   * any other: lit-v1's tags hide nothing (§2), so it links nothing new. A concurrent call that saved the alias first is
+   * refused (its retry answers it). */
+  private keyedSave(name: string, intent: string, view: Frontier, operator: Uint8Array, selected: readonly KeyedNote[],
+    outputs: () => KeyedOutput[], theirs: readonly string[] = []): Payment {
+    const { canonical, at, observed } = view, taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE owner=?");
+    const inputs = this.keyedInputs(selected);
+    try {
+      // The venue view behind this decision is checked before the durable write.
+      observed.check();
+      this.transaction(() => {
+        requireThat(this.db.prepare("SELECT 1 FROM saved_records WHERE alias=?").get(name) === undefined, "CONFLICT", "alias was saved concurrently");
+        requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
+        requireThat(theirs.every(owner => taken.get(owner) === undefined), "CONFLICT", "request is already in a saved payment");
+        const bytes = this.keyed!.spend(this.domain, canonical!.segment, inputs, outputs());
+        const statement = hex(this.statementOf(bytes));
+        this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,NULL,'prepared',NULL,NULL,NULL,?,NULL)").run(name, intent, statement,
+          bytes, selected[0]!.opening.backing, operator, at.toString());
+        for (const note of selected) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(note.nf.toString(), name);
+        for (const { cm, opening: o } of this.keyed!.outputs(this.domain, bytes)) {
+          this.db.prepare("INSERT INTO saved_outputs VALUES(?,?,?,?,?)").run(cm.toString(), name, o.value.toString(), hex(o.owner), hex(o.rho));
+        }
+      });
+    } finally { for (const input of inputs) input.secret.fill(0); }
+    return this.payment(name)!;
   }
 
   /** Pool-fees C1.2.5 as lit reads it: once a prepared lit payment's segment is no longer the canonical one, its owners
@@ -2034,7 +2097,7 @@ export class V3Wallet {
       const { canonical, force, notes, at, observed } = view;
       requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to spend from");
       requireThat(at >= BigInt(row.judged as string), "CHANGED_VIEW", "the venue view is older than the saved record's");
-      const status = this.keyedPaid(name, saved.record, canonical, force);
+      const status = this.paid(name, saved.record, canonical, force);
       if (status !== undefined) {
         observed.check();
         this.resolve([{ alias: name, status }], encodeCommitment(canonical.commitment), at);
@@ -2064,6 +2127,243 @@ export class V3Wallet {
         });
       } finally { for (const input of inputs) input.secret.fill(0); }
       return this.payment(name)!;
+    });
+  }
+
+  // --- Lit-v1 acts and the window move (slice 14 M14g2) ------------------------------------------------------------
+
+  /** Lit-v1 §§3, 8: K's issue of an owned request's quantity to its key, under the nonce this backer wallet's seed derives
+   * for that backing, key and quantity (`issueNonce`): an issue made again under a new alias once its segment ended, or by
+   * a wallet restored from the seed, creates the same output, which at most one statement can (§2). Refused where that
+   * output already exists. K signs through `sign`, checked against the obligor; saved before it is returned. */
+  private async keyedIssue(name: string, request: KeyedRequest, value: bigint, packageBytes: Uint8Array, signed: SignedTerms,
+    sign: BackerSigner): Promise<Act> {
+    name = alias(name); this.mutable();
+    const { backing, obligor, own } = this.termsOf(signed);
+    let output: KeyedOutput;
+    try {
+      const owned = this.keyed!.request(request, { domain: this.domain, backing, value });
+      output = { backing: owned.backing, value: owned.value, owner: owned.owner };
+    } catch (error) {
+      if (error instanceof EncodingError) throw new V3WalletError("INVALID", "invalid keyed payment request");
+      throw error;
+    }
+    const intent = JSON.stringify([hex(backing), "keyed", hex(output.owner), value.toString()]);
+    const existing = this.savedAct(name, 1, intent);
+    if (existing !== undefined) return existing;
+    requireThat(typeof sign === "function", "INVALID", "a backer signer is required");
+    this.requireUnissued(hex(output.owner));
+    const nonce = this.keyed!.issueNonce(this.seed, this.domain, output);
+    const planned = await this.read(packageBytes, own, view => {
+      if (this.savedAct(name, 1, intent) !== undefined) return undefined;
+      const { canonical, force, at, observed } = view;
+      requireThat(canonical !== undefined && force !== undefined, "ABSENT", "no canonical checkpoint to issue in");
+      this.current(at);
+      const header = this.admissible(view), issue = this.keyed!.issue(this.domain, canonical.segment, output, nonce);
+      // Issued to this wallet's own key, it would credit no request (§8): K issues to a holder's request.
+      requireThat(this.keys!.find(output.owner) === undefined, "OWN_KEY", "the request's key is this wallet's own");
+      requireThat(!force.hasOutput(issue.cm), "CONFLICT", "request is already paid");
+      observed.check();
+      return { header, issue, at };
+    });
+    if (planned === undefined) return this.act(name)!;
+    const signature = await this.backerSignature(sign, planned.issue.message, obligor);
+    return this.saveAct(name, 1, intent, planned.issue.record(signature), backing, planned.header.operator, undefined, [], planned.at);
+  }
+
+  /** A request's key is paid once (§8): an issue saved here naming it with any quantity, not failed, refuses another; one
+   * whose segment ended has failed, and is made again under a new alias with the same output. */
+  private requireUnissued(owner: string): void {
+    requireThat(this.db.prepare("SELECT intent FROM saved_records WHERE kind='1' AND status!='failed'").all().every(row =>
+      (JSON.parse(row.intent as string) as unknown[])[2] !== owner), "CONFLICT", "an issue to this key is already saved");
+  }
+
+  /** Lit-v1 §3 kind 3: burn `quantity` from this wallet's available notes (the smallest covering note or pair),
+   * signed by their owners, the rest to the backing's next index, allocated in the saving transaction; no change output
+   * where nothing is left. */
+  private async keyedBurn(name: string, quantity: bigint, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
+    name = alias(name); this.mutable();
+    const { backing, own } = this.termsOf(signed);
+    requireThat(isValue(quantity) && quantity > 0n, "INVALID", "invalid burn quantity");
+    const intent = JSON.stringify([hex(backing), quantity.toString()]);
+    const existing = this.savedAct(name, 3, intent);
+    if (existing !== undefined) return existing;
+    return this.read(packageBytes, own, view => {
+      const again = this.savedAct(name, 3, intent);
+      if (again !== undefined) return again;
+      const { canonical, force, notes, at, observed } = view;
+      this.current(at);
+      const header = this.admissible(view), holdings = this.holdingsOf(notes, force, at);
+      const selected = select((notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available"), quantity);
+      const sum = selected.reduce((n, note) => n + note.opening.value, 0n), inputs = this.keyedInputs(selected);
+      try {
+        observed.check();
+        return this.saveAct(name, 3, intent, () => this.keyed!.burn(this.domain, canonical!.segment, quantity, inputs,
+          sum > quantity ? { backing, value: sum - quantity, owner: this.keys!.key(backing, this.allocate(backing)) } : undefined),
+          backing, header.operator, undefined, selected.map(note => note.nf), at);
+      } finally { for (const input of inputs) input.secret.fill(0); }
+    });
+  }
+
+  /** Lit-v1 §3 kind 4 and C3.3: as `demand`, from whole available notes, presented or not (one of exactly the quantity, or a pair summing to it), signed
+   * by their owners, the presenter key `presentSecret`'s over their tags in input order, the read's index and the deadline
+   * (§8), so a wallet restored from its seed finds it. No padding. */
+  private async keyedDemand(name: string, quantity: bigint, deadline: bigint, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
+    name = alias(name); this.mutable();
+    const { backing, own } = this.termsOf(signed);
+    requireThat(isValue(quantity) && quantity > 0n && isValue(deadline), "INVALID", "invalid demand");
+    const intent = JSON.stringify([hex(backing), quantity.toString(), deadline.toString()]);
+    const existing = this.savedAct(name, 4, intent);
+    if (existing !== undefined) return existing;
+    return this.read(packageBytes, own, view => {
+      const again = this.savedAct(name, 4, intent);
+      if (again !== undefined) return again;
+      const { canonical, force, notes, at, lag, observed } = view;
+      this.current(at);
+      const { header, gap } = this.route(view);
+      requireThat(deadline > at + lag, "INVALID", "the deadline is not strictly ahead of the operator's horizon");
+      requireThat(!gap || deadline > at + 2n * lag, "INVALID", "the deadline is not after every index C3.3's window allows");
+      // Any available whole notes: a presented note links nothing new in lit (§2). `repeats` names the earlier demands
+      // presenting a selected note, as the pool's does.
+      const holdings = this.holdingsOf(notes, force, at), available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
+      const selected = exact(available, quantity);
+      requireThat(selected !== undefined, "FUNDS", "no available note or pair is exactly the quantity; pay yourself that amount first");
+      const repeats = [...new Set(selected.flatMap(note => holdings[notes.indexOf(note)]!.presented.map(id => hex(id))))].sort();
+      const secret = this.presenterOf({ tags: selected.map(note => note.tag), instant: at, deadline });
+      const presenter = ed25519.getPublicKey(secret);
+      secret.fill(0);
+      const inputs = this.keyedInputs(selected);
+      try {
+        observed.check();
+        const bytes = this.keyed!.demand(this.domain, canonical!.segment, inputs, presenter, at, deadline);
+        return this.saveAct(name, 4, intent, bytes, backing, header.operator, hex(this.statementOf(bytes)), selected.map(note => note.nf), at, repeats);
+      } finally { for (const input of inputs) input.secret.fill(0); }
+    });
+  }
+
+  /** Lit-v1 §§3–4 kind 6 and C3.5–C3.6: settle this seed's standing demand that K's acceptance answers, to the acceptance's
+   * owner, the release signed by the presenter key over this settlement's own statement hash. The acceptance must verify
+   * under the obligor, be due no later than the demand and not behind the horizon, and name no key of this wallet K can
+   * see (`OWN_KEY`): an owner key of a held backing, or the presenter key of a demand it presents, which no scan marks. Its notes paid
+   * back to itself, or stranded, would end the demand with K paying nothing; refused, an acceptance published in time
+   * still reads as answered (C3.8), and the holder withdraws. The
+   * settlement's output derives from the demand's nullifiers (§3), so no disclosure count is read (§7) and at most one
+   * settlement of a demand is admitted. In a gap (`route`) it is bound to the snapshot and its release published. */
+  private async keyedSettle(name: string, acceptance: KeyedAcceptance, packageBytes: Uint8Array, signed: SignedTerms): Promise<Act> {
+    name = alias(name); this.mutable();
+    const { backing, obligor, own: terms } = this.termsOf(signed);
+    let own: KeyedAcceptance, message: Uint8Array;
+    try {
+      own = { domain: copyUnshared(acceptance.domain), demand: copyUnshared(acceptance.demand), owner: copyUnshared(acceptance.owner),
+        deadline: acceptance.deadline, signature: copyUnshared(acceptance.signature) };
+      message = this.keyed!.acceptance(own);
+    } catch (error) {
+      if (error instanceof EncodingError || error instanceof TypeError) throw new V3WalletError("INVALID", "malformed acceptance");
+      throw error;
+    }
+    requireThat(same(own.domain, this.domain) && verifySignatureStrict(own.signature, message, obligor),
+      "INVALID", "the acceptance does not answer a demand under the backing's obligor");
+    const intent = JSON.stringify([hex(backing), hex(sha256(message))]);
+    const existing = this.savedAct(name, 6, intent);
+    if (existing !== undefined) return existing;
+    const key = hex(own.demand);
+    return this.read(packageBytes, terms, view => {
+      const again = this.savedAct(name, 6, intent);
+      if (again !== undefined) return again;
+      const { canonical, force, notes, at, lag, observed } = view;
+      this.current(at);
+      const demand = this.standing(view, own.demand);
+      requireThat(own.deadline <= demand.deadline, "INVALID", "the acceptance is due after the demand");
+      requireThat(own.deadline >= at + lag, "INVALID", "the acceptance deadline is behind the horizon");
+      const { header } = this.route(view);
+      // The presenter key of any demand this seed presents over its unspent notes, this one's included, and of every demand
+      // saved here (another backing's, or one that never stood, public all the same).
+      const presenters = [...notes.flatMap(note => [...force!.demandsWithTag(note.tag)].map(([, d]) => d)).filter(d => this.presents(d)),
+        ...this.db.prepare("SELECT record FROM saved_records WHERE kind='4'").all()
+          .map(row => this.construction.view(this.construction.decode(row.record as Uint8Array), () => undefined).demand!.value)];
+      requireThat(this.keys!.find(own.owner) === undefined && !presenters.some(d => same(own.owner, d.presenter)) &&
+        !same(own.owner, demand.presenter), "OWN_KEY", "the acceptance's owner is a key of this wallet: withdraw the demand instead");
+      const nfs = demand.nullifiers ?? [];
+      requireThat(nfs.length !== 0 && nfs.every(nf => !force!.hasNullifier(nf)), "ABSENT", "a demanded note is not unspent in canonical history");
+      const presenter = this.presenterOf(demand);
+      try {
+        const bytes = this.keyed!.settle(this.domain, canonical!.segment, own, presenter);
+        const output = this.construction.view(this.construction.decode(bytes), () => demand).outputs[0];
+        requireThat(output !== undefined && !force!.hasOutput(output), "CONFLICT", "the settlement's output already exists");
+        observed.check();
+        return this.saveAct(name, 6, intent, bytes, backing, header.operator, key, nfs, at);
+      } finally { presenter.fill(0); }
+    });
+  }
+
+  /** Lit-v1 §8's window move: once the backing's window is full (its highest exposed or found owner index `e` is `h + 256`,
+   * `h` the highest one paid), pay this wallet's smallest available note (or pair) covering more than the optional fee
+   * wholly, less the fee, to `e`'s key. Once that statement is final `h` reaches `e` and requests resume. The request that
+   * named `e` is closed: no retry hands its key out again (`CLOSED`), while a payer's output to it is still credited, since
+   * the move's own output is never (§8). No index is allocated (§8's exception), none past `h + 256` is named, and a
+   * second move is refused while one not failed pays `e`. One backing per statement. The intent binds the backing, the fee
+   * and `e`; an exact alias retry (backing and fee) returns the saved payment, signed again as any lit payment once its
+   * segment ends. */
+  async moveWindow(name: string, packageBytes: Uint8Array, signed: SignedTerms,
+    fee?: { readonly request: KeyedRequest; readonly value: bigint }): Promise<Payment> {
+    requireThat(this.keyed !== undefined, "INVALID", "a pool wallet has no owner-key window");
+    name = alias(name); this.mutable();
+    const { backing, own } = this.termsOf(signed);
+    let paid: { readonly owner: Uint8Array; readonly value: bigint } | undefined;
+    if (fee !== undefined) {
+      const { request, value } = fee;
+      try { paid = { owner: this.keyed.request(request, { domain: this.domain, backing, value }).owner, value }; } catch (error) {
+        if (error instanceof EncodingError) throw new V3WalletError("INVALID", "invalid keyed payment request");
+        throw error;
+      }
+    }
+    const head = [hex(backing), "move", paid === undefined ? null : hex(paid.owner), paid?.value.toString() ?? null];
+    const saved = (): Payment | undefined => {
+      const row = this.db.prepare("SELECT kind,intent FROM saved_records WHERE alias=?").get(name);
+      if (row === undefined) return undefined;
+      requireThat(row.kind === "2", "CONFLICT", "alias names a saved act");
+      const intent = JSON.parse(row.intent as string) as unknown[];
+      requireThat(head.every((field, i) => intent[i] === field), "CONFLICT", "alias names another payment order");
+      return this.payment(name);
+    };
+    const existing = saved();
+    if (existing !== undefined) return existing;
+    const theirs = paid === undefined ? [] : [hex(paid.owner)];
+    requireThat(theirs.every(owner => this.db.prepare("SELECT 1 FROM saved_outputs WHERE owner=?").get(owner) === undefined), "CONFLICT",
+      "request is already in a saved payment");
+    return this.read(packageBytes, own, view => {
+      const again = saved();
+      if (again !== undefined) return again;
+      const { canonical, force, notes, at } = view;
+      requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
+      this.current(at);
+      const header = this.admissible(view), keys = this.ownerKeys(backing);
+      requireThat(keys?.exposed !== undefined, "WINDOW", "sync the backing first: a wallet restored from its seed reads its exposed keys");
+      const target = keys.exposed > keys.found ? keys.exposed : keys.found;
+      // §8 moves a full window only: one whose next index `allocate` refuses.
+      requireThat(target + 1n > keys.high + this.keyed!.lookAhead, "CONFLICT", "the window is not full: requests still take new keys");
+      requireThat(target === keys.high + this.keyed!.lookAhead, "WINDOW", "the highest exposed owner key lies past the window");
+      // One move per window: a saved payment, or a burn's change, not failed that already pays `target`'s key moves it once
+      // final. A burn keeps no output rows: one remade after its segment ended may derive a later move's output exactly.
+      const targetKey = hex(this.keys!.key(backing, target));
+      requireThat(this.db.prepare(`SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE o.owner=? AND r.status!='failed'`)
+        .get(targetKey) === undefined && this.db.prepare("SELECT record FROM saved_records WHERE kind='3' AND status!='failed' AND backing=?").all(backing)
+        .every(row => this.keyed!.outputs(this.domain, row.record as Uint8Array).every(o => hex(o.opening.owner) !== targetKey)),
+        "CONFLICT", "a saved record already pays the highest exposed key: sync once it is final");
+      const holdings = this.holdingsOf(notes, force, at), price = paid?.value ?? 0n;
+      const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
+      requireThat(isValue(price + 1n), "INVALID", "invalid payment order");
+      const selected = select(available, price + 1n), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
+      return this.keyedSave(name, JSON.stringify([...head, target.toString()]), view, header.operator, selected, () => [
+        { backing, value: sum - price, owner: this.keys!.key(backing, target) },
+        ...(paid === undefined ? [] : [{ backing, value: paid.value, owner: paid.owner }])], theirs);
+    });
+  }
+  /** Whether a saved window move of `backing` pays this wallet's key at `index` (lit-v1 §8 closes the request naming it). */
+  private moved(backing: Uint8Array, index: bigint): boolean {
+    return this.db.prepare("SELECT intent FROM saved_records WHERE kind='2' AND backing=?").all(backing).some(row => {
+      const intent = JSON.parse(row.intent as string) as unknown[];
+      return intent[1] === "move" && intent[4] === index.toString();
     });
   }
 

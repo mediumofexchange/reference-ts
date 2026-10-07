@@ -22,13 +22,15 @@ import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configurat
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodeRecord, evidencePair, hashEvidenceFields, splitRecord, ownerSignaturesVerify,
-  settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord,
+  acceptanceBytes, arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodePublication, encodeRecord, evidencePair, hashEvidenceFields,
+  splitRecord, ownerSignaturesVerify, settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord, type SignedAcceptance,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
 import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, windowFor } from "./holdings.js";
-import { copyLitPaymentRequest, signedSpend } from "./wallet.js";
-import { OWNER_LOOK_AHEAD, presentSecret } from "./wallet-keys.js";
+import {
+  copyLitPaymentRequest, signedBurn, signedDemand, signedSettlement, signedSpend, signedWithdrawal, unsignedIssue,
+} from "./wallet.js";
+import { acceptSecret, issueNonce, OWNER_LOOK_AHEAD, presentSecret, publicKeyOf } from "./wallet-keys.js";
 import { LIT_HEADERS, LIT_PACKAGES, LIT_TRAILS, MAX_LIT_TRAIL_RECORD_BYTES } from "./transport.js";
 import { verifySignatureStrict } from "../keys.js";
 
@@ -213,6 +215,28 @@ const LIT_WALLET: KeyedWalletFrames = Object.freeze({
   presentSecret,
   request: copyLitPaymentRequest,
   spend: signedSpend,
+  burn: signedBurn,
+  demand: signedDemand,
+  withdraw: signedWithdrawal,
+  settle: signedSettlement,
+  issueNonce: (seed: Uint8Array, domain: Uint8Array, output: Output) => issueNonce(seed, domain, output.backing, output.owner, output.value),
+  issue: (domain: Uint8Array, segment: Uint8Array, output: Output, nonce: Uint8Array) => {
+    const { message, record } = unsignedIssue(domain, segment, output, nonce);
+    return { message, cm: keyOf(noteCommitment(domain, { ...output, rho: issueRho(output, nonce) })), record };
+  },
+  ownIssue: (seed: Uint8Array, domain: Uint8Array, opening: Opening) => {
+    const output = { backing: opening.backing, value: opening.value, owner: opening.owner };
+    return compareBytes(issueRho(output, issueNonce(seed, domain, output.backing, output.owner, output.value)), opening.rho) === 0;
+  },
+  acceptOwner: (seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint) => {
+    const secret = acceptSecret(seed, domain, demand, deadline);
+    try { return publicKeyOf(secret); } finally { secret.fill(0); }
+  },
+  acceptance: acceptanceBytes,
+  publication: (domain: Uint8Array, backing: Uint8Array, body: { readonly kind: 1 | 3 | 4; readonly record: Uint8Array } |
+    { readonly kind: 2; readonly acceptance: SignedAcceptance }) =>
+    encodePublication(body.kind === 2 ? { domain, backing, kind: 2, acceptance: body.acceptance } :
+      { domain, backing, kind: body.kind, record: decodeRecord(body.record) }),
   spendOf: (bytes: Uint8Array) => {
     const s = decodeRecord(bytes).statement;
     if (s.kind !== 2) throw new EncodingError("not a spend");
