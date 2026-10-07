@@ -76,8 +76,11 @@ the named commitment under the expected operator's signature, so a sequence
 it records is one that operator signed. It keeps each part as it arrives.
 A stated position authenticates nothing: the store looks it up in its own
 rows and continues its own evidence recurrence. Where the parts do not
-assemble over what the store holds, the client fetches everything once more
-from nothing. `{ full: true }` asks for that outright, which a reader uses
+assemble over what the store holds, or leave out the selection's directory, a
+snapshot it names or that snapshot's trail, the client fetches everything once
+more from nothing; a source whose answer from nothing still leaves them out is
+refused, its mark unmoved, so no source can move a mark past evidence it did
+not send. `{ full: true }` asks from nothing outright, which a reader uses
 when a read over its kept evidence is unresolved: a resupplied copy replaces
 an object that storage damaged. The result is the selection and the read's
 own package (the configuration and the selected commitment), to pass to
@@ -133,8 +136,11 @@ bounds.
 The client aborts a command after ten seconds, and a served stream ten seconds
 after its last chunk. The server closes a pending command response after
 fifteen seconds measured from the request callback, after headers arrive. A
-served stream is closed fifteen seconds after its last write, or once its peer
-has taken less than 64 KB per second beyond the first fifteen seconds. At most
+served stream is closed fifteen seconds after its last write. Each side also
+ends a stream once the time it waited on the other passes fifteen seconds and
+a millisecond per 64 bytes moved: the server counts only its writes' waits on
+the peer, never its own reads of rows, and the client only its waits for
+chunks, refusing a dripping source as one that did not answer. At most
 eight streams are served at once (`BUSY` otherwise), so slow readers leave
 connections for commands. Node's header/request receive timeouts apply
 separately. Serving holds no journal
@@ -147,7 +153,7 @@ needs no walk and commands are answered meanwhile. A fork kept beside the
 served trail, or a resumed position with two kept values, falls back to one
 walk back over its kept links (about 7.5 µs per record served, giving up the
 turn each 4,096 links). `sync` takes no
-overall deadline or abort signal yet. Losing a response does not
+abort signal yet. Losing a response does not
 cancel or roll back journal work. Recover an uncertain submit or commit by its
 exact saved statement or command ID. Reopening the journal fences older owners
 and reads its state from rows without verifying a proof again; it refuses
