@@ -24,9 +24,10 @@ history without trusting issuer totals; and a returning operator to preserve
 every finalized spend and effective recovery settlement. Tests must distinguish
 invalid evidence, unavailable evidence and pending receipt liability.
 
-The target phone and practical latency/memory/network budgets have not yet been
-selected. The benchmark below supplies a baseline, not a pass against an
-unstated budget. A one-backer deployment does not remove general independent
+The practical latency, memory and network budgets are declared in
+[target scale and budgets](PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets); a phone wallet is
+outside the release target. [The design point](#the-design-point-m11c3) measures the runtime
+against them. A one-backer deployment does not remove general independent
 replacement rights from the protocol.
 
 ## Browser proof baseline
@@ -102,7 +103,7 @@ checkpoints and imported ancestry; unchanged snapshots cannot evade them.
 The [local](pool-v3-recovery-store-verification.json) and
 [synthetic Ergo](pool-v3-recovery-store-ergo-verification.json) reports retain
 the passing real-proof acceptance, package size and actual funding cost.
-The current reader's checked CI baseline is recorded in WORK.md.
+CI runs these checks, and the retained reports above bind the sources they passed on.
 Earlier live publisher and journal reports are historical at
 [`2c6b20c`](https://github.com/mediumofexchange/reference-ts/tree/2c6b20c).
 
@@ -121,38 +122,18 @@ proof counts, package sizes, transaction bytes and source bindings.
 
 The store checks' live testnet modes are retired ([decision](../decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify)):
 the live command drill (`command-drill.mjs --testnet --authorized-testnet`, [M10d](../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d))
-is the live evidence, and the recovery and scope checks keep their local and synthetic Ergo modes. Their live
-runs used `--testnet --authorized-testnet` through `drill.mjs` and a pre-broadcast publication guard, all at
-[`09534a8`](https://github.com/mediumofexchange/reference-ts/tree/09534a8/scripts/pool/v3). The authorized 2026-09-27 [recovery acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
-passed with nine real proofs and ten distinct transactions (guard cap: ten transactions, 0.05 tERG
-spend), spending 0.03434168 tERG including 0.011 tERG fees; the complete package was 126,037 bytes, and
-the holder-only reader verified force, the non-service count, unchanged supply of 20 and exact adoption of
-four recovery records at opening index 51. It is historical after later journal changes. The 2026-10-01
-[two-backing scope drill (M8b) at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)
-passed in 69 minutes with seven real proofs and twelve distinct transactions (the cap) spending 0.01434984
-tERG (0.0132 tERG fees), equal to the synthetic run's spend; fresh processes read each backing from the
-node at every group, and the retained public bundle (`scratch/pool-v3-scope-testnet-reader/`) re-read to
-its `readback.json`. The anchor is a trust input; persistence, custody and mainnet remain outside both.
-The planned transaction order, budgets and timing are in the full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal).
-
-The journal's live path, `store-check.mjs --testnet` (retired with the modes above, at `09534a8`), used the own
-v6.0.6 testnet node and throwaway tERG funding. It selected the distinct
-reference-testnet identity and verified the pinned testnet header rules,
-inclusion and depth through `ErgoVenue`. The fresh seedless reader received
-only the served package and selection; its endpoint, profile, judging index,
-witnessed pin and verification keys were held separately, and it fetched the
-headers and sections itself. Wrong pins and withheld carrying sections
-remained unresolved. The run retained a public bundle in
-`scratch/pool-v3-testnet-reader/`, runnable with its `replay.mjs`; the bundle
-contains no holder seed, wallet key, witness or journal. The [live report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json)
-owns the transaction run at `acc1ab7`. Its initial export omitted public bytecode
-needed by the reader's identity checks; the corrected export retains it beside
-the keys. `testnet-reader-check.mjs` (retired with M10d, at `2fd0f08`) rebuilt those public
-artifacts and verified the bundle without sending transactions. Its separate
-[readback report](https://github.com/mediumofexchange/reference-ts/blob/2fd0f08/docs/pool-v3-testnet-reader-verification.json) binds the corrected
-exporter and reader, preserves every original bundle input hash, and records
-standalone replay and altered-bytecode refusal. The chosen anchor and prehistory remain trust inputs; depth 2 on
-one controlled testnet node establishes no mainnet finality, adoption or deployment.
+is the live evidence, and the recovery and scope checks keep their local and synthetic Ergo modes.
+Their authorized live runs (`--testnet --authorized-testnet` through `drill.mjs` and a pre-broadcast
+publication guard, sources at [`09534a8`](https://github.com/mediumofexchange/reference-ts/tree/09534a8/scripts/pool/v3)) are historical:
+the 2026-09-27 [recovery acceptance at a72888b](https://github.com/mediumofexchange/reference-ts/blob/a72888b/docs/pool-v3-recovery-store-testnet-verification.json)
+(nine real proofs, ten transactions, 0.03434168 tERG, a 126,037-byte package, exact adoption of four recovery
+records at opening index 51), the 2026-10-01 [two-backing scope drill (M8b) at 8ca96cd](https://github.com/mediumofexchange/reference-ts/blob/8ca96cd/docs/pool-v3-scope-store-testnet-verification.json)
+(seven real proofs, twelve transactions, 0.01434984 tERG, equal to the synthetic run's spend) and the journal's own
+[live report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json)
+with its [reader readback at 2fd0f08](https://github.com/mediumofexchange/reference-ts/blob/2fd0f08/docs/pool-v3-testnet-reader-verification.json).
+The anchor and prehistory are trust inputs; depth 2 on one controlled testnet node establishes no mainnet
+finality, persistence, custody or adoption.
+Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#reference-operator-journal).
 
 ### Conditional initial-segment replay
 
@@ -433,81 +414,25 @@ venue record alongside the canonical package bytes.
 
 ## Transfer shape and ordinary fees
 
-The F4 probe generated candidates from the pinned v2 spend; its
-[recorded evidence](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-fees-verification.json) pins their identities,
-inputs and measurement scope and is historical, recorded at
-[fcf532c](https://github.com/mediumofexchange/reference-ts/tree/fcf532c). It
-retired on 2026-09-25 (sources at
-[1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/scripts/pool/fees)):
-the v3 conformance suite proves the chosen spend, fee output included.
+The F4 probe generated candidate spends from the pinned v2 spend and chose two inputs and four outputs
+under [pool-fees C1.2.3–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md):
+a payment and a fee in a second backing fit one statement with both changes, and a third position fits only
+same-backing payment, change and fee. Measured gates (subgroup 32,768 for each):
 
-F4 selects two input/four output positions for successor spend, under
-[pool-fees C1.2.3–7](https://github.com/mediumofexchange/money-from-first-principles/blob/37cbd40/pool-fees.md).
-A payment of 73 A from 100 A and a fee of 2 B from 10 B fit in one statement:
-73 A to the receiver, 27 A change, 2 B to the fee recipient and 8 B change.
-Each recipient controls its output through an exact F3 request. Every output
-uses the same commitment, scope and per-backing conservation rules; no fee
-position, asset, debit authority, public amount or new statement kind exists.
-Same-backing fees and sponsored service pad the unused positions with the
-payer's distinct zero-value notes and capsules.
+| Spend candidate | Gates | Public inputs |
+|---|---:|---:|
+| Pinned v2, 2x2 | 19,034 | 11 |
+| F3 delivery, 2x2 | 19,050 | 13 |
+| F4 comparison, 2x3 | 19,256 | 14 |
+| Selected F4, 2x4 | 19,465 | 15 |
 
-Three positions fit same-backing payment/change/fee and can use another fee
-backing if its input already has the exact amount. Four also returns both
-changes without a preparation transfer. Separate fee/payment statements have
-separate admission/finality; putting their submissions beside each other does
-not provide atomicity. Adding a batch would need a new receipt/replay/finality
-contract for behavior one ordinary spend already supplies.
-
-| Spend candidate | Gates | Subgroup | Public inputs |
-|---|---:|---:|---:|
-| Pinned v2, 2x2 | 19,034 | 32,768 | 11 |
-| F3 delivery, 2x2 | 19,050 | 32,768 | 13 |
-| F4 comparison, 2x3 | 19,256 | 32,768 | 14 |
-| Selected F4, 2x4 | 19,465 | 32,768 | 15 |
-
-Four costs 209 gates over three (about 1.1%), a 32-byte commitment, 89-byte
-capsule, one leaf and one recovery trial on every spend, including padding.
-That is 121 extra statement bytes versus another roughly 15 KB proof-bearing
-preparation record when needed. It also increases output storage/scanning
-positions by one third; no frequency or device budget is assumed. All four
-capsules plus the two public digest encodings cost 420 bytes before framing.
-Inputs, note formulas, issue's one output and burn's one change remain fixed.
-
-All five real proofs are 14,656 bytes. The selected 2x4 flow and a total of
-`2^64` with individually bounded inputs both prove. Seventeen positive host
-checks and 35 rejection cases cover every added output, all duplicate pairs,
-per-backing conservation even when aggregate value matches, and exact capsule
-association. Host-ABI bypasses leave ACIR unchanged and still reject `2^64`
-in each added output and `2^128` in either delivery limb. Mutating any
-commitment or digest limb rejects its original proof. These tests do not
-infer hidden-value range constraints from ABI serialization alone.
-
-On the recorded single-threaded Node 24 desktop run, the selected fee/change
-proof took 4.22 s to prove and 92 ms to verify; its widened-sum boundary took
-5.78 s and 132 ms. These are individual feasibility measurements, not a
-timing distribution or a phone/deployment budget.
-
-The fee recipient knows its fee opening and statement association. When the
-flow guarantees the same backing, this reveals the payment backing; a quoted
-fee independent of payment size avoids disclosing size through a fee formula.
-Another fee backing reduces that inference only where scope and other leaks
-leave actual alternatives. Sponsored service avoids direct-fee disclosure.
-Fees have ordinary pending-local-root, finality, lapse and recovery treatment;
-exact retry returns its existing receipt before applying a changed price.
-Changing an exposed fee requires a newly authorized transfer after verified
-lapse and canonical unspentness, not an implicit rewrite or cancellation.
-
-Private fee policy is outside public validity. A fee-free admitted statement
-remains valid on replay. Unpaid/declined quotes do not clear non-service counts
-or gate the public remedies: the holding request proves no fee agreement.
-Backer/sponsor funding remains a practical service choice, including for the
-unchanged issue/burn/recovery shapes. Pool fees do not fund venue currency
-publication costs automatically.
-
-The probe compares generated circuits and receiver-prepared output evidence.
-It does not implement v3 admission, a quote transport, durable wallet pricing,
-public-history authentication or actual publication. Those are integration
-and deployment gates, not consequences of choosing an arity.
+The fourth position costs 209 gates over three (about 1.1%), a 32-byte commitment, an 89-byte capsule, one
+leaf and one recovery trial on every spend, and 121 extra statement bytes, against another roughly 15 KB
+proof-bearing preparation record when needed. All five real proofs are 14,656 bytes; the selected flow proved
+in 4.22 s and verified in 92 ms on one single-threaded Node 24 desktop (individual feasibility measurements,
+not a budget). Retired on 2026-09-25 with the v3 conformance suite proving the chosen spend, fee output
+included; `npm run check:pool:v3` covers it now. The [recorded evidence at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/pool-fees-verification.json)
+is historical. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#transfer-shape-and-ordinary-fees).
 
 ## Spent-set replay
 
@@ -595,96 +520,20 @@ Slice 8 M5b asks where replay state lives so that memory is independent of
 history (pool-v3 §14; [decision](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
 The probe was `node --expose-gc scripts/pool/v3/replay-store-probe.mjs`, retired after M5b.6
 ([at its last revision](https://github.com/mediumofexchange/reference-ts/blob/6c7d8f2/scripts/pool/v3/replay-store-probe.mjs));
-the subsections below name its modes. It
-uses the replay-cost shape: an issue, then spends of two fresh nullifiers into
-four outputs, anchored at the empty root, with 932-byte stand-in records. It
-has two modes:
-- *baseline:* the runtime state machine (`openSegmentState`, `applyRecord`)
-  with a stub verifier;
-- *stored:* the decision's layout in node:sqlite, with a SHA-256 stand-in for
-  the Poseidon2 node hash (26 ms per event, independent of storage). The
-  layout is:
-  - append-only fact rows carrying their position, read with as-of bounds,
-    with events holding their chain values;
-  - the note tree's frontier only;
-  - spent-set nodes updated in place behind a write-back cache;
-  - a savepoint per 64-event checkpoint;
-  - keep points that commit and then hash the state file;
-  - records in a separate evidence file.
-
-After the run, the stored mode reopens and re-digests the file, then
-recomputes from the kept state what §14 compares with the snapshot: the note
-root from the frontier, the spent root from the root node's children, the
-totals from the rows, and the chain at `n` from the stored value at `n−1`.
-
-With `--check`, it compares each checkpoint's roots with the runtime
-`NoteTree` (under `--poseidon`) and `RadixSpentSet`. It then rehashes every
-stored spent node from its children to that root. These passed on 2026-09-29:
-- 600 events under Poseidon2, with 12 of 38 checkpoints rolled back and
-  reapplied;
-- 400 events under Poseidon2 with a 32-node cache, 8 rollbacks;
-- 3,000 events with a 64-node cache, 47 rollbacks, so write-back evictions
-  happened inside rolled-back savepoints;
-- a WAL variant.
-
-Reapplying the same events after a rollback would trip the duplicate
-nullifier, statement or spent-root checks if any rolled-back row or node had
-survived.
-
-Runs of 2026-09-29, on one Windows desktop:
-
-| Run | Storage work per event | Heap | Process memory | State per event |
-|---|---:|---:|---:|---:|
-| Baseline, 3,000 events, 32-byte proofs | (Poseidon2 replay, 59 ms) | +8.4 KB per event | grows | — |
-| Baseline, 2,000 events, 14,656-byte proofs | — | +8.3 KB per event, plus 30 KB of record bytes | grows | — |
-| Stored, 10⁵ events, keep every 10,240, 64 MiB cache per file | 1.9 ms mean; 0.8 ms rising to 2.6–2.9 ms | flat near 44 MB | levels near 520 MB | 1.3 KB |
-| The same, 16 MiB cache per file | 2.4 ms mean; 0.9 ms rising to 3.1 ms | flat near 44 MB | levels near 420 MB | 1.3 KB |
-| 10⁶ events, keep every 102,400, 64 MiB cache per file | 3.95 ms mean; 1.5 ms rising to 4–6 ms from 450,000 on | 42 → 45 MB | 589 MB at 50,000 → 695 MB at 10⁶ | 1.3 KB (1.27 GB) |
-| The journal's pattern: WAL, `synchronous=FULL`, a commit per event, 20,000 events | 32 ms, the commit's flush | — | — | 1.2 KB |
-
-Checking a whole state at 10⁵ events:
-
-| Operation | Time |
-|---|---:|
-| Hash the 126 MB state file at a keep point | 0.4–0.6 s |
-| Reopen and re-digest it | 0.54 s |
-| Recompute the roots, totals and chain | 47 ms |
-| A SHA-256 over every state row in key order | 7.1 s |
-
-At 10⁶ events:
-- *Time:* storage work added about 66 minutes in all, against about 7 h of
-  Poseidon2 note hashing at 26 ms per event.
-- *Keep point:* hashing the 1.27 GB state file took 6.7 s.
-- *Resume:* reopening and re-digesting took 4.6 s, and recomputing took
-  0.3 s.
-- *Memory:* after the caches filled, process memory still rose about 0.1 KB
-  per event, 106 MB over 950,000 events. That is inside 1 GiB at the design
-  point but not yet shown independent of history. M5b.3's flat-memory
-  acceptance has to attribute or remove it.
-- *Growth of per-event cost:* it grows with the database as random-key
-  B-tree pages fall out of the cache. Two levers remain untried: key
-  clustering and a larger cache.
-
-Records add 1.0 KB per event to the evidence file at these stand-in sizes
-(about 15.6 KB at the conformance proof size).
-
-Process memory is the Windows working set. It includes a page cache for each
-of the two open files; with 16 MiB caches it settles about 100 MB lower.
-
-An earlier form of the probe stored every note-tree node and updated all
-nodes write-through. Over 10⁵ events it took 4.8 ms per event with WAL
-commits and 2.7 ms in one rollback-journal transaction, at 2.6 KB per event.
-Its 10⁶ run held heap at 44 MB and process memory near 600 MB through
-400,000 events before it was stopped for the revised layout. For scale, a
-single `node:sqlite` call costs 3–6 µs in memory.
-
-Limits:
-- one desktop shared with other work;
-- one synthetic single-segment shape;
-- as-of reads measured only at the tip;
-- no imports, scopes, recovery tables or verification workers;
-- a stand-in node hash, so this is storage evidence, not replay-time
-  evidence.
+the subsections below name its modes. On the replay-cost shape (an issue, then spends of two fresh nullifiers
+into four outputs, 932-byte stand-in records) the in-memory state machine grew 8.3 KB of heap per spend-sized
+statement, plus the record bytes twice at real proof size (38 KB in all). The stored layout (append-only fact
+rows read as of a position, the note tree's frontier only, spent-set nodes behind a write-back cache, a
+savepoint per checkpoint, keep points that hash the state file, records in a separate evidence file; a SHA-256
+stand-in for the 26 ms Poseidon2 node hash) held heap flat near 44 MB and process memory near 520 MB over 10⁵
+events at 1.3 KB of state per event and 1.9 ms mean storage work. Hashing the 126 MB state file at a keep point
+took 0.4–0.6 s; reopening and re-digesting it took 0.54 s. At 10⁶ events storage work (about 4 ms an event) added about 66 minutes
+against about 7 h of Poseidon2 note hashing, the state file was 1.27 GB (6.7 s to hash, 4.6 s to reopen and re-digest), and process memory rose
+from 589 to 695 MB (about 0.1 KB per event after the caches filled). Records add 1.0 KB per event to the
+evidence file at stand-in sizes, about 15.6 KB at the conformance proof size. Roots, totals and chain
+recomputed from kept state matched the runtime `NoteTree` and `RadixSpentSet` across rolled-back savepoints.
+Storage evidence from one shared Windows desktop, not replay-time evidence. Retired once the runtime
+took the layout over; the subsections below measure that runtime. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#replay-state-storage).
 
 ### The runtime reader streaming one long segment (M5b.3a)
 
@@ -699,209 +548,69 @@ Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd
 
 ### The runtime reader over many checkpoints (M5b.3b)
 
-`replay-store-probe.mjs read <N> --every 1 [--silence]` writes the same
-shape with a checkpoint after every record: an empty opening, then N
-checkpoints of one more record each, all served by one trail. The fixture
-venue holds the N + 1 held commitments. The read classifies every checkpoint
-in rank order ([M5b.3b](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)),
-resuming each from the one before. Memory is sampled after a forced
-collection at the first proof and every 5% of the records. The probe drops
-its own generation objects before the read, but the fixture venue's records
-stay in the process.
-
-Runs of 2026-09-29 on the same desktop, sharing it with the real-proof
-harness:
-
-| Checkpoints | Before the first proof | Replay per checkpoint | Heap over the replay | Process memory over the replay |
-|---:|---:|---:|---:|---:|
-| 1,001, descent before M5b.3b (`979346e`) | 20.4 s | 95 ms | 27.0 MB at the first proof, then falling to 23.8 MB | 145 → 212 MB |
-| 10,001, forward walk (`c6d9fd8`) | 61 s | 93 ms | 16.0 → 16.2 MB, 33 bytes per checkpoint | 274 → 275 MB, peak 370 MB |
-| 5,001 with `--silence`, forward walk (`bf69479`) | 29 s | 92 ms | 13.0 → 13.4 MB, 88 bytes per checkpoint | 236 → 237 MB, peak 299 MB |
-
-- *The baseline:* the descent reached the opening before checking a proof,
-  holding every verdict. Its heap rose by 15.5 MB over 1,001 checkpoints,
-  about 16 KB per checkpoint, so 10⁵ checkpoints would pass 1 GiB.
-- *Before the first proof:* the time is mostly the signature check of every
-  held commitment (C2.3.3), about 4 ms each on this host, once per read. The
-  held answer at 10,001 checkpoints (1.5 MB) was read in windows.
-- *Commits:* a first run of the walk wrote each walk row in its own commit
-  and replayed at 131 ms per checkpoint. Each walk now runs in one
-  transaction, and each kept answer in one savepoint.
-- *Clocks:* with a silence clause every continuation reads its clock, and
-  the running clock state keeps that linear. Heap rose 0.4 MB over the first
-  2,500 checkpoints and was flat over the last 2,500.
-- *Files:* the evidence file took 20.4 MiB and the state file 29.7 MiB. Event
-  rows no longer hold record bytes.
-- *Limits:* stand-in proofs and one backing, with no imports, recovery
-  publications or faults. Timings are from a shared host.
+`replay-store-probe.mjs read <N> --every 1 [--silence]` measured the runtime reader with a checkpoint after
+every record, classifying each in rank order ([M5b.3b](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+The earlier descent held every verdict and its heap rose about 16 KB per checkpoint (15.5 MB over 1,001), so
+10⁵ checkpoints would pass 1 GiB. The forward walk held heap flat over 10,001 checkpoints (16.0 → 16.2 MB,
+process memory 274 → 275 MB, 93 ms replay per checkpoint) and over 5,001 with a silence clause (13.0 → 13.4 MB).
+About 4 ms of each held commitment's signature check (C2.3.3) precedes the first proof. Stand-in proofs, one
+backing, shared host. Covered now by the runtime's kept-state tests and the later subsections. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#the-runtime-reader-over-many-checkpoints-m5b3b).
 
 ### Kept state and incremental retrieval (M5b.4b)
 
-`replay-store-probe.mjs read <N> --every <K> --kept <M>` first reads the
-M5b.3a shape with the replay file kept under its digest. The file commits a
-keep point every 10,000 replayed records. The operator then adds M spends and
-a checkpoint. The reader reopens its kept file, which runs the digest check,
-and fetches the trail's head and the M records after its checkpoint
-(`importTrail`). It then reads a package carrying only the configuration, the
-new commitment, its directory and its snapshot
+`replay-store-probe.mjs read <N> --every <K> --kept <M>` measured a reader that keeps its replay file under
+its digest and fetches only the trail's head and the M records after its checkpoint
 ([M5b.4b](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-
-Run of 2026-09-30 at `b4e9b09`, with N = 10⁵, K = 10⁴ and M = 1,000, on the
-same desktop:
-
-| Step | Result |
-|---|---|
-| First read, 10⁵ records, 11 checkpoints | 39.3 ms per record (37.1 ms without a kept file at M5b.3a); heap 10.2 → 10.5 MB; peak process memory 274 MB |
-| Files after it | state 212 MiB, evidence 124 MiB |
-| One SHA-256 of the state file (a keep point's cost) | 0.71 s |
-| Reopening the kept file (digest check) | 0.68 s |
-| Fetched head and 1,000 records; the package | 0.9 MiB; 871 bytes |
-| Assembly (`importTrail`) | 0.49 s |
-| Second read | 43.1 s: 1,000 proofs checked, 43 ms per new record |
-
-- *Keep points:* ten of them cost about 7 s over a 65-minute read. At the
-  design point's 1.27 GB state file, the M5b.1 probe measured 4.6–6.7 s per
-  digest, so the interval should grow with the file (M5b.6).
-- *The second read:* its cost follows the new records, not the 10⁵ before
-  them. It still judges the 11 kept checkpoints again (M5b.4a), which costs
-  lookups and signatures, not proofs.
-- *Limits:*
-  - stand-in proofs, one backing and one segment;
-  - the run predates the review fixes (records bound to their segment, a
-    top-record check per served checkpoint). They add 32 bytes per record
-    and one record hash per checkpoint read, and were not re-measured.
+At N = 10⁵ and M = 1,000 the first read took 39.3 ms per record (heap 10.2 → 10.5 MB, peak 274 MB; state file
+212 MiB, evidence 124 MiB); reopening the kept file took 0.68 s, the fetch was 0.9 MiB and the second read took
+43.1 s, 43 ms per new record: its cost followed the new records, not the 10⁵ before them. Stand-in proofs, one
+backing; the run predates the review fixes (32 bytes per record, one record hash per checkpoint read) and did
+not re-measure them. Covered now by the kept-state tests. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#kept-state-and-incremental-retrieval-m5b4b).
 
 ### The operator journal on rows (M5b.5a)
 
-`replay-store-probe.mjs journal <N> --every <K> [--audit]` runs the operator
-journal itself: N stand-in statements admitted one transaction each, with a
-published checkpoint every K, then the journal reopened, audited and served
-([M5b.5a](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-
-Runs of 2026-09-30 with N = 10⁴ and K = 1,000 (at `48b2836`, while tests
-shared the desktop) and N = 4,000 on the idle desktop (final code):
-
-| Step | Result |
-|---|---|
-| Heap over 10⁴ admissions | 10.0 → 10.4 MB |
-| Process memory | 87 MB, settling near 190 MB after 4,000 admissions; peak 405 MB during the audit |
-| One admission, idle desktop | 59 ms at the start, 87 ms after four checkpoints |
-| Database | 50 MiB, 5.2 KB per 938-byte statement |
-| Reopening after 10⁴ admissions | 0.14 s, no proof verified |
-| Audit | 467 s: all 10⁴ proofs checked again, through the public reader from the seed |
-| Assembling the 9 MiB package | 4.2 s |
-
-- *Where an admission's time goes:* about two thirds is the note tree's
-  Poseidon2 hashing, as in the storage probe; the synced commit is under a
-  tenth.
-- *The rise per checkpoint:* the journal's view verified every held
-  commitment of its key twice at each command, about 5 ms per checkpoint.
-  M5b.5b.1 replaced that whole-answer read with kept windows (below).
-- *Limits:* stand-in proofs, one backing and one segment, 11 checkpoints; no
-  silence clause, so no admission read the journal's own history; the package
-  is assembled whole in memory.
+`replay-store-probe.mjs journal <N> --every <K> [--audit]` measured the operator journal on rows
+([M5b.5a](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)):
+at 10⁴ stand-in admissions, heap stayed 10.0 → 10.4 MB, an admission took 59–87 ms (about two thirds of it the
+note tree's Poseidon2 hashing), the database held 5.2 KB per 938-byte statement, and reopening took 0.14 s with
+no proof verified. The rise per checkpoint (about 5 ms, the view verifying every held commitment twice per
+command) is what M5b.5b.1 removed. Stand-in proofs, one backing and segment, no silence clause. Covered now by
+the journal's kept-row tests and crash drills. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#the-operator-journal-on-rows-m5b5a).
 
 ### The journal's venue view by kept windows (M5b.5b.1)
 
-`replay-store-probe.mjs journal <N> --every 1` signs and publishes a
-checkpoint after every admission, so the journal's own key holds N + 1
-commitments on the venue
+`replay-store-probe.mjs journal <N> --every 1` measured the journal's view of the venue with a checkpoint
+after every admission, so its own key held N + 1 commitments
 ([M5b.5b.1](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-One cycle is an admission, a commitment and a publication: three commands,
-each reading its view of the venue.
-
-Runs of 2026-09-30 on the same desktop: the whole-answer view at `76ee0b4`
-with N = 300, and kept windows at `2ea30c8` with N = 5,000 and `--audit`.
-
-| Step | Whole answers, 301 checkpoints | Kept windows, 5,001 checkpoints |
-|---|---|---|
-| One cycle | 228 ms over the first 15, 4,871 ms at 240: about 20 ms per checkpoint held | 76 ms over the first 250, 81 ms over the last 250; 76–87 ms throughout |
-| Past 4,096 checkpoints | not run: one answer's entry budget refuses every command (the unit test shows it at 4,200 objects) | served |
-| Heap over the run | 9.6 → 10.2 MB | 10.2 → 13.0 MB, the in-process fixture venue's 5,001 records |
-| Database | 7.7 KB per statement | 33.7 MiB, 7.1 KB per statement with its checkpoint |
-| Reopening | 0.10 s | 0.11 s, no proof and no commitment verified |
-| Audit | — | 501 s: 5,000 proofs and 5,001 checkpoints judged again through the reader, and the venue read again from index zero |
-| Assembling the package | — | 5.7 MiB in 5.1 s |
-
-- *Flat per command:* a view asks the venue for the indices after its kept
-  answers and verifies each held commitment once, in the window that first
-  carries it. With the review's fixes, a run of N = 1,000 gave 73–84 ms per
-  cycle throughout.
-- *Limits:* stand-in proofs, one backing and one segment; a local fixture
-  venue in the same process; no silence or non-service clause, so no
-  admission read the journal's own history (a journal under one still judges
-  every held checkpoint at each admission); the audit and the package follow
-  the history, as before.
+With whole answers a cycle (admission, commitment, publication) rose about 20 ms per held checkpoint (228 ms
+over the first 15, 4,871 ms at 240) and one answer's entry budget refused every command past 4,096
+checkpoints. With kept windows, 5,001 checkpoints ran at 76–87 ms per admission with its commitment and
+publication, flat, and the reopening verified no proof or commitment (0.11 s). Stand-in proofs, one backing
+and segment, a fixture venue in the same process; a journal under a silence clause still judged every held
+checkpoint at each admission then (M11b4). Covered now by the journal's kept-window tests. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#the-journals-venue-view-by-kept-windows-m5b5b1).
 
 ### Serving by stream and incrementally (M5b.5b.2)
 
-`replay-store-probe.mjs journal <N> --every <K> --serve --more <M>` runs the
-journal as above, then serves its history over its HTTP service into a
-reader's evidence file (`V3ServiceClient.sync`), admits M more statements
-under one new checkpoint, and syncs again
+`replay-store-probe.mjs journal <N> --every <K> --serve --more <M>` measured the journal serving its history
+over its HTTP service into a reader's evidence file and then serving only what is new
 ([M5b.5b.2](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-The journal, the transport and the reader's import share one process, and
-memory is sampled as the response is written.
-
-Run of 2026-09-30 on the same desktop with N = 10⁴, K = 1,000, M = 100 and
-14,016-byte stand-in proofs (14.9 KB per statement, the real proof size), on
-the delivered code:
-
-| Step | Result |
-|---|---|
-| First sync: 10⁴ records, 11 checkpoints | 142.3 MiB in 14.0 s, 10.2 MiB/s; one package part and one whole trail |
-| Heap while it is served and kept | 12.0–13.2 MB throughout (12.3 MB before the first byte) |
-| Process memory while it is served and kept | 197 → 229 MB, SQLite's page caches; peak 238 MB over the run |
-| Second sync, after 100 new records (1,492,600 bytes framed) | 1,494,323 bytes in 0.27 s |
-| A sync with nothing new | 809 bytes |
-| Reader's evidence file | 158 MiB |
-
-- *Only new bytes:* the second response is the new records plus 1,723
-  bytes: the frame, the read's own package, the new directory and snapshot,
-  and the trail's head.
-- *Flat:* the heap does not follow the 142 MiB served. Each record is read,
-  checked against its chain step and written on the journal's side, then
-  framed, decoded, chained and stored on the reader's.
-- *Limits:* stand-in proofs, one backing and one segment; loopback, both ends
-  in one process; the reader kept the evidence and did not replay it (the
-  M5b.4b probe measures that read). Before a trail's first record the journal
-  walks its kept links back once, about 7.5 µs per record served in the
-  review's run (0.75 s at 10⁵ records). Since M11b3 a trail is read
-  forward by position and only a fork falls back to that walk.
+At 10⁴ statements of real proof size (14.9 KB each) the first sync moved 142.3 MiB in 14.0 s while the heap
+stayed at 12.0–13.2 MB; a second sync after 100 new records fetched their bytes plus 1,723 (1,494,323 bytes in
+0.27 s), and a sync with nothing new 809 bytes. Loopback, one backing and segment; the reader kept the
+evidence without replaying it. Since M11b3 a trail is read forward by position and only a fork walks its kept
+links. Covered now by the service tests and the separate-process service check. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#serving-by-stream-and-incrementally-m5b5b2).
 
 ### The wallet on its kept files (M5b.5c.1)
 
-`replay-store-probe.mjs journal <N> --every <K> --wallet --more <M>` runs the
-journal as above, then a `V3Wallet` whose verifier declares its circuits: it
-syncs its evidence file from the journal's HTTP service (`supply` with
-`V3ServiceClient.sync`) and reads the backing's frontier into its kept replay
-file, scanning every output with its seed. The journal then admits M more
-statements under one new checkpoint; the wallet syncs and reads again, and once
-more after a restart with nothing new
-([M5b.5c.1](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
-Journal, transport and wallet share one process, and memory is sampled as the
-read verifies.
-
-Run of 2026-09-30 on the same desktop at `52c90ec`, with N = 10⁴, K = 1,000,
-M = 100 and 14,656-byte stand-in proofs (15.6 KB per statement):
-
-| Step | Result |
-|---|---|
-| First sync: fetch into the evidence file | 14.1 s |
-| First read: 10⁴ records, 11 checkpoints, 4 × 10⁴ outputs scanned | 440 s, 44 ms per statement; 3 venue requests |
-| Heap during the first read | 13.2–13.6 MB throughout |
-| Process memory during the first read | 227 → 324 MB, SQLite's page caches; the run's peak |
-| Second sync and read, 100 new records | 0.4 s and 5.7 s; 100 proofs checked, 3 venue requests |
-| Sync and read after a restart, nothing new | 0.06 s and 0.75 s; no proof checked, no venue request |
-| Files | evidence 158 MiB, replay 21.5 MiB |
-
-- *Flat and proportional:* the heap does not follow the history, and the
-  second read costs what its 100 records do. The first read's 44 ms per
-  statement is the reader's replay cost (39–43 ms at M5b.4b) with the seed's
-  scan of four outputs.
-- *Limits:* stand-in proofs, one backing and one segment, and a wallet that
-  owns none of the outputs. A wallet's cost per record no longer grows with
-  the notes it holds ([M11b](#a-wallets-witnesses-kept-at-completion-m11b)).
+`replay-store-probe.mjs journal <N> --every <K> --wallet --more <M>` measured a `V3Wallet` syncing its evidence
+file from the journal's service and reading the backing into its kept replay file, scanning every output with
+its seed ([M5b.5c.1](../decisions/2026-09.md#2026-09-29--keep-replay-state-in-each-partys-sqlite-storage-committed-at-keep-points)).
+At 10⁴ statements of 15.6 KB the heap stayed at 13.2–13.6 MB through a first read of 44 ms per statement (4 × 10⁴
+outputs scanned, 227 → 324 MB of process memory in SQLite's page caches); 100 new records cost 0.4 s to sync
+and 5.7 s to read, and a restart with nothing new 0.06 s and 0.75 s with no proof checked and no venue request.
+Stand-in proofs, one backing and segment, a wallet owning none of the outputs; a wallet's cost per record no
+longer grows with the notes it holds ([M11b](#a-wallets-witnesses-kept-at-completion-m11b)). Covered now by the
+wallet's kept-file tests and the history check below. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#the-wallet-on-its-kept-files-m5b5c1).
 
 ### Real proofs past the old package (M5b.5c.2)
 
@@ -919,33 +628,12 @@ exactly; the wallet proves its lapsed payment again in the returned segment
 and pays once more. A fresh seedless process, holding only its own evidence
 and replay files, reads at each stage.
 
-The [retained report](pool-v3-history-store-verification.json) is the CI run
-(Linux, Node 24) of 2026-09-30 at `7214e4b`, 3.8 minutes:
-
-| Step | Result |
-|---|---|
-| Proofs made | 79, each 14,656 bytes: 37 issues at 1.0 s, 39 spends at 3.1 s, 2 demands and a settlement at 2.6 s |
-| Payer, first sync and read (37 statements) | 566 KB fetched, 37 proofs checked, 1.6 s |
-| Payer, each later round (12 statements) | 189 KB fetched, 12 proofs checked, 0.75 s; preparing a payment checks its own proof only and asks the venue nothing |
-| Payer after a restart, nothing new | 809 bytes fetched, no proof checked, no venue request, 0.16 s |
-| Fresh seedless process, first sync (73 statements) | 1.13 MB fetched, 73 proofs checked, read 3.0 s (41 ms per statement), process peak 449 MB |
-| The same process's files, service down, after the force | nothing fetched, 3 proofs checked, read 0.4 s |
-| Payer after the return | 48 KB fetched, no proof checked (it read the force at its original indices) |
-| The same process's files after the return | 80 KB fetched, 2 proofs checked; equal to a new process from nothing (1.21 MB, 78 proofs) |
-| Wallet restored from the seed, first sync | 78 proofs checked, 3.7 s; the payer's holdings exactly |
-| Reopened journal's audit | 3.0 s |
-| The acceptance process (prover, journal, service, both wallets) | peak 640 MB |
-
-- *What the circuits check:* every payment's membership path is the wallet's
-  kept witness, in the genesis segment and, after the return, under the
-  returned segment's imports; the holder's is a kept witness moved through
-  every later output. A wrong path fails its proof.
-- *Limits:* tens of statements, one backing and the local reference venue.
-  The target scale has the stand-in-proof measurements above only. The reader
-  process's peak is one verifier backend's; the budget of the whole process
-  with its verification workers is M5b.6's. On this desktop two local runs
-  were stopped under host memory pressure while the process stayed under
-  350 MB; the acceptance was taken from CI.
+The [retained report](pool-v3-history-store-verification.json) owns the proof counts and timings, the bytes
+each party fetched, the process peaks and the source bindings. Every payment's membership path is the
+wallet's kept witness, in the genesis segment and, after the return, under the returned segment's imports; a
+wrong path fails its proof. The limits are tens of statements, one backing and the local reference venue: the
+target scale has the stand-in-proof measurements of the sections above only, and a reader process's peak is one
+verifier backend's (the whole process with its verification workers is M5b.6's).
 
 ### Verification ahead and the first sync (M5b.6)
 
@@ -1037,63 +725,25 @@ time.
 
 ### A wallet's witnesses kept at completion (M11b)
 
-A replay kept every witnessed output's 32 siblings current and rewrote each
-witness of its segment at every record adding outputs, so a wallet's cost per
-record grew with the notes it ever held. The store now writes a right sibling
-once its block completes (at most once per height per witness, found from the
-blocks a record completes) and folds the one still-filling block from the
-frontier when it reads a path; the paths of one tip share that fold. A
-throwaway vitest probe timed `ReplayStore.append` of 2-output records after W
-one-output witnessed records, on a 4-core cloud container on 2026-10-03:
-
-| Witnesses kept | Before (`1808a22`, 200 records) | After (500 records) |
-|---|---|---|
-| 0 | 16.5 ms per record | 17.5 ms |
-| 250 | 53.0 ms | not run |
-| 1,000 | 162.0 ms | 17.3 ms |
-| 4,000 | not finished in 15 min | 18.1 ms |
-
-- *Result:* about 0.15 ms per kept witness per record before; flat on average
-  after, the note tree's root being the cost. A wallet holding 1,000 notes
-  through the design point's 10⁶ records would have spent about 45 h on
-  witnesses alone.
-- *Bound:* each witness is rewritten at most 31 times over its life, so the
-  average is flat; one record that completes a block of height h rewrites the
-  witnesses among the 2^h leaves left of it (a review's probe: 2,048
-  witnesses, 309 ms for the record completing height 11, against 16 ms).
-- *Limits:* the store alone, with no proof, scan or journal; one run per
-  point. A spent note's witness is still kept, and a holdings read still
-  scans every witnessed output once. The kept file's layout moved to 6, so a
-  wallet's earlier kept file is replayed once.
+A replay rewrote each kept witness of its segment at every record adding outputs, so a wallet's cost per
+record grew with the notes it ever held: about 0.15 ms per kept witness per record (16.5 ms at none, 162 ms at
+1,000 witnesses, over 15 minutes at 4,000), or about 45 h on witnesses alone for a wallet holding 1,000 notes
+through the design point's 10⁶ records. The store now writes a right sibling once its block completes and folds
+the one filling block from the frontier when it reads a path; each witness is rewritten at most 31 times, and
+the same probe stayed at 17.3–18.1 ms per record from 0 to 4,000 witnesses (the note tree's root being the
+cost). The store alone, with no proof, scan or journal, on a 4-core cloud container. Covered now by the
+replay-store tests. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-witnesses-kept-at-completion-m11b).
 
 ### An admission under a silence clause (M11b4)
 
-Under a silence or non-service clause the operator's journal reads its own
-canonical checkpoint through the public reader before each admission. Each
-read judged every held checkpoint again (a kept class skipped only the
-replay), walked the silence clock from the segment's opening and hashed the
-kept replay file whole. A read now resumes the selected backing's kept walk
-and judges only new checkpoints
-([decision](../decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)).
-A throwaway vitest probe committed and published H empty checkpoints of one
-backing with a silence clause on the fixture venue, with stand-in proofs,
-then timed `submit` of an issue, on a 4-core cloud container on 2026-10-03/04:
-
-| Held checkpoints | Before (`6d0fdf9`), 3 admissions | After (`c889aac`), 5 admissions |
-|---|---|---|
-| 5 | 96–122 ms | 74–112 ms |
-| 20 | 344–401 ms | 123–154 ms |
-| 80 | 1,099–1,194 ms | 112–138 ms |
-| 320 | not run | 121–178 ms |
-
-- *Result:* about 14 ms per held checkpoint per admission before (with the
-  trails these checkpoints carried); flat within the runs' spread after. The
-  first admission after each commit is the highest: it judges the new
-  checkpoint. The admission's own state transition is most of the rest.
-- *Limits:* stand-in proofs, the fixture venue and one backing; one run per
-  point. The replay file here is small: a read at a new venue index still
-  hashes the whole file (WORK.md Next 4(v)), about 7 s at 10⁶ statements by
-  M5b.6's figure, which this probe cannot show.
+Under a silence or non-service clause the operator's journal reads its own canonical checkpoint through the
+public reader before each admission. Each read judged every held checkpoint again, walked the silence clock
+from the segment's opening and hashed the kept replay file whole: about 14 ms per held checkpoint per admission
+(96–122 ms at 5 held checkpoints, 1,099–1,194 ms at 80). A read now resumes the selected backing's kept walk and
+judges only new checkpoints ([decision](../decisions/2026-10.md#2026-10-04--resume-a-kept-walk-so-a-later-read-judges-only-new-checkpoints-slice-11-m11b4-next-4k)),
+and the probe stayed at 112–178 ms from 5 to 320. Stand-in proofs, the fixture venue and one backing; a small
+replay file, so the whole-file hash a read at a new venue index still takes (about 7 s at 10⁶ statements by
+M5b.6's figure) does not show. Covered now by the kept-walk tests. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#an-admission-under-a-silence-clause-m11b4).
 
 ### The commands over a thousand statements (M11c1)
 
@@ -1163,7 +813,7 @@ Run of 2026-10-04 at `fa8384d` on a 4-core cloud container (Xeon 2.1 GHz,
   steady-state budget. The lever is to keep each output's recovered
   opening and nullifier with its witness, so that a read recovers only
   new outputs. Dropping a spent output's witness would also help (WORK.md
-  Next 4(x)). M11b7 took the first lever and leaves spent outputs out of a
+  Next 4(n)). M11b7 took the first lever and leaves spent outputs out of a
   read ([below](#a-wallet-read-from-kept-marks-m11b7)).
 - *Against the budgets:* at 10³ statements every budget holds. Admission is
   under 1 s, and every process stays under 1 GiB. Restart does not
@@ -1183,59 +833,28 @@ Run of 2026-10-04 at `fa8384d` on a 4-core cloud container (Xeon 2.1 GHz,
 
 ### A wallet read from kept marks (M11b7)
 
-M11b7 keeps each witnessed output's nullifier and opening with its witness
-and leaves spent outputs out of a read
-([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x)).
-`owned-notes-probe.mjs`
-([at its revision](https://github.com/mediumofexchange/reference-ts/blob/9616784/scripts/pool/v3/owned-notes-probe.mjs))
-writes one seed's outputs, four a record, into an in-memory replay store
-through the seed's witness predicate, then spends every second one. It
-times `ownedNotes` at the tip, then reading two notes' secrets and paths as
-a spend does. No proof or record is involved: it isolates the read M11c1
-attributed the growth to.
-
-Run of 2026-10-04 on the M11c1 container (4 cores, Xeon 2.1 GHz), one run
-per point, `npm run build` output of each revision:
-
-| Outputs (half spent) | Before (`4a1b0b5`) | After (`0f32190`) | Two inputs completed |
-|---|---|---|---|
-| 2,000 | 3.14 s, 1.57 ms an output | 39 ms, 0.020 ms an output | 3.2 ms |
-| 20,000 | 32.8 s, 1.64 ms an output | 214 ms, 0.011 ms an output | 3.2 ms |
-| 100,000 | not run (about 2.7 min at this rate) | 1.54 s, 0.015 ms an output | 17.6 ms |
-
-- *Result:* a read no longer recovers outputs. What remains is one indexed
-  row a witnessed output, read from the witness rows, and the spent check in
-  SQL; spent outputs cost their row only. The shop of M11c1 with 10⁵ outputs reads in about 1.5 s
-  instead of about 2 minutes. Ten syncs a day then spend about 15 CPU-s on
-  it, against the ≤ 10 CPU-minute budget. Spending recovers its one or two inputs
-  (about 1.6 ms each) and folds their paths.
-- *Limits:* the store is in memory and holds only this seed's records; a kept
-  file on disk and a long shared history add page reads, which M11c2
-  measures with the runtime at depth. `holdingsOf`'s per-note demand checks
-  are not timed here.
+M11b7 keeps each witnessed output's nullifier and opening with its witness and leaves spent outputs out of a
+read ([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-outputs-nullifier-and-opening-with-its-witness-and-leave-spent-ones-out-of-a-wallets-read-slice-11-m11b7-next-4x)).
+`owned-notes-probe.mjs` ([at its revision](https://github.com/mediumofexchange/reference-ts/blob/9616784/scripts/pool/v3/owned-notes-probe.mjs))
+timed `ownedNotes` over one seed's outputs in an in-memory replay store, half of them spent, with no proof or
+record: a read recovered every output at 1.6 ms (3.14 s at 2,000 outputs, 32.8 s at 20,000) and now reads one
+indexed row per witnessed output at 0.01–0.02 ms (39 ms at 2,000, 214 ms at 20,000, 1.54 s at 10⁵, against about
+2 minutes before). Ten syncs a day then spend about 15 CPU-s on it, against the ≤ 10 CPU-minute budget;
+spending recovers its one or two inputs at about 1.6 ms each. One 4-core cloud container, one run per point;
+a kept file on disk adds page reads, which M11c2 measures. Covered now by `pool-v3-kept-state` and the wallet's
+kept-file tests. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#a-wallet-read-from-kept-marks-m11b7).
 
 ### A wallet's tags kept with its marks (M11b8)
 
-M11c2's runtime probe (`runtime-depth-probe.mjs`,
-[at its revision](https://github.com/mediumofexchange/reference-ts/blob/ee822c4/scripts/pool/v3/runtime-depth-probe.mjs);
-its method and results are M11c2's section) reads a wallet restored from a seed that receives one output in
-every second stand-in spend and spends half of them. Its read with nothing new grew with the notes held, while a
-reader's of the same history stayed flat. Each unspent note cost three `tagOf` hashes (0.21 ms each in
-JavaScript Poseidon2) in `holdingsOf`, `presentedBy` and `demandsOf`. M11b8 keeps the tag in the note's mark
-([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)).
-Runs of 2026-10-04 on a 4-core cloud container, one run per point:
-
-| Statements (holdings) | Reader, nothing new | Wallet, nothing new: before (`a4752a9`) | After (`fb7ec95`) |
-|---:|---:|---:|---:|
-| 1,200 (315) | 79–85 ms | 351 ms | 302 ms |
-| 4,200 (1,065) | 89–93 ms | 984 ms | 235 ms |
-
-- *Result:* the wallet's read beyond the reader's went from about 0.84 ms a holding to about 0.14 ms. What
-  remains is each note's witness row and its per-note lookups (reservations, saved demands, demand tags). First
-  syncs and reads of 200 new statements are unchanged within the runs' spread (wallet first sync 29.5 s and
-  31.9 s at 10³, 111 s and 118 s at 4·10³).
-- *Limits:* the after-run shared the container with M11c2's 10⁵ run, the before-run did not; one run per
-  point. Process start-up (about 3.5 s, the verifier's and view's opening) is outside these read times.
+M11c2's runtime probe (`runtime-depth-probe.mjs`, [at its revision](https://github.com/mediumofexchange/reference-ts/blob/ee822c4/scripts/pool/v3/runtime-depth-probe.mjs))
+found a wallet's read with nothing new growing with the notes held while a reader's of the same history stayed
+flat: 351 ms at 315 holdings and 984 ms at 1,065, against 79–93 ms for the reader. Each unspent note cost three
+`tagOf` hashes (0.21 ms each in JavaScript Poseidon2). M11b8 keeps the tag in the note's mark
+([decision](../decisions/2026-10.md#2026-10-04--keep-each-witnessed-notes-tag-with-its-mark-so-a-wallets-read-hashes-none-slice-11-m11b8)),
+and the read at 1,065 holdings took 235 ms, the wallet's cost beyond the reader's falling from about 0.84 to
+0.14 ms a holding (a note's witness row and per-note lookups). First syncs were unchanged within the spread.
+One 4-core cloud container, one run per point. Covered now by `pool-v3-wallet-kept`, `pool-v3-redemption` and
+`pool-v3-kept-state`. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#a-wallets-tags-kept-with-its-marks-m11b8).
 
 ### The runtime at depth (M11c2)
 
@@ -1273,7 +892,7 @@ with tests and M11b8's measurement.
 | 10⁵, judged at 13,440 (below) | 385 s, 704 CPU-s | not run | 615 MB; 414–573 MB | 1,558 MB | 1,684 MB |
 
 *Admission* by depth (`journal.submit` in the process; the first admission after each block reads at a new
-venue index, WORK.md Next 4(v)):
+venue index):
 
 | Through | Median, others | Median (p95), first after a block | Checkpoints | Journal | Process memory |
 |---:|---:|---:|---:|---:|---:|
@@ -1349,57 +968,25 @@ Findings:
 
 M11b11 syncs every command's view in bounded passes until it is caught up
 ([decision](../decisions/2026-10.md#2026-10-05--sync-a-commands-view-in-bounded-passes-until-it-is-caught-up-slice-11-m11b11)).
-`catch-up-probe.mjs`
-([at its revision](https://github.com/mediumofexchange/reference-ts/blob/c693fa9/scripts/pool/v3/catch-up-probe.mjs))
-creates an operator directory with a synthetic venue (depth 10), mines blocks
-on the synthetic node, and opens the directory's view as every command does.
-Runs of 2026-10-05 on a 4-core cloud container, one run per point, the
-10,000-block run beside a test run:
-
-| Blocks behind | Passes | Clock after the first pass | Clock reached | Time |
-|---:|---:|---:|---:|---:|
-| 4,500 | 3 | 1,989 | 4,499 (the tip less the depth) | 59 s |
-| 10,000 | 6 | 1,989 | 9,999 (the tip less the depth) | 154 s |
-
-- *Result:* one command reaches the tip; before, it answered at the first
-  pass's clock. The time is the header work, about 13–15 ms a synthetic
-  block here, and empty blocks read no section bytes.
-- *Limits:* empty synthetic blocks, so the section budget's passes are
-  covered by unit tests only; one supplier. The runs used the first stop rule,
-  which the review replaced (decision); with one honest supplier both continue
-  on its header budget, and the 4,500-block point rerun on the final rule
-  gave the same passes and clock in 61 s.
+`catch-up-probe.mjs` ([at its revision](https://github.com/mediumofexchange/reference-ts/blob/c693fa9/scripts/pool/v3/catch-up-probe.mjs))
+opened an operator directory's view on a synthetic venue (depth 10) after 4,500 and 10,000 blocks were mined:
+one command reached the tip less the depth in 3 and 6 passes (59 s and 154 s, about 13–15 ms a synthetic
+block of header work), where before it answered at the first pass's clock (block 1,989). Empty synthetic
+blocks, so the section budget's passes are covered by unit tests only; one supplier; the 4,500-block point
+rerun on the review's final stop rule gave the same passes and clock in 61 s. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#a-commands-view-caught-up-m11b11).
 
 ### A kept file's digest from its changed pages (M11b12)
 
-M11b12 records a kept replay file's digest from the pages each keep point
-changed, read from SQLite's write-ahead log
+M11b12 records a kept replay file's digest from the pages each keep point changed, read from SQLite's
+write-ahead log
 ([decision](../decisions/2026-10.md#2026-10-05--record-a-kept-files-digest-from-the-pages-its-keep-point-changed-slice-11-m11b12-next-4v)).
-`page-digest-probe.mjs`
-([at its revision](https://github.com/mediumofexchange/reference-ts/blob/e63f546/scripts/pool/v3/page-digest-probe.mjs))
-runs the runtime's `ReplayStore`. A kept file holds one namespace of 2,000
-spend-shaped records and is then padded with a filler table to each size.
-Each round is one block's read: a walk that appends 14 records and closes,
-committing and recording the digest. Runs of 2026-10-05 on a 4-core cloud
-container (Xeon 2.8 GHz, no SHA extensions, about 400 MB/s of SHA256), five
-rounds per size, one run:
-
-| Kept file | Walk close (median, max) | Whole-file SHA256 (before) | Opening |
-|---:|---:|---:|---:|
-| 66 MB | 23.6 ms, 111 ms | 187 ms | 225 ms |
-| 257 MB | 23.8 ms, 102 ms | 718 ms | 918 ms |
-| 1,020 MB | 23.2 ms, 131 ms | 2,900 ms | 3,529 ms |
-
-- *Result:* recording the digest no longer grows with the file. A block's
-  read cost a whole-file hash before, about 2.8 s a GB here. Opening still
-  hashes every page, about 1.2 times one whole-file hash.
-- *Limits:*
-  - padding stands in for a deep history, so the walk's rows lie in shallow
-    tables. A deep history's indices change more pages per record, and this
-    container's rehash costs about 40–70 µs a changed page with the log moved
-    into the file. A model of the mechanism changed about 1,400 random pages a
-    commit at 33 MB and at 1 GB, in 55 and 100 ms;
-  - the operator's admission at depth is M11c3's measurement ([below](#the-design-point-m11c3)).
+`page-digest-probe.mjs` ([at its revision](https://github.com/mediumofexchange/reference-ts/blob/e63f546/scripts/pool/v3/page-digest-probe.mjs))
+ran the runtime's `ReplayStore` on kept files of 66 MB, 257 MB and 1,020 MB, one block's read (a walk of 14
+records) per round: closing the walk took 23.2–23.8 ms at every size, where the whole-file SHA256 it replaced
+took 0.19, 0.72 and 2.9 s (about 2.8 s a GB on a 4-core cloud container with no SHA extensions). Opening still
+hashes every page, about 1.2 times one whole-file hash. Padding stands in for a deep history, whose indices
+change more pages per record (about 40–70 µs a changed page here); the operator's admission at depth is
+[M11c3's](#the-design-point-m11c3). Covered now by the kept-file and abrupt-exit tests. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#a-kept-files-digest-from-its-changed-pages-m11b12).
 
 ### The design point (M11c3)
 
@@ -1591,7 +1178,7 @@ sigma-rust ([report at 1915d5d](https://github.com/mediumofexchange/reference-ts
 277 checks), answered a twelve-height synthetic chain with real signed commitments and read the four
 mainnet fixtures as one-block ranges: real roots of block versions 1, 3 and 4 reproduced, all 77 outputs
 scanned. Capacity carried from it, counted with a two-byte output index (M7 replaced the counts with the
-runtime's `ergoRunCapacity` and a [live capacity run](ergo-publisher-verification.json)): a box holds a
+runtime's `ergoRunCapacity` and a [live capacity run at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/ergo-publisher-verification.json)): a box holds a
 3,981-byte piece and a transaction under the 98,304-byte mempool policy 24 pieces (95,544 bytes), so a
 release of 15,498 bytes in four pieces fits, as does any proof up to 94,702 bytes; the frame's 131,914-byte
 ceiling is a parser bound. Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd8ce7e/docs/POOL_DEPLOYMENT_PROBES.md#ergo-venue-profile-candidate-and-full-block-range-verifier).
@@ -1697,104 +1284,26 @@ window. No profile, decoder or dependency pin is selected by this probe.
 
 *Retired 2026-09-25 with the vendored sigma-rust it signed with: P2 is answered, the runtime's own publisher is [testnet-verified](ERGO_VENUE_PROFILE.md#runtime-venue) for kinds 1–3, and kind-4 runs arrive with the publisher's pieces (v3 plan slice 3). `publish.mjs` and its guide are kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range); the runs below stand as recorded.*
 
-The recovery map's P2. `experiments/ergo-range/publish.mjs` was run explicitly,
-never by `check` or CI, because it submits transactions to a public Ergo
-**testnet** node and reads blocks back from it. It refuses a node whose `/info` does not report the
-testnet, signs with the pinned sigma-rust from a throwaway key in ignored
-`scratch/ergo-testnet/`, and never touches mainnet or real funds. Under the
-[candidate profile](ERGO_VENUE_PROFILE.md)'s layout it builds two publications
-of one backing with exact pool-v3 §6 frames and synthetic proof and signature
-bytes (a 15,498-byte release in four pieces and a 450-byte withdrawal in one),
-places each piece in a box at the kind-4 location with `R4` the subject and
-`R5` the piece, and submits six chained cases as separate transactions: the
-release; the same release again; its pieces reordered; three of its four
-pieces; the release and the withdrawal adjacent in one run; and the two
-separated by a plain output. After they are witnessed under the depth it
-spends every piece box back to the wallet, waits for the depth again, checks
-that the node's UTXO view serves no piece box and its indexed view names the
-spend for each, reads the headers from the header below the first inclusion to
-the tip and every block through the last inclusion through the JSON-text
-copy of the chain-cost probe, builds the model verifier from that anchor
-and asks the kind-4 range under the subject, mapping each answered object to
-its transaction by index and ordinal. Every submission records the node's full
-height at submission and the inclusion height and block timestamp (A10); the
-cases are chained on one change box and submitted together, so their
-latencies are one correlated observation, not a distribution. `--dry-run`
-runs the same construction, signing and read over a synthetic funded input
-and one synthetic block whose parent is the real latest testnet header,
-reading `/info` and the signing context from the node once, caching both
-together and submitting nothing.
-
-**Dry run, 2026-09-22** (the offline mode; its report is in Git history and
-is regenerated by the dry-run command): every case signs and round-trips
-exactly with the pinned build (`0.29.0-alpha-2f840d3`). The release
-transaction is 16,075 bytes over a 1-ERG synthetic input with six outputs;
-the partial case 12,439, the merged 16,606, the separated 16,650, and the
-sweep of all 25 piece boxes 2,412 bytes with one return output; read back
-from one synthetic block under the real latest header, the cases give the
-same seven objects as the testnet run below.
-
-**Testnet run, 2026-09-22** ([report](https://github.com/mediumofexchange/reference-ts/blob/d8f2b7b/docs/ergo-publication-verification.json)):
-the public node (`ergo-testnet-6.0.3`, `minValuePerByte` 360) accepted all
-seven transactions on first submission. The six cases, submitted together
-at full height 558,327 from one 20,000-tERG box, were all included in block
-558,329 (positions 1–5 and 7; another sender's transaction took 6); the
-sweep of all 25 piece boxes, submitted at 558,331, was included in 558,333.
-The release transaction is 16,077 bytes (34,473 bytes of node JSON): two
-bytes more than the dry run because the change value's VLQ is seven bytes,
-not five; the partial case 12,441, the merged 16,608, the separated 16,652,
-the sweep 2,412. A 3,981-byte piece box is 4,095 full bytes, within the
-4,096-byte limit, the 3,555-byte last piece 3,669, and the withdrawal's single
-piece box 564. The node's dust rule is its votable `minValuePerByte` over the
-full box bytes (upstream `BoxUtils.minimalErgoAmount`, applied in
-`ErgoTransaction.verifyOutput`): every piece box carried exactly that
-minimum, 1,474,200 nanoERG for a full piece box and 5,743,440 for a release,
-and was accepted with the library's suggested 1,100,000 fee, about 0.0068 ERG
-a release. sigma-rust's `calc_min_box_value` covers the candidate only (4,062
-bytes, 1,462,320 nanoERG), 11,880 nanoERG short of the node's rule for a full
-piece box, so the experiment computes the values itself; a value below the
-node's minimum was not submitted, so the refusal side of the rule rests on
-the upstream source. The sweep returned every piece value; the run cost the
-wallet the seven fees, 7,700,000 nanoERG. After the sweep reached depth 2 the
-node's UTXO view served none of the 25 piece boxes and its indexed view named
-the sweep as each one's spender. The window from the anchor at 558,328 to
-558,333 (five blocks, 30 transactions, 264,597 section bytes) was read through
-the JSON-text discipline, every block's transactions reproduced its header
-root, the pinned decoder refused none, and the model verifier built from that
-anchor answered the kind-4 range under the subject with seven objects at one
-index in transaction-then-output order (ordinal = position << 32 | output):
-the release and its duplicate are two witnessings of the same 15,498 bytes,
-both decoding under §6; the reordered, partial and merged runs are single
-objects of 15,498, 11,943 and 15,948 bytes that do not decode and so have no
-force; the separated case yields the release at output 0 and the withdrawal
-at output 5, both decoding; kinds 1–3 are empty. Every transaction was
-included two blocks above the node's full height at submission, 10–17 s by
-the block timestamps. Under C3.3's window a publication authorized at the
-tip with the instant at the latest witnessed index has force when included
-at most `depth + 2` blocks above that tip (A10), so these landed two
-blocks inside the bound at depth 2; the report's latency note states the
-bound one block stricter.
-
-**Testnet run, 2026-09-24** ([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-publication-verification.json)),
-through the reader that decodes nothing: the own testnet node (v6.0.6)
-accepted the same seven transactions, the six cases in block 561,774
-(positions 1–6) and the sweep in 561,779, each two blocks above the full
-height at submission. Every block's unsigned bytes and witness ids, copied
-from the node's JSON by `src/ergo-supplier.ts` (re-read from the same cached sections
-through the copy on the same day, with no new submission), reproduced its
-header root, and the framer read each case
-built by sigma-rust's transaction builder (plain inputs, piece outputs, a
-pay-to-public-key change and the fee output): the kind-4 range answered the
-same seven objects in the same order, kinds 1–3 empty, after all 25 piece
-boxes were spent.
-
-**Not established:** an inclusion-latency distribution (A10: the six cases
-are one correlated observation and the sweep a second, on the testnet's fast
-blocks and light load), the dust rule's refusal side and fee policy beyond
-acceptance at these values, mainnet acceptance, and authentication of the
-headers, which came from the one node the transactions were submitted to.
-The publications' content is synthetic (frames exact, proof and signature
-bytes not), which the venue does not read.
+The recovery map's P2 submitted six chained cases and a sweep as seven transactions to a public Ergo testnet
+node (a 15,498-byte release in four pieces, a 450-byte withdrawal in one; duplicate, reordered, partial,
+adjacent and separated runs) and read the kind-4 range back under the subject. Under the
+[candidate profile](ERGO_VENUE_PROFILE.md)'s layout every transaction was accepted on first submission
+([report at d8f2b7b](https://github.com/mediumofexchange/reference-ts/blob/d8f2b7b/docs/ergo-publication-verification.json),
+2026-09-22). The release transaction is 16,077 bytes (the partial case 12,441, the merged 16,608, the separated
+16,652, the sweep of all 25 piece boxes 2,412). A 3,981-byte piece is a 4,095-byte box, within the 4,096-byte
+limit, and the withdrawal's piece box is 564 bytes. The node's dust rule is its votable `minValuePerByte` over
+the full box bytes (upstream `BoxUtils.minimalErgoAmount`): every piece box carried exactly that minimum,
+1,474,200 nanoERG for a full piece box and 5,743,440 for a release, and was accepted with a 1,100,000 nanoERG
+fee, about 0.0068 ERG a release. sigma-rust's `calc_min_box_value` was 11,880 nanoERG short of the node's rule
+for a full piece box, so the experiment computed the values itself; the refusal side of the rule rests on the
+upstream source. The six cases returned seven objects at one index in transaction-then-output order (the
+release and its duplicate decode under §6; the reordered, partial and merged runs do not decode and have no
+force), and every transaction was included two blocks above the node's height at submission. The
+[2026-09-24 run on the own testnet node (v6.0.6) at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-publication-verification.json)
+repeated the seven transactions through the reader that decodes nothing (`src/ergo-supplier.ts` and the
+framer) and answered the same seven objects. Not established: an inclusion-latency distribution (one
+correlated observation), the dust rule's refusal side, mainnet acceptance, and header authentication (the
+headers came from the one node). Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node).
 
 ## Inclusion latency on the mainnet
 
@@ -1866,48 +1375,17 @@ runtime or specification changes.
 
 *`header-check.mjs` retired 2026-09-25: the reader now verifies headers itself ([below](#reader-verified-headers)); it is kept at [1b4857a](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range).*
 
-The profile leaves proof of work and chain selection to the reader's header
-source, and until now that source was two public nodes. On 2026-09-22 the
-reader ran its own mainnet node (`experiments/ergo-range/nodes.mjs`, the
-official v6.0.6 Windows release, JAR checked against the release digest),
-configured to bootstrap state from a UTXO-set snapshot but to download the
-header chain from genesis rather than accept a NiPoPoW proof, so the node
-itself checked every header's proof of work and difficulty and chose the
-best chain. `experiments/ergo-range/header-check.mjs` then asked whether the
-retained evidence stands on that chain
-([retained report](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-own-node-verification.json)):
-
-- the five pinned fixture headers (genesis, 100,000, 1,000,000, 1,500,000 and
-  1,876,512) are on the node's best chain, equal in id, parent, height,
-  version and transaction root;
-- the chain-cost window from its anchor at 1,873,360 to its tip at 1,878,410
-  links on the node's best chain, its anchor and tip ids are the report's,
-  and all 5,050 headers after the anchor equal the cached headers of both
-  public nodes in id, parent, height, version and transaction root;
-- at a recent height the node and both public nodes name the same header.
-
-A header id commits to its transaction root and, through its parent, to its
-ancestry, so the chain-cost probe's 5,040 sections, each of which reproduced
-its header's root, are now bound to headers this reader validated; they were
-not re-read from the node. The node's log shows it processing the genesis
-header itself. The header chain of 1.88 million headers synced in 6,863 s
-(1 h 54 min, from the first process, which was stopped for a configuration
-change at height 2,492 and resumed ten seconds later on the same data) over
-one home connection with up to 30 outbound peers (2 at the first sample); at
-that point the node held 850 MB of data with a 1.2 GB working set and 7,231
-CPU-seconds, read by hand with `nodes.mjs status` 34 s after the node
-logged the milestone. The testnet node (a full archive with the extra index)
-synced its 557,758 headers in 3,685 s.
-
-Not established here: an independent check of proof of work or chain
-selection (the node is the reference client most of the network runs; the
-reader's own check followed, [below](#reader-verified-headers)), resistance to
-an eclipse during sync beyond the agreement at one recent height, and the
-cost of full-block validation from genesis (state came from a snapshot).
-The node's INFO log grew by about 400 MB an hour during sync, so the nodes
-now log at WARN. v6.0.6 answers every API request with
-`Access-Control-Allow-Origin: *` whatever `corsAllowedOrigin` says, so a
-local browser page can read the node's key-free routes.
+On 2026-09-22 the reader ran its own mainnet node (official v6.0.6, bootstrapped from a UTXO-set snapshot but
+downloading the header chain from genesis, so the node itself checked every header's proof of work and
+difficulty) as the header source in place of two public nodes. The
+[retained report at 1915d5d](https://github.com/mediumofexchange/reference-ts/blob/1915d5d/docs/ergo-own-node-verification.json)
+shows the five pinned fixture headers and the chain-cost window (anchor 1,873,360 to tip 1,878,410, 5,050
+headers) on the node's best chain, equal to the public nodes' cached headers, so the chain-cost probe's 5,040
+sections are bound to headers this reader validated. The 1.88 million headers synced in 6,863 s (1 h 54 min)
+over one home connection, leaving 850 MB of data; the testnet archive node synced its 557,758 headers in
+3,685 s. Not established: an independent check of proof of work or chain selection (the reader's own check
+followed, [below](#reader-verified-headers)), resistance to an eclipse during sync, and full-block validation
+from genesis. Retired with `header-check.mjs`. Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca368db/docs/POOL_DEPLOYMENT_PROBES.md#own-node-as-the-header-source).
 
 ## Reader-verified headers
 
