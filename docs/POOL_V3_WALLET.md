@@ -186,7 +186,7 @@ the segments they were created in, and pay under those original roots.
 
 `prepare(alias, { request, value, fee? }, package, signedTerms, prove)` checks
 each exact request against the agreed domain, backing and amount, refuses a
-request already in a saved payment or already in canonical outputs, then
+request already in a saved payment that has not failed or already in canonical outputs, then
 selects the smallest single covering note or the least-total pair. A single
 input is padded with a fresh zero note. The wallet adds its own change and
 zero outputs under fresh request identifiers, shuffles the four positions and
@@ -257,7 +257,13 @@ new spend (C1.2.5). Inputs stay reserved until the payment is final or
 failed: a failed payment's other input is free again, as a failed act's notes
 are. Failure means an input was spent by another statement, which canonical
 history never undoes; should evidence ever show all four outputs, the payment
-would go final, as an act does. Output reservations are permanent. Release
+would go final, as an act does. Output reservations last until the payment
+fails: its request is then paid again under another alias, into the same exact
+output, so a door admits at most one of them however the failure was judged
+(Next 4 (bd)). A lit request names only a key and a lit output derives from its
+statement's nullifiers, so a lit retry spends a note the failed payment spends,
+unless one of its inputs is spent in canonical history, which no door then admits;
+where no such note is free it refuses (`CONFLICT`) until a sync decides. Release
 with other outputs (cancellation), same-segment tail repair (C2.10.9a) and
 release of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. Payments and acts are one kind of saved record

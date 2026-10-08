@@ -344,6 +344,26 @@ describe("v3 payer custody over restored holdings", () => {
     expect(f.payer.payment("shop")).toMatchObject({ status: "final", final: { judgingIndex: view.judgingIndex } });
   });
 
+  it("pays a failed payment's request again under another alias, and the request's one output admits at most one (Next 4 (bd))", async () => {
+    const f = await fixture([9n, 8n]);
+    const payment = await f.payer.prepare("shop", f.order, f.served, f.signed, prove);
+    await expect(f.payer.prepare("shop-2", f.order, f.served, f.signed, prove))
+      .rejects.toMatchObject({ code: "CONFLICT", message: "request is already in a saved payment" });
+    await f.payer.submit("shop", f.service);
+    // A judgement no consistent history yields, written directly: the admitted payment reads failed, and frees its note.
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(join(f.directory, "payer.db"));
+    db.prepare("UPDATE saved_records SET status='failed' WHERE alias='shop'").run(); db.close();
+    const other = f.receiver.request("other", f.backing, 7n);
+    expect((await f.payer.prepare("z", { request: other, value: 7n }, f.served, f.signed, prove)).inputs).toEqual(payment.inputs);
+    // The retry spends another note into the same request and fee outputs: a door refuses it once the first is admitted.
+    const retry = await f.payer.prepare("shop-2", f.order, f.served, f.signed, prove);
+    expect([retry.payee, retry.fee?.cm, retry.inputs.some(nf => payment.inputs.includes(nf))]).toEqual([payment.payee, payment.fee?.cm, false]);
+    await expect(f.payer.submit("shop-2", f.service)).rejects.toMatchObject({ code: "REFUSED", check: "OUTPUT" });
+    const view = await f.payer.sync(await f.publish(), f.signed);
+    expect(["shop", "shop-2", "z"].map(name => f.payer.payment(name)!.status)).toEqual(["final", "failed", "failed"]);
+    expect(view.holdings.map(h => [h.value, h.status])).toEqual([[9n, "available"]]);
+  });
+
   it("answers an exact retry with the saved record when the winner reserved the only note meanwhile", async () => {
     // A wallet's reads take turns, so the first call is overtaken while it proves, or while it waits its turn to read.
     let release = () => {}, entered = () => {};

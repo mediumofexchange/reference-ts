@@ -3,6 +3,13 @@
 Updated: 2026-10-08
 
 ## Goal
+**Next 4 (bd), in progress** (branch `claude/bd-repay-failed-request`): a request whose saved payment failed can be paid again
+under another alias, and the retry conflicts with each failed payment so at most one of them can ever land. Pool: the retry
+creates the request's own output, which every door refuses twice. Lit: the retry spends a note the failed payment spends,
+unless one of that payment's inputs is already spent in canonical history. Acceptance: pool and lit tests of a failed payment,
+its retry final and the failed record refused; a failed lit payment whose notes are all reserved or locked is refused with a named
+code; prepared or final payments still block. Stop: merged after review; no spec change (wallet rule; lit-v1 §8 credits one output per request).
+
 **Next 4 (bc) and (be), done** ([decision](decisions/2026-10.md#2026-10-08--raise-a-restored-lit-wallets-exposure-at-each-read-until-it-names-a-key-next-4-bc); #159, #160): a restored lit wallet raises each
 marked backing's exposure at every read until it names a key, leaving out only its own payments prepared after its first read;
 a restoration that moves at once takes two moves. Limit: a fee-less move made while the node lags may repeat the lost

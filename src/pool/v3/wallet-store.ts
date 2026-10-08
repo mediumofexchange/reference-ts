@@ -63,7 +63,7 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 /** A lit key (a SHA-256 digest held as a bigint, lit-v1 §2) as its 32 bytes. */
 const keyBytesOf = (key: bigint): Uint8Array => hexToBytes(key.toString(16).padStart(64, "0"));
-const PROFILE = "moe/wallet/v3/10", KEYED_PROFILE = "moe/wallet/keyed/3", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/11", KEYED_PROFILE = "moe/wallet/keyed/4", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
     "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW" | "OWN_KEY" | "CLOSED" | "COPIED" | "RESTORED" | "FORKED", message: string) { super(message); this.name = "V3WalletError"; }
@@ -101,8 +101,8 @@ const SCHEMA = `
     judging_index TEXT, judged TEXT NOT NULL, repeats TEXT CHECK(repeats IS NULL OR kind='4')) STRICT;
   CREATE TABLE IF NOT EXISTS saved_inputs (nf TEXT NOT NULL, alias TEXT NOT NULL REFERENCES saved_records(alias),
     PRIMARY KEY(nf, alias)) STRICT;
-  CREATE TABLE IF NOT EXISTS saved_outputs (cm TEXT PRIMARY KEY, alias TEXT NOT NULL REFERENCES saved_records(alias),
-    value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS saved_outputs (cm TEXT NOT NULL, alias TEXT NOT NULL REFERENCES saved_records(alias),
+    value TEXT NOT NULL, owner TEXT NOT NULL, rho TEXT NOT NULL, PRIMARY KEY(cm, alias)) STRICT;
   CREATE TABLE IF NOT EXISTS saved_superseded (statement TEXT NOT NULL, alias TEXT NOT NULL REFERENCES saved_records(alias),
     record BLOB NOT NULL, receipt BLOB) STRICT;
   CREATE TABLE IF NOT EXISTS backer_acceptances (alias TEXT PRIMARY KEY, demand TEXT NOT NULL, deadline TEXT NOT NULL,
@@ -326,13 +326,16 @@ function gapOpen({ canonical, clock, at, lag }: Frontier): boolean {
   return canonical !== undefined && clock !== null && clock !== undefined && at + lag - canonical.index > BigInt(clock.duration);
 }
 
-/** The spendable single-note or least-total pair covering `total`; ties by commitment. */
 /** A note a read found: pool-v3's, completed to spend by its path, or lit-v1's, spent by its opening. */
 type HeldNote = OwnedNote | KeyedNote;
 interface Valued { readonly opening: { readonly value: bigint }; readonly cm: bigint }
 /** The pool's selection refusal names freshen; a lit wallet has none (lit-v1 §8). */
 const POOL_FUNDS = "no available unpresented one- or two-note selection covers it; presented notes move by freshen where admission is open";
 const LIT_FUNDS = "no available one- or two-note selection covers it";
+/** A saved output row whose payment or act has not failed: the outputs a new payment may not name again (Next 4 (bd)). */
+const LIVE_OUTPUT_CM = "SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE o.cm=? AND r.status!='failed'";
+const LIVE_OUTPUT_OWNER = "SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE o.owner=? AND r.status!='failed'";
+/** The spendable single-note or least-total pair covering `total`; ties by commitment. */
 function select<N extends Valued>(notes: readonly N[], total: bigint, reason = POOL_FUNDS): N[] {
   const sorted = [...notes].sort((a, b) => a.opening.value < b.opening.value ? -1 : a.opening.value > b.opening.value ? 1 :
     a.cm < b.cm ? -1 : a.cm > b.cm ? 1 : 0);
@@ -347,6 +350,31 @@ function select<N extends Valued>(notes: readonly N[], total: bigint, reason = P
   }
   requireThat(best !== undefined, "FUNDS", reason);
   return best;
+}
+/** `select` where the selection must spend a note of each set in `meets` (nullifiers, Next 4 (bd)): a single note or the
+ * least-total pair covering `total`, with change of an admissible value; ties by commitment. A pair takes one note from a
+ * set, so each candidate is a met note beside either another met note or the least note covering the rest. */
+function selectMeeting<N extends Valued & { readonly nf: bigint }>(notes: readonly N[], total: bigint, meets: readonly ReadonlySet<bigint>[],
+  reason: string): N[] {
+  if (meets.length === 0) return select(notes, total, reason);
+  const sorted = [...notes].sort((a, b) => a.opening.value < b.opening.value ? -1 : a.opening.value > b.opening.value ? 1 :
+    a.cm < b.cm ? -1 : a.cm > b.cm ? 1 : 0);
+  const meeting = (picked: readonly N[]) => meets.every(set => picked.some(note => set.has(note.nf)));
+  const single = sorted.find(n => n.opening.value >= total && meeting([n]));
+  if (single !== undefined) return [single];
+  const met = sorted.filter(n => meets.some(set => set.has(n.nf)));
+  let best: N[] | undefined, sum: bigint | undefined;
+  const consider = (a: N, b: N | undefined) => {
+    if (b === undefined || a === b) return;
+    const pair = a.opening.value + b.opening.value;
+    if (pair >= total && isValue(pair - total) && meeting([a, b]) && (sum === undefined || pair < sum)) { best = [a, b]; sum = pair; }
+  };
+  for (const a of met) {
+    for (const b of met) consider(a, b);
+    if (meeting([a])) consider(a, sorted.find(n => n !== a && a.opening.value + n.opening.value >= total));
+  }
+  requireThat(best !== undefined, "FUNDS", reason);
+  return [...best!].sort((a, b) => a.opening.value < b.opening.value ? -1 : a.opening.value > b.opening.value ? 1 : a.cm < b.cm ? -1 : 1);
 }
 /** C3.3: a demand names whole notes, so one note of exactly `total` or a pair summing to it; ties by commitment.
  * A holder presenting part of a note, or more than two, first pays itself the exact amount. */
@@ -1508,7 +1536,9 @@ export class V3Wallet {
     this.unforked();
     requireThat(typeof prove === "function", "INVALID", "a local prover is required");
     const theirs = [payee.cm, ...(fee === undefined ? [] : [fee.request.cm])];
-    const taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE cm=?");
+    // Next 4 (bd): a failed payment's request is paid again under another alias. The retry creates the request's own
+    // output, which every door refuses once created, so at most one of them is ever admitted.
+    const taken = this.db.prepare(LIVE_OUTPUT_CM);
     requireThat(theirs.every(cm => taken.get(cm.toString()) === undefined), "CONFLICT", "request is already in a saved payment");
 
     const planned = await this.read(packageBytes, own, view => {
@@ -1558,7 +1588,7 @@ export class V3Wallet {
     const { header, selected, inputs, zero, outputs, at } = planned, backing = selected[0]!.opening.backing;
     const bytes = this.encoded(await this.proven(spendTask({ domain: this.domain, header }, inputs, outputs), prove));
     const statement = hex(statementHash(decodeRecord(bytes))), reserved = selected.map(note => note.nf.toString());
-    const taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE cm=?");
+    const taken = this.db.prepare(LIVE_OUTPUT_CM);
     this.transaction(() => {
       if (this.savedPayment(name, intent) !== undefined) return;
       requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
@@ -2280,7 +2310,7 @@ export class V3Wallet {
     if (existing !== undefined) return existing;
     this.unforked();
     const theirs = [payee.owner, ...(fee === undefined ? [] : [fee.request.owner])].map(owner => hex(owner));
-    const taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE owner=?");
+    const taken = this.db.prepare(LIVE_OUTPUT_OWNER);
     requireThat(theirs.every(owner => taken.get(owner) === undefined), "CONFLICT", "request is already in a saved payment");
     return this.read(packageBytes, own, view => {
       // A concurrent exact call may have saved while this one read: answer it before selection.
@@ -2297,11 +2327,37 @@ export class V3Wallet {
         "CONFLICT", "a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
       const holdings = this.holdingsOf(notes, force, at);
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
-      const selected = select(available, total, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
+      const meets = this.failedPaymentsOf(theirs, canonical, force!, available);
+      const selected = selectMeeting(available, total, meets, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
       return this.keyedSave(name, intent, view, header.operator, selected, () => [{ backing, value, owner: payee.owner },
         ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }]),
         ...(sum > total ? [{ backing, value: sum - total, owner: this.keys!.key(backing, this.allocate(backing)) }] : [])], theirs);
     });
+  }
+  /** Next 4 (bd): the nullifier sets a lit payment to the payees' keys `theirs` must meet, one per failed saved payment
+   * to one of them that a door could still admit. A lit output derives from its statement's nullifiers (lit-v1 §2), so a
+   * retry's output to the key differs from the failed one's, and the payee credits one output a request (§8): the retry
+   * spends a note of each such payment, so at most one of them is ever admitted. A failed payment one of whose inputs is
+   * spent in canonical history is never admitted (its outputs enter with its nullifiers, and it is not final), and needs
+   * none; one whose outputs are all there is final, and the request paid. */
+  private failedPaymentsOf(theirs: readonly string[], canonical: CanonicalCheckpoint, force: ForceState,
+    available: readonly KeyedNote[]): Set<bigint>[] {
+    const failed = new Map<string, Uint8Array>(), owners = new Set(theirs);
+    for (const row of this.db.prepare(`SELECT r.alias, r.record, o.owner FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias
+      WHERE r.kind='2' AND r.status='failed'`).all()) {
+      if (owners.has(row.owner as string)) failed.set(row.alias as string, row.record as Uint8Array);
+    }
+    const meets: Set<bigint>[] = [];
+    for (const [name, record] of failed) {
+      requireThat(this.paid(name, record, canonical, force) !== "final", "CONFLICT", "request is already paid");
+      const nfs = this.db.prepare("SELECT nf FROM saved_inputs WHERE alias=?").all(name).map(row => BigInt(row.nf as string));
+      if (nfs.some(nf => canonical.state.hasNullifier(nf))) continue;
+      const set = new Set(nfs);
+      requireThat(available.some(note => set.has(note.nf)), "CONFLICT",
+        `the failed payment ${name} to this request can still be admitted and no note it spends is available: sync until it is decided`);
+      meets.push(set);
+    }
+    return meets;
   }
   /** Sign a lit spend of `selected` into the outputs `outputs` builds and save it under `name` with its reservations, in
    * the read's turn with no await: `outputs` runs inside the saving transaction, so a change index it allocates is saved
@@ -2310,7 +2366,7 @@ export class V3Wallet {
    * refused (its retry answers it). */
   private keyedSave(name: string, intent: string, view: Frontier, operator: Uint8Array, selected: readonly KeyedNote[],
     outputs: () => KeyedOutput[], theirs: readonly string[] = []): Payment {
-    const { canonical, at, observed } = view, taken = this.db.prepare("SELECT 1 FROM saved_outputs WHERE owner=?");
+    const { canonical, at, observed } = view, taken = this.db.prepare(LIVE_OUTPUT_OWNER);
     const inputs = this.keyedInputs(selected);
     try {
       // The venue view behind this decision is checked before the durable write.
@@ -2321,6 +2377,8 @@ export class V3Wallet {
         requireThat(theirs.every(owner => taken.get(owner) === undefined), "CONFLICT", "request is already in a saved payment");
         const bytes = this.keyed!.spend(this.domain, canonical!.segment, inputs, outputs());
         const statement = hex(this.statementOf(bytes));
+        // A lit spend is deterministic: the same notes into the same outputs repeat a failed record's statement byte for byte.
+        requireThat(!this.savedStatement(this.statementOf(bytes)), "CONFLICT", "the payment repeats a statement this wallet saved");
         this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,NULL,'prepared',NULL,NULL,NULL,?,NULL)").run(name, intent, statement,
           bytes, selected[0]!.opening.backing, operator, at.toString());
         this.savedSinceRestoration(name, selected[0]!.opening.backing, canonical!.index);

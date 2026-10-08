@@ -510,6 +510,68 @@ describe("the one wallet holding lit notes", () => {
       .toBe("CONFLICT: a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
   });
 
+  /** A judgement no consistent history yields, written directly: the saved payment `name` reads failed while a door can still
+   * admit it. */
+  const markFailed = (path: string, name: string) => {
+    const db = new DatabaseSync(path); db.prepare("UPDATE saved_records SET status='failed' WHERE alias=?").run(name); db.close();
+  };
+
+  it("pays a failed payment's request again only by spending a note the failed one spends, so at most one is admitted (Next 4 (bd))", async () => {
+    const f = await fixture(), payer = f.open("payer"), shop = f.open("shop");
+    await f.issue(payer.keyedRequest("a", f.backing, 10n)); await f.issue(payer.keyedRequest("b", f.backing, 7n)); await f.checkpoint();
+    await payer.sync(await f.served(), f.signed);
+    const invoice = shop.keyedRequest("invoice", f.backing, 6n), order = { request: invoice, value: 6n };
+    const x = await payer.prepare("x", order, await f.served(), f.signed);
+    // A prepared payment of the request holds it.
+    expect(await refusalOf(payer.prepare("x-2", order, await f.served(), f.signed))).toBe("CONFLICT: request is already in a saved payment");
+    markFailed(f.path("payer"), "x");
+    await f.issue(payer.keyedRequest("c", f.backing, 6n)); await f.checkpoint();
+    // The retry's output to the key derives from its own nullifiers, so it spends x's note, not the exact one.
+    const retry = await payer.prepare("x-2", order, await f.served(), f.signed);
+    expect(retry.inputs).toEqual(x.inputs);
+    // Its outputs derive from the same nullifiers, the payee's included; only the change's key is new.
+    expect([retry.payee === x.payee, same(retry.statement, x.statement)]).toEqual([true, false]);
+    await payer.submit("x-2", f.service); await f.checkpoint();
+    await expect(payer.submit("x", f.service)).rejects.toThrow(/SPENT/);
+    await payer.sync(await f.served(), f.signed);
+    expect([payer.payment("x")!.status, payer.payment("x-2")!.status]).toEqual(["failed", "final"]);
+    expect((await shop.keyedFulfill("invoice", await f.served(), f.signed)).cm).toBe(retry.payee);
+    // Once its retry is final, the request is held again.
+    expect(await refusalOf(payer.prepare("x-3", order, await f.served(), f.signed))).toBe("CONFLICT: request is already in a saved payment");
+
+    // A failed payment whose input another statement spent in canonical history is never admitted: its retry spends any notes.
+    const other = shop.keyedRequest("other", f.backing, 5n), third = shop.keyedRequest("third", f.backing, 6n);
+    const p = await payer.prepare("p", { request: other, value: 5n }, await f.served(), f.signed);
+    markFailed(f.path("payer"), "p");
+    const q = await payer.prepare("q", { request: third, value: 6n }, await f.served(), f.signed);
+    expect(q.inputs).toEqual(p.inputs);
+    await payer.submit("q", f.service); await f.checkpoint();
+    const again = await payer.prepare("p-2", { request: other, value: 5n }, await f.served(), f.signed);
+    expect(again.inputs.some(nf => p.inputs.includes(nf))).toBe(false);
+  });
+
+  it("refuses paying a failed payment's request again where no note it spends is free, or where it is final (Next 4 (bd))", async () => {
+    const f = await fixture(), payer = f.open("payer"), shop = f.open("shop");
+    await f.issue(payer.keyedRequest("a", f.backing, 10n)); await f.checkpoint();
+    await payer.sync(await f.served(), f.signed);
+    const invoice = shop.keyedRequest("invoice", f.backing, 4n), order = { request: invoice, value: 4n };
+    await payer.prepare("x", order, await f.served(), f.signed);
+    markFailed(f.path("payer"), "x");
+    // Another payment takes the note x no longer reserves.
+    await payer.prepare("z", { request: shop.keyedRequest("other", f.backing, 4n), value: 4n }, await f.served(), f.signed);
+    expect(await refusalOf(payer.prepare("x-2", order, await f.served(), f.signed))).toBe("CONFLICT: the failed payment x to this " +
+      "request can still be admitted and no note it spends is available: sync until it is decided");
+    // Admitted and checkpointed, x is final whatever was written: its request is paid.
+    const g = await fixture(), holder = g.open("holder"), seller = g.open("seller");
+    await g.issue(holder.keyedRequest("a", g.backing, 10n)); await g.checkpoint();
+    await holder.sync(await g.served(), g.signed);
+    const bill = seller.keyedRequest("bill", g.backing, 4n);
+    await holder.prepare("x", { request: bill, value: 4n }, await g.served(), g.signed);
+    await holder.submit("x", g.service); await g.checkpoint();
+    markFailed(g.path("holder"), "x");
+    expect(await refusalOf(holder.prepare("x-2", { request: bill, value: 4n }, await g.served(), g.signed))).toBe("CONFLICT: request is already paid");
+  });
+
   it("hands a restoration's marks to an encrypted backup's restored copy", async () => {
     const f = await fixture(), shop = f.open("shop");
     shop.keyedRequest("invoice", f.backing, 4n); shop.close();
