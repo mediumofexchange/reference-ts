@@ -551,9 +551,20 @@ export class V3Wallet {
       // A restoration marks only requests it found unfulfilled, and fulfilling one clears its mark.
       this.db.prepare("SELECT 1 FROM receiver_restored WHERE alias IN (SELECT alias FROM receiver_fulfilled)").get() === undefined,
       "INVALID", "backup state has unmatched references");
-    // Next 4 (bd): only failed payments give up an output (pool) or a key of a backing (lit), so no two others share one.
-    requireThat(this.db.prepare(`SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE r.status!='failed'
-      GROUP BY ${lit ? "o.owner, r.backing" : "o.cm"} HAVING COUNT(DISTINCT o.alias) > 1`).get() === undefined, "INVALID",
+    // Next 4 (bd): only failed payments give up a request's output (pool) or a payee's key of a backing (lit), so no two others
+    // share one. A lit window move's own target is not a payee's: a failed move later read final may sit beside the next move.
+    const paidKeys: string[] = [];
+    if (lit) {
+      for (const row of this.db.prepare("SELECT intent, backing FROM saved_records WHERE kind='2' AND status!='failed'").all()) {
+        let intent: unknown;
+        try { intent = JSON.parse(row.intent as string); } catch { continue; }  // a malformed intent is refused below
+        if (!Array.isArray(intent)) continue;
+        const keys = intent[1] === "keyed" ? [intent[2], intent[4]] : intent[1] === "move" ? [intent[2]] : [];
+        for (const key of keys) if (typeof key === "string") paidKeys.push(`${hex(row.backing as Uint8Array)}:${key}`);
+      }
+    }
+    requireThat(lit ? new Set(paidKeys).size === paidKeys.length : this.db.prepare(`SELECT 1 FROM saved_outputs o JOIN saved_records r
+      ON r.alias=o.alias WHERE r.status!='failed' GROUP BY o.cm HAVING COUNT(DISTINCT o.alias) > 1`).get() === undefined, "INVALID",
       "backup state has two saved payments of one output");
     if (lit) {
       // Well-formed owner-index rows, and each request naming its backing's key at an index the rows show exposed: a

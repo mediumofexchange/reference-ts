@@ -608,8 +608,28 @@ describe("the one wallet holding lit notes", () => {
     const paying = mover.prepare("p", { request: F, value: 2n }, served, h.signed);
     const other = mover.prepare("z", { request: W, value: 2n }, served, h.signed);
     const move = mover.moveWindow("m", served, h.signed, { request: F, value: 2n });
-    await paying; markFailed(h.path("mover"), "p"); await other;
+    const p = await paying; markFailed(h.path("mover"), "p");
+    // The note p no longer reserves went to z first: p had failed before the move's turn read it.
+    expect((await other).inputs).toEqual(p.inputs);
     expect(await refusalOf(move)).toBe("CONFLICT: request is already in a saved payment");
+  });
+
+  it("restores a backup holding a failed window move read final beside the next move to its target (Next 4 (bd) read-back)", async () => {
+    const { walletBackupDigest } = await import("../src/pool/v3/wallet-backup.js");
+    const f = await fixture(), w = f.open("w"), shop = f.open("shop");
+    await f.issue(w.keyedRequest("a", f.backing, 5n)); await f.issue(w.keyedRequest("b", f.backing, 7n)); await f.checkpoint();
+    await w.sync(await f.served(), f.signed);
+    for (let i = 0; ; i++) { try { w.keyedRequest(`r${i}`, f.backing, 1n); } catch { break; } }
+    await w.moveWindow("m1", await f.served(), f.signed);
+    markFailed(f.path("w"), "m1");
+    await w.prepare("pay", { request: shop.keyedRequest("s", f.backing, 5n), value: 5n }, await f.served(), f.signed);
+    await w.moveWindow("m2", await f.served(), f.signed);
+    // Evidence may move a failed record final (`resolve`); both moves then pay the wallet's own target key.
+    const db = new DatabaseSync(f.path("w")); db.prepare("UPDATE saved_records SET status='final' WHERE alias='m1'").run(); db.close();
+    const key = b(9), bytes = w.exportBackup(key);
+    const copy = V3Wallet.restoreBackup(f.path("copy"), { construction: LIT, venue: f.venue, reference }, bytes, key, walletBackupDigest(bytes));
+    wallets.push(copy);
+    expect([copy.payment("m1")!.status, copy.payment("m2")!.status]).toEqual(["final", "prepared"]);
   });
 
   it("hands a restoration's marks to an encrypted backup's restored copy", async () => {
