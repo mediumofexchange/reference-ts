@@ -337,7 +337,10 @@ export class V3OperatorJournal {
         // co-signed in its segment: that return is never this restoration's to adopt (it is adopted as any pending
         // opening, keeping the fence) and the next skips past it.
         this.db.prepare("DELETE FROM journal_restored WHERE id=1 AND opening IS NOT NULL").run();
-        this.db.prepare("INSERT OR IGNORE INTO journal_restored VALUES(1,?,?,NULL)").run(now.toString(), spacing);
+        // A copy taken while the fence stands holds its spacing too: each recording draws a fresh one, keeping the
+        // index, so no two restorations sign one return (nothing is signed under a spacing before the return).
+        this.db.prepare("INSERT INTO journal_restored VALUES(1,?,?,NULL) ON CONFLICT(id) DO UPDATE SET spacing=excluded.spacing")
+          .run(now.toString(), spacing);
       } else {
         requireThat(kept === undefined || kept === file, "COPIED", "this journal's file is not the one it was made in: if it is a copy " +
           "or a restored backup, run moe operator restore, which signs nothing on its segment and returns after silence");
