@@ -505,7 +505,9 @@ customer's payment credits another's order), and crediting again a request its l
    - A lit wallet reads every owner key's exposure as unknown, as one restored from its seed does (lit-v1 §8): its next
      read of each backing exposes every index through `h + 256`, and `move-window` comes before new requests and before
      a payment or burn with change. Make that read from a view at least as fresh as the lost instance's: `h` comes from
-     it, and the exposure is fixed there.
+     it, and the exposure is fixed there. A read from an older view fixes it too low, so a later request can name a key
+     the lost instance handed out, and the wallet cannot tell (reproduced by the 2026-10-08 audit, WORK.md Next 4 (bc)).
+     `restore-seed` says the same of its first sync.
 3. A payment is refused once its seed already paid the request: pool-v3's at every door, since the request names the
    exact output; lit's by the wallet (`CONFLICT`), which finds the request's exact output among those of the statements
    spending its own notes that it did not save. A lit payment the lost instance still had in flight is unknown until it

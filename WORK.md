@@ -3,12 +3,12 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 17, Bitcoin's read-only probe 3, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17), [decision](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17); #157, reviewed). Do records reach pools
-through the public mempool, and how long do they wait? Other parties' records had almost all reached mempool.space's mempool before
-mining, AntPool's group skipped them there, and the wait within `depth + 2` blocks sets a Bitcoin profile's depth. Publishing our own
-records still needs funds. Slice 16 (#156): AntPool's templates exclude OP_RETURN over 83 B; a Bitcoin reader fails the transfer budget.
+**Slice 17, Bitcoin's read-only probe 3, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17), [decision](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17); #157): records reach mempool.space's mempool
+before mining and their wait within `depth + 2` blocks sets a Bitcoin depth; publishing our own needs funds. Slice 16 (#156): see Next 12.
 
-**Proposed next:** by release distance: Next 4's waiting letters, (bb) the journal's whole replay at a lagged read, (az) streaming if a
+**Audit 2026-10-08, area 33 (lit-v1 runtime), done** ([decision](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33); #158): verdict and custody sound but for (bc), a major
+deferred with its design: a restoration whose first read is older than its lost instance's view reissues that instance's owner keys.
+**Proposed next:** (bc) first (custody, reproduced); then by release distance: Next 4's waiting letters, (bb) the journal's whole replay at a lagged read, (az) streaming if a
 holder must pass about 1.5·10⁵ notes, or `venue-bitcoin.md` (Next 12; a desktop-reader role).
 
 **Slice 13, release assurance, is done** (Next 6; M13a–M13h, #143–#153: [release record](docs/RELEASE.md), separate installs, restoration,
@@ -44,6 +44,9 @@ copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ re
    at 42 statements a checkpoint); (bb) a journal read at an index below its kept reads' discards them and replays its whole
    history in one turn (37 s at 2.7·10³ statements), seen when a read ran at a restart's index before the lag: root-cause it
    in the journal's audit area;
+   (bc) a lit restoration's exposure fixed from a stale first read: raise it per read while restoration-derived, over outputs
+   not created since the restoration ([design](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33)); (bd) a failed payment blocks paying its request again; (be) a lit scan's
+   predicate keeps a seed copy unzeroed for its read; (bf) an extra kept lit demand row goes unchecked;
    accepted (ba): a lit read re-checks every marked note (about 0.14 ms each, 14 s a read at 10⁵), within the steady state.
 5. Slice 11 leftovers (the 10⁵ rerun is M13h: `serve`'s memory levels off near 600 MB, its JavaScript heap near 7 MB). M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
@@ -55,7 +58,7 @@ copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ re
 7. CI's real-proof checks run in five parallel groups (12 min, not 43) and skip for report/unread-doc commits ([decision](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)); lever: split the drill
    or local replay. M10e2 left: the harness's proof-free cases in vitest with stand-in proofs; narrow the optional `StoredEvent.index`/`judgedIndex` when touched.
    Root-cause a Windows hang: PR #114 run 37350884943 attempt 1 timed out (30 s, vitest worker RPC too) in `pool-v3-replay-store` keep-point tests and `cli.test.mjs:158`; green on re-run.
-8. On touching affected files (simplify survey 2026-10-07): wallet-store's pool and keyed `reprove`/`keyedResign`, supersede and `superseded` blocks; one CLI profile per construction for `wallet.ts`'s `keyed ? lit : pool` branches; lit's §2 output derivation once (`litView`, `litScanOutput`, `derivedOutputs`);
+8. On touching affected files (simplify survey 2026-10-07): wallet-store's pool and keyed `reprove`/`keyedResign`, supersede and `superseded` blocks; one CLI profile per construction for `wallet.ts`'s `keyed ? lit : pool` branches; the wallet's pool and `keyed*` flows (`keyOf` copies, positional intents; audit area 33);
    one `moe` harness for the two command drills; one fixture `foldSegment` (`receiptFields`; re-records local replay); `store-check`/`history-store-check` onto `drill.mjs` with a `drill.serve`; reports written to `docs/` directly; CLI `commitmentOf`/`READ` shared; `openProver` refuses absent parameters as
    `PARAMETERS` (exits 3 now). Also shared byte helpers; Ergo section versus transaction charging; served-trail caller-object cache; drop the `vite` dev pin at the next dependency change; test a second commit refused while one is in flight (`store.ts` `ready`).
    Not worth it: `fulfill` into `sync` (its credit-once exit contract) and a second atomic writer (replay-store's `replaceFile`, only with its next change).

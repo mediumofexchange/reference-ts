@@ -443,7 +443,10 @@ async function restoreSeed(argv: readonly string[]): Promise<void> {
     await initRole(argv, "wallet", { venue: "required", construction: true, flags: { verifiers: "value", "backer-key": "value" }, fill: async (directory, args) => {
       await withView(directory, args, (view, verifier) =>
         V3Wallet.restoreSeed(directory.file(WALLET_DB), walletOptions(directory, view, verifier), secret).close());
-      return { restored: "seed", ...restoreBacker(directory, args) };
+      return { restored: "seed", ...restoreBacker(directory, args), ...(keyed(directory) ? { notes: [
+        "sync each backing first from a view at least as fresh as the seed's last instance's: that sync exposes every owner key " +
+          "through h + 256 (lit-v1 §8), and an older view fixes it too low, so a later request could name a key the last instance handed out",
+      ] } : {}) };
     } });
   } finally { secret.fill(0); }
 }

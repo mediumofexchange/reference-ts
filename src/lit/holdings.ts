@@ -48,6 +48,7 @@ export class OwnerKeys implements Keyring {
   readonly #root: Uint8Array;
   readonly #owners = new Map<string, { readonly backing: Uint8Array; readonly index: bigint }>();
   readonly #counts = new Map<string, bigint>();
+  #closed = false;
   constructor(seed: Uint8Array, domain: Uint8Array) { this.#root = ownerRoot(seed, domain); }
   /** Derive `backing`'s keys below `window`. */
   extend(backing: Uint8Array, window: bigint): void {
@@ -60,13 +61,16 @@ export class OwnerKeys implements Keyring {
   /** The backing and index whose key is `owner`, among those derived. */
   find(owner: Uint8Array): { readonly backing: Uint8Array; readonly index: bigint } | undefined { return this.#owners.get(hex(owner)); }
   /** `ownerSecret` for `backing` and `index`: the caller zeroes it after use. */
-  secret(backing: Uint8Array, index: bigint): Uint8Array { return ownerSecretAt(this.#root, backing, index); }
+  secret(backing: Uint8Array, index: bigint): Uint8Array {
+    if (this.#closed) throw new TypeError("the owner keyring is closed");
+    return ownerSecretAt(this.#root, backing, index);
+  }
   /** `ownerSecret`'s key for `backing` and `index`. */
   key(backing: Uint8Array, index: bigint): Uint8Array {
     const secret = this.secret(backing, index);
     try { return publicKeyOf(secret); } finally { secret.fill(0); }
   }
-  close(): void { this.#root.fill(0); }
+  close(): void { this.#closed = true; this.#root.fill(0); }
 }
 
 /** How a note is the wallet's (§8), and a wallet's lit note, as the one wallet reads them (pool/v3/construction.ts). */

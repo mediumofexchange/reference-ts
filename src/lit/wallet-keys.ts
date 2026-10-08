@@ -26,10 +26,16 @@ function root(seed: Uint8Array, domain: Uint8Array, info: Uint8Array): Uint8Arra
 function hmac(key: Uint8Array, message: Uint8Array): Uint8Array {
   return new Uint8Array(createHmac("sha256", key).update(message).digest());
 }
+/** HMAC under a root derived for this one secret, the root zeroed after use. */
+function derived(seed: Uint8Array, domain: Uint8Array, info: Uint8Array, message: Uint8Array): Uint8Array {
+  const key = root(seed, domain, info);
+  try { return hmac(key, message); } finally { key.fill(0); }
+}
 
 /** `ownerSecret = HMAC-SHA256(ownerRoot, backing || u64 i)`: owner indices are per backing. */
 export function ownerSecret(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, index: bigint): Uint8Array {
-  return ownerSecretAt(ownerRoot(seed, domain), backing, index);
+  const key = ownerRoot(seed, domain);
+  try { return ownerSecretAt(key, backing, index); } finally { key.fill(0); }
 }
 /** `ownerRoot`, for deriving many owner secrets from one root (a wallet's scan). */
 export function ownerRoot(seed: Uint8Array, domain: Uint8Array): Uint8Array { return root(seed, domain, OWNER_INFO); }
@@ -41,7 +47,7 @@ export function ownerSecretAt(ownerRootIn: Uint8Array, backing: Uint8Array, inde
 /** K's `acceptSecret = HMAC-SHA256(settlementRoot, demand || u64 acceptanceDeadline)`. */
 export function acceptSecret(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array {
   const w = new ByteWriter(); w.key32(field32(demand, "demand"), "demand"); w.u64(u64(deadline, "acceptance deadline"));
-  return hmac(root(seed, domain, SETTLEMENT_INFO), w.finish());
+  return derived(seed, domain, SETTLEMENT_INFO, w.finish());
 }
 /** `presentSecret = HMAC-SHA256(presenterRoot, tag_1 || tag_2 || u64 instant || u64 deadline)`, the tags in the demand's
  * input order and `tag_2` 32 zero bytes for a demand over one note: every field is public in the demand, so a restored
@@ -55,7 +61,7 @@ export function presentSecret(seed: Uint8Array, domain: Uint8Array, tags: readon
   const w = new ByteWriter();
   w.key32(own[0]!, "tag 1"); w.key32(own[1] ?? new Uint8Array(32), "tag 2");
   w.u64(u64(instant, "instant")); w.u64(u64(deadline, "deadline"));
-  return hmac(root(seed, domain, PRESENTER_INFO), w.finish());
+  return derived(seed, domain, PRESENTER_INFO, w.finish());
 }
 /** K's issue nonce (§8 leaves the derivation to K; slice 14 M14g2): `HMAC-SHA256(issueRoot, backing || owner || u64
  * quantity)` under `issueRoot = HKDF-SHA256(seed, salt=domain, info="moe/wallet/lit/v1/issue")`. One issuance per backing,
@@ -64,7 +70,7 @@ export function presentSecret(seed: Uint8Array, domain: Uint8Array, tags: readon
 export function issueNonce(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, owner: Uint8Array, quantity: bigint): Uint8Array {
   const w = new ByteWriter(); w.key32(field32(backing, "backing"), "backing"); w.key32(field32(owner, "owner"), "owner");
   w.u64(u64(quantity, "quantity"));
-  return hmac(root(seed, domain, ISSUE_INFO), w.finish());
+  return derived(seed, domain, ISSUE_INFO, w.finish());
 }
 /** The key (§1) of a derived secret: an Ed25519 public key is canonical and, from a hashed seed, never of small order. */
 export function publicKeyOf(secret: Uint8Array): Uint8Array {

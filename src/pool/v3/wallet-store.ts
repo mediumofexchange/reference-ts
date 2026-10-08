@@ -324,7 +324,10 @@ function gapOpen({ canonical, clock, at, lag }: Frontier): boolean {
 /** A note a read found: pool-v3's, completed to spend by its path, or lit-v1's, spent by its opening. */
 type HeldNote = OwnedNote | KeyedNote;
 interface Valued { readonly opening: { readonly value: bigint }; readonly cm: bigint }
-function select<N extends Valued>(notes: readonly N[], total: bigint): N[] {
+/** The pool's selection refusal names freshen; a lit wallet has none (lit-v1 §8). */
+const POOL_FUNDS = "no available unpresented one- or two-note selection covers it; presented notes move by freshen where admission is open";
+const LIT_FUNDS = "no available one- or two-note selection covers it";
+function select<N extends Valued>(notes: readonly N[], total: bigint, reason = POOL_FUNDS): N[] {
   const sorted = [...notes].sort((a, b) => a.opening.value < b.opening.value ? -1 : a.opening.value > b.opening.value ? 1 :
     a.cm < b.cm ? -1 : a.cm > b.cm ? 1 : 0);
   const single = sorted.find(n => n.opening.value >= total);
@@ -336,8 +339,7 @@ function select<N extends Valued>(notes: readonly N[], total: bigint): N[] {
     if (isValue(pair - total) && (sum === undefined || pair < sum)) { best = [sorted[i]!, sorted[j]!]; sum = pair; }
     j--;
   }
-  requireThat(best !== undefined, "FUNDS",
-    "no available unpresented one- or two-note selection covers it; presented notes move by freshen where admission is open");
+  requireThat(best !== undefined, "FUNDS", reason);
   return best;
 }
 /** C3.3: a demand names whole notes, so one note of exactly `total` or a pair summing to it; ties by commitment.
@@ -457,7 +459,7 @@ export class V3Wallet {
       this.db.exec("COMMIT");
     } catch (error) {
       try { this.db.exec("ROLLBACK"); } catch { /* preserve error */ }
-      this.db.close(); throw error;
+      this.keys?.close(); this.db.close(); throw error;
     }
   }
 
@@ -2247,7 +2249,7 @@ export class V3Wallet {
         "CONFLICT", "a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
       const holdings = this.holdingsOf(notes, force, at);
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
-      const selected = select(available, total), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
+      const selected = select(available, total, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
       return this.keyedSave(name, intent, view, header.operator, selected, () => [{ backing, value, owner: payee.owner },
         ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }]),
         ...(sum > total ? [{ backing, value: sum - total, owner: this.keys!.key(backing, this.allocate(backing)) }] : [])], theirs);
@@ -2399,7 +2401,7 @@ export class V3Wallet {
       const { canonical, force, notes, at, observed } = view;
       this.current(at);
       const header = this.admissible(view), holdings = this.holdingsOf(notes, force, at);
-      const selected = select((notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available"), quantity);
+      const selected = select((notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available"), quantity, LIT_FUNDS);
       const sum = selected.reduce((n, note) => n + note.opening.value, 0n), inputs = this.keyedInputs(selected);
       try {
         observed.check();
@@ -2556,7 +2558,7 @@ export class V3Wallet {
       const holdings = this.holdingsOf(notes, force, at), price = paid?.value ?? 0n;
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
       requireThat(isValue(price + 1n), "INVALID", "invalid payment order");
-      const selected = select(available, price + 1n), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
+      const selected = select(available, price + 1n, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
       return this.keyedSave(name, JSON.stringify([...head, target.toString()]), view, header.operator, selected, () => [
         { backing, value: sum - price, owner: this.keys!.key(backing, target) },
         ...(paid === undefined ? [] : [{ backing, value: paid.value, owner: paid.owner }])], theirs);
@@ -2572,7 +2574,7 @@ export class V3Wallet {
 
   close(): void {
     if (this.closed) return;
-    this.closed = true; this.seed.fill(0);
+    this.closed = true; this.seed.fill(0); this.keys?.close();
     this.retained?.close(); this.replays?.close(); this.db.close();
   }
 }
