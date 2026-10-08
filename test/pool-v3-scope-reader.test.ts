@@ -7,7 +7,7 @@ import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
-import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
+import { decodeSnapshot, encodeReceipt, receiptBytes, snapshotBytes } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
@@ -37,7 +37,7 @@ const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items
 
 /** One operator opens a segment scoping two backings and issues into the first;
  * a successor segment may then import the first backing alone. */
-async function twoBackings(silence?: bigint, witnessed = 10n) {
+async function twoBackings(silence?: bigint, witnessed = 10n, link?: Uint8Array) {
   const venue = FixtureVenue.reference(label, lag, witnessed), operatorStore = new ReplayStore();
   const termsOf = (thing: string): RootTerms => ({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
     payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)),
@@ -49,7 +49,7 @@ async function twoBackings(silence?: bigint, witnessed = 10n) {
   const [x, y] = backings as [typeof backings[0], typeof backings[0]];
   const open = (scoped: typeof backings, sequence: bigint, predecessor?: Commitment, imported?: SegmentState) => {
     const header: SegmentHeader = { domain, venue: venue.id, operator, sequence,
-      entries: scoped.map(item => ({ backing: item.name, link: item.name, ...(predecessor === undefined ? {} : { opening: predecessor }) })) };
+      entries: scoped.map(item => ({ backing: item.name, link: link ?? item.name, ...(predecessor === undefined ? {} : { opening: predecessor }) })) };
     const id = segmentIdentity(header);
     return { header, id, scoped, scope: new ScopeTree(header.entries).root(), records: [] as Uint8Array[],
       scopedTerms: new Map(scoped.map(item => [hex(item.name), item.fields])),
@@ -61,11 +61,12 @@ async function twoBackings(silence?: bigint, witnessed = 10n) {
     if (!items.some(item => item.kind === kind && compareBytes(item.payload, payload) === 0)) items.push({ kind, payload });
   };
   /** Commit the current state, witnessed at `index` (none: signed and served, never witnessed); `alter` may drop
-   * or change the directory's snapshots. */
-  function checkpoint(sequence: bigint, index: bigint | undefined, alter = (snapshots: ReturnType<typeof snapshotsNow>) => snapshots): Commitment {
+   * or change the directory's snapshots, and `preimage` give a snapshot's committed bytes. */
+  function checkpoint(sequence: bigint, index: bigint | undefined, alter = (snapshots: ReturnType<typeof snapshotsNow>) => snapshots,
+    preimage: (snapshot: ReturnType<typeof snapshotsNow>[number]) => Uint8Array = snapshotBytes): Commitment {
     const snapshots = alter(snapshotsNow());
-    const directory = snapshots.map(snapshot => ({ name: snapshot.backing, digest: snapshotDigest(snapshot) }));
-    for (const snapshot of snapshots) add(4, snapshotBytes(snapshot));
+    const directory = snapshots.map(snapshot => ({ name: snapshot.backing, digest: sha256(preimage(snapshot)) }));
+    for (const snapshot of snapshots) add(4, preimage(snapshot));
     add(3, encodeEvidenceDirectory(directory));
     add(6, encodeTrail({ header: segmentBytes(current.header), terms: current.scoped.map(item => item.signed), records: current.records }));
     const commitment = signCommitment(operatorSecret, sequence, directoryRoot(directory));
@@ -322,5 +323,44 @@ describe("multi-backing scope reader", () => {
     // A distinct event repeating an imported output is a conflicting history.
     const repeated = await f.replayInto(store, b(93), [f.issued(5n, 101n, b(94))], b(94));
     expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: repeated }])).toThrow(expect.objectContaining({ check: "OUTPUT" }));
+  });
+
+  it("reads a committed snapshot preimage that does not decode as unresolved, never a verdict (pool-v3 §7, C2.10.11)", async () => {
+    for (const odd of ["first", "second"] as const) {
+      const f = await twoBackings();
+      f.checkpoint(1n, 1n); await f.issue(5n, 101n);
+      const target = odd === "first" ? f.x.name : f.y.name;
+      // The preimage hashes to the signed digest, but a trailing byte leaves it undecodable under §7's strict codec.
+      const odds = f.checkpoint(2n, 3n, snapshots => snapshots, snapshot => compareBytes(snapshot.backing, target) === 0 ?
+        new Uint8Array([...snapshotBytes(snapshot), 0]) : snapshotBytes(snapshot));
+      for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, odds)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    }
+  });
+
+  it("lapses a checkpoint witnessed after a scoped term ended whose own snapshot preimage is withheld (C2.10.11)", async () => {
+    const f = await twoBackings();
+    f.replaceX(1n, 6n); // x's first term ends at 6
+    const opening = f.checkpoint(1n, 7n);
+    // y's preimage is withheld; the first snapshot (x's) authenticates the header and scope that term lapse reads.
+    f.items.splice(f.items.findIndex(item => item.kind === 4 && compareBytes(decodeSnapshot(item.payload).backing, f.y.name) === 0), 1);
+    await expect(f.read(f.y.name, opening)).rejects.toMatchObject({ status: "lapsed-selection" });
+  });
+
+  it("judges a continuation's silence lapse before a scope term not in force (C2.10.11)", async () => {
+    for (const [silence, expected] of [[4n, { status: "lapsed-selection", clock: { duration: "4", open: true } }],
+      [20n, { check: "TERMS_SCOPE" }]] as const) {
+      const f = await twoBackings(silence, 20n, b(55)); // every scoped link names a term the replacement chain does not hold
+      f.checkpoint(1n, 1n); // excluded TERMS_SCOPE: no valid checkpoint closes either backing's interval
+      await f.issue(5n, 101n);
+      const continuation = f.checkpoint(2n, 12n); // c(12) = 0: the gap is open under a duration of 4, not of 20
+      await expect(f.read(f.x.name, continuation)).rejects.toMatchObject(expected);
+    }
+  });
+
+  it("reads a selected checkpoint whose own snapshot names another segment in the first snapshot's segment (pool-v3 §7.1)", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, 1n); await f.issue(5n, 101n);
+    const misplaced = f.checkpoint(2n, 3n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s));
+    for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, misplaced)).rejects.toMatchObject({ check: "SNAPSHOT" });
   });
 });
