@@ -752,7 +752,7 @@ prepared as it went quiet, a demand and settlement published through the relay a
 return and adoption, and the lapsed payment proved again, final and fulfilled. It records each process's peak RSS
 (at most about 470 MB for a proving wallet command over that history). With `--testnet --authorized-testnet` the same
 checks ran over the own live testnet node ([M10d](../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d),
-[report](pool-v3-command-testnet-verification.json)): each funding key paid from the retained testnet wallet and swept
+[report](pool-v3-command-testnet-verification.json), recorded at `de1f688`, before slice 13's command changes): each funding key paid from the retained testnet wallet and swept
 back, a 30-block silence, two bulk notes instead of seventy.
 `redemption-store-check.mjs` (in `check:pool:v3`; `npm run check:pool:v3-redemption` alone) runs the same path with real
 proofs, each wallet operation in a fresh process that opens its database, proves with its own prover and syncs its kept

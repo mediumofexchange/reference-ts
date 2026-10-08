@@ -549,7 +549,7 @@ journal and reader require the caller's reference identity preimage. See the
 for the synthetic report and limits. The explicit `--testnet` path (retired, at `09534a8`) used the same
 journal on the live reference testnet, with throwaway tERG funding and a fresh
 reader fetching its own headers and sections ([live report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json));
-the live command drill is the current live evidence ([report](pool-v3-command-testnet-verification.json)).
+the live command drill is the live evidence, last run at `de1f688` before slice 13's command changes ([report](pool-v3-command-testnet-verification.json); a re-run waits on the local machine).
 
 What remains before an Ergo deployment: qualified durable storage/custody, the one-transaction
 condition checked against an adopted configuration, publication on the
