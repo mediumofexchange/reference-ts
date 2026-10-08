@@ -8,6 +8,7 @@ import * as notes from "../src/lit/notes.js";
 import * as codec from "../src/lit/records.js";
 import * as frames from "../src/lit/commitments.js";
 import * as wallet from "../src/lit/wallet-keys.js";
+import { OwnerKeys } from "../src/lit/holdings.js";
 import * as fault from "../src/lit/fault-evidence.js";
 import * as terms from "../src/lit/terms.js";
 import * as transport from "../src/lit/transport.js";
@@ -386,6 +387,15 @@ describe("lit-v1 §8 key derivation", () => {
     expect(hex(wallet.publicKeyOf(secret))).toBe(hex(ed25519.getPublicKey(secret)));
     expect(hex(wallet.ownerSecret(seed, id(1), BACKING, 7n))).not.toBe(hex(secret));
     expect(reason(() => wallet.ownerSecret(seed, DOMAIN, BACKING, -1n))).toBe("owner index outside u64");
+  });
+  it("keeps a scan's owner and acceptance keys under two roots that close zeroes, and no seed (Next 4 (be))", () => {
+    const keys = new OwnerKeys(seed, DOMAIN);
+    expect(hex(keys.acceptKey(demandHash, ACCEPTANCE_DEADLINE)))
+      .toBe(hex(ed25519.getPublicKey(wallet.acceptSecret(seed, DOMAIN, demandHash, ACCEPTANCE_DEADLINE))));
+    expect(hex(keys.key(BACKING, 7n))).toBe(hex(ed25519.getPublicKey(wallet.ownerSecret(seed, DOMAIN, BACKING, 7n))));
+    keys.close();
+    expect(() => keys.acceptKey(demandHash, ACCEPTANCE_DEADLINE)).toThrow("the owner keyring is closed");
+    expect(() => keys.key(BACKING, 7n)).toThrow("the owner keyring is closed");
   });
 });
 

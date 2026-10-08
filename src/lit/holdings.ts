@@ -17,7 +17,7 @@ import { KeptStateMismatch } from "../pool/v3/replay-store.js";
 import type { KeyedNote, KeyedOwner, Keyring } from "../pool/v3/construction.js";
 import type { ScanOutput, StateHandle, WitnessMark, WitnessPredicate } from "../pool/v3/state.js";
 import { noteCommitment, noteNullifier, noteTag, spendRho, type Opening, type Output } from "./notes.js";
-import { acceptSecret, OWNER_LOOK_AHEAD, ownerRoot, ownerSecretAt, publicKeyOf } from "./wallet-keys.js";
+import { acceptSecret, acceptSecretAt, OWNER_LOOK_AHEAD, ownerRoot, ownerSecretAt, publicKeyOf, settlementRoot } from "./wallet-keys.js";
 
 const keyOf = (bytes: Uint8Array): bigint => BigInt(`0x${hex(bytes)}`);
 const bytesOf = (key: bigint): Uint8Array => Uint8Array.from(Buffer.from(key.toString(16).padStart(64, "0"), "hex"));
@@ -42,14 +42,16 @@ export function reached(indices: Iterable<bigint>): bigint {
   return h;
 }
 
-/** One wallet's owner keys by backing and index, derived once per handle and extended as windows grow. Only public keys
- * are kept; a secret is derived again when a note is spent. */
+/** One wallet's owner keys by backing and index, derived once per handle and extended as windows grow, and its acceptance
+ * keys. Only public keys and the two roots are kept, the roots zeroed on close; a secret is derived again when a note is
+ * spent. */
 export class OwnerKeys implements Keyring {
   readonly #root: Uint8Array;
+  readonly #settlement: Uint8Array;
   readonly #owners = new Map<string, { readonly backing: Uint8Array; readonly index: bigint }>();
   readonly #counts = new Map<string, bigint>();
   #closed = false;
-  constructor(seed: Uint8Array, domain: Uint8Array) { this.#root = ownerRoot(seed, domain); }
+  constructor(seed: Uint8Array, domain: Uint8Array) { this.#root = ownerRoot(seed, domain); this.#settlement = settlementRoot(seed, domain); }
   /** Derive `backing`'s keys below `window`. */
   extend(backing: Uint8Array, window: bigint): void {
     const name = hex(backing);
@@ -70,7 +72,13 @@ export class OwnerKeys implements Keyring {
     const secret = this.secret(backing, index);
     try { return publicKeyOf(secret); } finally { secret.fill(0); }
   }
-  close(): void { this.#closed = true; this.#root.fill(0); }
+  /** `acceptSecret`'s key for `demand` and `deadline`. */
+  acceptKey(demand: Uint8Array, deadline: bigint): Uint8Array {
+    if (this.#closed) throw new TypeError("the owner keyring is closed");
+    const secret = acceptSecretAt(this.#settlement, demand, deadline);
+    try { return publicKeyOf(secret); } finally { secret.fill(0); }
+  }
+  close(): void { this.#closed = true; this.#root.fill(0); this.#settlement.fill(0); }
 }
 
 /** How a note is the wallet's (§8), and a wallet's lit note, as the one wallet reads them (pool/v3/construction.ts). */
@@ -110,21 +118,23 @@ const SCAN_INFO = utf8Encoder.encode("moe/wallet/lit/v1/kept-scan");
  * throws, so a wallet's reading cannot change a checkpoint's verdict. Its identity is derived one way from the seed, the
  * domain and every backing's window. */
 export function litWitness(seed: Uint8Array, domain: Uint8Array, windows: ReadonlyMap<string, bigint>, keys: OwnerKeys): WitnessPredicate {
-  const own = copyBytes(seed), ownDomain = copyBytes(domain), info = new ByteWriter();
+  const info = new ByteWriter();
   info.context(SCAN_INFO);
   for (const [name, window] of [...windows].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     const backing = Uint8Array.from(Buffer.from(name, "hex"));
     info.key32(backing, "backing"); info.u64(window); keys.extend(backing, window);
   }
-  const identity = new Uint8Array(hkdfSync("sha256", own, ownDomain, info.finish(), 32));
+  // The predicate keeps no copy of the seed: acceptance keys come from the keyring, whose roots the wallet zeroes on close.
+  const own = copyBytes(seed);
+  let identity: Uint8Array;
+  try { identity = new Uint8Array(hkdfSync("sha256", own, copyBytes(domain), info.finish(), 32)); } finally { own.fill(0); }
   return Object.assign((output: ScanOutput): WitnessMark | undefined => {
     try {
       const lit = output.lit;
       if (lit === undefined) return undefined;
       let owner: LitOwner | undefined;
       if (lit.acceptance !== undefined) {
-        const secret = acceptSecret(own, ownDomain, lit.acceptance.demand, lit.acceptance.deadline);
-        try { if (same(publicKeyOf(secret), lit.owner)) owner = { acceptance: lit.acceptance }; } finally { secret.fill(0); }
+        if (same(keys.acceptKey(lit.acceptance.demand, lit.acceptance.deadline), lit.owner)) owner = { acceptance: lit.acceptance };
       }
       if (owner === undefined) {
         const found = keys.find(lit.owner), window = found === undefined ? undefined : windows.get(hex(found.backing));
