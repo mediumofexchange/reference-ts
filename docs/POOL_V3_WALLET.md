@@ -504,13 +504,16 @@ customer's payment credits another's order), and crediting again a request its l
      refuses it (`RESTORED`) unless the holder's records outside the wallet show it was not (`--uncredited`).
    - A lit wallet reads every owner key's exposure as unknown, as one restored from its seed does (lit-v1 §8): its next
      read of each backing exposes every index through `h + 256`, and `move-window` comes before new requests and before
-     a payment or burn with change. Each later read raises the exposure to its own `h + 256` until the wallet names a
-     key, so a first read from a view older than the lost instance's does not fix it too low: the read that finds the
-     move final is past the restoration and covers what that instance saw. That `h` leaves out the outputs of the
-     wallet's own records saved since the restoration, so its move does not fill the window again (WORK.md Next 4 (bc)).
-     While it raises, an output within that reach reads as the lost instance's, since a late payment to one of its
-     requests looks the same as another instance acting; one past it, or a held note another instance spent, still
-     stops the wallet (`FORKED`). `restore-seed` does the same from its first sync.
+     a payment or burn with change. Every later read, of any backing in its scope, raises the exposure to that read's
+     `h + 256` until the wallet names a key, so a first read from a venue view behind the lost instance's (a node still
+     catching up) does not fix it too low (WORK.md Next 4 (bc)). That `h` leaves out the outputs of the wallet's own
+     payments prepared from a checkpoint witnessed after the first read, so its move does not fill the window again; a
+     move from an older checkpoint counts, since lit-v1's moves are deterministic and the lost instance may have made
+     the same one. Make the move from a view caught up with the lost instance's: one made while the node still lags
+     may repeat a move that instance made and read final, and is then left out wrongly. While the exposure rises, an
+     output within its reach reads as the lost instance's, since a late payment to one of its requests looks the same
+     as another instance acting, for as long as the wallet names no key; one past it, or a held note another instance
+     spent, still stops the wallet (`FORKED`). `restore-seed` does the same from its first sync.
 3. A payment is refused once its seed already paid the request: pool-v3's at every door, since the request names the
    exact output; lit's by the wallet (`CONFLICT`), which finds the request's exact output among those of the statements
    spending its own notes that it did not save. A lit payment the lost instance still had in flight is unknown until it
