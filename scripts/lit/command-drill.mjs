@@ -377,12 +377,17 @@ try {
     await refused(wallet("publish", SH, "redeem", backing, "--out", join(scratch, "early.json")), "GAP");
     await submit(SH, "redeem");
     await finalOf(SH, "redeem");
+    // Next 4 (ab): the same command line rerun after the index moved is the exact retry, its `+n` read as the saved deadline.
+    const rerun = await ok(wallet("demand", SH, "redeem", backing, "3", "--deadline", "+60"));
+    assert.deepEqual([rerun.demand, rerun.deadline, rerun.status], [shown.demand, shown.deadline, "final"]);
     const locked = await ok(wallet("sync", SH, backing));
     assert.deepEqual(holdings(locked), [["3", "locked", 1]]);
     assert.deepEqual(locked.demands.map(d => d.id), [shown.demand]);
     const acceptance = join(scratch, "answer.acceptance"), relayed = join(scratch, "answer.json");
     const accepted = await ok(wallet("accept", BK, "answer", backing, shown.demand, "--deadline", String(BigInt(shown.deadline) - 10n), "--out", acceptance));
     assert.equal(accepted.demand, shown.demand); assert.match(accepted.owner, /^[0-9a-f]{64}$/);
+    const again = await ok(wallet("accept", BK, "answer", backing, shown.demand, "--deadline", "+1", "--out", acceptance));
+    assert.deepEqual([again.deadline, again.owner], [accepted.deadline, accepted.owner]);
     await ok(wallet("publish-acceptance", BK, "answer", backing, "--out", relayed));
     const sent = await ok(["relay", "publish", "--dir", RL, relayed]);
     assert.equal(sent.status, "pending");

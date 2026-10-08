@@ -386,11 +386,13 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
 }
 
 /** The directory's evidence file, under its construction; `shared` for a replica's (M12b). */
-function openEvidence(directory: Directory, shared = false): EvidenceStore {
+export function openEvidence(directory: Pick<Directory, "file" | "construction">, shared = false): EvidenceStore {
   try { return new EvidenceStore(directory.file("evidence.db"), { construction: directory.construction, shared }); } catch (error) {
     if (error instanceof TypeError && /another construction's evidence/.test(error.message)) {
       throw new CommandError("CONSTRUCTION", `evidence.db holds another construction's evidence than this directory's ${nameOf(directory.construction)}`);
     }
+    // A file of another layout is refused, never read or replaced (Next 4 (m)).
+    if (error instanceof TypeError && /another layout/.test(error.message)) throw new CommandError("STORAGE", "evidence.db has another layout than this release reads");
     throw inUse(error);
   }
 }

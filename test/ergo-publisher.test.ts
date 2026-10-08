@@ -287,7 +287,7 @@ describe("kind-4 publications are one adjacent output run", () => {
     const fee = 1n << 63n, height = 0xffff_ffffn, options = { fee, minValuePerByte: 1_000_000n };
     const worst = (record: Uint8Array) => ({ ...publicationRequest(record), height });
     const n = funded([fee + 1_000_000_000_000n]), p = new ErgoPublisher({ secretKey: SECRET, suppliers: [n], ...options });
-    await expect(p.publish(worst(new Uint8Array(capacity + 1)))).rejects.toThrow(/does not fit one transaction$/);
+    await expect(p.publish(worst(new Uint8Array(capacity + 1)))).rejects.toMatchObject({ code: "TOO_LARGE", message: expect.stringMatching(/does not fit one transaction$/) });
     expect(p.unsettled).toBe(0);
     expect(n.submitted).toEqual([]);
     const record = Uint8Array.from({ length: capacity }, (_, i) => i % 251);
@@ -299,7 +299,7 @@ describe("kind-4 publications are one adjacent output run", () => {
     const easy = await publisher([funded([100_000_000n])]).publish(publicationRequest(record));
     expect(easy.signed.length).toBeLessThan(fitting.signed.length);
     // The whole frame's bound does not fit, and a longer location tree carries less.
-    await expect(publisher([funded([100_000_000n])]).publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4])))).rejects.toThrow(/does not fit one transaction$/);
+    await expect(publisher([funded([100_000_000n])]).publish(publicationRequest(new Uint8Array(MAX_RANGE_RECORD_BYTES[4])))).rejects.toMatchObject({ code: "TOO_LARGE", message: expect.stringMatching(/does not fit one transaction$/) });
     const sized = (length: number) => Uint8Array.of(0x08, 0x88, 0x1b, ...new Uint8Array(length));
     expect(ergoRunCapacity(sized(3_464))).toBeLessThan(capacity);
     // A tree of 4,016 bytes leaves no room in a box for even an empty piece.

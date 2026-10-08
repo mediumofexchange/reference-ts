@@ -146,17 +146,16 @@ async function publish(argv: readonly string[]): Promise<void> {
 }
 
 /** A refusal's status and code on the relay's listener: the file's own (400), one a later send may pass (409), and the
- * relay's view or nodes not ready (503). The publisher's two refusals no resend passes have codes of their own; its
- * other venue refusal is the best chain shorter than the clock's depth, which passes as the chain grows. */
+ * relay's view or nodes not ready (503). The publisher's two coded refusals keep their codes (`VenueError.code`, Next 4
+ * (at)); its other venue refusal is the best chain shorter than the clock's depth, which passes as the chain grows. */
 export function relayRefusal(error: unknown): RelayRefusal | undefined {
   if (error instanceof CommandError) {
     return { status: ["INVALID", "VENUE", "SUBJECT", "CONFIGURATION"].includes(error.code) ? 400 :
       ["EARLY", "BUDGET", "UNREPLAYED", "BUSY", "FULL"].includes(error.code) ? 409 : 503, code: error.code };
   }
   if (error instanceof VenueError) {
-    // ErgoPublisher's messages: a record its funding cannot carry in one transaction, and a full outbox.
-    if (/does not fit one transaction/.test(error.message)) return { status: 400, code: "TOO_LARGE" };
-    if (/too many unsettled publications/.test(error.message)) return { status: 409, code: "FULL" };
+    if (error.code === "TOO_LARGE") return { status: 400, code: "TOO_LARGE" };
+    if (error.code === "FULL") return { status: 409, code: "FULL" };
     return { status: 503, code: "UNAVAILABLE" };
   }
   return undefined;

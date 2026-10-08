@@ -35,10 +35,10 @@ describe("a served relay (slice 12 M12c)", () => {
     for (const c of ["INVALID", "VENUE", "SUBJECT", "CONFIGURATION"]) expect(relayRefusal(new CommandError(c, "x"))).toEqual({ status: 400, code: c });
     for (const c of ["EARLY", "BUDGET", "UNREPLAYED", "BUSY"]) expect(relayRefusal(new CommandError(c, "x"))).toEqual({ status: 409, code: c });
     expect(relayRefusal(new CommandError("GONE", "x"))).toEqual({ status: 503, code: "GONE" });
-    // The publisher's refusals, by its messages: no resend passes the first two.
-    expect(relayRefusal(new VenueError("the publication does not fit one transaction"))).toEqual({ status: 400, code: "TOO_LARGE" });
-    expect(relayRefusal(new VenueError("the publication does not fit one transaction's output run"))).toEqual({ status: 400, code: "TOO_LARGE" });
-    expect(relayRefusal(new VenueError("the publisher holds too many unsettled publications; settle it from a view"))).toEqual({ status: 409, code: "FULL" });
+    // The publisher's refusals, by their codes, never their text: no resend passes the first.
+    expect(relayRefusal(new VenueError("the publication does not fit one transaction", "TOO_LARGE"))).toEqual({ status: 400, code: "TOO_LARGE" });
+    expect(relayRefusal(new VenueError("the publisher holds too many unsettled publications; settle it from a view", "FULL"))).toEqual({ status: 409, code: "FULL" });
+    expect(relayRefusal(new VenueError("the publication does not fit one transaction"))).toEqual({ status: 503, code: "UNAVAILABLE" });
     expect(relayRefusal(new VenueError("the best chain is shorter than the clock's depth; publish once it grows"))).toEqual({ status: 503, code: "UNAVAILABLE" });
     expect(relayRefusal(new Error("node failure"))).toBeUndefined();
   });
