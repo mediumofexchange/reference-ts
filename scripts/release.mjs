@@ -9,12 +9,13 @@
 // two systems building one commit must record the same tarball and lock (`--compare`).
 //
 // Usage: node scripts/release.mjs --compare <release-record.json> <release-record.json>
-//        node scripts/release.mjs --verify <directory>   (an install made there with npm ci from the install lock)
+//        node scripts/release.mjs --verify <directory> <release-record.json>   (an install made there with npm ci
+//          from the install lock, checked against the record and this checkout's lockfile)
 //        (packRelease is called by check-package.mjs and the command drills, installParties by the drills)
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
@@ -71,7 +72,8 @@ export function packRelease(directory) {
   writeFileSync(join(directory, "package.json"), manifestOut);
   writeFileSync(join(directory, "package-lock.json"), lockOut);
   const shipped = install(directory, manifest.name);
-  const commit = git(["rev-parse", "HEAD"]), clean = git(["status", "--porcelain"]) === "";
+  // `dist` is ignored by git: the tree is clean only when it has no changes and the packed build is a fresh one of it.
+  const commit = git(["rev-parse", "HEAD"]), clean = git(["status", "--porcelain"]) === "" && freshBuild();
   const record = {
     package: manifest.name,
     version: manifest.version,
@@ -139,6 +141,50 @@ export function verifyInstall(directory) {
   }
 }
 
+/** Checks an install in `directory` against `record` (`--verify`): the directory's install lock is the one this
+ * checkout's lockfile gives for the record's tarball and the one the record names, the tarball has the record's bytes,
+ * the record names this checkout's clean commit, and npm placed the lock's tree (`verifyInstall`). */
+export function verifyRelease(directory, record) {
+  assert(record.source?.clean === true && record.source.commit === git(["rev-parse", "HEAD"]),
+    "the record names this checkout's commit, built from a clean tree");
+  const lockText = readFileSync(join(root, "package-lock.json"), "utf8");
+  assert.equal(sha256(lockText.replaceAll("\r\n", "\n")), record.checkoutLock, "the record names this checkout's lockfile");
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const expected = `${JSON.stringify(installLock(JSON.parse(lockText), manifest, record.tarball.file, record.tarball.integrity), null, 2)}\n`;
+  const lock = readFileSync(join(directory, "package-lock.json"), "utf8");
+  assert(lock === expected && sha256(lock) === record.installLock.sha256, "the install lock is the record's, from this checkout's lockfile");
+  const tarball = readFileSync(join(directory, record.tarball.file));
+  assert(sha256(tarball) === record.tarball.sha256 && `sha512-${createHash("sha512").update(tarball).digest("base64")}` === record.tarball.integrity,
+    "the tarball has the record's bytes");
+  verifyInstall(directory);
+}
+
+/** Whether `dist` is what a fresh build of the checkout's sources writes: the same files with the same bytes, a
+ * source map's sources read from where it lies. */
+function freshBuild() {
+  const out = join(root, "scratch", "release-build-check");
+  rmSync(out, { recursive: true, force: true });
+  try {
+    const result = spawnSync(process.execPath, [join(root, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json",
+      "--outDir", out], { cwd: root, encoding: "utf8", windowsHide: true, timeout: 300_000 });
+    assert.equal(result.status, 0, `tsc: ${result.error?.message ?? result.stdout}`);
+    copyFileSync(join(root, "src", "pool", "v3", "programs.json"), join(out, "pool", "v3", "programs.json"));
+    const dist = join(root, "dist"), files = dir => readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter(entry => entry.isFile()).map(entry => relative(dir, join(entry.parentPath, entry.name))).sort();
+    const shipped = files(dist), fresh = files(out);
+    if (JSON.stringify(shipped) !== JSON.stringify(fresh)) return false;
+    const read = (dir, file) => {
+      const text = readFileSync(join(dir, file), "utf8");
+      if (!file.endsWith(".map")) return text;
+      const map = JSON.parse(text);
+      return JSON.stringify({ ...map, sources: map.sources.map(source => resolve(dirname(join(dir, file)), source)) });
+    };
+    return shipped.every(file => read(dist, file) === read(out, file));
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+}
+
 /** git with `args` in the checkout, its output trimmed. */
 function git(args) {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8", windowsHide: true, timeout: 60_000 });
@@ -160,14 +206,17 @@ function specificationPins(shipped) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
-  const args = process.argv.slice(2), usage = "usage: node scripts/release.mjs --compare <record> <record> | --verify <directory>";
+  const args = process.argv.slice(2), usage = "usage: node scripts/release.mjs --compare <record> <record> | --verify <directory> <record>";
   if (args[0] === "--verify") {
-    assert(args.length === 2, usage);
-    verifyInstall(args[1]);
-    console.log(`The install in ${args[1]} is its install lock's tree, every entry for this system present`);
+    assert(args.length === 3, usage);
+    const record = JSON.parse(readFileSync(args[2], "utf8"));
+    verifyRelease(args[1], record);
+    console.log(`The install in ${args[1]} is the release ${record.source.commit} records, every entry for this system present`);
   } else {
     assert(args.length === 3 && args[0] === "--compare", usage);
     const [a, b] = args.slice(1).map(file => JSON.parse(readFileSync(file, "utf8")));
+    // A record of a tree with changes, or of a build older than its tree, names no commit's release.
+    assert(a.source?.clean === true && b.source?.clean === true, "both records are of a clean tree's fresh build");
     // A different Node or npm can pack other bytes: name both toolchains before comparing.
     console.log(`Toolchains: ${JSON.stringify(a.toolchain)} and ${JSON.stringify(b.toolchain)}`);
     for (const field of ["package", "version", "source", "tarball", "installLock", "checkoutLock", "specification"]) {
