@@ -490,6 +490,22 @@ describe("lit packages through the one reader (M14d)", () => {
     } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
   });
 
+  it("walks each own output row about once in a read resuming checkpoint after checkpoint (§10's rebuild, not per checkpoint)", async () => {
+    const g = litScope(), store = new ReplayStore(), walk = store.ownOutputs.bind(store);
+    let rows = 0;
+    vi.spyOn(store, "ownOutputs").mockImplementation(function* (ns: number, from: bigint) { for (const row of walk(ns, from)) { rows++; yield row; } });
+    g.checkpoint(1n, 1n);
+    let last: Commitment | undefined;
+    for (let k = 0; k < 20; k++) {
+      for (let m = 0; m < 10; m++) await g.admit(g.issue(1n, ALICE));
+      last = g.checkpoint(BigInt(k + 2), BigInt(2 * k + 3));
+    }
+    expect(stateOf(await g.read(last!, [], { store })).state.position).toBe(200n);
+    // 200 outputs; a walk from leaf 0 at every resumed checkpoint read 1,900.
+    expect(rows).toBeLessThanOrEqual(200);
+    store.close();
+  });
+
   it("rebuilds an imported namespace's outputs before a kept successor resumes on them (§10)", async () => {
     const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-imported-"));
     const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };

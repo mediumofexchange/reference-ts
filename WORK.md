@@ -46,7 +46,7 @@ copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ re
    in the journal's audit area;
    (bc) a lit restoration's exposure fixed from a stale first read: raise it per read while restoration-derived, over outputs
    not created since the restoration ([design](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33)); (bd) a failed payment blocks paying its request again; (be) a lit scan's
-   predicate keeps a seed copy unzeroed for its read;
+   predicate keeps a seed copy unzeroed for its read; (bf) an extra kept lit demand row goes unchecked;
    accepted (ba): a lit read re-checks every marked note (about 0.14 ms each, 14 s a read at 10⁵), within the steady state.
 5. Slice 11 leftovers (the 10⁵ rerun is M13h: `serve`'s memory levels off near 600 MB, its JavaScript heap near 7 MB). M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is

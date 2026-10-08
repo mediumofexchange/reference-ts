@@ -459,7 +459,7 @@ export class V3Wallet {
       this.db.exec("COMMIT");
     } catch (error) {
       try { this.db.exec("ROLLBACK"); } catch { /* preserve error */ }
-      this.db.close(); throw error;
+      this.keys?.close(); this.db.close(); throw error;
     }
   }
 

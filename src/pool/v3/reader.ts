@@ -528,8 +528,9 @@ function keptRowsHold(store: ReplayStore, ns: number, position: bigint, identity
 /** Where each namespace's own outputs are known to be its trail's (lit-v1 §10), per store this process holds: through a
  * position, with the own outputs (leaves) and the demands its trail stood up there. A namespace this process's replay
  * wrote is known through what it wrote; one loaded from a kept file is known only once rebuilt, so each is rebuilt once,
- * from where it is known on, never per checkpoint. */
-interface KnownOutputs { readonly position: bigint; readonly leaves: bigint; readonly demands: ReadonlyMap<string, Demand> }
+ * from where it is known on, never per checkpoint. `top` is the highest position of any own row a rebuild walked, so a
+ * check at a tip knows no known row lies past it. */
+interface KnownOutputs { readonly position: bigint; readonly leaves: bigint; readonly top: bigint; readonly demands: ReadonlyMap<string, Demand> }
 const knownOutputs = new WeakMap<ReplayStore, Map<number, KnownOutputs>>();
 function known(store: ReplayStore): Map<number, KnownOutputs> {
   let map = knownOutputs.get(store);
@@ -540,7 +541,7 @@ function known(store: ReplayStore): Map<number, KnownOutputs> {
 function replayedOutputs(store: ReplayStore, ns: number, construction: Construction): void {
   if (construction.namespace.tree) return;
   const tip = store.tip(ns), prior = known(store).get(ns);
-  known(store).set(ns, { position: tip.position, leaves: tip.leaves, demands: prior?.position === tip.position ? prior.demands : new Map() });
+  known(store).set(ns, { position: tip.position, leaves: tip.leaves, top: tip.position, demands: prior?.position === tip.position ? prior.demands : new Map() });
 }
 
 /** Lit-v1 §10: no root in a lit snapshot checks the output set, so a reader resuming a namespace without a note tree
@@ -554,11 +555,10 @@ function replayedOutputs(store: ReplayStore, ns: number, construction: Construct
 function keptOutputsHold(store: ReplayStore, ns: number, construction: Construction, trail: StoredTrail | undefined, position: bigint,
   closure?: (id: string) => Demand | undefined, tip = false): boolean {
   if (construction.namespace.tree) return true;
-  // At the tip no own row may lie past it: one would become visible, and spendable, as the namespace grows.
-  if (tip) for (const output of store.ownOutputs(ns, 0n)) if (output.position > position) return false;
   const from = known(store).get(ns);
-  // Rows through a known position are a prefix of those known: a position at or below it holds.
-  if (from !== undefined && from.position >= position) return true;
+  // Rows through a known position are a prefix of those known: a position at or below it holds, at a tip where no row
+  // walked lay past it.
+  if (from !== undefined && from.position >= position) return !tip || from.top <= position;
   if (trail === undefined || trail.length < position) return false;
   const after = from?.position ?? 0n, local = new Map(from?.demands);
   const derived: { readonly cm: bigint; readonly position: bigint }[] = [];
@@ -582,15 +582,21 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
     }
     for (const cm of view.outputs) derived.push({ cm, position: at });
   }
-  // Every own row past the known leaves at or below `position` is a derived output, in order, and none is missing.
-  let k = 0;
+  // Every own row past the known leaves at or below `position` is a derived output, in order, and none is missing. At the
+  // tip no own row may lie past it: one would become visible, and spendable, as the namespace grows. Rows this process
+  // already knows are not walked again, so a read resuming checkpoint after checkpoint walks each row once.
+  let k = 0, top = from?.top ?? 0n;
   for (const output of store.ownOutputs(ns, from?.leaves ?? 0n)) {
-    if (output.position > position) continue;
+    if (output.position > top) top = output.position;
+    if (output.position > position) {
+      if (tip) return false;
+      continue;
+    }
     const expected = derived[k++];
     if (expected === undefined || expected.cm !== output.cm || expected.position !== output.position) return false;
   }
   if (k !== derived.length) return false;
-  known(store).set(ns, { position, leaves: (from?.leaves ?? 0n) + BigInt(k), demands: local });
+  known(store).set(ns, { position, leaves: (from?.leaves ?? 0n) + BigInt(k), top, demands: local });
   return true;
 }
 
