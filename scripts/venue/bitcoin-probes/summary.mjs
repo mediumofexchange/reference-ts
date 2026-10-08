@@ -20,12 +20,14 @@ for (const r of A) if (pools[r.height].hash !== r.hash) throw new Error(`pool li
 const chain = [...headers, ...A].map((h) => ({ ...h, target: bitsToTarget(h.bits) }));
 const { retargets } = checkChain(chain);
 
-// Binomial lower tail P(X <= k) for n trials at p.
+// Binomial lower tail P(X <= k) for n trials at p, summed in log space (p near 1 underflows otherwise).
 function lowerTail(k, n, p) {
-  let term = (1 - p) ** n;
-  let sum = term;
-  for (let i = 0; i < k; i++) { term *= ((n - i) / (i + 1)) * (p / (1 - p)); sum += term; }
-  return Math.min(1, sum);
+  if (p <= 0 || k >= n) return 1;
+  if (p >= 1) return 0;
+  const logs = [n * Math.log1p(-p)];
+  for (let i = 0; i < k; i++) logs.push(logs[i] + Math.log((n - i) / (i + 1)) + Math.log(p / (1 - p)));
+  const max = Math.max(...logs);
+  return Math.min(1, Math.exp(max) * logs.reduce((s, l) => s + Math.exp(l - max), 0));
 }
 
 const signals = {

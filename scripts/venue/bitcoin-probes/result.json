@@ -1,0 +1,656 @@
+{
+ "window": {
+  "tip": 970510,
+  "start": 968489,
+  "end": 970504,
+  "weekStart": 969497,
+  "fixedAt": "2026-10-08T16:12:02.277Z"
+ },
+ "host": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+ "node": "v24.21.0",
+ "headers": {
+  "checked": 2825,
+  "from": 967680,
+  "to": 970504,
+  "retargets": 1
+ },
+ "probe1": {
+  "blocks": 2016,
+  "totals": {
+   "opReturnOutputs": 5982530,
+   "opReturnBytes": 135657581,
+   "opReturnOver83": 13280,
+   "opReturnOver83Bytes": 3929352,
+   "opReturnAtLeast139": 9840,
+   "opReturnAtLeast1000": 243,
+   "multiOpReturnTxs": 895,
+   "multiOpReturnOver83Txs": 424,
+   "envelopeInputs": 115530,
+   "envelopeBytes": 103349062,
+   "tx64": 0
+  },
+  "maxOpReturn": 33351,
+  "blockRates": {
+   "over83": 0.5803571428571429,
+   "atLeast139": 0.4270833333333333,
+   "multi": 0.2197420634920635,
+   "multiOver83": 0.10515873015873016,
+   "envelope": 0.96875
+  },
+  "pools": [
+   {
+    "pool": "Foundry USA",
+    "blocks": 524,
+    "share": 0.2599,
+    "over83": {
+     "blocks": 465,
+     "expected": 304.1,
+     "pLower": 1
+    },
+    "atLeast139": {
+     "blocks": 345,
+     "expected": 223.8,
+     "pLower": 1
+    },
+    "multi": {
+     "blocks": 187,
+     "expected": 115.1,
+     "pLower": 1
+    },
+    "multiOver83": {
+     "blocks": 85,
+     "expected": 55.1,
+     "pLower": 1
+    },
+    "envelope": {
+     "blocks": 519,
+     "expected": 507.6,
+     "pLower": 1
+    },
+    "over83Outputs": 5725,
+    "multiTxs": 380,
+    "multiOver83Txs": 186,
+    "opReturnMax": 33351
+   },
+   {
+    "pool": "AntPool",
+    "blocks": 415,
+    "share": 0.2059,
+    "over83": {
+     "blocks": 0,
+     "expected": 240.8,
+     "pLower": 3.13e-157
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 177.2,
+     "pLower": 4.05e-101
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 91.2,
+     "pLower": 1.9e-45
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 43.6,
+     "pLower": 9.43e-21
+    },
+    "envelope": {
+     "blocks": 411,
+     "expected": 402,
+     "pLower": 0.999
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   },
+   {
+    "pool": "F2Pool",
+    "blocks": 334,
+    "share": 0.1657,
+    "over83": {
+     "blocks": 289,
+     "expected": 193.8,
+     "pLower": 1
+    },
+    "atLeast139": {
+     "blocks": 211,
+     "expected": 142.6,
+     "pLower": 1
+    },
+    "multi": {
+     "blocks": 102,
+     "expected": 73.4,
+     "pLower": 1
+    },
+    "multiOver83": {
+     "blocks": 52,
+     "expected": 35.1,
+     "pLower": 0.998
+    },
+    "envelope": {
+     "blocks": 330,
+     "expected": 323.6,
+     "pLower": 0.993
+    },
+    "over83Outputs": 3404,
+    "multiTxs": 193,
+    "multiOver83Txs": 88,
+    "opReturnMax": 1650
+   },
+   {
+    "pool": "ViaBTC",
+    "blocks": 185,
+    "share": 0.0918,
+    "over83": {
+     "blocks": 164,
+     "expected": 107.4,
+     "pLower": 1
+    },
+    "atLeast139": {
+     "blocks": 118,
+     "expected": 79,
+     "pLower": 1
+    },
+    "multi": {
+     "blocks": 62,
+     "expected": 40.7,
+     "pLower": 1
+    },
+    "multiOver83": {
+     "blocks": 27,
+     "expected": 19.5,
+     "pLower": 0.968
+    },
+    "envelope": {
+     "blocks": 183,
+     "expected": 179.2,
+     "pLower": 0.98
+    },
+    "over83Outputs": 1528,
+    "multiTxs": 136,
+    "multiOver83Txs": 62,
+    "opReturnMax": 13172
+   },
+   {
+    "pool": "SpiderPool",
+    "blocks": 144,
+    "share": 0.0714,
+    "over83": {
+     "blocks": 123,
+     "expected": 83.6,
+     "pLower": 1
+    },
+    "atLeast139": {
+     "blocks": 93,
+     "expected": 61.5,
+     "pLower": 1
+    },
+    "multi": {
+     "blocks": 49,
+     "expected": 31.6,
+     "pLower": 1
+    },
+    "multiOver83": {
+     "blocks": 28,
+     "expected": 15.1,
+     "pLower": 1
+    },
+    "envelope": {
+     "blocks": 139,
+     "expected": 139.5,
+     "pLower": 0.469
+    },
+    "over83Outputs": 1496,
+    "multiTxs": 102,
+    "multiOver83Txs": 56,
+    "opReturnMax": 15507
+   },
+   {
+    "pool": "MARA Pool",
+    "blocks": 91,
+    "share": 0.0451,
+    "over83": {
+     "blocks": 62,
+     "expected": 52.8,
+     "pLower": 0.981
+    },
+    "atLeast139": {
+     "blocks": 45,
+     "expected": 38.9,
+     "pLower": 0.92
+    },
+    "multi": {
+     "blocks": 28,
+     "expected": 20,
+     "pLower": 0.981
+    },
+    "multiOver83": {
+     "blocks": 11,
+     "expected": 9.6,
+     "pLower": 0.753
+    },
+    "envelope": {
+     "blocks": 91,
+     "expected": 88.2,
+     "pLower": 1
+    },
+    "over83Outputs": 572,
+    "multiTxs": 56,
+    "multiOver83Txs": 17,
+    "opReturnMax": 5167
+   },
+   {
+    "pool": "SECPOOL",
+    "blocks": 87,
+    "share": 0.0432,
+    "over83": {
+     "blocks": 0,
+     "expected": 50.5,
+     "pLower": 1.55e-33
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 37.2,
+     "pLower": 8.99e-22
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 19.1,
+     "pLower": 4.21e-10
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 9.1,
+     "pLower": 0.0000634
+    },
+    "envelope": {
+     "blocks": 85,
+     "expected": 84.3,
+     "pLower": 0.76
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   },
+   {
+    "pool": "Luxor",
+    "blocks": 63,
+    "share": 0.0313,
+    "over83": {
+     "blocks": 0,
+     "expected": 36.6,
+     "pLower": 1.74e-24
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 26.9,
+     "pLower": 5.75e-16
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 13.8,
+     "pLower": 1.63e-7
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 6.6,
+     "pLower": 0.000912
+    },
+    "envelope": {
+     "blocks": 63,
+     "expected": 61,
+     "pLower": 1
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   },
+   {
+    "pool": "OCEAN",
+    "blocks": 60,
+    "share": 0.0298,
+    "over83": {
+     "blocks": 14,
+     "expected": 34.8,
+     "pLower": 4.85e-8
+    },
+    "atLeast139": {
+     "blocks": 9,
+     "expected": 25.6,
+     "pLower": 0.00000414
+    },
+    "multi": {
+     "blocks": 5,
+     "expected": 13.2,
+     "pLower": 0.00468
+    },
+    "multiOver83": {
+     "blocks": 3,
+     "expected": 6.3,
+     "pLower": 0.112
+    },
+    "envelope": {
+     "blocks": 21,
+     "expected": 58.1,
+     "pLower": 8.3e-44
+    },
+    "over83Outputs": 57,
+    "multiTxs": 8,
+    "multiOver83Txs": 3,
+    "opReturnMax": 498
+   },
+   {
+    "pool": "Braiins Pool",
+    "blocks": 27,
+    "share": 0.0134,
+    "over83": {
+     "blocks": 21,
+     "expected": 15.7,
+     "pLower": 0.991
+    },
+    "atLeast139": {
+     "blocks": 15,
+     "expected": 11.5,
+     "pLower": 0.938
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 5.9,
+     "pLower": 0.00123
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 2.8,
+     "pLower": 0.0498
+    },
+    "envelope": {
+     "blocks": 26,
+     "expected": 26.2,
+     "pLower": 0.576
+    },
+    "over83Outputs": 153,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 1647
+   },
+   {
+    "pool": "NiceHash",
+    "blocks": 24,
+    "share": 0.0119,
+    "over83": {
+     "blocks": 22,
+     "expected": 13.9,
+     "pLower": 1
+    },
+    "atLeast139": {
+     "blocks": 17,
+     "expected": 10.3,
+     "pLower": 0.999
+    },
+    "multi": {
+     "blocks": 9,
+     "expected": 5.3,
+     "pLower": 0.976
+    },
+    "multiOver83": {
+     "blocks": 5,
+     "expected": 2.5,
+     "pLower": 0.966
+    },
+    "envelope": {
+     "blocks": 24,
+     "expected": 23.3,
+     "pLower": 1
+    },
+    "over83Outputs": 274,
+    "multiTxs": 13,
+    "multiOver83Txs": 7,
+    "opReturnMax": 1690
+   },
+   {
+    "pool": "BTC.com",
+    "blocks": 24,
+    "share": 0.0119,
+    "over83": {
+     "blocks": 0,
+     "expected": 13.9,
+     "pLower": 8.89e-10
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 10.3,
+     "pLower": 0.00000156
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 5.3,
+     "pLower": 0.00259
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 2.5,
+     "pLower": 0.0695
+    },
+    "envelope": {
+     "blocks": 23,
+     "expected": 23.3,
+     "pLower": 0.533
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   },
+   {
+    "pool": "Binance Pool",
+    "blocks": 16,
+    "share": 0.0079,
+    "over83": {
+     "blocks": 0,
+     "expected": 9.3,
+     "pLower": 9.25e-7
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 6.8,
+     "pLower": 0.000135
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 3.5,
+     "pLower": 0.0189
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 1.7,
+     "pLower": 0.169
+    },
+    "envelope": {
+     "blocks": 16,
+     "expected": 15.5,
+     "pLower": 1
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   },
+   {
+    "pool": "Unknown",
+    "blocks": 13,
+    "share": 0.0064,
+    "over83": {
+     "blocks": 10,
+     "expected": 7.5,
+     "pLower": 0.957
+    },
+    "atLeast139": {
+     "blocks": 8,
+     "expected": 5.6,
+     "pLower": 0.95
+    },
+    "multi": {
+     "blocks": 1,
+     "expected": 2.9,
+     "pLower": 0.185
+    },
+    "multiOver83": {
+     "blocks": 1,
+     "expected": 1.4,
+     "pLower": 0.596
+    },
+    "envelope": {
+     "blocks": 13,
+     "expected": 12.6,
+     "pLower": 1
+    },
+    "over83Outputs": 71,
+    "multiTxs": 7,
+    "multiOver83Txs": 5,
+    "opReturnMax": 466
+   },
+   {
+    "pool": "WhitePool",
+    "blocks": 6,
+    "share": 0.003,
+    "over83": {
+     "blocks": 0,
+     "expected": 3.5,
+     "pLower": 0.00546
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 2.6,
+     "pLower": 0.0354
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 1.3,
+     "pLower": 0.226
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 0.6,
+     "pLower": 0.513
+    },
+    "envelope": {
+     "blocks": 6,
+     "expected": 5.8,
+     "pLower": 1
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   },
+   {
+    "pool": "Poolin",
+    "blocks": 2,
+    "share": 0.001,
+    "over83": {
+     "blocks": 0,
+     "expected": 1.2,
+     "pLower": 0.176
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 0.9,
+     "pLower": 0.328
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 0.4,
+     "pLower": 0.609
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 0.2,
+     "pLower": 0.801
+    },
+    "envelope": {
+     "blocks": 2,
+     "expected": 1.9,
+     "pLower": 1
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   },
+   {
+    "pool": "ULTIMUSPOOL",
+    "blocks": 1,
+    "share": 0.0005,
+    "over83": {
+     "blocks": 0,
+     "expected": 0.6,
+     "pLower": 0.42
+    },
+    "atLeast139": {
+     "blocks": 0,
+     "expected": 0.4,
+     "pLower": 0.573
+    },
+    "multi": {
+     "blocks": 0,
+     "expected": 0.2,
+     "pLower": 0.78
+    },
+    "multiOver83": {
+     "blocks": 0,
+     "expected": 0.1,
+     "pLower": 0.895
+    },
+    "envelope": {
+     "blocks": 1,
+     "expected": 1,
+     "pLower": 1
+    },
+    "over83Outputs": 0,
+    "multiTxs": 0,
+    "multiOver83Txs": 0,
+    "opReturnMax": 83
+   }
+  ]
+ },
+ "probe2": {
+  "suppliersAgree": true,
+  "A": {
+   "bytes": 1581404133,
+   "fetchMsMedian": 755,
+   "verifyMsMedian": 66.01,
+   "verifyMsP99": 170.38,
+   "verifyMsMax": 253.05,
+   "peakRssMiB": 375
+  },
+  "B": {
+   "bytes": 1581404133,
+   "fetchMsMedian": 677,
+   "verifyMsMedian": 67.23,
+   "verifyMsP99": 179.02,
+   "verifyMsMax": 375.31,
+   "peakRssMiB": 358
+  },
+  "week": {
+   "days": 6.69,
+   "blocksPerDay": 150.7,
+   "fullMBPerDay": 236.4,
+   "strippedMBPerDay": 118.5,
+   "verifyCpuSecondsPerDay": 11.5,
+   "txPerDay": 719642
+  },
+  "window2016": {
+   "days": 13.477,
+   "blocksPerDay": 149.6,
+   "fullMBPerDay": 234.6,
+   "strippedMBPerDay": 117.2,
+   "verifyCpuSecondsPerDay": 11.3,
+   "txPerDay": 702695
+  }
+ }
+}
