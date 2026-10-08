@@ -30,8 +30,14 @@ const g = Object.fromEntries(GROUPS.map((k) => [k, {
   ordinary: 0, ordinaryUnseen: 0, ordinaryInTemplate: zeros(), ordinaryMisses: zeros(), recordInTemplateBands: zeros(), recordMissBands: zeros(),
   ordinaryAges: BANDS.map(() => ({})),
 }]));
+// Per pool: blocks, records mined from its template, and records it left out of its template.
+const perPool = {};
 for (const b of blocks) {
   const G = g[group(b.pool)];
+  const P = (perPool[b.pool] ??= { blocks: 0, recordsInTemplate: 0, recordMisses: 0 });
+  P.blocks++;
+  P.recordsInTemplate += b.records.filter((r) => r.inTemplate).length;
+  P.recordMisses += b.missing.filter((m) => records.has(m.txid)).length;
   G.blocks++;
   for (const r of b.records) {
     G.records++;
@@ -89,14 +95,39 @@ const latency = BANDS.map((lo, k) => {
     ordinaryMinutes: histQuantiles(merged), ordinaryMinutesIncluding: histQuantiles(g.including.ordinaryAges[k]),
   };
 });
-const blocksWaited = seenRecords.map((r) => times.filter((t, i) => blocks[i].height < r.height && t > r.firstSeen).length);
+// Blocks waited: the week's blocks before the including one whose timestamp follows first sight,
+// capped at CAP (a scan back stops two hours of timestamps before first sight). Ordinary ages are
+// minute buckets, so their first sight is the bucket's middle. Blocks waited counts only
+// transactions mined from the week's (CAP + 1)th block on, so the cap is never cut short by the window's start.
+const CAP = 10;
+const waited = (i, firstSeen) => {
+  let n = 0;
+  for (let j = i - 1; j >= 0 && n < CAP && times[j] > firstSeen - 7200; j--) if (times[j] > firstSeen) n++;
+  return n;
+};
+const indexOf = new Map(blocks.map((b, i) => [b.height, i]));
+const blocksWaited = seenRecords.map((r) => waited(indexOf.get(r.height), r.firstSeen));
+const counted = blocksWaited.filter((_, k) => indexOf.get(seenRecords[k].height) >= CAP);
+const recordWaitBands = BANDS.map(() => Array(CAP + 1).fill(0));
+seenRecords.forEach((r, k) => { if (indexOf.get(r.height) >= CAP) recordWaitBands[band(r.rate)][blocksWaited[k]]++; });
+const ordinaryWaitBands = BANDS.map(() => Array(CAP + 1).fill(0));
+blocks.forEach((b, i) => i >= CAP && b.ordinary.forEach((o, k) => {
+  for (const [m, c] of Object.entries(o.ages)) ordinaryWaitBands[k][waited(i, b.time - Number(m) * 60 - 30)] += c;
+}));
+// Share mined within L blocks of first sight (waited < L), the lag C3.3's window must cover.
+const LAGS = [1, 2, 3, 6];
+const within = (d) => { const n = d.reduce((s, x) => s + x, 0); return Object.fromEntries(LAGS.map((L) => [L, n ? +(d.slice(0, L).reduce((s, x) => s + x, 0) / n).toFixed(4) : null])); };
+const withinLag = BANDS.map((lo, k) => ({ band: `>=${lo}`, records: recordWaitBands[k].reduce((s, x) => s + x, 0), recordsWithin: within(recordWaitBands[k]), ordinaryWithin: within(ordinaryWaitBands[k]) }));
 const missesPerRecord = (G) => seenRecords.map((r) => r.misses.filter((x) => x === G).length);
 const mean = (xs) => (xs.length ? +(xs.reduce((s, x) => s + x, 0) / xs.length).toFixed(3) : null);
 const dist = (xs, cap = 6) => { const d = Array(cap + 1).fill(0); for (const x of xs) d[Math.min(cap, x)]++; return d; };
 
+const waitOf = new Map(seenRecords.map((r, k) => [r.txid, indexOf.get(r.height) >= CAP ? blocksWaited[k] : null]));
 const bySize = {};
 for (const r of records.values()) {
-  const c = (bySize[sizeClass(r)] ??= { records: 0, unseen: 0, seen: 0, inTemplate: 0, misses: 0, missesAntpoolTemplates: 0 });
+  const c = (bySize[sizeClass(r)] ??= { records: 0, unseen: 0, seen: 0, inTemplate: 0, misses: 0, missesAntpoolTemplates: 0, largest: 0, waits: Array(CAP + 1).fill(0) });
+  c.largest = Math.max(c.largest, r.largest);
+  if (waitOf.get(r.txid) != null) c.waits[waitOf.get(r.txid)]++;
   c.records++;
   if (r.unseen) c.unseen++; else c.seen++;
   if (r.inTemplate) c.inTemplate++;
@@ -110,7 +141,8 @@ console.log(JSON.stringify({
   suppliers: { rawBlocks: 'blockstream.info (verified by block.mjs)', auditAndSummary: 'mempool.space (summary txids checked against the parsed block)' },
   templateAlgorithms: [...new Set(blocks.map((b) => b.templateAlgorithm))],
   summaryWithoutTimes: blocks.filter((b) => b.summaryTimes * 2 < b.txCount).length,
-  records: records.size, recordsSeen: seenRecords.length, bySize,
+  records: records.size, recordsSeen: seenRecords.length,
+  bySize: Object.fromEntries(Object.entries(bySize).map(([k, { waits, ...c }]) => [k, { ...c, within: within(waits) }])),
   groups: Object.fromEntries(GROUPS.map((k) => {
     const G = g[k];
     return [k, {
@@ -119,11 +151,13 @@ console.log(JSON.stringify({
       recordsInTemplate: G.recordsInTemplate, recordMisses: G.recordMisses, skip: skip(G),
     }];
   })),
+  pools: Object.entries(perPool).sort((a, b) => b[1].blocks - a[1].blocks).map(([pool, P]) => ({ pool, ...P, recordSkip: ratio(P.recordMisses, P.recordMisses + P.recordsInTemplate) })),
   misses: {
     meanPerSeenRecord: Object.fromEntries(GROUPS.map((k) => [k, mean(missesPerRecord(k))])),
     distributionAntpoolTemplates: dist(missesPerRecord('antpoolTemplates')),
     distributionIncluding: dist(missesPerRecord('including')),
   },
-  blocksWaited: { mean: mean(blocksWaited), distribution: dist(blocksWaited, 10) },
+  blocksWaited: { records: counted.length, mean: mean(counted), distribution: dist(counted, CAP) },
+  withinLag,
   latency,
 }, null, 1));
