@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-08` [Build a claim-layer profile only where it serves a function no other profile serves](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)
 - `2026-10-07` [Bind a settlement's output to its acceptance, fence a wallet that sees another instance of its seed act, and refuse a lit request the seed already paid (slice 13 M13f)](decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f)
 - `2026-10-07` [Restore a wallet directory from a copy by a recorded restoration, and audit copied views (slice 13 M13e)](decisions/2026-10.md#2026-10-07--restore-a-wallet-directory-from-a-copy-by-a-recorded-restoration-and-audit-copied-views-slice-13-m13e)
 - `2026-10-07` [Restore an operator journal by a return at a skipped sequence once silence is witnessed (slice 13 M13d)](decisions/2026-10.md#2026-10-07--restore-an-operator-journal-by-a-return-at-a-skipped-sequence-once-silence-is-witnessed-slice-13-m13d)
