@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-08` [Hash H through Barretenberg, let the journal's own read skip the proofs it verified, and slim a wallet's read notes (slice 15)](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15)
 - `2026-10-08` [Close the code review of slices 12–14: a fenced backup's restoration spacing, a settlement to the holder's own owner, and a release check bound to its record](decisions/2026-10.md#2026-10-08--close-the-code-review-of-slices-1214-a-fenced-backups-restoration-spacing-a-settlement-to-the-holders-own-owner-and-a-release-check-bound-to-its-record)
 - `2026-10-08` [Judge lapse before the reader's own snapshot, serve every fork's trail, and disposition the rest of Next 4 (slice 13 M13g)](decisions/2026-10.md#2026-10-08--judge-lapse-before-the-readers-own-snapshot-serve-every-forks-trail-and-disposition-the-rest-of-next-4-slice-13-m13g)
 - `2026-10-08` [Build a claim-layer profile only where it serves a function no other profile serves](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)

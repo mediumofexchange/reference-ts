@@ -3,13 +3,16 @@
 Updated: 2026-10-08
 
 ## Goal
-**Proposed next: slice 15, the design point's two edges** (Next 4 (ay), (az); [M13h](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-apart-and-the-wallet-at-depth-m13h)), the only budgets
-M13h found at their edge. Must achieve: a statement's admission stays within ≤ 1 s while `serve` reads its own newly held checkpoint,
-and a wallet's sync memory stops growing with its holdings. Acceptance: (ay) after comparing the smallest alternatives (the journal's
-read skips verifying statements whose receipts it signed; that read off the admission queue; Poseidon2 on Barretenberg), a 10⁵ profile
-of `serve` (M13h's probe at [51ea592](https://github.com/mediumofexchange/reference-ts/tree/51ea592/scripts/pool/v3/design-point-rerun), restored to scratch) shows no admission waiting on that read past 1 s;
-(az) a wallet sync over about 10⁵ holdings stays near a reader's memory, its outputs unchanged. Stop: both merged with adversarial review
-(journal read, wallet state), CI green. Change the proposal if something else brings release closer, and say why.
+**Slice 15, the design point's two edges** (Next 4 (ay), (az); [decision](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15), [probes](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15)), branch
+`claude/slice-15-design-point-edges`. (ay) is closed: H through Barretenberg's own Poseidon2 and the journal's read skipping proofs
+this process verified at admission keep admission during that read at 0.52–0.61 s at 10⁵ and 42 statements a checkpoint (M13h: 1.30–1.48 s), and `serve`'s CPU a
+statement nearly halves; the 10⁶ run settles how the wait grows with depth. (az) is reduced, not closed: a wallet's read holds about 2.2 KB a holding beyond a
+reader's (4.0 KB before), so a first sync reaches 1 GiB near 1.8·10⁵ unspent notes. Making that independent of holdings means
+streaming the view, kept as Next 4 (az). The acceptance changed from "near a reader's memory" once 10⁵ holdings showed what remains.
+Reviewed: one fresh reviewer each, every finding fixed. Stop: merged with CI green.
+
+**Proposed next:** choose from Next by release distance: (az) streaming only if a holder must pass about 1.5·10⁵ notes;
+otherwise the Venues probe (Next 12) or Next 4's waiting letters. The external review and local-machine runs stay outside.
 
 **Slice 13, release assurance, is done** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3): (a) M13a #143 ([release record](docs/RELEASE.md), CI's
 `reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (c) M13d #146, spec #19 (a restored operator returns past
@@ -20,7 +23,7 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
 ## Status
 - **Slices 10–14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
   install with real proofs on the synthetic node and live on the testnet; the Ergo view in SQLite rows, caught up in bounded passes; every budget
-  holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-apart-and-the-wallet-at-depth-m13h)), the operator's memory levelling off near 600 MB; at the edge only (ay) and (az).
+  holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-apart-and-the-wallet-at-depth-m13h)), the operator's memory levelling off near 600 MB; slice 15 brought (ay) within budget and reduced (az).
 - **Audits**: area 27 (state machine, [decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); area 29 (wallet, [decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)); area 31 (readers): a continuation whose opening the record moved past is excluded, or lapsed in a gap, and a receipt reads a term end and a moved-past `after` without its opening ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)); the journal not yet; area 30 (transport): a source's mark moves only past an answer that delivers its selection, and a stream's minimum rate is charged to the peer alone, on both sides ([decision](decisions/2026-10.md#2026-10-07--move-a-sources-mark-only-past-an-answer-that-delivers-its-selection-and-charge-a-streams-rate-to-the-peer-alone-audit-area-30)). Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): resumed kept walks recheck scope; a truncated `wallet.db` refuses; no failed act is published; Node floor 24.21.0. Review-code 2026-10-08 (`582d6fc..f4cf083`, five lanes, #154, [decision](decisions/2026-10.md#2026-10-08--close-the-code-review-of-slices-1214-a-fenced-backups-restoration-spacing-a-settlement-to-the-holders-own-owner-and-a-release-check-bound-to-its-record)): a fenced backup's restoration draws a fresh spacing; pool `settle` refuses an owner of the holder's own (`OWN_KEY`); `release.mjs --verify` binds to its record. Simplify 2026-10-07: one evidence chain for both constructions (#133); the store checks' live testnet modes retired (#134).
 
 ## Evidence
@@ -40,15 +43,19 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
    (ak), (al), (m)'s sync abort signal; replica availability (ap), (aq), (ar); their change (y) next wallet profile, (ad) mainnet,
    (z) a holder path for force-created outputs, (ao); tooling (g), (aa); accepted (n), (an), (af), (v) (directory lock). M13f limits
    (accepted): a lost instance's statement in flight at a restoration lands beside a retry; a note another instance received and
-   spent between two reads is never held. M13h ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-apart-and-the-wallet-at-depth-m13h)), the Goal's slice: (ay) `serve`'s read of its own newly held
-   checkpoint verifies and replays its statements again while admissions queue in its one journal turn (about 1 s at 28 statements);
-   (az) a wallet's sync holds about 6 KB a holding (1 GiB near 1.2·10⁵ unspent notes); (ba) a lit read hashes every marked note (about
-   0.14 ms each, 14 s a read at 10⁵, after review-code 2026-10-08 made `foundIndices` linear): measure it with (az).
+   spent between two reads is never held. Slice 15 ([edges](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15)) fixed (ay). Waiting: (az) a wallet's read
+   holds about 2.2 KB a holding beyond a reader's, so 1 GiB near 1.8·10⁵ unspent notes in a first sync; the lever is to keep
+   holdings in rows and stream the view (the output and every acting command's selection), taken if a holder must pass about 1.5·10⁵;
+   a restarted `serve`'s first admission once its last commitment is held reads what the previous process admitted (1.0–1.5 s
+   at 42 statements a checkpoint); (bb) a journal read at an index below its kept reads' discards them and replays its whole
+   history in one turn (37 s at 2.7·10³ statements), seen when a read ran at a restart's index before the lag: root-cause it
+   in the journal's audit area;
+   accepted (ba): a lit read re-checks every marked note (about 0.14 ms each, 14 s a read at 10⁵), within the steady state.
 5. Slice 11 leftovers (the 10⁵ rerun is M13h: `serve`'s memory levels off near 600 MB, its JavaScript heap near 7 MB). M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
    never reached (step-back doubling overruns the fetch budget on known headers; pre-existing); a node POST (`unspentBoxes`, `submit`) on
    a connection the node closed as idle is not sent again (M11b9 sends GETs once more; availability only, the publisher resends exact
-   bytes). Levers (Poseidon2 on Barretenberg, a 10⁶ first-sync run) only if a budget fails.
+   bytes). Lever (a 10⁶ first-sync run) only if a budget fails; Barretenberg's Poseidon2 is taken (slice 15).
 6. **Slice 13**, release assurance: done but for the external review. Security reviews until the external review (once the product is complete, 2026-10-01):
    separate AI instances (fresh reviewers, rolling audits).
 7. CI's real-proof checks run in five parallel groups (12 min, not 43) and skip for report/unread-doc commits ([decision](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)); lever: split the drill
@@ -80,11 +87,11 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking, local machine: a live re-run of the command drill (its report predates slice 13), the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- Non-blocking, local machine: a live re-run of the command drill (its report predates slice 13), the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵, and it settles slice 15's admission wait; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Non-blocking, maintainer (2026-10-08): the external security review, release assurance's one remaining item; commissioning it lies
   outside the standing authorization. Slice 13's own part is done; rolling AI reviews continue meanwhile (Next 6).
 - Deletion list (2026-10-07): none open.
 
-Roughly **75% done / 25% remaining** (range 65–82%), reassessed 2026-10-08 (M13h): slice 13 delivered release records, separate installs,
-restore drills and every open finding dispositioned, and the design point holds at 10⁵ but for two edges; the external review and its
-findings, the edges (ay), (az), qualified storage and custody, and mainnet remain.
+Roughly **76% done / 24% remaining** (range 66–82%), reassessed 2026-10-08 (slice 15): the design point now holds every budget at 10⁵,
+admission during the journal's own read included, with a wallet's memory per holding cut by about half. The external review and its
+findings, qualified storage and custody, and mainnet remain.

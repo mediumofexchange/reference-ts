@@ -489,7 +489,7 @@ declared host.
 Host replay is dominated by the note tree. A four-output append costs about
 26 ms, about 34 Poseidon2 hashes at about 0.85 ms each in the JavaScript
 implementation. Barretenberg's wasm computes the same permutation in 0.065 ms
-against 0.43 ms, an untaken lever. The spent set costs 0.16 ms per two
+against 0.43 ms, a lever [slice 15](#the-design-points-two-edges-slice-15) took. The spent set costs 0.16 ms per two
 nullifiers, and a state copy 0.34 ms per 1,000 leaves. By extrapolation, one
 core replays 10⁵ spends in about 2.3 h of verification (75–129 ms per proof in
 this run's conformance report) plus 0.7 h of note-tree hashing. The proofs are
@@ -1196,7 +1196,8 @@ Findings:
     statements would arrive during one and wait up to that long, at the edge of the ≤ 1 s admission budget. The median
     holds.
   - Levers (WORK.md Next 4 (ay)): the journal's read skips verifying a statement whose receipt it signed after verifying
-    it at admission, or reads off the admission queue. Poseidon2 on Barretenberg shortens both.
+    it at admission, or reads off the admission queue. Poseidon2 on Barretenberg shortens both. Slice 15 took the first
+    and the third ([edges](#the-design-points-two-edges-slice-15)).
 - **The wallet's first sync holds at 10⁵.** It took 28.8 ms a statement against the reader's 25.8 ms, peaking at 676 MB
   with 25,015 holdings. It was 26.3 ms at 10⁴, so it is flat per statement. Linear at the 10⁵ rate, 10⁶ takes the wallet
   about 8 h on these 4 cores, against 24 h on the declared 8. Served evidence stays 15.6 KB a statement. The reader keeps
@@ -1207,7 +1208,7 @@ Findings:
   That is about 6 KB and 0.12 ms a holding (M11b8 measured 0.14 ms), so a wallet holding about 1.2·10⁵ unspent notes
   would pass 1 GiB in a sync. The probe's holder is extreme by construction, since every second spend pays it; a
   design-point holder holds far fewer notes. Lever (WORK.md Next 4 (az)): a sync keeps its holdings in rows and streams
-  its view, instead of holding every note as objects.
+  its view, instead of holding every note as objects. Slice 15 cut the cost per holding instead ([edges](#the-design-points-two-edges-slice-15)).
 - **The steady state holds.** The reader read 200 new statements in 10.7 s and 17.2 CPU-s at 10⁵, against 9.7 s and
   16.1 CPU-s at 10⁴. The wallet costs about 89 CPU-ms a new statement beyond its read with nothing new. A day of 900
   statements with ten syncs comes to about 170 CPU-s and 14 MB served for this wallet, within ≤ 10 CPU-minutes and
@@ -1222,6 +1223,92 @@ Findings:
   - one backing and segment, and synthetic blocks;
   - one run per point, on one host;
   - 10⁶ itself remains a local-machine run (WORK.md Open questions).
+
+### The design point's two edges (slice 15)
+
+Slice 15 measures the levers for M13h's two edges ([decision](../decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15)). The tooling is
+[at defc7ee](https://github.com/mediumofexchange/reference-ts/tree/defc7ee/scripts/pool/v3/design-point-edges), over M13h's driver and stand-in verifier. Every run was on
+2026-10-08 on one 4-core cloud container (Xeon at 2.1 GHz, 16 GB), M13h's host class.
+
+*The host hash.* Barretenberg's WebAssembly `poseidon2Hash` takes 0.085 ms against the JavaScript hash's 0.41 ms, with no
+difference over 1,600 random inputs. Its native backend takes 0.044 ms. Starting the instance takes about 0.2 s and 30 MB.
+
+*Admission during the journal's own read, A/B.* Each variant builds its own history of 1,200 statements. It then admits
+1,500 stand-ins through `serve --interval 2`, with a block every 14 statements, so 36 checkpoints of about 42 statements
+each. The wait follows a checkpoint's statements, not depth (M13h). The first admission of each run reads what the
+building process admitted and is listed apart:
+
+| Variant | Median (p95) | Waits over 300 ms: count, median, max | First admission |
+|---|---:|---|---:|
+| `66d3e93`, as M13h | 88.3 ms (117) | 36, 1,153 ms, 1,478 ms | 1,467 ms |
+| H through Barretenberg | 60.5 ms (79) | 35, 752 ms, 940 ms | 1,121 ms |
+| Proofs remembered at admission | 90.2 ms (114) | 35, 1,027 ms, 1,157 ms | 1,423 ms |
+| Both (slice 15) | 60.2 ms (78) | 35, 424 ms, 527 ms | 1,028 ms |
+
+*At 10⁵.* M13h's method, with both levers (`965b3c1`'s runtime), to 10⁵ statements in 2.2 h. From 2·10⁴ to 8·10⁴ the host
+also ran the wallet measurements below. Admission over HTTP by band:
+
+| Through | Median (p95), others | Median (p95), first after a block | Worst | Resident (peak) | CPU a statement |
+|---:|---:|---:|---:|---:|---:|
+| 10,000 | 62.1 ms (88) | 61.0 ms (81) | 714 ms | 435 MB (437) | 78 ms |
+| 50,000 | 63.9 ms (97) | 61.9 ms (85) | 662 ms | 450 MB (476) | 84 ms |
+| 80,000 | 67.2 ms (103) | 64.9 ms (94) | 1,480 ms | 452 MB (477) | 84 ms |
+| 100,000 | 61.8 ms (85) | 60.2 ms (75) | 740 ms | 453 MB (480) | 84 ms |
+
+Then 3,000 more stand-ins through a restarted `serve`, with nothing else on the host: median 61.2 ms (p95 82.5). Its 71
+waits during the journal's own read lay between 518 and 606 ms (5th to 95th percentile), with a median of 550 ms; the
+worst was 806 ms. The first admission after the restart took 1,498 ms.
+
+*A wallet's holdings.* One history of about 25,100 statements, nearly all paying the probe's seed, so that 99,832 notes are
+unspent. Each figure is the command's whole run:
+
+| Holdings | Command | `66d3e93` with H through Barretenberg | Slice 15 |
+|---:|---|---|---|
+| 19,860 | wallet, nothing new | 6.0 s, 436–448 MB, heap 115–124 MB | 5.0 s, 318–323 MB, heap 61–93 MB |
+| 19,860 | reader, nothing new | 3.9 s, 307–310 MB | 4.0 s, 310–326 MB |
+| 99,832 | wallet, first sync | 615 s, 945 MB, heap 283 MB | 529 s, 859 MB, heap 245 MB |
+| 99,832 | reader, first sync | 442 s, 633 MB | 444 s, 637 MB |
+| 99,832 | wallet, nothing new | 14.7 s, 697–710 MB, heap 273–277 MB | 10.4 s, 518–524 MB, heap 214–250 MB |
+| 99,832 | reader, nothing new | 4.2–4.5 s, 306–308 MB | 4.1–4.2 s, 303–309 MB |
+
+The output (12.8 MB of JSON at 10⁵) is the same.
+
+Findings:
+- **Admission stays within ≤ 1 s during the journal's own read.**
+  - H through Barretenberg shortens the read's replay and every admission's own replay: the median fell from 88 to 60 ms.
+  - Proofs remembered at admission spare the read its second verification of each proof.
+  - Each lever alone leaves waits at 0.75–1.03 s with checkpoints of 42 statements. Together they wait about 0.42 s, or about
+    0.3 s at the design point's 28 statements a checkpoint.
+  - At 10⁵ the waits lay between 0.52 and 0.61 s, against M13h's 1.30–1.48 s at the same checkpoint size. At the design
+    point's 28 statements a checkpoint that is about 0.37 s.
+  - They grew from 0.42 s at 2·10³. Growth per decade gives about 0.6 s at 10⁶ at this size; growth per statement gives
+    about 1.7 s. Only the 10⁶ run can tell (WORK.md Open questions).
+  - The operator's CPU a statement fell from M13h's 133–144 ms to 78–84 ms. Its resident set stayed at 435–480 MB,
+    against M13h's 517–634 MB.
+  - One admission took 1.48 s, in the band from 7·10⁴ to 8·10⁴, while the wallet measurements' first syncs ran on the
+    same 4 cores.
+- **The first admission once a restarted journal's last commitment is held still reads what the previous process
+  admitted.** The new process remembers none of it: 1.03 s at 2·10³ and 1.50 s at 10⁵, at 42 statements a checkpoint on
+  this host.
+  - Reading earlier does not help. A restarted journal admits only after the lag, and the slow read follows the venue
+    holding the commitment the previous process signed last, which happens after `serve` listens.
+  - A read before listening, at the restart's index, discarded the journal's kept reads and replayed all 2.7·10³
+    statements in 37 s (WORK.md Next 4 (bb)).
+- **A wallet's read costs less per holding, but still grows with its holdings.**
+  - Against the same code with only the hash changed, a nothing-new sync at 10⁵ holdings holds about 2.2 KB a holding beyond a
+    reader's (4.0 KB before) and takes 0.06 ms a holding (0.10 ms before). M13h, before the hash too, measured about 6 KB.
+  - A first sync holds about 2.2 KB a holding beyond a reader's (3.1 KB before).
+  - So a seed-restored wallet's first sync reaches 1 GiB near 1.8·10⁵ unspent notes (about 1.3·10⁵ before), and its later
+    syncs near 3.4·10⁵.
+  - Allocation profiles found the cost in how each note was read: a bigint per byte in each field conversion, four closures
+    and accessor pairs a note, and two prepared statements a holding. They did not find it in what a note holds.
+  - What remains is spread over the replay store's rows, each note's demand lookups and the view.
+  - Holding memory independent of holdings needs the sync to keep its holdings in rows and stream its view (WORK.md Next 4 (az)).
+- *Limits:*
+  - one run per point, on one host;
+  - stand-in proofs verified against real ones, as in M11c2;
+  - the wallet's holder is extreme by construction;
+  - memory is the process's peak, which garbage collection timing moves by tens of MB.
 
 ## Invalid-checkpoint evidence
 
