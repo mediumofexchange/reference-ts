@@ -544,7 +544,9 @@ restoration and a handoff destination start from their first read, so their own 
 wallet's own pasts do, and the stop is intended: a statement its lost instance still had in flight that lands after the
 restored copy's first read, and, for lit, a first read after a restoration from a view older than the lost instance's.
 The fence follows the venue, so the other instance's statement may already be submitted when it trips; a note the other
-instance received and spent between two reads of this one was never held here.
+instance received and spent between two reads of this one was never held here. A lit key both instances hand out (each
+allocates past the same highest index, as a live wallet and a seed restoration reading as its baseline do) trips nothing:
+keys are given privately, so no public evidence tells the two requests apart, and one payment to it credits both orders.
 
 ## Commands
 
@@ -562,7 +564,7 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 |---|---|
 | `request <alias> <backing> <value> [--out f]` | the exact request: its 246-byte frame (hex, and the file) and digest to hand on |
 | `pay <alias> <backing> --request f --digest d --value n` | authenticates the frame by the digest, prepares the payment and submits it |
-| `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records. `available` totals what `pay` and `burn` can spend, `presented` the available notes a demand presented, which only `freshen` moves; `forked` where a read showed another instance of the seed acting ([above](#when-another-instance-of-the-seed-acts)) |
+| `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records. `available` totals what `pay` and `burn` can spend, `presented` the available notes a demand presented, which in the pool only `freshen` moves (a lit wallet spends them as any other, so its `available` includes them); `forked` where a read showed another instance of the seed acting ([above](#when-another-instance-of-the-seed-acts)) |
 | `fulfill <alias> <backing> [--uncredited]` / `fulfillment <alias>` | the request found paid; never replayed: a rerun exits 4 printing the saved fulfillment. `--uncredited` fulfills a request a restoration from a copy marked (below) |
 | `demand`, `withdraw`, `settle --acceptance f`, `freshen` | the acts above; `freshen` submits as `pay` does |
 | `submit <alias> <backing>`, `status <alias>`, `reprove` | submits a saved record (a rerun prints the kept receipt); reads a saved record as the last sync resolved it; re-proves a payment in the canonical segment |
