@@ -63,7 +63,7 @@ import { decodeCommitment, encodeCommitment, signCommitment, verifyCommitment, t
 import { scopeSchedule } from "../schedule.js";
 import type { Snapshot } from "./commitments.js";
 import { POOL_V3, type Construction, type ReaderFrames } from "./construction.js";
-import { EvidenceStore, MAX_ITEM_BYTES, SERVED_PART_BYTES, SERVED_PART_ITEMS, trailPart, wholePackage, type EvidenceBatch, type EvidencePart, type TrailTip } from "./evidence-store.js";
+import { EvidenceStore, MAX_ITEM_BYTES, SERVED_PART_BYTES, SERVED_PART_ITEMS, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
@@ -1375,7 +1375,9 @@ export class V3OperatorJournal {
   private async *parts(selected: Signed, after: bigint): AsyncIterable<EvidencePart> {
     try {
       const through = selected.commitment.sequence, from = after < through ? after : through;
-      const tops = new Map<string, TrailTip>(), batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
+      // Each segment's tops that no other of them reaches: one in the common case, one per fork where snapshots of a taken
+      // predecessor lie on two (Next 4 (o)).
+      const tops = new Map<string, { readonly tip: TrailTip; readonly trail: StoredTrail }[]>(), batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
       let held = 0;
       const add = (kind: number, payload: Uint8Array): void => {
         const hash = sha256(payload), key = `${kind}:${bytesToHex(hash)}`;
@@ -1390,14 +1392,21 @@ export class V3OperatorJournal {
       // A snapshot names the furthest record of its segment that a reader of it needs. Every segment this journal
       // signed keeps its trail, so an own snapshot without one is damage, never a shorter package; a taken snapshot
       // is served as it was taken, with its trail where that came too.
-      const snapshot = (payload: Uint8Array, own: boolean): void => {
+      const snapshot = async (payload: Uint8Array, own: boolean): Promise<void> => {
         let named: Snapshot;
         try { named = this.frames.snapshot.decode(payload); } catch (error) { if (error instanceof EncodingError && !own) return; throw error; }
-        const key = bytesToHex(named.segment), top = tops.get(key);
-        if (top !== undefined && same(top.evidence, named.evidenceHash)) return;
-        const length = this.retained.trail(named.segment, named.evidenceHash)?.length;
-        requireThat(length !== undefined || !own, "STORAGE", "a signed segment's trail is missing");
-        if (length !== undefined && (top === undefined || top.position < length)) tops.set(key, { segment: named.segment, position: length, evidence: named.evidenceHash });
+        const key = bytesToHex(named.segment), frontier = tops.get(key) ?? [];
+        if (frontier.some(top => same(top.tip.evidence, named.evidenceHash))) return;
+        const trail = this.retained.trail(named.segment, named.evidenceHash);
+        requireThat(trail !== undefined || !own, "STORAGE", "a signed segment's trail is missing");
+        if (trail === undefined) return;
+        const tip: TrailTip = { segment: named.segment, position: trail.length, evidence: named.evidenceHash };
+        const reaches = async (held: StoredTrail, to: TrailTip): Promise<boolean> => held.length >= to.position && await held.reaches(to.position, to.evidence) !== undefined;
+        // A top a kept one reaches is served with it; a kept top this one reaches is served with this one.
+        for (const top of frontier) if (await reaches(top.trail, tip)) return;
+        const kept: { readonly tip: TrailTip; readonly trail: StoredTrail }[] = [];
+        for (const top of frontier) if (!await reaches(trail, top.tip)) kept.push(top);
+        tops.set(key, [...kept, { tip, trail }]);
       };
       for (let cursor = from; cursor < through;) {
         const rows = this.db.prepare("SELECT sequence,commitment FROM journal_signed WHERE sequence>? AND sequence<=? ORDER BY sequence LIMIT ?").all(cursor, through, SERVE_PAGE);
@@ -1416,7 +1425,7 @@ export class V3OperatorJournal {
           for (const entry of decodeEvidenceDirectory(directory)) {
             const payload = this.retained.snapshot(entry.digest);
             requireThat(payload !== undefined, "STORAGE", "a signed snapshot is missing");
-            add(4, payload); snapshot(payload, true);
+            add(4, payload); await snapshot(payload, true);
             if (full()) yield packed();
           }
           cursor = row.sequence as bigint;
@@ -1432,20 +1441,16 @@ export class V3OperatorJournal {
           const kind = row.kind === 3n ? 3 : 4, payload = this.retained.object(kind, mark[2]);
           if (payload === undefined) continue;
           add(kind, payload);
-          if (kind === 4) snapshot(payload, false);
+          if (kind === 4) await snapshot(payload, false);
           if (full()) yield packed();
         }
       }
       if (batch.size > 0) yield packed();
-      for (const top of tops.values()) {
-        const trail = this.retained.trail(top.segment, top.evidence);
-        requireThat(trail !== undefined, "STORAGE", "a served trail is missing");
-        const base = from === 0n ? undefined : this.ownTop(top.segment, from);
-        // A reader served through `from` holds this top where its own trail passes through it.
-        if (base !== undefined && base.position >= top.position &&
-            await this.retained.trail(base.segment, base.evidence)?.reaches(top.position, top.evidence) !== undefined) continue;
-        yield (base === undefined ? undefined : await trailPart(trail, base, this.construction)) ?? (await trailPart(trail, undefined, this.construction))!;
-      }
+      // A reader served through `from` holds what this journal's own checkpoints through it name of each segment.
+      const order = [...tops.values()].flatMap(frontier => frontier.map(top => top.tip).sort((a, b) =>
+        a.position > b.position ? -1 : a.position < b.position ? 1 : compareBytes(a.evidence, b.evidence)));
+      yield* topTrails(order, (segment, value) => this.retained.trail(segment, value),
+        segment => from === 0n ? undefined : this.ownTop(segment, from), this.construction);
     } catch (error) {
       if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
       throw error;

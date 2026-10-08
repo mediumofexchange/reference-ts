@@ -196,6 +196,26 @@ describe("a replica of a lit operator's evidence", () => {
     expect((await payer.sync((await payer.supply(store => f.client.sync(f.backing, store))).package, f.signed)).holdings.map(h => h.value)).toEqual([10n]);
   });
 
+  it("serves a journal's trail for each fork its checkpoints' snapshots name, not the longest alone (Next 4 (o))", async () => {
+    const f = await fixture(), payer = f.open("payer");
+    await f.operator.submit(f.issue(payer.keyedRequest("fund", f.backing, 10n).owner, 10n));
+    const through = (await f.commit("c1")).sequence;
+    // A longer fork of the segment comes into the journal's evidence with a snapshot naming it, as an opening that took a
+    // forked predecessor's evidence keeps both: its own checkpoints name the genuine trail, the taken snapshot the fork.
+    const bytes = await f.fork(), fork = decodeLitTrail(bytes), segment = litSegmentIdentity(decodeLitSegmentHeader(fork.header));
+    let evidence = LIT.genesisEvidence(segment);
+    fork.records.forEach((record, i) => { evidence = LIT.nextEvidence(evidence, LIT.reader.digests(record), BigInt(i + 1)); });
+    const snapshot = LIT.reader.snapshot.bytes({ backing: f.backing, segment, historyHash: b(1), evidenceHash: evidence, issued: 0n, burned: 0n });
+    const inside = f.j as unknown as { evidence: EvidenceStore; db: DatabaseSync };
+    expect(await inside.evidence.take([{ trail: { size: BigInt(bytes.length), chunks: [bytes] } }])).toBe(true);
+    inside.evidence.keep(4, snapshot);
+    inside.db.prepare("INSERT INTO journal_taken VALUES(?,?,?)").run(through, 4n, LIT.reader.snapshot.digest(LIT.reader.snapshot.decode(snapshot)));
+    expect((await counted((await f.j.serve(f.backing, 0n)).parts)).trails).toBe(2);
+    // The genuine trail still serves a holder, through the replica that synced from the journal.
+    await f.mirror();
+    expect((await payer.sync((await payer.supply(store => f.client.sync(f.backing, store))).package, f.signed)).holdings.map(h => h.value)).toEqual([10n]);
+  });
+
   it("ends a stream at a damaged object, so the reader keeps its mark", async () => {
     const f = await fixture();
     await f.operator.submit(f.issue(pub(b(44)), 2n));
