@@ -100,6 +100,36 @@ export function seedWitness(seed: Uint8Array, domain: Uint8Array): WitnessPredic
   }, { identity });
 }
 
+/** One note `ownedNotes` read: its fields, with its path and spend secret found when first read. The accessors are the
+ * class's, so a read of many holdings keeps no closures of its own per note (slice 15, WORK.md Next 4 (az)). */
+class ReadNote implements OwnedNote {
+  readonly #state: StateHandle;
+  readonly #scan: (output: ScanOutput) => SpendableNote | undefined;
+  readonly #output: ScanOutput;
+  #placed: OutputPath | undefined;
+  #secret: bigint | undefined;
+  constructor(readonly opening: NoteOpening, readonly cm: bigint, readonly nf: bigint, readonly tag: bigint, readonly leaf: bigint,
+    readonly local: boolean, state: StateHandle, scan: (output: ScanOutput) => SpendableNote | undefined, output: ScanOutput,
+    placed: OutputPath | undefined) {
+    this.#state = state; this.#scan = scan; this.#output = output; this.#placed = placed;
+    Object.freeze(this);
+  }
+  #place(): OutputPath { return this.#placed ??= placeOf(this.#state, this.cm); }
+  get anchor(): bigint { return this.#place().anchor; }
+  get path(): NotePath { return this.#place().path; }
+  get secret(): bigint {
+    if (this.#secret === undefined) {
+      const note = this.#scan(this.#output);
+      if (note === undefined || note.cm !== this.cm || note.nf !== this.nf || !sameOpening(note.opening, this.opening) || tagOf(this.nf) !== this.tag) {
+        throw new KeptStateMismatch("a witnessed output's mark is not what its output recovers");
+      }
+      this.#secret = note.secret;
+    }
+    return this.#secret;
+  }
+}
+const placeOf = (state: StateHandle, cm: bigint): OutputPath => { const placed = state.path(cm); requireReplay(placed !== undefined, "OUTPUT"); return placed; };
+
 /** This seed's unspent positive notes of `backing` in a state replayed with
  * `seedWitness(seed, domain)`, read from the witnesses' marks: the state
  * leaves spent ones out. A note's spend secret is recovered from its output
@@ -114,25 +144,10 @@ export function ownedNotes(seed: Uint8Array, domain: Uint8Array, backing: Uint8A
     const { opening, tag } = decodeNote(stored.mark.note), nf = stored.mark.nf, cm = stored.cm;
     // Shared history can hold the same seed's notes of other scoped backings.
     if (compareBytes(opening.backing, backing) !== 0) continue;
-    const place = (): OutputPath => { const placed = state.path(cm); requireReplay(placed !== undefined, "OUTPUT"); return placed; };
-    let placed = checked.has(stored.ns) ? undefined : place();
+    const placed = checked.has(stored.ns) ? undefined : placeOf(state, cm);
     checked.add(stored.ns);
     // The output as scanned, fixed now: the secret's recovery reads nothing of the state later.
-    const output = state.scanOutput(stored);
-    let secret: bigint | undefined;
-    found.push(Object.freeze({ opening, cm, nf, tag, leaf: stored.leaf, local: stored.ns === state.ns,
-      get anchor(): bigint { return (placed ??= place()).anchor; },
-      get path(): NotePath { return (placed ??= place()).path; },
-      get secret(): bigint {
-        if (secret === undefined) {
-          const note = scan(output);
-          if (note === undefined || note.cm !== cm || note.nf !== nf || !sameOpening(note.opening, opening) || tagOf(nf) !== tag) {
-            throw new KeptStateMismatch("a witnessed output's mark is not what its output recovers");
-          }
-          secret = note.secret;
-        }
-        return secret;
-      } }));
+    found.push(new ReadNote(opening, cm, nf, tag, stored.leaf, stored.ns === state.ns, state, scan, state.scanOutput(stored), placed));
   }
   return found;
 }
