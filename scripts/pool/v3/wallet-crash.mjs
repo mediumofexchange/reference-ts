@@ -142,6 +142,9 @@ async function worker(directory, operation, phase, action) {
           fixture.checkpoint = await journal.commit('more'); await journal.publish();
           fixture.package = (await journal.package()).package;
         }
+        // The wallet's first read of the final package keeps its held notes (M13f's baseline), so the operation's own
+        // read changes nothing before the COMMIT that is armed.
+        if (!['read', 'request', 'receipt', 'export', 'import'].includes(operation)) await wallet.sync(fixture.package, signed);
         fixture.venue = venue.export();
       } finally { journal.close(); }
     }

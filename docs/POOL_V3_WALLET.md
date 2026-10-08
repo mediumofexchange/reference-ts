@@ -531,13 +531,14 @@ a seed restoration beside a live wallet, or a thief. The venue keeps the money c
 instances break is the accounting between them, such as a lit key given to two requests. So every read watches for public
 evidence that only a holder of the seed can make
 ([M13f](../decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f)):
-- a note this wallet held at its previous read of the backing, now spent by a statement no payment, burn or settlement it
-  saved names (each saves its inputs before it is submitted, so the wallet's own handles never trip it);
+- a note this wallet held at its previous read of the backing, now spent by a statement it did not save (each record is
+  saved before it is submitted, so the wallet's own handles never trip it, while a saved record of its own that failed
+  over the same note is no cover);
 - lit: one of its keys paid at an index above every index it exposed (it persists an index before exposing the key).
 
 The wallet then keeps the evidence and refuses every acting operation and a new handoff (`FORKED`, naming the note or the
-index); `sync` (which reports it as `forked`), `supply`, `presentation`, and `submit` or `publish` of saved bytes still
-run. Find and stop the other instance (or, after a theft, act at once from this one), then record a restoration
+index); `sync` (which reports it as `forked`), `supply`, `presentation`, `submit` or `publish` of saved bytes, and an exact
+retry of a saved alias still run. Find and stop the other instance (or, after a theft, act at once from this one), then record a restoration
 (`moe wallet restore --copy`): that clears the evidence, and the next read is the baseline. A new wallet, a seed
 restoration and a handoff destination start from their first read, so their own history never trips it. Two of a
 wallet's own pasts do, and the stop is intended: a statement its lost instance still had in flight that lands after the

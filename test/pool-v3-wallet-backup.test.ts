@@ -294,6 +294,10 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     throws(() => f.payer.exportBackup(createWalletBackupKey()), forked);
     expect(proved).toBe(false);
     expect(await f.payer.submit("pending", f.service)).toEqual(f.receipt);
+    // Exact retries still answer with what was saved: they sign nothing new.
+    expect(await f.payer.prepare("pending", { request: f.second, value: 3n }, new Uint8Array(), f.signed, undefined as never))
+      .toEqual(f.payer.payment("pending"));
+    expect(f.payer.request("fund-0", f.backing, 10n).cm).toBe(f.payer.request("fund-0", f.backing, 10n).cm);
     // A reopened handle keeps the evidence.
     f.payer.close();
     const reopened = track(V3Wallet.open(f.path("payer"), f.reader));

@@ -185,20 +185,20 @@ export function ownFunded(state: StateHandle, note: LitNote): boolean {
   return consumed.length > 0 && consumed.every(nf => state.store.marked(state.ns, state.position, nf));
 }
 
-/** Whether a statement that consumed notes of this wallet, none of them named by `saved` (a statement this wallet did not
+/** Whether a statement that consumed notes of this wallet and that `saved` does not name (a statement this wallet did not
  * save: its lost instance's, or one a seed restoration's earlier life made), created the exact output `output` (slice 13
  * M13f, Next 4 (aw)). A spend's output derives from the nullifiers it consumes in input order and its position (§2), and
  * every spend consumes one or two notes into at most four outputs, so each such statement gives at most eight candidates:
  * the cost follows this wallet's own spends, never the record's outputs. */
 export function paidByOwn(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keys: OwnerKeys, output: Output,
-  saved: (nf: bigint) => boolean): boolean {
+  saved: (statement: Uint8Array) => boolean): boolean {
   const checked = new Set<string>();
   for (const note of marked(seed, domain, state, keys, true)) {
-    if (saved(note.nf)) continue;
     for (const spend of state.store.tagSpends(state.ns, state.position, note.tag)) {
       const place = `${spend.ns}:${spend.position}`;
       if (checked.has(place)) continue;
       checked.add(place);
+      if (saved(spend.identity)) continue;
       const nfs = state.store.consumedAt(spend.ns, spend.position).map(bytesOf);
       for (const order of nfs.length === 2 ? [nfs, [nfs[1]!, nfs[0]!]] : [nfs]) {
         for (let j = 0; j < 4; j++) {
