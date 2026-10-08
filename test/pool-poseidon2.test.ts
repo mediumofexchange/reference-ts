@@ -4,6 +4,7 @@ import { FIELD_MODULUS, fieldToHex, identifierOf } from "../src/pool/field.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, nullifierOf, ownerOf } from "../src/pool/notes.js";
 import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
+import { oracleHash, oraclePermutation } from "./poseidon2-oracle.js";
 
 // pool-v2 §1: H is Poseidon2 over BN254, width 4, rate 3, the Noir standard
 // library's permutation in noir-lang/poseidon v0.3.0's sponge. The host
@@ -11,6 +12,8 @@ import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
 // test vector from Barretenberg's poseidon2_params.hpp, and hash outputs
 // recorded from Barretenberg 5.2.0's `poseidon2Hash`, the backend the pinned
 // circuits prove under (`scripts/pool/v3/check.mjs` proves against the same).
+// The host asks that backend (slice 15); an independent bigint implementation
+// of the published parameters (poseidon2-oracle.ts) must agree with it.
 
 const p = FIELD_MODULUS;
 
@@ -40,6 +43,27 @@ describe("pool-v2 §1: the in-circuit hash on the host", () => {
     for (const [input, expected] of vectors) expect(fieldToHex(poseidon2Hash(input))).toBe(expected);
     // The length enters the initial state, so a shorter input is not a prefix's hash.
     expect(poseidon2Hash([1n, 2n, 3n])).not.toBe(poseidon2Hash([1n, 2n, 3n, 0n]));
+  });
+
+  it("agrees with an independent implementation of the published parameters over random and boundary inputs", () => {
+    // A deterministic generator: the same inputs on every run, spread over the field.
+    let x = 0x2545f4914f6cdd1dn;
+    const next = (): bigint => { x = (x * 6364136223846793005n + 1442695040888963407n) % (1n << 256n); return x % p; };
+    const boundary = [0n, 1n, 2n, p - 1n, p - 2n, 1n << 64n, (1n << 253n) - 1n, 1n << 253n];
+    for (let n = 1; n <= 10; n++) {
+      for (let k = 0; k < 40; k++) {
+        const input = Array.from({ length: n }, (_, i) => (k < 8 ? boundary[(k + i) % boundary.length]! : next()));
+        expect(poseidon2Hash(input)).toBe(oracleHash(input));
+      }
+    }
+    for (let k = 0; k < 40; k++) {
+      const input = Array.from({ length: 4 }, (_, i) => (k < 8 ? boundary[(k + i) % boundary.length]! : next()));
+      expect(poseidon2Permutation(input)).toEqual(oraclePermutation(input));
+    }
+    // Chained, as a tree's levels are: each hash an input of the next.
+    let chained = 0n, oracle = 0n;
+    for (let level = 0; level < 64; level++) { chained = poseidon2Hash([1n, BigInt(level), chained, chained]); oracle = oracleHash([1n, BigInt(level), oracle, oracle]); }
+    expect(chained).toBe(oracle);
   });
 
   it("refuses anything but one or more canonical field elements", () => {
