@@ -1105,7 +1105,7 @@ Findings:
   a read with nothing new, and up to about 20 ms to an admission through `serve`'s HTTP. None of these grows with
   the statements read, so the runtime's curves above, plus this fixed cost, give the commands' figures at depth.
 - *Against the budgets:* at the measured depths, admission, first sync, steady state and restart hold and
-  extrapolate within budget to 10⁶. Not established:
+  extrapolate within budget to 10⁶. Not established here (both measured in [M13h](#the-operator-apart-and-the-wallet-at-depth-m13h)):
   - **the operator's own memory at depth.** The probe's process, which also holds the synthetic node with every
     block and box of its chain in memory, the service and the record generator, grew 778 → 857 MB from 10⁴ to 10⁵.
     Its JavaScript heap grew 37 → 67 MB. A straight line from there reaches 1 GiB near 3·10⁵ statements. That bounds
@@ -1118,6 +1118,110 @@ Findings:
   - one backing and segment, and synthetic blocks;
   - one run per point, on two hosts;
   - 10⁶ itself is a local-machine run (WORK.md Open questions).
+
+### The operator apart and the wallet at depth (M13h)
+
+Slice 13 (e) measures the two 10⁵ points M11c3 left open: `moe operator serve` as its own process at depth, and the
+wallet's first sync and steady state at 10⁵. `design-point-rerun/driver.mjs`
+([at its last revision](https://github.com/mediumofexchange/reference-ts/blob/51ea592/scripts/pool/v3/design-point-rerun/driver.mjs), with the
+[profile and memory tools](https://github.com/mediumofexchange/reference-ts/tree/51ea592/scripts/pool/v3/design-point-rerun) used for the findings)
+keeps M11c2's history and verification load: eight real issues, then stand-in spends that verify a kept real proof in
+place of their own, a block every 14 statements, and `serve --interval 2` under a silence clause. It changes three things:
+- `serve`, the synthetic node and each read run as processes of their own. The node logs every request that changed it
+  and replays the log when it starts, and the driver resumes from the journal's count. A container restart would lose
+  at most the step in progress; none came.
+- The stand-ins reach `serve` over its HTTP service. Its memory is read from `/proc`, and its JavaScript heap through a
+  hook, as history grows.
+- The reads are the `moe` commands (`reader supply`, and `wallet sync` after `restore-seed`), so each figure includes
+  start-up and view sync. M11c3 measured these at about 2 s and 2 CPU-s at matched size. A hook gives each process the
+  stand-in verifier.
+
+One run of 2026-10-08 at `154735d`'s runtime, on a 4-core cloud container (Xeon at 2.1 GHz, 16 GB, host B's class), with
+marks at 10⁴ and 10⁵, then `serve`'s restart. It took 5 h, and nothing else ran on the host.
+
+*`serve`* by depth. Admission is timed as the submitter sees it over HTTP, and the first admission after each block reads
+at a new venue index. Each proof is verified twice, at admission and in `serve`'s own read of the checkpoint carrying it
+(200,382 checks for 100,193 stand-ins):
+
+| Through | Median (p95), others | Median (p95), first after a block | Resident | CPU a statement | Journal |
+|---:|---:|---:|---:|---:|---:|
+| 10,000 | 85.8 ms (108) | 84.8 ms (108) | 517 MB | 133 ms | 0.23 GB |
+| 20,000 | 86.7 ms (109) | 86.3 ms (111) | 571 MB | 137 ms | 0.45 GB |
+| 30,000 | 86.7 ms (111) | 85.8 ms (114) | 594 MB | 137 ms | 0.66 GB |
+| 40,000 | 87.4 ms (114) | 86.4 ms (116) | 617 MB | 139 ms | 0.88 GB |
+| 50,000 | 87.6 ms (111) | 87.1 ms (115) | 593 MB | 139 ms | 1.10 GB |
+| 60,000 | 88.3 ms (115) | 88.2 ms (124) | 593 MB | 140 ms | 1.32 GB |
+| 70,000 | 88.6 ms (114) | 88.4 ms (130) | 609 MB | 140 ms | 1.53 GB |
+| 80,000 | 89.3 ms (114) | 88.6 ms (124) | 634 MB | 141 ms | 1.75 GB |
+| 90,000 | 89.6 ms (115) | 89.4 ms (1,226) | 618 MB | 142 ms | 1.97 GB |
+| 100,000 | 91.3 ms (118) | 91.4 ms (1,255) | 610 MB | 144 ms | 2.18 GB |
+
+*First sync*, each the command's whole run:
+
+| Statements | Reader: time, CPU, peak; quarter means | Wallet: time, CPU, peak (holdings) | Served | Kept by the reader, the wallet |
+|---:|---|---|---:|---:|
+| 10⁴ | 241 s, 463 CPU-s, 583 MB; 450–556 MB | 263 s, 485 CPU-s, 559 MB (2,515) | 156 MB | 191 MB, 216 MB |
+| 10⁵ | 2,579 s, 4,868 CPU-s, 629 MB; 514–597 MB | 2,878 s, 5,226 CPU-s, 676 MB (25,015) | 1,558 MB | 1,885 MB, 2,130 MB |
+
+*Steady state*: 200 more statements, then nothing new (each the command's whole run):
+
+| Statements | Reader, 200 new | Wallet, 200 new | Reader, nothing new | Wallet, nothing new (holdings) |
+|---:|---|---|---|---|
+| 10⁴ | 9.7 s, 16.1 CPU-s, 444 MB | 10.7 s, 17.0 CPU-s, 433 MB | 3.8 s, 4.6 CPU-s, 293 MB | 4.0 s, 4.9 CPU-s, 277 MB (2,565) |
+| 10⁵ | 10.7 s, 17.2 CPU-s, 429 MB | 19.7 s, 26.5 CPU-s, 632 MB | 4.3 s, 5.2 CPU-s, 302 MB | 7.4 s, 8.7 CPU-s, 441 MB (25,065) |
+
+*Restart* at 100,201 statements: `serve` listened after 4.0 s over its 2.17 GB directory and then held 247 MB, against
+662 MB before. Its first admission took 834 ms, a read at the reopened journal's new index.
+
+Findings:
+- **The operator's memory levels off.** `serve` rose from 517 to about 600 MB between 10⁴ and 3·10⁴ statements, then held
+  593–634 MB to 10⁵. It peaked at 642 MB while admitting, and at 663 MB after serving both 10⁵ first syncs. Its JavaScript
+  heap stayed near 7 MB after collection, and its heap snapshots grew from 23 to 30 MB between the marks. Sampled from
+  2.5·10⁴ on, each part of the resident set was flat: anonymous mappings of 408–441 MB (V8 and the two verifier
+  instances' WebAssembly), 125 MB of malloc heap (154 MB after serving) and the 55 MB binary. Restarted at 10⁵, it held
+  247 MB. So the journal holds no state that grows with history, and M11c3's straight line to 1 GiB near 3·10⁵ does not
+  apply to the operator.
+- **Admission is flat.** The median rose from 85.8 to 91.3 ms over HTTP between 10⁴ and 10⁵, about 0.6 ms per 10⁴
+  statements. A straight line gives about 150 ms at 10⁶.
+- **A statement that arrives during `serve`'s read of its own newly held checkpoint waits for that read.** A profile of
+  3,000 more statements at 10⁵ ran under `--cpu-prof`. Its 72 commitments coincided with the 71 admissions of
+  the 3,000 that took over 0.5 s, 1.30–1.48 s for the middle 90% of them. Once the venue holds a commitment, `serve`'s next poll reads it
+  at the new index. That read verifies the proofs of the checkpoint's statements again, in the verifier's workers. It
+  also replays them on the note tree, where JavaScript Poseidon2 took most of the main thread's time. Admissions queue
+  behind it in `serve`'s one journal turn.
+  - The wait follows the statements a checkpoint carries, not depth. The profile's checkpoints carried about 40–44, and the
+    longest admission in each band was 1.4–1.9 s from 10⁴ on. What changed with depth was only how often the wait fell
+    on the first admission after a block, which moved that column's p95 past 1 s from 9·10⁴.
+  - At the design point's peak, a checkpoint carries about 28 statements, so the wait is about 1 s. About 0.4% of
+    statements would arrive during one and wait up to that long, at the edge of the ≤ 1 s admission budget. The median
+    holds.
+  - Levers (WORK.md Next 4 (ay)): the journal's read skips verifying a statement whose receipt it signed after verifying
+    it at admission, or reads off the admission queue. Poseidon2 on Barretenberg shortens both.
+- **The wallet's first sync holds at 10⁵.** It took 28.8 ms a statement against the reader's 25.8 ms, peaking at 676 MB
+  with 25,015 holdings. It was 26.3 ms at 10⁴, so it is flat per statement. Linear at the 10⁵ rate, 10⁶ takes the wallet
+  about 8 h on these 4 cores, against 24 h on the declared 8. Served evidence stays 15.6 KB a statement. The reader keeps
+  18.9 KB a statement and the wallet 21.3 KB.
+- **A wallet's memory grows with its holdings, not with history.** At 10⁴ the wallet's read with nothing new matched
+  the reader's within 0.2 s and 16 MB. At 10⁵ it took 7.4 s and 441 MB against 4.3 s and 302 MB. Sampled again with
+  26,533 holdings, its JavaScript heap peaked at 124 MB against the reader's 29 MB, and it held 441 MB against 288 MB.
+  That is about 6 KB and 0.12 ms a holding (M11b8 measured 0.14 ms), so a wallet holding about 1.2·10⁵ unspent notes
+  would pass 1 GiB in a sync. The probe's holder is extreme by construction, since every second spend pays it; a
+  design-point holder holds far fewer notes. Lever (WORK.md Next 4 (az)): a sync keeps its holdings in rows and streams
+  its view, instead of holding every note as objects.
+- **The steady state holds.** The reader read 200 new statements in 10.7 s and 17.2 CPU-s at 10⁵, against 9.7 s and
+  16.1 CPU-s at 10⁴. The wallet costs about 89 CPU-ms a new statement beyond its read with nothing new. A day of 900
+  statements with ten syncs comes to about 170 CPU-s and 14 MB served for this wallet, within ≤ 10 CPU-minutes and
+  ≤ 50 MB.
+- **Restart stays cheap:** 4.0 s to listen at 10⁵. The journal holds 21.8 KB a statement, about 22 GB at 10⁶, against
+  the storage column's estimate of about 20 GB.
+- *Against the budgets:* at 10⁵ the operator, the reader and a wallet hold every budget, and their curves extrapolate
+  within budget to 10⁶. Two exceptions remain, (ay) and (az) above: the ≤ 1 s admission budget at the edge for a
+  statement that arrives during the journal's own read, and a wallet's memory past about 1.2·10⁵ holdings.
+- *Limits:*
+  - stand-in records verified against eight real proofs, as in M11c2;
+  - one backing and segment, and synthetic blocks;
+  - one run per point, on one host;
+  - 10⁶ itself remains a local-machine run (WORK.md Open questions).
 
 ## Invalid-checkpoint evidence
 

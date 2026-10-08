@@ -3,23 +3,24 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 13: release assurance** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3; release gate in [production requirements](docs/PRODUCTION_REQUIREMENTS.md#release-gates)).
-Must achieve: anyone can check that a release's installed code is exactly what its reviewed commit builds and tests, and that
-the parties' stores survive the backups and restores an owner would make, before the external review. Acceptance: (a) a release
-record: the package tarball rebuilds byte-identically on Linux and Windows, and installs from it with every dependency pinned by
-integrity to the tested tree, checked in CI; (b) installed-package interoperability: operator, replica, relay and wallet from
-separate installs of that tarball; (c) backup and restore drills of each role's store (an operator restored from an older copy
-signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's open correctness findings fixed or dispositioned,
-(au) first; (e) Next 5's 10⁵ rerun. Stop: (a)–(e) merged, CI green; the 10⁶ run, live Tor and the external review stay outside.
-- **Done:** (a) M13a #143 ([release record](docs/RELEASE.md), CI's `reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (d)'s (au) M13b #144, (av)–(ax) M13f ([decision](decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f), spec C3.5 114799e): `rho_out` reads the acceptance, a wallet seeing another instance of its seed act refuses `FORKED`, lit `pay` refuses a request the seed already paid; the rest of (d) M13g #152 ([decision](decisions/2026-10.md#2026-10-08--judge-lapse-before-the-readers-own-snapshot-serve-every-forks-trail-and-disposition-the-rest-of-next-4-slice-13-m13g), spec #21): the reader judges lapse before its own snapshot and CONTEXT's operator part, TERMS_SCOPE after silence lapse; an undecodable snapshot reads unresolved; a journal serves every fork's trail; coded refusals; every other letter dispositioned.
-- **(c):** M13d #146, spec #19 ([decision](decisions/2026-10.md#2026-10-07--restore-an-operator-journal-by-a-return-at-a-skipped-sequence-once-silence-is-witnessed-slice-13-m13d)): a restored operator returns past silence at a skipped sequence (`moe operator restore`). M13e
-  ([decision](decisions/2026-10.md#2026-10-07--restore-a-wallet-directory-from-a-copy-by-a-recorded-restoration-and-audit-copied-views-slice-13-m13e), #147): `wallet restore --copy` marks open requests (`fulfill` `RESTORED` unless
-  `--uncredited`) and exposes a lit window; copied replay files are read again, copied views audited; `moe venue audit`. **Next:** (e), the 10⁵ rerun (Next 5): restore the probes from their last revisions into scratch and run them in parts under 2 h each, results written per part; heartbeat the lock.
+**Proposed next: slice 15, the design point's two edges** (Next 4 (ay), (az); [M13h](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-apart-and-the-wallet-at-depth-m13h)), the only budgets
+M13h found at their edge. Must achieve: a statement's admission stays within ≤ 1 s while `serve` reads its own newly held checkpoint,
+and a wallet's sync memory stops growing with its holdings. Acceptance: (ay) after comparing the smallest alternatives (the journal's
+read skips verifying statements whose receipts it signed; that read off the admission queue; Poseidon2 on Barretenberg), a 10⁵ profile
+of `serve` (M13h's probe at [51ea592](https://github.com/mediumofexchange/reference-ts/tree/51ea592/scripts/pool/v3/design-point-rerun), restored to scratch) shows no admission waiting on that read past 1 s;
+(az) a wallet sync over about 10⁵ holdings stays near a reader's memory, its outputs unchanged. Stop: both merged with adversarial review
+(journal read, wallet state), CI green. Change the proposal if something else brings release closer, and say why.
+
+**Slice 13, release assurance, is done** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3): (a) M13a #143 ([release record](docs/RELEASE.md), CI's
+`reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (c) M13d #146, spec #19 (a restored operator returns past
+silence at a skipped sequence) and M13e #147 (`wallet restore --copy`, copied views audited, `moe venue audit`); (d) M13b #144, M13f (spec C3.5
+114799e: `rho_out` reads the acceptance, `FORKED`, lit's paid-request refusal) and M13g #152 (every open Next 4 letter fixed or
+dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security review stays outside (Open questions).
 
 ## Status
-- **Slices 10–12 and 14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
+- **Slices 10–14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
   install with real proofs on the synthetic node and live on the testnet; the Ergo view in SQLite rows, caught up in bounded passes; every budget
-  holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)) except the operator's own memory at depth and the wallet's 10⁵ points, lost to a restart (Next 5).
+  holds to 10⁵ statements ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-apart-and-the-wallet-at-depth-m13h)), the operator's memory levelling off near 600 MB; at the edge only (ay) and (az).
 - **Audits**: area 27 (state machine, [decision](decisions/2026-10.md#2026-10-03--hold-the-note-trees-last-leaf-and-judge-7s-position-bound-first-audit-area-27)); area 29 (wallet, [decision](decisions/2026-10.md#2026-10-04--fail-a-payment-whose-output-another-statement-created-and-fail-no-act-with-a-pending-receipt-by-the-doors-times-audit-area-29)); area 31 (readers): a continuation whose opening the record moved past is excluded, or lapsed in a gap, and a receipt reads a term end and a moved-past `after` without its opening ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)); the journal not yet; area 30 (transport): a source's mark moves only past an answer that delivers its selection, and a stream's minimum rate is charged to the peer alone, on both sides ([decision](decisions/2026-10.md#2026-10-07--move-a-sources-mark-only-past-an-answer-that-delivers-its-selection-and-charge-a-streams-rate-to-the-peer-alone-audit-area-30)). Review-code 2026-10-06 (`3a240f6..582d6fc`, six lanes): resumed kept walks recheck scope; a truncated `wallet.db` refuses; no failed act is published; Node floor 24.21.0. Simplify 2026-10-07: one evidence chain for both constructions (#133); the store checks' live testnet modes retired (#134).
 
 ## Evidence
@@ -39,15 +40,15 @@ signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's o
    (ak), (al), (m)'s sync abort signal; replica availability (ap), (aq), (ar); their change (y) next wallet profile, (ad) mainnet,
    (z) a holder path for force-created outputs, (ao); tooling (g), (aa); accepted (n), (an), (af), (v) (directory lock). M13f limits
    (accepted): a lost instance's statement in flight at a restoration lands beside a retry; a note another instance received and
-   spent between two reads is never held.
-5. Slice 11 leftovers. One design-point rerun, in slice 13 at the latest: `moe operator serve` as its own process at 10⁵, and the wallet's first sync and steady state at 10⁵ (the depth probe's process, which also held the synthetic
-   node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
-   if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
+   spent between two reads is never held. M13h ([design point](docs/POOL_DEPLOYMENT_PROBES.md#the-operator-apart-and-the-wallet-at-depth-m13h)), the Goal's slice: (ay) `serve`'s read of its own newly held
+   checkpoint verifies and replays its statements again while admissions queue in its one journal turn (about 1 s at 28 statements);
+   (az) a wallet's sync holds about 6 KB a holding (1 GiB near 1.2·10⁵ unspent notes).
+5. Slice 11 leftovers (the 10⁵ rerun is M13h: `serve`'s memory levels off near 600 MB, its JavaScript heap near 7 MB). M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
    never reached (step-back doubling overruns the fetch budget on known headers; pre-existing); a node POST (`unspentBoxes`, `submit`) on
    a connection the node closed as idle is not sent again (M11b9 sends GETs once more; availability only, the publisher resends exact
    bytes). Levers (Poseidon2 on Barretenberg, a 10⁶ first-sync run) only if a budget fails.
-6. **Slice 13**, release assurance: the Goal above. Security reviews until the external review (once the product is complete, 2026-10-01):
+6. **Slice 13**, release assurance: done but for the external review. Security reviews until the external review (once the product is complete, 2026-10-01):
    separate AI instances (fresh reviewers, rolling audits).
 7. CI's real-proof checks run in five parallel groups (12 min, not 43) and skip for report/unread-doc commits ([decision](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)); lever: split the drill
    or local replay. M10e2 left: the harness's proof-free cases in vitest with stand-in proofs; narrow the optional `StoredEvent.index`/`judgedIndex` when touched.
@@ -79,7 +80,10 @@ signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's o
 
 ## Open questions
 - Non-blocking, local machine: the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- Non-blocking, maintainer (2026-10-08): the external security review, release assurance's one remaining item; commissioning it lies
+  outside the standing authorization. Slice 13's own part is done; rolling AI reviews continue meanwhile (Next 6).
 - Deletion list (2026-10-07): none open.
 
-Roughly **72% done / 28% remaining** (range 62–79%), reassessed 2026-10-07 (M12c): lit notes adopted, holders reach operators over Tor,
-read a replica's evidence while an operator is down and have a third party's relay fund their gap acts; release assurance, qualified storage and mainnet remain.
+Roughly **75% done / 25% remaining** (range 65–82%), reassessed 2026-10-08 (M13h): slice 13 delivered release records, separate installs,
+restore drills and every open finding dispositioned, and the design point holds at 10⁵ but for two edges; the external review and its
+findings, the edges (ay), (az), qualified storage and custody, and mainnet remain.
