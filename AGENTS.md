@@ -36,11 +36,11 @@ one moded state machine and one reader over the neutral core and the shared prim
 retired (Git history at `a020215`); do not restore its mechanisms without a decision. V3 is
 adopted (pool-v3 §11.4, manifest in `v3/configuration.ts`); a byte, identity or verdict change is v4.
 
-Extensions' profiles are built beside the pool, each declared per backing in E (WORK.md Next 10): lit notes
-(`moe/lit/v1`) before release assurance; offline, accumulator, Chaumian after. The old transparent path is retired
-(cases at `8d207eb`; never port its exhibit walk/signed opening claim). Keep one implementation per construction,
-never reinterpret pinned versions, and develop wallet, transport and witness feasibility alongside the core. Design every
-user-facing surface (commands, wallet, service) for agents as well as people, for holders and backers who manage them through agents and for autonomous AIs acting directly: machine-readable output, named refusals, no interactive step, idempotent retries.
+Extensions' profiles are built beside the pool, each declared per backing in E (WORK.md Next 10), only where it serves a
+function no other does (a strictly worse one is not built; each states its tradeoffs): lit notes (`moe/lit/v1`) for
+links carrying only tiny packets; offline, then accumulator and Chaumian if they pass that test, after release. The old
+transparent path is retired (cases at `8d207eb`; never port its exhibit walk/signed opening claim). One implementation per construction;
+never reinterpret pinned versions; develop wallet, transport and witness feasibility alongside the core. Design every user-facing surface (commands, wallet, service) for agents as well as people, for holders and backers who manage them through agents and for autonomous AIs acting directly: machine-readable output, named refusals, no interactive step, idempotent retries.
 
 Standing authorization effective 2026-09-08 covers development, protocol decisions and merge/push
 after verification until superseded; it excludes real funds, public releases, live deployment,
