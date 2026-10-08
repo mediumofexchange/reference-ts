@@ -4,9 +4,9 @@ Updated: 2026-10-08
 
 ## Goal
 **Slice 16, Bitcoin's venue probes 1 and 2, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16), [decision](decisions/2026-10.md#2026-10-08--keep-bitcoin-as-the-second-venue-direction-its-records-are-delayed-by-a-third-of-blocks-not-excluded-and-its-reader-exceeds-the-declared-transfer-budget-slice-16)). Ergo alone is not
-enough for material value, so these read-only probes could falsify Bitcoin before any `venue-bitcoin.md`. They did not: over
-2,016 blocks AntPool's templates (30.5%) exclude OP_RETURN over 83 B and two thirds of blocks mine them (delay, not exclusion);
-our own parser verified a week from two suppliers: 118 MB/day without witness, 2.4× the reader's transfer budget, CPU 11.5 s/day.
+enough for material value, so these read-only probes could falsify Bitcoin before any `venue-bitcoin.md`. They did not: AntPool's
+templates (a third of blocks) exclude OP_RETURN over 83 B and the rest mine them (delay, not exclusion). Our own parser verified
+a week from two suppliers; a Bitcoin reader fails the declared transfer budget (gate failed, not revised). Reviewed (#156).
 
 **Proposed next:** by release distance: Next 12's read-only probe 3, Next 4's waiting letters, or (az) streaming if a holder must
 pass about 1.5·10⁵ notes. Slice 15 (#155): (ay) closed, (az) reduced.
@@ -72,7 +72,7 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
 11. **Agent-first surfaces** (AGENTS.md direction): every command, wallet and service answer serves agents managing backings and wallets and autonomous AIs (one JSON object and coded exits exist, M10b); check each new lit command against it.
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
    Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probes 1 and 2 (slice 16, [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16)) keep it:
-   AntPool's template group (a third of blocks) delays records over 83 B, and its reader exceeds the 50 MB/day transfer budget 2.4×.
+   AntPool's template group (a third of blocks) delays records over 83 B; its reader fails the declared transfer budget.
    Next: probe 3 read-only (time public-mempool transactions with OP_RETURN over 83 B from first sight to inclusion, against fee and pool,
    beside ordinary ones at the same fee rate), then mainnet publication once funded (Open questions); then `venue-bitcoin.md` with
    its reader's own budget line. BTC/XMR as chain-asset terms.
