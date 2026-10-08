@@ -3,16 +3,17 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 15, the design point's two edges, is done** (#155; Next 4 (ay), (az); [decision](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15), [probes](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15))
-(ay) is closed: H through Barretenberg's own Poseidon2 and the journal's read skipping proofs
-this process verified at admission keep admission during that read at 0.52–0.61 s at 10⁵ and 42 statements a checkpoint (M13h: 1.30–1.48 s), and `serve`'s CPU a
-statement nearly halves; the 10⁶ run settles how the wait grows with depth. (az) is reduced, not closed: a wallet's read holds about 2.2 KB a holding beyond a
-reader's (4.0 KB before), so a first sync reaches 1 GiB near 1.8·10⁵ unspent notes. Making that independent of holdings means
-streaming the view, kept as Next 4 (az). The acceptance changed from "near a reader's memory" once 10⁵ holdings showed what remains.
-Reviewed: one fresh reviewer each, every finding fixed; reports re-recorded from CI run 37797516743. Local machine: no new runs owed.
+**Slice 16 (open), Bitcoin's venue probes 1 and 2** (Next 12; [research §4](docs/VENUE_ALTERNATIVES.md#4-recommendation)). Why now: the research holds Ergo
+($28/h to rent a majority; one address mined 51%) is not enough alone for material value, so mainnet needs a second venue
+or the venue-moving record; Bitcoin is the direction, and these GET-only probes can falsify it before any `venue-bitcoin.md`.
+Acceptance: (1) over the last 2,016 mainnet blocks, OP_RETURN outputs over 83 B and multi-OP_RETURN transactions counted by
+pool, with each major pool's count against what its block share predicts, so filtering shows as a shortfall; (2) one week of
+blocks from two suppliers, headers (work, links, bits) and txid/wtxid Merkle roots and the witness commitment verified by our
+own parser (no library decoder), every transaction framed; bytes, time and memory recorded against a desktop reader. Results in
+the research's probes section and a decision on what follows (probe 3, Litecoin, or the venue-moving record); the tooling retires,
+cited. Stop: recorded, reviewed by one fresh reviewer, merged. Not in scope: publishing (probe 3), `venue-bitcoin.md`, code.
 
-**Proposed next:** choose from Next by release distance: (az) streaming only if a holder must pass about 1.5·10⁵ notes;
-otherwise the Venues probe (Next 12) or Next 4's waiting letters. The external review and local-machine runs stay outside.
+**Slice 15, the design point's two edges, is done** (#155; [decision](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15)): (ay) closed, (az) reduced (Next 4).
 
 **Slice 13, release assurance, is done** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3): (a) M13a #143 ([release record](docs/RELEASE.md), CI's
 `reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (c) M13d #146, spec #19 (a restored operator returns past
