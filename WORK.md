@@ -3,6 +3,14 @@
 Updated: 2026-10-08
 
 ## Goal
+**Slice 17, Bitcoin's read-only probe 3, is active** (Next 12; branch `claude/slice-17-bitcoin-probe-3`). It must say whether a
+record relayed through the public mempool is mined with the delay slice 16's model predicts. *Acceptance:* over probe 2's week
+(969,497–970,504), our own parser finds every transaction with an OP_RETURN over 83 B. mempool.space's block audits (its projected
+template, first-seen times, unseen and missing lists) and per-transaction summaries give each record's fee rate, whether it was ever in the
+public mempool, and the blocks that skipped it while it was in their template. These are compared by pool and against ordinary
+transactions in the same fee band. *Falsifier:* most records are unseen (out-of-band), or including pools skip seen records well
+beyond the control. *Stop:* results and decision recorded, tooling retired; no mainnet spend (Open questions).
+
 **Slice 16, Bitcoin's venue probes 1 and 2, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16), [decision](decisions/2026-10.md#2026-10-08--keep-bitcoin-as-the-second-venue-direction-its-records-are-delayed-by-a-third-of-blocks-not-excluded-and-its-reader-exceeds-the-declared-transfer-budget-slice-16)). Ergo alone is not
 enough for material value, so these read-only probes could falsify Bitcoin before any `venue-bitcoin.md`. They did not: AntPool's
 templates (a third of blocks) exclude OP_RETURN over 83 B and the rest mine them (delay, not exclusion). Our own parser verified
