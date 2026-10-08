@@ -223,6 +223,21 @@ export function demandClaim(demand: Demand): { readonly backing: Uint8Array; rea
  * identity must be the one the settlement names. Kinds 4, 5 and 7 create none. */
 export function derivedOutputs(statement: Statement, demand?: Demand): readonly Opening[] {
   const s = ownStatement(statement);
+  if (s.kind !== 6) return createdOutputs(s);
+  if (demand === undefined) throw new EncodingError("a settlement's output needs its demand");
+  const d = ownStatement(demand);
+  if (d.kind !== 4 || compareBytes(d.domain, s.domain) !== 0 || compareBytes(statementHash(d), s.demand) !== 0) {
+    throw new EncodingError("not the settlement's demand");
+  }
+  return createdOutputs(s, { ...demandClaim(d), nullifiers: inputNullifiers(d) });
+}
+/** What a settlement reads of its demand (§3): the demand's backing, quantity and nullifiers in its input order. */
+export interface SettledClaim { readonly backing: Uint8Array; readonly quantity: bigint; readonly nullifiers: readonly Uint8Array[] }
+/** §2's derivation itself, the one every reader's verdict and every wallet's scan uses: the outputs `statement` creates,
+ * each with its rho, a settlement's from its demand's `claim`, which the caller has checked (`derivedOutputs` from the
+ * demand statement, or the demand row a replay stood up). */
+export function createdOutputs(statement: Statement, claim?: SettledClaim): readonly Opening[] {
+  const s = ownStatement(statement);
   switch (s.kind) {
     case 1: {
       const output = { backing: s.backing, value: s.quantity, owner: s.owner };
@@ -233,13 +248,9 @@ export function derivedOutputs(statement: Statement, demand?: Demand): readonly 
       return Object.freeze(s.outputs.map((output, j) => Object.freeze({ ...output, rho: spendRho(nullifiers, j) })));
     }
     case 6: {
-      if (demand === undefined) throw new EncodingError("a settlement's output needs its demand");
-      const d = ownStatement(demand);
-      if (d.kind !== 4 || compareBytes(d.domain, s.domain) !== 0 || compareBytes(statementHash(d), s.demand) !== 0) {
-        throw new EncodingError("not the settlement's demand");
-      }
-      const { backing, quantity } = demandClaim(d);
-      return Object.freeze([Object.freeze({ backing, value: quantity, owner: s.owner, rho: spendRho(inputNullifiers(d), 0) })]);
+      if (claim === undefined) throw new EncodingError("a settlement's output needs its demand");
+      return Object.freeze([Object.freeze({ backing: Uint8Array.from(claim.backing), value: claim.quantity, owner: s.owner,
+        rho: spendRho(claim.nullifiers, 0) })]);
     }
     default: return Object.freeze([]);
   }

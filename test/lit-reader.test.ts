@@ -460,6 +460,36 @@ describe("lit packages through the one reader (M14d)", () => {
     } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
   });
 
+  it("discards a kept namespace holding an output row past the tip it resumes at (§10), under a re-recorded digest", async () => {
+    const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-past-tip-"));
+    const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };
+    try {
+      g.checkpoint(1n, 1n);
+      const minted = g.issue(10n, ALICE); await g.admit(minted);
+      const first = g.checkpoint(2n, 3n);
+      let store = new ReplayStore(files.path, { digest: files.digest }), evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      expect(stateOf(await g.read(first, [], { store, evidence })).state.position).toBe(1n);
+      store.close(); evidence.close();
+      // A phantom note of Mallory's one position past the kept tip: resumed there, it would become an output, and spendable,
+      // as the replay appends. Only the tip's row check can see it; §14's digest is re-recorded for it.
+      const db = new DatabaseSync(files.path), phantom: Opening = { backing: g.backing, value: 1000n, owner: pub(MALLORY), rho: b(88) };
+      const { ns } = db.prepare("SELECT ns FROM namespace WHERE position = 1").get() as { ns: number };
+      expect(db.prepare("INSERT INTO output (cm, ns, position, leaf, capsule, settlement) VALUES (?, ?, 2, 1000, NULL, 0)")
+        .run(noteCommitment(DOMAIN, phantom), ns).changes).toBe(1);
+      db.close();
+      writeFileSync(files.digest, keptFileDigest(files.path)!);
+      await g.admit(g.spend([g.outputsOf(minted)[0]!], [g.to(6n, BOB), g.to(4n, ALICE)], [ALICE]));
+      g.venue.advance(210n);
+      const second = g.checkpoint(3n, 205n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const discard = vi.spyOn(store, "discardKept");
+      const resumed = stateOf(await g.read(second, [], { store, evidence }));
+      expect(discard).toHaveBeenCalled();
+      expect(resumed.state.hasOutput(BigInt(`0x${hex(noteCommitment(DOMAIN, phantom))}`))).toBe(false);
+      store.close(); evidence.close();
+    } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
+  });
+
   it("rebuilds an imported namespace's outputs before a kept successor resumes on them (§10)", async () => {
     const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-imported-"));
     const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };

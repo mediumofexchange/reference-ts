@@ -469,7 +469,8 @@ function resumable(store: ReplayStore, identity: Uint8Array, segment: Uint8Array
     const tip = store.tip(ns);
     if (!same(store.identity(ns), identity)) continue;
     if (tip.position !== lastValid.position || !same(tip.history, lastValid.historyHash) || !same(tip.evidence, lastValid.evidenceHash)) continue;
-    if (!keptTipHolds(store, ns, lastValid, construction) || !keptOutputsHold(store, ns, construction, trail, lastValid.position)) {
+    // The replay resumes at this tip and appends, so no own output row may lie past it (`keptOutputsHold`'s tip check).
+    if (!keptTipHolds(store, ns, lastValid, construction) || !keptOutputsHold(store, ns, construction, trail, lastValid.position, undefined, true)) {
       throw new KeptStateMismatch("a resumed tip is not its checkpoint's snapshot");
     }
     const evidence = trail.evidence(tip.position);

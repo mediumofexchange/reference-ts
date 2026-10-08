@@ -21,9 +21,9 @@ import {
 } from "./commitments.js";
 import { CONSTRUCTION, litConfigHash, litConfigurationBytes } from "./configuration.js";
 import { decodeFaultEvidence, intrinsicFailures, verifyFaultEvidence } from "./fault-evidence.js";
-import { noteCommitment, noteNullifier, noteTag, spendRho, issueRho, type Opening, type Output } from "./notes.js";
+import { noteCommitment, noteNullifier, noteTag, issueRho, type Opening, type Output } from "./notes.js";
 import {
-  acceptanceBytes, acceptanceId, arithmeticHolds, decodePublication, decodeRecord, derivedOutputs, encodePublication, encodeRecord, evidencePair, hashEvidenceFields,
+  acceptanceBytes, acceptanceId, arithmeticHolds, createdOutputs, decodePublication, decodeRecord, derivedOutputs, encodePublication, encodeRecord, evidencePair, hashEvidenceFields,
   splitRecord, ownerSignaturesVerify, settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord, type SignedAcceptance,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
@@ -42,6 +42,15 @@ function distinct(backings: readonly Uint8Array[]): Uint8Array[] {
   const out: Uint8Array[] = [];
   for (const backing of backings) if (!out.some(b => compareBytes(b, backing) === 0)) out.push(backing);
   return out;
+}
+
+/** §2's outputs of a decoded lit record (`createdOutputs`), a settlement's from its demand as the store keeps it: the
+ * demand's backing and quantity over its nullifiers in input order (§3). None for a settlement whose demand does not stand. */
+function litOutputs(record: LitRecord, demand: Demand | undefined): readonly Opening[] {
+  const s = record.statement;
+  if (s.kind !== 6) return createdOutputs(s);
+  return demand?.nullifiers === undefined ? [] :
+    createdOutputs(s, { backing: demand.backing, quantity: demand.quantity, nullifiers: demand.nullifiers.map(bytesOf) });
 }
 
 /** The view of a decoded lit record of kinds 1–6 (a request is refused as `KIND` before any view). It never throws on
@@ -63,16 +72,14 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
     withdrawalSigned: (presenter: Uint8Array): boolean => kind === 5 && statementSignatureVerifies(record, presenter),
     settlement: (): ReturnType<StatementView["settlement"]> => { throw new TypeError("not a settlement"); },
   };
-  const created = (outputs: readonly Output[], rho: (output: Output, j: number) => Uint8Array): bigint[] =>
-    outputs.map((output, j) => keyOf(noteCommitment(domain, { ...output, rho: rho(output, j) })));
+  const created = (demand?: Demand): bigint[] => litOutputs(record, demand).map(opening => keyOf(noteCommitment(domain, opening)));
   // The statement check of kinds 2–4: its own arithmetic, then each input's owner signature, in input order (§§3, 6).
   const owned = (): void => {
     requireReplay(arithmeticHolds(s), "ARITHMETIC");
     requireReplay(ownerSignaturesVerify(record), "SIGNATURE");
   };
   switch (s.kind) {
-    case 1: return { ...base, backings: [s.backing], quantity: s.quantity,
-      outputs: created([{ backing: s.backing, value: s.quantity, owner: s.owner }], output => issueRho(output, s.nonce)) };
+    case 1: return { ...base, backings: [s.backing], quantity: s.quantity, outputs: created() };
     case 2: case 3: case 4: {
       const cms = s.inputs.map((input: Opening) => noteCommitment(domain, input)), nfs = cms.map(noteNullifier);
       const tags = nfs.map(nf => keyOf(noteTag(nf))), inputs = cms.map(keyOf);
@@ -83,7 +90,7 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
         return { ...base, backings: distinct(s.inputs.map(input => input.backing)), inputs, check: owned, demand: { id: hex(identity), value } };
       }
       return { ...base, backings: distinct([...s.inputs, ...s.outputs].map(note => note.backing)), quantity: s.kind === 3 ? s.quantity : undefined,
-        nfs: nfs.map(keyOf), tags, inputs, check: owned, outputs: created(s.outputs, (_, j) => spendRho(nfs, j)) };
+        nfs: nfs.map(keyOf), tags, inputs, check: owned, outputs: created() };
     }
     case 5: return { ...base, ended: hex(s.demand), needsDemand: true };
     case 6: {
@@ -97,10 +104,9 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
           verifySignatureStrict(auth.releaseSignature, auth.releaseMessage, presenter) };
       };
       if (demand?.nullifiers === undefined) return { ...base, ended, needsDemand: true, settlement };
-      // §3: the demand's backing and quantity to the settlement's owner, over the demand's nullifiers in input order.
-      const nfs = demand.nullifiers, rho = spendRho(nfs.map(bytesOf), 0);
+      const nfs = demand.nullifiers;
       return { ...base, ended, needsDemand: true, settlement, quantity: demand.quantity, nfs: [...nfs], tags: demand.tags.slice(0, nfs.length),
-        outputs: [keyOf(noteCommitment(domain, { backing: demand.backing, value: demand.quantity, owner: s.owner, rho }))] };
+        outputs: created(demand) };
     }
   }
 }
@@ -109,21 +115,11 @@ function litView(record: LitRecord, demandOf: (id: string) => Demand | undefined
  * against the view's commitment, and a settlement's acceptance. */
 function litScanOutput(record: LitRecord, _view: StatementView, cm: bigint, i: number, demand: Demand | undefined): ScanOutput {
   const s = record.statement, domain = s.domain;
-  let opening: Opening, acceptance: LitScan["acceptance"];
-  switch (s.kind) {
-    case 1: { const output = { backing: s.backing, value: s.quantity, owner: s.owner }; opening = { ...output, rho: issueRho(output, s.nonce) }; break; }
-    case 2: case 3: {
-      const nfs = s.inputs.map(input => noteNullifier(noteCommitment(domain, input)));
-      opening = { ...s.outputs[i]!, rho: spendRho(nfs, i) }; break;
-    }
-    case 6: {
-      // §3: the demand's backing and quantity to the settlement's owner, over the demand's nullifiers in input order.
-      if (demand?.nullifiers === undefined) throw new TypeError("a settlement's output needs its demand");
-      opening = { backing: demand.backing, value: demand.quantity, owner: s.owner, rho: spendRho(demand.nullifiers.map(bytesOf), 0) };
-      acceptance = { demand: Uint8Array.from(s.demand), deadline: settlementAuthorization(record).acceptance.deadline }; break;
-    }
-    default: throw new TypeError("a lit record of this kind creates no output");
-  }
+  if (s.kind === 6 && demand?.nullifiers === undefined) throw new TypeError("a settlement's output needs its demand");
+  const opening = litOutputs(record, demand)[i];
+  if (opening === undefined) throw new TypeError("a lit record of this kind creates no output");
+  const acceptance: LitScan["acceptance"] = s.kind !== 6 ? undefined :
+    { demand: Uint8Array.from(s.demand), deadline: settlementAuthorization(record).acceptance.deadline };
   if (keyOf(noteCommitment(domain, opening)) !== cm) throw new TypeError("a scanned output is not the view's");
   return { cm, lit: { backing: Uint8Array.from(opening.backing), value: opening.value, owner: Uint8Array.from(opening.owner),
     rho: Uint8Array.from(opening.rho), acceptance } };
