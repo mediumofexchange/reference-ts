@@ -21,8 +21,15 @@
 // loads no proving parameters and proves or verifies nothing, so the
 // parameter check before loading (pool-v3 §4, proof-verifier.ts) has nothing
 // to check here. The WebAssembly backend is chosen over a native one so that
-// every host computes H with the same code.
+// every host computes H with the same code, and it is the binary the pinned
+// package ships, named by its path: bb.js would otherwise run whatever binary
+// `BB_WASM_PATH` names, which the verifier refuses at every start
+// (proof-verifier.ts) but which this instance, started once at import, would
+// keep for the life of the process. The start-up cost is paid by every
+// process that loads the pool's primitives, the `moe` commands included.
 
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { BackendType, BarretenbergSync } from "@aztec/bb.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { EncodingError } from "../bytes.js";
@@ -30,7 +37,10 @@ import { isField } from "./field.js";
 
 const WIDTH = 4;
 
-const backend = await BarretenbergSync.new({ backend: BackendType.Wasm, threads: 1 });
+/** The WebAssembly binary inside the installed bb.js, where its own loader finds it by default: beside its Node build,
+ * found from that build's `platform` export (dest/node/bb_backends/node/). */
+const PACKAGED_WASM = join(dirname(createRequire(import.meta.url).resolve("@aztec/bb.js/platform")), "../../barretenberg_wasm/barretenberg-threads.wasm.gz");
+const backend = await BarretenbergSync.new({ backend: BackendType.Wasm, threads: 1, wasmPath: PACKAGED_WASM });
 
 export type PermutationState = readonly [bigint, bigint, bigint, bigint];
 

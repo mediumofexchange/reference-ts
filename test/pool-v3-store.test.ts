@@ -799,13 +799,15 @@ describe("the v3 operator journal", () => {
     await j.commit("c3"); await j.publish();
     await j.submit(issued(4)); expect(verified).toBe(5);
     await j.commit("c4"); await j.publish();
+    // The audit verifies every proof of the latest checkpoint again, though this process remembers all five.
+    venue.advance(venue.witnessedIndex() + 1n);
+    await j.audit(); expect(verified).toBe(10);
     j.close(); j = open();
     venue.advance(venue.witnessedIndex() + lag);
     // Another process with the same declared verifier resumes the kept classes and replays, and remembers no proof:
     // its read of c4 verifies the record the last process admitted, beside its own admission.
-    await j.submit(issued(5)); expect(verified).toBe(7);
-    // The audit verifies every proof of the latest checkpoint again, remembered or not.
-    await j.audit(); expect(verified).toBe(12);
+    await j.submit(issued(5)); expect(verified).toBe(12);
+    await j.audit(); expect(verified).toBe(17);
     expect(carried).not.toHaveBeenCalled();
   });
 

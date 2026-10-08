@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { FIELD_MODULUS, fieldToHex, identifierOf } from "../src/pool/field.js";
 import { NoteTree } from "../src/pool/note-tree.js";
@@ -64,6 +64,16 @@ describe("pool-v2 §1: the in-circuit hash on the host", () => {
     let chained = 0n, oracle = 0n;
     for (let level = 0; level < 64; level++) { chained = poseidon2Hash([1n, BigInt(level), chained, chained]); oracle = oracleHash([1n, BigInt(level), oracle, oracle]); }
     expect(chained).toBe(oracle);
+  });
+
+  it("hashes on the binary the pinned package ships, whatever BB_WASM_PATH names", async () => {
+    // bb.js runs the binary BB_WASM_PATH names unless it is given a path; the host hash starts once, at import.
+    process.env.BB_WASM_PATH = "/nonexistent/elsewhere.wasm";
+    try {
+      vi.resetModules();
+      const fresh = await import("../src/pool/poseidon2.js");
+      expect(fieldToHex(fresh.poseidon2Hash([1n, 2n]))).toBe("0x038682aa1cb5ae4e0a3f13da432a95c77c5c111f6f030faf9cad641ce1ed7383");
+    } finally { delete process.env.BB_WASM_PATH; vi.resetModules(); }
   });
 
   it("refuses anything but one or more canonical field elements", () => {
