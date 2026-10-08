@@ -168,17 +168,21 @@ export function litNotes(seed: Uint8Array, domain: Uint8Array, backing: Uint8Arr
 }
 
 /** Per backing (hex) whose keys the read found in outputs of that backing, spent ones included: §8's `h` (the highest
- * index its restoration rule finds) and the highest index found at all, beyond a 256-index gap too. An output of another
- * backing to a backing's key is the wallet's note but moves no index (§8). */
-export function foundIndices(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keys: OwnerKeys):
-  Map<string, { readonly reached: bigint; readonly top: bigint }> {
-  const indices = new Map<string, bigint[]>();
+ * index its restoration rule finds), the highest index found at all, beyond a 256-index gap too, and `h` over the
+ * outputs whose commitment `excluded` does not hold (a restored wallet's own since its restoration, Next 4 (bc)). An
+ * output of another backing to a backing's key is the wallet's note but moves no index (§8). */
+export function foundIndices(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keys: OwnerKeys, excluded?: ReadonlySet<bigint>):
+  Map<string, { readonly reached: bigint; readonly top: bigint; readonly reachedExcluding: bigint }> {
+  const indices = new Map<string, { readonly all: bigint[]; readonly kept: bigint[] }>();
   for (const note of marked(seed, domain, state, keys, true)) {
     if (note.owner.index === undefined || !same(note.opening.backing, note.owner.backing)) continue;
-    const name = hex(note.owner.backing), found = indices.get(name);
-    if (found === undefined) indices.set(name, [note.owner.index]); else found.push(note.owner.index);
+    const name = hex(note.owner.backing), found = indices.get(name) ?? { all: [], kept: [] };
+    indices.set(name, found);
+    found.all.push(note.owner.index);
+    if (excluded?.has(note.cm) !== true) found.kept.push(note.owner.index);
   }
-  return new Map([...indices].map(([name, found]) => [name, { reached: reached(found), top: found.reduce((a, b) => (a > b ? a : b)) }]));
+  return new Map([...indices].map(([name, { all, kept }]) =>
+    [name, { reached: reached(all), top: all.reduce((a, b) => (a > b ? a : b)), reachedExcluding: reached(kept) }]));
 }
 
 /** Whether the statement that created the note consumed notes, all of them the wallet's own (§8: no request is credited

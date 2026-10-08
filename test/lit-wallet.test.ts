@@ -243,6 +243,61 @@ describe("the one wallet holding lit notes", () => {
     expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 957n)))).toBe(true);
   });
 
+  it("raises a restoration's exposure at each read until it names a key, so a first read older than its lost instance's view " +
+    "never names a key that instance exposed, and its own window moves do not fill the window again (Next 4 (bc))", async () => {
+    const f = await fixture(), holder = f.open("holder");
+    const requests = new Map<number, LitPaymentRequest>();
+    const ask = (from: number, to: number) => { for (let i = from; i <= to; i++) requests.set(i, holder.keyedRequest(`r${i}`, f.backing, BigInt(i + 1))); };
+    ask(0, 255);
+    // The restoration's first read comes before the payment at 100: h = −1 exposes through 255.
+    const first = f.restore("first", holder.recoverySeed());
+    await first.sync(await f.served(), f.signed);
+    await f.issue(requests.get(100)!); await f.checkpoint();
+    // The lost instance read h = 100 and exposed through 356.
+    await holder.sync(await f.served(), f.signed);
+    ask(256, 356);
+    // The next read raises the exposure to h + 256 = 356, so index 256 is never named again; an encrypted handoff keeps raising.
+    await first.sync(await f.served(), f.signed);
+    expect(await refusal(() => first.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
+    const key = b(78), backup = first.exportBackup(key);
+    const { walletBackupDigest } = await import("../src/pool/v3/wallet-backup.js");
+    const restored = V3Wallet.restoreBackup(f.path("restored"), { construction: LIT, venue: f.venue, reference }, backup, key, walletBackupDigest(backup));
+    wallets.push(restored);
+    // The move pays index 356 itself, and a payer of the lost instance's request pays it too, in the same checkpoint: the
+    // payer's output counts, so h reaches 356 and exposes through 612; the move's own output never does.
+    await restored.moveWindow("move", await f.served(), f.signed);
+    await restored.submit("move", f.service); await f.issue(requests.get(356)!); await f.checkpoint();
+    await restored.sync(await f.served(), f.signed);
+    expect(await refusal(() => restored.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
+    await restored.moveWindow("move-2", await f.served(), f.signed);
+    await restored.submit("move-2", f.service); await f.checkpoint();
+    await restored.sync(await f.served(), f.signed);
+    // Its move to 612 final, h = 612, and the first key it names is 613's; that ends the raising.
+    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(holder.recoverySeed(), DOMAIN, f.backing, 613n)))).toBe(true);
+    await restored.sync(await f.served(), f.signed);
+    expect(same(restored.keyedRequest("after", f.backing, 1n).owner, pub(ownerSecret(holder.recoverySeed(), DOMAIN, f.backing, 614n)))).toBe(true);
+  });
+
+  it("reads a restoration's later outputs past its first read's exposure as its lost instance's, not as another instance acting (Next 4 (bc))", async () => {
+    const f = await fixture(), holder = f.open("holder");
+    const requests = new Map<number, LitPaymentRequest>();
+    const ask = (from: number, to: number) => { for (let i = from; i <= to; i++) requests.set(i, holder.keyedRequest(`r${i}`, f.backing, BigInt(i + 1))); };
+    ask(0, 255);
+    const restored = f.restore("restored", holder.recoverySeed());
+    await restored.sync(await f.served(), f.signed);
+    // Paid at 200, the lost instance exposed through 456 and was paid at 450, above the first read's 255 but within reach.
+    await f.issue(requests.get(200)!); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    ask(256, 456);
+    await f.issue(requests.get(450)!); await f.checkpoint();
+    expect((await restored.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    expect(await refusal(() => restored.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
+    await restored.moveWindow("move", await f.served(), f.signed);
+    await restored.submit("move", f.service); await f.checkpoint();
+    await restored.sync(await f.served(), f.signed);
+    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(holder.recoverySeed(), DOMAIN, f.backing, 707n)))).toBe(true);
+  });
+
   // --- Slice 13 M13e: a wallet restored from a copy of its files ------------------------------------------------------
   /** A plain copy of a closed wallet's database and side files, as an owner's backup takes it. */
   const copyWallet = (from: string, to: string) => {

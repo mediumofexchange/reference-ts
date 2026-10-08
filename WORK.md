@@ -6,6 +6,11 @@ Updated: 2026-10-08
 **Slice 17, Bitcoin's read-only probe 3, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17), [decision](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17); #157): records reach mempool.space's mempool
 before mining and their wait within `depth + 2` blocks sets a Bitcoin depth; publishing our own needs funds. Slice 16 (#156): see Next 12.
 
+**Next 4 (bc), in progress** (branch `claude/bc-lit-restoration-exposure`, [decision](decisions/2026-10.md#2026-10-08--raise-a-restored-lit-wallets-exposure-at-each-read-until-it-names-a-key-next-4-bc)): a restored lit wallet's exposure
+rises at each read until it names a key. Acceptance: the reproducers (a stale first read, then a fresh one) name no key the lost
+instance exposed and do not stop as `FORKED`; its own moves do not refill the window; the mark survives a handoff; unit suite,
+lit drill and `check:scripts` pass; a fresh adversarial review's findings resolved; merged with CI green. Stop: (bc) only.
+
 **Audit 2026-10-08, area 33 (lit-v1 runtime), done** ([decision](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33); #158): verdict and custody sound but for (bc), a major
 deferred with its design: a restoration whose first read is older than its lost instance's view reissues that instance's owner keys.
 **Proposed next:** (bc) first (custody, reproduced); then by release distance: Next 4's waiting letters, (bb) the journal's whole replay at a lagged read, (az) streaming if a

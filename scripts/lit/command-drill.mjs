@@ -576,8 +576,8 @@ try {
     assert.deepEqual((await ok(wallet("fulfillment", H3, "invoice"))).value, "3", "the handoff carries the fulfillments");
     // A second copy of the seed, for the drill only (one active copy is the holder's precondition).
     const seeded = await ok(["wallet", "restore-seed", "--dir", H2, "--venue", venueFile, ...nodeArgs, ...LIT], { input: `${seed}\n` });
-    // The exposure its first sync fixes needs a view at least as fresh as the last instance's (lit-v1 §8): said, not checkable.
-    assert.match(seeded.notes?.[0] ?? "", /at least as fresh/);
+    // Its first sync exposes through h + 256 and later ones raise that until it names a key (lit-v1 §8, Next 4 (bc)).
+    assert.match(seeded.notes?.[0] ?? "", /each later sync raises that until the wallet names a key/);
     await ok(wallet("terms add", H2, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN));
     await ok(wallet("service add", H2, backing, join(OP, "holders.json")));
     assert.deepEqual(holdings(await ok(wallet("sync", H2, backing))), before);
