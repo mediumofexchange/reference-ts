@@ -648,9 +648,11 @@ describe("the one wallet holding lit notes", () => {
     const g = await fixture(), burner = g.open("burner");
     await g.issue(burner.keyedRequest("fund", g.backing, 10n)); await g.issue(burner.keyedRequest("fund2", g.backing, 5n)); await g.checkpoint();
     await burner.sync(await g.served(), g.signed);
-    for (let i = 2; i <= 255; i++) burner.keyedRequest(`r${i}`, g.backing, 1n);
+    for (let i = 2; i <= 256; i++) burner.keyedRequest(`r${i}`, g.backing, 1n);
+    // h = 1: the burn's change takes index 257 = h + 256, the highest exposed key, which the move would pay.
     await burner.burn("b", 3n, await g.served(), g.signed);
-    expect(await refusal(burner.moveWindow("move", await g.served(), g.signed))).toBe("CONFLICT");
+    await expect(burner.moveWindow("move", await g.served(), g.signed))
+      .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("already pays the highest exposed key") });
 
     // An acceptance naming the presenter key of the holder's other standing demand, whose output no scan marks.
     const h = await fixture(), presenter = h.open("presenter");
@@ -705,7 +707,7 @@ describe("the one wallet holding lit notes", () => {
     await f.issue(holder.keyedRequest("fund", f.backing, 10n)); await f.issue(holder.keyedRequest("fund2", f.backing, 5n)); await f.checkpoint();
     await holder.sync(await f.served(), f.signed);
     for (let i = 2; i <= 256; i++) holder.keyedRequest(`r${i}`, f.backing, 1n);
-    // The burn's change of 2 takes index 256 = h + 256; its segment then ends, and the burn fails with its note free.
+    // The burn's change of 2 takes index 257 = h + 256; its segment then ends, and the burn fails with its note free.
     await holder.burn("b", 3n, await f.served(), f.signed);
     await f.j.rescope("again", { keep: [f.backing] }); await f.j.publish(); await f.j.adopt();
     await holder.sync(await f.served(), f.signed);
