@@ -19,7 +19,8 @@ import {
 import { WALLET_V3_REQUEST_CONTEXT } from "../src/pool/v3/wallet-request.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import type { V3Wallet as Wallet, V3WalletError as WalletError } from "../src/pool/v3/wallet-store.js";
-import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
+import { FixtureVenue, LOCAL_REFERENCE, type RecordVenue } from "../src/record-venue.js";
+import type { RangeLimits, RangeRequest } from "../src/record-range.js";
 import { keptFileDigest } from "../src/pool/v3/replay-store.js";
 
 // The one wallet (src/pool/v3/wallet-store.ts) holding lit-v1 notes (slice 14 M14g1): requests by owner key, notes found by
@@ -31,7 +32,7 @@ const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
 const pub = (secret: Uint8Array): Uint8Array => ed25519.getPublicKey(secret);
 const same = (a: Uint8Array, z: Uint8Array): boolean => compareBytes(a, z) === 0;
 const DOMAIN = litConfigHash(), label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const;
-const K = b(15), OPERATOR = b(16), RULE = b(19);
+const K = b(15), K2 = b(25), OPERATOR = b(16), RULE = b(19);
 
 describe("the one wallet holding lit notes", () => {
   let V3OperatorJournal: typeof import("../src/pool/v3/store.js").V3OperatorJournal;
@@ -51,7 +52,8 @@ describe("the one wallet holding lit notes", () => {
     }
   });
 
-  async function fixture() {
+  /** A lit journal over one backing or, `scoped`, two in one scope (the second's K is `K2`). */
+  async function fixture(scoped = false) {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "lit-wallet-test-")); directories.push(directory);
     const venue = FixtureVenue.reference(label, lag);
@@ -59,26 +61,30 @@ describe("the one wallet holding lit notes", () => {
       payout: { thing: "lit wallet test", quantumExponent: 0, perUnit: 1n }, replacementRule: pub(RULE) };
     const terms = encodeLitTerms(fields), backing = litTermsName(terms);
     const signed = { terms, signature: ed25519.sign(litTermsSignatureMessage(terms), K) };
+    const otherTerms = encodeLitTerms({ ...fields, obligor: pub(K2), payout: { ...fields.payout, thing: "lit wallet test, second" } });
+    const other = { backing: litTermsName(otherTerms), signed: { terms: otherTerms, signature: ed25519.sign(litTermsSignatureMessage(otherTerms), K2) } };
     const options = { construction: LIT, venue, reference };
     const open = (name: string): Wallet => { const w = new V3Wallet(join(directory, `${name}.db`), options); wallets.push(w); return w; };
-    const restore = (name: string, seed: Uint8Array): Wallet => {
-      const w = V3Wallet.restoreSeed(join(directory, `${name}.db`), options, seed); wallets.push(w); return w;
+    const restore = (name: string, seed: Uint8Array, view: RecordVenue = venue): Wallet => {
+      const w = V3Wallet.restoreSeed(join(directory, `${name}.db`), { ...options, venue: view }, seed); wallets.push(w); return w;
     };
     const j = new V3OperatorJournal(join(directory, "journal.db"), { secret: OPERATOR, venue, reference, construction: LIT }); journals.push(j);
-    await j.open("genesis", signed); await j.publish();
+    await j.open("genesis", scoped ? [signed, other.signed] : signed); await j.publish();
     const headers = decodeLitPackage((await j.package()).package).filter(item => item.kind === 6)
       .map(item => decodeLitSegmentHeader(decodeLitTrail(item.payload).header));
     const segment = litSegmentIdentity(headers[0]!);
     let nonce = 0, commits = 0;
-    /** K issues `request`'s quantity to its key (lit-v1 §3 kind 1). */
+    /** K (K2 for the second backing) issues `request`'s quantity to its key (lit-v1 §3 kind 1). */
     const issue = async (request: LitPaymentRequest) => {
-      const statement: Statement = { domain: DOMAIN, kind: 1, segment, backing, quantity: request.value, owner: request.owner, nonce: b(150 + nonce++) };
-      await j.submit(encodeRecord({ statement, authorization: ed25519.sign(statementBytes(statement), K) }));
+      const second = same(request.backing, other.backing);
+      const statement: Statement = { domain: DOMAIN, kind: 1, segment, backing: request.backing, quantity: request.value, owner: request.owner,
+        nonce: b(150 + nonce++) };
+      await j.submit(encodeRecord({ statement, authorization: ed25519.sign(statementBytes(statement), second ? K2 : K) }));
     };
     const checkpoint = async () => { await j.commit(`c${commits++}`); await j.publish(); };
     const served = async () => (await j.package()).package;
     const service = { submit: async (bytes: Uint8Array) => decodeReceipt(await j.submit(bytes)) };
-    return { venue, backing, signed, open, restore, j, issue, checkpoint, served, service, segment, path: (name: string) => join(directory, `${name}.db`) };
+    return { venue, backing, signed, other, open, restore, j, issue, checkpoint, served, service, segment, path: (name: string) => join(directory, `${name}.db`) };
   }
   async function refusal(action: Promise<unknown> | (() => unknown)): Promise<string> {
     const error = typeof action === "function" ? (() => { try { action(); return undefined; } catch (e) { return e; } })() :
@@ -236,11 +242,121 @@ describe("the one wallet holding lit notes", () => {
     expect(values(view).sort((p, q) => (p[0]! < q[0]! ? -1 : 1))).toEqual([[201n, "available"], [451n, "available"], [701n, "available"]]);
     // Every index through h + 256 = 956 reads as exposed: no new request until the window moves.
     expect(await refusal(() => restored.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
-    // §8: the restored wallet pays itself at 956, and once that is final requests again past it.
+    // §8: the restored wallet pays itself at 956. Prepared from a checkpoint its first read had, that move may be its lost
+    // instance's own (Next 4 (bc)), so once final it counts and exposes through 1212; a second move, prepared after, does
+    // not, and requests resume past it.
+    for (const name of ["move", "move-2"]) {
+      expect(await refusalOf(Promise.resolve().then(() => restored.keyedRequest("next", f.backing, 1n)))).toMatch(/^WINDOW: every owner key within 256/);
+      await restored.moveWindow(name, await f.served(), f.signed);
+      await restored.submit(name, f.service); await f.checkpoint();
+      await restored.sync(await f.served(), f.signed);
+    }
+    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 1213n)))).toBe(true);
+  });
+
+  // --- Next 4 (bc): a restoration whose first read is older than its lost instance's view ------------------------------
+  /** `holder`'s requests by index, asked from `from` to `to`. */
+  const asker = (holder: Wallet, backing: Uint8Array, requests = new Map<number, LitPaymentRequest>()) => Object.assign(
+    (from: number, to: number) => { for (let i = from; i <= to; i++) requests.set(i, holder.keyedRequest(`r${i}`, backing, BigInt(i + 1))); },
+    { requests });
+  const keyAt = (seed: Uint8Array, backing: Uint8Array, index: bigint) => pub(ownerSecret(seed, DOMAIN, backing, index));
+  const FULL = /^WINDOW: every owner key within 256 of the highest one paid is exposed/;
+  const requestRefusal = (wallet: Wallet, backing: Uint8Array) => refusalOf(Promise.resolve().then(() => wallet.keyedRequest("next", backing, 1n)));
+  /** A view of `venue` that lags behind it from `hold` until `release`, as a node still catching up does. */
+  const lagging = (venue: FixtureVenue) => {
+    let cap: bigint | undefined;
+    const view: RecordVenue = { get id() { return venue.id; }, lag: () => venue.lag(), witnessedIndex: () => cap ?? venue.witnessedIndex(),
+      range: (request: RangeRequest, limits: RangeLimits) => (cap !== undefined && request.toIndex > cap ? undefined : venue.range(request, limits)) };
+    return { view, hold: () => { cap = venue.witnessedIndex(); }, release: () => { cap = undefined; } };
+  };
+
+  it("raises a restoration's exposure at each read until it names a key, so a first read older than its lost instance's view " +
+    "never names a key that instance exposed, and its own later window moves do not fill the window again (Next 4 (bc))", async () => {
+    const f = await fixture(), holder = f.open("holder"), ask = asker(holder, f.backing), { requests } = ask, node = lagging(f.venue);
+    ask(0, 255);
+    node.hold();
+    const old = await f.served();
+    await f.issue(requests.get(100)!); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    ask(256, 356);
+    // The holder is lost, having exposed through 356 = h + 256. Its restoration first reads from a node behind that
+    // payment: h = −1 exposes through 255. Caught up, a read raises that to 356, so index 256 is never named again.
+    const first = f.restore("first", holder.recoverySeed(), node.view);
+    await first.sync(old, f.signed);
+    node.release();
+    await first.sync(await f.served(), f.signed);
+    expect(await requestRefusal(first, f.backing)).toMatch(FULL);
+    // An encrypted handoff keeps raising.
+    const key = b(78), backup = first.exportBackup(key);
+    const { walletBackupDigest } = await import("../src/pool/v3/wallet-backup.js");
+    const restored = V3Wallet.restoreBackup(f.path("restored"), { construction: LIT, venue: f.venue, reference }, backup, key, walletBackupDigest(backup));
+    wallets.push(restored);
+    // A move prepared from a checkpoint witnessed after the first read is one the lost instance never made. It pays index
+    // 356, and a payer of the lost instance's request pays 356 too, in the same checkpoint: the payer's output counts, so
+    // h reaches 356 and exposes through 612; the move's own output does not.
     await restored.moveWindow("move", await f.served(), f.signed);
-    await restored.submit("move", f.service); await f.checkpoint();
+    await restored.submit("move", f.service); await f.issue(requests.get(356)!); await f.checkpoint();
     await restored.sync(await f.served(), f.signed);
-    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 957n)))).toBe(true);
+    expect(await requestRefusal(restored, f.backing)).toMatch(FULL);
+    await restored.moveWindow("move-2", await f.served(), f.signed);
+    await restored.submit("move-2", f.service); await f.checkpoint();
+    await restored.sync(await f.served(), f.signed);
+    // Its move to 612 final, h = 612, and the first key it names is 613's; that ends the raising.
+    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, keyAt(holder.recoverySeed(), f.backing, 613n))).toBe(true);
+    await restored.sync(await f.served(), f.signed);
+    expect(same(restored.keyedRequest("after", f.backing, 1n).owner, keyAt(holder.recoverySeed(), f.backing, 614n))).toBe(true);
+  });
+
+  it("counts a restoration's window move prepared from a checkpoint its first read had, which may be its lost instance's own, " +
+    "byte for byte (Next 4 (bc) review)", async () => {
+    const f = await fixture(), lost = f.open("lost"), node = lagging(f.venue);
+    await f.issue(lost.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    await lost.sync(await f.served(), f.signed);
+    for (let i = 1; i <= 256; i++) lost.keyedRequest(`r${i}`, f.backing, 1n);
+    // The lost instance moves its full window to 256, reads the move final and hands index 257 out.
+    node.hold();
+    const old = await f.served(), moved = await lost.moveWindow("move", old, f.signed);
+    await lost.submit("move", f.service); await f.checkpoint();
+    await lost.sync(await f.served(), f.signed);
+    const handedOut = lost.keyedRequest("r257", f.backing, 1n);
+    // Its restoration first reads from a node behind that move and moves the same way: the same record.
+    const restored = f.restore("restored", lost.recoverySeed(), node.view);
+    await restored.sync(old, f.signed);
+    expect((await restored.moveWindow("move", old, f.signed)).record).toEqual(moved.record);
+    node.release();
+    await restored.submit("move", f.service);
+    // Final at the caught-up read, the move counts: h = 256 exposes through 512. A move from a checkpoint witnessed after
+    // the first read does not count.
+    await restored.sync(await f.served(), f.signed);
+    expect(await requestRefusal(restored, f.backing)).toMatch(FULL);
+    await restored.moveWindow("move-2", await f.served(), f.signed);
+    await restored.submit("move-2", f.service); await f.checkpoint();
+    await restored.sync(await f.served(), f.signed);
+    const next = restored.keyedRequest("next", f.backing, 1n);
+    expect(same(next.owner, handedOut.owner)).toBe(false);
+    expect(same(next.owner, keyAt(lost.recoverySeed(), f.backing, 513n))).toBe(true);
+  });
+
+  it("raises a restoration's exposure of every backing it holds at a read of any one in its scope, and reads outputs within " +
+    "that reach as its lost instance's, not as another instance acting (Next 4 (bc) review)", async () => {
+    const f = await fixture(true), lost = f.open("lost"), ask = asker(lost, f.other.backing), { requests } = ask, node = lagging(f.venue);
+    ask(0, 255);
+    node.hold();
+    const old = await f.served();
+    // Paid at 200, the lost instance exposed through 300 and was paid there, above the first read's 255 but within reach.
+    await f.issue(requests.get(200)!); await f.checkpoint();
+    await lost.sync(await f.served(), f.other.signed);
+    ask(256, 300);
+    await f.issue(requests.get(300)!); await f.checkpoint();
+    const restored = f.restore("restored", lost.recoverySeed(), node.view);
+    await restored.sync(old, f.other.signed);
+    node.release();
+    // A read of the scope's first backing raises the second's exposure to 556 and finds no other instance acting.
+    expect((await restored.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    expect(await requestRefusal(restored, f.other.backing)).toMatch(FULL);
+    // So does a read of the second backing itself.
+    expect((await restored.sync(await f.served(), f.other.signed)).forked).toBeUndefined();
+    expect(await requestRefusal(restored, f.other.backing)).toMatch(FULL);
   });
 
   // --- Slice 13 M13e: a wallet restored from a copy of its files ------------------------------------------------------
@@ -363,10 +479,11 @@ describe("the one wallet holding lit notes", () => {
     holder.recordRestoration();
     expect((await holder.sync(await f.served(), f.signed)).forked).toBeUndefined();
     expect(await refusal(() => holder.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
-    // The other instance, still running, finds the live one's window move in turn: its key at 512, above its own 256.
+    // The other instance, still running, finds the live one's window move in turn. Its exposure is restoration-derived and
+    // reaches the move's key at 512 (Next 4 (bc)), but the move spent the note at 256 it held.
     await holder.moveWindow("move-2", await f.served(), f.signed);
     await holder.submit("move-2", f.service); await f.checkpoint();
-    expect((await other.sync(await f.served(), f.signed)).forked).toMatch(/pays its owner key at index 512, above every index this wallet exposed \(256\)$/);
+    expect((await other.sync(await f.served(), f.signed)).forked).toMatch(/^the note \d+ of backing [0-9a-f]{64}, held at this wallet's read at index \d+, is spent by a statement this wallet did not make/);
   });
 
   it("trips on another instance's spend of a note even where its own spend of that note failed, and refuses paying that request (M13f review)", async () => {

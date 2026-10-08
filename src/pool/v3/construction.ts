@@ -164,8 +164,10 @@ export interface KeyedWalletFrames {
   /** The wallet's unspent notes of `backing` (spent ones too with `spent`) in a state replayed with its predicate, each
    * mark checked against its output and the seed's keys (KeptStateMismatch otherwise). */
   notes(seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle, keyring: Keyring, spent?: boolean): KeyedNote[];
-  /** Per held backing (hex): §8's `h` and the highest index found in an output of it, spent ones included. */
-  found(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring): Map<string, { readonly reached: bigint; readonly top: bigint }>;
+  /** Per held backing (hex): §8's `h` and the highest index found in an output of it, spent ones included, and `h` over
+   * the outputs whose commitment `excluded` does not hold. */
+  found(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring, excluded?: ReadonlySet<bigint>):
+    Map<string, { readonly reached: bigint; readonly top: bigint; readonly reachedExcluding: bigint }>;
   /** Whether the note's creating statement consumed notes, all of them the wallet's own. */
   ownFunded(state: StateHandle, note: KeyedNote): boolean;
   /** Whether a statement consuming notes of the wallet, whose identity `saved` does not name, created exactly `output` (slice 13 M13f). */
