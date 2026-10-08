@@ -208,8 +208,9 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
     throw error;
   }
   const scope = checkpointScope(construction, batch, first.name, first.digest, snapshot), { header } = scope;
-  // The trail is the judgment's to demand: a valid or excluded class needs it, a lapse reads the header and scope alone
-  // (C2.10.11, pool-v3 §12), so a lapsed selection served a count-zero trail reads lapsed.
+  // The trail is the judgment's to demand: a valid or excluded class needs it (the selection's own, never a compact
+  // fault, `judge`), a lapse reads the header and scope alone (C2.10.11, pool-v3 §12), so a lapsed selection served a
+  // count-zero trail reads lapsed.
   // The operator and opening sequence are the judgment's, after term lapse (C2.10.11).
   requireReplay(same(header.domain, domain) && same(header.venue, selection.venue), "CONTEXT");
   // A directory entry the scope does not name gives no terms to read the selected backing under.

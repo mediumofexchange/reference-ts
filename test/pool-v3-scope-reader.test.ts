@@ -37,7 +37,7 @@ const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items
 
 /** One operator opens a segment scoping two backings and issues into the first;
  * a successor segment may then import the first backing alone. */
-async function twoBackings(silence?: bigint, witnessed = 10n, link?: Uint8Array) {
+async function twoBackings(silence?: bigint, witnessed = 10n, link?: Uint8Array, headerOperator = operator) {
   const venue = FixtureVenue.reference(label, lag, witnessed), operatorStore = new ReplayStore();
   const termsOf = (thing: string): RootTerms => ({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
     payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)),
@@ -48,7 +48,7 @@ async function twoBackings(silence?: bigint, witnessed = 10n, link?: Uint8Array)
   }).sort((a, z) => compareBytes(a.name, z.name));
   const [x, y] = backings as [typeof backings[0], typeof backings[0]];
   const open = (scoped: typeof backings, sequence: bigint, predecessor?: Commitment, imported?: SegmentState) => {
-    const header: SegmentHeader = { domain, venue: venue.id, operator, sequence,
+    const header: SegmentHeader = { domain, venue: venue.id, operator: headerOperator, sequence,
       entries: scoped.map(item => ({ backing: item.name, link: link ?? item.name, ...(predecessor === undefined ? {} : { opening: predecessor }) })) };
     const id = segmentIdentity(header);
     return { header, id, scoped, scope: new ScopeTree(header.entries).root(), records: [] as Uint8Array[],
@@ -363,7 +363,7 @@ describe("multi-backing scope reader", () => {
     const misplaced = f.checkpoint(2n, 3n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s));
     for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, misplaced)).rejects.toMatchObject({ check: "SNAPSHOT" });
   });
-  it("refuses unresolved where a receipt walk's reference with an undecodable first snapshot refuses unresolved, not EncodingError", async () => {
+  it("reads a receipt whose `after` checkpoint's first snapshot does not decode as unresolved, never EncodingError (pool-v3 §7)", async () => {
     const f = await twoBackings();
     f.replaceX(1n, 6n); // x's first term ends at 6
     const opening = f.checkpoint(1n, 1n);
@@ -373,7 +373,7 @@ describe("multi-backing scope reader", () => {
     await expect(f.read(f.x.name, opening, [{ kind: 10, payload: receipt }])).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 
-  it("reads a selected term-lapsed continuation served with a count-zero trail reads lapsed, as the walk classifies it", async () => {
+  it("reads a selected term-lapsed continuation served only a count-zero trail as lapsed, as the walk classifies it (pool-v3 §12)", async () => {
     const f = await twoBackings();
     f.replaceX(1n, 6n);
     const opening = f.checkpoint(1n, 1n);
@@ -385,12 +385,17 @@ describe("multi-backing scope reader", () => {
     await expect(f.read(f.y.name, continuation)).rejects.toMatchObject({ status: "lapsed-selection" });
   });
 
-
   it("judges a header's operator and opening sequence after term lapse, from the header, scope and chain alone (C2.10.11)", async () => {
     for (const [witnessed, expected] of [[7n, { status: "lapsed-selection" }], [3n, { check: "CONTEXT" }]] as const) {
       const f = await twoBackings();
       f.replaceX(1n, 6n); // x's first term ends at 6
       f.fresh(5n); // the header names an opening at sequence 5, after the checkpoint's own sequence 1
+      await expect(f.read(f.x.name, f.checkpoint(1n, witnessed))).rejects.toMatchObject(expected);
+    }
+    // A header naming another operator, likewise.
+    for (const [witnessed, expected] of [[7n, { status: "lapsed-selection" }], [3n, { check: "CONTEXT" }]] as const) {
+      const f = await twoBackings(undefined, 10n, undefined, ed25519.getPublicKey(b(9)));
+      f.replaceX(1n, 6n);
       await expect(f.read(f.x.name, f.checkpoint(1n, witnessed))).rejects.toMatchObject(expected);
     }
   });

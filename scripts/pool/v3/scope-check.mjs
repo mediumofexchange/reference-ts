@@ -414,8 +414,11 @@ export async function checkScopes({ codec, verifier, configurationBytes, domain,
     const alienCp = checkpoint(alien, 3n, 7n, [issuanceX, bad], [effect([fundedX]), effect([fundedY])]);
     alienCp.commitment = signCommitment(operatorSecret, 3n, directoryRoot(alienCp.directory));
     const alienPartial = { ...alienCp, trail: codec.encodeTrail({ ...codec.decodeTrail(alienCp.trail, LIMITS), records: [] }, LIMITS) };
-    // Even a provable header-context fault cannot exclude missing event evidence.
-    await refused(compose([a0, a1, x0, alienPartial, resumed], resumed, y, [toB]), "unresolved-evidence");
+    // Witnessed after x's term ended, the alien header is lapsed before its context is judged (C2.10.11, M13g): term lapse
+    // reads the header, scope and chain alone, so its withheld records do not hold the read.
+    await accepted(compose([a0, a1, x0, alienPartial, resumed], resumed, y, [toB]));
+    // Live at its index, even a provable header-context fault cannot exclude missing event evidence.
+    await refused(compose([a0, a1, { ...alienPartial, at: 4n }, x0, resumed], resumed, y, [toB]), "unresolved-evidence");
     // Exact snapshot backing is checked even when the signed directory binds it. Judged in the segment its first
     // entry names (pool-v3 §7.1), the checkpoint is read alike for every backing: this late one is lapsed, since
     // lapse precedes the snapshot checks, and the valid continuation reads past it.

@@ -902,8 +902,11 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
         return s;
       });
-      // §9.1: the opening's record-derived block bounds compact exclusion to later positions.
-      const intrinsic = !opening && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
+      // §9.1: the opening's record-derived block bounds compact exclusion to later positions. The selected checkpoint's own
+      // envelope stays complete: a compact fault never stands in for its trail, which a lapse alone does not need.
+      const chosen = "operator" in selection ? selection as ReaderSelection : undefined;
+      const selected = chosen !== undefined && same(c.operator, chosen.operator) && c.sequence === chosen.sequence && same(c.root, chosen.root);
+      const intrinsic = !opening && !selected && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
       const classification = scope.classificationEvidence(intrinsic);
       if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
       // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot.
