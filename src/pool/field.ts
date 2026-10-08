@@ -50,10 +50,12 @@ export function fieldToBytes(value: bigint): Uint8Array {
 
 /** Strict inverse of fieldToBytes: exactly 32 bytes, below p. */
 export function bytesToField(bytes: Uint8Array): bigint {
-  if (!(bytes instanceof Uint8Array) || bytes.length !== 32) {
+  // An own copy, at the view's real length: a subclass's own length or hex conversion is never read.
+  const own = bytes instanceof Uint8Array && bytes.length === 32 ? new Uint8Array(bytes) : undefined;
+  if (own === undefined || own.length !== 32) {
     throw new EncodingError("field element must be 32 bytes");
   }
-  return requireField(BigInt(`0x${bytesToHex(bytes)}`), "field element");
+  return requireField(BigInt(`0x${bytesToHex(own)}`), "field element");
 }
 
 /** A field element as text: `0x` and exactly 64 lowercase hexadecimal digits. */
@@ -71,10 +73,11 @@ export function hexToField(text: unknown): bigint {
 
 /** The two limbs of a 32-byte identifier: the first 16 bytes, then the last 16. */
 export function limbsOf(identifier: Uint8Array): readonly [bigint, bigint] {
-  if (!(identifier instanceof Uint8Array) || identifier.length !== 32) {
+  const own = identifier instanceof Uint8Array && identifier.length === 32 ? new Uint8Array(identifier) : undefined;
+  if (own === undefined || own.length !== 32) {
     throw new EncodingError("identifier must be 32 bytes");
   }
-  const hex = bytesToHex(identifier);
+  const hex = bytesToHex(own);
   return [BigInt(`0x${hex.slice(0, 32)}`), BigInt(`0x${hex.slice(32)}`)];
 }
 

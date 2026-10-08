@@ -1090,12 +1090,16 @@ export class V3Wallet {
       "another demand presented an input while this one was proved");
   }
   /** Each note's holding. What saved records reserve and which saved demands present a note are read once for all
-   * of them (`reserved`, `savedPresenters`), not twice a note (slice 15, WORK.md Next 4 (az)). */
+   * of them (`reserved`, `savedPresenters`), not twice a note, and only for these notes, so a long-lived wallet's
+   * saved history is not read whole (slice 15, WORK.md Next 4 (az)). */
   private holdingsOf(notes: readonly HeldNote[], force: ForceState | undefined, at: bigint): Holding[] {
+    const nfs = JSON.stringify(notes.map(note => note.nf.toString()));
     const reserved = new Set(this.db.prepare(`SELECT i.nf FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias
-      WHERE a.status='prepared' OR (a.status='final' AND a.kind!='4')`).all().map(row => row.nf as string));
+      WHERE i.nf IN (SELECT value FROM json_each(?)) AND (a.status='prepared' OR (a.status='final' AND a.kind!='4'))`).all(nfs)
+      .map(row => row.nf as string));
     const presenters = new Map<string, string[]>();
-    for (const row of this.db.prepare(`SELECT i.nf, a.demand FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE a.kind='4'`).all()) {
+    for (const row of this.db.prepare(`SELECT i.nf, a.demand FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias
+      WHERE i.nf IN (SELECT value FROM json_each(?)) AND a.kind='4'`).all(nfs)) {
       const nf = row.nf as string, ids = presenters.get(nf);
       if (ids === undefined) presenters.set(nf, [row.demand as string]); else ids.push(row.demand as string);
     }

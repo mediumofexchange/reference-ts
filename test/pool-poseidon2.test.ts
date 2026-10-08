@@ -168,6 +168,11 @@ describe("pool-v2 §1: field elements and identifier limbs as bytes", () => {
     for (const bad of [p, -1n, 1 as unknown as bigint]) expect(() => fieldToBytes(bad)).toThrow(EncodingError);
     for (const bad of [new Uint8Array(31), "00" as unknown as Uint8Array]) expect(() => limbsOf(bad)).toThrow(EncodingError);
     expect(() => limbsBack(1n << 128n, 0n)).toThrow(EncodingError);
+    // A detached buffer reads as no bytes; a subclass reporting 32 bytes over a longer view is read at its real length.
+    const detached = new Uint8Array(32); structuredClone(detached.buffer, { transfer: [detached.buffer] });
+    class Lying extends Uint8Array { override get length(): number { return 32; } }
+    const lying = new Lying(40);
+    for (const bad of [detached, lying]) { expect(() => bytesToField(bad)).toThrow(EncodingError); expect(() => limbsOf(bad)).toThrow(EncodingError); }
     expect(() => limbsBack(0n, -1n)).toThrow(EncodingError);
   });
 });
