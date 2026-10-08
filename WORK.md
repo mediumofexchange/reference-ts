@@ -3,11 +3,10 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 17, Bitcoin's read-only probe 3, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17), [decision](decisions/2026-10.md#2026-10-08--bitcoins-records-travel-the-public-mempool-size-a-bitcoin-depth-by-the-excluding-third-slice-17); #157). Do records reach pools
-through the public mempool, and how long do they wait? Over probe 2's week, 0.1% of 5,967 records were never seen publicly. AntPool's group
-skipped every record in its template; Foundry and ViaBTC skipped none. At 1 sat/vB or more, 97–100% were mined within six blocks of first
-sight, so a Bitcoin depth of 4 would leave up to 3% of demands to be filed again. Publishing our own records still needs funds.
-Slice 16 (#156): AntPool's templates (a third of blocks) exclude OP_RETURN over 83 B, and a Bitcoin reader fails the transfer budget.
+**Slice 17, Bitcoin's read-only probe 3, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17), [decision](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17); #157, reviewed). Do records reach pools
+through the public mempool, and how long do they wait? Other parties' records had almost all reached mempool.space's mempool before
+mining, AntPool's group skipped them there, and the wait within `depth + 2` blocks sets a Bitcoin profile's depth. Publishing our own
+records still needs funds. Slice 16 (#156): AntPool's templates exclude OP_RETURN over 83 B; a Bitcoin reader fails the transfer budget.
 
 **Proposed next:** by release distance: Next 4's waiting letters, (bb) the journal's whole replay at a lagged read, (az) streaming if a
 holder must pass about 1.5·10⁵ notes, or `venue-bitcoin.md` (Next 12; a desktop-reader role).
@@ -71,8 +70,8 @@ copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ re
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
    Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probes 1 and 2 (slice 16, [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16)) keep it:
    AntPool's template group (a third of blocks) delays records over 83 B; its reader fails the declared transfer budget. Read-only
-   probe 3 (slice 17, [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17)): records travel the public mempool; 97–100% at 1 sat/vB or more are mined within six
-   blocks of first sight, so the depth sets C3.3's margin. Next: mainnet publication of our own records once funded (Open questions); then `venue-bitcoin.md` with
+   probe 3 (slice 17, [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17)): records reach mempool.space's mempool before mining and
+   their wait sets C3.3's margin, so the depth. Next: mainnet publication of our own records once funded (Open questions); then `venue-bitcoin.md` with
    its reader's own budget line. BTC/XMR as chain-asset terms.
 
 ## Retained boundaries and local state
