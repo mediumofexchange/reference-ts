@@ -1,12 +1,20 @@
 // Summarizes probe 3 (fetch3.mjs) into one JSON report. Usage: node summary3.mjs <out dir>
 // Groups follow probe 1: the pools on AntPool's templates exclude records, OCEAN and Braiins include
 // some, the rest include them. A record is a transaction with an OP_RETURN over 83 B or several
-// OP_RETURN outputs (block.mjs). "Ordinary" is every other non-coinbase transaction.
+// OP_RETURN outputs (block.mjs). "Ordinary" is every other non-coinbase transaction. A "skip" is an
+// entry of the audit's missingTxs: mempool.space's "censored" list, which leaves out transactions under
+// 1 sat/vB, ones first seen within 180 s, replaced ones, and the template's low-fee tail when the block
+// carried other weight. A thin block (under half its template's transactions; empty blocks among them)
+// is counted apart from every skip statistic, since its audit lists all or none of its template.
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { BANDS, band } from './block.mjs';
 
 const out = process.argv[2];
-const blocks = readFileSync(`${out}/probe3.jsonl`, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).sort((a, b) => a.height - b.height);
+const input = readFileSync(`${out}/probe3.jsonl`);
+const sha256 = (b) => createHash('sha256').update(b).digest('hex');
+const sources = Object.fromEntries(['block.mjs', 'fetch3.mjs', 'summary3.mjs'].map((f) => [f, sha256(readFileSync(new URL(f, import.meta.url)))]));
+const blocks = input.toString('utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).sort((a, b) => a.height - b.height);
 const START = 969497;
 const END = 970504;
 if (blocks.length !== END - START + 1 || blocks[0].height !== START) throw new Error(`incomplete: ${blocks.length} blocks`);
@@ -31,21 +39,40 @@ const g = Object.fromEntries(GROUPS.map((k) => [k, {
   ordinaryAges: BANDS.map(() => ({})),
 }]));
 // Per pool: blocks, records mined from its template, and records it left out of its template.
+// A full skip: a block (not thin) that left out at least one record and mined none from its template.
+const thin = (b) => b.txCount * 2 < b.templateSize;
 const perPool = {};
+const thinBlocks = [];
+let unminedMissing = 0;
+let allMissing = 0;
 for (const b of blocks) {
   const G = g[group(b.pool)];
-  const P = (perPool[b.pool] ??= { blocks: 0, recordsInTemplate: 0, recordMisses: 0 });
+  const P = (perPool[b.pool] ??= { blocks: 0, thinBlocks: 0, recordsMined: 0, recordsInTemplate: 0, recordMisses: 0, fullSkipBlocks: 0 });
   P.blocks++;
-  P.recordsInTemplate += b.records.filter((r) => r.inTemplate).length;
-  P.recordMisses += b.missing.filter((m) => records.has(m.txid)).length;
+  P.recordsMined += b.records.length;
   G.blocks++;
   for (const r of b.records) {
     G.records++;
     if (r.unseen) G.recordsUnseen++;
     if (r.added) G.recordsAdded++;
     if (r.accelerated) G.recordsAccelerated++;
-    if (r.inTemplate) { G.recordsInTemplate++; G.recordInTemplateBands[band(r.rate)]++; }
   }
+  for (const m of b.missing) { allMissing++; if (!mined.has(m.txid.slice(0, 12))) unminedMissing++; }
+  const recordMisses = b.missing.filter((m) => records.has(m.txid)).length;
+  const recordsInTemplate = b.records.filter((r) => r.inTemplate).length;
+  if (thin(b)) {
+    P.thinBlocks++;
+    thinBlocks.push({ height: b.height, pool: b.pool, txCount: b.txCount, templateSize: b.templateSize, missing: b.missing.length, recordMisses });
+    G.ordinary += b.ordinary.reduce((n, o) => n + o.n, 0);
+    G.ordinaryUnseen += b.ordinary.reduce((n, o) => n + o.unseen, 0);
+    b.ordinary.forEach((o, k) => { for (const [m, c] of Object.entries(o.ages)) G.ordinaryAges[k][m] = (G.ordinaryAges[k][m] ?? 0) + c; });
+    continue;
+  }
+  P.recordsInTemplate += recordsInTemplate;
+  P.recordMisses += recordMisses;
+  if (recordMisses > 0 && recordsInTemplate === 0) P.fullSkipBlocks++;
+  if (recordMisses > 0 || recordsInTemplate > 0) P.informativeBlocks = (P.informativeBlocks ?? 0) + 1;
+  for (const r of b.records) if (r.inTemplate) { G.recordsInTemplate++; G.recordInTemplateBands[band(r.rate)]++; }
   b.ordinary.forEach((o, k) => {
     G.ordinary += o.n;
     G.ordinaryUnseen += o.unseen;
@@ -119,6 +146,13 @@ const LAGS = [1, 2, 3, 6];
 const within = (d) => { const n = d.reduce((s, x) => s + x, 0); return Object.fromEntries(LAGS.map((L) => [L, n ? +(d.slice(0, L).reduce((s, x) => s + x, 0) / n).toFixed(4) : null])); };
 const withinLag = BANDS.map((lo, k) => ({ band: `>=${lo}`, records: recordWaitBands[k].reduce((s, x) => s + x, 0), recordsWithin: within(recordWaitBands[k]), ordinaryWithin: within(ordinaryWaitBands[k]) }));
 const missesPerRecord = (G) => seenRecords.map((r) => r.misses.filter((x) => x === G).length);
+// Slice 16's geometric model, like for like: the mean number of excluding blocks before an including
+// one is q/(1 - q), with q the share of informative blocks (not thin, holding a record in their template)
+// that skipped every record they held.
+const informative = Object.values(perPool).reduce((n, P) => n + (P.informativeBlocks ?? 0), 0);
+const fullSkip = Object.values(perPool).reduce((n, P) => n + P.fullSkipBlocks, 0);
+const qShare = fullSkip / informative;
+const totalMisses = seenRecords.map((r) => r.misses.length);
 const mean = (xs) => (xs.length ? +(xs.reduce((s, x) => s + x, 0) / xs.length).toFixed(3) : null);
 const dist = (xs, cap = 6) => { const d = Array(cap + 1).fill(0); for (const x of xs) d[Math.min(cap, x)]++; return d; };
 
@@ -137,6 +171,8 @@ for (const r of records.values()) {
 
 console.log(JSON.stringify({
   window: { start: START, end: END, days: +((blocks.at(-1).time - blocks[0].time) / 86400).toFixed(3) },
+  input: { file: 'probe3.jsonl', sha256: sha256(input) }, sources,
+  thinBlocks, missingEntries: allMissing, missingNeverMinedInWeek: unminedMissing,
   host: readFileSync('/proc/cpuinfo', 'utf8').match(/model name\s*:\s*(.*)/)?.[1] ?? null, node: process.version,
   suppliers: { rawBlocks: 'blockstream.info (verified by block.mjs)', auditAndSummary: 'mempool.space (summary txids checked against the parsed block)' },
   templateAlgorithms: [...new Set(blocks.map((b) => b.templateAlgorithm))],
@@ -154,10 +190,13 @@ console.log(JSON.stringify({
   pools: Object.entries(perPool).sort((a, b) => b[1].blocks - a[1].blocks).map(([pool, P]) => ({ pool, ...P, recordSkip: ratio(P.recordMisses, P.recordMisses + P.recordsInTemplate) })),
   misses: {
     meanPerSeenRecord: Object.fromEntries(GROUPS.map((k) => [k, mean(missesPerRecord(k))])),
+    meanPerSeenRecordAll: mean(totalMisses),
+    model: { informativeBlocks: informative, fullSkipBlocks: fullSkip, q: +qShare.toFixed(4), predictedMean: +(qShare / (1 - qShare)).toFixed(3) },
     distributionAntpoolTemplates: dist(missesPerRecord('antpoolTemplates')),
     distributionIncluding: dist(missesPerRecord('including')),
   },
   blocksWaited: { records: counted.length, mean: mean(counted), distribution: dist(counted, CAP) },
   withinLag,
   latency,
+  largestRecords: [...records.values()].filter((r) => r.largest >= 10000).map((r) => ({ height: r.height, pool: r.pool, largest: r.largest, rate: +r.rate.toFixed(2), secondsFromFirstSight: r.firstSeen == null ? null : r.time - r.firstSeen })),
 }, null, 1));
