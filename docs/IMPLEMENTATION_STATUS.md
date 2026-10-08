@@ -60,7 +60,9 @@ assurance (slice 13) adds a [release record](RELEASE.md) whose tarball CI rebuil
 Windows, [separate installs](RELEASE.md#separate-installs) of each role, and restore drills: an operator restored
 from a copy returns past silence ([guide](POOL_V3_SERVICE.md#restoring-an-operator-directory)), a wallet restored
 from a copy marks its open requests ([guide](POOL_V3_WALLET.md#restoring-a-copy-of-the-directory)), and
-`moe venue audit` checks a copied view before use. WORK.md's Next 4 holds the open findings.
+`moe venue audit` checks a copied view before use. A wallet stops acting once a read shows another instance of its
+seed acting ([guide](POOL_V3_WALLET.md#when-another-instance-of-the-seed-acts)), and a settlement's `rho_out` reads
+its acceptance (pool-recovery C3.5 at 114799e). WORK.md's Next 4 holds the open findings.
 
 Pool-v2 is retired: every remaining v2 check was mapped to a v3 case, a v2-only
 mechanism or a later slice
@@ -321,7 +323,7 @@ their source identities unchanged. The pin includes venue-ergo §2's clock
 on a heavier, shorter chain (`dce3ae1`, `298cc06`) and §8's one-transaction
 condition (`01f922c`), which the v3 guard checks against `PROOF_BYTES`, and
 pool-v3's adoption (`e7f7f24`), whose manifest the runtime holds. Later rule revisions the runtime implements
-(pool-v3 §14 at `dc51baf`, Construction C2.4.1 and C2.7.5 at `25c078e`) are pinned per rule in `docs/PROTOCOL_RULES.md`.
+(pool-v3 §14 at `dc51baf`, Construction C2.4.1 and C2.7.5 at `25c078e`, pool-recovery C3.5 at `114799e`) are pinned per rule in `docs/PROTOCOL_RULES.md`.
 `740adaa` (pool-recovery C3.4, C3.5 and C3.8) is in it; the wallet's disclosure
 count and the C3.8 reading (`dishonour.ts`) read it. Earlier revisions
 pinned the retired pool-v2 runtime. `docs/PROTOCOL_RULES.md` maps each binding

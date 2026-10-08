@@ -306,14 +306,14 @@ gap, on the local venue).
   checks the acceptance against the obligor, the demand's deadline and the
   horizon, re-proves the demand's positions into one output to the
   acceptance's owner with `rho_out` derived from the seed, the input
-  nullifiers, the segment and the disclosure count (C3.5), and signs the
+  nullifiers, the segment, the acceptance and the disclosure count (C3.5), and signs the
   release. `withdraw(alias, demand, …)` signs the withdrawal of the demand
   with that identity for the canonical segment. Both read the demand's notice
   from the view, so they need it standing (admitted, or with force in a gap)
   and recognize it as this seed's by its presenter key, which only this seed
   derives (`UNKNOWN` otherwise); a demand a lost wallet made is settled or
-  withdrawn from the seed alone, and its settlement is the record the lost
-  wallet would have made at the same disclosure count. A prepared settlement
+  withdrawn from the seed alone, and its settlement under the same acceptance
+  is the record the lost wallet would have made at the same disclosure count. A prepared settlement
   reserves the demand's notes. It takes them even where another saved record
   reserves them (a payment a restored copy prepared before the demand stood):
   while the demand stands its lock refuses that spend at the door, and the
@@ -346,15 +346,17 @@ naming the demand and the segment and signed by the demand's presenter key. So a
 names an output nobody has seen, and any wallet of the seed, a restored one
 included, reads the same count from the same record. A copy, or a "release" with a signature that does not verify, adds
 nothing. An output disclosed only to an operator is not counted (C3.5).
-Because `rho_out` reads no acceptance or owner, `settle` refuses (`CONFLICT`)
-while another settlement of the demand is prepared at the same count: one
-published release would otherwise let K compute the other's output for any
-owner. Publish or resolve the prepared one first. For the same reason
-`publish` refuses (`CONFLICT`) a settlement that has failed: it has no force
-at any later index, and a later settlement at the same count names its output.
-A release sent in time but witnessed only after a later settlement at its count
-was built still discloses that settlement's output; C3.5's count reads only
-witnessed releases ([review decision](../decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)).
+Because `rho_out` reads the acceptance, which names its demand, a release
+discloses only its own acceptance's output: a settlement under another
+acceptance, at the same count or not, and one of a later demand presenting the
+same notes, name outputs nobody has seen
+([M13f](../decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f)).
+Under the same acceptance again, after a release without force, the count gives
+a new output; a release sent in time but witnessed only after that next
+settlement was built still discloses its output, since C3.5's count reads only
+witnessed releases. `publish` refuses (`CONFLICT`) a failed act: it has no force
+at any later index and would only disclose
+([review decision](../decisions/2026-10.md#2026-10-02--close-the-code-review-of-slices-910-the-publishers-readiness-race-a-failed-settlements-disclosure-serves-keep-alive-window-and-verifier-key-sets)).
 
 Resolution: an act is final once its statement is in canonical history,
 imports included, or (a demand, withdrawal or settlement) has force at the
@@ -504,8 +506,10 @@ customer's payment credits another's order), and crediting again a request its l
      read of each backing exposes every index through `h + 256`, and `move-window` comes before new requests and before
      a payment or burn with change. Make that read from a view at least as fresh as the lost instance's: `h` comes from
      it, and the exposure is fixed there.
-3. A lit wallet cannot tell which requests its lost instance paid: before paying one again, ask the payee. A pool-v3
-   payment is refused once its request's exact output exists.
+3. A payment is refused once its seed already paid the request: pool-v3's at every door, since the request names the
+   exact output; lit's by the wallet (`CONFLICT`), which finds the request's exact output among those of the statements
+   spending its own notes that it did not save. A lit payment the lost instance still had in flight is unknown until it
+   lands (the fence below then names it): before paying again a request nobody has seen paid, ask the payee.
 
 A wallet whose database file is not the one it was made in refuses every acting operation and a new handoff (`COPIED`)
 until then; reads and `seed --show` stay open. That check compares the file's inode and, where the system keeps one, its
@@ -515,11 +519,32 @@ run the step yourself. Recording it again is harmless: it marks the requests unf
 past the window. The marks travel in a handoff. The wallet's kept replay file is discarded and read again where its
 identity changed, and its Ergo view is audited as it opens ([Ergo venue](ERGO_VENUE_PROFILE.md)).
 
-Not covered: an obsolete instance that comes back beside the restored copy, or a seed restoration beside a live wallet,
-is not fenced (the one-active-copy precondition); a lit payment the lost instance had in flight at the restoration can
-still land beside a retry; and a pool-v3 wallet restored while its lost instance's release is unwitnessed in a gap can
-settle the same demand at the same disclosure count (C3.5), which a backer holding that release could use. These are the
-open items of the durable-operation gate for the wallet.
+A pool-v3 wallet restored while its lost instance's release waits unwitnessed settles under any other acceptance to an
+output nobody has seen, since `rho_out` reads the acceptance (C3.5); under the lost instance's acceptance it makes the
+same settlement. A backer holding that release and presenting its acceptance again can create that output first, which
+the wallet sees before signing (`CONFLICT`): withdraw the demand and demand again.
+
+### When another instance of the seed acts
+
+No wallet can stop a second holder of its seed from acting: an obsolete instance that comes back beside its restored copy,
+a seed restoration beside a live wallet, or a thief. The venue keeps the money consistent (one spend per note); what two
+instances break is the accounting between them, such as a lit key given to two requests. So every read watches for public
+evidence that only a holder of the seed can make
+([M13f](../decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f)):
+- a note this wallet held at its previous read of the backing, now spent by a statement it did not save (each record is
+  saved before it is submitted, so the wallet's own handles never trip it, while a saved record of its own that failed
+  over the same note is no cover);
+- lit: one of its keys paid at an index above every index it exposed (it persists an index before exposing the key).
+
+The wallet then keeps the evidence and refuses every acting operation and a new handoff (`FORKED`, naming the note or the
+index); `sync` (which reports it as `forked`), `supply`, `presentation`, `submit` or `publish` of saved bytes, and an exact
+retry of a saved alias still run. Find and stop the other instance (or, after a theft, act at once from this one), then record a restoration
+(`moe wallet restore --copy`): that clears the evidence, and the next read is the baseline. A new wallet, a seed
+restoration and a handoff destination start from their first read, so their own history never trips it. Two of a
+wallet's own pasts do, and the stop is intended: a statement its lost instance still had in flight that lands after the
+restored copy's first read, and, for lit, a first read after a restoration from a view older than the lost instance's.
+The fence follows the venue, so the other instance's statement may already be submitted when it trips; a note the other
+instance received and spent between two reads of this one was never held here.
 
 ## Commands
 
@@ -537,7 +562,7 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 |---|---|
 | `request <alias> <backing> <value> [--out f]` | the exact request: its 246-byte frame (hex, and the file) and digest to hand on |
 | `pay <alias> <backing> --request f --digest d --value n` | authenticates the frame by the digest, prepares the payment and submits it |
-| `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records. `available` totals what `pay` and `burn` can spend, `presented` the available notes a demand presented, which only `freshen` moves |
+| `sync <backing>` | holdings (available, reserved or locked, with the demands presenting each), standing demands, the canonical checkpoint and whether the gap is open; resolves saved records. `available` totals what `pay` and `burn` can spend, `presented` the available notes a demand presented, which only `freshen` moves; `forked` where a read showed another instance of the seed acting ([above](#when-another-instance-of-the-seed-acts)) |
 | `fulfill <alias> <backing> [--uncredited]` / `fulfillment <alias>` | the request found paid; never replayed: a rerun exits 4 printing the saved fulfillment. `--uncredited` fulfills a request a restoration from a copy marked (below) |
 | `demand`, `withdraw`, `settle --acceptance f`, `freshen` | the acts above; `freshen` submits as `pay` does |
 | `submit <alias> <backing>`, `status <alias>`, `reprove` | submits a saved record (a rerun prints the kept receipt); reads a saved record as the last sync resolved it; re-proves a payment in the canonical segment |
@@ -545,7 +570,7 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 | `publish <alias> <backing> --out f` | a demand, withdrawal or release as a publication file for a relay (below); refused unless the read shows the gap open |
 | backer: `issue`, `accept <alias> <backing> <demand> --deadline n --out f`, `burn`, `publish-acceptance` | `accept` writes the acceptance as its canonical publication bytes, which the holder's `settle --acceptance` reads |
 | `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files new, outside the directory and on a file system with hard links; `o` is checked new before the wallet freezes); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
-| `restore --copy` | records that this directory was restored from a copy or a backup ([below](#restoring-a-copy-of-the-directory)) |
+| `restore --copy` | records that this directory was restored from a copy or a backup, or is now the seed's only instance ([above](#restoring-a-copy-of-the-directory)) |
 
 Each command that reads syncs the directory's Ergo view first, in bounded passes until it is caught up, with a
 `syncing` event on stderr for each pass another follows. Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact

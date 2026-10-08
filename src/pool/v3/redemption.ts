@@ -47,8 +47,14 @@ export function paddingRequestId(seed: Uint8Array, domain: Uint8Array, nf: bigin
 }
 
 /** C3.5: `rho_out` from the seed, the settlement's input nullifiers in
- * position order, the segment identity and the disclosure count. */
-export function settlementRho(seed: Uint8Array, domain: Uint8Array, nfs: readonly bigint[], segment: Uint8Array, count: bigint): bigint {
-  if (nfs.length !== 2 || !(segment instanceof Uint8Array) || segment.length !== 32) throw new EncodingError("invalid settlement context");
-  return deriveNonzeroField(key(seed, domain, RHO_OUT_INFO), concat(...nfs.map(fieldToBytes), copyBytes(segment), u64(count)));
+ * position order, the segment identity, the acceptance identity and the
+ * disclosure count (slice 13 M13f). The acceptance names its demand, so two
+ * demands over the same notes in one segment, each counting from zero, never
+ * share an output, and neither do two acceptances of one demand at one count:
+ * a release discloses only the output of its own acceptance. */
+export function settlementRho(seed: Uint8Array, domain: Uint8Array, nfs: readonly bigint[], segment: Uint8Array, acceptance: Uint8Array,
+  count: bigint): bigint {
+  if (nfs.length !== 2 || !(segment instanceof Uint8Array) || segment.length !== 32 || !(acceptance instanceof Uint8Array) ||
+      acceptance.length !== 32) throw new EncodingError("invalid settlement context");
+  return deriveNonzeroField(key(seed, domain, RHO_OUT_INFO), concat(...nfs.map(fieldToBytes), copyBytes(segment), copyBytes(acceptance), u64(count)));
 }

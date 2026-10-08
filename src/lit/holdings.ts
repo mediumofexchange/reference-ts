@@ -16,7 +16,7 @@ import { utf8Encoder } from "../contexts.js";
 import { KeptStateMismatch } from "../pool/v3/replay-store.js";
 import type { KeyedNote, KeyedOwner, Keyring } from "../pool/v3/construction.js";
 import type { ScanOutput, StateHandle, WitnessMark, WitnessPredicate } from "../pool/v3/state.js";
-import { noteCommitment, noteNullifier, noteTag, type Opening } from "./notes.js";
+import { noteCommitment, noteNullifier, noteTag, spendRho, type Opening, type Output } from "./notes.js";
 import { acceptSecret, OWNER_LOOK_AHEAD, ownerRoot, ownerSecretAt, publicKeyOf } from "./wallet-keys.js";
 
 const keyOf = (bytes: Uint8Array): bigint => BigInt(`0x${hex(bytes)}`);
@@ -183,6 +183,31 @@ export function foundIndices(seed: Uint8Array, domain: Uint8Array, state: StateH
 export function ownFunded(state: StateHandle, note: LitNote): boolean {
   const consumed = state.store.consumedAt(note.ns, note.position);
   return consumed.length > 0 && consumed.every(nf => state.store.marked(state.ns, state.position, nf));
+}
+
+/** Whether a statement that consumed notes of this wallet and that `saved` does not name (a statement this wallet did not
+ * save: its lost instance's, or one a seed restoration's earlier life made), created the exact output `output` (slice 13
+ * M13f, Next 4 (aw)). A spend's output derives from the nullifiers it consumes in input order and its position (§2), and
+ * every spend consumes one or two notes into at most four outputs, so each such statement gives at most eight candidates:
+ * the cost follows this wallet's own spends, never the record's outputs. */
+export function paidByOwn(seed: Uint8Array, domain: Uint8Array, state: StateHandle, keys: OwnerKeys, output: Output,
+  saved: (statement: Uint8Array) => boolean): boolean {
+  const checked = new Set<string>();
+  for (const note of marked(seed, domain, state, keys, true)) {
+    for (const spend of state.store.tagSpends(state.ns, state.position, note.tag)) {
+      const place = `${spend.ns}:${spend.position}`;
+      if (checked.has(place)) continue;
+      checked.add(place);
+      if (saved(spend.identity)) continue;
+      const nfs = state.store.consumedAt(spend.ns, spend.position).map(bytesOf);
+      for (const order of nfs.length === 2 ? [nfs, [nfs[1]!, nfs[0]!]] : [nfs]) {
+        for (let j = 0; j < 4; j++) {
+          if (state.hasOutput(keyOf(noteCommitment(domain, { ...output, rho: spendRho(order, j) })))) return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 /** The note's spend secret (the caller zeroes it), checked against its owner: a mark whose key this seed does not

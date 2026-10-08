@@ -99,7 +99,9 @@ function viewOut(view: WalletView) {
   return { status: view.checkpoint === undefined ? "unavailable" : "final", backing: view.backing, judgingIndex: view.judgingIndex,
     checkpoint: view.checkpoint === undefined ? null : commitmentOut(view.checkpoint), gap: view.gap, available: total(false), presented: total(true),
     holdings: view.holdings.map(h => ({ cm: h.cm, value: h.value, status: h.status, presented: h.presented })),
-    demands: view.demands.map(d => ({ id: d.id, quantity: d.quantity, instant: d.instant, deadline: d.deadline, holdings: d.holdings })) };
+    demands: view.demands.map(d => ({ id: d.id, quantity: d.quantity, instant: d.instant, deadline: d.deadline, holdings: d.holdings })),
+    // M13f: the evidence that another instance of the seed acted; every acting command refuses FORKED until `restore --copy`.
+    ...(view.forked === undefined ? {} : { forked: view.forked }) };
 }
 
 /** An opened wallet over the directory's view, with a prover where the command proves. */
@@ -480,11 +482,13 @@ async function restoreCopy(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, {}, async ({ wallet }) => {
     const copied = wallet.isCopy(), { requests } = wallet.recordRestoration();
     print({ status: "restored", restored: "copy", copied, requests, notes: [
-      "never run the instance this copy was made from again: two copies of one wallet act unaware of each other",
+      "never run the instance this copy was made from again: two copies of one wallet act unaware of each other; a later read " +
+        "that shows another instance of the seed acting stops every acting command (FORKED) until restore --copy is run again",
       "its lost instance may have credited a request it made: fulfill refuses those listed (RESTORED) unless your records outside the wallet show it did not (--uncredited)",
       ...(keyed(directory) ? ["its next sync of each backing, from a view at least as fresh as its lost instance's, exposes every owner key " +
         "through h + 256 (lit-v1 §8): move-window before new requests, and before a payment or burn with change",
-        "it cannot tell which requests its lost instance paid: before paying one again, ask the payee"] : []),
+        "pay refuses a request a statement of this seed already paid; one its lost instance still had in flight is not known: " +
+        "if it lands later, the next read stops the wallet (FORKED), so before paying an unpaid request again, ask the payee"] : []),
     ] });
   });
 }

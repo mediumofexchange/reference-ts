@@ -191,6 +191,9 @@ describe("v3 payer custody over restored holdings", () => {
     const paid = g.receiver.request("paid", g.backing, 3n), rest = prepareExactOutput(b(60), domain, b(63), g.backing, 3n);
     await g.j.submit(encodeRecord(record(spendTask(g.context, [input, { ...input, note: pad }], [paid, rest, zero(64), zero(65)]))));
     const served = await g.publish();
+    // That statement spends a note of this seed the wallet held and did not save a spend of: another instance (M13f).
+    await expect(g.payer.prepare("paid", { request: paid, value: 3n }, served, g.signed, prove)).rejects.toMatchObject({ code: "FORKED" });
+    g.payer.recordRestoration();
     await expect(g.payer.prepare("paid", { request: paid, value: 3n }, served, g.signed, prove)).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -270,10 +273,14 @@ describe("v3 payer custody over restored holdings", () => {
     const change = prepareExactOutput(f.payer.recoverySeed(), domain, b(80), f.backing, 4n);
     await f.j.submit(encodeRecord(record(burnTask(f.context, 6n, [input, { ...input, note: prepareExactOutput(b(81), domain, b(82), f.backing, 0n) }], change))));
     const served = await f.publish();
-    // A reproof request resolves the failure from evidence without proving.
+    // That copy is another instance of the seed (M13f): a reproof refuses before proving, and sync resolves the failure.
+    await expect(f.payer.reprove("shop", served, f.signed, async () => { throw new Error("not called"); })).rejects.toMatchObject({ code: "FORKED" });
+    const view = await f.payer.sync(served, f.signed);
+    expect(view.forked).toMatch(/is spent by a statement this wallet did not make/);
+    f.payer.recordRestoration();
+    // Recorded as the only instance, a reproof request resolves the failure from evidence without proving.
     expect(await f.payer.reprove("shop", served, f.signed, async () => { throw new Error("not called"); }))
       .toMatchObject({ status: "failed", final: undefined, inputs: payment.inputs, superseded: [] });
-    const view = await f.payer.sync(served, f.signed);
     expect(view.holdings.map(h => [h.cm, h.value, h.status])).toEqual([[change.cm, 4n, "available"]]);
     expect(f.payer.payment("shop")).toMatchObject({ status: "failed", final: undefined, inputs: payment.inputs });
     await expect(f.j.submit(payment.record)).rejects.toMatchObject({ code: "REFUSED" });
@@ -293,6 +300,9 @@ describe("v3 payer custody over restored holdings", () => {
     const view = await f.payer.sync(served, f.signed);
     expect(f.payer.payment("shop")).toMatchObject({ status: "failed", inputs: payment.inputs });
     expect(view.holdings.map(h => [h.cm, h.value, h.status])).toEqual([[f.funding[1]!.cm, 6n, "available"], [change.cm, 1n, "available"]]);
+    // That copy is another instance of the seed (M13f); recorded as the only one, the wallet acts again.
+    expect(view.forked).toMatch(/is spent by a statement this wallet did not make/);
+    f.payer.recordRestoration();
     // The freed note can be taken by an act; a sync with nothing new to decide writes nothing.
     expect((await f.payer.burn("melt", 6n, served, f.signed, prove)).inputs).toEqual(payment.inputs.filter(nf => nf !== note.nf));
     await f.payer.sync(served, f.signed);

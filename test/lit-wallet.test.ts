@@ -293,6 +293,85 @@ describe("the one wallet holding lit notes", () => {
     expect(await refusal(() => restored.keyedRequest("order-B", f.backing, 4n))).toBe("WINDOW");
   });
 
+  it("refuses paying again a request its lost instance paid, which the record shows from the seed's own spends (M13f)", async () => {
+    const f = await fixture(), shop = f.open("shop");
+    let payer = f.open("payer");
+    await f.issue(payer.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    const invoice = shop.keyedRequest("invoice", f.backing, 4n), other = shop.keyedRequest("other", f.backing, 4n);
+    await payer.sync(await f.served(), f.signed); payer.close();
+    copyWallet(f.path("payer"), f.path("backup"));
+    // After the backup the payer pays the invoice and is lost.
+    payer = V3Wallet.open(f.path("payer"), { construction: LIT, venue: f.venue, reference }); wallets.push(payer);
+    await payer.prepare("pay", { request: invoice, value: 4n }, await f.served(), f.signed);
+    await payer.submit("pay", f.service); await f.checkpoint(); payer.close();
+
+    const restored = V3Wallet.open(f.path("backup"), { construction: LIT, venue: f.venue, reference }); wallets.push(restored);
+    restored.recordRestoration();
+    expect((await restored.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    // Its spend of the backup's note created the invoice's exact output: a retry is refused before anything is built.
+    expect(await refusalOf(restored.prepare("pay", { request: invoice, value: 4n }, await f.served(), f.signed)))
+      .toBe("CONFLICT: a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
+    expect(restored.payment("pay")).toBeUndefined();
+    // A request nobody paid passes that check (and then waits for the window move a restoration asks for its change).
+    expect(await refusal(restored.prepare("other", { request: other, value: 4n }, await f.served(), f.signed))).toBe("WINDOW");
+    // A wallet restored from the seed alone reads the same.
+    const seeded = f.restore("seeded", restored.recoverySeed());
+    await seeded.sync(await f.served(), f.signed);
+    expect(await refusalOf(seeded.prepare("pay", { request: invoice, value: 4n }, await f.served(), f.signed))).toMatch(/^CONFLICT: a statement of this seed that this wallet did not save already paid/);
+  });
+
+  it("acts on nothing once a read finds its key paid above every index it exposed, or a note it held spent by another instance (M13f)", async () => {
+    const f = await fixture(), holder = f.open("holder");
+    await f.issue(holder.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    expect((await holder.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    // A second instance from the seed, beside the live one: its first read is its baseline and exposes through h + 256.
+    const other = f.restore("other", holder.recoverySeed());
+    expect((await other.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    // It moves its window, paying itself at index 256, which the live wallet never exposed (it exposed index 0).
+    await other.moveWindow("move", await f.served(), f.signed);
+    await other.submit("move", f.service); await f.checkpoint();
+    expect((await other.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    const view = await holder.sync(await f.served(), f.signed);
+    expect(view.forked).toBe(`an output of backing ${Buffer.from(f.backing).toString("hex")} pays its owner key at index 256, above every index this wallet exposed (0)`);
+    expect(await refusalOf(Promise.resolve().then(() => holder.keyedRequest("next", f.backing, 1n))))
+      .toMatch(/^FORKED: another instance of this wallet's seed has acted: an output of backing/);
+    expect(await refusal(holder.burn("burn", 1n, await f.served(), f.signed))).toBe("FORKED");
+    // An exact retry still answers with what was saved.
+    expect(holder.keyedRequest("fund", f.backing, 10n).value).toBe(10n);
+    // Recorded as the only instance, it reads every index through h + 256 as exposed, the other instance's included.
+    holder.recordRestoration();
+    expect((await holder.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    expect(await refusal(() => holder.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
+    // The other instance, still running, finds the live one's window move in turn: its key at 512, above its own 256.
+    await holder.moveWindow("move-2", await f.served(), f.signed);
+    await holder.submit("move-2", f.service); await f.checkpoint();
+    expect((await other.sync(await f.served(), f.signed)).forked).toMatch(/pays its owner key at index 512, above every index this wallet exposed \(256\)$/);
+  });
+
+  it("trips on another instance's spend of a note even where its own spend of that note failed, and refuses paying that request (M13f review)", async () => {
+    const f = await fixture(), shop = f.open("shop"), holder = f.open("holder");
+    await f.issue(holder.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    const other = f.restore("other", holder.recoverySeed());
+    await other.sync(await f.served(), f.signed);
+    const x = shop.keyedRequest("x", f.backing, 10n), y = shop.keyedRequest("y", f.backing, 10n);
+    // Both instances sign a spend of the one note; the other's is admitted, so the live wallet's own saved record fails.
+    await holder.prepare("x", { request: x, value: 10n }, await f.served(), f.signed);
+    await other.prepare("y", { request: y, value: 10n }, await f.served(), f.signed);
+    await other.submit("y", f.service); await f.checkpoint();
+    await expect(holder.submit("x", f.service)).rejects.toThrow(/SPENT/);
+    const view = await holder.sync(await f.served(), f.signed);
+    expect(holder.payment("x")!.status).toBe("failed");
+    // The statement that spent the note is compared, not the note: x named it, but y spent it.
+    expect(view.forked).toMatch(/^the note \d+ of backing [0-9a-f]{64}, held at this wallet's read at index \d+, is spent by a statement this wallet did not make/);
+    expect(await refusal(() => holder.keyedRequest("next", f.backing, 1n))).toBe("FORKED");
+    // Recorded as the only instance, it still refuses paying y, which a statement of its seed paid.
+    holder.recordRestoration();
+    await holder.sync(await f.served(), f.signed);
+    expect(await refusalOf(holder.prepare("y-again", { request: y, value: 10n }, await f.served(), f.signed)))
+      .toBe("CONFLICT: a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
+  });
+
   it("hands a restoration's marks to an encrypted backup's restored copy", async () => {
     const f = await fixture(), shop = f.open("shop");
     shop.keyedRequest("invoice", f.backing, 4n); shop.close();

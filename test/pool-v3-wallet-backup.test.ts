@@ -260,6 +260,61 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     expect(copy.request("fresh", f.backing, 1n).cm).not.toBe(f.unpaid.cm);
   });
 
+  it("acts on nothing once a read shows another instance of its seed spending a note it held, until its restoration is recorded (M13f)", async () => {
+    const f = await fixture();
+    // The seed's second instance, restored beside the live wallet (the one-active-copy precondition broken). Its first
+    // read is its baseline: the history it finds, the live wallet's spends included, trips nothing.
+    // (A statement still in flight when it was restored would trip it on landing: the pending payment lands first.)
+    let served = await f.publish();
+    const other = track(V3Wallet.restoreSeed(f.path("other"), f.reader, f.payer.recoverySeed()));
+    expect((await other.sync(served, f.signed)).forked).toBeUndefined();
+    expect((await f.payer.sync(served, f.signed)).forked).toBeUndefined();
+    expect(f.payer.payment("pending")!.status).toBe("final");
+    // The other instance pays from a note the live wallet holds; its own read of its own payment trips nothing.
+    const order = { request: f.receiver.request("elsewhere", f.backing, 2n), value: 2n };
+    await other.prepare("elsewhere", order, served, f.signed, prove);
+    await other.submit("elsewhere", f.service); served = await f.publish();
+    expect((await other.sync(served, f.signed)).forked).toBeUndefined();
+    expect(other.payment("elsewhere")!.status).toBe("final");
+
+    // The live wallet's next read records the evidence; sync still answers and resolves its saved records.
+    const view = await f.payer.sync(served, f.signed);
+    expect(view.forked).toMatch(/^the note \d+ of backing [0-9a-f]{64}, held at this wallet's read at index \d+, is spent by a statement this wallet did not make/);
+    expect(f.payer.fork()).toBe(view.forked);
+    expect(view.holdings.length).toBe((await other.sync(served, f.signed)).holdings.length);
+    // Every acting operation refuses, and nothing reaches a prover; exact saved bytes are still sent.
+    const forked = expect.objectContaining({ code: "FORKED", message: expect.stringMatching(/another instance of this wallet's seed has acted: .*restore --copy/) });
+    let proved = false;
+    const watching: LocalProver = async task => { proved = true; return record(task); };
+    throws(() => f.payer.request("blocked", f.backing, 1n), forked);
+    await expect(f.payer.prepare("blocked", { request: f.receiver.request("blocked", f.backing, 1n), value: 1n }, served, f.signed, watching))
+      .rejects.toEqual(forked);
+    await expect(f.payer.burn("blocked", 1n, served, f.signed, watching)).rejects.toEqual(forked);
+    await expect(f.payer.fulfill("fund-0", served, f.signed)).rejects.toEqual(forked);
+    throws(() => f.payer.exportBackup(createWalletBackupKey()), forked);
+    expect(proved).toBe(false);
+    expect(await f.payer.submit("pending", f.service)).toEqual(f.receipt);
+    // Exact retries still answer with what was saved: they sign nothing new.
+    expect(await f.payer.prepare("pending", { request: f.second, value: 3n }, new Uint8Array(), f.signed, undefined as never))
+      .toEqual(f.payer.payment("pending"));
+    expect(f.payer.request("fund-0", f.backing, 10n).cm).toBe(f.payer.request("fund-0", f.backing, 10n).cm);
+    // A reopened handle keeps the evidence.
+    f.payer.close();
+    const reopened = track(V3Wallet.open(f.path("payer"), f.reader));
+    throws(() => reopened.request("blocked", f.backing, 1n), forked);
+
+    // The owner records that this is now the only instance: the evidence goes, and the next read is the baseline.
+    expect(reopened.recordRestoration().requests).toEqual(["fund-0", "fund-1", "fund-2"]);
+    expect(reopened.fork()).toBeUndefined();
+    expect((await reopened.sync(served, f.signed)).forked).toBeUndefined();
+    await reopened.prepare("again", { request: f.receiver.request("again", f.backing, 1n), value: 1n }, served, f.signed, prove);
+    await reopened.submit("again", f.service); served = await f.publish();
+    expect((await reopened.sync(served, f.signed)).forked).toBeUndefined();
+    expect(reopened.payment("again")!.status).toBe("final");
+    // The other instance, still running, sees that spend of a note it held in turn.
+    expect((await other.sync(served, f.signed)).forked).toMatch(/is spent by a statement this wallet did not make/);
+  });
+
   it("refuses wrong credentials, another wallet's venue, corruption, inconsistent state and occupied destinations", async () => {
     const f = await fixture(), key = createWalletBackupKey(), backup = f.payer.exportBackup(key), digest = walletBackupDigest(backup);
     const invalid = expect.objectContaining({ code: "INVALID", message: "invalid wallet backup or recovery credentials" });

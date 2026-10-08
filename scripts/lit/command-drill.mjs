@@ -577,6 +577,16 @@ try {
     assert.deepEqual(holdings(await ok(wallet("sync", H2, backing))), before);
     const after = await ok(wallet("request", H2, "after", backing, "1"));
     assert.equal(after.status, "saved");
+    // The handoff's wallet, still running, reads that window move: an own key paid above every index it exposed, so
+    // another instance of its seed acted (M13f). It acts on nothing until its owner records it as the only instance;
+    // the seed restoration is retired here.
+    const forked = await ok(wallet("sync", H3, backing));
+    assert.match(forked.forked, /pays its owner key at index \d+, above every index this wallet exposed/);
+    await refused(wallet("request", H3, "next", backing, "1"), "FORKED");
+    assert.equal((await ok(["wallet", "restore", "--copy", "--dir", H3])).copied, false);
+    assert.equal((await ok(wallet("sync", H3, backing))).forked, undefined);
+    await ok(wallet("move-window", H3, "move-h3", backing));
+    await finalOf(H3, "move-h3");
     // A wallet whose window still takes new keys has none to move.
     assert.match((await refused(wallet("move-window", HD, "move-0", backing), "CONFLICT")).message, /window is not full/);
   });

@@ -8,7 +8,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../bytes.js";
 import type { LitScan, ScanOutput, StateHandle } from "../pool/v3/state.js";
 import type {
-  AcceptanceView, AnswerView, Construction, FaultTarget, KeyedNote, KeyedReceipt, KeyedWalletFrames, Keyring, OperatorReceipt, PublicationView, ReaderFrames, ReceiptCodec, ReceiptFieldsOf,
+  AcceptanceView, AnswerView, Construction, FaultTarget, KeyedNote, KeyedOutput, KeyedReceipt, KeyedWalletFrames, Keyring, OperatorReceipt, PublicationView, ReaderFrames, ReceiptCodec, ReceiptFieldsOf,
   ReceiptView, RequestView, StatementView,
 } from "../pool/v3/construction.js";
 import type { VerifierIdentities } from "../pool/v3/configuration.js";
@@ -27,7 +27,7 @@ import {
   splitRecord, ownerSignaturesVerify, settlementAuthorization, statementHash, statementSignatureVerifies, type LitRecord, type SignedAcceptance,
 } from "./records.js";
 import { LIT_TERMS } from "./terms.js";
-import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, windowFor } from "./holdings.js";
+import { foundIndices, litNotes, litWitness, noteSecret, OwnerKeys, ownFunded, paidByOwn, windowFor } from "./holdings.js";
 import {
   copyLitPaymentRequest, ownerAcceptanceSignature, signedBurn, signedDemand, signedSettlement, signedSpend, signedWithdrawal, unsignedIssue,
 } from "./wallet.js";
@@ -231,6 +231,8 @@ const LIT_WALLET: KeyedWalletFrames = Object.freeze({
     litNotes(seed, domain, backing, state, owned(keyring), spent),
   found: (seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring) => foundIndices(seed, domain, state, owned(keyring)),
   ownFunded,
+  paidByOwn: (seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring, output: KeyedOutput, saved: (statement: Uint8Array) => boolean) =>
+    paidByOwn(seed, domain, state, owned(keyring), output, saved),
   noteSecret: (seed: Uint8Array, domain: Uint8Array, keyring: Keyring, note: KeyedNote) => noteSecret(seed, domain, owned(keyring), note),
   presentSecret,
   request: copyLitPaymentRequest,
