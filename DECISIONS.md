@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-08` [Bitcoin's records reached mempool.space's mempool before mining; size a Bitcoin depth by the excluding third (slice 17)](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17)
 - `2026-10-08` [Keep Bitcoin as the second venue direction: its records are delayed by a third of blocks, not excluded, and its reader exceeds the declared transfer budget (slice 16)](decisions/2026-10.md#2026-10-08--keep-bitcoin-as-the-second-venue-direction-its-records-are-delayed-by-a-third-of-blocks-not-excluded-and-its-reader-exceeds-the-declared-transfer-budget-slice-16)
 - `2026-10-08` [Hash H through Barretenberg, let the journal's own read skip the proofs it verified, and slim a wallet's read notes (slice 15)](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15)
 - `2026-10-08` [Close the code review of slices 12–14: a fenced backup's restoration spacing, a settlement to the holder's own owner, and a release check bound to its record](decisions/2026-10.md#2026-10-08--close-the-code-review-of-slices-1214-a-fenced-backups-restoration-spacing-a-settlement-to-the-holders-own-owner-and-a-release-check-bound-to-its-record)

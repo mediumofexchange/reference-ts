@@ -3,19 +3,16 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 16, Bitcoin's venue probes 1 and 2, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16), [decision](decisions/2026-10.md#2026-10-08--keep-bitcoin-as-the-second-venue-direction-its-records-are-delayed-by-a-third-of-blocks-not-excluded-and-its-reader-exceeds-the-declared-transfer-budget-slice-16)). Ergo alone is not
-enough for material value, so these read-only probes could falsify Bitcoin before any `venue-bitcoin.md`. They did not: AntPool's
-templates (a third of blocks) exclude OP_RETURN over 83 B and the rest mine them (delay, not exclusion). Our own parser verified
-a week from two suppliers; a Bitcoin reader fails the declared transfer budget (gate failed, not revised). Reviewed (#156).
+**Slice 17, Bitcoin's read-only probe 3, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17), [decision](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17); #157, reviewed). Do records reach pools
+through the public mempool, and how long do they wait? Other parties' records had almost all reached mempool.space's mempool before
+mining, AntPool's group skipped them there, and the wait within `depth + 2` blocks sets a Bitcoin profile's depth. Publishing our own
+records still needs funds. Slice 16 (#156): AntPool's templates exclude OP_RETURN over 83 B; a Bitcoin reader fails the transfer budget.
 
-**Proposed next:** by release distance: Next 12's read-only probe 3, Next 4's waiting letters, or (az) streaming if a holder must
-pass about 1.5·10⁵ notes. Slice 15 (#155): (ay) closed, (az) reduced.
+**Proposed next:** by release distance: Next 4's waiting letters, (bb) the journal's whole replay at a lagged read, (az) streaming if a
+holder must pass about 1.5·10⁵ notes, or `venue-bitcoin.md` (Next 12; a desktop-reader role).
 
-**Slice 13, release assurance, is done** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3): (a) M13a #143 ([release record](docs/RELEASE.md), CI's
-`reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (c) M13d #146, spec #19 (a restored operator returns past
-silence at a skipped sequence) and M13e #147 (`wallet restore --copy`, copied views audited, `moe venue audit`); (d) M13b #144, M13f (spec C3.5
-114799e: `rho_out` reads the acceptance, `FORKED`, lit's paid-request refusal) and M13g #152 (every open Next 4 letter fixed or
-dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security review stays outside (Open questions).
+**Slice 13, release assurance, is done** (Next 6; M13a–M13h, #143–#153: [release record](docs/RELEASE.md), separate installs, restoration,
+copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ rerun). The external security review stays outside (Open questions).
 
 ## Status
 - **Slices 10–14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
@@ -72,9 +69,9 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
 11. **Agent-first surfaces** (AGENTS.md direction): every command, wallet and service answer serves agents managing backings and wallets and autonomous AIs (one JSON object and coded exits exist, M10b); check each new lit command against it.
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
    Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probes 1 and 2 (slice 16, [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16)) keep it:
-   AntPool's template group (a third of blocks) delays records over 83 B; its reader fails the declared transfer budget.
-   Next: probe 3 read-only (time public-mempool transactions with OP_RETURN over 83 B from first sight to inclusion, against fee and pool,
-   beside ordinary ones at the same fee rate), then mainnet publication once funded (Open questions); then `venue-bitcoin.md` with
+   AntPool's template group (a third of blocks) delays records over 83 B; its reader fails the declared transfer budget. Read-only
+   probe 3 (slice 17, [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17)): records reach mempool.space's mempool before mining and
+   their wait sets C3.3's margin, so the depth. Next: mainnet publication of our own records once funded (Open questions); then `venue-bitcoin.md` with
    its reader's own budget line. BTC/XMR as chain-asset terms.
 
 ## Retained boundaries and local state
@@ -92,7 +89,7 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
   outside the standing authorization. Slice 13's own part is done; rolling AI reviews continue meanwhile (Next 6).
 - Non-blocking, maintainer (2026-10-08): Bitcoin probe 3's decisive part publishes 136 B and 15.5 KB records on mainnet against
   fee (Next 12), which spends real funds outside the standing authorization: fund or authorize a small budget (under about
-  100,000 sats at 1–2 sat/vB). The read-only variant goes first.
+  100,000 sats at 1–2 sat/vB). The read-only variant is done (slice 17).
 - Deletion list (2026-10-07): none open.
 
 Roughly **76% done / 24% remaining** (range 66–82%), reassessed 2026-10-08 (slice 15): the design point now holds every budget at 10⁵,

@@ -51,7 +51,7 @@ Sidechains, Liquid (federated), Lightning and ecash (Fedimint, Cashu) give no in
 **Cheapest decisive probes, in order:**
 1. *Offline policy probe* (hours, GET only). Over the last 2,016 mainnet blocks, count OP_RETURN outputs larger than 83 B and multi-OP_RETURN transactions, grouped by pool tag. **It falsifies the plan** if major pools exclude them, which would leave only the witness envelope, itself censorable by the same filters.
 2. *Exhaustion probe* (a P4 analogue). Fetch about one week of blocks from two suppliers, verify headers and the txid/wtxid Merkle roots with our own code (no library decoder), and frame every transaction. Record bytes, time and memory against a desktop budget.
-3. *Publication probe* on signet or testnet4, then mainnet with dust: inclusion latency of 136 B and 15.5 KB records against fee, at depth 2–3, inside the C3.3 window.
+3. *Publication probe* on signet or testnet4, then mainnet with dust: inclusion latency of 136 B and 15.5 KB records against fee, at depth 2–3, inside the C3.3 window. Its read-only part, other parties' records watched from first sight to inclusion, [is done](#results-of-read-only-probe-3-slice-17).
 
 ### Results of probes 1 and 2 (slice 16)
 
@@ -63,7 +63,7 @@ Measured 2026-10-08 with our own parser and verifier (no library decoder; [tooli
 - *Volume:* the window holds 13,280 OP_RETURN outputs over 83 B, 9,840 of at least 139 B (a kind-1 record's script) and 243 of at least 1,000 B. The largest is 33,351 B (Foundry), and SpiderPool mined one of 15,507 B, the largest v3 publication's size. There are 895 multi-OP_RETURN transactions. 58% of all blocks, and 89% of Foundry's, hold at least one OP_RETURN over 83 B.
 - *Witness envelopes* (taproot `OP_FALSE OP_IF` scripts, a heuristic) appear in 96.9% of blocks, at every pool's share except OCEAN's (21 blocks against 58 expected). AntPool's group mines them.
 - *Delay model (judgment):* if a third of blocks will not include a record, its wait for an including block is geometric. The mean is 1.5 blocks, not 1. The chance of waiting three or more blocks longer is 0.334³ ≈ 3.7%, and of six or more about 0.14%. If Foundry joined the filtering group, about 41% of blocks would remain. These figures count OCEAN as excluding although it includes some, so they are conservative: the AntPool group alone gives a mean of 1.44 blocks and 2.8%.
-- *Confound:* the probe shows that pools mine large OP_RETURN outputs, not that they mine ones relayed through the public mempool. Out-of-band submission to a pool could explain part of the including pools' rate. The read-only probe 3 tests this.
+- *Confound:* the probe shows that pools mine large OP_RETURN outputs, not that they mine ones relayed through the public mempool. Out-of-band submission to a pool could explain part of the including pools' rate. The [read-only probe 3](#results-of-read-only-probe-3-slice-17) finds records in the public mempool before mining.
 
 **Probe 2: exhaustion is cheap to verify and costly to transfer.** The week is heights 969,497–970,504 (1,008 blocks, 6.69 days). It was fetched from mempool.space and from blockstream.info, and the two were byte-identical. Every block was parsed by our own code: each transaction framed, txid and wtxid recomputed, the Merkle root checked with CVE-2012-2459's duplicated pair refused, the BIP141 witness commitment, BIP34 height, weight and proof of work. The window held no 64-byte transaction. The headers from 967,680 to tip−6 (970,504) were checked for links, BIP113 median time, constant bits within a period, and the retarget at 969,696 recomputed exactly; the 809 below the window were rebuilt from supplier fields and checked against their ids. That chain is **not anchored**. Each header's proof of work is checked against its own bits, the first period's bits are the supplier's, and neither cumulative work nor a known hash is checked. So the evidence here rests on the two suppliers agreeing, which is not §13.2's authenticated evidence. A Bitcoin profile needs an anchor and a minimum of cumulative work. On an Intel Xeon at 2.10 GHz under Node 24.21.0:
 
@@ -77,7 +77,59 @@ Measured 2026-10-08 with our own parser and verifier (no library decoder; [tooli
 
 The budgets are the whole reader's, and the table compares the venue part alone. The transfer figure already fails without the reader's other transfers. A year from the anchor is about 43 GB without witness or 86 GB in full. Three years from index zero is about 130 GB without witness: roughly 3 h at the reader's 100 Mbit/s and 3.5 CPU-hours on one thread. Added to the pool's modelled first sync of 15.5–20.5 h, that gives about 19–24 h, at the edge of the 24 h budget (estimate). Per-day figures use timestamp days (150.7 blocks a day against the long-run 144), so the yearly figures run about 5% high. The two explorer suppliers serve only full blocks, so a reader of blocks without witness needs peer-to-peer suppliers, which serve them. Through the cloud proxy, one stream fetched a block in a median of 0.7 s.
 
-**Limits.** This is one fortnight's policy snapshot. Pool attribution is the supplier's, and grouping the template users with AntPool follows b10c; Poolin, ULTIMUSPOOL and WhitePool have too few blocks to judge. The envelope count is a heuristic: it does not check that the prevout is taproot, and it can match `00 63` inside pushed data. OCEAN's envelope shortfall may partly reflect its smaller blocks. The parser counts 64-byte transactions and does not refuse them. Its BIP34 check accepts a height push that is not minimal. The self-test's refusals cover proof of work, height, trailing and truncated bytes, the Merkle root, the witness commitment and the duplicated pair. The review confirmed the chain's median-time, bits and retarget refusals. Refusals of a broken link, the segwit flag, varints, a superfluous witness, coinbase position and weight are untested. The delay model assumes independent blocks and a sufficient fee; the inclusion latency of a real record is probe 3's. Memory was not tuned to one block at a time.
+**Limits.** This is one fortnight's policy snapshot. Pool attribution is the supplier's, and grouping the template users with AntPool follows b10c; Poolin, ULTIMUSPOOL and WhitePool have too few blocks to judge. The envelope count is a heuristic: it does not check that the prevout is taproot, and it can match `00 63` inside pushed data. OCEAN's envelope shortfall may partly reflect its smaller blocks. The parser counts 64-byte transactions and does not refuse them. Its BIP34 check accepts a height push that is not minimal. The self-test's refusals cover proof of work, height, trailing and truncated bytes, the Merkle root, the witness commitment and the duplicated pair. The review confirmed the chain's median-time, bits and retarget refusals. Refusals of a broken link, the segwit flag, varints, a superfluous witness, coinbase position and weight are untested. The delay model assumes independent blocks and a sufficient fee; probe 3 measures the inclusion latency of other parties' records. Memory was not tuned to one block at a time.
+
+### Results of read-only probe 3 (slice 17)
+
+Measured 2026-10-08 over probe 2's week (heights 969,497–970,504), GET only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/e8b218f/scripts/venue/bitcoin-probes); [decision](../decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17)).
+- *Blocks:* every raw block came from blockstream.info and was verified by probe 1's parser. The parser also lists each **record**: a transaction with an OP_RETURN over 83 B or several OP_RETURN outputs. These records are other parties' transactions, not ours.
+- *Summary:* mempool.space supplied each transaction's fee rate and first sight. The summary was checked to list exactly the parsed txids in order.
+- *Audit:* mempool.space also supplied its block audit. That is the template it projected from its own mempool, with first-sight times. *Unseen* lists the block's transactions its mempool never held.
+- *Skipped:* a template transaction the audit lists as missing, mempool.space's "censored". It excuses a transaction under 1 sat/vB, one first seen within 180 s, a replaced one, and the template's low-fee tail when the block carried other weight. So skips are a lower bound, and records under 1 sat/vB are never skipped.
+- *Thin blocks:* 29 blocks held under half their template's transactions, among them four holding only the coinbase. Their audits list either the whole template or none of it. They are counted apart from every skip figure: OCEAN 14, MARA 6, F2Pool, SECPOOL and AntPool 2 each, and SpiderPool, BTC.com and Binance Pool 1 each.
+
+**Records reached mempool.space's mempool before mining, and the excluding blocks skipped them there.**
+- *Seen:* the week holds 5,967 records. Only 5 were unseen, 0.1%, against 6.1% of ordinary transactions in the including pools' blocks. So the records pools mined had reached the public mempool, as mempool.space sees it. This does not show that a record sent only through the public mempool reaches every including pool. A sender may also hand the same record to a pool directly.
+- *Skipped while in the template* (excluding thin blocks; the control is ordinary transactions of the same fee band):
+
+| Blocks (week) | Records mined from the template | Record slots skipped | Skip rate, records | Skip rate, ordinary |
+|---|---|---|---|---|
+| AntPool's template group, 304 (30.2%) | 0 | 2,817 | 100% | 1.7% |
+| Including pools, 664 | 5,758 | 42 | 0.72% | 0.42% |
+| OCEAN, 27 (13 not thin) | 42 | 34 | 45% | 7.0% |
+| Braiins, 13 | 105 | 11 | 9.5% | 1.6% |
+
+  - Foundry (268 blocks, 2,304 records mined), ViaBTC (94), SpiderPool (69) and NiceHash (10) skipped none.
+  - MARA skipped every record in 4 of the 27 blocks that held one in their template, and none in the rest.
+  - F2Pool skipped 22 of 1,691 slots, one to four at a time. OCEAN skipped every record in 5 of its 12 such blocks.
+  - A skip is a block's choice, so slots cluster by block, and rates are per slot, not independent trials.
+- *Skips per seen record:* 0.47 by AntPool's group and 0.49 by all blocks. Of the 850 blocks that held a record in their template, outside thin blocks, 241 (28.4%) skipped every one. Slice 16's geometric model then predicts q/(1−q) = 0.40. The measured excess fits the heavier tail below.
+- *Mined within L blocks of first sight:* C3.3's margin on Ergo is `depth + 2` blocks ([venue-ergo §2](https://github.com/mediumofexchange/money-from-first-principles/blob/46e6933/venue-ergo.md#2-index-finality-and-lag)).
+
+| Fee band (sat/vB) | Records | L = 1 | 2 | 3 | 6 | Ordinary at L = 1, 3, 6 |
+|---|---|---|---|---|---|---|
+| 1–2 | 2,341 | 52% | 76% | 89% | 97.3% | 55%, 86%, 95.0% |
+| 2–3 | 1,143 | 67% | 86% | 92% | 99.1% | 80%, 97%, 98.5% |
+| 3–5 | 1,090 | 60% | 85% | 91% | 99.0% | 83%, 96%, 99.4% |
+| 5–10 | 1,083 | 56% | 82% | 88% | 97.0% | 88%, 98%, 99.8% |
+| 10–20 | 86 | 47% | 92% | 97% | 100% | 91%, 99.8%, 99.95% |
+
+- *Minutes from first sight to the including block* (median, then p90):
+  - Records at 1 sat/vB or more: 10–15 and 33–45. Ordinary transactions: 7–10 and 25–53.
+  - One record paid 20 sat/vB or more. Below 1 sat/vB, 111 records were mined, 20% within one block and 68% within six.
+  - The records of 1,000 B or more mostly paid under 1 sat/vB.
+  - The two of 15.5 KB, each at 1 sat/vB, were mined 150 s and 1,015 s after first sight.
+- *Model check (judgment):* take an independent-block model with 28.4% of blocks excluding and the ordinary first-block rate (88% at 5–10 sat/vB). It predicts 63%, 86%, 95% and 99.7% within 1, 2, 3 and 6 blocks. The measured 56%, 82%, 88% and 97.0% fall short at every L, and the shortfall widens in the tail.
+- *For a Bitcoin profile (judgment):* a demand that names the latest witnessed instant must be mined within about `depth + 2` blocks of its authorization. First sight comes after proving and propagation, so the shares above are an upper bound on what a demand gets, and the refiling shares below are lower bounds. At these fees, depth 1 (L = 3) would leave at least 4–12% of such demands to be filed again. Depth 4 (L = 6) would leave up to 3%, and none of the 87 at 10 sat/vB or more. Ten-minute blocks make depth 4 roughly 50 minutes of lag.
+
+**Limits.**
+- *One observer:* mempool.space's nodes, with their relay policy, which accepts OP_RETURN over 83 B as Core v30 does, their peering, and transactions pushed through its broadcast API. Its first-sight clock and its pool attribution are its own. Its template projection ran under two algorithms (684 blocks under one, 324 under the other).
+- *Audits change:* one block's live audit later listed one more skip than the stored copy. A refetch can therefore differ slightly from the result, which hashes its input file.
+- *First sight:* in 373 blocks the summary carried no first-sight times, so those blocks' ordinary ages come from template transactions only.
+- *Blocks waited:* counted from header timestamps after first sight, with ordinary first sights rounded to the minute. Only transactions mined from the week's 11th block on count, and the count stops at 10.
+- *Skips:* only transactions mined within the week count. 24,483 of the 50,568 skip entries were never mined in the week, so records never mined are missing from every figure. Skipped transactions take the template's fee rate for their band, and template inclusions the summary's.
+- *Fees:* fee bands are absolute across a week whose fee level moved.
+- *Records:* other protocols' transactions, with their own fees, chains of unconfirmed parents and senders. Whether *our* records at a chosen fee behave alike is the mainnet publication's question (Open questions), which this probe does not replace.
 
 **Spec and code if it passes:** a new normative `venue-bitcoin.md` (context such as `moe/venue/bitcoin/v1`, anchor, depth, exact-scriptPubKey or OP_RETURN-prefix locations, transaction grammar with segwit, section/root rule, retarget and timewarp header rules, ordinal, fork rule), mirroring venue-ergo §§1–10. Code: `bitcoin-headers.ts`, a framer, a `BitcoinVenue` implementing `RecordVenue`, and reference contexts (regtest or synthetic) in the v3 guard. **Construction changes: none for the venue itself**, which agrees with 2026-08-27. Two venues do raise the priority of the venue-moving record and of accepting that sets will split.
 
