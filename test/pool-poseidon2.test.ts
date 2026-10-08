@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EncodingError } from "../src/bytes.js";
-import { FIELD_MODULUS, fieldToHex, identifierOf } from "../src/pool/field.js";
+import { bytesToField, FIELD_MODULUS, fieldToBytes, fieldToHex, identifierOf, limbsOf } from "../src/pool/field.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, nullifierOf, ownerOf } from "../src/pool/notes.js";
 import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
+import { oracleHash, oraclePermutation } from "./poseidon2-oracle.js";
 
 // pool-v2 §1: H is Poseidon2 over BN254, width 4, rate 3, the Noir standard
 // library's permutation in noir-lang/poseidon v0.3.0's sponge. The host
@@ -11,6 +12,8 @@ import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
 // test vector from Barretenberg's poseidon2_params.hpp, and hash outputs
 // recorded from Barretenberg 5.2.0's `poseidon2Hash`, the backend the pinned
 // circuits prove under (`scripts/pool/v3/check.mjs` proves against the same).
+// The host asks that backend (slice 15); an independent bigint implementation
+// of the published parameters (poseidon2-oracle.ts) must agree with it.
 
 const p = FIELD_MODULUS;
 
@@ -40,6 +43,37 @@ describe("pool-v2 §1: the in-circuit hash on the host", () => {
     for (const [input, expected] of vectors) expect(fieldToHex(poseidon2Hash(input))).toBe(expected);
     // The length enters the initial state, so a shorter input is not a prefix's hash.
     expect(poseidon2Hash([1n, 2n, 3n])).not.toBe(poseidon2Hash([1n, 2n, 3n, 0n]));
+  });
+
+  it("agrees with an independent implementation of the published parameters over random and boundary inputs", () => {
+    // A deterministic generator: the same inputs on every run, spread over the field.
+    let x = 0x2545f4914f6cdd1dn;
+    const next = (): bigint => { x = (x * 6364136223846793005n + 1442695040888963407n) % (1n << 256n); return x % p; };
+    const boundary = [0n, 1n, 2n, p - 1n, p - 2n, 1n << 64n, (1n << 253n) - 1n, 1n << 253n];
+    for (let n = 1; n <= 10; n++) {
+      for (let k = 0; k < 40; k++) {
+        const input = Array.from({ length: n }, (_, i) => (k < 8 ? boundary[(k + i) % boundary.length]! : next()));
+        expect(poseidon2Hash(input)).toBe(oracleHash(input));
+      }
+    }
+    for (let k = 0; k < 40; k++) {
+      const input = Array.from({ length: 4 }, (_, i) => (k < 8 ? boundary[(k + i) % boundary.length]! : next()));
+      expect(poseidon2Permutation(input)).toEqual(oraclePermutation(input));
+    }
+    // Chained, as a tree's levels are: each hash an input of the next.
+    let chained = 0n, oracle = 0n;
+    for (let level = 0; level < 64; level++) { chained = poseidon2Hash([1n, BigInt(level), chained, chained]); oracle = oracleHash([1n, BigInt(level), oracle, oracle]); }
+    expect(chained).toBe(oracle);
+  });
+
+  it("hashes on the binary the pinned package ships, whatever BB_WASM_PATH names", async () => {
+    // bb.js runs the binary BB_WASM_PATH names unless it is given a path; the host hash starts once, at import.
+    process.env.BB_WASM_PATH = "/nonexistent/elsewhere.wasm";
+    try {
+      vi.resetModules();
+      const fresh = await import("../src/pool/poseidon2.js");
+      expect(fieldToHex(fresh.poseidon2Hash([1n, 2n]))).toBe("0x038682aa1cb5ae4e0a3f13da432a95c77c5c111f6f030faf9cad641ce1ed7383");
+    } finally { delete process.env.BB_WASM_PATH; vi.resetModules(); }
   });
 
   it("refuses anything but one or more canonical field elements", () => {
@@ -101,5 +135,44 @@ describe("pool-v2 §1: the in-circuit hash on the host", () => {
     const tree = new NoteTree();
     tree.append(cm);
     expect(fieldToHex(tree.root())).toBe("0x0a0b4349ebb20fb003a7426207c71532b4daf133a8cd0fb9d01bbdf78498b43b");
+  });
+});
+
+describe("pool-v2 §1: field elements and identifier limbs as bytes", () => {
+  // The per-byte forms these conversions had before slice 15, as the reference they must agree with.
+  const perByte = {
+    toBytes(value: bigint): Uint8Array { const out = new Uint8Array(32); let v = value; for (let i = 31; i >= 0; i--) { out[i] = Number(v & 0xffn); v >>= 8n; } return out; },
+    fromBytes(bytes: Uint8Array): bigint { let n = 0n; for (const b of bytes) n = (n << 8n) | BigInt(b); return n; },
+  };
+  it("converts as the per-byte forms did, over boundary and spread values, and refuses as before", () => {
+    const limbsBack = identifierOf;
+    let x = 0x9e3779b97f4a7c15n;
+    const next = (): bigint => { x = (x * 6364136223846793005n + 1442695040888963407n) % (1n << 256n); return x; };
+    const values = [0n, 1n, 255n, 256n, p - 1n, p - 2n, 1n << 128n, (1n << 128n) - 1n, 1n << 248n, ...Array.from({ length: 200 }, () => next() % p)];
+    for (const value of values) {
+      const bytes = fieldToBytes(value);
+      expect(bytes).toEqual(perByte.toBytes(value));
+      expect(bytesToField(bytes)).toBe(value);
+      expect(bytesToField(Buffer.from(bytes))).toBe(value);
+      const id = perByte.toBytes(value), [hi, lo] = limbsOf(id);
+      expect([hi, lo]).toEqual([perByte.fromBytes(id.subarray(0, 16)), perByte.fromBytes(id.subarray(16))]);
+      expect(limbsBack(hi, lo)).toEqual(id);
+    }
+    const all = new Uint8Array(32).fill(0xff);
+    expect(limbsOf(all)).toEqual([(1n << 128n) - 1n, (1n << 128n) - 1n]);
+    expect(limbsBack((1n << 128n) - 1n, 0n)).toEqual(new Uint8Array(32).fill(0xff, 0, 16));
+    // p and above, a wrong length, a non-byte value and a limb past 2^128 are refused, as before.
+    for (const bad of [perByte.toBytes(p), all, new Uint8Array(31), new Uint8Array(33), [1, 2] as unknown as Uint8Array]) {
+      expect(() => bytesToField(bad)).toThrow(EncodingError);
+    }
+    for (const bad of [p, -1n, 1 as unknown as bigint]) expect(() => fieldToBytes(bad)).toThrow(EncodingError);
+    for (const bad of [new Uint8Array(31), "00" as unknown as Uint8Array]) expect(() => limbsOf(bad)).toThrow(EncodingError);
+    expect(() => limbsBack(1n << 128n, 0n)).toThrow(EncodingError);
+    // A detached buffer reads as no bytes; a subclass reporting 32 bytes over a longer view is read at its real length.
+    const detached = new Uint8Array(32); structuredClone(detached.buffer, { transfer: [detached.buffer] });
+    class Lying extends Uint8Array { override get length(): number { return 32; } }
+    const lying = new Lying(40);
+    for (const bad of [detached, lying]) { expect(() => bytesToField(bad)).toThrow(EncodingError); expect(() => limbsOf(bad)).toThrow(EncodingError); }
+    expect(() => limbsBack(0n, -1n)).toThrow(EncodingError);
   });
 });

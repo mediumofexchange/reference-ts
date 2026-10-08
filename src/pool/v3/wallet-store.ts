@@ -1070,8 +1070,8 @@ export class V3Wallet {
    * whatever their status, and those of its backing the view holds naming its tag, ended or not, forced ones
    * included. A seed-restored wallet misses a demand refused at the door, published without force, or admitted
    * only into a segment the canonical one did not import (the wallet guide says so). */
-  private presentedBy(note: HeldNote, force: ForceState | undefined): string[] {
-    const ids = new Set(this.savedPresenters(note.nf));
+  private presentedBy(note: HeldNote, force: ForceState | undefined, saved = this.savedPresenters(note.nf)): string[] {
+    const ids = new Set(saved);
     for (const [id, demand] of force?.presentedWithTag(note.tag) ?? []) {
       if (!ids.has(id) && same(demand.backing, note.opening.backing) && this.presents(demand)) ids.add(id);
     }
@@ -1089,11 +1089,26 @@ export class V3Wallet {
     requireThat(nfs.every(nf => this.savedPresenters(nf).every(id => repeats.includes(id))), "CONFLICT",
       "another demand presented an input while this one was proved");
   }
+  /** Each note's holding. What saved records reserve and which saved demands present a note are read once for all
+   * of them (`reserved`, `savedPresenters`), not twice a note, and only for these notes, so a long-lived wallet's
+   * saved history is not read whole (slice 15, WORK.md Next 4 (az)). */
   private holdingsOf(notes: readonly HeldNote[], force: ForceState | undefined, at: bigint): Holding[] {
-    return notes.map(note => Object.freeze({ cm: note.cm, value: note.opening.value,
-      status: this.reserved(note.nf) ? "reserved" as const :
-        force !== undefined && locked(force, note.tag, at) ? "locked" as const : "available" as const,
-      presented: Object.freeze(this.presentedBy(note, force).map(id => hexToBytes(id))) }));
+    const nfs = JSON.stringify(notes.map(note => note.nf.toString()));
+    const reserved = new Set(this.db.prepare(`SELECT i.nf FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias
+      WHERE i.nf IN (SELECT value FROM json_each(?)) AND (a.status='prepared' OR (a.status='final' AND a.kind!='4'))`).all(nfs)
+      .map(row => row.nf as string));
+    const presenters = new Map<string, string[]>();
+    for (const row of this.db.prepare(`SELECT i.nf, a.demand FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias
+      WHERE i.nf IN (SELECT value FROM json_each(?)) AND a.kind='4'`).all(nfs)) {
+      const nf = row.nf as string, ids = presenters.get(nf);
+      if (ids === undefined) presenters.set(nf, [row.demand as string]); else ids.push(row.demand as string);
+    }
+    return notes.map(note => {
+      const nf = note.nf.toString();
+      return Object.freeze({ cm: note.cm, value: note.opening.value,
+        status: reserved.has(nf) ? "reserved" as const : force !== undefined && locked(force, note.tag, at) ? "locked" as const : "available" as const,
+        presented: Object.freeze(this.presentedBy(note, force, presenters.get(nf) ?? []).map(id => hexToBytes(id))) });
+    });
   }
 
   /** Secret material for independently secured offline backup; never send to a

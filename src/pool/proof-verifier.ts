@@ -15,8 +15,9 @@
 // match `BN254_PARAMETERS` (`parameters.ts`, pool-v3 §4's check before loading);
 // the backend's own loader, which reads an unchecked directory or downloads,
 // is never used.
-// This module and `v3/prover.ts` are the only ones that import `@aztec/bb.js`,
-// an exact-pinned dependency.
+// This module, `v3/prover.ts` and `poseidon2.ts` (the host hash, on an
+// instance of its own that loads no parameters) are the only ones that import
+// `@aztec/bb.js`, an exact-pinned dependency.
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
