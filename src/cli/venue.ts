@@ -115,11 +115,16 @@ async function fetchContext(directory: Directory, anchor: Uint8Array, anchorHeig
  * fetched again and replaced. */
 export async function keepContext(directory: Directory, venue: VenueFile): Promise<void> {
   if (readOptional(directory.file("anchor.json")) !== undefined) {
-    try { new ErgoVenue(venue.profile, readContext(directory)); return; } catch { /* fetched again below */ }
+    try { takesContext(venue, readContext(directory)); return; } catch { /* fetched again below */ }
   }
   const context = await fetchContext(directory, venue.profile.anchor, venue.anchorHeight);
-  new ErgoVenue(venue.profile, context);
+  takesContext(venue, context);
   writeReplace(directory.file("anchor.json"), `${JSON.stringify(context.map(bytesToHex))}\n`);
+}
+/** Check that a view takes the anchor's context, closing the in-memory rows it builds to do so (Next 4 (ac)). */
+function takesContext(venue: VenueFile, context: readonly Uint8Array[]): void {
+  const rows = ErgoVenueJournal.memory(ergoProfileIdentity(venue.profile));
+  try { new ErgoVenue(venue.profile, context, {}, undefined, rows); } finally { rows.close(); }
 }
 function readContext(directory: Directory): Uint8Array[] {
   const value = readJson(directory.file("anchor.json"), "anchor.json");

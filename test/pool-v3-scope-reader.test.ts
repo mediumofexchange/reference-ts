@@ -7,7 +7,7 @@ import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 import { directoryRoot, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, signCommitment, type Commitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { ScopeTree } from "../src/pool/scope.js";
-import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest } from "../src/pool/v3/commitments.js";
+import { decodeSnapshot, encodeReceipt, receiptBytes, snapshotBytes } from "../src/pool/v3/commitments.js";
 import { configurationBytes, configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
@@ -18,7 +18,7 @@ import { ReplayResult } from "../src/pool/v3/reader.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
-import { encodeTrail } from "../src/pool/v3/trail.js";
+import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 
 // Oracle proofs isolate the scope reader's evidence contract; real-proof
 // scope groups run in scripts/pool/v3/local-check.mjs through readPackage.
@@ -37,7 +37,7 @@ const pack = (items: readonly EvidenceItem[]) => encodeEvidencePackage([...items
 
 /** One operator opens a segment scoping two backings and issues into the first;
  * a successor segment may then import the first backing alone. */
-async function twoBackings(silence?: bigint, witnessed = 10n) {
+async function twoBackings(silence?: bigint, witnessed = 10n, link?: Uint8Array, headerOperator = operator) {
   const venue = FixtureVenue.reference(label, lag, witnessed), operatorStore = new ReplayStore();
   const termsOf = (thing: string): RootTerms => ({ configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
     payout: { thing, quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)),
@@ -48,8 +48,8 @@ async function twoBackings(silence?: bigint, witnessed = 10n) {
   }).sort((a, z) => compareBytes(a.name, z.name));
   const [x, y] = backings as [typeof backings[0], typeof backings[0]];
   const open = (scoped: typeof backings, sequence: bigint, predecessor?: Commitment, imported?: SegmentState) => {
-    const header: SegmentHeader = { domain, venue: venue.id, operator, sequence,
-      entries: scoped.map(item => ({ backing: item.name, link: item.name, ...(predecessor === undefined ? {} : { opening: predecessor }) })) };
+    const header: SegmentHeader = { domain, venue: venue.id, operator: headerOperator, sequence,
+      entries: scoped.map(item => ({ backing: item.name, link: link ?? item.name, ...(predecessor === undefined ? {} : { opening: predecessor }) })) };
     const id = segmentIdentity(header);
     return { header, id, scoped, scope: new ScopeTree(header.entries).root(), records: [] as Uint8Array[],
       scopedTerms: new Map(scoped.map(item => [hex(item.name), item.fields])),
@@ -61,11 +61,12 @@ async function twoBackings(silence?: bigint, witnessed = 10n) {
     if (!items.some(item => item.kind === kind && compareBytes(item.payload, payload) === 0)) items.push({ kind, payload });
   };
   /** Commit the current state, witnessed at `index` (none: signed and served, never witnessed); `alter` may drop
-   * or change the directory's snapshots. */
-  function checkpoint(sequence: bigint, index: bigint | undefined, alter = (snapshots: ReturnType<typeof snapshotsNow>) => snapshots): Commitment {
+   * or change the directory's snapshots, and `preimage` give a snapshot's committed bytes. */
+  function checkpoint(sequence: bigint, index: bigint | undefined, alter = (snapshots: ReturnType<typeof snapshotsNow>) => snapshots,
+    preimage: (snapshot: ReturnType<typeof snapshotsNow>[number]) => Uint8Array = snapshotBytes): Commitment {
     const snapshots = alter(snapshotsNow());
-    const directory = snapshots.map(snapshot => ({ name: snapshot.backing, digest: snapshotDigest(snapshot) }));
-    for (const snapshot of snapshots) add(4, snapshotBytes(snapshot));
+    const directory = snapshots.map(snapshot => ({ name: snapshot.backing, digest: sha256(preimage(snapshot)) }));
+    for (const snapshot of snapshots) add(4, preimage(snapshot));
     add(3, encodeEvidenceDirectory(directory));
     add(6, encodeTrail({ header: segmentBytes(current.header), terms: current.scoped.map(item => item.signed), records: current.records }));
     const commitment = signCommitment(operatorSecret, sequence, directoryRoot(directory));
@@ -322,5 +323,80 @@ describe("multi-backing scope reader", () => {
     // A distinct event repeating an imported output is a conflicting history.
     const repeated = await f.replayInto(store, b(93), [f.issued(5n, 101n, b(94))], b(94));
     expect(() => mergeFinalizedPrefixes(store, [{ state: read.state! }, { state: repeated }])).toThrow(expect.objectContaining({ check: "OUTPUT" }));
+  });
+
+  it("reads a committed snapshot preimage that does not decode as unresolved, never a verdict (pool-v3 §7, C2.10.11)", async () => {
+    for (const odd of ["first", "second"] as const) {
+      const f = await twoBackings();
+      f.checkpoint(1n, 1n); await f.issue(5n, 101n);
+      const target = odd === "first" ? f.x.name : f.y.name;
+      // The preimage hashes to the signed digest, but a trailing byte leaves it undecodable under §7's strict codec.
+      const odds = f.checkpoint(2n, 3n, snapshots => snapshots, snapshot => compareBytes(snapshot.backing, target) === 0 ?
+        new Uint8Array([...snapshotBytes(snapshot), 0]) : snapshotBytes(snapshot));
+      for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, odds)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    }
+  });
+
+  it("lapses a checkpoint witnessed after a scoped term ended whose own snapshot preimage is withheld (C2.10.11)", async () => {
+    const f = await twoBackings();
+    f.replaceX(1n, 6n); // x's first term ends at 6
+    const opening = f.checkpoint(1n, 7n);
+    // y's preimage is withheld; the first snapshot (x's) authenticates the header and scope that term lapse reads.
+    f.items.splice(f.items.findIndex(item => item.kind === 4 && compareBytes(decodeSnapshot(item.payload).backing, f.y.name) === 0), 1);
+    await expect(f.read(f.y.name, opening)).rejects.toMatchObject({ status: "lapsed-selection" });
+  });
+
+  it("judges a continuation's silence lapse before a scope term not in force (C2.10.11)", async () => {
+    for (const [silence, expected] of [[4n, { status: "lapsed-selection", clock: { duration: "4", open: true } }],
+      [20n, { check: "TERMS_SCOPE" }]] as const) {
+      const f = await twoBackings(silence, 20n, b(55)); // every scoped link names a term the replacement chain does not hold
+      f.checkpoint(1n, 1n); // excluded TERMS_SCOPE: no valid checkpoint closes either backing's interval
+      await f.issue(5n, 101n);
+      const continuation = f.checkpoint(2n, 12n); // c(12) = 0: the gap is open under a duration of 4, not of 20
+      await expect(f.read(f.x.name, continuation)).rejects.toMatchObject(expected);
+    }
+  });
+
+  it("reads a selected checkpoint whose own snapshot names another segment in the first snapshot's segment (pool-v3 §7.1)", async () => {
+    const f = await twoBackings();
+    f.checkpoint(1n, 1n); await f.issue(5n, 101n);
+    const misplaced = f.checkpoint(2n, 3n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s));
+    for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, misplaced)).rejects.toMatchObject({ check: "SNAPSHOT" });
+  });
+  it("reads a receipt whose `after` checkpoint's first snapshot does not decode as unresolved, never EncodingError (pool-v3 §7)", async () => {
+    const f = await twoBackings();
+    f.replaceX(1n, 6n); // x's first term ends at 6
+    const opening = f.checkpoint(1n, 1n);
+    await f.issue(5n, 101n);
+    const receipt = f.receipt(2n);
+    f.checkpoint(2n, 7n, s => s, s => compareBytes(s.backing, f.x.name) === 0 ? new Uint8Array([...snapshotBytes(s), 0]) : snapshotBytes(s));
+    await expect(f.read(f.x.name, opening, [{ kind: 10, payload: receipt }])).rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("reads a selected term-lapsed continuation served only a count-zero trail as lapsed, as the walk classifies it (pool-v3 §12)", async () => {
+    const f = await twoBackings();
+    f.replaceX(1n, 6n);
+    const opening = f.checkpoint(1n, 1n);
+    await f.issue(5n, 101n);
+    const continuation = f.checkpoint(2n, 7n);
+    f.items.splice(f.items.findIndex(item => item.kind === 6 && decodeTrail(item.payload).records.length > 0), 1);
+    const via = stateOf(await f.read(f.y.name, opening));
+    expect(via.carrying.map(c => [c.sequence, c.class])).toEqual([["1", "valid"], ["2", "lapsed"]]);
+    await expect(f.read(f.y.name, continuation)).rejects.toMatchObject({ status: "lapsed-selection" });
+  });
+
+  it("judges a header's operator and opening sequence after term lapse, from the header, scope and chain alone (C2.10.11)", async () => {
+    for (const [witnessed, expected] of [[7n, { status: "lapsed-selection" }], [3n, { check: "CONTEXT" }]] as const) {
+      const f = await twoBackings();
+      f.replaceX(1n, 6n); // x's first term ends at 6
+      f.fresh(5n); // the header names an opening at sequence 5, after the checkpoint's own sequence 1
+      await expect(f.read(f.x.name, f.checkpoint(1n, witnessed))).rejects.toMatchObject(expected);
+    }
+    // A header naming another operator, likewise.
+    for (const [witnessed, expected] of [[7n, { status: "lapsed-selection" }], [3n, { check: "CONTEXT" }]] as const) {
+      const f = await twoBackings(undefined, 10n, undefined, ed25519.getPublicKey(b(9)));
+      f.replaceX(1n, 6n);
+      await expect(f.read(f.x.name, f.checkpoint(1n, witnessed))).rejects.toMatchObject(expected);
+    }
   });
 });

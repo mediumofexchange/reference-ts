@@ -218,11 +218,18 @@ function submitter(opened: Opened, kept: KeptTerms) {
   } };
 }
 
-/** `--deadline n` or `--deadline +n` (relative to the read's witnessed index). */
-function deadlineOf(args: Arguments, at: bigint): bigint {
+/** `--deadline n` or `--deadline +n` (relative to the read's witnessed index). On an alias already saved, `+n` reads as
+ * its saved deadline, so a rerun of the same command line after a lost reply is the exact retry (Next 4 (ab)); an
+ * absolute deadline is compared as given. */
+function deadlineOf(args: Arguments, at: bigint, saved?: bigint): bigint {
   const text = required(args, "deadline"), relative = /^\+/.test(text);
   const value = integer(relative ? text.slice(1) : text, "--deadline", 0n, (1n << 63n) - 1n);
-  return relative ? at + value : value;
+  return relative ? saved ?? at + value : value;
+}
+/** The deadline of the demand saved under `alias`, as `actOut` prints it. */
+function savedDemandDeadline(directory: Directory, wallet: V3Wallet, alias: string): bigint | undefined {
+  const act = wallet.act(alias);
+  return act?.kind !== 4 ? undefined : directory.construction.view(directory.construction.decode(act.record), () => undefined).demand!.value.deadline;
 }
 
 /** A backer's directory holds K; the role check reads no key bytes. */
@@ -694,7 +701,7 @@ async function demand(argv: readonly string[]): Promise<void> {
   const { args, directory, alias, kept } = aliased(argv, { deadline: "value" }, 3);
   const quantity = integer(args.positional[2]!, "the quantity", 1n, (1n << 64n) - 1n);
   await withWallet(directory, args, { prove: true, sync: true }, async opened => {
-    const deadline = deadlineOf(args, opened.at!);
+    const deadline = deadlineOf(args, opened.at!, savedDemandDeadline(directory, opened.wallet, alias));
     await withEvidence(opened, args, kept, opened.wallet.act(alias) !== undefined, async source => {
       const act = await opened.wallet.demand(alias, quantity, deadline, source.bytes, kept.signed, opened.prove);
       print({ ...actOut(act, directory.construction), evidence: source.source, ...source.from, notes: demandNotes(directory, act) });
@@ -813,7 +820,7 @@ async function accept(argv: readonly string[]): Promise<void> {
   const id = hex32(args.positional[2]!, "the demand"), out = required(args, "out");
   requireBacker(directory);
   await withWallet(directory, args, { sync: true }, async opened => {
-    const deadline = deadlineOf(args, opened.at!);
+    const deadline = deadlineOf(args, opened.at!, opened.wallet.acceptanceDeadline(alias));
     await withEvidence(opened, args, kept, false, async source => {
       let acceptance: SignedAcceptance | KeyedAcceptance, bytes: Uint8Array;
       if (keyed(directory)) {

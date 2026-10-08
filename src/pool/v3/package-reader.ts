@@ -8,6 +8,7 @@ import { compareBytes, copyBytes, copyUnshared, EncodingError } from "../../byte
 import type { RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { isValue } from "../field.js";
+import type { Snapshot } from "./commitments.js";
 import { POOL_V3, type Construction } from "./construction.js";
 import { faultObserver, type FaultResult, type ReportingFaultObserver } from "./fault-observer.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
@@ -194,16 +195,30 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   if (!same(commitment.operator, selection.operator) || commitment.sequence !== selection.sequence || !same(commitment.root, selection.root)) {
     throw new EvidenceRefusal("selection-mismatch");
   }
-  const entry = batch.directory(commitment.root)?.find(value => same(value.name, selection.backing));
-  if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
-  const snapshotBytes = batch.snapshot(entry.digest);
+  const directory = batch.directory(commitment.root), own = directory?.find(value => same(value.name, selection.backing));
+  if (directory === undefined || own === undefined) throw new EvidenceRefusal("unresolved-evidence");
+  // The read's context is the scope the directory's first snapshot names, as the checkpoint's judgment reads it (pool-v3
+  // §7.1, C2.10.11), so a selected backing whose own snapshot names another segment reads the class every backing reads.
+  // It needs only the selected backing's terms, which its name binds: where the first snapshot is not held, the selected
+  // backing's own names them, and a read that judges the selection still refuses for the first one (a receipt final
+  // before it does not). A preimage that does not decode is no snapshot (§7): unresolved, never a verdict.
+  const first = directory[0]!, source = batch.snapshot(first.digest) !== undefined ? first : own, snapshotBytes = batch.snapshot(source.digest);
   if (snapshotBytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
-  const snapshot = frames.snapshot.decode(snapshotBytes), scope = checkpointScope(construction, batch, selection.backing, entry.digest, snapshot);
-  const { header } = scope;
-  scope.fullTrail();
-  requireReplay(same(header.domain, domain) && same(header.venue, selection.venue) && same(header.operator, selection.operator) &&
-    header.sequence <= selection.sequence, "CONTEXT");
-  const terms = scope.rootTerms[header.entries.findIndex(scoped => same(scoped.backing, selection.backing))]!;
+  let snapshot: Snapshot;
+  try { snapshot = frames.snapshot.decode(snapshotBytes); } catch (error) {
+    if (error instanceof EncodingError) throw new EvidenceRefusal("unresolved-evidence");
+    throw error;
+  }
+  const scope = checkpointScope(construction, batch, source.name, source.digest, snapshot), { header } = scope;
+  // The trail is the judgment's to demand: a valid or excluded class needs it (the selection's own, never a compact
+  // fault, `judge`), a lapse reads the header and scope alone (C2.10.11, pool-v3 §12), so a lapsed selection served a
+  // count-zero trail reads lapsed.
+  // The operator and opening sequence are the judgment's, after term lapse (C2.10.11).
+  requireReplay(same(header.domain, domain) && same(header.venue, selection.venue), "CONTEXT");
+  // A directory entry the scope does not name gives no terms to read the selected backing under.
+  const scoped = header.entries.findIndex(item => same(item.backing, selection.backing));
+  if (scoped < 0) throw new EvidenceRefusal("unresolved-evidence");
+  const terms = scope.rootTerms[scoped]!;
   requireReplay(same(terms.configuration, domain) && same(terms.venue, header.venue), "TERMS_CONTEXT");
   const faults = faultObserver(payloads(7), selection, verifier, construction);
   const context: ImportContext = { construction, store: options.store ?? new ReplayStore(), witness: options.witness, carrying: options.carrying, selection, terms, header, verifier, reference, faults,

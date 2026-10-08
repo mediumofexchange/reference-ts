@@ -392,26 +392,12 @@ export class EvidenceStore {
       const tops = db.prepare(`SELECT segment, evidence, position FROM served_top WHERE operator = ? AND sequence > ? AND sequence <= ?
         ORDER BY segment, position DESC`).all(by, from, through) as { segment: Uint8Array; evidence: Uint8Array; position: bigint }[];
       const below = db.prepare("SELECT evidence, position FROM served_top WHERE operator = ? AND segment = ? AND sequence <= ? ORDER BY position DESC LIMIT 1");
-      const reached = async (trails: readonly StoredTrail[], position: bigint, value: Uint8Array): Promise<boolean> => {
-        for (const held of trails) if (held.length >= position && await held.reaches(position, value) !== undefined) return true;
-        return false;
-      };
-      let segment: Uint8Array | undefined, served: StoredTrail[] = [], base: TrailTip | undefined, baseTrail: StoredTrail | undefined;
-      for (const row of tops) {
-        if (segment === undefined || !same(segment, bytes(row.segment))) {
-          segment = bytes(row.segment); served = [];
+      // The base is what a reader served through `from` holds of the segment.
+      yield* topTrails(tops.map(row => ({ segment: bytes(row.segment), position: row.position, evidence: bytes(row.evidence) })),
+        (segment, value) => evidence.trail(segment, value), segment => {
           const held = from === 0n ? undefined : below.get(by, segment, from) as { evidence: Uint8Array; position: bigint } | undefined;
-          base = held === undefined ? undefined : { segment, position: held.position, evidence: bytes(held.evidence) };
-          baseTrail = base === undefined ? undefined : evidence.trail(segment, base.evidence);
-        }
-        const value = bytes(row.evidence), trail = evidence.trail(segment, value);
-        if (trail === undefined || trail.length !== row.position) throw new EvidenceRefusal("unresolved-evidence");
-        // A reader served through `from` holds a top its base's trail passes through.
-        if (await reached([...served, ...(baseTrail === undefined ? [] : [baseTrail])], trail.length, value)) continue;
-        served.push(trail);
-        const part = (base === undefined ? undefined : await trailPart(trail, base, construction)) ?? await trailPart(trail, undefined, construction);
-        if (part !== undefined) yield part;
-      }
+          return held === undefined ? undefined : { segment, position: held.position, evidence: bytes(held.evidence) };
+        }, construction);
       db.exec("COMMIT");
     } finally { db.close(); }
   }
@@ -967,6 +953,33 @@ export async function trailPart(trail: StoredTrail, after?: TrailTip, constructi
     }
   };
   return { trail: { after, size: BigInt(head.length) + trail.bytes - held, chunks: chunks() } };
+}
+
+/** The trails a serve owes for its tops (§14), for a journal and a replica alike: `tops` grouped by segment, furthest
+ * first. Each goes after the reader's base where its chain passes through it, else whole, and none where a trail
+ * already served for its segment or the base reaches it. Every top is served, not the furthest of a segment alone, so
+ * snapshots on two forks each come with a trail. A top whose trail is not held at its position is storage damage. */
+export async function* topTrails(tops: Iterable<TrailTip>, trailOf: (segment: Uint8Array, evidence: Uint8Array) => StoredTrail | undefined,
+  baseOf: (segment: Uint8Array) => TrailTip | undefined, construction: Construction): AsyncIterable<EvidencePart> {
+  const reached = async (trails: readonly StoredTrail[], position: bigint, value: Uint8Array): Promise<boolean> => {
+    for (const held of trails) if (held.length >= position && await held.reaches(position, value) !== undefined) return true;
+    return false;
+  };
+  let segment: Uint8Array | undefined, served: StoredTrail[] = [], base: TrailTip | undefined, baseTrail: StoredTrail | undefined;
+  for (const top of tops) {
+    if (segment === undefined || !same(segment, top.segment)) {
+      segment = top.segment; served = [];
+      base = baseOf(segment);
+      baseTrail = base === undefined ? undefined : trailOf(segment, base.evidence);
+    }
+    const trail = trailOf(segment, top.evidence);
+    if (trail === undefined || trail.length !== top.position) throw new EvidenceRefusal("unresolved-evidence");
+    // A reader served through the base holds a top its base's trail passes through.
+    if (await reached([...served, ...(baseTrail === undefined ? [] : [baseTrail])], trail.length, top.evidence)) continue;
+    served.push(trail);
+    const part = (base === undefined ? undefined : await trailPart(trail, base, construction)) ?? await trailPart(trail, undefined, construction);
+    if (part !== undefined) yield part;
+  }
 }
 
 /** One §12 package of a read's own items and a supplier's parts served from nothing, for a caller that holds a

@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-07
+Updated: 2026-10-08
 
 ## Goal
 **Slice 13: release assurance** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3; release gate in [production requirements](docs/PRODUCTION_REQUIREMENTS.md#release-gates)).
@@ -11,10 +11,10 @@ integrity to the tested tree, checked in CI; (b) installed-package interoperabil
 separate installs of that tarball; (c) backup and restore drills of each role's store (an operator restored from an older copy
 signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's open correctness findings fixed or dispositioned,
 (au) first; (e) Next 5's 10⁵ rerun. Stop: (a)–(e) merged, CI green; the 10⁶ run, live Tor and the external review stay outside.
-- **Done:** (a) M13a #143 ([release record](docs/RELEASE.md), CI's `reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (d)'s (au) M13b #144, (av)–(ax) M13f ([decision](decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f), spec C3.5 114799e): `rho_out` reads the acceptance, a wallet seeing another instance of its seed act refuses `FORKED`, lit `pay` refuses a request the seed already paid.
+- **Done:** (a) M13a #143 ([release record](docs/RELEASE.md), CI's `reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (d)'s (au) M13b #144, (av)–(ax) M13f ([decision](decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f), spec C3.5 114799e): `rho_out` reads the acceptance, a wallet seeing another instance of its seed act refuses `FORKED`, lit `pay` refuses a request the seed already paid; the rest of (d) M13g #152 ([decision](decisions/2026-10.md#2026-10-08--judge-lapse-before-the-readers-own-snapshot-serve-every-forks-trail-and-disposition-the-rest-of-next-4-slice-13-m13g), spec #21): the reader judges lapse before its own snapshot and CONTEXT's operator part, TERMS_SCOPE after silence lapse; an undecodable snapshot reads unresolved; a journal serves every fork's trail; coded refusals; every other letter dispositioned.
 - **(c):** M13d #146, spec #19 ([decision](decisions/2026-10.md#2026-10-07--restore-an-operator-journal-by-a-return-at-a-skipped-sequence-once-silence-is-witnessed-slice-13-m13d)): a restored operator returns past silence at a skipped sequence (`moe operator restore`). M13e
   ([decision](decisions/2026-10.md#2026-10-07--restore-a-wallet-directory-from-a-copy-by-a-recorded-restoration-and-audit-copied-views-slice-13-m13e), #147): `wallet restore --copy` marks open requests (`fulfill` `RESTORED` unless
-  `--uncredited`) and exposes a lit window; copied replay files are read again, copied views audited; `moe venue audit`. **Next:** (d)'s other open Next 4 letters (fix, or disposition with the reason), then (e).
+  `--uncredited`) and exposes a lit window; copied replay files are read again, copied views audited; `moe venue audit`. **Next:** (e), the 10⁵ rerun (Next 5): restore the probes from their last revisions into scratch and run them in parts under 2 h each, results written per part; heartbeat the lock.
 
 ## Status
 - **Slices 10–12 and 14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
@@ -34,25 +34,12 @@ signs nothing conflicting), `moe venue audit` for restored views; (d) Next 4's o
 2. [Visibility](docs/POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet) duties: all landed (M10c2, M12a–c), each with its limits. M12c levers if a deployment needs them: a relay budget per window of witnessed indices, a check that a release names a witnessed demand.
 3. M10c2 leftovers: synthetic index lag knob; read the budget's boxes before
    readiness (review); the relay judges no gap itself; drill `EARLY`, `CONFIGURATION`, a relay `BUDGET` and `UNWITNESSED`.
-4. Deferred review findings, taken when their files are touched (closed letters are in their decisions). (g) `journal-crash.mjs` covers
-   only open, submit and commit, and arms no failure inside a transaction. (j) Verify-only parties could take identity-checked key bytes,
-   needing no G1 file. (m) left: `cli/reader.ts` refuses an evidence.db of another layout with an uncoded TypeError; `sync` takes no
-   abort signal. (n) left: a spent note's witness stays kept.
-   (o) `store.ts` `parts()` keeps one trail top per segment, so a taken predecessor segment whose snapshots lie on two forks serves only
-   the longer trail (a fix needs an ancestor test without a walk per snapshot). (p) `package-reader.ts` reads the selection through its own
-   backing's entry before the walk, so a malformed selection's refusal reason differs per backing. (r) CONTEXT, TERMS_CONTEXT, TERMS_SCOPE,
-   SILENCE_SCOPE are judged before silence lapse (label, or an answer where lapse is unresolved). (t) A settle or `presentation` read decodes
-   every acceptance and release of the backing; count inside the read if a budget needs it. (u) Each `readRecordView` and journal `chain()`
-   re-verifies every kept replacement (two Ed25519 checks each); cache by record bytes if a budget needs it. (v) left: the opening check's
-   window (another process committing between the hash and the store's connection; inherited): check under the store's own
-   `BEGIN IMMEDIATE` and refuse a moved `data_version`. Audit 29: (y) a restored handoff starts `seen` at 0, so it may build from a view
-   older than its source synced at (refusals, not loss; carry `seen` at the next profile change); (z) pool-delivery C4.7's venue-created
-   output awaiting adoption is not reported at all (only never as spendable). Review 2026-10-06: (aa) the testnet drill sweeps funding keys
-   in-process only (no signal handler or `--sweep <dir>`; boxes above the indexed height read as dust); (ab) no command prints a saved
-   acceptance's absolute deadline for an exact `accept --deadline +n` retry; (ac) `keepContext`'s throwaway views keep `:memory:` journals
-   open; (ad) a mainnet anchor has no difficulty floor (CLI takes test profiles only); (ae) `venue-ergo.md` §1 names transparent operations. M14f review: (af) reopening finds no deleted nullifier row (a later generic error). M14g1 review: (al) a keyed scan's identity names every held backing's window (one replay of every held scope per new backing or grown window; old namespaces kept). M14g2: (an) left: a remade lit burn takes a new change index. M14g4: (ao) a reader whose operator does not answer reads only a `--package` file (no kept fallback as the wallet's; slice 12's replica).
-   M13f limits (accepted, decision): a lost instance's statement in flight at a restoration lands beside a retry (the fence then names it); a note another instance received and spent between two reads is never held.
-   Audit 31 ([decision](decisions/2026-10.md#2026-10-06--exclude-a-continuation-whose-opening-the-record-moved-past-and-read-a-receipts-term-end-without-its-segments-opening-audit-area-31)): (ag) the package reader's scope from the selected snapshot (§7.1); (ah) own snapshot before term lapse; (ai) an undecodable committed snapshot surfaces as `EncodingError`; (aj) the non-service count rereads every publication and keeps every request; (ak) the replay identity names the backing, so a sibling's read replays again. Audit 30 (decision above): (ap) a terms field a replica learns later is never served past a mark; (aq) a hostile upstream's junk is indexed and served on by a replica; (ar) a backing whose canonical sequence lags another's is never kept by a replica; (as) one `serveParts` for the journal's and the replica's §14 parts (closes (o)); (at) `relayRefusal` reads `VenueError` text.
+4. Deferred review findings: [M13g](decisions/2026-10.md#2026-10-08--judge-lapse-before-the-readers-own-snapshot-serve-every-forks-trail-and-disposition-the-rest-of-next-4-slice-13-m13g) fixed or dispositioned every letter open before it (fixed ones are in
+   their decisions; new findings take letters after (ax)). Waiting, each on the trigger M13g names: performance (j), (t), (u), (aj),
+   (ak), (al), (m)'s sync abort signal; replica availability (ap), (aq), (ar); their change (y) next wallet profile, (ad) mainnet,
+   (z) a holder path for force-created outputs, (ao); tooling (g), (aa); accepted (n), (an), (af), (v) (directory lock). M13f limits
+   (accepted): a lost instance's statement in flight at a restoration lands beside a retry; a note another instance received and
+   spent between two reads is never held.
 5. Slice 11 leftovers. One design-point rerun, in slice 13 at the latest: `moe operator serve` as its own process at 10⁵, and the wallet's first sync and steady state at 10⁵ (the depth probe's process, which also held the synthetic
    node's chain, would pass 1 GiB near 3·10⁵: [design point](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3)), and find the growth
    if it is the journal's. M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections

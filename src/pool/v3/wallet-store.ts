@@ -2013,6 +2013,12 @@ export class V3Wallet {
       encodePublication({ domain: new Uint8Array(this.domain), backing, kind, record: decodeRecord(record) });
     await send.call(publisher, 4, backing, bytes);
   }
+  /** The deadline of the acceptance saved under `name`, if any: a rerun's relative deadline names it (Next 4 (ab)). */
+  acceptanceDeadline(name: string): bigint | undefined {
+    name = alias(name); this.active();
+    const row = this.db.prepare("SELECT deadline FROM backer_acceptances WHERE alias=?").get(name);
+    return row === undefined ? undefined : BigInt(row.deadline as string);
+  }
   /** C3.4: publish the backer's saved acceptance under `name` at the backing's venue (publication kind 2), routed to
    * the demand's backing, as evidence that it answered; a retry republishes the same bytes. It answers for C3.8 only
    * where its deadline is later than the index the venue witnesses it at by more than the lag, so a backer publishes

@@ -550,10 +550,15 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, evidence, record, context.reference, store));
     return views.get(id)!;
   };
+  // A committed preimage that hashes to its digest but does not decode is no snapshot: a strict codec's rejection
+  // supplies no exclusion verdict (pool-v3 §7), so the read is unresolved, as for an undecodable directory (§12).
   const snapshotFor = (digest: Uint8Array): Snapshot => {
     const bytes = evidence.snapshot(digest);
     if (bytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    return frames.snapshot.decode(bytes);
+    try { return frames.snapshot.decode(bytes); } catch (error) {
+      if (error instanceof EncodingError) throw new EvidenceRefusal("unresolved-evidence");
+      throw error;
+    }
   };
   // A resumed walk reads a class an earlier read made only after §14's checks on this read's evidence: the venue
   // holds the same commitment at the same index, the kept snapshot authenticates against the checkpoint's retained
@@ -750,11 +755,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (directory === undefined) throw new EvidenceRefusal("unresolved-evidence");
     const entry = directory.find(item => same(item.name, backing));
     if (entry === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    const snapshot = snapshotFor(entry.digest);
     // The segment and scope are those the directory's first snapshot names, whichever backing the reader
     // holds, so every reader judges one class (C2.10.11, pool-v3 §7.1); a snapshot naming another segment
-    // fails SNAPSHOT below, after lapse.
-    const first = directory[0]!, named = same(first.name, backing) ? snapshot : snapshotFor(first.digest);
+    // fails SNAPSHOT below, after lapse. Lapse reads only the authenticated header and scope, so the reader's own
+    // snapshot is read after it: a lapsed checkpoint whose own preimage is withheld still lapses. A lapsed or
+    // excluded class keeps the first snapshot, a valid one its own.
+    const first = directory[0]!, named = snapshotFor(first.digest);
     const scope = checkpointScope(construction, trails, first.name, first.digest, named), { header } = scope, { segment } = named;
     await faults.inspect(held, directory, scope);
     // The descent had visited this checkpoint once its faults were inspected.
@@ -764,10 +770,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     // checkpointScope resolved and verified every scoped terms field.
     const scopedTerms = new Map(header.entries.map((scoped, i) => [hex(scoped.backing), scope.rootTerms[i]!]));
     const scopeViews = new Map<string, RecordView>();
-    const base: Classified = { commitment: c, index: held.index, segment, header, snapshot };
+    const base: Classified = { commitment: c, index: held.index, segment, header, snapshot: named };
+    let mine: Snapshot | undefined;
+    const ownSnapshot = (): Snapshot => mine ??= same(first.name, backing) ? named : snapshotFor(entry.digest);
     try {
-      requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
-        same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
+      // A header of another configuration or venue names no chain on this record, so no lapse reads it.
+      requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue), "CONTEXT");
       let lapsed = false, termsInForce = true;
       for (const scoped of header.entries) {
         const terms = scopedTerms.get(hex(scoped.backing))!;
@@ -779,7 +787,13 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         if (own === undefined || !same(own.operator, c.operator) || !same(own.link, current.link)) termsInForce = false;
       }
       if (lapsed) return { ...base, class: "lapsed" };
-      requireReplay(termsInForce, "TERMS_SCOPE");
+      // Term lapse read only the header, scope and chain (C2.10.11); a header of another operator, or whose opening sequence
+      // follows this checkpoint, has no opening to run a silence clock from.
+      requireReplay(same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
+      // A scope naming a term not in force is excluded only where the checkpoint is not lapsed (C2.10.11): an opening
+      // has no silence lapse, a continuation is judged against its scope's clock first. Each backing's clock reads
+      // the terms its name commits, so it is the same whichever link the scope names.
+      const termsScope = (): void => requireReplay(termsInForce, "TERMS_SCOPE");
       const durations = [...scopedTerms.values()].map(terms => terms.silence?.noCommitmentDuration);
       requireReplay(durations.every(duration => duration === durations[0]), "SILENCE_SCOPE");
       // Each scoped backing's last valid checkpoint before this one, in rank order.
@@ -791,6 +805,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       let segmentBase: SegmentBase, lastValid: ValidCheckpoint | undefined, openingValid: boolean;
       const opening = c.sequence === header.sequence;
       if (opening) {
+        termsScope();
         const parents = await parentsOf();
         for (let i = 0; i < header.entries.length; i++) {
           const scoped = header.entries[i]!, parent = parents[i];
@@ -844,6 +859,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
             const { record } = await scopeClocks(header, termsOf, header.entries[gap]!.backing, held.index, held.index);
             return { ...base, class: "lapsed", ...(record === null ? {} : { clock: record }) };
           }
+          termsScope();
           requireReplay(false, "OPENING");
         }
         requireReplay(before(openingHeld, held), "IMPORT_RANK");
@@ -856,6 +872,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
           const { record } = await scopeClocks(header, termsOf, header.entries[cause]!.backing, openingHeld.index, held.index);
           return { ...base, class: "lapsed", ...(record === null ? {} : { clock: record }) };
         }
+        termsScope();
         openingValid = (await classify(openingHeld, openingEntry.name)).class === "valid";
         const parents = await parentsOf(), established = baseOf(segment);
         requireReplay(established !== undefined && established.openingIndex === openingHeld.index, "OPENING");
@@ -878,14 +895,18 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       // sibling snapshots are finalization conditions, checked after lapse.
       requireReplay(directory.length === header.entries.length && header.entries.every(scoped =>
         directory.some(item => same(item.name, scoped.backing))), "SCOPE");
+      const snapshot = ownSnapshot();
       const scopedSnapshots = header.entries.map(scoped => {
         const s = snapshotFor(directory.find(item => same(item.name, scoped.backing))!.digest);
         requireReplay(same(s.backing, scoped.backing) && same(s.segment, segment) &&
           same(s.historyHash, snapshot.historyHash) && same(s.evidenceHash, snapshot.evidenceHash), "SNAPSHOT");
         return s;
       });
-      // §9.1: the opening's record-derived block bounds compact exclusion to later positions.
-      const intrinsic = !opening && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
+      // §9.1: the opening's record-derived block bounds compact exclusion to later positions. The selected checkpoint's own
+      // envelope stays complete: a compact fault never stands in for its trail, which a lapse alone does not need.
+      const chosen = "operator" in selection ? selection as ReaderSelection : undefined;
+      const selected = chosen !== undefined && same(c.operator, chosen.operator) && c.sequence === chosen.sequence && same(c.root, chosen.root);
+      const intrinsic = !opening && !selected && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
       const classification = scope.classificationEvidence(intrinsic);
       if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
       // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot.
@@ -896,7 +917,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction, classification.trail, trails) &&
             scopedSnapshots.every(sibling => { const t = store.total(s.ns, s.position, hex(sibling.backing)); return t.issued === sibling.issued && t.burned === sibling.burned; })) {
           const { issued, burned } = store.total(s.ns, s.position, hex(backing));
-          verdict = { ...base, class: "valid", scopedTerms, openingIndex,
+          verdict = { ...base, snapshot, class: "valid", scopedTerms, openingIndex,
             state: new ReplayResult(store, s.ns, s.position, { issued, burned, adoptionIndices: s.adoption, identity: s.identity }, construction) };
         } else throw new KeptStateMismatch("a kept class or its state");
         return verdict;
@@ -905,7 +926,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       const state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
         snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
           block: opening ? [] : block, openingIndex, scopedSnapshots });
-      return { ...base, state, scopedTerms, openingIndex, class: "valid" };
+      return { ...base, snapshot, state, scopedTerms, openingIndex, class: "valid" };
     } catch (error) {
       if (!(error instanceof ReplayRefusal)) throw error;
       scope.fullTrail(); // Header-only faults are not exclusion certificates.

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { CommandError, integer, hex32, openDirectory, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
@@ -18,7 +19,7 @@ import { limbsOf } from '../src/pool/field.js';
 import { EMPTY_NOTE_ROOT } from '../src/pool/note-tree.js';
 import { outside } from '../src/cli/wallet.js';
 import { parsePublicationFile, readPublication } from '../src/cli/relay.js';
-import { keptReplay } from '../src/cli/reader.js';
+import { keptReplay, openEvidence } from '../src/cli/reader.js';
 import { keptFileDigest, ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
 import { V3StoreError } from '../src/pool/v3/store.js';
@@ -182,6 +183,16 @@ describe('moe reader kept replay file', () => {
       writeFileSync(join(dir, 'replay.db.sha256'), '00'.repeat(32));
       const tampered = keptReplay(directory(dir), 10n);
       try { expect(tampered.answersThrough()).toBeUndefined(); } finally { tampered.close(); }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('refuses an evidence file of another layout by code, never as an uncoded failure (Next 4 (m))', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'moe-reader-'));
+    try {
+      const db = new DatabaseSync(join(dir, 'evidence.db')); db.exec('PRAGMA user_version = 999'); db.close();
+      let refused;
+      try { openEvidence({ file: name => join(dir, name), construction: POOL_V3 }).close(); } catch (error) { refused = error; }
+      expect(refused).toBeInstanceOf(CommandError);
+      expect(refused.code).toBe('STORAGE');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

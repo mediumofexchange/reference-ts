@@ -575,7 +575,8 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 Each command that reads syncs the directory's Ergo view first, in bounded passes until it is caught up, with a
 `syncing` event on stderr for each pass another follows. Every mutating command names the alias the library keys on, so a rerun after a crash or a lost reply is the exact
 retry and prints the saved result; a deadline is a witnessed index, absolute or `+n` from the read, and a saved
-demand prints its absolute deadline so a rerun can name it. Evidence comes from the operator's service, synced into
+demand or acceptance prints its absolute deadline. On an alias already saved, `+n` reads as that deadline, so the same
+command line rerun after the index moved is the exact retry. Evidence comes from the operator's service, synced into
 the evidence file, then, where it does not answer, from each replica added (below); or from `--package f`. Where no
 source answers, a read uses the package the last sync kept. A read left `unresolved-evidence` over a source's answer
 syncs that source again from nothing and reads again; where that read is still unresolved, the source is passed over

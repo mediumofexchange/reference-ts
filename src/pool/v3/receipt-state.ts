@@ -1,7 +1,7 @@
 // C2.10.9a–c and C2b.4.3. Classification and clock boundaries come from the reader; the receipt, header and
 // snapshot frames are the construction's.
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { compareBytes } from "../../bytes.js";
+import { compareBytes, EncodingError } from "../../bytes.js";
 import type { HeldCommitment } from "../../record-range.js";
 import type { Construction, ReceiptView } from "./construction.js";
 import type { TrailEvidence } from "./evidence-store.js";
@@ -61,7 +61,12 @@ export async function receiptWalk(bytes: Uint8Array, context: { readonly selecti
     const entry = directory[0]; requireReceipt(entry !== undefined && header.entries.some(scope => same(scope.backing, entry.name)));
     const snapshot = snapshotOf(entry.digest);
     if (snapshot === undefined) throw new EvidenceRefusal("unresolved-evidence");
-    const decoded = frames.snapshot.decode(snapshot);
+    // A preimage that does not decode is no snapshot (pool-v3 §7): unresolved, never a verdict.
+    let decoded: ReturnType<typeof frames.snapshot.decode>;
+    try { decoded = frames.snapshot.decode(snapshot); } catch (error) {
+      if (error instanceof EncodingError) throw new EvidenceRefusal("unresolved-evidence");
+      throw error;
+    }
     // A first snapshot of another backing authenticates nothing, as the checkpoint's judgment reads it.
     if (!same(decoded.backing, entry.name)) throw new EvidenceRefusal("unresolved-evidence");
     requireReceipt(same(decoded.segment, receipt.segment));

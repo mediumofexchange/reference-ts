@@ -292,7 +292,7 @@ function recordOutputs(request: ErgoRecordRequest, perByte: bigint): Candidate[]
     size = low;
     // The run, change and fee all at one-byte indices.
     if (size === 0 || Math.max(1, Math.ceil(request.record.length / size)) + 2 > MAX_RUN_INDEX + 1) {
-      throw new VenueError("the publication does not fit one transaction's output run");
+      throw new VenueError("the publication does not fit one transaction's output run", "TOO_LARGE");
     }
   }
   const outputs: Candidate[] = [];
@@ -757,7 +757,7 @@ export class ErgoPublisher {
         kept();
       }
     } else {
-      if (this.#pending.size >= PENDING_LIMIT) throw new VenueError("the publisher holds too many unsettled publications; settle it from a view");
+      if (this.#pending.size >= PENDING_LIMIT) throw new VenueError("the publisher holds too many unsettled publications; settle it from a view", "FULL");
       pending = await this.#build(key, request, [], new Set(), []);
     }
     if (await this.#send(pending) !== "accepted") kept();
@@ -776,7 +776,7 @@ export class ErgoPublisher {
     // Inputs take only the room the outputs leave, so a record within the location's capacity is never
     // refused for the transaction's size.
     const room = inputRoom(request, this.#tree, this.#fee, this.#perByte);
-    if (room === 0 || room < required.length) throw new VenueError("the publication does not fit one transaction");
+    if (room === 0 || room < required.length) throw new VenueError("the publication does not fit one transaction", "TOO_LARGE");
     const selected = await this.#select(request.height, publicationCost(request, this.#tree, this.#fee, this.#perByte), required, avoided, room);
     const inputs = selected.map(box => Object.freeze({ id: copyBytes(box.id), value: box.value, creationHeight: box.creationHeight }));
     const pending: Pending = Object.freeze({ key, request, inputs: Object.freeze(inputs),
