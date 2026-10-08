@@ -923,7 +923,8 @@ export class V3Wallet {
       }
       this.db.prepare("DELETE FROM held_notes WHERE backing=?").run(backing);
       const hold = this.db.prepare("INSERT OR IGNORE INTO held_notes VALUES(?,?,?,?)");
-      for (const note of notes) hold.run(backing, note.nf.toString(), note.tag.toString(), note.cm.toString());
+      // A pool mark's tag is checked only when its note is spent: derive it from the nullifier (lit's marks are checked as read).
+      for (const note of notes) hold.run(backing, note.nf.toString(), (this.keyed === undefined ? tagOf(note.nf) : note.tag).toString(), note.cm.toString());
       this.db.prepare("INSERT INTO held_read VALUES(?,?) ON CONFLICT(backing) DO UPDATE SET at=excluded.at").run(backing, at.toString());
     }, "observe");
   }
