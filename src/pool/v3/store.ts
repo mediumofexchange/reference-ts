@@ -22,9 +22,11 @@
 // history go through the public reader over the same evidence. Their classes
 // and replays are a reader's kept state (§14) in a file of their own beside
 // the database, so a read never holds the journal's connection and each
-// record is verified there once; what a new segment imports from a read is
-// copied into the database with the command that opens it. `audit`
-// re-verifies from the evidence alone, keeping nothing of what it replays.
+// record is verified there once, and a proof this process already verified
+// at admission is not verified again (`rememberedProofs`); what a new segment
+// imports from a read is copied into the database with the command that
+// opens it. `audit` re-verifies from the evidence alone, keeping nothing of
+// what it replays.
 //
 // What the journal reads of the venue for its own commands is kept in the
 // database too (§§13.2–13.3): this key's held commitments, each scoped
@@ -53,6 +55,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { fieldToBytes, isField } from "../field.js";
 import { fileIdentity } from "../../file-identity.js";
 import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
 import { RangeLimitError, replacementChain, type ChainLink, type HeldCommitment, type RangeAnswer, type RangeEntry,
@@ -94,6 +97,48 @@ const importIdentity = (segment: Uint8Array): Uint8Array => sha256(concatBytes(u
  * opening waits for adoption (C2b.4.2, C2.10.9). */
 const isGenesis = (header: SegmentHeader): boolean => header.sequence === 1n &&
   header.entries.every(entry => entry.opening === undefined && same(entry.link, entry.backing));
+
+/** Proofs remembered at once: more than a checkpoint carries between admission and the read of it. One forgotten is
+ * verified again, so the bound costs work, never a verdict. */
+export const REMEMBERED_PROOFS = 4096;
+/** A proof's kind, public inputs and bytes in one injective frame (fixed-width kind, count and inputs, then the
+ * proof), hashed; undefined for a call a decoded record could not make, which is never remembered. */
+function proofKey(kind: number, inputs: readonly bigint[], proof: Uint8Array): string | undefined {
+  if (!Number.isInteger(kind) || kind < 0 || kind > 255 || !Array.isArray(inputs) || !(proof instanceof Uint8Array)) return undefined;
+  const frame = new Uint8Array(5 + 32 * inputs.length + proof.length);
+  frame[0] = kind; new DataView(frame.buffer).setUint32(1, inputs.length);
+  for (let i = 0; i < inputs.length; i++) {
+    const value: unknown = inputs[i];
+    if (!isField(value)) return undefined;
+    frame.set(fieldToBytes(value), 5 + 32 * i);
+  }
+  frame.set(proof, 5 + 32 * inputs.length);
+  return bytesToHex(sha256(frame));
+}
+/**
+ * The journal's verifier twice over one memory (WORK.md Next 4 (ay)): admission's, which remembers each proof it
+ * verified, and its own reads', which ask the verifier only for a proof not remembered. A verdict depends on the
+ * kind, public inputs and proof bytes alone (verify-ahead.ts), so a remembered proof gets the verdict the verifier
+ * gave it, and the read of a newly held checkpoint of this journal's own verifies none of its statements again. The
+ * memory is this process's and holds only what it verified, never the rows', so stored bytes that changed are
+ * verified as any others. Both keep the verifier's circuit identities, so kept state is named as before (§14).
+ */
+export function rememberedProofs(verifier: DeclaredVerifier): { readonly admitting: DeclaredVerifier; readonly reading: DeclaredVerifier } {
+  const verified = new Set<string>();
+  const admitting: DeclaredVerifier = { ...verifier, async verify(kind, inputs, proof) {
+    const key = proofKey(kind, inputs, proof), verdict = await verifier.verify(kind, inputs, proof);
+    if (verdict === true && key !== undefined) {
+      verified.delete(key); verified.add(key);
+      if (verified.size > REMEMBERED_PROOFS) verified.delete(verified.values().next().value!);
+    }
+    return verdict;
+  } };
+  const reading: DeclaredVerifier = { ...verifier, verify(kind, inputs, proof) {
+    const key = proofKey(kind, inputs, proof);
+    return key !== undefined && verified.has(key) ? true : verifier.verify(kind, inputs, proof);
+  } };
+  return { admitting, reading };
+}
 
 export class V3StoreError extends Error {
   constructor(readonly code: "STORAGE" | "FENCED" | "BUSY" | "CONFLICT" | "UNAVAILABLE" | "STALE" | "SCHEDULE" | "UNSUPPORTED" | "REFUSED" |
@@ -262,6 +307,8 @@ export class V3OperatorJournal {
   private readonly venueId: Uint8Array;
   private readonly lag: bigint;
   private readonly verifier: DeclaredVerifier;
+  /** The verifier admission asks and the one the journal's own reads ask, over one memory (`rememberedProofs`). */
+  private readonly proofs: ReturnType<typeof rememberedProofs>;
   private readonly reference: VenueReference;
   private readonly owner: bigint;
   private readonly resumedAt: bigint | undefined;
@@ -288,7 +335,7 @@ export class V3OperatorJournal {
     this.construction = options.construction ?? POOL_V3 as Construction; this.frames = this.construction.reader;
     this.domain = this.frames.domain();
     // The circuit identities are copied once: what later reads name and check is what was checked here.
-    this.verifier = ownVerifier(this.construction, verifier);
+    this.verifier = ownVerifier(this.construction, verifier); this.proofs = rememberedProofs(this.verifier);
     this.venue = venue; this.lag = venue.lag();
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
     this.observedIndex = 0n; this.path = path;
@@ -681,7 +728,8 @@ export class V3OperatorJournal {
     this.transaction(() => {});
     // The journal reads its own state, clock and force, never the listing of its carrying checkpoints, which grows
     // by one row per checkpoint and would otherwise be read before every admission (M11c2).
-    return { construction: this.construction, verifier: this.verifier, venue: this.venue, reference: this.reference,
+    // An audit (a store of its own) verifies every proof again; the journal's own reads ask only for those it did not verify.
+    return { construction: this.construction, verifier: store === undefined ? this.proofs.reading : this.verifier, venue: this.venue, reference: this.reference,
       store: store ?? this.reads(), evidence, carrying: false };
   }
   /** One read through the public reader. A kept file another handle is writing leaves the operation BUSY. */
@@ -783,7 +831,7 @@ export class V3OperatorJournal {
     return { domain: this.domain, backing: first.backing, segment: opened.segment, scope: opened.scope, terms: first.terms,
       ...(scoped ? { scopedTerms: new Map(opened.entries.map(entry => [bytesToHex(entry.backing), entry.terms])), revocations } :
         { revokedAt: revocations.get(bytesToHex(first.backing)) }),
-      verifier: this.verifier, index: horizon, lag: this.lag, admission: true, block: [] };
+      verifier: this.proofs.admitting, index: horizon, lag: this.lag, admission: true, block: [] };
   }
   /** Every scoped backing's current snapshot and the directory over them (§7, C2.10.3). */
   private checkpoint(opened: Opened, state: SegmentState): { readonly directory: readonly SnapshotDigest[]; readonly snapshots: readonly Uint8Array[] } {

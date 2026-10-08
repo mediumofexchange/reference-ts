@@ -792,16 +792,20 @@ describe("the v3 operator journal", () => {
     await j.open("genesis", silent); await j.publish();
     await j.submit(issued(0)); await j.submit(issued(1)); await j.commit("c2"); await j.publish();
     expect(verified).toBe(2);
-    // The next admission's read replays the two committed records once; the one after it replays nothing again.
-    await j.submit(issued(2)); expect(verified).toBe(5);
-    await j.submit(issued(3)); expect(verified).toBe(6);
+    // The next admission's read replays the two committed records once, and verifies neither again: this process
+    // verified both at admission (WORK.md Next 4 (ay)). The one after it replays nothing again.
+    await j.submit(issued(2)); expect(verified).toBe(3);
+    await j.submit(issued(3)); expect(verified).toBe(4);
     await j.commit("c3"); await j.publish();
-    await j.submit(issued(4)); expect(verified).toBe(9);
+    await j.submit(issued(4)); expect(verified).toBe(5);
+    await j.commit("c4"); await j.publish();
     j.close(); j = open();
     venue.advance(venue.witnessedIndex() + lag);
-    // Another process with the same declared verifier resumes the kept classes and replays.
-    await j.submit(issued(5)); expect(verified).toBe(10);
-    await j.audit();
+    // Another process with the same declared verifier resumes the kept classes and replays, and remembers no proof:
+    // its read of c4 verifies the record the last process admitted, beside its own admission.
+    await j.submit(issued(5)); expect(verified).toBe(7);
+    // The audit verifies every proof of the latest checkpoint again, remembered or not.
+    await j.audit(); expect(verified).toBe(12);
     expect(carried).not.toHaveBeenCalled();
   });
 
@@ -809,13 +813,16 @@ describe("the v3 operator journal", () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     let during = () => {};
     const hooked = { identities: configuration.circuits, verify: (...args: Parameters<typeof verifier.verify>) => { during(); return verifier.verify(...args); } };
-    const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
+    let j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
     const issued = (n: number): Uint8Array =>
       encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
     await j.open("genesis", silent); await j.publish();
     await j.submit(issued(0)); await j.commit("c2"); await j.publish();
+    // A reopened journal remembers no proof it verified, so its read of c2 verifies issued(0) again.
+    j.close(); j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: hooked }); journals.push(j);
+    venue.advance(venue.witnessedIndex() + lag);
     // The publication outbox writes through the journal's connection while a read verifies (an Ergo venue's
     // sync settles it at any time): the read must not hold that connection.
     const persistence = j.publisherPersistence(); persistence.load();
@@ -841,9 +848,11 @@ describe("the v3 operator journal", () => {
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
     const issued = (n: number): Uint8Array =>
       encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
-    const a = open();
+    let a = open();
     await a.open("genesis", silent); await a.publish();
     await a.submit(issued(0)); await a.commit("c2"); await a.publish();
+    // A reopened journal remembers no proof it verified, so its read of c2 verifies issued(0) again.
+    a.close(); a = open(); venue.advance(venue.witnessedIndex() + lag);
     let next: Journal | undefined, first: [string, string | undefined] | undefined;
     during = async () => {
       if (next !== undefined) return;
@@ -1039,5 +1048,52 @@ describe("the v3 operator journal", () => {
       .filter(item => item.kind === 4).map(item => item.payload).find(payload => decodeSnapshot(payload).issued === 10n)!).evidenceHash)?.length).toBe(1n);
     expect((await j.package()).selection.sequence).toBe(3n);
     evidence.close();
+  });
+});
+
+describe("the journal's remembered proofs (WORK.md Next 4 (ay))", () => {
+  it("spares a read only exactly the proofs admission verified, and forgets the oldest past its bound", async () => {
+    const { rememberedProofs, REMEMBERED_PROOFS } = await import("../src/pool/v3/store.js");
+    const asked: number[] = [];
+    let throwing = false;
+    const inner = { identities: configuration.circuits, parallel: 3, verify: (kind: number, _inputs: bigint[], proof: Uint8Array) => {
+      asked.push(kind);
+      if (throwing) throw new Error("instance lost");
+      return proof[0] === kind;
+    } };
+    const { admitting, reading } = rememberedProofs(inner);
+    // Both name the verifier's circuits and run as many at once, so kept state and verification ahead are as before.
+    expect([admitting.identities, reading.identities]).toEqual([inner.identities, inner.identities]);
+    expect([admitting.parallel, reading.parallel]).toEqual([3, 3]);
+    const proof = new Uint8Array([2, 9, 9]), inputs = [5n, 6n];
+    expect(await admitting.verify(2, inputs, proof)).toBe(true);
+    expect(asked).toEqual([2]);
+    expect(await reading.verify(2, [5n, 6n], new Uint8Array(proof))).toBe(true);
+    expect(asked).toEqual([2]);
+    // Another kind, input, input count or proof byte is verified as before.
+    for (const [kind, other, bytes] of [[3, inputs, proof], [2, [5n, 7n], proof], [2, [5n], proof], [2, [5n, 6n, 0n], proof],
+      [2, inputs, new Uint8Array([2, 9, 8])], [2, inputs, new Uint8Array([2, 9])], [2, inputs, new Uint8Array([2, 9, 9, 0])]] as const) {
+      asked.length = 0;
+      await reading.verify(kind, [...other], bytes);
+      expect(asked).toEqual([kind]);
+    }
+    // A false verdict, a throw and a call no decoded record makes are not remembered; a read remembers nothing.
+    expect(await admitting.verify(4, inputs, proof)).toBe(false);
+    throwing = true;
+    await expect(admitting.verify(2, inputs, new Uint8Array([2, 1]))).rejects.toThrow("instance lost");
+    throwing = false;
+    expect(await admitting.verify(2, [-1n], proof)).toBe(true);
+    asked.length = 0;
+    expect(await reading.verify(4, inputs, proof)).toBe(false);
+    expect(await reading.verify(2, inputs, new Uint8Array([2, 1]))).toBe(true);
+    expect(await reading.verify(2, inputs, new Uint8Array([2, 1]))).toBe(true);
+    expect(await reading.verify(2, [-1n], proof)).toBe(true);
+    expect(asked).toEqual([4, 2, 2, 2]);
+    // The bound: past it the oldest is verified again, and the newest still not.
+    for (let n = 0; n < REMEMBERED_PROOFS; n++) await admitting.verify(1, [BigInt(n)], new Uint8Array([1]));
+    asked.length = 0;
+    await reading.verify(2, inputs, proof);
+    await reading.verify(1, [BigInt(REMEMBERED_PROOFS - 1)], new Uint8Array([1]));
+    expect(asked).toEqual([2]);
   });
 });
