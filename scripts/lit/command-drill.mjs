@@ -177,9 +177,11 @@ const refused = async (args, code, options) => {
   assert.equal(result.refusal?.code, code, result.stderr);
   return result.refusal;
 };
-const usage = async args => {
+/** A usage refusal (exit 2) naming `message`: any other usage error would pass a bare exit check. */
+const usage = async (args, message) => {
   const result = await moe(args);
   assert.equal(result.status, 2, `moe ${args.join(" ")} exited ${result.status}: ${result.stderr}`);
+  assert(result.stderr.includes(message), `moe ${args.join(" ")}: ${result.stderr}`);
   return result.stderr;
 };
 
@@ -241,12 +243,12 @@ try {
 
   let operatorKey, backing, termsFile, signatureFile;
   await check("lit directories declare their construction at init and keep no proving parameters; the operator creates the venue", async () => {
-    await usage(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, "--construction", "moe/lit/v2"]);
-    await usage(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, ...LIT, "--parameters", scratch]);
+    await usage(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, "--construction", "moe/lit/v2"], "--construction is one of");
+    await usage(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, ...LIT, "--parameters", scratch], "keeps no proving parameters");
     const init = await ok(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, ...LIT]);
     // A holders' listener needs a v3 onion name.
-    await usage(["operator", "serve", "--dir", OP, "--interval", "2", "--holder-port", "1"]);
-    await usage(["operator", "serve", "--dir", OP, "--interval", "2", "--onion", `${"m".repeat(56)}.onion`]);
+    await usage(["operator", "serve", "--dir", OP, "--interval", "2", "--holder-port", "1"], "--holder-port needs --onion");
+    await usage(["operator", "serve", "--dir", OP, "--interval", "2", "--onion", `${"m".repeat(56)}.onion`], "--onion takes a v3 onion host");
     assert.deepEqual([init.status, init.construction], ["created", "moe/lit/v1"]);
     assert.equal(JSON.parse(readFileSync(join(OP, "config.json"), "utf8")).construction, "moe/lit/v1");
     operatorKey = init.operator;
@@ -256,7 +258,7 @@ try {
     const backer = await ok(wallet("init", BK, "--backer", "--venue", venueFile, ...nodeArgs, ...LIT));
     assert.match(backer.backer, /^[0-9a-f]{64}$/);
     await usage(wallet("terms create", BK, "--operator", operatorKey, "--thing", "drill units", "--per-unit", "1", "--interval", "80",
-      "--silence", String(SILENCE), "--challenge", "5"));
+      "--silence", String(SILENCE), "--challenge", "5"), "--challenge is not taken");
     const created = await ok(wallet("terms create", BK, "--operator", operatorKey, "--thing", "drill units", "--per-unit", "1", "--interval", "80",
       "--silence", String(SILENCE)));
     backing = created.backing; termsFile = created.terms; signatureFile = created.signature;
@@ -279,7 +281,7 @@ try {
     await ok(["reader", "init", "--dir", RD, "--venue", venueFile, ...nodeArgs, ...LIT]);
     await ok(["reader", "terms", "add", "--dir", RD, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN]);
     // A relay verifies nothing: it keeps no parameters and serves either construction.
-    await usage(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET, "--parameters", scratch]);
+    await usage(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET, "--parameters", scratch], "unknown option --parameters");
     const relay = await ok(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET]);
     await fund(relay.fundingTree, FUND);
     // A third party's relay, which serves holders (M12c).
@@ -424,7 +426,10 @@ try {
     await ok(wallet("withdraw", HD, "w2", backing, shown.demand));
     await submit(HD, "w2");
     await finalOf(HD, "w2");
-    assert.deepEqual(holdings(await ok(wallet("sync", HD, backing))), [["7", "available", 1]]);
+    const freed = await ok(wallet("sync", HD, backing));
+    assert.deepEqual(holdings(freed), [["7", "available", 1]]);
+    // Lit spends a presented note as any other: `available` counts it, `presented` names the part a demand presented.
+    assert.deepEqual([freed.available, freed.presented], ["7", "7"]);
     const withdrawn = await ok(wallet("presentation", HD, backing, shown.demand));
     assert.deepEqual([withdrawn.status, withdrawn.ended.by, withdrawn.acceptances], ["final", "withdrawal", []]);
     await refused(wallet("freshen", HD, "fresh-2", backing, shown.demand), "CONSTRUCTION");

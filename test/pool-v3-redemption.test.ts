@@ -179,6 +179,14 @@ describe("v3 redemption through the backer's and the holder's wallets", () => {
     await expect(f.holder.settle("forged", forged, f.served(), f.signed, prove)).rejects.toMatchObject({ code: "INVALID" });
     await expect(f.holder.settle("other", { ...good, owner: good.owner + 1n }, f.served(), f.signed, prove))
       .rejects.toMatchObject({ code: "INVALID" });
+    // An obligor-signed acceptance naming an owner of the holder's own (a demanded note's, or an open request's that
+    // the backer saw) would end the demand settled while releasing nothing to the backer: refused before any proof.
+    for (const owner of [f.holder.request("fund-0", f.backing, 6n).opening.owner, f.holder.request("spare", f.backing, 3n).opening.owner]) {
+      const fields = { domain, demand: demand.demand!, owner, deadline: deadline - 1n };
+      await expect(f.holder.settle("own", { ...fields, signature: ed25519.sign(acceptanceBytes(fields), issuerSecret) }, f.served(), f.signed, prove))
+        .rejects.toMatchObject({ code: "OWN_KEY" });
+    }
+    expect(f.holder.act("own")).toBeUndefined();
 
     const withdrawn = await f.holder.withdraw("back", f.holder.act("pair")!.demand!, f.served(), f.signed);
     expect(withdrawn).toMatchObject({ kind: 5, demand: demand.demand });

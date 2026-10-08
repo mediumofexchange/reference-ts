@@ -210,7 +210,7 @@ export interface V3StoreOptions {
   /** The owner restored this journal from a copy or backup (slice 13 M13d). It records the fact, and from then on signs
    * nothing but C2b.4's return, once the silence boundary is witnessed, at a sequence above any its lost instance can
    * have left unwitnessed, and that return's adopted block; adopting it lifts the fence. Recorded again before the
-   * return is signed, it changes nothing; after, it is a restoration of its own (the copy may have been taken after
+   * return is signed, it keeps its index and draws a fresh spacing (a copy taken then holds the same row); after, it is a restoration of its own (the copy may have been taken after
    * the return was signed) and draws a fresh spacing. Also the only way to open a journal whose file is not the one it
    * was made in. */
   readonly restored?: boolean | undefined;
@@ -337,7 +337,10 @@ export class V3OperatorJournal {
         // co-signed in its segment: that return is never this restoration's to adopt (it is adopted as any pending
         // opening, keeping the fence) and the next skips past it.
         this.db.prepare("DELETE FROM journal_restored WHERE id=1 AND opening IS NOT NULL").run();
-        this.db.prepare("INSERT OR IGNORE INTO journal_restored VALUES(1,?,?,NULL)").run(now.toString(), spacing);
+        // A copy taken while the fence stands holds its spacing too: each recording draws a fresh one, keeping the
+        // index, so no two restorations sign one return (nothing is signed under a spacing before the return).
+        this.db.prepare("INSERT INTO journal_restored VALUES(1,?,?,NULL) ON CONFLICT(id) DO UPDATE SET spacing=excluded.spacing")
+          .run(now.toString(), spacing);
       } else {
         requireThat(kept === undefined || kept === file, "COPIED", "this journal's file is not the one it was made in: if it is a copy " +
           "or a restored backup, run moe operator restore, which signs nothing on its segment and returns after silence");

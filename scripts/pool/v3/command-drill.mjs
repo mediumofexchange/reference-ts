@@ -357,7 +357,8 @@ try {
     assert.deepEqual([offline.evidence, viaService.evidence], ["file", "served"]);
     assert.deepEqual({ ...offline, sync: undefined, evidence: undefined, ...index }, { ...viaService, sync: undefined, evidence: undefined, ...index });
     assert(BigInt(offline.judgingIndex) >= BigInt(viaService.judgingIndex));
-    assert.equal((await moe(["reader", "supply", ...reader, backing, "--verifiers", "7"])).status, 2);
+    const many = await moe(["reader", "supply", ...reader, backing, "--verifiers", "7"]);
+    assert(many.status === 2 && many.stderr.includes("--verifiers is out of range"), many.stderr);
   });
 
   await check("an operator directory restored from a copy refuses COPIED; restore signs nothing until silence, then a return " +
@@ -569,7 +570,8 @@ try {
   await check("restore-seed finds the holdings from the seed alone; a handoff freezes its source and restores once", async () => {
     const { seed } = await ok(wallet("seed", HD, "--show"));
     assert.match(seed, /^[0-9a-f]{64}$/);
-    assert.equal((await moe(wallet("seed", HD))).status, 2, "seed needs --show");
+    const unshown = await moe(wallet("seed", HD));
+    assert(unshown.status === 2 && unshown.stderr.includes("moe wallet seed --show"), "seed needs --show");
     await ok(["wallet", "restore-seed", "--dir", H2, "--venue", join(OP, "venue.json"), ...common], { input: `${seed}\n` });
     await ok(wallet("terms add", H2, backing2, "--terms", join(BK, "terms", backing2), "--signature", join(BK, "terms", `${backing2}.sig`), ...SYN));
     await ok(wallet("service add", H2, backing2, join(OW, "service.json")));
@@ -739,7 +741,7 @@ try {
     await refused(["reader", "supply", "--dir", partial, backing], "INCOMPLETE");
     await refused(["reader", "init", "--dir", RD, "--venue", join(OP, "venue.json"), ...common], "EXISTS");
     const usage = await moe(["reader", "supply", ...reader]);
-    assert.equal(usage.status, 2);
+    assert(usage.status === 2 && usage.stderr.includes("expected 1 argument, got 0"), usage.stderr);
   });
 
   await check("SQLite's temporary files stay in the directory (Linux)", async () => {

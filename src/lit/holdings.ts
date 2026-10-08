@@ -171,8 +171,8 @@ export function foundIndices(seed: Uint8Array, domain: Uint8Array, state: StateH
   const indices = new Map<string, bigint[]>();
   for (const note of marked(seed, domain, state, keys, true)) {
     if (note.owner.index === undefined || !same(note.opening.backing, note.owner.backing)) continue;
-    const name = hex(note.owner.backing);
-    indices.set(name, [...(indices.get(name) ?? []), note.owner.index]);
+    const name = hex(note.owner.backing), found = indices.get(name);
+    if (found === undefined) indices.set(name, [note.owner.index]); else found.push(note.owner.index);
   }
   return new Map([...indices].map(([name, found]) => [name, { reached: reached(found), top: found.reduce((a, b) => (a > b ? a : b)) }]));
 }

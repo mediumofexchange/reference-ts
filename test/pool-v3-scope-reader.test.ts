@@ -121,7 +121,7 @@ async function twoBackings(silence?: bigint, witnessed = 10n, link?: Uint8Array,
     const message = replacementMessage(x.name, fields);
     venue.witness(2, x.name, index, encodeReplacement(x.name, { ...fields, signature: ed25519.sign(message, b(6)), successorSignature: ed25519.sign(message, b(9)) }));
   };
-  return { venue, x, y, items, checkpoint, issue, issued, replayInto, successor, fresh, replaceX, selection, read, receipt };
+  return { venue, x, y, items, checkpoint, issue, issued, replayInto, successor, fresh, replaceX, selection, read, receipt, cur: () => current };
 }
 
 describe("multi-backing scope reader", () => {
@@ -363,6 +363,30 @@ describe("multi-backing scope reader", () => {
     const misplaced = f.checkpoint(2n, 3n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s));
     for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, misplaced)).rejects.toMatchObject({ check: "SNAPSHOT" });
   });
+  it("reads a selection whose first snapshot is withheld and whose own names a segment of another context as unresolved (pool-v3 §7.1)", async () => {
+    for (const [lapse, withReceipt, held] of [[false, false, { check: "SNAPSHOT" }], [true, false, { status: "lapsed-selection" }],
+      [false, true, undefined]] as const) {
+      const f = await twoBackings();
+      if (lapse) f.replaceX(1n, 6n); // x's first term ends at 6
+      f.checkpoint(1n, 1n); await f.issue(5n, 101n);
+      const receipt = f.receipt(1n);
+      if (withReceipt) { f.checkpoint(2n, 3n); await f.issue(1n, 102n); } // the receipt is final at checkpoint 2
+      // y's snapshot names a segment of another venue, whose header is served; x's, the directory's first, is withheld.
+      const { header, scoped } = f.cur(), foreign: SegmentHeader = { ...header, venue: b(99) };
+      f.items.push({ kind: 6, payload: encodeTrail({ header: segmentBytes(foreign), terms: scoped.map(item => item.signed), records: [] }) });
+      const target = f.checkpoint(withReceipt ? 3n : 2n, lapse ? 7n : 4n,
+        snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: segmentIdentity(foreign) } : s));
+      const extra = withReceipt ? [{ kind: 10, payload: receipt }] : [];
+      if (held === undefined) expect((await f.read(f.y.name, target, extra)).receipt).toMatchObject({ status: "final" });
+      else await expect(f.read(f.y.name, target, extra)).rejects.toMatchObject(held);
+      const first = f.items.findIndex(item => item.kind === 4 && compareBytes(decodeSnapshot(item.payload).backing, f.x.name) === 0 &&
+        compareBytes(decodeSnapshot(item.payload).historyHash, f.cur().state.history) === 0);
+      f.items.splice(first, 1);
+      // Withheld evidence leaves the checkpoint unresolved, never a context exclusion read from the other segment's header.
+      await expect(f.read(f.y.name, target, extra)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    }
+  });
+
   it("reads a receipt whose `after` checkpoint's first snapshot does not decode as unresolved, never EncodingError (pool-v3 §7)", async () => {
     const f = await twoBackings();
     f.replaceX(1n, 6n); // x's first term ends at 6

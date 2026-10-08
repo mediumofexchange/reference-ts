@@ -190,7 +190,7 @@ describe("v3 recovery journal and independent package reader", () => {
     await expect(restored.rescope("repair", { keep: [f.backing] })).rejects.toMatchObject({ code: "RESTORED" });
     await expect(restored.open("genesis-2", [])).rejects.toMatchObject({ code: "RESTORED" });
     await expect(restored.return("early")).rejects.toMatchObject({ code: "STALE" });
-    // Recording the restoration again before its return keeps its index and spacing.
+    // Recording the restoration again before its return keeps its index (and draws a fresh spacing).
     const at = (await restored.status()).restoredAt!;
     restored.close();
     const again = copy(true);
@@ -272,6 +272,31 @@ describe("v3 recovery journal and independent package reader", () => {
     f.venue.witness(1, operator, f.venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, next.sequence - 5n, b(9))));
     f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
     await expect(second.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("draws a fresh spacing for a copy taken while a restoration's fence stands, so its return is no other's (M13d)", async () => {
+    const f = await fixture(12n), { original, copy } = await copied(f);
+    original.close();
+    const fenced = copy(true), at = (await fenced.status()).restoredAt!;
+    fenced.close();
+    // A backup of the fenced directory, taken before its return is signed, restored while the first instance lives.
+    const directory = f.file.slice(0, -"/journal.db".length), during = `${directory}-during`; directories.push(during);
+    cpSync(`${directory}-copy`, during, { recursive: true });
+    const first = copy(), second = new V3OperatorJournal(join(during, "journal.db"), { secret: operatorSecret, venue: f.venue, reference,
+      verifier, restored: true }); journals.push(second);
+    expect((await second.status()).restoredAt).toBe(at);
+    f.venue.advance(f.venue.witnessedIndex() + 16n);
+    const one = await first.return("restored"), two = await second.return("restored-during");
+    expect(two.sequence).not.toBe(one.sequence);
+    // The lower return publishes nothing over the higher one; the record holds the higher, and both if the lower went first.
+    const [low, high] = one.sequence < two.sequence ? [first, second] : [second, first];
+    await high.publish();
+    await expect(low.publish()).rejects.toMatchObject({ code: "CONFLICT" });
+    f.venue.advance(f.venue.witnessedIndex() + lag + 1n);
+    // The lower sees a commitment it did not sign past its own: it adopts no segment the other co-signs in.
+    await expect(low.adopt()).rejects.toMatchObject({ code: "CONFLICT" });
+    await high.adopt();
+    expect((await high.status()).restoredAt).toBeUndefined();
   });
 
   it("keeps a restored copy refused when the record holds a commitment it did not sign (M13d)", async () => {

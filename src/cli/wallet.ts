@@ -92,10 +92,11 @@ function paymentOut(payment: Payment) {
     payee: payment.payee, value: payment.value, fee: payment.fee ?? null, freshens: payment.freshens ?? null, inputs: payment.inputs.length,
     receipt: receiptOut(payment.receipt), final: finalOut(payment.final), superseded: payment.superseded.length, record: sha256(payment.record) };
 }
-function viewOut(view: WalletView) {
-  // `available` is what `pay` and `burn` can spend; notes a demand presented move only by `freshen`.
-  const total = (presented: boolean) => view.holdings.filter(h => h.status === "available" && (h.presented.length > 0) === presented)
-    .reduce((n, h) => n + h.value, 0n);
+function viewOut(view: WalletView, lit: boolean) {
+  // `available` is what `pay` and `burn` can spend: in the pool notes a demand presented move only by `freshen`; lit has
+  // none, and spends a presented note as any other (M14g2), so its `available` counts them and `presented` is a part of it.
+  const total = (presented: boolean) => view.holdings.filter(h => h.status === "available" && (lit ? !presented || h.presented.length > 0 :
+    (h.presented.length > 0) === presented)).reduce((n, h) => n + h.value, 0n);
   return { status: view.checkpoint === undefined ? "unavailable" : "final", backing: view.backing, judgingIndex: view.judgingIndex,
     checkpoint: view.checkpoint === undefined ? null : commitmentOut(view.checkpoint), gap: view.gap, available: total(false), presented: total(true),
     holdings: view.holdings.map(h => ({ cm: h.cm, value: h.value, status: h.status, presented: h.presented })),
@@ -643,7 +644,7 @@ async function sync(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, READ, 1), { directory, kept } = open(args);
   await withWallet(directory, args, { sync: true }, async opened => {
     await withEvidence(opened, args, kept, false, async source => {
-      print({ ...viewOut(await opened.wallet.sync(source.bytes, kept.signed)), evidence: source.source, ...source.from });
+      print({ ...viewOut(await opened.wallet.sync(source.bytes, kept.signed), keyed(directory)), evidence: source.source, ...source.from });
     });
   });
 }

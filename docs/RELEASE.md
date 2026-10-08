@@ -25,8 +25,10 @@ npm run check:package
 
 Before writing the record it installs from the install lock with `npm ci`, checks npm's own record of what it placed
 (`node_modules/.package-lock.json`): each installed entry is the pinned one and every pinned entry for this system is
-there, optional ones included. It then runs the installed package's imports and its `moe` bin. A record made from a
-tree with changes says `clean: false` and matches no commit. In a pull request's CI the commit is the merge commit
+there, optional ones included. It then runs the installed package's imports and its `moe` bin. `dist` is ignored by
+git, so the record says `clean: true` only when the tree has no changes and the packed `dist` is byte for byte what a
+fresh `tsc` build of it writes (source maps read from where they lie); a record saying `clean: false` matches no
+commit, and `--compare` and `--verify` refuse it. In a pull request's CI the commit is the merge commit
 checked out. CI does this on Linux and Windows and its `reproducible-release` job compares the
 two records: one commit must give the same tarball bytes, install lock and pins on both systems.
 
@@ -36,8 +38,16 @@ Copy the tarball, `package.json` and `package-lock.json` into an empty directory
 
 ```
 npm ci --ignore-scripts
-node <checkout of the commit>/scripts/release.mjs --verify <that directory>
+node <checkout of the commit>/scripts/release.mjs --verify <that directory> <release-record.json>
 ```
+
+`--verify` binds the install to the record and to the checkout: the record names the checkout's commit, a clean
+tree and the checkout's lockfile; the directory's install lock is byte for byte the one `installLock` derives from
+the checkout's lockfile for the record's tarball, with the record's SHA-256; and the tarball has the record's SHA-256
+and integrity. A tarball and lock that only name each other are refused. The record is what binds the tarball to
+the commit, so take it from a source you trust for that commit: CI's `release-record-<system>` artifact, or a record
+you made yourself with `check:package` from the checkout and compared with `--compare`. `--verify` does not rebuild
+the tarball, so a record anyone could write binds nothing.
 
 `npm ci` refuses a tarball or required registry entry whose bytes fail their integrity (`EINTEGRITY`), and npm's
 cache, keyed by integrity, serves only the pinned bytes. It drops an optional entry that fails its integrity silently
