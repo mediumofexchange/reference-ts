@@ -509,8 +509,10 @@ customer's payment credits another's order), and crediting again a request its l
      catching up) does not fix it too low (WORK.md Next 4 (bc)). That `h` leaves out the outputs of the wallet's own
      payments prepared from a checkpoint witnessed after the first read, so its move does not fill the window again; a
      move from an older checkpoint counts, since lit-v1's moves are deterministic and the lost instance may have made
-     the same one. Make the move from a view caught up with the lost instance's: one made while the node still lags
-     may repeat a move that instance made and read final, and is then left out wrongly. While the exposure rises, an
+     the same one, and fills the window again (waiting for one more checkpoint after the first read saves that move).
+     Make the move from a view caught up with the lost instance's, or pay its fee to a request taken since the
+     restoration: a fee-less move made while the node still lags may repeat one that instance made and read final, and
+     is then left out wrongly, while any other move conflicts with it and stops the wallet (`FORKED`). While the exposure rises, an
      output within its reach reads as the lost instance's, since a late payment to one of its requests looks the same
      as another instance acting, for as long as the wallet names no key; one past it, or a held note another instance
      spent, still stops the wallet (`FORKED`). `restore-seed` does the same from its first sync.

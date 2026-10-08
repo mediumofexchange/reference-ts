@@ -587,6 +587,12 @@ try {
     assert.deepEqual([moved.kind, moved.status, moved.value], ["payment", "pending", "2"]);
     await finalOf(H2, "move-1");
     assert.deepEqual(holdings(await ok(wallet("sync", H2, backing))), before);
+    // That move, prepared from a checkpoint its first sync had, may be the last instance's own and counts (Next 4 (bc)):
+    // the window is full again until a second move, prepared after it.
+    await refused(wallet("request", H2, "after", backing, "1"), "WINDOW");
+    await ok(wallet("move-window", H2, "move-2", backing));
+    await finalOf(H2, "move-2");
+    await ok(wallet("sync", H2, backing));
     const after = await ok(wallet("request", H2, "after", backing, "1"));
     assert.equal(after.status, "saved");
     // The handoff's wallet, still running, reads that window move: an own key paid above every index it exposed, so
@@ -597,8 +603,11 @@ try {
     await refused(wallet("request", H3, "next", backing, "1"), "FORKED");
     assert.equal((await ok(["wallet", "restore", "--copy", "--dir", H3])).copied, false);
     assert.equal((await ok(wallet("sync", H3, backing))).forked, undefined);
-    await ok(wallet("move-window", H3, "move-h3", backing));
-    await finalOf(H3, "move-h3");
+    for (const name of ["move-h3", "move-h3-2"]) {
+      await ok(wallet("move-window", H3, name, backing));
+      await finalOf(H3, name);
+      await ok(wallet("sync", H3, backing));
+    }
     // A wallet whose window still takes new keys has none to move.
     assert.match((await refused(wallet("move-window", HD, "move-0", backing), "CONFLICT")).message, /window is not full/);
   });
@@ -630,8 +639,11 @@ try {
     // Its next read exposes every key through h + 256 (lit-v1 §8): the key order-A took is never named again.
     await ok(wallet("sync", H3, backing));
     await refused(wallet("request", H3, "order-B", backing, "1"), "WINDOW");
-    await ok(wallet("move-window", H3, "move-2", backing));
-    await finalOf(H3, "move-2");
+    for (const name of ["move-2", "move-3"]) {
+      await ok(wallet("move-window", H3, name, backing));
+      await finalOf(H3, name);
+      await ok(wallet("sync", H3, backing));
+    }
     const next = await request(H3, "order-B", 1);
     assert.notEqual(next.made.frame.slice(-64), lost.made.frame.slice(-64));
     // The reader's copied view is audited as it opens and its copied replay file read again: the same supply.

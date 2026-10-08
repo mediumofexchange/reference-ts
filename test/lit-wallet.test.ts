@@ -242,11 +242,16 @@ describe("the one wallet holding lit notes", () => {
     expect(values(view).sort((p, q) => (p[0]! < q[0]! ? -1 : 1))).toEqual([[201n, "available"], [451n, "available"], [701n, "available"]]);
     // Every index through h + 256 = 956 reads as exposed: no new request until the window moves.
     expect(await refusal(() => restored.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
-    // §8: the restored wallet pays itself at 956, and once that is final requests again past it.
-    await restored.moveWindow("move", await f.served(), f.signed);
-    await restored.submit("move", f.service); await f.checkpoint();
-    await restored.sync(await f.served(), f.signed);
-    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 957n)))).toBe(true);
+    // §8: the restored wallet pays itself at 956. Prepared from a checkpoint its first read had, that move may be its lost
+    // instance's own (Next 4 (bc)), so once final it counts and exposes through 1212; a second move, prepared after, does
+    // not, and requests resume past it.
+    for (const name of ["move", "move-2"]) {
+      expect(await refusalOf(Promise.resolve().then(() => restored.keyedRequest("next", f.backing, 1n)))).toMatch(/^WINDOW: every owner key within 256/);
+      await restored.moveWindow(name, await f.served(), f.signed);
+      await restored.submit(name, f.service); await f.checkpoint();
+      await restored.sync(await f.served(), f.signed);
+    }
+    expect(same(restored.keyedRequest("next", f.backing, 1n).owner, pub(ownerSecret(restored.recoverySeed(), DOMAIN, f.backing, 1213n)))).toBe(true);
   });
 
   // --- Next 4 (bc): a restoration whose first read is older than its lost instance's view ------------------------------
@@ -474,10 +479,11 @@ describe("the one wallet holding lit notes", () => {
     holder.recordRestoration();
     expect((await holder.sync(await f.served(), f.signed)).forked).toBeUndefined();
     expect(await refusal(() => holder.keyedRequest("next", f.backing, 1n))).toBe("WINDOW");
-    // The other instance, still running, finds the live one's window move in turn: its key at 512, above its own 256.
+    // The other instance, still running, finds the live one's window move in turn. Its exposure is restoration-derived and
+    // reaches the move's key at 512 (Next 4 (bc)), but the move spent the note at 256 it held.
     await holder.moveWindow("move-2", await f.served(), f.signed);
     await holder.submit("move-2", f.service); await f.checkpoint();
-    expect((await other.sync(await f.served(), f.signed)).forked).toMatch(/pays its owner key at index 512, above every index this wallet exposed \(256\)$/);
+    expect((await other.sync(await f.served(), f.signed)).forked).toMatch(/^the note \d+ of backing [0-9a-f]{64}, held at this wallet's read at index \d+, is spent by a statement this wallet did not make/);
   });
 
   it("trips on another instance's spend of a note even where its own spend of that note failed, and refuses paying that request (M13f review)", async () => {
