@@ -3,16 +3,13 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 15, the design point's two edges, is done** (#155; Next 4 (ay), (az); [decision](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15), [probes](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15))
-(ay) is closed: H through Barretenberg's own Poseidon2 and the journal's read skipping proofs
-this process verified at admission keep admission during that read at 0.52–0.61 s at 10⁵ and 42 statements a checkpoint (M13h: 1.30–1.48 s), and `serve`'s CPU a
-statement nearly halves; the 10⁶ run settles how the wait grows with depth. (az) is reduced, not closed: a wallet's read holds about 2.2 KB a holding beyond a
-reader's (4.0 KB before), so a first sync reaches 1 GiB near 1.8·10⁵ unspent notes. Making that independent of holdings means
-streaming the view, kept as Next 4 (az). The acceptance changed from "near a reader's memory" once 10⁵ holdings showed what remains.
-Reviewed: one fresh reviewer each, every finding fixed; reports re-recorded from CI run 37797516743. Local machine: no new runs owed.
+**Slice 16, Bitcoin's venue probes 1 and 2, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16), [decision](decisions/2026-10.md#2026-10-08--keep-bitcoin-as-the-second-venue-direction-its-records-are-delayed-by-a-third-of-blocks-not-excluded-and-its-reader-exceeds-the-declared-transfer-budget-slice-16)). Ergo alone is not
+enough for material value, so these read-only probes could falsify Bitcoin before any `venue-bitcoin.md`. They did not: AntPool's
+templates (a third of blocks) exclude OP_RETURN over 83 B and the rest mine them (delay, not exclusion). Our own parser verified
+a week from two suppliers; a Bitcoin reader fails the declared transfer budget (gate failed, not revised). Reviewed (#156).
 
-**Proposed next:** choose from Next by release distance: (az) streaming only if a holder must pass about 1.5·10⁵ notes;
-otherwise the Venues probe (Next 12) or Next 4's waiting letters. The external review and local-machine runs stay outside.
+**Proposed next:** by release distance: Next 12's read-only probe 3, Next 4's waiting letters, or (az) streaming if a holder must
+pass about 1.5·10⁵ notes. Slice 15 (#155): (ay) closed, (az) reduced.
 
 **Slice 13, release assurance, is done** (Next 6; [2026-10-03](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 3): (a) M13a #143 ([release record](docs/RELEASE.md), CI's
 `reproducible-release`); (b) M13c #145 ([separate installs](docs/RELEASE.md#separate-installs)); (c) M13d #146, spec #19 (a restored operator returns past
@@ -74,8 +71,11 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
 10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)), each only where it serves a function no other does ([2026-10-08](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)): pool the default; lit notes (slice 14, adopted) for links carrying only tiny packets: measure its frames against a mesh packet budget, size cuts are lit-v2 candidates; offline after release; accumulator and Chaumian only if a comparison shows a function of their own.
 11. **Agent-first surfaces** (AGENTS.md direction): every command, wallet and service answer serves agents managing backings and wallets and autonomous AIs (one JSON object and coded exits exist, M10b); check each new lit command against it.
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
-   Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probe: OP_RETURN outputs over 83 bytes by pool over 2,016
-   blocks (read-only), then a week's exhaustion read; before release assurance; BTC/XMR as chain-asset terms.
+   Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probes 1 and 2 (slice 16, [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16)) keep it:
+   AntPool's template group (a third of blocks) delays records over 83 B; its reader fails the declared transfer budget.
+   Next: probe 3 read-only (time public-mempool transactions with OP_RETURN over 83 B from first sight to inclusion, against fee and pool,
+   beside ordinary ones at the same fee rate), then mainnet publication once funded (Open questions); then `venue-bitcoin.md` with
+   its reader's own budget line. BTC/XMR as chain-asset terms.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
@@ -90,6 +90,9 @@ dispositioned, spec #21); (e) M13h #153: the 10⁵ rerun. The external security 
 - Non-blocking, local machine: a live re-run of the command drill (its report predates slice 13), the 10⁶ design-point run (budgets extrapolate from curves flat to 10⁵, and it settles slice 15's admission wait; [2026-10-03 direction](decisions/2026-10.md#2026-10-03--measure-the-design-point-at-sizes-a-run-can-prove-and-give-the-holders-transport-and-funding-a-slice-before-release-assurance) item 1), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Non-blocking, maintainer (2026-10-08): the external security review, release assurance's one remaining item; commissioning it lies
   outside the standing authorization. Slice 13's own part is done; rolling AI reviews continue meanwhile (Next 6).
+- Non-blocking, maintainer (2026-10-08): Bitcoin probe 3's decisive part publishes 136 B and 15.5 KB records on mainnet against
+  fee (Next 12), which spends real funds outside the standing authorization: fund or authorize a small budget (under about
+  100,000 sats at 1–2 sat/vB). The read-only variant goes first.
 - Deletion list (2026-10-07): none open.
 
 Roughly **76% done / 24% remaining** (range 66–82%), reassessed 2026-10-08 (slice 15): the design point now holds every budget at 10⁵,
