@@ -529,8 +529,12 @@ function keptRowsHold(store: ReplayStore, ns: number, position: bigint, identity
  * position, with the own outputs (leaves) and the demands its trail stood up there. A namespace this process's replay
  * wrote is known through what it wrote; one loaded from a kept file is known only once rebuilt, so each is rebuilt once,
  * from where it is known on, never per checkpoint. `top` is the highest position of any own row a rebuild walked, so a
- * check at a tip knows no known row lies past it. */
-interface KnownOutputs { readonly position: bigint; readonly leaves: bigint; readonly top: bigint; readonly demands: ReadonlyMap<string, Demand> }
+ * check at a tip knows no known row lies past it, and `skipped` the lowest leaf of a row it passed over as past its
+ * position: leaves are not unique, so the next walk starts there to judge that row again. */
+interface KnownOutputs {
+  readonly position: bigint; readonly leaves: bigint; readonly top: bigint; readonly skipped: bigint | undefined;
+  readonly demands: ReadonlyMap<string, Demand>;
+}
 const knownOutputs = new WeakMap<ReplayStore, Map<number, KnownOutputs>>();
 function known(store: ReplayStore): Map<number, KnownOutputs> {
   let map = knownOutputs.get(store);
@@ -541,7 +545,7 @@ function known(store: ReplayStore): Map<number, KnownOutputs> {
 function replayedOutputs(store: ReplayStore, ns: number, construction: Construction): void {
   if (construction.namespace.tree) return;
   const tip = store.tip(ns), prior = known(store).get(ns);
-  known(store).set(ns, { position: tip.position, leaves: tip.leaves, top: tip.position, demands: prior?.position === tip.position ? prior.demands : new Map() });
+  known(store).set(ns, { position: tip.position, leaves: tip.leaves, top: tip.position, skipped: undefined, demands: prior?.position === tip.position ? prior.demands : new Map() });
 }
 
 /** Lit-v1 §10: no root in a lit snapshot checks the output set, so a reader resuming a namespace without a note tree
@@ -585,18 +589,22 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
   // Every own row past the known leaves at or below `position` is a derived output, in order, and none is missing. At the
   // tip no own row may lie past it: one would become visible, and spendable, as the namespace grows. Rows this process
   // already knows are not walked again, so a read resuming checkpoint after checkpoint walks each row once.
-  let k = 0, top = from?.top ?? 0n;
-  for (const output of store.ownOutputs(ns, from?.leaves ?? 0n)) {
+  const leaves = from?.leaves ?? 0n, start = from?.skipped !== undefined && from.skipped < leaves ? from.skipped : leaves;
+  let k = 0, top = from?.top ?? 0n, skipped: bigint | undefined;
+  for (const output of store.ownOutputs(ns, start)) {
     if (output.position > top) top = output.position;
     if (output.position > position) {
       if (tip) return false;
+      if (skipped === undefined || output.leaf < skipped) skipped = output.leaf;
       continue;
     }
+    // A row below the known leaves that an earlier walk compared (at or below its position) is not compared again.
+    if (output.leaf < leaves && output.position <= after) continue;
     const expected = derived[k++];
     if (expected === undefined || expected.cm !== output.cm || expected.position !== output.position) return false;
   }
-  if (k !== derived.length) return false;
-  known(store).set(ns, { position, leaves: (from?.leaves ?? 0n) + BigInt(k), top, demands: local });
+  if (k !== derived.length || (tip && top > position)) return false;
+  known(store).set(ns, { position, leaves: leaves + BigInt(k), top, skipped, demands: local });
   return true;
 }
 

@@ -27,7 +27,7 @@ import type { SegmentHeader } from "../src/pool/v3/headers.js";
 import { encodeEvidenceDirectory, type EvidenceItem } from "../src/pool/v3/package.js";
 import { readPresentation } from "../src/pool/v3/dishonour.js";
 import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
-import { keptStateHolds } from "../src/pool/v3/reader.js";
+import { keptStateHolds, storedTipHolds } from "../src/pool/v3/reader.js";
 import { keptFileDigest, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type ProofCheck, type SegmentReplay, type SegmentState } from "../src/pool/v3/state.js";
 import type { RootTerms } from "../src/pool/v3/terms.js";
@@ -488,6 +488,36 @@ describe("lit packages through the one reader (M14d)", () => {
       expect(resumed.state.hasOutput(BigInt(`0x${hex(noteCommitment(DOMAIN, phantom))}`))).toBe(false);
       store.close(); evidence.close();
     } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
+  });
+
+  it("judges again a phantom row a lower check passed over: leaves are not unique, so a later walk cannot start past it (§10)", async () => {
+    for (const at of [3n, 2n]) {
+      const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-low-leaf-"));
+      const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };
+      try {
+        g.checkpoint(1n, 1n);
+        await g.admit(g.issue(10n, ALICE));
+        const first = g.snapshotNow();
+        await g.admit(g.issue(5n, BOB));
+        let store = new ReplayStore(files.path, { digest: files.digest });
+        const evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        expect(stateOf(await g.read(g.checkpoint(2n, 3n), [], { store, evidence })).state.position).toBe(2n);
+        store.close(); evidence.close();
+        // A phantom note of Mallory's at leaf 0, past the tip (3) or at it (2), under a re-recorded digest.
+        const db = new DatabaseSync(files.path), phantom: Opening = { backing: g.backing, value: 1000n, owner: pub(MALLORY), rho: b(88) };
+        const { ns } = db.prepare("SELECT ns FROM namespace WHERE position = 2").get() as { ns: number };
+        expect(db.prepare("INSERT INTO output (cm, ns, position, leaf, capsule, settlement) VALUES (?, ?, ?, 0, NULL, 0)")
+          .run(noteCommitment(DOMAIN, phantom), ns, at).changes).toBe(1);
+        db.close();
+        writeFileSync(files.digest, keptFileDigest(files.path)!);
+        store = new ReplayStore(files.path, { digest: files.digest });
+        const trail = g.trailOf();
+        // The check at position 1 passes over the phantom; the tip's check must still find it.
+        expect(keptStateHolds(store, ns, 1n, store.identity(ns), first, LIT, trail)).toBe(true);
+        expect(storedTipHolds(store, ns, LIT, trail)).toBe(false);
+        store.close();
+      } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
+    }
   });
 
   it("walks each own output row about once in a read resuming checkpoint after checkpoint (§10's rebuild, not per checkpoint)", async () => {
