@@ -3,7 +3,7 @@
 Updated: 2026-10-08
 
 ## Goal
-**Next 4 (bd), done** ([decision](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd); PR pending): a request held only by
+**Next 4 (bd), done** ([decision](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd); #161): a request held only by
 failed saved payments is paid again under another alias, and the retry conflicts with each, so at most one ever lands: pool's
 retry pays the request's exact output (a door refuses it twice); lit's spends a note each failed payment spends, unless one of
 its inputs is spent in canonical history. (bc), (be) done before it (#159, #160; (bc)'s limit in its decision).
