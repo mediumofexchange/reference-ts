@@ -195,19 +195,21 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   if (!same(commitment.operator, selection.operator) || commitment.sequence !== selection.sequence || !same(commitment.root, selection.root)) {
     throw new EvidenceRefusal("selection-mismatch");
   }
-  const directory = batch.directory(commitment.root);
-  if (directory?.some(value => same(value.name, selection.backing)) !== true) throw new EvidenceRefusal("unresolved-evidence");
-  // The scope is the one the directory's first snapshot names, as the checkpoint's judgment reads it (pool-v3 §7.1,
-  // C2.10.11), so a selected backing whose own snapshot names another segment reads the class every backing reads.
-  // A preimage that does not decode is no snapshot (§7): unresolved, never a verdict.
-  const first = directory[0]!, snapshotBytes = batch.snapshot(first.digest);
+  const directory = batch.directory(commitment.root), own = directory?.find(value => same(value.name, selection.backing));
+  if (directory === undefined || own === undefined) throw new EvidenceRefusal("unresolved-evidence");
+  // The read's context is the scope the directory's first snapshot names, as the checkpoint's judgment reads it (pool-v3
+  // §7.1, C2.10.11), so a selected backing whose own snapshot names another segment reads the class every backing reads.
+  // It needs only the selected backing's terms, which its name binds: where the first snapshot is not held, the selected
+  // backing's own names them, and a read that judges the selection still refuses for the first one (a receipt final
+  // before it does not). A preimage that does not decode is no snapshot (§7): unresolved, never a verdict.
+  const first = directory[0]!, source = batch.snapshot(first.digest) !== undefined ? first : own, snapshotBytes = batch.snapshot(source.digest);
   if (snapshotBytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
   let snapshot: Snapshot;
   try { snapshot = frames.snapshot.decode(snapshotBytes); } catch (error) {
     if (error instanceof EncodingError) throw new EvidenceRefusal("unresolved-evidence");
     throw error;
   }
-  const scope = checkpointScope(construction, batch, first.name, first.digest, snapshot), { header } = scope;
+  const scope = checkpointScope(construction, batch, source.name, source.digest, snapshot), { header } = scope;
   // The trail is the judgment's to demand: a valid or excluded class needs it (the selection's own, never a compact
   // fault, `judge`), a lapse reads the header and scope alone (C2.10.11, pool-v3 §12), so a lapsed selection served a
   // count-zero trail reads lapsed.
