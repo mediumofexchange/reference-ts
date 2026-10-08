@@ -8,7 +8,7 @@ import * as notes from "../src/lit/notes.js";
 import * as codec from "../src/lit/records.js";
 import * as frames from "../src/lit/commitments.js";
 import * as wallet from "../src/lit/wallet-keys.js";
-import { OwnerKeys } from "../src/lit/holdings.js";
+import { litWitness, OwnerKeys } from "../src/lit/holdings.js";
 import * as fault from "../src/lit/fault-evidence.js";
 import * as terms from "../src/lit/terms.js";
 import * as transport from "../src/lit/transport.js";
@@ -368,6 +368,7 @@ describe("lit-v1 §5 frames", () => {
 });
 
 describe("lit-v1 §8 key derivation", () => {
+  const IDENTITY = "5faf9a77d46b8c7de5241fc158cc8270628cdae410de5a8331c34130849a3193";
   const seed = id(71);
   const root = (info: string): Buffer => Buffer.from(hkdfSync("sha256", seed, DOMAIN, ascii(info), 32));
   const hmac = (key: Uint8Array, ...m: Uint8Array[]): Buffer => createHmac("sha256", key).update(join(...m)).digest();
@@ -396,6 +397,18 @@ describe("lit-v1 §8 key derivation", () => {
     keys.close();
     expect(() => keys.acceptKey(demandHash, ACCEPTANCE_DEADLINE)).toThrow("the owner keyring is closed");
     expect(() => keys.key(BACKING, 7n)).toThrow("the owner keyring is closed");
+  });
+  it("names a scan's kept state by an identity fixed by the seed, the domain and every window, and marks nothing once its keyring closes", () => {
+    const keys = new OwnerKeys(seed, DOMAIN), windows = new Map([[hex(BACKING), 512n], [hex(BACKING_2), 1024n]]);
+    // Kept replay state is reused only under this identity (§14): a change of its bytes discards every kept read.
+    const witness = litWitness(seed, DOMAIN, windows, keys);
+    expect(hex(witness.identity!)).toBe(IDENTITY);
+    expect(hex(litWitness(seed, DOMAIN, new Map([[hex(BACKING), 1024n], [hex(BACKING_2), 1024n]]), keys).identity!)).not.toBe(IDENTITY);
+    const owner = keys.key(BACKING, 3n), opening = { backing: BACKING, value: 5n, owner, rho: id(9) };
+    const output = { cm: 11n, lit: opening } as unknown as Parameters<typeof witness>[0];
+    expect(witness(output)).toBeDefined();
+    keys.close();
+    expect(witness(output)).toBeUndefined();
   });
 });
 

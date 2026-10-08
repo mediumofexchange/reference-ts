@@ -79,6 +79,7 @@ export class OwnerKeys implements Keyring {
     try { return publicKeyOf(secret); } finally { secret.fill(0); }
   }
   close(): void { this.#closed = true; this.#root.fill(0); this.#settlement.fill(0); }
+  get closed(): boolean { return this.#closed; }
 }
 
 /** How a note is the wallet's (§8), and a wallet's lit note, as the one wallet reads them (pool/v3/construction.ts). */
@@ -130,8 +131,9 @@ export function litWitness(seed: Uint8Array, domain: Uint8Array, windows: Readon
   try { identity = new Uint8Array(hkdfSync("sha256", own, copyBytes(domain), info.finish(), 32)); } finally { own.fill(0); }
   return Object.assign((output: ScanOutput): WitnessMark | undefined => {
     try {
+      // A closed keyring marks nothing, whatever the output: no mark depends on which keys a closed one still answers.
       const lit = output.lit;
-      if (lit === undefined) return undefined;
+      if (lit === undefined || keys.closed) return undefined;
       let owner: LitOwner | undefined;
       if (lit.acceptance !== undefined) {
         if (same(keys.acceptKey(lit.acceptance.demand, lit.acceptance.deadline), lit.owner)) owner = { acceptance: lit.acceptance };
