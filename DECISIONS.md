@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-08` [Close the code review of slices 12–14: a fenced backup's restoration spacing, a settlement to the holder's own owner, and a release check bound to its record](decisions/2026-10.md#2026-10-08--close-the-code-review-of-slices-1214-a-fenced-backups-restoration-spacing-a-settlement-to-the-holders-own-owner-and-a-release-check-bound-to-its-record)
 - `2026-10-08` [Judge lapse before the reader's own snapshot, serve every fork's trail, and disposition the rest of Next 4 (slice 13 M13g)](decisions/2026-10.md#2026-10-08--judge-lapse-before-the-readers-own-snapshot-serve-every-forks-trail-and-disposition-the-rest-of-next-4-slice-13-m13g)
 - `2026-10-08` [Build a claim-layer profile only where it serves a function no other profile serves](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)
 - `2026-10-07` [Bind a settlement's output to its acceptance, fence a wallet that sees another instance of its seed act, and refuse a lit request the seed already paid (slice 13 M13f)](decisions/2026-10.md#2026-10-07--bind-a-settlements-output-to-its-acceptance-fence-a-wallet-that-sees-another-instance-of-its-seed-act-and-refuse-a-lit-request-the-seed-already-paid-slice-13-m13f)

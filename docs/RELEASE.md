@@ -44,7 +44,10 @@ node <checkout of the commit>/scripts/release.mjs --verify <that directory> <rel
 `--verify` binds the install to the record and to the checkout: the record names the checkout's commit, a clean
 tree and the checkout's lockfile; the directory's install lock is byte for byte the one `installLock` derives from
 the checkout's lockfile for the record's tarball, with the record's SHA-256; and the tarball has the record's SHA-256
-and integrity. A tarball and lock that only name each other are refused.
+and integrity. A tarball and lock that only name each other are refused. The record is what binds the tarball to
+the commit, so take it from a source you trust for that commit: CI's `release-record-<system>` artifact, or a record
+you made yourself with `check:package` from the checkout and compared with `--compare`. `--verify` does not rebuild
+the tarball, so a record anyone could write binds nothing.
 
 `npm ci` refuses a tarball or required registry entry whose bytes fail their integrity (`EINTEGRITY`), and npm's
 cache, keyed by integrity, serves only the pinned bytes. It drops an optional entry that fails its integrity silently
