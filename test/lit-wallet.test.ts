@@ -320,6 +320,27 @@ describe("the one wallet holding lit notes", () => {
     expect(await refusalOf(seeded.prepare("pay", { request: invoice, value: 4n }, await f.served(), f.signed))).toMatch(/^CONFLICT: a statement of this seed that this wallet did not save already paid/);
   });
 
+  it("refuses a window move's fee its lost instance already paid, as any payment of that request (M13f)", async () => {
+    const f = await fixture(), operator = f.open("operator");
+    let holder = f.open("holder");
+    await f.issue(holder.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();
+    await holder.sync(await f.served(), f.signed);
+    for (let i = 1; i <= 256; i++) holder.keyedRequest(`r${i}`, f.backing, 1n);
+    holder.close();
+    copyWallet(f.path("holder"), f.path("backup"));
+    // After the backup the holder moves its full window paying the operator's fee, and is lost.
+    holder = V3Wallet.open(f.path("holder"), { construction: LIT, venue: f.venue, reference }); wallets.push(holder);
+    const fee = { request: operator.keyedRequest("fee", f.backing, 1n), value: 1n };
+    await holder.moveWindow("move", await f.served(), f.signed, fee);
+    await holder.submit("move", f.service); await f.checkpoint(); holder.close();
+    const restored = V3Wallet.open(f.path("backup"), { construction: LIT, venue: f.venue, reference }); wallets.push(restored);
+    restored.recordRestoration();
+    expect((await restored.sync(await f.served(), f.signed)).forked).toBeUndefined();
+    expect(await refusalOf(restored.moveWindow("move", await f.served(), f.signed, fee)))
+      .toBe("CONFLICT: a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
+    expect(restored.payment("move")).toBeUndefined();
+  });
+
   it("acts on nothing once a read finds its key paid above every index it exposed, or a note it held spent by another instance (M13f)", async () => {
     const f = await fixture(), holder = f.open("holder");
     await f.issue(holder.keyedRequest("fund", f.backing, 10n)); await f.checkpoint();

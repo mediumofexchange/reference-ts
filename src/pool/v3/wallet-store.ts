@@ -1822,6 +1822,15 @@ export class V3Wallet {
     return saved()!;
   }
 
+  /** Whether `owner` is one this pool wallet holds a note under, gave an output of its own statements, or derives
+   * for a receive request it made or recovered. */
+  private ownsOwner(owner: bigint, notes: readonly OwnedNote[]): boolean {
+    if (notes.some(note => note.opening.owner === owner)) return true;
+    if (this.db.prepare("SELECT 1 FROM saved_outputs WHERE owner=?").get(owner.toString()) !== undefined) return true;
+    return this.db.prepare("SELECT request_id, backing, value FROM receiver_requests").all().some(row =>
+      prepareExactOutput(this.seed, this.domain, row.request_id as Uint8Array, row.backing as Uint8Array, BigInt(row.value as string)).opening.owner === owner);
+  }
+
   /** C3.5–C3.6: settle this seed's demand that the backer's acceptance answers (`standing`: a demand saved here,
    * or one a lost wallet made, found from the seed): the demand's own notes in its positions into one output of
    * its quantity to the acceptance's owner, with `rho_out` derived from the seed, the input nullifiers, the
@@ -1869,6 +1878,9 @@ export class V3Wallet {
           backing, 0n) });
       const count = this.disclosures(view, own.demand, demand.presenter, canonical!.segment);
       const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, acceptanceId(own), count);
+      // A backer naming an owner of this wallet's own takes no claims, yet the demand would read settled (C3.8) and
+      // this seed never finds the output (only a backer's derivation finds settlement outputs): no release to it.
+      requireThat(!this.ownsOwner(own.owner, notes as OwnedNote[]), "OWN_KEY", "the acceptance names an owner this wallet holds or made: it releases no claims to the backer");
       const opening = { backing, value: demand.quantity, owner: own.owner, rho }, cm = commitmentOf(this.domain, opening);
       requireThat(!force!.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
       observed.check();
@@ -2509,6 +2521,10 @@ export class V3Wallet {
       requireThat(canonical !== undefined, "ABSENT", "no canonical checkpoint to spend from");
       this.current(at);
       const header = this.admissible(view), keys = this.ownerKeys(backing);
+      // M13f, as for any lit payment: the fee's request may already be paid by a statement of this seed not saved here.
+      requireThat(paid === undefined || !this.keyed!.paidByOwn(this.seed, this.domain, canonical.state, this.keys!, { backing, ...paid },
+        statement => this.savedStatement(statement)), "CONFLICT",
+        "a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
       requireThat(keys?.exposed !== undefined, "WINDOW", "sync the backing first: a wallet restored from its seed reads its exposed keys");
       const target = keys.exposed > keys.found ? keys.exposed : keys.found;
       // §8 moves a full window only: one whose next index `allocate` refuses.
