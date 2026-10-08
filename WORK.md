@@ -3,20 +3,12 @@
 Updated: 2026-10-08
 
 ## Goal
-**Next 4 (bd), in progress** (branch `claude/bd-repay-failed-request`): a request whose saved payment failed can be paid again
-under another alias, and the retry conflicts with each failed payment so at most one of them can ever land. Pool: the retry
-creates the request's own output, which every door refuses twice. Lit: the retry spends a note the failed payment spends,
-unless one of that payment's inputs is already spent in canonical history. Acceptance: pool and lit tests of a failed payment,
-its retry final and the failed record refused; a failed lit payment whose notes are all reserved or locked is refused with a named
-code; prepared or final payments still block. Stop: merged after review; no spec change (wallet rule; lit-v1 §8 credits one output per request).
-
-**Next 4 (bc) and (be), done** ([decision](decisions/2026-10.md#2026-10-08--raise-a-restored-lit-wallets-exposure-at-each-read-until-it-names-a-key-next-4-bc); #159, #160): a restored lit wallet raises each
-marked backing's exposure at every read until it names a key, leaving out only its own payments prepared after its first read;
-a restoration that moves at once takes two moves. Limit: a fee-less move made while the node lags may repeat the lost
-instance's own byte for byte (lit-v1 cannot tell); the notes ask for a caught-up view or a fee to a request taken since. (be): a lit
-scan holds no seed copy. Area 33 (lit runtime, #158) is otherwise sound.
-**Proposed next:** by release distance: (bd) after a design (Next 4), (bf), (bb) the journal's whole replay at a lagged read, (az)
-streaming past about 1.5·10⁵ notes, or `venue-bitcoin.md` (Next 12, after slices 16–17's probes, #156–#157; a desktop-reader role).
+**Next 4 (bd), done** ([decision](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd); PR pending): a request held only by
+failed saved payments is paid again under another alias, and the retry conflicts with each, so at most one ever lands: pool's
+retry pays the request's exact output (a door refuses it twice); lit's spends a note each failed payment spends, unless one of
+its inputs is spent in canonical history. (bc), (be) done before it (#159, #160; (bc)'s limit in its decision).
+**Proposed next:** by release distance: (bf), (bb) the journal's whole replay at a lagged read (a backward venue view only;
+one full replay, then incremental), (az) streaming past about 1.5·10⁵ notes, or `venue-bitcoin.md` (Next 12, after funding).
 
 **Slice 13, release assurance, is done** (Next 6; M13a–M13h, #143–#153: [release record](docs/RELEASE.md), separate installs, restoration,
 copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ rerun). The external security review stays outside (Open questions).
@@ -51,8 +43,7 @@ copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ re
    at 42 statements a checkpoint); (bb) a journal read at an index below its kept reads' discards them and replays its whole
    history in one turn (37 s at 2.7·10³ statements), seen when a read ran at a restart's index before the lag: root-cause it
    in the journal's audit area;
-   (bc), (be) fixed (Goal; (bc)'s limit and levers in its decision); (bd) a failed payment blocks paying its request again, and a
-   `failed` one can still go `final` (admitted with force), so a fix must show no record of it can land; (bf) an extra kept lit demand row goes unchecked;
+   (bc), (be), (bd) fixed (Goal; (bc)'s limit and levers in its decision); (bf) an extra kept lit demand row goes unchecked;
    accepted (ba): a lit read re-checks every marked note (about 0.14 ms each, 14 s a read at 10⁵), within the steady state.
 5. Slice 11 leftovers (the 10⁵ rerun is M13h: `serve`'s memory levels off near 600 MB, its JavaScript heap near 7 MB). M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
