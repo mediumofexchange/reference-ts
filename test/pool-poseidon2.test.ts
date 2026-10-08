@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { EncodingError } from "../src/bytes.js";
-import { FIELD_MODULUS, fieldToHex, identifierOf } from "../src/pool/field.js";
+import { bytesToField, FIELD_MODULUS, fieldToBytes, fieldToHex, identifierOf, limbsOf } from "../src/pool/field.js";
 import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, nullifierOf, ownerOf } from "../src/pool/notes.js";
 import { poseidon2Hash, poseidon2Permutation } from "../src/pool/poseidon2.js";
@@ -135,5 +135,39 @@ describe("pool-v2 §1: the in-circuit hash on the host", () => {
     const tree = new NoteTree();
     tree.append(cm);
     expect(fieldToHex(tree.root())).toBe("0x0a0b4349ebb20fb003a7426207c71532b4daf133a8cd0fb9d01bbdf78498b43b");
+  });
+});
+
+describe("pool-v2 §1: field elements and identifier limbs as bytes", () => {
+  // The per-byte forms these conversions had before slice 15, as the reference they must agree with.
+  const perByte = {
+    toBytes(value: bigint): Uint8Array { const out = new Uint8Array(32); let v = value; for (let i = 31; i >= 0; i--) { out[i] = Number(v & 0xffn); v >>= 8n; } return out; },
+    fromBytes(bytes: Uint8Array): bigint { let n = 0n; for (const b of bytes) n = (n << 8n) | BigInt(b); return n; },
+  };
+  it("converts as the per-byte forms did, over boundary and spread values, and refuses as before", () => {
+    const limbsBack = identifierOf;
+    let x = 0x9e3779b97f4a7c15n;
+    const next = (): bigint => { x = (x * 6364136223846793005n + 1442695040888963407n) % (1n << 256n); return x; };
+    const values = [0n, 1n, 255n, 256n, p - 1n, p - 2n, 1n << 128n, (1n << 128n) - 1n, 1n << 248n, ...Array.from({ length: 200 }, () => next() % p)];
+    for (const value of values) {
+      const bytes = fieldToBytes(value);
+      expect(bytes).toEqual(perByte.toBytes(value));
+      expect(bytesToField(bytes)).toBe(value);
+      expect(bytesToField(Buffer.from(bytes))).toBe(value);
+      const id = perByte.toBytes(value), [hi, lo] = limbsOf(id);
+      expect([hi, lo]).toEqual([perByte.fromBytes(id.subarray(0, 16)), perByte.fromBytes(id.subarray(16))]);
+      expect(limbsBack(hi, lo)).toEqual(id);
+    }
+    const all = new Uint8Array(32).fill(0xff);
+    expect(limbsOf(all)).toEqual([(1n << 128n) - 1n, (1n << 128n) - 1n]);
+    expect(limbsBack((1n << 128n) - 1n, 0n)).toEqual(new Uint8Array(32).fill(0xff, 0, 16));
+    // p and above, a wrong length, a non-byte value and a limb past 2^128 are refused, as before.
+    for (const bad of [perByte.toBytes(p), all, new Uint8Array(31), new Uint8Array(33), [1, 2] as unknown as Uint8Array]) {
+      expect(() => bytesToField(bad)).toThrow(EncodingError);
+    }
+    for (const bad of [p, -1n, 1 as unknown as bigint]) expect(() => fieldToBytes(bad)).toThrow(EncodingError);
+    for (const bad of [new Uint8Array(31), "00" as unknown as Uint8Array]) expect(() => limbsOf(bad)).toThrow(EncodingError);
+    expect(() => limbsBack(1n << 128n, 0n)).toThrow(EncodingError);
+    expect(() => limbsBack(0n, -1n)).toThrow(EncodingError);
   });
 });

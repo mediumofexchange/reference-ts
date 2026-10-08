@@ -12,7 +12,12 @@
 // two limbs, each the big-endian integer of 16 bytes and so below 2^128.
 // Reducing the identifier modulo p is not a representation of it (§1), and
 // the circuits range-check both limbs, so the host does the same.
+//
+// Bytes and integers convert through one hexadecimal string, not a bigint per
+// byte: a replay and a wallet read convert several elements per record or
+// note, and the per-byte form allocated about 2 KB a conversion (slice 15).
 
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { EncodingError } from "../bytes.js";
 
 /** The BN254 scalar field modulus (pool-v2 §1). */
@@ -40,13 +45,7 @@ export function isValue(value: unknown): value is bigint {
 /** A field element as 32 big-endian bytes. */
 export function fieldToBytes(value: bigint): Uint8Array {
   requireField(value, "field element");
-  const out = new Uint8Array(32);
-  let v = value;
-  for (let i = 31; i >= 0; i--) {
-    out[i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return out;
+  return hexToBytes(value.toString(16).padStart(64, "0"));
 }
 
 /** Strict inverse of fieldToBytes: exactly 32 bytes, below p. */
@@ -54,9 +53,7 @@ export function bytesToField(bytes: Uint8Array): bigint {
   if (!(bytes instanceof Uint8Array) || bytes.length !== 32) {
     throw new EncodingError("field element must be 32 bytes");
   }
-  let n = 0n;
-  for (const b of bytes) n = (n << 8n) | BigInt(b);
-  return requireField(n, "field element");
+  return requireField(BigInt(`0x${bytesToHex(bytes)}`), "field element");
 }
 
 /** A field element as text: `0x` and exactly 64 lowercase hexadecimal digits. */
@@ -77,11 +74,8 @@ export function limbsOf(identifier: Uint8Array): readonly [bigint, bigint] {
   if (!(identifier instanceof Uint8Array) || identifier.length !== 32) {
     throw new EncodingError("identifier must be 32 bytes");
   }
-  let hi = 0n;
-  let lo = 0n;
-  for (let i = 0; i < 16; i++) hi = (hi << 8n) | BigInt(identifier[i] as number);
-  for (let i = 16; i < 32; i++) lo = (lo << 8n) | BigInt(identifier[i] as number);
-  return [hi, lo];
+  const hex = bytesToHex(identifier);
+  return [BigInt(`0x${hex.slice(0, 32)}`), BigInt(`0x${hex.slice(32)}`)];
 }
 
 /** Strict inverse of limbsOf: both limbs below 2^128, or the pair is malformed. */
@@ -91,14 +85,5 @@ export function identifierOf(hi: bigint, lo: bigint): Uint8Array {
       throw new EncodingError("identifier limb out of range");
     }
   }
-  const out = new Uint8Array(32);
-  let h = hi;
-  let l = lo;
-  for (let i = 15; i >= 0; i--) {
-    out[i] = Number(h & 0xffn);
-    h >>= 8n;
-    out[16 + i] = Number(l & 0xffn);
-    l >>= 8n;
-  }
-  return out;
+  return hexToBytes(hi.toString(16).padStart(32, "0") + lo.toString(16).padStart(32, "0"));
 }
