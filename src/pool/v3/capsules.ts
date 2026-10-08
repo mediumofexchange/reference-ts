@@ -161,6 +161,12 @@ export function deriveNonzeroField(key: Uint8Array, preimage: Uint8Array): bigin
   return deriveNonzeroFieldWithAttempt(key, preimage).value;
 }
 
+/** The owner `prepareExactOutput` gives the request `requestId` of this seed, with the keys derived once for all of them. */
+export function requestOwners(seed: Uint8Array, domain: Uint8Array): (requestId: Uint8Array) => bigint {
+  const { spendKey } = deriveMasterKeys(seed, domain);
+  return requestId => ownerOf(deriveNonzeroField(spendKey, bytes(requestId, 32, "request identifier")));
+}
+
 function capsuleKey(recoveryKey: Uint8Array, domain: Uint8Array, commitment: bigint): Uint8Array {
   return hkdf(
     bytes(recoveryKey, 32, "recovery key"),

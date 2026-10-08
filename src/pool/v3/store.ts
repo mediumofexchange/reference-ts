@@ -210,7 +210,7 @@ export interface V3StoreOptions {
   /** The owner restored this journal from a copy or backup (slice 13 M13d). It records the fact, and from then on signs
    * nothing but C2b.4's return, once the silence boundary is witnessed, at a sequence above any its lost instance can
    * have left unwitnessed, and that return's adopted block; adopting it lifts the fence. Recorded again before the
-   * return is signed, it changes nothing; after, it is a restoration of its own (the copy may have been taken after
+   * return is signed, it keeps its index and draws a fresh spacing (a copy taken then holds the same row); after, it is a restoration of its own (the copy may have been taken after
    * the return was signed) and draws a fresh spacing. Also the only way to open a journal whose file is not the one it
    * was made in. */
   readonly restored?: boolean | undefined;

@@ -66,6 +66,12 @@ describe("v3 capsules", () => {
     expect(again.attempts).toEqual(base.attempts);
   });
 
+  it("gives each request's owner as its prepared output names it, the keys derived once", () => {
+    const owners = api.requestOwners(seed, domain);
+    for (const id of [requestId, otherRequestId]) expect(owners(id)).toBe(prepareExactOutput(seed, domain, id, otherBacking, 1n).opening.owner);
+    expect(api.requestOwners(otherSeed, domain)(requestId)).not.toBe(base.opening.owner);
+  });
+
   it("separates identifier, domain, seed, backing and amount", () => {
     const variants = {
       id: prepareExactOutput(seed, domain, otherRequestId, backing, 73n),

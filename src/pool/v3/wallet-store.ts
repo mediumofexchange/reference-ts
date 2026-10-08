@@ -34,7 +34,7 @@ import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
 import { identifierOf, isField, isValue } from "../field.js";
 import { commitmentOf, ownerOf } from "../notes.js";
-import { deriveSettlementOwnerSecret, prepareExactOutput, type PreparedOutput } from "./capsules.js";
+import { deriveSettlementOwnerSecret, prepareExactOutput, requestOwners, type PreparedOutput } from "./capsules.js";
 import type { Receipt } from "./commitments.js";
 import { adoptedDomain, requireConfigurationVerifier } from "./configuration.js";
 import { requireReferenceVenue } from "./guard.js";
@@ -1827,8 +1827,8 @@ export class V3Wallet {
   private ownsOwner(owner: bigint, notes: readonly OwnedNote[]): boolean {
     if (notes.some(note => note.opening.owner === owner)) return true;
     if (this.db.prepare("SELECT 1 FROM saved_outputs WHERE owner=?").get(owner.toString()) !== undefined) return true;
-    return this.db.prepare("SELECT request_id, backing, value FROM receiver_requests").all().some(row =>
-      prepareExactOutput(this.seed, this.domain, row.request_id as Uint8Array, row.backing as Uint8Array, BigInt(row.value as string)).opening.owner === owner);
+    const ownerOf = requestOwners(this.seed, this.domain);
+    return this.db.prepare("SELECT request_id FROM receiver_requests").all().some(row => ownerOf(row.request_id as Uint8Array) === owner);
   }
 
   /** C3.5–C3.6: settle this seed's demand that the backer's acceptance answers (`standing`: a demand saved here,
@@ -1879,7 +1879,8 @@ export class V3Wallet {
       const count = this.disclosures(view, own.demand, demand.presenter, canonical!.segment);
       const rho = settlementRho(this.seed, this.domain, inputs.map(i => i.note.nf), canonical!.segment, acceptanceId(own), count);
       // A backer naming an owner of this wallet's own takes no claims, yet the demand would read settled (C3.8) and
-      // this seed never finds the output (only a backer's derivation finds settlement outputs): no release to it.
+      // this seed never finds the output (only a backer's derivation finds settlement outputs): no release to it, so
+      // the holder keeps its notes. A wallet restored from its seed knows only the owners of what it holds.
       requireThat(!this.ownsOwner(own.owner, notes as OwnedNote[]), "OWN_KEY", "the acceptance names an owner this wallet holds or made: it releases no claims to the backer");
       const opening = { backing, value: demand.quantity, owner: own.owner, rho }, cm = commitmentOf(this.domain, opening);
       requireThat(!force!.hasOutput(cm), "CONFLICT", "the settlement's output already exists");
