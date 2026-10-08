@@ -201,7 +201,7 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   // §7.1, C2.10.11), so a selected backing whose own snapshot names another segment reads the class every backing reads.
   // It needs only the selected backing's terms, which its name binds: where the first snapshot is not held, the selected
   // backing's own names them, and a read that judges the selection still refuses for the first one (a receipt final
-  // before it does not). A preimage that does not decode is no snapshot (§7): unresolved, never a verdict.
+  // before it does not, unless the own snapshot's segment is of another context: unresolved). A preimage that does not decode is no snapshot (§7): unresolved, never a verdict.
   const first = directory[0]!, source = batch.snapshot(first.digest) !== undefined ? first : own, snapshotBytes = batch.snapshot(source.digest);
   if (snapshotBytes === undefined) throw new EvidenceRefusal("unresolved-evidence");
   let snapshot: Snapshot;
@@ -213,7 +213,9 @@ function openPackage(batch: EvidenceBatch, owned: ReturnType<typeof ownPackageRe
   // The trail is the judgment's to demand: a valid or excluded class needs it (the selection's own, never a compact
   // fault, `judge`), a lapse reads the header and scope alone (C2.10.11, pool-v3 §12), so a lapsed selection served a
   // count-zero trail reads lapsed.
-  // The operator and opening sequence are the judgment's, after term lapse (C2.10.11).
+  // The operator and opening sequence are the judgment's, after term lapse (C2.10.11). The selected backing's own
+  // snapshot read in place of a first one not held decides no context: the judgment's is the first's (pool-v3 §7.1).
+  if (!(same(header.domain, domain) && same(header.venue, selection.venue)) && source !== first) throw new EvidenceRefusal("unresolved-evidence");
   requireReplay(same(header.domain, domain) && same(header.venue, selection.venue), "CONTEXT");
   // A directory entry the scope does not name gives no terms to read the selected backing under.
   const scoped = header.entries.findIndex(item => same(item.backing, selection.backing));
