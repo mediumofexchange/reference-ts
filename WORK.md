@@ -3,13 +3,13 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 17, Bitcoin's read-only probe 3, is done** (Next 12; [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17), [decision](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17); #157): records reach mempool.space's mempool
-before mining and their wait within `depth + 2` blocks sets a Bitcoin depth; publishing our own needs funds. Slice 16 (#156): see Next 12.
-
-**Audit 2026-10-08, area 33 (lit-v1 runtime), done** ([decision](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33); #158): verdict and custody sound but for (bc), a major
-deferred with its design: a restoration whose first read is older than its lost instance's view reissues that instance's owner keys.
-**Proposed next:** (bc) first (custody, reproduced); then by release distance: Next 4's waiting letters, (bb) the journal's whole replay at a lagged read, (az) streaming if a
-holder must pass about 1.5·10⁵ notes, or `venue-bitcoin.md` (Next 12; a desktop-reader role).
+**Next 4 (bc) and (be), done** ([decision](decisions/2026-10.md#2026-10-08--raise-a-restored-lit-wallets-exposure-at-each-read-until-it-names-a-key-next-4-bc); #159, #160): a restored lit wallet raises each
+marked backing's exposure at every read until it names a key, leaving out only its own payments prepared after its first read;
+a restoration that moves at once takes two moves. Limit: a fee-less move made while the node lags may repeat the lost
+instance's own byte for byte (lit-v1 cannot tell); the notes ask for a caught-up view or a fee to a request taken since. (be): a lit
+scan holds no seed copy. Area 33 (lit runtime, #158) is otherwise sound.
+**Proposed next:** by release distance: (bd) after a design (Next 4), (bf), (bb) the journal's whole replay at a lagged read, (az)
+streaming past about 1.5·10⁵ notes, or `venue-bitcoin.md` (Next 12, after slices 16–17's probes, #156–#157; a desktop-reader role).
 
 **Slice 13, release assurance, is done** (Next 6; M13a–M13h, #143–#153: [release record](docs/RELEASE.md), separate installs, restoration,
 copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ rerun). The external security review stays outside (Open questions).
@@ -44,9 +44,8 @@ copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ re
    at 42 statements a checkpoint); (bb) a journal read at an index below its kept reads' discards them and replays its whole
    history in one turn (37 s at 2.7·10³ statements), seen when a read ran at a restart's index before the lag: root-cause it
    in the journal's audit area;
-   (bc) a lit restoration's exposure fixed from a stale first read: raise it per read while restoration-derived, over outputs
-   not created since the restoration ([design](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33)); (bd) a failed payment blocks paying its request again; (be) a lit scan's
-   predicate keeps a seed copy unzeroed for its read; (bf) an extra kept lit demand row goes unchecked;
+   (bc), (be) fixed (Goal; (bc)'s limit and levers in its decision); (bd) a failed payment blocks paying its request again, and a
+   `failed` one can still go `final` (admitted with force), so a fix must show no record of it can land; (bf) an extra kept lit demand row goes unchecked;
    accepted (ba): a lit read re-checks every marked note (about 0.14 ms each, 14 s a read at 10⁵), within the steady state.
 5. Slice 11 leftovers (the 10⁵ rerun is M13h: `serve`'s memory levels off near 600 MB, its JavaScript heap near 7 MB). M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
@@ -68,7 +67,7 @@ copied views, `rho_out` reading the acceptance, the Next 4 letters, the 10⁵ re
    tied to what the venue newly holds and serving a reader only the segments its checkpoints name. Past the smallest profile: statements
    spending several backings, adding an original-term backing to a live scope, single-backing openings' |E| over-reserve; a phone-first wallet
    (a venue range source proportional to the subject's records, a new venue identity, then a succinct relation).
-10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)), each only where it serves a function no other does ([2026-10-08](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)): pool the default; lit notes (slice 14, adopted) for links carrying only tiny packets: measure its frames against a mesh packet budget, size cuts are lit-v2 candidates; offline after release; accumulator and Chaumian only if a comparison shows a function of their own.
+10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)), each only where it serves a function no other does ([2026-10-08](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)): pool the default; lit notes (slice 14, adopted) for links carrying only tiny packets: measure its frames against a mesh packet budget, size cuts and a spend salt (closing (bc)'s limit) are lit-v2 candidates; offline after release; accumulator and Chaumian only if a comparison shows a function of their own.
 11. **Agent-first surfaces** (AGENTS.md direction): every command, wallet and service answer serves agents managing backings and wallets and autonomous AIs (one JSON object and coded exits exist, M10b); check each new lit command against it.
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
    Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probes 1 and 2 (slice 16, [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16)) keep it:

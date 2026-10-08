@@ -444,8 +444,10 @@ async function restoreSeed(argv: readonly string[]): Promise<void> {
       await withView(directory, args, (view, verifier) =>
         V3Wallet.restoreSeed(directory.file(WALLET_DB), walletOptions(directory, view, verifier), secret).close());
       return { restored: "seed", ...restoreBacker(directory, args), ...(keyed(directory) ? { notes: [
-        "sync each backing first from a view at least as fresh as the seed's last instance's: that sync exposes every owner key " +
-          "through h + 256 (lit-v1 §8), and an older view fixes it too low, so a later request could name a key the last instance handed out",
+        "its first sync of each backing exposes every owner key through h + 256 (lit-v1 §8), and each later sync raises that until " +
+          "the wallet names a key: move-window before new requests, and before a payment or burn with change. A move from a checkpoint " +
+          "the first sync had counts and fills the window again: wait for one more checkpoint. Make it from a venue view caught up " +
+          "with the seed's last instance's, or pay its fee to a request taken since: a fee-less move from an older view may repeat that instance's own",
       ] } : {}) };
     } });
   } finally { secret.fill(0); }
@@ -496,8 +498,11 @@ async function restoreCopy(argv: readonly string[]): Promise<void> {
       "never run the instance this copy was made from again: two copies of one wallet act unaware of each other; a later read " +
         "that shows another instance of the seed acting stops every acting command (FORKED) until restore --copy is run again",
       "its lost instance may have credited a request it made: fulfill refuses those listed (RESTORED) unless your records outside the wallet show it did not (--uncredited)",
-      ...(keyed(directory) ? ["its next sync of each backing, from a view at least as fresh as its lost instance's, exposes every owner key " +
-        "through h + 256 (lit-v1 §8): move-window before new requests, and before a payment or burn with change",
+      ...(keyed(directory) ? ["its next sync of each backing exposes every owner key through h + 256 (lit-v1 §8), and each later sync " +
+        "raises that until " +
+          "the wallet names a key: move-window before new requests, and before a payment or burn with change. A move from a checkpoint " +
+          "the first sync had counts and fills the window again: wait for one more checkpoint. Make it from a venue view caught up " +
+          "with its lost instance's, or pay its fee to a request taken since: a fee-less move from an older view may repeat that instance's own",
         "pay refuses a request a statement of this seed already paid; one its lost instance still had in flight is not known: " +
         "if it lands later, the next read stops the wallet (FORKED), so before paying an unpaid request again, ask the payee"] : []),
     ] });

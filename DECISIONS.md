@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-08` [Raise a restored lit wallet's exposure at each read until it names a key (Next 4 (bc))](decisions/2026-10.md#2026-10-08--raise-a-restored-lit-wallets-exposure-at-each-read-until-it-names-a-key-next-4-bc)
 - `2026-10-08` [Resume a kept lit namespace only where no output row lies past its tip, and derive lit's outputs once (audit, area 33)](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33)
 - `2026-10-08` [Bitcoin's records reached mempool.space's mempool before mining; size a Bitcoin depth by the excluding third (slice 17)](decisions/2026-10.md#2026-10-08--bitcoins-records-reached-mempoolspaces-mempool-before-mining-size-a-bitcoin-depth-by-the-excluding-third-slice-17)
 - `2026-10-08` [Keep Bitcoin as the second venue direction: its records are delayed by a third of blocks, not excluded, and its reader exceeds the declared transfer budget (slice 16)](decisions/2026-10.md#2026-10-08--keep-bitcoin-as-the-second-venue-direction-its-records-are-delayed-by-a-third-of-blocks-not-excluded-and-its-reader-exceeds-the-declared-transfer-budget-slice-16)

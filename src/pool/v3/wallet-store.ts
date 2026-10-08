@@ -63,7 +63,7 @@ import { authorizeSettlement, burnTask, demandTask, issueTask, settleTask, spend
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 /** A lit key (a SHA-256 digest held as a bigint, lit-v1 §2) as its 32 bytes. */
 const keyBytesOf = (key: bigint): Uint8Array => hexToBytes(key.toString(16).padStart(64, "0"));
-const PROFILE = "moe/wallet/v3/10", KEYED_PROFILE = "moe/wallet/keyed/2", MAX_OWNER = (1n << 63n) - 1n;
+const PROFILE = "moe/wallet/v3/10", KEYED_PROFILE = "moe/wallet/keyed/3", MAX_OWNER = (1n << 63n) - 1n;
 export class V3WalletError extends Error {
   constructor(readonly code: "INVALID" | "UNKNOWN" | "CONFLICT" | "FENCED" | "STORAGE" |
     "ABSENT" | "SPENT" | "LOCKED" | "CHANGED_VIEW" | "FUNDS" | "SILENCE" | "WINDOW" | "OWN_KEY" | "CLOSED" | "COPIED" | "RESTORED" | "FORKED", message: string) { super(message); this.name = "V3WalletError"; }
@@ -115,10 +115,15 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS wallet_fork (id INTEGER PRIMARY KEY CHECK(id=1), evidence TEXT NOT NULL) STRICT;`;
 /** A lit wallet's owner-index state per backing (lit-v1 §8): its highest exposed index, NULL where a wallet restored from
  * its seed alone (`seeded`) has not read the backing yet (its first read exposes every index through `high + 256`), the
- * highest index §8's restoration rule reaches (`h`), and the highest index any read found; −1 for none. */
+ * highest index §8's restoration rule reaches (`h`), and the highest index any read found; −1 for none. `owner_restored`
+ * names the backings whose exposure a restoration's first read fixed, at the venue index `since` of that read, and that
+ * have allocated no index since: each read raises it (Next 4 (bc)), reaching over every output but those of the payments
+ * `owner_restored_saved` names, prepared from a checkpoint witnessed after `since`. */
 const KEYED_SCHEMA = `${SCHEMA}
   CREATE TABLE IF NOT EXISTS owner_wallet (seeded TEXT PRIMARY KEY CHECK(seeded IN ('0','1'))) STRICT;
-  CREATE TABLE IF NOT EXISTS owner_keys (backing BLOB PRIMARY KEY, exposed TEXT, high TEXT NOT NULL, found TEXT NOT NULL) STRICT;`;
+  CREATE TABLE IF NOT EXISTS owner_keys (backing BLOB PRIMARY KEY, exposed TEXT, high TEXT NOT NULL, found TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS owner_restored (backing BLOB PRIMARY KEY REFERENCES owner_keys(backing), since TEXT NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS owner_restored_saved (alias TEXT PRIMARY KEY REFERENCES saved_records(alias)) STRICT;`;
 const definitions = (schema: string) => new Map(schema.split(";").map(s => s.replace(/\s+/g, " ").trim()).filter(s => s !== "")
   .map(s => { const sql = s.replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE "); return [sql.split(" ")[2]!, sql] as const; }));
 /** The wallet's state tables and columns in export order; fixed names, never SQL
@@ -144,7 +149,8 @@ interface Layout {
 }
 const POOL_LAYOUT: Layout = { profile: PROFILE, schema: SCHEMA, definitions: definitions(SCHEMA), tables: TABLES };
 const KEYED_LAYOUT: Layout = { profile: KEYED_PROFILE, schema: KEYED_SCHEMA, definitions: definitions(KEYED_SCHEMA),
-  tables: [...TABLES, ["owner_wallet", ["seeded"]], ["owner_keys", ["backing", "exposed", "high", "found"]]] };
+  tables: [...TABLES, ["owner_wallet", ["seeded"]], ["owner_keys", ["backing", "exposed", "high", "found"]], ["owner_restored", ["backing", "since"]],
+    ["owner_restored_saved", ["alias"]]] };
 /** A restoration the constructor consumes synchronously: the seed, the state
  * rows, the envelope's digest, and the domain and venue it was opened under. */
 interface Installation {
@@ -520,6 +526,13 @@ export class V3Wallet {
           requireThat((row.backing as Uint8Array).length === 32 && keys !== undefined && keys.high <= keys.found &&
             (keys.exposed === undefined || keys.exposed <= keys.high + this.keyed!.lookAhead), "INVALID", "backup state has malformed owner key state");
         }
+        // A restoration's raising (Next 4 (bc)) marks a backing whose exposure a read fixed, at a venue index, and names
+        // payments of a marked backing.
+        requireThat(this.db.prepare("SELECT 1 FROM owner_restored r JOIN owner_keys k ON k.backing=r.backing WHERE k.exposed IS NULL").get() === undefined &&
+          this.db.prepare("SELECT since FROM owner_restored").all().every(row => typeof row.since === "string" && /^(0|[1-9][0-9]{0,19})$/.test(row.since) &&
+            isValue(BigInt(row.since))) &&
+          this.db.prepare(`SELECT 1 FROM owner_restored_saved s JOIN saved_records r ON r.alias=s.alias
+            WHERE r.kind!='2' OR r.backing NOT IN (SELECT backing FROM owner_restored)`).get() === undefined, "INVALID", "backup state has malformed owner key state");
         for (const row of this.db.prepare("SELECT request_id, backing, value, cm FROM receiver_requests").all()) {
           const id = row.request_id as Uint8Array, backing = row.backing as Uint8Array;
           const index = id.length === 40 && same(id.subarray(0, 32), backing) ? new DataView(id.buffer, id.byteOffset + 32).getBigUint64(0) : undefined;
@@ -740,7 +753,7 @@ export class V3Wallet {
           }
           const spent = force;
           // A lit read whose keys reach past a window reads again from nothing under the larger one.
-          if (lit && this.found(backing, canonical.state)) continue;
+          if (lit && this.found(backing, canonical.state, at)) continue;
           // The scan ran inside the replay, once per output: this seed's unspent outputs are read from their kept marks.
           notes = (lit ? this.keyed!.notes(this.seed, this.domain, backing, canonical.state, this.keys!) : ownedNotes(this.seed, this.domain, backing, canonical.state))
             .filter(note => !spent.hasNullifier(note.nf));
@@ -770,31 +783,62 @@ export class V3Wallet {
       return [hex(backing), this.keyed!.window(this.ownerKeys(backing)!.high)] as const;
     }));
   }
-  /** Record what a lit read of `backing` found in its canonical state: per held backing, `h` and the highest index found
-   * (each only rises). True where a window grew, so the read runs again under it; otherwise a backing read for the first
-   * time since a restoration from the seed alone exposes every index through `h + 256` (lit-v1 §8). */
-  private found(backing: Uint8Array, state: CanonicalCheckpoint["state"]): boolean {
-    const found = this.keyed!.found(this.seed, this.domain, state, this.keys!);
+  /** Record what a lit read of `backing` at venue index `at` found in its canonical state: per held backing, `h` and the
+   * highest index found (each only rises). True where a window grew, so the read runs again under it; otherwise a backing
+   * read for the first time since a restoration exposes every index through `h + 256` (lit-v1 §8), and is marked.
+   *
+   * Next 4 (bc): a first read older than the lost instance's view finds `h` too low, so every read, of any backing,
+   * raises each marked backing's exposure to its `h' + 256` until the wallet allocates an index of it. Its window is
+   * full until then, and only its own output moves `h` past `h'`. `h'` reaches over every output but those of the
+   * wallet's payments (a window move above all) prepared from a checkpoint witnessed after the first read's index, the
+   * latest the wallet knows to bound the lost instance's view. A payment prepared from an older checkpoint may be byte
+   * for byte one the lost instance made and read final (a move is deterministic), so it counts, and the window fills
+   * again once. One prepared while the venue view still lags that instance's can be too, and is left out wrongly:
+   * lit-v1 leaves the wallet no way to tell, so the guide asks for the move from a caught-up view. */
+  private found(backing: Uint8Array, state: CanonicalCheckpoint["state"], at: bigint): boolean {
+    const marked = new Set(this.db.prepare("SELECT backing FROM owner_restored").all().map(row => hex(row.backing as Uint8Array)));
+    const found = this.keyed!.found(this.seed, this.domain, state, this.keys!, marked.size === 0 ? undefined : this.restoredOutputs());
     return this.transaction(() => {
       let grew = false;
+      const raised: [Uint8Array, bigint][] = [];
       for (const row of this.db.prepare("SELECT backing FROM owner_keys").all()) {
         const name = row.backing as Uint8Array, keys = this.ownerKeys(name)!, seen = found.get(hex(name));
         const high = seen !== undefined && seen.reached > keys.high ? seen.reached : keys.high;
         const top = seen !== undefined && seen.top > keys.found ? seen.top : keys.found;
+        let exposed = keys.exposed;
+        if (marked.has(hex(name)) && exposed !== undefined && seen !== undefined && seen.reachedExcluding + this.keyed!.lookAhead > exposed) {
+          exposed = seen.reachedExcluding + this.keyed!.lookAhead;
+          raised.push([name, exposed]);
+        }
         // M13f: a wallet persists an index before exposing its key, and a payer pays only a key it was given, so an
         // own key paid above every index this wallet exposed and found was exposed by another instance of the seed.
-        if (keys.exposed !== undefined && top > keys.found && top > keys.exposed) {
-          this.forked(`an output of backing ${hex(name)} pays its owner key at index ${top}, above every index this wallet exposed (${keys.exposed})`);
+        if (exposed !== undefined && top > keys.found && top > exposed) {
+          this.forked(`an output of backing ${hex(name)} pays its owner key at index ${top}, above every index this wallet exposed (${exposed})`);
         }
         if (this.keyed!.window(high) > this.keyed!.window(keys.high)) grew = true;
         this.db.prepare("UPDATE owner_keys SET high=?, found=? WHERE backing=?").run(high.toString(), top.toString(), name);
       }
       if (!grew) {
+        for (const [name, exposed] of raised) this.db.prepare("UPDATE owner_keys SET exposed=? WHERE backing=?").run(exposed.toString(), name);
         const keys = this.ownerKeys(backing)!;
-        if (keys.exposed === undefined) this.db.prepare("UPDATE owner_keys SET exposed=? WHERE backing=?").run((keys.high + this.keyed!.lookAhead).toString(), backing);
+        if (keys.exposed === undefined) {
+          this.db.prepare("UPDATE owner_keys SET exposed=? WHERE backing=?").run((keys.high + this.keyed!.lookAhead).toString(), backing);
+          this.db.prepare("INSERT OR IGNORE INTO owner_restored VALUES(?,?)").run(backing, at.toString());
+        }
       }
       return grew;
     }, "observe");
+  }
+  /** The outputs of the payments a restoration's reads leave out of `h'` (Next 4 (bc), `found`). */
+  private restoredOutputs(): Set<bigint> {
+    return new Set(this.db.prepare("SELECT o.cm FROM saved_outputs o JOIN owner_restored_saved s ON s.alias=o.alias").all()
+      .map(row => BigInt(row.cm as string)));
+  }
+  /** Inside the saving transaction: a payment of a marked backing prepared from a checkpoint witnessed after the mark's
+   * first read is one the lost instance could not have made (Next 4 (bc), `found`). */
+  private savedSinceRestoration(name: string, backing: Uint8Array, checkpointIndex: bigint): void {
+    const since = this.db.prepare("SELECT since FROM owner_restored WHERE backing=?").get(backing)?.since;
+    if (since !== undefined && checkpointIndex > BigInt(since as string)) this.db.prepare("INSERT INTO owner_restored_saved VALUES(?)").run(name);
   }
   /** The canonical segment's header, if a new statement for it could still be
    * admitted: no scoped backing's operator term has ended (one ending ends the
@@ -1151,6 +1195,7 @@ export class V3Wallet {
       if (this.layout === KEYED_LAYOUT) {
         this.db.prepare("UPDATE owner_wallet SET seeded='1'").run();
         this.db.prepare("UPDATE owner_keys SET exposed=NULL").run();
+        this.db.exec("DELETE FROM owner_restored_saved; DELETE FROM owner_restored;");
       }
       // M13f: this is now the only instance; its next read of each backing is the baseline the fence watches from.
       this.db.exec("DELETE FROM wallet_fork; DELETE FROM held_notes; DELETE FROM held_read;");
@@ -2100,6 +2145,9 @@ export class V3Wallet {
     requireThat(index <= keys.high + this.keyed!.lookAhead, "WINDOW",
       "every owner key within 256 of the highest one paid is exposed: a payment to an exposed key, or the wallet's own, moves the window");
     this.db.prepare("UPDATE owner_keys SET exposed=? WHERE backing=?").run(index.toString(), backing);
+    // Next 4 (bc): a key named past the window a restoration's reads fixed ends their raising.
+    this.db.prepare("DELETE FROM owner_restored_saved WHERE alias IN (SELECT alias FROM saved_records WHERE backing=?)").run(backing);
+    this.db.prepare("DELETE FROM owner_restored WHERE backing=?").run(backing);
     return index;
   }
   /** The saved lit request under `name`: its index and key. */
@@ -2275,6 +2323,7 @@ export class V3Wallet {
         const statement = hex(this.statementOf(bytes));
         this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,NULL,'prepared',NULL,NULL,NULL,?,NULL)").run(name, intent, statement,
           bytes, selected[0]!.opening.backing, operator, at.toString());
+        this.savedSinceRestoration(name, selected[0]!.opening.backing, canonical!.index);
         for (const note of selected) this.db.prepare("INSERT INTO saved_inputs VALUES(?,?)").run(note.nf.toString(), name);
         for (const { cm, opening: o } of this.keyed!.outputs(this.domain, bytes)) {
           this.db.prepare("INSERT INTO saved_outputs VALUES(?,?,?,?,?)").run(cm.toString(), name, o.value.toString(), hex(o.owner), hex(o.rho));

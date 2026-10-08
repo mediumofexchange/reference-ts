@@ -225,7 +225,8 @@ const LIT_WALLET: KeyedWalletFrames = Object.freeze({
     litWitness(seed, domain, windows, owned(keyring)),
   notes: (seed: Uint8Array, domain: Uint8Array, backing: Uint8Array, state: StateHandle, keyring: Keyring, spent?: boolean) =>
     litNotes(seed, domain, backing, state, owned(keyring), spent),
-  found: (seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring) => foundIndices(seed, domain, state, owned(keyring)),
+  found: (seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring, excluded?: ReadonlySet<bigint>) =>
+    foundIndices(seed, domain, state, owned(keyring), excluded),
   ownFunded,
   paidByOwn: (seed: Uint8Array, domain: Uint8Array, state: StateHandle, keyring: Keyring, output: KeyedOutput, saved: (statement: Uint8Array) => boolean) =>
     paidByOwn(seed, domain, state, owned(keyring), output, saved),
