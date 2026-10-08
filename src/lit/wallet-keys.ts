@@ -46,8 +46,15 @@ export function ownerSecretAt(ownerRootIn: Uint8Array, backing: Uint8Array, inde
 }
 /** K's `acceptSecret = HMAC-SHA256(settlementRoot, demand || u64 acceptanceDeadline)`. */
 export function acceptSecret(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array {
+  const key = settlementRoot(seed, domain);
+  try { return acceptSecretAt(key, demand, deadline); } finally { key.fill(0); }
+}
+/** `settlementRoot`, for deriving many acceptance secrets from one root (a wallet's scan). */
+export function settlementRoot(seed: Uint8Array, domain: Uint8Array): Uint8Array { return root(seed, domain, SETTLEMENT_INFO); }
+/** `acceptSecret` for `demand` and `deadline` under a `settlementRoot`. */
+export function acceptSecretAt(settlementRootIn: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array {
   const w = new ByteWriter(); w.key32(field32(demand, "demand"), "demand"); w.u64(u64(deadline, "acceptance deadline"));
-  return derived(seed, domain, SETTLEMENT_INFO, w.finish());
+  return hmac(field32(settlementRootIn, "settlement root"), w.finish());
 }
 /** `presentSecret = HMAC-SHA256(presenterRoot, tag_1 || tag_2 || u64 instant || u64 deadline)`, the tags in the demand's
  * input order and `tag_2` 32 zero bytes for a demand over one note: every field is public in the demand, so a restored
