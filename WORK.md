@@ -3,13 +3,13 @@
 Updated: 2026-10-08
 
 ## Goal
-**Slice 15, the design point's two edges** (Next 4 (ay), (az); [decision](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15), [probes](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15)), branch
-`claude/slice-15-design-point-edges`. (ay) is closed: H through Barretenberg's own Poseidon2 and the journal's read skipping proofs
+**Slice 15, the design point's two edges, is done** (#155; Next 4 (ay), (az); [decision](decisions/2026-10.md#2026-10-08--hash-h-through-barretenberg-let-the-journals-own-read-skip-the-proofs-it-verified-and-slim-a-wallets-read-notes-slice-15), [probes](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15))
+(ay) is closed: H through Barretenberg's own Poseidon2 and the journal's read skipping proofs
 this process verified at admission keep admission during that read at 0.52–0.61 s at 10⁵ and 42 statements a checkpoint (M13h: 1.30–1.48 s), and `serve`'s CPU a
 statement nearly halves; the 10⁶ run settles how the wait grows with depth. (az) is reduced, not closed: a wallet's read holds about 2.2 KB a holding beyond a
 reader's (4.0 KB before), so a first sync reaches 1 GiB near 1.8·10⁵ unspent notes. Making that independent of holdings means
 streaming the view, kept as Next 4 (az). The acceptance changed from "near a reader's memory" once 10⁵ holdings showed what remains.
-Reviewed: one fresh reviewer each, every finding fixed. Stop: merged with CI green.
+Reviewed: one fresh reviewer each, every finding fixed; reports re-recorded from CI run 37797516743. Local machine: no new runs owed.
 
 **Proposed next:** choose from Next by release distance: (az) streaming only if a holder must pass about 1.5·10⁵ notes;
 otherwise the Venues probe (Next 12) or Next 4's waiting letters. The external review and local-machine runs stay outside.
