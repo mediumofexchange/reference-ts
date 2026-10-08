@@ -18,7 +18,7 @@ import { ReplayResult } from "../src/pool/v3/reader.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type SegmentState } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
-import { encodeTrail } from "../src/pool/v3/trail.js";
+import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 
 // Oracle proofs isolate the scope reader's evidence contract; real-proof
 // scope groups run in scripts/pool/v3/local-check.mjs through readPackage.
@@ -362,5 +362,36 @@ describe("multi-backing scope reader", () => {
     f.checkpoint(1n, 1n); await f.issue(5n, 101n);
     const misplaced = f.checkpoint(2n, 3n, snapshots => snapshots.map(s => compareBytes(s.backing, f.y.name) === 0 ? { ...s, segment: b(77) } : s));
     for (const backing of [f.x.name, f.y.name]) await expect(f.read(backing, misplaced)).rejects.toMatchObject({ check: "SNAPSHOT" });
+  });
+  it("refuses unresolved where a receipt walk's reference with an undecodable first snapshot refuses unresolved, not EncodingError", async () => {
+    const f = await twoBackings();
+    f.replaceX(1n, 6n); // x's first term ends at 6
+    const opening = f.checkpoint(1n, 1n);
+    await f.issue(5n, 101n);
+    const receipt = f.receipt(2n);
+    f.checkpoint(2n, 7n, s => s, s => compareBytes(s.backing, f.x.name) === 0 ? new Uint8Array([...snapshotBytes(s), 0]) : snapshotBytes(s));
+    await expect(f.read(f.x.name, opening, [{ kind: 10, payload: receipt }])).rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("reads a selected term-lapsed continuation served with a count-zero trail reads lapsed, as the walk classifies it", async () => {
+    const f = await twoBackings();
+    f.replaceX(1n, 6n);
+    const opening = f.checkpoint(1n, 1n);
+    await f.issue(5n, 101n);
+    const continuation = f.checkpoint(2n, 7n);
+    f.items.splice(f.items.findIndex(item => item.kind === 6 && decodeTrail(item.payload).records.length > 0), 1);
+    const via = stateOf(await f.read(f.y.name, opening));
+    expect(via.carrying.map(c => [c.sequence, c.class])).toEqual([["1", "valid"], ["2", "lapsed"]]);
+    await expect(f.read(f.y.name, continuation)).rejects.toMatchObject({ status: "lapsed-selection" });
+  });
+
+
+  it("judges a header's operator and opening sequence after term lapse, from the header, scope and chain alone (C2.10.11)", async () => {
+    for (const [witnessed, expected] of [[7n, { status: "lapsed-selection" }], [3n, { check: "CONTEXT" }]] as const) {
+      const f = await twoBackings();
+      f.replaceX(1n, 6n); // x's first term ends at 6
+      f.fresh(5n); // the header names an opening at sequence 5, after the checkpoint's own sequence 1
+      await expect(f.read(f.x.name, f.checkpoint(1n, witnessed))).rejects.toMatchObject(expected);
+    }
   });
 });

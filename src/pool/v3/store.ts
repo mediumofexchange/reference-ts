@@ -1366,11 +1366,11 @@ export class V3OperatorJournal {
   /**
    * What serves `selected` and was not served through sequence `after`, read from rows as it is consumed
    * (§12.1, §14): each directory and snapshot signed after `after` through the selection, what an opening in
-   * that range took, and for each segment those snapshots name, one trail through the furthest of them, whose
-   * prefixes serve each earlier checkpoint. Objects go in whole §12 packages of bounded size. A trail goes as
-   * its head and the records after the furthest one this journal's checkpoints through `after` name, where
-   * the trail passes through it, else whole; a trail already served that far is left out. Memory holds one
-   * package part or one record at a time. Served rows are never changed, so no command waits for a reader.
+   * that range took, and for each segment those snapshots name, a trail through each furthest top no other reaches
+   * (one, unless snapshots lie on two forks), whose prefixes serve each earlier checkpoint (`topTrails`). Objects go
+   * in whole §12 packages of bounded size. A trail goes as its head and the records after the furthest one this
+   * journal's checkpoints through `after` name, where the trail passes through it, else whole; a trail already served
+   * that far is left out. Memory holds one package part or one record at a time. Served rows are never changed, so no command waits for a reader.
    */
   private async *parts(selected: Signed, after: bigint): AsyncIterable<EvidencePart> {
     try {

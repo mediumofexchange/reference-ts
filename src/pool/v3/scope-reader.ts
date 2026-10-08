@@ -774,8 +774,8 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     let mine: Snapshot | undefined;
     const ownSnapshot = (): Snapshot => mine ??= same(first.name, backing) ? named : snapshotFor(entry.digest);
     try {
-      requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue) &&
-        same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
+      // A header of another configuration or venue names no chain on this record, so no lapse reads it.
+      requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue), "CONTEXT");
       let lapsed = false, termsInForce = true;
       for (const scoped of header.entries) {
         const terms = scopedTerms.get(hex(scoped.backing))!;
@@ -787,6 +787,9 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         if (own === undefined || !same(own.operator, c.operator) || !same(own.link, current.link)) termsInForce = false;
       }
       if (lapsed) return { ...base, class: "lapsed" };
+      // Term lapse read only the header, scope and chain (C2.10.11); a header of another operator, or whose opening sequence
+      // follows this checkpoint, has no opening to run a silence clock from.
+      requireReplay(same(header.operator, c.operator) && header.sequence <= c.sequence, "CONTEXT");
       // A scope naming a term not in force is excluded only where the checkpoint is not lapsed (C2.10.11): an opening
       // has no silence lapse, a continuation is judged against its scope's clock first. Each backing's clock reads
       // the terms its name commits, so it is the same whichever link the scope names.
