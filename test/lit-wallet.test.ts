@@ -532,7 +532,7 @@ describe("the one wallet holding lit notes", () => {
     // Its outputs derive from the same nullifiers, the payee's included; only the change's key is new.
     expect([retry.payee === x.payee, same(retry.statement, x.statement)]).toEqual([true, false]);
     await payer.submit("x-2", f.service); await f.checkpoint();
-    await expect(payer.submit("x", f.service)).rejects.toThrow(/SPENT/);
+    await expect(payer.submit("x", f.service)).rejects.toMatchObject({ code: "REFUSED", check: "SPENT" });
     await payer.sync(await f.served(), f.signed);
     expect([payer.payment("x")!.status, payer.payment("x-2")!.status]).toEqual(["failed", "final"]);
     expect((await shop.keyedFulfill("invoice", await f.served(), f.signed)).cm).toBe(retry.payee);
@@ -570,6 +570,46 @@ describe("the one wallet holding lit notes", () => {
     await holder.submit("x", g.service); await g.checkpoint();
     markFailed(g.path("holder"), "x");
     expect(await refusalOf(holder.prepare("x-2", { request: bill, value: 4n }, await g.served(), g.signed))).toBe("CONFLICT: request is already paid");
+  });
+
+  it("meets a failed fee's payment, names what blocks a retry, and keeps a window move's fee key held by a failed payment (Next 4 (bd) review)", async () => {
+    const f = await fixture(), payer = f.open("payer"), shop = f.open("shop"), op = f.open("op");
+    for (const n of ["a", "b", "c", "d"]) await f.issue(payer.keyedRequest(n, f.backing, 3n));
+    await f.checkpoint(); await payer.sync(await f.served(), f.signed);
+    const X = shop.keyedRequest("X", f.backing, 5n), Y = shop.keyedRequest("Y", f.backing, 5n);
+    const p1 = await payer.prepare("p1", { request: X, value: 5n }, await f.served(), f.signed);
+    const p2 = await payer.prepare("p2", { request: Y, value: 5n }, await f.served(), f.signed);
+    markFailed(f.path("payer"), "p1"); markFailed(f.path("payer"), "p2");
+    await f.issue(payer.keyedRequest("e", f.backing, 100n)); await f.checkpoint();
+    // The 100 covers it but meets neither failed payment, and one note of each covers only 6: the rule blocks it, not funds.
+    expect(await refusalOf(payer.prepare("r", { request: X, value: 5n, fee: { request: Y, value: 5n } }, await f.served(), f.signed)))
+      .toBe("CONFLICT: no one- or two-note selection covers it while spending a note of each failed payment to its requests: sync until they are decided");
+    // A failed payment to a key as a fee is met as one to it as the payee.
+    const Z = shop.keyedRequest("Z", f.backing, 1n);
+    const r = await payer.prepare("r", { request: Z, value: 1n, fee: { request: X, value: 5n } }, await f.served(), f.signed);
+    expect(r.inputs.some(nf => p1.inputs.includes(nf))).toBe(true);
+
+    // A retry that meets the failed payment by its one exact note and no change repeats its statement byte for byte.
+    const g = await fixture(), holder = g.open("holder"), seller = g.open("seller");
+    await g.issue(holder.keyedRequest("a", g.backing, 6n)); await g.issue(holder.keyedRequest("b", g.backing, 50n)); await g.checkpoint();
+    await holder.sync(await g.served(), g.signed);
+    const bill = { request: seller.keyedRequest("bill", g.backing, 6n), value: 6n };
+    await holder.prepare("x", bill, await g.served(), g.signed);
+    markFailed(g.path("holder"), "x");
+    expect(await refusalOf(holder.prepare("x-2", bill, await g.served(), g.signed)))
+      .toBe("CONFLICT: the payment repeats a statement this wallet saved: submit that payment again, or sync until it is decided");
+
+    // A window move's fee key stays held by a failed payment naming it, also when the move's read turn follows that payment's.
+    const h = await fixture(), mover = h.open("mover"), fee = h.open("fee"), store = h.open("store");
+    await h.issue(mover.keyedRequest("a", h.backing, 2n)); await h.issue(mover.keyedRequest("b", h.backing, 5n)); await h.checkpoint();
+    await mover.sync(await h.served(), h.signed);
+    for (let i = 0; ; i++) { try { mover.keyedRequest(`r${i}`, h.backing, 1n); } catch { break; } }
+    const F = fee.keyedRequest("F", h.backing, 2n), W = store.keyedRequest("W", h.backing, 2n), served = await h.served();
+    const paying = mover.prepare("p", { request: F, value: 2n }, served, h.signed);
+    const other = mover.prepare("z", { request: W, value: 2n }, served, h.signed);
+    const move = mover.moveWindow("m", served, h.signed, { request: F, value: 2n });
+    await paying; markFailed(h.path("mover"), "p"); await other;
+    expect(await refusalOf(move)).toBe("CONFLICT: request is already in a saved payment");
   });
 
   it("hands a restoration's marks to an encrypted backup's restored copy", async () => {

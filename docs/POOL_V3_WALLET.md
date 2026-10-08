@@ -267,7 +267,7 @@ where no such note is free it refuses (`CONFLICT`) until a sync decides. Release
 with other outputs (cancellation), same-segment tail repair (C2.10.9a) and
 release of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. Payments and acts are one kind of saved record
-under one alias namespace. The wallet profile is `moe/wallet/v3/8`; a database
+under one alias namespace. The wallet profile is `moe/wallet/v3/11` (a lit wallet's `moe/wallet/keyed/4`); a database
 of an earlier profile (withdrawals and settlements naming a demand by alias,
 payments and acts saved apart, no saved acts, no output openings, or a package
 saved with each fulfillment, or no saved demand links) is refused.

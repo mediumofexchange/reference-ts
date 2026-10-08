@@ -351,6 +351,11 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
       const pending = t[2]!.find(row => row[9] === "prepared")!, held = t[3]!.find(row => row[1] === pending[0])!;
       t[2]!.push(["twin", ...pending.slice(1, 3), "ab".repeat(32), ...pending.slice(4)]); t[3]!.push([held[0], "twin"]);
     }), /reserves a note twice/);
+    refused(variant(t => {
+      // A twin naming the prepared payment's request output under another alias: only a failed payment gives one up (Next 4 (bd)).
+      const pending = t[2]!.find(row => row[9] === "prepared")!, out = t[4]!.find(row => row[1] === pending[0])!;
+      t[2]!.push(["twin", ...pending.slice(1, 3), "ab".repeat(32), ...pending.slice(4)]); t[4]!.push([out[0], "twin", ...out.slice(2)]);
+    }), /two saved payments of one output/);
     refused(variant(t => { t[1]!.push(["stranger", "123", b(1), "0", b(3), b(4)]); }), /unmatched references/);
     refused(variant(t => { t[0]![0]![3] = new Uint8Array([1]) as never; }), /does not fit/);
     refused(variant(t => { t[2]![0]![9] = "cancelled"; }), /does not fit/);

@@ -334,7 +334,10 @@ const POOL_FUNDS = "no available unpresented one- or two-note selection covers i
 const LIT_FUNDS = "no available one- or two-note selection covers it";
 /** A saved output row whose payment or act has not failed: the outputs a new payment may not name again (Next 4 (bd)). */
 const LIVE_OUTPUT_CM = "SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE o.cm=? AND r.status!='failed'";
-const LIVE_OUTPUT_OWNER = "SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE o.owner=? AND r.status!='failed'";
+/** A lit request names a backing and a key: a key a hostile payee gives for two backings is two requests. */
+const LIVE_OUTPUT_OWNER = "SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE o.owner=? AND r.backing=? AND r.status!='failed'";
+/** Any saved output row to a key, failed or not: a window move's fee request is held by every saved payment naming it. */
+const ANY_OUTPUT_OWNER = "SELECT 1 FROM saved_outputs WHERE owner=?";
 /** The spendable single-note or least-total pair covering `total`; ties by commitment. */
 function select<N extends Valued>(notes: readonly N[], total: bigint, reason = POOL_FUNDS): N[] {
   const sorted = [...notes].sort((a, b) => a.opening.value < b.opening.value ? -1 : a.opening.value > b.opening.value ? 1 :
@@ -372,6 +375,13 @@ function selectMeeting<N extends Valued & { readonly nf: bigint }>(notes: readon
   for (const a of met) {
     for (const b of met) consider(a, b);
     if (meeting([a])) consider(a, sorted.find(n => n !== a && a.opening.value + n.opening.value >= total));
+  }
+  // Funds that cover it outside the rule are not missing: the failed payments are what blocks it.
+  if (best === undefined) {
+    let covered = true;
+    try { select(notes, total, reason); } catch (error) { if (!(error instanceof V3WalletError)) throw error; covered = false; }
+    requireThat(!covered, "CONFLICT", "no one- or two-note selection covers it while spending a note of each failed payment " +
+      "to its requests: sync until they are decided");
   }
   requireThat(best !== undefined, "FUNDS", reason);
   return [...best!].sort((a, b) => a.opening.value < b.opening.value ? -1 : a.opening.value > b.opening.value ? 1 : a.cm < b.cm ? -1 : 1);
@@ -541,6 +551,10 @@ export class V3Wallet {
       // A restoration marks only requests it found unfulfilled, and fulfilling one clears its mark.
       this.db.prepare("SELECT 1 FROM receiver_restored WHERE alias IN (SELECT alias FROM receiver_fulfilled)").get() === undefined,
       "INVALID", "backup state has unmatched references");
+    // Next 4 (bd): only failed payments give up an output (pool) or a key of a backing (lit), so no two others share one.
+    requireThat(this.db.prepare(`SELECT 1 FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias WHERE r.status!='failed'
+      GROUP BY ${lit ? "o.owner, r.backing" : "o.cm"} HAVING COUNT(DISTINCT o.alias) > 1`).get() === undefined, "INVALID",
+      "backup state has two saved payments of one output");
     if (lit) {
       // Well-formed owner-index rows, and each request naming its backing's key at an index the rows show exposed: a
       // restored copy then never names a key twice.
@@ -2311,7 +2325,7 @@ export class V3Wallet {
     this.unforked();
     const theirs = [payee.owner, ...(fee === undefined ? [] : [fee.request.owner])].map(owner => hex(owner));
     const taken = this.db.prepare(LIVE_OUTPUT_OWNER);
-    requireThat(theirs.every(owner => taken.get(owner) === undefined), "CONFLICT", "request is already in a saved payment");
+    requireThat(theirs.every(owner => taken.get(owner, backing) === undefined), "CONFLICT", "request is already in a saved payment");
     return this.read(packageBytes, own, view => {
       // A concurrent exact call may have saved while this one read: answer it before selection.
       const again = this.savedPayment(name, intent);
@@ -2327,7 +2341,7 @@ export class V3Wallet {
         "CONFLICT", "a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
       const holdings = this.holdingsOf(notes, force, at);
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
-      const meets = this.failedPaymentsOf(theirs, canonical, force!, available);
+      const meets = this.failedPaymentsOf(backing, theirs, canonical, force!, available);
       const selected = selectMeeting(available, total, meets, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
       return this.keyedSave(name, intent, view, header.operator, selected, () => [{ backing, value, owner: payee.owner },
         ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }]),
@@ -2340,11 +2354,11 @@ export class V3Wallet {
    * spends a note of each such payment, so at most one of them is ever admitted. A failed payment one of whose inputs is
    * spent in canonical history is never admitted (its outputs enter with its nullifiers, and it is not final), and needs
    * none; one whose outputs are all there is final, and the request paid. */
-  private failedPaymentsOf(theirs: readonly string[], canonical: CanonicalCheckpoint, force: ForceState,
+  private failedPaymentsOf(backing: Uint8Array, theirs: readonly string[], canonical: CanonicalCheckpoint, force: ForceState,
     available: readonly KeyedNote[]): Set<bigint>[] {
     const failed = new Map<string, Uint8Array>(), owners = new Set(theirs);
     for (const row of this.db.prepare(`SELECT r.alias, r.record, o.owner FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias
-      WHERE r.kind='2' AND r.status='failed'`).all()) {
+      WHERE r.kind='2' AND r.status='failed' AND r.backing=?`).all(backing)) {
       if (owners.has(row.owner as string)) failed.set(row.alias as string, row.record as Uint8Array);
     }
     const meets: Set<bigint>[] = [];
@@ -2361,12 +2375,14 @@ export class V3Wallet {
   }
   /** Sign a lit spend of `selected` into the outputs `outputs` builds and save it under `name` with its reservations, in
    * the read's turn with no await: `outputs` runs inside the saving transaction, so a change index it allocates is saved
-   * with the record, or not at all. `theirs` are payees' keys no other saved payment names. A presented note is spent as
+   * with the record, or not at all. `theirs` are payees' keys no other saved payment of the backing names that has not failed
+   * (`strict`, a window move's fee: none at all). A presented note is spent as
    * any other: lit-v1's tags hide nothing (§2), so it links nothing new. A concurrent call that saved the alias first is
    * refused (its retry answers it). */
   private keyedSave(name: string, intent: string, view: Frontier, operator: Uint8Array, selected: readonly KeyedNote[],
-    outputs: () => KeyedOutput[], theirs: readonly string[] = []): Payment {
-    const { canonical, at, observed } = view, taken = this.db.prepare(LIVE_OUTPUT_OWNER);
+    outputs: () => KeyedOutput[], theirs: readonly string[] = [], strict = false): Payment {
+    const { canonical, at, observed } = view, taken = this.db.prepare(strict ? ANY_OUTPUT_OWNER : LIVE_OUTPUT_OWNER);
+    const held = (owner: string) => (strict ? taken.get(owner) : taken.get(owner, selected[0]!.opening.backing)) !== undefined;
     const inputs = this.keyedInputs(selected);
     try {
       // The venue view behind this decision is checked before the durable write.
@@ -2374,11 +2390,12 @@ export class V3Wallet {
       this.transaction(() => {
         requireThat(this.db.prepare("SELECT 1 FROM saved_records WHERE alias=?").get(name) === undefined, "CONFLICT", "alias was saved concurrently");
         requireThat(selected.every(note => !this.reserved(note.nf)), "CONFLICT", "an input is reserved by another payment or act");
-        requireThat(theirs.every(owner => taken.get(owner) === undefined), "CONFLICT", "request is already in a saved payment");
+        requireThat(!theirs.some(held), "CONFLICT", "request is already in a saved payment");
         const bytes = this.keyed!.spend(this.domain, canonical!.segment, inputs, outputs());
         const statement = hex(this.statementOf(bytes));
         // A lit spend is deterministic: the same notes into the same outputs repeat a failed record's statement byte for byte.
-        requireThat(!this.savedStatement(this.statementOf(bytes)), "CONFLICT", "the payment repeats a statement this wallet saved");
+        requireThat(!this.savedStatement(this.statementOf(bytes)), "CONFLICT",
+          "the payment repeats a statement this wallet saved: submit that payment again, or sync until it is decided");
         this.db.prepare("INSERT INTO saved_records VALUES(?,'2',?,?,?,?,?,NULL,NULL,'prepared',NULL,NULL,NULL,?,NULL)").run(name, intent, statement,
           bytes, selected[0]!.opening.backing, operator, at.toString());
         this.savedSinceRestoration(name, selected[0]!.opening.backing, canonical!.index);
@@ -2637,7 +2654,7 @@ export class V3Wallet {
     if (existing !== undefined) return existing;
     this.unforked();
     const theirs = paid === undefined ? [] : [hex(paid.owner)];
-    requireThat(theirs.every(owner => this.db.prepare("SELECT 1 FROM saved_outputs WHERE owner=?").get(owner) === undefined), "CONFLICT",
+    requireThat(theirs.every(owner => this.db.prepare(ANY_OUTPUT_OWNER).get(owner) === undefined), "CONFLICT",
       "request is already in a saved payment");
     return this.read(packageBytes, own, view => {
       const again = saved();
@@ -2668,7 +2685,7 @@ export class V3Wallet {
       const selected = select(available, price + 1n, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
       return this.keyedSave(name, JSON.stringify([...head, target.toString()]), view, header.operator, selected, () => [
         { backing, value: sum - price, owner: this.keys!.key(backing, target) },
-        ...(paid === undefined ? [] : [{ backing, value: paid.value, owner: paid.owner }])], theirs);
+        ...(paid === undefined ? [] : [{ backing, value: paid.value, owner: paid.owner }])], theirs, true);
     });
   }
   /** Whether a saved window move of `backing` pays this wallet's key at `index` (lit-v1 §8 closes the request naming it). */
