@@ -13,9 +13,9 @@ export const SERVE_FLAGS = { port: "value", onion: "value", "poll-ms": "value" }
 export const portOf = (args: Arguments, name: string): number => Number(integer(flag(args, name) ?? "0", `--${name}`, 0n, 65535n));
 /** `--port`, `--onion` (a v3 onion host) and `--poll-ms`. */
 export function serveFlags(args: Arguments): { port: number; onion: string | undefined; ms: number } {
-  const onion = flag(args, "onion");
+  const port = portOf(args, "port"), ms = pollMs(args), onion = flag(args, "onion");
   if (onion !== undefined && !ONION_HOST.test(onion)) throw new UsageError("--onion takes a v3 onion host: 56 base32 characters and .onion");
-  return { port: portOf(args, "port"), onion, ms: pollMs(args) };
+  return { port, onion, ms };
 }
 
 /** Listen on 127.0.0.1 at `port` and answer the port listened on; a port in use is `UNAVAILABLE`, naming it. */

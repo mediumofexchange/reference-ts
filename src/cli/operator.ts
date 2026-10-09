@@ -200,6 +200,7 @@ async function serve(argv: readonly string[]): Promise<void> {
     if (holders !== undefined) holderService = { url: `http://${onion}/`, port: await listenLoopback(holders, holdersAt) };
   } catch (error) {
     await closeListener(server);
+    await queue(async () => {});
     await op.close();
     throw error;
   }

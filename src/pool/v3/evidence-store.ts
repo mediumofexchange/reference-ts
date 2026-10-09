@@ -213,7 +213,7 @@ const READ_SQL = {
   // A forward step: the kept values of a segment at one position; two say a fork.
   at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
 } as const;
-/** Lineage rows kept:a kept walk whose mark is older is resumed no more, and its next read judges every checkpoint once. */
+/** Lineage rows kept: a kept walk whose mark is older is resumed no more, and its next read judges every checkpoint once. */
 const LINEAGE_KEPT = 65_536n;
 
 /** A kept position a trail is assembled after: its chain value and the frame bytes of its records. */
