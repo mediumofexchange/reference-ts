@@ -326,6 +326,32 @@ describe("pool-v3 §14 kept classes across reads", () => {
     store.close();
   });
 
+  it("commits a keep point by time inside a long read that replays fewer records than its count (Next 4 (bb))", async () => {
+    const f = fixture();
+    await f.first();
+    let clock = 0;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    try {
+      const vouchedDuring = async (step: number): Promise<boolean[]> => {
+        const kept = files(), store = opened(kept.path, kept), seen: boolean[] = [];
+        // Each proof takes `step` milliseconds of the read.
+        const verifier = { ...counting(), verify() {
+          seen.push(existsSync(kept.digest) && readFileSync(kept.digest, "utf8") === keptFileDigest(kept.path)!);
+          clock += step; return true;
+        } };
+        await f.read(verifier, store);
+        store.close();
+        return seen;
+      };
+      // Six seconds a proof: by the second checkpoint's records, the first checkpoint's keep point recorded the digest.
+      const slow = await vouchedDuring(6_000);
+      expect(slow[0]).toBe(false);
+      expect(slow.slice(1).some(Boolean)).toBe(true);
+      // A read shorter than the interval commits only at its close.
+      expect((await vouchedDuring(1)).some(Boolean)).toBe(false);
+    } finally { now.mockRestore(); }
+  });
+
   it("needs the evidence a fresh read needs: a kept class grounds nothing its package does not carry", async () => {
     const f = fixture(), kept = files();
     await f.first();

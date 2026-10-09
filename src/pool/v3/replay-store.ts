@@ -231,6 +231,10 @@ const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_pu
 const SCHEMA_VERSION = 11;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
+/** Milliseconds of a read between keep points, whatever it replayed: a read stopped sooner than it replays `every`
+ * records (a restarted journal's whole replay inside a client's idle bound) still keeps its progress (storage
+ * decision item 6's "count or time", Next 4 (bb)). */
+const KEEP_MS = 5_000;
 /** Every table holding a namespace's rows. */
 const NAMESPACE_TABLES = ["namespace", "import", "event", "event_key", "nullifier", "output", "anchor", "demand", "demand_tag", "demand_end",
   "demand_nullifier", "namespace_construction", "total", "spent", "witness"];
@@ -529,6 +533,8 @@ export class ReplayStore {
   #savepoints = 0;
   #replaying = false;
   #sinceKeep = 0;
+  /** When the last keep point recorded its digest, or the store opened (`performance.now()`). */
+  #keptAt = performance.now();
   /** The connection's count of changed rows when the file's digest was last recorded: a read that changed nothing
    * leaves the digest as it is. */
   #digestedAt: bigint | undefined;
@@ -670,7 +676,7 @@ export class ReplayStore {
       const checkpoint = this.#db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: bigint; log: bigint; checkpointed: bigint };
       if (checkpoint.busy !== 0n || checkpoint.log !== checkpoint.checkpointed) throw new FileInUse("kept replay file");
     }
-    this.#digestedAt = changes; this.#sinceKeep = 0;
+    this.#digestedAt = changes; this.#sinceKeep = 0; this.#keptAt = performance.now();
   }
   /** Move a resumed kept walk's mark to this read's where the walk changed a row since it opened. */
   #moveMark(walk: number): void {
@@ -681,12 +687,13 @@ export class ReplayStore {
   }
   /** Rows this connection has inserted, updated or deleted since it opened. */
   #changes(): bigint { return BigInt((this.#db.prepare("SELECT total_changes() AS c").get() as { c: bigint | number }).c); }
-  /** A keep point inside a walk where one is due: only between checkpoints (no savepoint or replay open),
-   * once `every` records have replayed since the last, so a killed long read keeps its progress. */
+  /** A keep point inside a walk where one is due: only between checkpoints (no savepoint or replay open), once
+   * `every` records have replayed since the last or a record has and `KEEP_MS` have passed, so a killed long read
+   * keeps its progress. */
   keepPoint(): void {
     const kept = this.#kept;
     if (kept === undefined || this.#lost || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
-        this.#sinceKeep < (kept.every ?? KEEP_EVERY)) return;
+        this.#sinceKeep === 0 || (this.#sinceKeep < (kept.every ?? KEEP_EVERY) && performance.now() - this.#keptAt < KEEP_MS)) return;
     // The walk takes its write lock again at once, as openWalk took it: while it awaits a verifier or a venue
     // after the keep point, another store's walk is refused, not free to take the walk rows as a crashed read's.
     // A store that wrote in the moment between is found by the file's data version, and this walk stops.
@@ -1167,7 +1174,8 @@ export class ReplayStore {
     // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
     if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
-    this.#lost = false; this.#keptMark = undefined;
+    // A read's time between keep points counts from its own start: one shorter than KEEP_MS commits only at its close.
+    this.#lost = false; this.#keptMark = undefined; this.#keptAt = performance.now();
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
