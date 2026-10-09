@@ -362,8 +362,9 @@ if (process.argv[2] === '--worker') {
     }
     // A read commits its evidence file, then its kept replay file, then that file's digest (storage decision
     // item 6). Exiting before either commit leaves the first checkpoint's kept state standing, so the next
-    // read verifies the new record only; exiting between the replay commit and its digest leaves a file its
-    // digest does not name, which is discarded and replayed in full. Every case reads the same view.
+    // read verifies the new record only. Exiting between the replay commit and its digest leaves the file its
+    // digest names beside a log no digest vouches for, which the next opening drops: that read verifies the new
+    // record only too, never the whole history again (Next 4 (bb)). Every case reads the same view.
     for (const phase of ['evidence', 'replay', 'digest']) {
       const path = join(directory, `read-${phase}.sqlite`);
       await run('read', phase, 'setup');
@@ -372,7 +373,7 @@ if (process.argv[2] === '--worker') {
       assert.equal(readFileSync(`${path}.replay.sha256`, 'utf8'), digest, 'no crash point records a new digest');
       await run('read', phase, 'restore'); await run('read', phase, 'retry');
       const fixture = load(`${path}.fixture`), restored = load(`${path}.restore`);
-      assert.deepEqual(restored, { checkpoint: fixture.checkpoint, holdings: [[5n, 'available'], [10n, 'available']], verified: phase === 'digest' ? 2 : 1 });
+      assert.deepEqual(restored, { checkpoint: fixture.checkpoint, holdings: [[5n, 'available'], [10n, 'available']], verified: 1 });
       assert.deepEqual(load(`${path}.retry`), { ...restored, verified: 0 }, 'a later process reads the kept state and verifies nothing');
       console.log(`PASS v3 wallet read/${phase}: abrupt exit at the ${phase === 'evidence' ? 'evidence' : 'replay'} file's COMMIT, same view after restart.`);
     }

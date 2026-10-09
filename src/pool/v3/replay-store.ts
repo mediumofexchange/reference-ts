@@ -388,10 +388,11 @@ class PageDigest {
   /** The state a log's commit leaves: its page images over the pages known, at the page count it commits. */
   apply(log: CommittedLog): void {
     const count = log.count, known = this.#length;
+    // SQLite writes every page a commit adds to the log, so a page past the known length that the log lacks is no state.
+    // Checked before any hash changes, so a refused log leaves the digest as it was.
+    for (let p = known; p < count; p++) if (!log.pages.has(p + 1)) throw new Error("the write-ahead log lacks a page its commit adds");
     this.#reserve(count);
     for (const [n, image] of log.pages) if (n >= 1 && n <= count) image.copy(this.#pages, 32 * (n - 1));
-    // SQLite writes every page a commit adds to the log, so a page past the known length that the log lacks is no state.
-    for (let p = known; p < count; p++) if (!log.pages.has(p + 1)) throw new Error("the write-ahead log lacks a page its commit adds");
     this.#regroup(count, new Set([...log.pages.keys()].filter(n => n >= 1 && n <= count).map(n => Math.floor((n - 1) / GROUP))));
   }
   /** Room for `count` page hashes, grown by doubling, so a keep point copies no hash list that has room for its new pages. */
@@ -501,8 +502,12 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
   if (!existsSync(path)) return undefined;
   try {
     const raw = headerPageSize(path), log = `${path}-wal`;
-    if (raw !== undefined && existsSync(digest) && committedLog(log, raw) !== undefined &&
-        readFileSync(digest, "utf8") === vouched(path, PageDigest.of(path, raw))) removeFiles([log, `${path}-shm`]);
+    // The file as it lies, where its log holds a commit: hashed once, and reused below once its log is dropped.
+    let dropped: PageDigest | undefined;
+    if (raw !== undefined && existsSync(digest) && committedLog(log, raw) !== undefined) {
+      const lying = PageDigest.of(path, raw);
+      if (readFileSync(digest, "utf8") === vouched(path, lying)) { removeFiles([log, `${path}-shm`]); dropped = lying; }
+    }
     const db = new DatabaseSync(path, { readBigInts: true });
     let version: bigint, moved: boolean;
     try {
@@ -515,7 +520,8 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
     if (!moved || (existsSync(`${path}-wal`) && statSync(`${path}-wal`).size !== 0)) throw new FileInUse("kept replay file");
     const size = headerPageSize(path);
     if (version !== BigInt(SCHEMA_VERSION) || size === undefined || !existsSync(digest)) return undefined;
-    const pages = PageDigest.of(path, size);
+    // With no log left, opening and checkpointing wrote nothing: a dropped log's file is the one just hashed.
+    const pages = dropped !== undefined && dropped.pageSize === size ? dropped : PageDigest.of(path, size);
     return readFileSync(digest, "utf8") === vouched(path, pages) ? pages : undefined;
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.
