@@ -18,13 +18,15 @@ Commissioning the review lies outside this repository.
 - **The specification it implements**, in
   [money-from-first-principles](https://github.com/mediumofexchange/money-from-first-principles): Construction,
   pool-v3 and venue-ergo at `e7f7f24`, lit-v1 at `80a4ea1` (later commits there change no byte, identity or verdict of
-  these). [Protocol rules](PROTOCOL_RULES.md) maps each rule to its code and to the test that fails without it.
+  these). Later pins of single rules (pool-v3 §14 at `dc51baf`, C2.4.1/C2.7.5 at `25c078e`, C3.5 at `114799e`) are in
+  [protocol rules](PROTOCOL_RULES.md), which maps each rule to its code and to the test that fails without it.
 - **Sensitive areas, in the argument's order:** the six Noir relations (`scripts/pool/v3/circuits/`) and their
   boundary in `src/pool/v3/{records,state,recovery,non-service}.ts`; the state machine and readers
   (`src/pool/v3/{state,reader,scope-reader,package-reader,replay-store}.ts`); the operator journal (`store.ts`); the
   wallet's custody (`wallet-store.ts`, `holdings.ts`, `wallet-backup.ts`, `src/cli/wallet.ts`); the Ergo header
   verifier and view (`src/ergo-headers.ts`, `src/ergo.ts`, `src/ergo-store.ts`); signatures and key files
-  (`src/keys.ts`); the lit construction (`src/lit/`).
+  (`src/keys.ts`); the proving-parameter loader (`src/pool/{parameters,parameter-files}.ts`, A3); delivery capsules
+  (`src/pool/v3/capsules.ts`); the lit construction (`src/lit/`).
 
 ## Reproducing the reports
 
@@ -42,14 +44,15 @@ SHA-256 against the manifest the runtime holds (A3). Then:
 
 | Command | Shows | Writes |
 |---|---|---|
-| `npm run check` | Documentation and links, typecheck, the unit suite, build, and `check:scripts`: compiled relations equal their sources, the package and its install, the Ergo view's persistence, wallet and journal crash recovery, the service, the synthetic node against recorded node answers, testnet transfers offline, and the lit command drill over onion services | `scratch/release/` (the release record) |
-| `npm run check:pool:v3 -- --ergo` | Every real-proof check in order (`scripts/pool/v3/real-proof.mjs`): the six relations' conformance and mutations; the journal with real proofs, locally and on the synthetic Ergo chain; history, recovery, succession, scope and redemption stores, each also on the synthetic chain; the pool command drill (every party from its own install); local replay with its Ergo adapter | Nine of the twelve current `docs/pool-v3-*-verification.json` reports directly; the conformance, journal and local replay checks write `scratch/pool-v3-results.json`, `pool-v3-store-results.json` and `pool-v3-local-replay-results.json`, retained as `docs/pool-v3-conformance-`, `store-` and `local-replay-verification.json` |
-| `npm run check:evidence` | That each retained report binds, by SHA-256, every source its verdict depends on at this commit | — |
+| `npm run check` | Documentation and links, typecheck, the unit suite, build, and `check:scripts`: compiled relations equal their sources, the package and its install, the Ergo view's persistence, wallet and journal crash recovery, the service, the synthetic node against recorded node answers, testnet transfers offline, and the lit command drill over a fixture Tor proxy with stand-in onion names | `scratch/release/` (the release record) |
+| `npm run check:pool:v3 -- --ergo` | Every real-proof check in order (`scripts/pool/v3/real-proof.mjs`): the six relations' conformance and mutations; the journal with real proofs on the synthetic Ergo chain; the history store locally; recovery, succession, scope and redemption stores, each locally and on the synthetic chain; the pool command drill (every party from its own install); local replay with its Ergo adapter | Nine of the twelve current `docs/pool-v3-*-verification.json` reports directly; the conformance, journal and local replay checks write `scratch/pool-v3-results.json`, `pool-v3-store-results.json` and `pool-v3-local-replay-results.json`, retained as `docs/pool-v3-conformance-`, `store-` and `local-replay-verification.json`. The committed reports are copied from CI's merged `pool-v3-reports-ubuntu-latest` artifact; a local run overwrites the nine `docs/` reports, so compare with `git diff` |
+| `npm run check:evidence` | Lists each retained report whose recorded source hashes differ from this checkout (informational, exit 0): after the build the twelve current reports match; the live testnet drill's report is history and drifts | — |
 | `node scripts/release.mjs --verify <dir> <record>` | That an install is the record's tarball and lock ([installing](RELEASE.md#installing)) | — |
 
 CI runs `check:pool:v3` in five parallel groups (`--group history|stores|redemption|drill|replay`, about twelve
 minutes each on its runners), so a serial run takes roughly their sum; leave at least 4 GB of memory free. A report names
-its specification pin, its environment and the SHA-256 of every source it binds; compare yours with the committed
+its specification pin and the SHA-256 of every source it binds (the conformance, journal, history and local replay
+reports also their environment); compare yours with the committed
 one by its checks and verdicts, since times and memory differ. The live testnet command drill (`command-drill.mjs --testnet --authorized-testnet`) needs
 the project's own synced testnet node and funded testnet wallet, so its report
 ([`docs/pool-v3-command-testnet-verification.json`](pool-v3-command-testnet-verification.json)) is evidence to
@@ -65,17 +68,22 @@ read, not to reproduce.
     copy its commitments between them ([open items](SECURITY_ARGUMENT.md#open-items-this-argument-found)).
   - **(bg)**: a kept read discarded for good reason (a new code version, a damaged file) is replayed whole inside an
     admission's turn, which at scale can lapse a short silence window. Availability, not validity.
-- **Internal audits.** One area per run, each by a fresh AI instance with an independent reviewer of its fixes, recorded
-  in [DECISIONS.md](../DECISIONS.md) (search "audit"): shared encoding; v3 records, codecs and evidence store; the
-  range verifier; the Ergo profile and header store; the six relations; the state machine, reader and journal; the
-  neutral core, Ergo venue and publisher; the wallet; the service transport, replica and relay; the multi-backing and
-  recovery readers; the lit runtime. Every sensitive patch also had an independent adversarial review before merge,
-  recorded in its decision. These are AI reviews: they are not the independent review the release gate asks for.
-- **Not audited as an area:** the `moe` commands, the compiled-relation loader and key files (`src/cli/`,
-  `src/pool/v3/{programs,verifier}.ts`, `src/keys.ts`; each slice's patches were reviewed); the replay harness and
-  check tooling (`scripts/`); the Ergo experiments (`experiments/ergo-range/`); the retained reports themselves; and
-  the specification documents (Construction, pool-v1/v2 layouts, authority, recovery and fault, pool-v3, spent, fees,
-  delivery), each reviewed when written but not audited since.
+- **Internal audits.** One area per run by AI instances, recorded in the decision log (`decisions/`, search "audit") and
+  the audit commits (`git log --grep audit`): shared encoding; the shared primitives with the retired v2 relations; v3
+  records, codecs and evidence store; the range verifier; the Ergo node-JSON intake and header store as the venue uses
+  it; the six relations; the state machine (`state`, `recovery`, the replay store's reads and append, `spent-set`,
+  `capsules`, `verify-ahead`, the reader's trail replay); the neutral core, Ergo venue and publisher; the wallet and
+  `cli/wallet.ts` custody; the service transport, replica and relay serving; the multi-backing and recovery readers;
+  the lit runtime. Sensitive patches record their adversarial reviews in their decisions. These are AI reviews: they
+  are not the independent review the release gate asks for.
+- **Not audited as an area** (each slice's patches were reviewed): the operator journal and served trail
+  (`store.ts`, `trail.ts`), the reader beyond its trail replay, `construction.ts`, `guard.ts`, `refusals.ts`; the Ergo
+  header verifier's work and difficulty rules (`src/ergo-headers.ts`); the proving-parameter loader; `file-identity.ts`
+  and `evidence-chain.ts`; the shared note tree, scope and schedule (exercised by real proofs only); the `moe` commands
+  other than the wallet's custody and serving, the compiled-relation loader and key files (`src/cli/`,
+  `src/pool/v3/{programs,verifier}.ts`, `src/keys.ts`); the replay harness and check tooling (`scripts/`); the Ergo
+  experiments; the retained reports; and the specification documents (Construction, pool-v1/v2 layouts, authority,
+  recovery and fault, pool-v3, spent, fees, delivery, venue-ergo, lit-v1), each reviewed when written.
 
 ## Out of scope
 
