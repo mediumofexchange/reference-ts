@@ -214,6 +214,8 @@ async function serve(argv: readonly string[]): Promise<void> {
     s.once("error", failed); s.listen(at, "127.0.0.1", () => { s.off("error", failed); done(); });
   });
   try {
+    // A restarted journal checks its kept reads before it listens, not in its first admission (Next 4 (bb)).
+    journal.openReads();
     await listen(server, port);
     if (holders !== undefined) await listen(holders, holdersAt);
   } catch (error) {
