@@ -170,6 +170,7 @@ const SCHEMA = `
   CREATE TABLE anchor (root BLOB, ns INTEGER, position INTEGER NOT NULL, PRIMARY KEY(root, ns)) WITHOUT ROWID;
   CREATE TABLE demand (id TEXT, ns INTEGER, position INTEGER NOT NULL, backing BLOB NOT NULL, quantity TEXT NOT NULL,
     tag0 BLOB NOT NULL, tag1 BLOB NOT NULL, presenter BLOB NOT NULL, instant TEXT NOT NULL, deadline TEXT NOT NULL, PRIMARY KEY(id, ns)) WITHOUT ROWID;
+  CREATE INDEX demand_order ON demand(ns, position);
   CREATE TABLE demand_tag (tag BLOB, id TEXT, ns INTEGER, PRIMARY KEY(tag, id, ns)) WITHOUT ROWID;
   CREATE TABLE demand_end (id TEXT, ns INTEGER, position INTEGER NOT NULL, PRIMARY KEY(id, ns)) WITHOUT ROWID;
   CREATE TABLE demand_nullifier (id TEXT, ns INTEGER, i INTEGER, nf BLOB NOT NULL, PRIMARY KEY(id, ns, i)) WITHOUT ROWID;
@@ -227,8 +228,9 @@ const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_pu
 /** The kept file's layout: another layout's file is discarded rather than read. 6: a witness row holds an
  * incomplete right block as the empty subtree, which an earlier build would return as its path. 7: a kept walk.
  * 8: a witness row holds its output's mark. 9: a mark keeps its nullifier's tag. 10: a write-ahead log and page digest.
- * 11: a namespace's construction, and a demand's nullifiers where its construction names them (lit-v1). */
-const SCHEMA_VERSION = 11;
+ * 11: a namespace's construction, and a demand's nullifiers where its construction names them (lit-v1). 12: a namespace's
+ * demands in position order (lit-v1 §10's rebuild reads them). */
+const SCHEMA_VERSION = 12;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
 /** Milliseconds of a read between keep points, whatever it replayed: a read stopped sooner than it replays `every`
@@ -639,6 +641,8 @@ export class ReplayStore {
       insertDemandEnd: "INSERT INTO demand_end VALUES (?, ?, ?)",
       outputs: `SELECT x.* FROM output x WHERE ${v} ORDER BY x.ns, x.leaf`,
       ownOutputs: "SELECT * FROM output WHERE ns = ? AND leaf >= ? ORDER BY leaf",
+      ownDemands: "SELECT id, position FROM demand WHERE ns = ? AND position > ? AND position <= ? ORDER BY position",
+      demandPast: "SELECT 1 FROM demand WHERE ns = ? AND position > ? LIMIT 1",
       outputOf: `SELECT x.* FROM output x WHERE x.cm = :key AND ${v}`,
       construction: "SELECT construction, tree FROM namespace_construction WHERE ns = ?",
       insertConstruction: "INSERT INTO namespace_construction VALUES (?, ?, ?)",
@@ -1066,6 +1070,16 @@ export class ReplayStore {
   *ownOutputs(ns: number, from: bigint): Generator<StoredOutput> {
     for (const row of this.#q.ownOutputs!.iterate(ns, from)) yield this.#output(row as Record<string, unknown>);
   }
+  /** A namespace's own demands stood up past position `after` through `through`, each identity with its position, in
+   * position order (lit-v1 §10's rebuild reads them as it reads the outputs). */
+  ownDemands(ns: number, after: bigint, through: bigint): { readonly id: string; readonly position: bigint }[] {
+    return this.#q.ownDemands!.all(ns, after, through).map(row => {
+      const r = row as { id: string; position: bigint };
+      return { id: r.id, position: BigInt(r.position) };
+    });
+  }
+  /** Whether a namespace holds an own demand row past `position`. */
+  demandPast(ns: number, position: bigint): boolean { return this.#q.demandPast!.get(ns, position) !== undefined; }
   /** Every visible output, in namespace then leaf order. */
   *outputs(ns: number, p: bigint): Generator<StoredOutput> {
     for (const row of this.#q.outputs!.iterate({ ns, p })) yield this.#output(row as Record<string, unknown>);

@@ -490,6 +490,52 @@ describe("lit packages through the one reader (M14d)", () => {
     } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
   });
 
+  it("discards a kept namespace holding a demand row its trail never stood up, at or past the tip it resumes at (§10, Next 4 (bf))", async () => {
+    for (const at of [1n, 2n]) {
+      const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-phantom-demand-"));
+      const files = { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") };
+      let store: ReplayStore | undefined, evidence: EvidenceStore | undefined;
+      try {
+        g.checkpoint(1n, 1n);
+        const minted = g.issue(10n, ALICE); await g.admit(minted);
+        const first = g.checkpoint(2n, 3n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        expect(stateOf(await g.read(first, [], { store, evidence })).state.position).toBe(1n);
+        store.close(); evidence.close();
+        // A demand of Mallory's for 1000 that no record stands up, kept at the tip (1) or one past it (2) under a re-recorded
+        // digest: a settlement of it would derive Mallory's output and nullifiers from this row alone.
+        const phantom: Opening = { backing: g.backing, value: 1000n, owner: pub(MALLORY), rho: b(88) };
+        const unadmitted = g.demand([phantom], [MALLORY], 0n, 1000n), id = hex(statementHash(LIT.decode(unadmitted).statement));
+        const view = LIT.view(LIT.decode(unadmitted), () => undefined).demand!.value;
+        const db = new DatabaseSync(files.path);
+        const { ns } = db.prepare("SELECT ns FROM namespace WHERE position = 1").get() as { ns: number };
+        const tag = (value: bigint): Uint8Array => Uint8Array.from(Buffer.from(value.toString(16).padStart(64, "0"), "hex"));
+        db.prepare("INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, ns, at, view.backing, view.quantity.toString(),
+          tag(view.tags[0]!), tag(view.tags[1]!), view.presenter, view.instant.toString(), view.deadline.toString());
+        for (const value of view.tags) db.prepare("INSERT OR IGNORE INTO demand_tag VALUES (?, ?, ?)").run(tag(value), id, ns);
+        view.nullifiers!.forEach((nf, i) => db.prepare("INSERT INTO demand_nullifier VALUES (?, ?, ?, ?)").run(id, ns, i, tag(nf)));
+        db.close();
+        writeFileSync(files.digest, keptFileDigest(files.path)!);
+        // An operator's journal reopening its admission state checks its tip the same way.
+        store = new ReplayStore(files.path, { digest: files.digest });
+        expect(storedTipHolds(store, ns, LIT, g.trailOf())).toBe(false);
+        store.close();
+        await g.admit(g.spend([g.outputsOf(minted)[0]!], [g.to(6n, BOB), g.to(4n, ALICE)], [ALICE]));
+        g.commitRaw(g.settle(unadmitted, MALLORY, 900n));
+        g.venue.advance(210n);
+        const second = g.checkpoint(3n, 205n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        const discard = vi.spyOn(store, "discardKept");
+        await expect(g.read(second, [], { store, evidence })).rejects.toMatchObject({ check: "DEMAND" });
+        expect(discard).toHaveBeenCalled();
+        await expect(g.read(second)).rejects.toMatchObject({ check: "DEMAND" });
+      } finally {
+        store?.close(); evidence?.close();
+        rmSync(directory, { recursive: true, force: true, maxRetries: 5 });
+      }
+    }
+  });
+
   it("judges again a phantom row a lower check passed over: leaves are not unique, so a later walk cannot start past it (§10)", async () => {
     for (const at of [3n, 2n]) {
       const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-low-leaf-"));

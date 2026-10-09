@@ -550,8 +550,8 @@ function replayedOutputs(store: ReplayStore, ns: number, construction: Construct
 
 /** Lit-v1 §10: no root in a lit snapshot checks the output set, so a reader resuming a namespace without a note tree
  * rebuilds it from the kept statements: its own output rows through `position` must be exactly, in order, the outputs
- * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`), and each
- * demand row it stands up the trail's demand, since a settlement's output and nullifiers are read from it. A
+ * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`), and its own
+ * demand rows exactly the demands the trail stands up, since a settlement's output and nullifiers are read from them. A
  * settlement reads its demand from the trail's records, or, one stood up before what is rebuilt (an imported one, or one
  * this process's replay wrote), from the state before it; imported outputs are their own namespaces' (each rebuilt by
  * `keptImportsHold` before a state importing it is reused). The caller has checked the trail's chain at `position`
@@ -561,10 +561,10 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
   if (construction.namespace.tree) return true;
   const from = known(store).get(ns);
   // Rows through a known position are a prefix of those known: a position at or below it holds, at a tip where no row
-  // walked lay past it.
-  if (from !== undefined && from.position >= position) return !tip || from.top <= position;
+  // walked lay past it and no demand row does.
+  if (from !== undefined && from.position >= position) return !tip || (from.top <= position && !store.demandPast(ns, position));
   if (trail === undefined || trail.length < position) return false;
-  const after = from?.position ?? 0n, local = new Map(from?.demands);
+  const after = from?.position ?? 0n, local = new Map(from?.demands), stood = new Map<string, bigint>();
   const derived: { readonly cm: bigint; readonly position: bigint }[] = [];
   let at = after;
   for (const bytes of position === after ? [] : trail.records(after)) {
@@ -583,6 +583,7 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
       const kept = store.presented(ns, at, view.demand.id);
       if (kept === undefined || kept.event.ns !== ns || kept.event.position !== at || !sameDemand(kept.demand, view.demand.value)) return false;
       local.set(view.demand.id, view.demand.value);
+      stood.set(view.demand.id, at);
     }
     for (const cm of view.outputs) derived.push({ cm, position: at });
   }
@@ -604,6 +605,11 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
     if (expected === undefined || expected.cm !== output.cm || expected.position !== output.position) return false;
   }
   if (k !== derived.length || (tip && top > position)) return false;
+  // Every own demand row past the known position through `position` is one the trail stood up there, since a later
+  // settlement derives its output and nullifiers from it; at the tip none lies past it. A demand identity has one row per
+  // namespace, so rows matching stood-up demands, as many as there are, are exactly those.
+  const rows = store.ownDemands(ns, after, position);
+  if (rows.length !== stood.size || rows.some(row => stood.get(row.id) !== row.position) || (tip && store.demandPast(ns, position))) return false;
   known(store).set(ns, { position, leaves: leaves + BigInt(k), top, skipped, demands: local });
   return true;
 }
