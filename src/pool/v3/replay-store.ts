@@ -553,7 +553,8 @@ export class ReplayStore {
   #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
   #lost = false;
-  /** Counts the times rows this store held may have gone: a discard, a collection or a rolled-back write. */
+  /** Counts the times rows this store held may have gone: a discard, a collection or a rolled-back walk. A savepoint's
+   * rollback inside a walk does not count: nothing it wrote was known (`replayTrail` records a replay once it stands). */
   #generation = 0;
   /** The last frontier `witness` folded, by its namespace, leaf count and root: the paths of one tip share it. */
   #filling: { readonly key: string; readonly nodes: readonly bigint[] } | undefined;
@@ -649,6 +650,8 @@ export class ReplayStore {
       demandPast: "SELECT 1 FROM demand WHERE ns = ? AND position > ? LIMIT 1",
       // A namespace number holds no output or demand row before its namespace is made (lit-v1 §10 rebuilds those).
       heldRows: "SELECT 1 FROM output WHERE ns = ?1 UNION ALL SELECT 1 FROM demand WHERE ns = ?1 LIMIT 1",
+      // Nor a demand identity a nullifier or end row before its demand stands (a settlement derives from its nullifiers).
+      heldDemandRows: "SELECT 1 FROM demand_nullifier WHERE id = ?1 AND ns = ?2 UNION ALL SELECT 1 FROM demand_end WHERE id = ?1 AND ns = ?2 LIMIT 1",
       outputOf: `SELECT x.* FROM output x WHERE x.cm = :key AND ${v}`,
       construction: "SELECT construction, tree FROM namespace_construction WHERE ns = ?",
       insertConstruction: "INSERT INTO namespace_construction VALUES (?, ?, ?)",
@@ -738,7 +741,7 @@ export class ReplayStore {
   #dataVersion(): bigint {
     return BigInt((this.#db.prepare("PRAGMA data_version").get() as { data_version: bigint }).data_version);
   }
-  /** Changes whenever rows this store held may have gone (a discard, a collection or a rolled-back write), so what a
+  /** Changes whenever rows this store held may have gone (a discard, a collection or a rolled-back walk), so what a
    * caller learned of its namespaces before is not carried past it (lit-v1 §10's known outputs). */
   get generation(): number { return this.#generation; }
   #rollback(): void {
@@ -865,7 +868,7 @@ export class ReplayStore {
       this.#db.exec(`RELEASE ${name}`);
       return result;
     } catch (error) {
-      this.#generation++; this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
+      this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
       throw error;
     } finally { this.#savepoints--; }
   }
@@ -878,7 +881,7 @@ export class ReplayStore {
       this.#db.exec(`RELEASE ${name}`);
       return result;
     } catch (error) {
-      this.#generation++; this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
+      this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
       throw error;
     } finally { this.#savepoints--; }
   }
@@ -1085,10 +1088,13 @@ export class ReplayStore {
       capsule: row["capsule"] === null ? undefined : bytes(row["capsule"]), settlement: row["settlement"] === 1n };
   }
   /** A namespace's own outputs from leaf `from` on, or all of them, in leaf order (lit-v1 §10's rebuild reads them past
-   * what it checked). */
-  *ownOutputs(ns: number, from?: bigint): Generator<StoredOutput> {
+   * what it checked). A row whose position or leaf is not an integer is returned as undefined, which matches nothing. */
+  *ownOutputs(ns: number, from?: bigint): Generator<StoredOutput | undefined> {
     const rows = from === undefined ? this.#q.ownOutputsAll!.iterate(ns) : this.#q.ownOutputs!.iterate(ns, from);
-    for (const row of rows) yield this.#output(row as Record<string, unknown>);
+    for (const row of rows) {
+      const r = row as Record<string, unknown>;
+      yield typeof r["position"] === "bigint" && typeof r["leaf"] === "bigint" ? this.#output(r) : undefined;
+    }
   }
   /** A namespace's own demands stood up past position `after` (or from its first) through `through`, each identity with
    * its position, in position order (lit-v1 §10's rebuild reads them as it reads the outputs). A position stored as
@@ -1661,6 +1667,7 @@ export class ReplayStore {
       if (tree) this.#q.insertAnchor!.run(fieldToBytes(noteRoot), ns, position);
       if (record.demand !== undefined) {
         const { id, value } = record.demand;
+        if (this.#q.heldDemandRows!.get(id, ns) !== undefined) throw new KeptStateMismatch("a demand's rows before it stands");
         this.#q.insertDemand!.run(id, ns, position, value.backing, u64(value.quantity), keyBytes(value.tags[0]!), keyBytes(value.tags[1]!),
           value.presenter, u64(value.instant), u64(value.deadline));
         for (const tag of value.tags) this.#q.insertDemandTag!.run(keyBytes(tag), id, ns);

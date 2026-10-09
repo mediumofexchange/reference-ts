@@ -332,7 +332,7 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     requireReplay(at !== undefined && same(at, lastValid.evidenceHash), "CONTINUITY");
   }
   const identity = replayIdentity(context, snapshot, { imported, block, openingIndex, revokedAt, revocations });
-  return store.replay(async () => {
+  const result = await store.replay(async () => {
     const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid, construction);
     const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported, construction);
     if (!isOpening) requireReplay(trail.length >= BigInt(block.length), "ADOPTION");
@@ -352,9 +352,11 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     const adoptionIndices = new Map(imported?.adoptionIndices);
     for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
       imported?.adoptionIndices.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
-    replayedOutputs(store, state.ns, construction);
     return new ReplayResult(store, state.ns, position, { issued, burned, adoptionIndices, identity }, construction);
   });
+  // Once the savepoint stands: a refused replay leaves nothing known, so a savepoint's rollback need not forget anything.
+  replayedOutputs(store, result.ns, construction);
+  return result;
 }
 
 let code: Uint8Array | undefined;
@@ -537,7 +539,7 @@ interface KnownOutputs {
 }
 const knownOutputs = new WeakMap<ReplayStore, { readonly generation: number; readonly map: Map<number, KnownOutputs> }>();
 /** What is known of the store's namespaces since its rows last may have gone (`generation`): a discard, collection or
- * rolled-back write forgets it, so a namespace number made again is never vouched for by an earlier one's walk. */
+ * rolled-back walk forgets it, so a namespace number made again is never vouched for by an earlier one's walk. */
 function known(store: ReplayStore): Map<number, KnownOutputs> {
   let held = knownOutputs.get(store);
   if (held === undefined || held.generation !== store.generation) { held = { generation: store.generation, map: new Map() }; knownOutputs.set(store, held); }
@@ -596,6 +598,7 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
   const leaves = from?.leaves ?? 0n, start = from === undefined ? undefined : from.skipped !== undefined && from.skipped < leaves ? from.skipped : leaves;
   let k = 0, top = from?.top ?? 0n, skipped: bigint | undefined;
   for (const output of store.ownOutputs(ns, start)) {
+    if (output === undefined) return false;
     if (output.position > top) top = output.position;
     if (output.position > position) {
       if (tip) return false;

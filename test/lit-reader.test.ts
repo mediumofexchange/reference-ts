@@ -603,6 +603,43 @@ describe("lit packages through the one reader (M14d)", () => {
     }
   });
 
+  it("refuses a demand's nullifier row held before the demand stands, which its settlement would derive from (§10, Next 4 (bf))", async () => {
+    for (const where of ["kept tip", "next numbers"] as const) {
+      const g = litScope(), { directory, files } = keptFiles("lit-orphan-nullifier-");
+      let store: ReplayStore | undefined, evidence: EvidenceStore | undefined;
+      try {
+        g.checkpoint(1n, 1n);
+        const minted = g.issue(10n, ALICE); await g.admit(minted);
+        const first = g.checkpoint(2n, 3n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        expect(stateOf(await g.read(first, [], { store, evidence })).state.position).toBe(1n);
+        store.close(); evidence.close();
+        if (where === "next numbers") { g.venue.advance(210n); g.successor(3n, first); g.checkpoint(3n, 205n); }
+        // An honest demand the trail stands up after the kept state, with an extra nullifier row under its identity
+        // already in the file: it would join the demand's own when the replay stands it up.
+        const presented = g.demand([g.outputsOf(minted)[0]!], [ALICE], 0n, 100n), id = demandId(presented);
+        kept(files.path, db => {
+          const seq = Number((db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'namespace'").get() as { seq: bigint }).seq);
+          const numbers = where === "kept tip" ? [namespaceAt(db, 1n, () => {})] : [1, 2, 3, 4, 5, 6].map(k => seq + k);
+          for (const ns of numbers) db.prepare("INSERT INTO demand_nullifier VALUES (?, ?, 1, ?)").run(id, ns, b(77));
+        });
+        writeFileSync(files.digest, keptFileDigest(files.path)!);
+        await g.admit(presented);
+        await g.admit(g.settle(presented, BOB, 50n));
+        if (where === "kept tip") g.venue.advance(210n);
+        const second = where === "kept tip" ? g.checkpoint(3n, 205n) : g.checkpoint(4n, 206n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        const discard = vi.spyOn(store, "discardKept");
+        const resumed = stateOf(await g.read(second, [], { store, evidence })), fresh = stateOf(await g.read(second));
+        expect(discard).toHaveBeenCalled();
+        expect([resumed.carrying, resumed.state.history, resumed.state.position]).toEqual([fresh.carrying, fresh.state.history, fresh.state.position]);
+      } finally {
+        store?.close(); evidence?.close();
+        rmSync(directory, { recursive: true, force: true, maxRetries: 5 });
+      }
+    }
+  });
+
   it("discards a kept namespace holding an output row below leaf 0, which a walk from the known leaves passed over (§10)", async () => {
     const g = litScope(), { directory, files } = keptFiles("lit-negative-leaf-");
     let store: ReplayStore | undefined, evidence: EvidenceStore | undefined;
@@ -681,6 +718,28 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(stateOf(await g.read(last!, [], { store })).state.position).toBe(200n);
     // 200 outputs; a walk from leaf 0 at every resumed checkpoint read 1,900.
     expect(rows).toBeLessThanOrEqual(200);
+    store.close();
+  });
+
+  it("keeps what it knows of a namespace across a refused checkpoint, so excluded checkpoints cause no walk from the first row (§10)", async () => {
+    const g = litScope(), store = new ReplayStore(), demands = store.ownDemands.bind(store);
+    let firstWalks = 0;
+    vi.spyOn(store, "ownDemands").mockImplementation(function* (ns: number, after: bigint | undefined, through: bigint) {
+      if (after === undefined) firstWalks++;
+      yield* demands(ns, after, through);
+    });
+    g.checkpoint(1n, 1n);
+    let last: Commitment | undefined, sequence = 2n, index = 3n;
+    for (let k = 0; k < 20; k++) {
+      for (let m = 0; m < 10; m++) await g.admit(g.issue(1n, ALICE));
+      // Every fourth round an excluded checkpoint first: its snapshot misstates the supply (SNAPSHOT, inside the replay).
+      if (k % 4 === 3) { g.checkpoint(sequence++, index, { alter: s => ({ ...s, issued: s.issued + 1n }) }); index += 2n; }
+      last = g.checkpoint(sequence++, index); index += 2n;
+    }
+    expect(stateOf(await g.read(last!, [], { store })).state.position).toBe(200n);
+    // Every namespace here is one this read replayed, so none is walked from its first row; a refusal that forgot what
+    // was known walked the whole namespace again after each of the five exclusions.
+    expect(firstWalks).toBe(0);
     store.close();
   });
 
