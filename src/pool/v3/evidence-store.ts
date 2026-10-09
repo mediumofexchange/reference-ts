@@ -221,6 +221,31 @@ interface Base { readonly segment: Uint8Array; readonly position: bigint; readon
 /** A trail's row sink, and the furthest position it kept. */
 type KeptRows = TrailSink & { top(): TrailTip | undefined };
 
+/** The next lineage row of a retained store's host, after its last (from its identity where there is none). */
+function nextLineage(db: DatabaseSync, identity: Uint8Array): { readonly n: bigint; readonly h: Uint8Array } {
+  const last = db.prepare("SELECT n, h FROM evidence_lineage ORDER BY n DESC LIMIT 1").get() as { n: bigint; h: Uint8Array } | undefined;
+  const n = (last?.n ?? 0n) + 1n, h = sha256(concatBytes(last === undefined ? identity : new Uint8Array(last.h), randomBytes(16)));
+  db.prepare("INSERT INTO evidence_lineage VALUES (?, ?)").run(n, h);
+  return { n, h };
+}
+const lineageMark = (n: bigint, h: Uint8Array): Uint8Array => { const mark = new Uint8Array(40); new DataView(mark.buffer).setBigUint64(0, n); mark.set(h, 8); return mark; };
+/** One lineage row added to a host's retained evidence by a connection beside its owner (Next 4 (bg)), in a transaction
+ * of its own that holds the write lock from its read of the last row to its insert: the identity and the new mark, for
+ * a walk read beside to be marked with once it has read, so it is grounded as the owner's walks are. */
+export function addLineage(db: DatabaseSync): { readonly identity: Uint8Array; readonly mark: Uint8Array } {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const row = db.prepare("SELECT value FROM evidence_identity WHERE id = 1").get() as { value: Uint8Array } | undefined;
+    if (row === undefined) throw new TypeError("the host's evidence has no identity");
+    const identity = new Uint8Array(row.value), { n, h } = nextLineage(db, identity);
+    db.exec("COMMIT");
+    return { identity, mark: lineageMark(n, h) };
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch { /* preserve the cause */ }
+    throw error;
+  }
+}
+
 export class EvidenceStore {
   /** The construction whose frames its packages and trails are read by (slice 14 M14d); a party's file records it. */
   readonly construction: Construction;
@@ -250,7 +275,7 @@ export class EvidenceStore {
     /** A host's database that another process owns and writes while this connection reads it (an operator journal's
      * handle beside its owner, Next 4 (bg)). A read's per-read rows go to tables of this connection's own that shadow
      * the host's (unqualified names resolve to them first), so the owner's are neither seen nor deleted; the store
-     * writes the host nothing but one lineage row per batch. */
+     * writes the host nothing, so its connection may be read-only. */
     readonly beside?: boolean } = {}) {
     this.construction = options.construction ?? POOL_V3 as Construction;
     this.#beside = options.beside === true;
@@ -611,33 +636,23 @@ export class EvidenceStore {
     return new EvidenceBatch(this.construction, this.#db, this.#q, id, this.#quota, spent, this.#lineage());
   }
 
-  /** A new lineage row for a batch of a retained store, in the batch's own transaction where it has one. */
+  /** A new lineage row for a batch of a retained store, in the batch's own transaction where it has one; beside the
+   * owner, its last row. */
   #lineage(): RetainedLineage | undefined {
     const identity = this.#identity;
     if (identity === undefined) return undefined;
-    const next = (step: bigint): { n: bigint; h: Uint8Array } => {
-      const last = this.#db.prepare("SELECT n, h FROM evidence_lineage ORDER BY n DESC LIMIT 1").get() as { n: bigint; h: Uint8Array } | undefined;
-      const n = (last?.n ?? 0n) + step, h = sha256(concatBytes(last === undefined ? identity : new Uint8Array(last.h), randomBytes(16)));
-      this.#db.prepare("INSERT INTO evidence_lineage VALUES (?, ?)").run(n, h);
-      return { n, h };
-    };
     let n: bigint, h: Uint8Array;
     if (this.#beside) {
-      // Beside the owner, written after the evidence this batch reads, so a kept walk marked here is grounded as the
-      // owner's are. The owner reads its last row and inserts the next number in two statements, so this row leaves
-      // that number free: one transaction, two past the last. The owner deletes old rows.
-      const open = !this.#db.isTransaction;
-      if (open) this.#db.exec("BEGIN IMMEDIATE");
-      try { ({ n, h } = next(2n)); if (open) this.#db.exec("COMMIT"); } catch (error) {
-        if (open) try { this.#db.exec("ROLLBACK"); } catch { /* preserve the cause */ }
-        throw error;
-      }
+      // Beside the owner nothing is written: a batch stands at the owner's last lineage row. A walk read beside is marked
+      // again once it has read (`addLineage`, Next 4 (bg)), at a row written after every record it read was kept.
+      const last = this.#db.prepare("SELECT n, h FROM evidence_lineage ORDER BY n DESC LIMIT 1").get() as { n: bigint; h: Uint8Array } | undefined;
+      if (last === undefined) return undefined;
+      n = last.n; h = new Uint8Array(last.h);
     } else {
-      ({ n, h } = next(1n));
+      ({ n, h } = nextLineage(this.#db, identity));
       if (n > LINEAGE_KEPT) this.#db.prepare("DELETE FROM evidence_lineage WHERE n <= ?").run(n - LINEAGE_KEPT);
     }
-    const mark = new Uint8Array(40); new DataView(mark.buffer).setBigUint64(0, n); mark.set(h, 8);
-    const db = this.#db;
+    const mark = lineageMark(n, h), db = this.#db;
     return { identity: copyBytes(identity), mark, holds(kept: Uint8Array): boolean {
       if (!(kept instanceof Uint8Array) || kept.length !== 40) return false;
       const row = db.prepare("SELECT h FROM evidence_lineage WHERE n = ?").get(new DataView(kept.buffer, kept.byteOffset).getBigUint64(0)) as

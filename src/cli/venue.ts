@@ -207,6 +207,20 @@ export function openView(directory: Directory): View {
   } catch (error) { journal.close(); throw error; }
 }
 
+/** The directory's view read beside the process that owns and syncs it (`moe operator prepare` beside `serve`,
+ * Next 4 (bg)): no sync, no publisher, answers through the clock its rows held when it opened. A directory whose view
+ * never synced has none (`ABSENT`). */
+export function besideView(directory: Directory): { readonly file: VenueFile; readonly venue: ErgoVenue; close(): void } {
+  const file = requireVenue(directory);
+  if (!existsSync(directory.file("venue.db"))) throw new CommandError("ABSENT", "the directory keeps no view (venue.db): serve or sync it first");
+  const journal = ErgoVenueJournal.beside(directory.file("venue.db"), file.id);
+  try {
+    const venue = new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal);
+    journal.settled();
+    return { file, venue, close: () => journal.close() };
+  } catch (error) { journal.close(); throw error; }
+}
+
 /**
  * `moe venue audit --dir <d>` (slice 13): any role's view re-checked as a reader that never trusted its rows would
  * (`ErgoVenue.audit` with work): run it on a directory restored from a backup or copied from elsewhere, or after a

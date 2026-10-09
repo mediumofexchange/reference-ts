@@ -4,11 +4,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { compareBytes, EncodingError } from "../src/bytes.js";
 import { limbsOf } from "../src/pool/field.js";
 import { genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, type Snapshot } from "../src/pool/v3/commitments.js";
-import { EvidenceStore, MAX_ITEM_BYTES, trailPart, wholePackage, type EvidencePart } from "../src/pool/v3/evidence-store.js";
+import { addLineage, EvidenceStore, MAX_ITEM_BYTES, trailPart, wholePackage, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage, PackageLimitError, type EvidenceItem } from "../src/pool/v3/package.js";
 import { directoryRoot } from "../src/venue-records.js";
@@ -78,6 +78,34 @@ function evidenceFile() {
 
 
 describe("v3 evidence store", () => {
+  it("reads a host's evidence beside its owner, writing it nothing but the lineage row it is given to add (Next 4 (bg))", () => {
+    const { path, count } = evidenceFile(), host = new DatabaseSync(path, { readBigInts: true });
+    onTestFinished(() => host.close());
+    host.exec("PRAGMA journal_mode=WAL");
+    const owner = new EvidenceStore(host);
+    // The owner's read in flight: its batch row and its lineage row 1.
+    const owners = owner.retained();
+    expect([count("batch"), count("evidence_lineage")]).toEqual([1, 1]);
+    // Read-only beside it: its per-read rows are its connection's own, and the owner's are neither seen nor deleted.
+    const beside = new DatabaseSync(path, { readBigInts: true, timeout: 5000, readOnly: true });
+    onTestFinished(() => beside.close());
+    const reader = new EvidenceStore(beside, { beside: true }), read = reader.retained();
+    expect([count("batch"), count("evidence_lineage")]).toEqual([1, 1]);
+    // A batch beside stands at the owner's last row.
+    expect([read.retained!.identity, read.retained!.mark]).toEqual([owners.retained!.identity, owners.retained!.mark]);
+    // The one row it adds, through a connection of its own, follows the owner's last; the owner's next follows it.
+    const writer = new DatabaseSync(path, { readBigInts: true, timeout: 5000 }), added = addLineage(writer);
+    writer.close();
+    expect(added.identity).toEqual(owners.retained!.identity);
+    const next = owner.retained();
+    expect(host.prepare("SELECT n FROM evidence_lineage ORDER BY n").all().map(row => row.n)).toEqual([1n, 2n, 3n]);
+    expect([next.retained!.holds(added.mark), read.retained!.holds(added.mark)]).toEqual([true, true]);
+    expect(next.retained!.holds(Uint8Array.of(...added.mark.subarray(0, 8), ...new Uint8Array(32)))).toBe(false);
+    // Only a host's database is read beside its owner, and only one holding evidence.
+    expect(() => new EvidenceStore(path, { beside: true })).toThrow(TypeError);
+    expect(() => new EvidenceStore(new DatabaseSync(":memory:", { readBigInts: true }), { beside: true })).toThrow(TypeError);
+  });
+
   it("keeps a party's own evidence in a host's transaction and serves it as supplied evidence is served", () => {
     const db = new DatabaseSync(":memory:", { readBigInts: true }), store = new EvidenceStore(db);
     const issuer = ed25519.getPublicKey(secret), termsBytes = encodeRootTerms({ obligor: issuer, payout: { thing: "units", quantumExponent: 0, perUnit: 1n },

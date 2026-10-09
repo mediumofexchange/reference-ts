@@ -479,7 +479,12 @@ try {
     }
     assert.equal(replica.lines[0].url, `http://${REPLICA}/`);
     assert.equal(JSON.parse(readFileSync(join(RP, "replica.json"), "utf8")).url, `http://${REPLICA}/`);
+    // A version's kept reads are prepared beside serve, which holds the directory (Next 4 (bg)): this serve runs the
+    // same version and holds its reads, so the preparation is refused; once it stops, the preparation reads.
+    await refused(["operator", "prepare", "--dir", OP], "BUSY");
     await serving.stop();
+    const prepared = await ok(["operator", "prepare", "--dir", OP]);
+    assert.equal(prepared.status, "prepared");
     await advance(Number(SILENCE) + 4);
     // The operator does not answer: the holder's sync falls to the replica.
     const shown = await ok(wallet("demand", HD, "gap", backing, "5", "--deadline", "+60"));

@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
@@ -847,7 +847,7 @@ describe("the v3 operator journal", () => {
     const venue = FixtureVenue.reference(label, lag), file = path();
     let verified = 0, during: () => Promise<void> = async () => {};
     const counted = { identities: configuration.circuits, verify: async (...args: Parameters<typeof verifier.verify>) => { verified++; await during(); return verifier.verify(...args); } };
-    const open = (beside = false): Journal => { const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: counted, beside }); journals.push(j); return j; };
+    const open = (beside = false): Journal => { const j = new V3OperatorJournal(file, { ...(beside ? { operator } : { secret: operatorSecret }), venue, reference, verifier: counted, beside }); journals.push(j); return j; };
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
     const issued = (n: number): Uint8Array =>
@@ -890,43 +890,46 @@ describe("the v3 operator journal", () => {
     expect(verified - at).toBe(1);
   });
 
-  it("removes another version's kept reads last kept before its own, where no handle holds them (Next 4 (bg))", async () => {
+  it("removes the kept reads of versions that served before it, never one prepared for a later version (Next 4 (bg))", async () => {
     const venue = FixtureVenue.reference(label, lag);
     const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
     const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
     const issued = (n: number): Uint8Array =>
       encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
-    const silentFile = path();
-    let owner = journal(silentFile, venue);
+    const file = path();
+    let owner = journal(file, venue);
     await owner.open("genesis", silent); await owner.publish();
     await owner.submit(issued(0)); await owner.commit("c2"); await owner.publish();
     await owner.submit(issued(1));
-    const reads = readsOf(silentFile), directory = dirname(silentFile);
-    // Three other versions' files beside this one's: the unnamed one kept before (bg) and one more, both kept before
-    // it, and one kept after it (prepared for a later version), whose lock another handle holds for one of them.
-    const write = (name: string, at: Date): string => {
+    const reads = readsOf(file), directory = dirname(file);
+    // Other versions' files beside this one's: the unnamed one kept before (bg), one that served, one that served whose
+    // lock another handle holds, and one prepared for a later version, kept after this one's digest.
+    const write = (name: string, served: boolean): string => {
       const other = join(directory, name);
-      for (const suffix of ["", "-wal", ".sha256", ".lock"]) writeFileSync(`${other}${suffix}`, "");
-      utimesSync(`${other}.sha256`, at, at);
+      for (const suffix of ["", "-wal", ".sha256", ".lock", ...(served ? [".served"] : [])]) writeFileSync(`${other}${suffix}`, "");
       return other;
     };
-    const kept = statSync(`${reads}.sha256`).mtime, earlier = new Date(kept.getTime() - 60_000), later = new Date(kept.getTime() + 60_000);
-    const legacy = write("journal.db.reads", earlier), older = write("journal.db.reads-0123456789abcdef", earlier);
-    const newer = write("journal.db.reads-fedcba9876543210", later), held = write("journal.db.reads-00000000000000aa", earlier);
+    const legacy = write("journal.db.reads", false), older = write("journal.db.reads-0123456789abcdef", true);
+    const held = write("journal.db.reads-00000000000000aa", true), prepared = write("journal.db.reads-fedcba9876543210", false);
     const { DatabaseSync } = await import("node:sqlite");
     const lock = new DatabaseSync(`${held}.lock`, { timeout: 0 }); lock.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE");
     onTestFinished(() => lock.close());
     // Unrelated files beside the journal stay.
     writeFileSync(join(directory, "journal.db.readsx"), ""); writeFileSync(join(directory, "other.db.reads-0123456789abcdef"), "");
-    owner.close(); owner = journal(silentFile, venue);
-    owner.openReads();
+    // Restarted, however often: the later version's prepared file stays.
+    for (let restart = 0; restart < 2; restart++) {
+      owner.close(); owner = journal(file, venue);
+      owner.openReads();
+      venue.advance(venue.witnessedIndex() + lag);
+      await owner.submit(issued(2 + restart));
+    }
     const left = new Set(readdirSync(directory));
-    for (const gone of [legacy, older]) for (const suffix of ["", "-wal", ".sha256", ".lock"]) expect(left.has(basename(`${gone}${suffix}`))).toBe(false);
-    for (const stays of [newer, held]) for (const suffix of ["", "-wal", ".sha256", ".lock"]) expect(left.has(basename(`${stays}${suffix}`))).toBe(true);
-    for (const stays of [reads, `${reads}.sha256`, join(directory, "journal.db.readsx"), join(directory, "other.db.reads-0123456789abcdef")]) expect(left.has(basename(stays))).toBe(true);
+    for (const gone of [legacy, older]) for (const suffix of ["", "-wal", ".sha256", ".served"]) expect(left.has(basename(`${gone}${suffix}`))).toBe(false);
+    for (const stays of [held, prepared]) for (const suffix of ["", "-wal", ".sha256"]) expect(left.has(basename(`${stays}${suffix}`))).toBe(true);
+    for (const stays of [reads, `${reads}.sha256`, `${reads}.served`, `${older}.lock`, join(directory, "journal.db.readsx"),
+      join(directory, "other.db.reads-0123456789abcdef")]) expect(left.has(basename(stays))).toBe(true);
     // Its own reads are open: a second handle of this version is refused.
-    venue.advance(venue.witnessedIndex() + lag);
-    const second = journal(silentFile, venue);
+    const second = journal(file, venue);
     expect(() => second.openReads()).toThrow(expect.objectContaining({ code: "BUSY" }));
   });
 

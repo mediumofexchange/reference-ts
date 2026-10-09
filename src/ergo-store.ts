@@ -1,6 +1,7 @@
 // Local, replayable Ergo evidence in SQLite rows. Node 24 only; never imported by the core barrel, so the `./ergo`
 // subpath, which keeps its view here, needs Node 24's node:sqlite like every party's replay state.
 // The rows are local state the view replayed itself, not a transferable venue certificate.
+import { existsSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -21,6 +22,7 @@ export const FAILURE = "venue failure: the best chain left a block witnessed und
 const MAX_INDEX = 0x7fff_ffffn, MAX_HEIGHT = (1n << 31n) - 1n;
 /** The token only `ErgoVenueJournal.memory` passes. */
 const IN_MEMORY: unique symbol = Symbol("in-memory Ergo view");
+const BESIDE: unique symbol = Symbol("Ergo view read beside its owner");
 
 function requireStored(ok: boolean): asserts ok {
   if (!ok) throw new VenueError("invalid stored Ergo view");
@@ -196,19 +198,48 @@ export class ErgoVenueJournal {
   private readonly identity: string;
   private rows: JournalHeaderRows | undefined;
   private closed = false;
+  /** Read beside the owner (`beside`): a read-only connection that never writes or fences. */
+  private readonly beside: boolean;
   /** The identity of the file this view was kept in, where it is another file's (a copy or a restored backup), until
    * the view that attaches the journal has audited every row (slice 13 M13e). */
   private copiedFrom: { readonly path: string; readonly identity: string } | undefined;
 
-  constructor(path: string, venueId: Uint8Array, memory?: typeof IN_MEMORY) {
+  constructor(path: string, venueId: Uint8Array, memory?: typeof IN_MEMORY | typeof BESIDE) {
     const durable = memory !== IN_MEMORY;
     if (durable && (typeof path !== "string" || path.trim() === "" || path === ":memory:" || path.startsWith("file:"))) {
       throw new VenueError("a persistent filesystem path is required");
     }
     this.identity = ErgoVenueJournal.identityOf(venueId);
-    this.db = new DatabaseSync(durable ? path : ":memory:", { timeout: 5000 });
-    this.owner = this.open(durable);
+    this.beside = memory === BESIDE;
+    if (this.beside && !existsSync(path)) throw new VenueError("this view has never synced");
+    this.db = new DatabaseSync(durable ? path : ":memory:", { timeout: 5000, readOnly: this.beside });
+    this.owner = this.beside ? this.read() : this.open(durable);
     if (durable) this.judgeFile(path);
+  }
+  /** A view's rows read beside the process that owns and syncs them (an operator's `prepare` beside its `serve`,
+   * Next 4 (bg)): read-only, taking no ownership, at the clock the rows held when it attached. Rows are appended per
+   * index and never removed below the clock, so its answers are the owner's for every index through that clock. A
+   * copied file, which its owner audits before any read, is refused. */
+  static beside(path: string, venueId: Uint8Array): ErgoVenueJournal {
+    return new ErgoVenueJournal(path, venueId, BESIDE);
+  }
+  /** Beside the owner: the stored format, rules and venue, as an opening checks them, with nothing written. */
+  private read(): bigint {
+    try {
+      requireStored(this.db.prepare("PRAGMA journal_mode").get()?.journal_mode === "wal");
+      // The view attaches in one read snapshot (`settled` ends it): the owner's sync rewrites header rows in place.
+      this.db.exec("BEGIN");
+      if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='meta'").get() === undefined) throw new VenueError("this view has never synced");
+      const row = this.meta();
+      requireStored(row?.format === FORMAT && row.venue === this.identity && typeof row.owner === "bigint");
+      if (row!.rules !== ERGO_VIEW_RULES) throw new VenueError("this Ergo view was kept under other view rules; remove it and sync again");
+      return row!.owner as bigint;
+    } catch (error) { this.db.close(); throw error; }
+  }
+  /** Beside the owner, once the view has attached: end the read snapshot it attached in. Its answers then read rows
+   * through the clock it attached at, which the owner never changes. */
+  settled(): void {
+    if (this.beside && this.db.isTransaction) this.db.exec("COMMIT");
   }
   /** A private in-memory database: a view without a journal keeps the same rows, for as long as it lives. */
   static memory(venueId: Uint8Array): ErgoVenueJournal {
@@ -268,6 +299,11 @@ export class ErgoVenueJournal {
    * read, recording the identity only once the audit passes (slice 13 M13e). */
   private judgeFile(path: string): void {
     try {
+      if (this.beside) {
+        const kept = this.db.prepare("SELECT identity FROM file WHERE id=1").get()?.identity;
+        if (kept !== fileIdentity(path)) throw new VenueError("this view's file is not the one it was kept in: its owner audits it first");
+        return;
+      }
       this.db.exec("CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL) STRICT");
       const identity = fileIdentity(path), kept = this.db.prepare("SELECT identity FROM file WHERE id=1").get()?.identity;
       if (kept === undefined) this.db.prepare("INSERT INTO file VALUES(1,?)").run(identity);
@@ -278,6 +314,7 @@ export class ErgoVenueJournal {
   copied(): boolean { return this.copiedFrom !== undefined; }
   /** After an audit of every row: this file is the view's own from now on. */
   audited(): void {
+    if (this.beside) throw new VenueError("a view read beside its owner keeps nothing");
     this.assertOwner();
     if (this.copiedFrom === undefined) return;
     this.db.prepare("UPDATE file SET identity=? WHERE id=1").run(this.copiedFrom.identity);
@@ -289,7 +326,8 @@ export class ErgoVenueJournal {
   assertOwner(): void {
     if (this.closed) throw new VenueError("Ergo journal is closed");
     const row = this.meta();
-    if (row?.owner !== this.owner || row.venue !== this.identity || row.format !== FORMAT) {
+    // Beside the owner, the owner may change: the rows stay the view's.
+    if ((!this.beside && row?.owner !== this.owner) || row?.venue !== this.identity || row.format !== FORMAT) {
       throw new VenueError("another owner fenced this Ergo journal");
     }
   }
@@ -326,6 +364,7 @@ export class ErgoVenueJournal {
    * caller fails its view. */
   commit(state: ErgoViewCommit): void {
     if (this.rows === undefined) throw new Error("commit before attach");
+    if (this.beside) throw new VenueError("a view read beside its owner keeps nothing");
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.assertOwner();

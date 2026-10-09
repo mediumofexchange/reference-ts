@@ -50,7 +50,7 @@
 // lit-v1 §9's) and only on a reference venue (guard.ts). Time is the venue's witnessed index.
 // SQLite fences handles of this journal; it cannot fence another database or
 // a copied key.
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -68,7 +68,7 @@ import { decodeCommitment, encodeCommitment, signCommitment, verifyCommitment, t
 import { scopeSchedule } from "../schedule.js";
 import type { Snapshot } from "./commitments.js";
 import { POOL_V3, type Construction, type ReaderFrames } from "./construction.js";
-import { EvidenceStore, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailTip } from "./evidence-store.js";
+import { addLineage, EvidenceStore, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
@@ -186,13 +186,6 @@ interface Opened {
   readonly scope: bigint | undefined;
   readonly entries: readonly Scoped[];
 }
-/** When a kept file's digest was last recorded (its keep point), or undefined where none is. */
-function keptAt(digest: string): bigint | undefined {
-  try { return statSync(digest, { bigint: true }).mtimeNs; } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-}
 function openedOf(frames: ReaderFrames, header: SegmentHeader, entries: readonly Scoped[]): Opened {
   // A reader takes a directory as one whole item: a scope whose directory passes that budget could not be served.
   requireThat(9n + 64n * BigInt(entries.length) <= MAX_ITEM_BYTES, "REFUSED", "the scope's directory would pass a reader's item budget", "RESOURCE");
@@ -251,8 +244,10 @@ interface View {
 
 /** What the journal needs besides its path. */
 export interface V3StoreOptions {
-  /** The operator's Ed25519 secret; copied, and erased on close. */
-  readonly secret: Uint8Array;
+  /** The operator's Ed25519 secret; copied, and erased on close. A handle beside the owner takes none. */
+  readonly secret?: Uint8Array | undefined;
+  /** Beside the owner, the operator's public key instead: it signs nothing. */
+  readonly operator?: Uint8Array | undefined;
   readonly venue: RecordVenue & RecordPublisher;
   /** The venue identity's preimage the caller holds; the guard recomputes it. */
   readonly reference: VenueReference;
@@ -353,15 +348,24 @@ export class V3OperatorJournal {
     // The circuit identities are copied once: what later reads name and check is what was checked here.
     this.verifier = ownVerifier(this.construction, verifier); this.proofs = rememberedProofs(this.verifier);
     this.venue = venue; this.lag = venue.lag();
-    this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
-    this.observedIndex = 0n; this.path = path; this.beside = options.beside === true;
+    this.beside = options.beside === true;
+    if (this.beside) {
+      if (secret !== undefined || !(options.operator instanceof Uint8Array) || options.operator.length !== 32) throw new TypeError("a handle beside the owner takes the operator's public key, not its secret");
+      this.secret = new Uint8Array(32); this.operator = copyBytes(options.operator);
+    } else {
+      if (!(secret instanceof Uint8Array)) throw new TypeError("the journal's owner takes the operator's secret");
+      this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
+    }
+    this.observedIndex = 0n; this.path = path;
     this.readsPath = `${path}.reads-${bytesToHex(keptContext({ construction: this.construction, domain: this.domain, venue: this.venueId,
       verifier: this.verifier })).slice(0, 16)}`;
     const now = this.clock();
     if (this.beside) {
       // Beside the owner: its rows are read, never written, so the owner's fence, log and recorded clock stay its own.
       requireThat(existsSync(path), "STORAGE", "there is no journal at this path");
-      this.db = new DatabaseSync(path, { timeout: 5000, readBigInts: true });
+      // Read-only: what a read writes stays on this connection (`EvidenceStore` `beside`), and the one lineage row a
+      // preparation adds goes through a connection of its own (`prepareReads`).
+      this.db = new DatabaseSync(path, { timeout: 5000, readBigInts: true, readOnly: true });
       try {
         requireThat(this.db.prepare("PRAGMA journal_mode").get()?.journal_mode === "wal", "STORAGE", "the journal keeps no write-ahead log");
         this.db.exec("BEGIN");
@@ -592,27 +596,25 @@ export class V3OperatorJournal {
    * whole file, which `serve` pays before it listens rather than in a restarted journal's first admission
    * (Next 4 (bb)). A file another handle holds leaves it BUSY.
    *
-   * Another version's kept reads (another context's file, or the one file kept before Next 4 (bg)) last kept before
-   * this version's are removed where no handle holds them: the version it followed, once this one has kept reads of
-   * its own. A newer one, prepared beside this owner (`prepareReads`), stays. */
+   * Serving marks this version's reads as served (`<file>.served`). Other versions' reads that have served, and the one
+   * file kept before Next 4 (bg), are removed where no handle holds them: a version this one replaced. One prepared
+   * beside the owner for a later version (`prepareReads`) has not served, and stays however often this owner restarts. */
   openReads(): void {
     requireThat(!this.closed, "STORAGE", "store is closed");
     requireThat(!this.beside, "STORAGE", "a handle beside the owner keeps no reads but its prepared ones");
     if (existsSync(this.readsPath)) this.reads();
-    const own = keptAt(`${this.readsPath}.sha256`);
-    if (own === undefined) return;
+    writeFileSync(`${this.readsPath}.served`, "");
     const directory = dirname(this.path), name = basename(this.path), others = new Set<string>();
     for (const entry of readdirSync(directory)) {
-      const file = /^(.*\.reads(?:-[0-9a-f]{16})?)(?:-wal|-shm|-journal|\.sha256|\.lock)?$/.exec(entry)?.[1];
+      const file = /^(.*\.reads(?:-[0-9a-f]{16})?)(?:-wal|-shm|-journal|\.sha256|\.served)?$/.exec(entry)?.[1];
       if (file !== undefined && (file === `${name}.reads` || file.startsWith(`${name}.reads-`)) && join(directory, file) !== this.readsPath) others.add(join(directory, file));
     }
     for (const file of others) {
-      const at = keptAt(`${file}.sha256`);
-      if (at === undefined || at < own) removeKeptFile(file, `${file}.sha256`);
+      if (file === join(directory, `${name}.reads`) || existsSync(`${file}.served`)) removeKeptFile(file, `${file}.sha256`, [`${file}.served`]);
     }
   }
   /** Prepare this version's kept reads beside the owner (Next 4 (bg)): read the journal's canonical checkpoint at the
-   * index its kept venue answers reach, as the owner's service reads it, into this version's file, so that once this
+   * index its kept answer of this key's held commitments reaches, as the owner's service reads it, into this version's file, so that once this
    * version owns the journal its first read classifies and replays only what was committed since. Where the journal's
    * service reads nothing (no taken term, silence or non-service clause), nothing is read. A file another handle holds
    * (an owner or a preparation of this version) refuses BUSY; one stopped part way keeps what it read (keep points by
@@ -623,12 +625,21 @@ export class V3OperatorJournal {
     requireThat(!this.busy, "BUSY", "a journal operation is in progress");
     this.busy = true;
     try {
-      // One read snapshot: the clock the owner's kept answers reach, and the state signed through it.
+      // One read snapshot: the index the owner's kept answer of this key's held commitments reaches, and the state signed
+      // through it. Not the recorded clock, which a reopening raises before any answer is kept through it: a commitment
+      // held at a later index would then supersede the one the kept answers select.
+      // The venue view's own clock bounds it too: a read is judged at an index the view has witnessed.
       this.db.exec("BEGIN");
       let at: bigint, engine: Engine;
       try {
         const meta = this.metadata(); this.identity(meta);
-        at = decimal(meta!.observed);
+        // Each preparation reads the view's clock afresh, not past this handle's last one.
+        this.observedIndex = 0n;
+        const held = this.replays.keptAnswer(1, this.operator), witnessed = this.clock();
+        requireThat(held !== undefined, "UNAVAILABLE", "the journal has read none of its commitments on the venue");
+        at = held.through < witnessed ? held.through : witnessed;
+        // The owner may have signed past the view this handle opened: its signed rows are checked against its own clock.
+        this.observedIndex = decimal(meta!.observed) > witnessed ? decimal(meta!.observed) : witnessed;
         try { engine = this.stored(); } catch (error) {
           if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "stored journal state does not decode");
           if (error instanceof EvidenceRefusal) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
@@ -637,6 +648,19 @@ export class V3OperatorJournal {
       } finally { this.db.exec("COMMIT"); }
       if (engine.opened === undefined || !this.servesByRead(engine.opened)) return { index: at, read: false };
       await this.currentRead(engine, at);
+      // The walk's batches stood at the owner's last lineage row when each began. Marked now at a row written after all
+      // it read, the evidence restored to before that no longer resumes it (§14: a class is reused only while its
+      // evidence is retained), and the mark is as young as the preparation's end.
+      const writer = new DatabaseSync(this.path, { timeout: 5000, readBigInts: true });
+      let lineage: ReturnType<typeof addLineage>;
+      try { lineage = addLineage(writer); } catch (error) {
+        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+        throw error;
+      } finally { writer.close(); }
+      try { this.reads().remark(lineage.identity, lineage.mark); } catch (error) {
+        if (error instanceof FileInUse) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
+        throw error;
+      }
       return { index: at, read: true };
     } finally { this.busy = false; }
   }

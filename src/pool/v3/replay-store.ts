@@ -504,19 +504,19 @@ function lockKept(path: string): DatabaseSync {
   }
   return lock;
 }
-/** Remove the files of a kept file no handle holds: its log, the file, its digest and its lock. One another handle
- * holds is left as it is (false). */
-export function removeKeptFile(path: string, digest: string): boolean {
+/** Remove the files of a kept file no handle holds: its log, the file and its digest, and `also` (a marker of the
+ * caller's). One another handle holds is left as it is (false). Its lock file stays: removed, a handle opening the
+ * file meanwhile and one after would each hold a lock of their own. */
+export function removeKeptFile(path: string, digest: string, also: readonly string[] = []): boolean {
   let lock: DatabaseSync;
   try { lock = lockKept(path); } catch (error) {
     if (error instanceof FileInUse) return false;
     throw error;
   }
-  try { removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, digest]); } catch (error) {
+  try { removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, digest, ...also]); } catch (error) {
     if (error instanceof FileInUse) return false;
     throw error;
   } finally { lock.close(); }
-  rmSync(`${path}.lock`, { force: true });
   return true;
 }
 /** A kept file's page digest where it may be reused (§14's digest check): opening it recovers what its write-ahead
@@ -1342,6 +1342,21 @@ export class ReplayStore {
       if (this.#db.isTransaction) this.#db.exec("COMMIT"); else this.#generation++;
     } catch (error) {
       this.#keptMark = undefined;
+      this.#rollback();
+      throw error;
+    }
+    if (this.#kept !== undefined) this.#recordDigest();
+  }
+  /** Mark every kept walk read from the retained evidence `evidence` with `mark`: a point its lineage reached after those
+   * walks had read (a preparation beside the evidence's owner, whose batches stand at the owner's last row, marks its walk
+   * once it has read, Next 4 (bg)), so the evidence restored to before it no longer resumes them. Outside a walk. */
+  remark(evidence: Uint8Array, mark: Uint8Array): void {
+    if (this.#db.isTransaction) throw new Error("a walk or transaction is open on this store");
+    try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
+      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      throw error;
+    }
+    try { this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE evidence = ?").run(mark, evidence); this.#db.exec("COMMIT"); } catch (error) {
       this.#rollback();
       throw error;
     }

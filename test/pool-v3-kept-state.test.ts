@@ -23,7 +23,7 @@ import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodePublication, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { withdrawalRecord } from "../src/pool/v3/witness.js";
-import { keptFileDigest, KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
+import { FileInUse, keptFileDigest, KeptStateMismatch, removeKeptFile, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
@@ -709,6 +709,25 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(() => new ReplayStore(":memory:", { digest: "x" })).toThrow(TypeError);
     expect(() => new ReplayStore("same", { digest: "same" })).toThrow(TypeError);
     expect(() => new ReplayStore("file", { digest: "d", every: 0 })).toThrow(TypeError);
+    expect(() => new ReplayStore("file", { digest: "file.lock" })).toThrow(TypeError);
+  });
+
+  it("keeps one handle per kept file: a second, in this process or another, is refused until the first closes (Next 4 (bg))", () => {
+    const kept = files(), first = opened(kept.path, kept);
+    expect(existsSync(`${kept.path}.lock`)).toBe(true);
+    // Refused before it judges the file: the first handle's log and digest stay as they are.
+    expect(() => new ReplayStore(kept.path, kept)).toThrow(FileInUse);
+    expect(removeKeptFile(kept.path, kept.digest)).toBe(false);
+    expect(existsSync(kept.path)).toBe(true);
+    first.close();
+    const second = opened(kept.path, kept);
+    second.close();
+    // A file no handle holds is removed with its digest and the caller's files; its lock stays, so no two handles hold
+    // locks of their own on one path.
+    writeFileSync(`${kept.path}.served`, "");
+    expect(removeKeptFile(kept.path, kept.digest, [`${kept.path}.served`])).toBe(true);
+    for (const file of [kept.path, kept.digest, `${kept.path}-wal`, `${kept.path}.served`]) expect(existsSync(file)).toBe(false);
+    expect(existsSync(`${kept.path}.lock`)).toBe(true);
   });
 });
 

@@ -13,7 +13,7 @@
 // silence, past any sequence the lost instance can have signed, then `adopt`;
 // a copy opened without it refuses `COPIED`. The journal serves the construction the directory declares at
 // init (M14g4); a lit operator keeps no parameters and opens no verifier.
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../bytes.js";
@@ -27,7 +27,7 @@ import { directoryVerifier } from "./backend.js";
 import { initRole, keptBackings } from "./reader.js";
 import { closeListener, listenLoopback, portOf, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { authenticate, keepTerms, keptTerms } from "./terms.js";
-import { createVenue, fresh, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
+import { besideView, createVenue, fresh, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
 
 const commitmentOf = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
 
@@ -308,6 +308,36 @@ async function restore(argv: readonly string[]): Promise<void> {
   } finally { await op.close(); }
 }
 
+/**
+ * `prepare [--verifiers <path>]` (Next 4 (bg)): with a new version of `moe`, build that version's kept reads of the
+ * journal beside the `serve` still running the old one, so the new version's first admission reads only what was
+ * admitted since rather than the whole history. It takes no directory lock, owns nothing and signs nothing: it reads
+ * the journal and the view as they stand (the view through its last sync) and writes this version's reads file. Prints
+ * `prepared` with the index read at, or `unneeded` where the journal's service reads nothing (no silence, non-service
+ * clause or taken term). Idempotent: a second run reads only what is new; a run stopped part way resumes. `BUSY`
+ * where this version's reads file is held: a `serve` of this same version, or another `prepare`. Then stop the old
+ * `serve` and start the new one (run `prepare` once more first if the old one served on for long).
+ */
+async function prepareReads(argv: readonly string[]): Promise<void> {
+  const args = parseArguments(argv, { dir: "value", verifiers: "value" }, 0);
+  const directory = openDirectory(required(args, "dir"), "operator", { beside: true });
+  if (!existsSync(directory.file("journal.db"))) throw new CommandError("ABSENT", "the directory keeps no journal (journal.db): nothing to prepare");
+  const view = besideView(directory);
+  let verifier: ProofVerifier | undefined;
+  try {
+    verifier = await directoryVerifier(directory, args);
+    // The journal beside its owner signs nothing: it is handed the operator's public key alone.
+    const secret = readSecret(directory.file("operator.key"), "operator.key"), operator = ed25519.getPublicKey(secret);
+    secret.fill(0);
+    const journal = new V3OperatorJournal(directory.file("journal.db"), { operator, venue: view.venue, reference: view.file.reference, verifier,
+      construction: directory.construction, beside: true });
+    try {
+      const prepared = await journal.prepareReads();
+      print({ status: prepared.read ? "prepared" : "unneeded", index: prepared.index });
+    } finally { journal.close(); }
+  } finally { await verifier?.close(); view.close(); }
+}
+
 export async function operator(argv: readonly string[]): Promise<void> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -318,6 +348,7 @@ export async function operator(argv: readonly string[]): Promise<void> {
     case "return": return returnCommand(rest);
     case "adopt": return adopt(rest);
     case "restore": return restore(rest);
-    default: throw new UsageError("moe operator init|venue|open|serve|return|adopt|restore");
+    case "prepare": return prepareReads(rest);
+    default: throw new UsageError("moe operator init|venue|open|serve|return|adopt|restore|prepare");
   }
 }
