@@ -1293,7 +1293,7 @@ Findings:
   - Reading earlier does not help. A restarted journal admits only after the lag, and the slow read follows the venue
     holding the commitment the previous process signed last, which happens after `serve` listens.
   - A read before listening, at the restart's index, discarded the journal's kept reads and replayed all 2.7·10³
-    statements in 37 s (WORK.md Next 4 (bb)).
+    statements in 37 s (WORK.md Next 4 (bb), [fixed](#the-restart-read-next-4-bb)).
 - **A wallet's read costs less per holding, but still grows with its holdings.**
   - Against the same code with only the hash changed, a nothing-new sync at 10⁵ holdings holds about 2.2 KB a holding beyond a
     reader's (4.0 KB before) and takes 0.06 ms a holding (0.10 ms before). M13h, before the hash too, measured about 6 KB.
@@ -1309,6 +1309,30 @@ Findings:
   - stand-in proofs verified against real ones, as in M11c2;
   - the wallet's holder is extreme by construction;
   - memory is the process's peak, which garbage collection timing moves by tens of MB.
+
+### The restart read (Next 4 (bb))
+
+Slice 18's 10⁶ run stopped at 1.25·10⁴ statements because a restarted `serve` replayed its whole history in its first
+admission ([decision](../decisions/2026-10.md#2026-10-09--record-a-kept-files-digest-before-its-log-moves-in-and-keep-a-long-reads-progress-by-time-next-4-bb)).
+A probe ran that run's driver (`scratch/dp6`, Windows) on a traced build, on the same laptop (i7-5500U, 4 threads), at
+2·10³–6.2·10³ statements, 42 a checkpoint:
+- **Before the fix, a stop between a keep point's commit and its digest discarded the kept reads.** With serve killed
+  there, the restart's open found no matching digest, so the first admission replayed all 2,339 statements: about 100 s,
+  past seven of the client's 10 s idle bounds. A stop at an idle moment kept them: the first read took 2.05 s at
+  2.6·10³ and 2.4 s at 6·10³ (a test suite ran beside the second).
+- *The window:* about 18–120 ms per keep point that changed rows, about once a checkpoint, so a random stop meets it
+  rarely. In the 10⁶ run the reads file had been deleted and made again: its NTFS file number lies outside the block
+  of the run's other files, and Windows carried its old creation time over. A deleted kept file is what an opening
+  that fails the digest check leaves. The probe's own discarded file shows the same sign.
+- *Every later restart began again,* because a keep point fell only every 10,000 records (minutes of replay) and the
+  keeper killed each restart within about 18 s.
+- **After the fix, a stop inside a keep point costs only that keep point.** Killed after its commit and before its
+  digest, at 6.1·10³: the restart opened its kept reads in 0.15 s before it listened, and its first read took 2.2 s.
+  Killed after its digest and before its checkpoint: 0.15 s and 1.8 s. A first read otherwise took 1.5–2.6 s.
+- *Opening hashes the whole reads file,* at about 190 MB/s here (254 MB in 1.36 s). The 10⁶ run's file grew about
+  2.2 KB a statement, so the hash would be about 12 s at 10⁶. `serve` now pays it before it listens.
+- *Limits:* stand-in proofs, synthetic blocks, one host, one run per point; the trace's own logging adds to each read.
+  The first admission still reads what the previous process admitted since its last kept read (slice 15's limit above).
 
 ## Invalid-checkpoint evidence
 
