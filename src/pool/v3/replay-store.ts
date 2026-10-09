@@ -508,7 +508,8 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
       const lying = PageDigest.of(path, raw);
       if (readFileSync(digest, "utf8") === vouched(path, lying)) { removeFiles([log, `${path}-shm`]); dropped = lying; }
     }
-    const db = new DatabaseSync(path, { readBigInts: true });
+    // A rollback journal beside the file is played into it as it opens (a kept file keeps none; one there is not its own).
+    const journal = existsSync(`${path}-journal`), db = new DatabaseSync(path, { readBigInts: true });
     let version: bigint, moved: boolean;
     try {
       version = (db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
@@ -520,8 +521,8 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
     if (!moved || (existsSync(`${path}-wal`) && statSync(`${path}-wal`).size !== 0)) throw new FileInUse("kept replay file");
     const size = headerPageSize(path);
     if (version !== BigInt(SCHEMA_VERSION) || size === undefined || !existsSync(digest)) return undefined;
-    // With no log left, opening and checkpointing wrote nothing: a dropped log's file is the one just hashed.
-    const pages = dropped !== undefined && dropped.pageSize === size ? dropped : PageDigest.of(path, size);
+    // With no log or rollback journal left, opening and checkpointing wrote nothing: a dropped log's file is the one just hashed.
+    const pages = dropped !== undefined && !journal && dropped.pageSize === size ? dropped : PageDigest.of(path, size);
     return readFileSync(digest, "utf8") === vouched(path, pages) ? pages : undefined;
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.

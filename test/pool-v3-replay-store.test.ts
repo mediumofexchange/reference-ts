@@ -26,6 +26,21 @@ function append(outputs: bigint[], nfs: bigint[], witness: (cm: bigint) => boole
     demand: undefined, ended: undefined, keys: [], history: () => new Uint8Array(32), ...extra };
 }
 
+/** A hot rollback journal for the database at `path`: one a copy of it, switched to rollback mode with a row it lacks,
+ * leaves while a spilled transaction is open, so its page images would write that copy's pages into `path`. */
+function hotJournal(path: string): Buffer {
+  const copy = `${path}.other`;
+  copyFileSync(path, copy);
+  const db = new DatabaseSync(copy);
+  try {
+    db.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE hot (id INTEGER PRIMARY KEY, v BLOB); INSERT INTO hot VALUES (1, x'4141'); PRAGMA cache_size=1;");
+    db.exec("BEGIN; DELETE FROM hot; WITH RECURSIVE g(n) AS (SELECT 10 UNION ALL SELECT n + 1 FROM g WHERE n < 200) INSERT INTO hot SELECT n, randomblob(2000) FROM g;");
+    const journal = readFileSync(`${copy}-journal`);
+    db.exec("ROLLBACK");
+    return journal;
+  } finally { db.close(); rmSync(copy, { force: true }); }
+}
+
 describe("replay storage", () => {
   it("keeps the spent and note roots, and witnessed paths, equal to the runtime structures", () => {
     const store = new ReplayStore(), ns = store.open(new Uint8Array(32), new Uint8Array(32), undefined, genesis);
@@ -269,13 +284,23 @@ describe("replay storage", () => {
       truncateSync(`${path}-wal`, statSync(`${path}-wal`).size - 1);
       store = new ReplayStore(path, { digest });
       expect(store.tip(kept[1]!)).toEqual(tips[1]);
+      // A rollback journal beside it too, which opening plays into the file: the file is hashed again after it opens, and
+      // the pages the journal wrote, which no digest names, leave it discarded (review read-back).
+      store.close();
+      stoppedKeepPoint(path, digest, drop(kept[1]!), false);
+      writeFileSync(`${path}-journal`, hotJournal(path));
+      expect(vouched()).toBe(true);
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(kept[1]!)).toBe(false);
+      const fresh = store.open(fieldToBytes(7n), new Uint8Array(32).fill(2), undefined, genesis);
+      store.closeWalk(store.openWalk(context).walk);
+      expect(vouched()).toBe(true);
       // An unvouched log beside a file the digest does not name either: the file is damaged, and discarded with the log.
       store.close();
       stoppedKeepPoint(path, digest, drop(kept[1]!), false);
       const bytes = readFileSync(path); bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 1; writeFileSync(path, bytes);
       store = new ReplayStore(path, { digest });
-      expect(store.hasNamespace(kept[1]!)).toBe(false);
-      expect(store.hasNamespace(kept[2]!)).toBe(false);
+      expect(store.hasNamespace(fresh)).toBe(false);
       // So is a copy of a stopped file: its identity is not the one the digest names, so its log is not dropped.
       store.close();
       const ns = (store = new ReplayStore(path, { digest }), store.open(fieldToBytes(9n), new Uint8Array(32).fill(2), undefined, genesis));
