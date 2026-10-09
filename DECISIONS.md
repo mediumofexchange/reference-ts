@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-09` [Fix the operator's restart replay before the 10⁶ run, and write the security argument the external review needs](decisions/2026-10.md#2026-10-09--fix-the-operators-restart-replay-before-the-10-run-and-write-the-security-argument-the-external-review-needs)
 - `2026-10-08` [Pay a failed payment's request again only by a retry that conflicts with it (Next 4 (bd))](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd)
 - `2026-10-08` [Raise a restored lit wallet's exposure at each read until it names a key (Next 4 (bc))](decisions/2026-10.md#2026-10-08--raise-a-restored-lit-wallets-exposure-at-each-read-until-it-names-a-key-next-4-bc)
 - `2026-10-08` [Resume a kept lit namespace only where no output row lies past its tip, and derive lit's outputs once (audit, area 33)](decisions/2026-10.md#2026-10-08--resume-a-kept-lit-namespace-only-where-no-output-row-lies-past-its-tip-and-derive-lits-outputs-once-audit-area-33)
