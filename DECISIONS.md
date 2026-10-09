@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-09` [State the release's security argument, take the request digest as its authentication channel, and give every gate's open item an owner (slice 19 M19a)](decisions/2026-10.md#2026-10-09--state-the-releases-security-argument-take-the-request-digest-as-its-authentication-channel-and-give-every-gates-open-item-an-owner-slice-19-m19a)
 - `2026-10-09` [Record a kept file's digest before its log moves in, and keep a long read's progress by time (Next 4 (bb))](decisions/2026-10.md#2026-10-09--record-a-kept-files-digest-before-its-log-moves-in-and-keep-a-long-reads-progress-by-time-next-4-bb)
 - `2026-10-09` [Fix the operator's restart replay before the 10⁶ run, and write the security argument the external review needs](decisions/2026-10.md#2026-10-09--fix-the-operators-restart-replay-before-the-10-run-and-write-the-security-argument-the-external-review-needs)
 - `2026-10-08` [Pay a failed payment's request again only by a retry that conflicts with it (Next 4 (bd))](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd)
