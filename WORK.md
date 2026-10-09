@@ -10,11 +10,11 @@ Updated: 2026-10-09
 - *Acceptance:* `scratch/dp6/run/report.json` done (bands of 10⁴; both marks' first, steady-state and nothing-new reads; serve's restart); a probes section with findings against each budget; the requirements'
   gate row and design-point text updated; the tooling committed at one revision, then deleted; the Open question closed. *Stop:* measure and record only; a failed budget becomes a Next item with its lever.
   *Limits:* stand-in proofs, synthetic blocks, one backing, one run, a 2-core laptop CPU (i7-5500U, 16 GB) below the declared hardware.
-- *Running* since 2026-10-08 23:47 UTC, about 2–3 days (history at about 120 ms a statement, then two first syncs of about 10 h at 10⁶). **Next run:** read `report.json` and `scratch/dp6/driver.log`; if
-  `exit.txt` is non-zero or no driver runs (a reboot), start `scratch/dp6/launch.cmd` detached again (PowerShell `Start-Process cmd.exe "/c <path>" -WindowStyle Hidden`), which resumes from the journal's count.
-  Until it ends keep the PC light: no local real-proof, full or measurement runs (CI artifacts instead); leave the worktree and its `dist` alone; ports 39053–39056 are taken. Then record it (Acceptance).
-- **Proposed next after it:** (bf), (bb) the journal's whole replay at a lagged read, (az), or `venue-bitcoin.md` (Next 12, after funding). Last fix delivered: Next 4 (bd) ([decision](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd), #161).
-  **Slice 13, release assurance, is done** (Next 6; M13a–M13h, #143–#153: [release record](docs/RELEASE.md)); the external security review stays outside (Open questions).
+- *Running* since 2026-10-08 23:47 UTC, about 2–3 days of awake time (history at about 130 ms a statement, then two first syncs of about 10 h at 10⁶). It pauses while the laptop sleeps or is off:
+  `keep.mjs` restarts a failed driver after a minute (resuming from the journal's count), the Startup folder's `moe-dp6.vbs` starts it at logon after a shutdown, and each sleep is listed in
+  `report.suspensions` (admissions spanning one counted as interrupted, left out of the figures). **Next run:** read `report.json` and `scratch/dp6/driver.log`; `exit.txt` appears only when the keeper
+  stops (`0 done`, or gave up: fix, then run `scratch/dp6/launch.cmd` detached). Until it ends keep the PC light: no local real-proof, full or measurement runs (CI artifacts instead); leave the worktree and its `dist` alone; ports 39053–39056 are taken. Then record it (Acceptance).
+- **Proposed next after it:** (bf), (bb) the journal's whole replay at a lagged read, (az), or `venue-bitcoin.md` (Next 12, after funding). Last fix delivered: Next 4 (bd) ([decision](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd), #161). **Slice 13, release assurance, is done** (Next 6; M13a–M13h, #143–#153: [release record](docs/RELEASE.md)); the external security review stays outside (Open questions).
 
 ## Status
 - **Slices 10–14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
