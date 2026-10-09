@@ -3,18 +3,23 @@
 Updated: 2026-10-09
 
 ## Goal
-**Slice 18, the 10⁶ design-point run (running, local machine).** *Goal:* measure the [design point](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) itself (the Practical deployment gate's
-  "10⁶ itself unmeasured") and settle what the 10⁵ curves leave open: the admission wait during the journal's own read (about 0.6 s at 10⁶ per decade, 1.7 s per statement, against ≤ 1 s) and a reader's memory (about 800–900 MB extrapolated, against 1 GiB).
-- *Method:* [slice 15's](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15) driver made to run for days on Windows (`scratch/dp6/`, over worktree `scratch/wt/dp6` at `ffc35c1`): marks at 10⁵ and 10⁶; the holder's holdings capped at 25,000
-  (10⁵'s), so 10⁶ measures depth apart from holdings ((az)); every process at above-normal priority, each band recording the host's CPU beside serve's. A 400-statement smoke run passed every step.
-- *Acceptance:* `scratch/dp6/run/report.json` done (bands of 10⁴; both marks' first, steady-state and nothing-new reads; serve's restart); a probes section with findings against each budget; the requirements'
-  gate row and design-point text updated; the tooling committed at one revision, then deleted; the Open question closed. *Stop:* measure and record only; a failed budget becomes a Next item with its lever.
+Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators-restart-replay-before-the-10-run-and-write-the-security-argument-the-external-review-needs)): **(bb) → slice 18 from scratch (local) → (bf) and slice 19 (cloud, while 18 runs) → public pages.**
+- **Next: Next 4 (bb), the operator's restart replay (a fix; a local or cloud run).** *Evidence:* slice 18 killed for a restart test at 12,489 statements; every restarted `serve`'s first read then held its turn about
+  5½ min (640 s CPU), past the client's 10 s idle bound, until the restarts' blocks reached the silence edge (`scratch/dp6/restart-probe.log`, `run/serve.log`). *Acceptance:* root-caused in the journal's audit area;
+  a restarted `serve`, after an abrupt stop too, reads only what it has not kept and admits within the budget at any depth; a regression test at a depth where a whole replay shows (fails on main);
+  journal adversarial review (restart, fencing and kept reads). *Stop:* the fix and its evidence; no other journal change.
+- **Then slice 18, the 10⁶ design-point run, from scratch (local machine)**, on the fixed revision. *Goal:* the [design point](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) itself: admission during the journal's own read
+  (about 0.6–1.7 s extrapolated, against ≤ 1 s), a reader's memory (about 800–900 MB, against 1 GiB), and a restart's first admission at 10⁵ and 10⁶. *Method:* `scratch/dp6/` ([slice 15's](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15) driver for Windows):
+  marks at 10⁵ and 10⁶, holdings capped at 25,000 ((az)), above-normal priority, host CPU beside serve's; `keep.mjs` restarts a failed driver, `launch.cmd` starts it detached. Before relaunch: move the worktree
+  `scratch/wt/dp6` to the fixed revision and build it; delete `scratch/dp6/run/` (past its silence edge); set the driver's `SILENCE` far beyond any restart's mined blocks (the patched driver already waits through a client timeout without mining);
+  re-create the Startup entry `moe-dp6.vbs` (removed 2026-10-09; its text is in `launch.cmd`'s comment) and run a short smoke run with a forced restart. Running takes about 2–3 days of awake time; keep the PC light meanwhile (no local real-proof, full or measurement runs; ports 39053–39056).
+  *Acceptance:* `run/report.json` done (bands of 10⁴; both marks' first, steady-state and nothing-new reads; the restarts); a probes section against each budget; the gate row and design-point text updated; the tooling committed at one revision, then deleted. *Stop:* measure and record; a failed budget becomes a Next item with its lever.
   *Limits:* stand-in proofs, synthetic blocks, one backing, one run, a 2-core laptop CPU (i7-5500U, 16 GB) below the declared hardware.
-- *Running* since 2026-10-08 23:47 UTC, about 2–3 days of awake time (history at about 130 ms a statement, then two first syncs of about 10 h at 10⁶). It pauses while the laptop sleeps or is off:
-  `keep.mjs` restarts a failed driver after a minute (resuming from the journal's count), the Startup folder's `moe-dp6.vbs` starts it at logon after a shutdown, and each sleep is listed in
-  `report.suspensions` (admissions spanning one counted as interrupted, left out of the figures). **Next run:** read `report.json` and `scratch/dp6/driver.log`; `exit.txt` appears only when the keeper
-  stops (`0 done`, or gave up: fix, then run `scratch/dp6/launch.cmd` detached). Until it ends keep the PC light: no local real-proof, full or measurement runs (CI artifacts instead); leave the worktree and its `dist` alone; ports 39053–39056 are taken. Then record it (Acceptance).
-- **Proposed next after it:** (bf), (bb) the journal's whole replay at a lagged read, (az), or `venue-bitcoin.md` (Next 12, after funding). Last fix delivered: Next 4 (bd) ([decision](decisions/2026-10.md#2026-10-08--pay-a-failed-payments-request-again-only-by-a-retry-that-conflicts-with-it-next-4-bd), #161). **Slice 13, release assurance, is done** (Next 6; M13a–M13h, #143–#153: [release record](docs/RELEASE.md)); the external security review stays outside (Open questions).
+- **Slice 19, readiness for the external review (cloud).** (a) `docs/SECURITY_ARGUMENT.md`: the release's claims (supply, payment soundness and privacy, holder authorization, compartmentalized failure and
+  recovery), the assumptions each rests on (proof system, one honest parameter contributor, Poseidon2, SHA-256, Ed25519, the venue's honest majority against Ergo's [measured concentration](docs/VENUE_ALTERNATIVES.md)), why the checks imply them (citing Construction and the [protocol rules](docs/PROTOCOL_RULES.md)) and residual risks; a fresh adversarial reviewer of the argument;
+  (b) a review brief: scope, the pinned release record, commands to reproduce, the dispositioned findings, what is out of scope; (c) the human authentication channel: state the digest argument as the release's channel with its limit, or take Next 9's text request frame. (bf) first, as a small fix.
+- **Then the public pages:** the site's reference line (it still names multi-backing statements as remaining; no commands, lit, replica or release record) and the organization profile (formats now adopted by name), under the site's push double-check.
+- Last delivered: Next 4 (bd) (#161). **Slice 13, release assurance, is done** (M13a–M13h, #143–#153: [release record](docs/RELEASE.md)); the external security review stays outside (Open questions).
 
 ## Status
 - **Slices 10–14 done** (slice 12: transport, replica, relay, #136–#140) (PRs in #69–#111 and #117; decisions M10a–M11b12 in [2026-10](decisions/2026-10.md)): the `moe` [commands](docs/POOL_V3_WALLET.md#commands) run from an `npm pack`
@@ -39,22 +44,18 @@ Updated: 2026-10-09
    (ak), (al), (m)'s sync abort signal; replica availability (ap), (aq), (ar); their change (y) next wallet profile, (ad) mainnet,
    (z) a holder path for force-created outputs, (ao); tooling (g), (aa); accepted (n), (an), (af), (v) (directory lock). M13f limits
    (accepted): a lost instance's statement in flight at a restoration lands beside a retry; a note another instance received and
-   spent between two reads is never held. Slice 15 ([edges](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15)) fixed (ay). Waiting: (az) a wallet's read
-   holds about 2.2 KB a holding beyond a reader's, so 1 GiB near 1.8·10⁵ unspent notes in a first sync; the lever is to keep
-   holdings in rows and stream the view (the output and every acting command's selection), taken if a holder must pass about 1.5·10⁵;
-   a restarted `serve`'s first admission once its last commitment is held reads what the previous process admitted (1.0–1.5 s
-   at 42 statements a checkpoint); (bb) a journal read at an index below its kept reads' discards them and replays its whole
-   history in one turn (37 s at 2.7·10³ statements), seen when a read ran at a restart's index before the lag: root-cause it
-   in the journal's audit area;
-   (bc), (be), (bd) fixed (Goal; (bc)'s limit and levers in its decision); (bf) an extra kept lit demand row goes unchecked;
+   spent between two reads is never held. Slice 15 ([edges](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15)) fixed (ay). **(bb), next (Goal):** a journal read at an index
+   below its kept reads' discards them and replays its whole history in one turn (37 s at 2.7·10³ statements in slice 15; about 5½ min at 1.25·10⁴ after an abrupt stop of `serve`, slice 18), so a restart
+   at scale holds admission past the budget and can lapse its backings; also a restarted `serve`'s first admission reads what the previous process admitted (1.0–1.5 s at 42 statements a checkpoint).
+   (bf), before slice 19: an extra kept lit demand row goes unchecked. Waiting on its trigger: (az) a wallet's read holds about 2.2 KB a holding beyond a reader's (1 GiB near 1.8·10⁵ unspent notes in a first sync);
+   the lever, rows and a streamed view, is taken if a holder must pass about 1.5·10⁵. (bc), (be), (bd) fixed ((bc)'s limit and levers in its decision);
    accepted (ba): a lit read re-checks every marked note (about 0.14 ms each, 14 s a read at 10⁵), within the steady state.
 5. Slice 11 leftovers (the 10⁵ rerun is M13h: `serve`'s memory levels off near 600 MB, its JavaScript heap near 7 MB). M11a's view: store each side row's meeting height (pruning re-judges protected side rows each sync); sections
    asked of several suppliers at once (if a first-sync budget needs it); a heavier fork more than about 10,000 headers below the tip is
    never reached (step-back doubling overruns the fetch budget on known headers; pre-existing); a node POST (`unspentBoxes`, `submit`) on
    a connection the node closed as idle is not sent again (M11b9 sends GETs once more; availability only, the publisher resends exact
    bytes). Lever (a 10⁶ first-sync run) only if a budget fails; Barretenberg's Poseidon2 is taken (slice 15).
-6. **Slice 13**, release assurance: done but for the external review. Security reviews until the external review (once the product is complete, 2026-10-01):
-   separate AI instances (fresh reviewers, rolling audits).
+6. **Slice 13**, release assurance: done but for the external review. Security reviews until the external review (once the product is complete, 2026-10-01): separate AI instances (fresh reviewers, rolling audits).
 7. CI's real-proof checks run in five parallel groups (12 min, not 43) and skip for report/unread-doc commits ([decision](decisions/2026-10.md#2026-10-06--run-cis-real-proof-checks-in-parallel-groups-and-skip-them-only-for-unread-changes-tooling)); lever: split the drill
    or local replay. M10e2 left: the harness's proof-free cases in vitest with stand-in proofs; narrow the optional `StoredEvent.index`/`judgedIndex` when touched.
    Root-cause a Windows hang: PR #114 run 37350884943 attempt 1 timed out (30 s, vitest worker RPC too) in `pool-v3-replay-store` keep-point tests and `cli.test.mjs:158`; green on re-run.
@@ -62,39 +63,38 @@ Updated: 2026-10-09
    one `moe` harness for the two command drills; one fixture `foldSegment` (`receiptFields`; re-records local replay); `store-check`/`history-store-check` onto `drill.mjs` with a `drill.serve`; reports written to `docs/` directly; CLI `commitmentOf`/`READ` shared; `openProver` refuses absent parameters as
    `PARAMETERS` (exits 3 now). Also shared byte helpers; Ergo section versus transaction charging; served-trail caller-object cache; drop the `vite` dev pin at the next dependency change; test a second commit refused while one is in flight (`store.ts` `ready`).
    Not worth it: `fulfill` into `sync` (its credit-once exit contract) and a second atomic writer (replay-store's `replaceFile`, only with its next change).
-9. Only when a gate needs them: cancellation (also closes C3.5's late-witnessed release; pool-v4 could bind the acceptance in `rho_out`), batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, sponsored
+9. Only when a gate needs them (none of the smallest profile's does): cancellation (release with other outputs; also closes C3.5's late-witnessed release; pool-v4 could bind the acceptance in `rho_out`), batching, venue-moving record, slowest-supplier clock, multi-entry extension fixture, sponsored
    holder funding, operator fee quotes, a kind-4 fee by length (fee-per-byte nodes rank a long run last once a pool fills; C3 deadlines), a
    text/QR request frame, C4.5 pending-acceptance receipt handoff, same-segment rescoping; against hostile evidence growth (M4) a per-supply bound
    tied to what the venue newly holds and serving a reader only the segments its checkpoints name. Past the smallest profile: statements
    spending several backings, adding an original-term backing to a live scope, single-backing openings' |E| over-reserve; a phone-first wallet
    (a venue range source proportional to the subject's records, a new venue identity, then a succinct relation).
-10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)), each only where it serves a function no other does ([2026-10-08](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)): pool the default; lit notes (slice 14, adopted) for links carrying only tiny packets: measure its frames against a mesh packet budget, size cuts and a spend salt (closing (bc)'s limit) are lit-v2 candidates; offline after release; accumulator and Chaumian only if a comparison shows a function of their own.
+10. **Claim-layer profiles** beside the pool ([direction](decisions/2026-10.md#2026-10-05--build-extensions-claim-layer-profiles-beside-the-shielded-pool-each-chosen-per-backing)), each only where it serves a function no other does ([2026-10-08](decisions/2026-10.md#2026-10-08--build-a-claim-layer-profile-only-where-it-serves-a-function-no-other-profile-serves)): pool the default; lit notes (slice 14, adopted) for links carrying only tiny packets: after release, measure its frames against a mesh packet budget; size cuts and a spend salt (closing (bc)'s limit) are lit-v2 candidates; offline after release; accumulator and Chaumian only if a comparison shows a function of their own.
 11. **Agent-first surfaces** (AGENTS.md direction): every command, wallet and service answer serves agents managing backings and wallets and autonomous AIs (one JSON object and coded exits exist, M10b); check each new lit command against it.
 12. **Venues and assets.** [Research](docs/VENUE_ALTERNATIVES.md) (2026-10-05) agrees with the [2026-08-27 direction](decisions/2026-08.md#2026-08-27--venues-ergo-is-queued-bitcoin-is-the-direction-after-it):
    Ergo fits best but one address mined 51% of 700 blocks; Bitcoin is second. Probes 1 and 2 (slice 16, [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16)) keep it:
    AntPool's template group (a third of blocks) delays records over 83 B; its reader fails the declared transfer budget. Read-only
    probe 3 (slice 17, [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17)): records reach mempool.space's mempool before mining and
-   their wait sets C3.3's margin, so the depth. Next: mainnet publication of our own records once funded (Open questions); then `venue-bitcoin.md` with
-   its reader's own budget line. BTC/XMR as chain-asset terms.
+   their wait sets C3.3's margin, so the depth. Next: mainnet publication of our own records once funded (Open questions); `venue-bitcoin.md`, with
+   its reader's own budget line, after release (Ergo is the release's venue, its concentration a stated residual risk in slice 19). BTC/XMR as chain-asset terms.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
   2026-10-06: run them (`experiments/ergo-range/nodes.mjs start|stop`) only while work uses them, allowing catch-up sync.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public `pool-v3-testnet-reader/`, `pool-v3-recovery-testnet-reader/` and `pool-v3-scope-testnet-reader/`
   bundles (their readers retired; re-read with the scripts at `09534a8`), `testnet-header-probe/`, `private-payment-crs/` (G1/G2 cache), `jdk/` and `ergo-headers/` under scratch. The PC's Node is 24.21.0 (installed 2026-10-06).
-- Until slice 18 is recorded: `scratch/dp6/` (driver, hooks, `run/`, about 70 GB at 10⁶) and the worktree `scratch/wt/dp6`. Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`, `node-startup/`, `sync-preparation/`;
+- Until slice 18 is recorded: `scratch/dp6/` (driver, hooks, `restart-probe.log`, `run/`: stopped 2026-10-09 past its silence edge, kept as (bb)'s evidence until the relaunch deletes it; about 70 GB at 10⁶) and the worktree `scratch/wt/dp6`. No dp6 process or Startup entry is live. Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`, `node-startup/`, `sync-preparation/`;
   allocate no other. Archive node `C:\Users\Bob\ergo-node` (outside): synced, stopped, unused. Preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
 
 ## Open questions
-- Non-blocking, local machine: a live re-run of the command drill (its report predates slice 13; after slice 18 ends), the 10⁶ design-point run (running as slice 18, Goal), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
+- Non-blocking, local machine: a live re-run of the command drill (its report predates slice 13; after slice 18 ends), the 10⁶ design-point run (slice 18, Goal: stopped, relaunched from scratch after (bb)), and a live Tor run of M12a's onion route an M12b replica and an M12c relay behind their own onion names (latency, isolation by credential, Tor's refusal of internal addresses). Runs review and merge through other instances (maintainer's direction 2026-10-07).
 - Non-blocking, maintainer (2026-10-08): the external security review, release assurance's one remaining item; commissioning it lies
-  outside the standing authorization. Slice 13's own part is done; rolling AI reviews continue meanwhile (Next 6).
+  outside the standing authorization. Slice 13's own part is done; slice 19 writes the security argument and brief it reviews; rolling AI reviews continue meanwhile (Next 6).
 - Non-blocking, maintainer (2026-10-08): Bitcoin probe 3's decisive part publishes 136 B and 15.5 KB records on mainnet against
   fee (Next 12), which spends real funds outside the standing authorization: fund or authorize a small budget (under about
   100,000 sats at 1–2 sat/vB). The read-only variant is done (slice 17).
 - Deletion list (2026-10-07): none open.
 
-Roughly **76% done / 24% remaining** (range 66–82%), reassessed 2026-10-08 (slice 15): the design point now holds every budget at 10⁵,
-admission during the journal's own read included, with a wallet's memory per holding cut by about half. The external review and its
-findings, qualified storage and custody, and mainnet remain.
+Roughly **72% done / 28% remaining** (range 62–80%), reassessed 2026-10-09 (direction check): the restart replay (bb) is a gate defect at scale and the
+security argument is uncounted work; every budget still holds at 10⁵ otherwise. The external review and its findings, qualified storage and custody, and mainnet remain.
