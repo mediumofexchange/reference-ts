@@ -419,8 +419,8 @@ privacy claim**: every statement names its inputs, outputs, backing and quantiti
   signed by K and the acceptance's owner key, and the presenter's release (`src/lit/records.ts`, lit-v1 §3).
 - Its failure path is the pool's, judged by the one state machine through lit's view.
 - Its residual is the pool's without the proof system's. Its lit boundary is the whole record.
-- One defect is open: a kept lit demand row that no trail record stood up is never checked, and a settlement would
-  derive its output from it (WORK.md Next 4 (bf), under A11's kept state).
+- A resumed lit reader rebuilds its kept output and own demand rows from the trail (lit-v1 §10), since a settlement
+  derives its output from its demand's row; the other kept rows rest on §14's digest, as the pool's do (A11).
 
 ## What this argument does not claim
 

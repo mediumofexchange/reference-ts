@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-09` [Rebuild a kept lit namespace's own demand rows from its trail at any position, and make no namespace over rows it already holds (Next 4 (bf), slice 19 M19b)](decisions/2026-10.md#2026-10-09--rebuild-a-kept-lit-namespaces-own-demand-rows-from-its-trail-at-any-position-and-make-no-namespace-over-rows-it-already-holds-next-4-bf-slice-19-m19b)
 - `2026-10-09` [One loopback listener and one serve frame for the operator, a replica and a relay (simplify)](decisions/2026-10.md#2026-10-09--one-loopback-listener-and-one-serve-frame-for-the-operator-a-replica-and-a-relay-simplify)
 - `2026-10-09` [State the release's security argument, take the request digest as its authentication channel, and give every gate's open item an owner (slice 19 M19a)](decisions/2026-10.md#2026-10-09--state-the-releases-security-argument-take-the-request-digest-as-its-authentication-channel-and-give-every-gates-open-item-an-owner-slice-19-m19a)
 - `2026-10-09` [Record a kept file's digest before its log moves in, and keep a long read's progress by time (Next 4 (bb))](decisions/2026-10.md#2026-10-09--record-a-kept-files-digest-before-its-log-moves-in-and-keep-a-long-reads-progress-by-time-next-4-bb)
