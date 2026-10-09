@@ -163,9 +163,6 @@ export function replicaCommand(argv: readonly string[], role: Role): void {
   print({ status: "kept", operator: kept.terms.operator, replicas: [...new Set([...urls, url])] });
 }
 
-/** Where a read's evidence came from: a replica, the operator's service, a package file, or (a wallet) the package its
- * last sync kept or a saved retry's none. */
-export type EvidenceOrigin = "replica" | "served" | "file" | "kept" | "saved";
 /** A replica passed over, and why. */
 export interface Skipped { readonly url: string; readonly code: string }
 
@@ -429,7 +426,7 @@ export async function presentationCommand(argv: readonly string[], role: Role): 
 }
 
 /** The backings whose terms the directory keeps, in name order. */
-function keptBackings(directory: Directory): Uint8Array[] {
+export function keptBackings(directory: Directory): Uint8Array[] {
   let names: string[];
   try { names = readdirSync(directory.file("terms")); } catch { return []; }
   return names.filter(name => /^[0-9a-f]{64}$/.test(name)).sort().map(name => hex32(name, "a kept backing"));

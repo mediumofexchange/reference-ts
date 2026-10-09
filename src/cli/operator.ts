@@ -13,7 +13,7 @@
 // silence, past any sequence the lost instance can have signed, then `adopt`;
 // a copy opened without it refuses `COPIED`. The journal serves the construction the directory declares at
 // init (M14g4); a lit operator keeps no parameters and opens no verifier.
-import { readdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../bytes.js";
@@ -24,7 +24,7 @@ import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, event, flag, has, hex, hex32, integer, openDirectory, parseArguments, pause, pollMs, print, readRequired, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Arguments, type Directory } from "./common.js";
 import { directoryVerifier } from "./backend.js";
-import { initRole } from "./reader.js";
+import { initRole, keptBackings } from "./reader.js";
 import { closeListener, listenLoopback, portOf, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { authenticate, keepTerms, keptTerms } from "./terms.js";
 import { createVenue, fresh, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
@@ -133,10 +133,8 @@ async function open(argv: readonly string[]): Promise<void> {
 function servedSilence(directory: Directory, operator: Uint8Array): bigint | undefined {
   const file = requireVenue(directory);
   let least: bigint | undefined;
-  let names: string[] = [];
-  try { names = readdirSync(directory.file("terms")); } catch { /* no terms yet */ }
-  for (const name of names.filter(n => /^[0-9a-f]{64}$/.test(n))) {
-    const kept = keptTerms(directory, hex32(name, "a kept backing"), file);
+  for (const backing of keptBackings(directory)) {
+    const kept = keptTerms(directory, backing, file);
     if (compareBytes(kept.terms.operator, operator) !== 0) continue;
     const duration = kept.terms.silence?.noCommitmentDuration;
     if (duration !== undefined && (least === undefined || duration < least)) least = duration;
