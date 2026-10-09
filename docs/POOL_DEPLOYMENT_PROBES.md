@@ -1746,8 +1746,10 @@ Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd
 
 ## Hostile-input node equivalence
 
-**Framer against node, 2026-09-24** ([guide](../experiments/ergo-range/README.md#hostile-input-node-equivalence),
-[retained report](ergo-framer-hostile-equivalence-verification.json)). The
+**Framer against node, 2026-09-24, retired 2026-10-09** ([harness at 3ca1961](https://github.com/mediumofexchange/reference-ts/blob/3ca1961/experiments/ergo-range/hostile-equivalence.mjs),
+[node reader at 2a625a1](https://github.com/mediumofexchange/reference-ts/blob/2a625a1/experiments/ergo-range/node-read/NodeRead.java),
+[guide at 563a477](https://github.com/mediumofexchange/reference-ts/blob/563a477/experiments/ergo-range/README.md#hostile-input-node-equivalence),
+[report at 2c6b20c](https://github.com/mediumofexchange/reference-ts/blob/2c6b20c/docs/ergo-framer-hostile-equivalence-verification.json)). The
 seeds are the 29 corpus transactions' unsigned bytes, copied by `src/ergo-supplier.ts`,
 so the mutations (as below) fall on the reader's own input: 143,227 distinct
 cases. Each is read by the node (as below, with the node also stating its own
