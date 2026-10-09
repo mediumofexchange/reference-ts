@@ -73,7 +73,7 @@ const ONION = `${"m".repeat(55)}d.onion`, REPLICA = `${"r".repeat(55)}d.onion`, 
 const RELAY = `${"l".repeat(55)}d.onion`;
 const tor = { holders: 0, replica: 0, relay: 0, tunnels: 0, refused: [] };
 const torProxy = createServer((_, response) => response.writeHead(405).end()).on("connect", (request, client, head) => {
-  // An onion service that is down answers 502, as Tor does.
+  // An onion service that is down answers an error status (Tor answers 500, 503 or 504; moe reads each as UNAVAILABLE).
   if (request.url === `${DOWN}:80`) { client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
   const port = request.url === `${ONION}:80` ? tor.holders : request.url === `${REPLICA}:80` ? tor.replica : request.url === `${RELAY}:80` ? tor.relay : 0;
   if (port === 0) { tor.refused.push(request.url); client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
