@@ -11,13 +11,12 @@
 // verifier. `serve` makes it a replica (slice 12 M12b): it keeps each backing's
 // evidence and serves it, with no credential, through the one wire.
 import { mkdirSync, readdirSync } from "node:fs";
-import type { AddressInfo } from "node:net";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { readPresentation, type Presentation } from "../pool/v3/dishonour.js";
 import { EvidenceStore } from "../pool/v3/evidence-store.js";
 import { PackageLimitError } from "../pool/v3/package.js";
 import { EvidenceRefusal } from "../pool/v3/refusals.js";
-import { selectionOf, V3Replica } from "../pool/v3/replica.js";
+import { V3Replica } from "../pool/v3/replica.js";
 import { createV3EvidenceService } from "../pool/v3/service-http.js";
 import type { ServedPackage } from "../pool/v3/store.js";
 import { compareBytes, EncodingError } from "../bytes.js";
@@ -27,11 +26,13 @@ import { FileInUse, ReplayStore } from "../pool/v3/replay-store.js";
 import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
-import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, pause, pollMs, print,
+import type { ProofVerifier } from "../pool/proof-verifier.js";
+import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print,
   readJson, readOptional, readRequired, required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { directoryVerifier } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
+import { closeListener, LISTENER_URL, listenerFile, listenLoopback, SERVE_FLAGS, serveFlags, untilStopped } from "./serve.js";
 import { keepContext, openView, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
 /** `init` shared by every role: parameters (copied from `--parameters` or fetched) where the directory verifies proofs,
@@ -105,19 +106,9 @@ export function termsCommand(argv: readonly string[], role: Role): void {
   } else throw new UsageError("terms add|show");
 }
 
-/** A service file: the operator's service URL and its service-wide wallet token, never per holder. */
-interface ServiceFile { readonly url: string; readonly walletToken: string }
-/** The operator's loopback service, or its holders' listener as a v3 onion service (M12a), which the client reaches only
- * through a loopback proxy. */
-const SERVICE_URL = /^http:\/\/(127\.0\.0\.1:[0-9]{1,5}|[a-z2-7]{55}d\.onion(:[0-9]{1,5})?)\/$/;
-function parseService(value: unknown): ServiceFile {
-  const v = value as Partial<ServiceFile>;
-  if (value === null || typeof value !== "object" || Object.keys(value).sort().join() !== "url,walletToken" ||
-      typeof v.url !== "string" || !SERVICE_URL.test(v.url) || typeof v.walletToken !== "string" || !/^[0-9a-f]{64}$/.test(v.walletToken)) {
-    throw new CommandError("INVALID", "the service file is not { url, walletToken } with a loopback or v3 onion URL");
-  }
-  return { url: v.url, walletToken: v.walletToken };
-}
+/** A service file: the operator's loopback service, or its holders' listener as a v3 onion service (M12a), and the
+ * service-wide wallet token. */
+const parseService = (value: unknown) => listenerFile(value, "walletToken", "service");
 
 /** `service add <backing> <file>`: keep the service file under the operator the terms name. */
 export function serviceCommand(argv: readonly string[], role: Role): void {
@@ -127,7 +118,7 @@ export function serviceCommand(argv: readonly string[], role: Role): void {
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), service = parseService(readJson(args.positional[1]!, "the service file"));
   mkdirSync(directory.file("services"), { recursive: true, mode: 0o700 });
-  writeReplace(directory.file(`services/${hex(kept.terms.operator)}.json`), `${JSON.stringify(service, null, 2)}\n`);
+  writeReplace(directory.file(`services/${hex(kept.terms.operator)}.json`), `${JSON.stringify({ url: service.url, walletToken: service.token }, null, 2)}\n`);
   print({ status: "kept", operator: kept.terms.operator, url: service.url });
 }
 
@@ -135,13 +126,13 @@ export function serviceCommand(argv: readonly string[], role: Role): void {
  * and the directory's construction, never from the service file. */
 export function serviceClient(directory: Directory, kept: KeptTerms, view: View): V3ServiceClient {
   const service = parseService(readJson(directory.file(`services/${hex(kept.terms.operator)}.json`), "service file for the terms' operator (service add)"));
-  return new V3ServiceClient(service.url, service.walletToken, { operator: kept.terms.operator, reference: view.file.reference,
+  return new V3ServiceClient(service.url, service.token, { operator: kept.terms.operator, reference: view.file.reference,
     construction: directory.construction });
 }
 
 /** A replica's URL: the loopback or v3 onion forms a service file takes, with no credential (M12b). */
 function parseReplicaUrl(value: string): string {
-  if (!SERVICE_URL.test(value)) throw new CommandError("INVALID", "a replica URL is http://127.0.0.1:<port>/ or a v3 onion's http://<host>/");
+  if (!LISTENER_URL.test(value)) throw new CommandError("INVALID", "a replica URL is http://127.0.0.1:<port>/ or a v3 onion's http://<host>/");
   return value;
 }
 /** The replica URLs kept for an operator, in the order added. */
@@ -172,9 +163,6 @@ export function replicaCommand(argv: readonly string[], role: Role): void {
   print({ status: "kept", operator: kept.terms.operator, replicas: [...new Set([...urls, url])] });
 }
 
-/** Where a read's evidence came from: a replica, the operator's service, a package file, or (a wallet) the package its
- * last sync kept or a saved retry's none. */
-export type EvidenceOrigin = "replica" | "served" | "file" | "kept" | "saved";
 /** A replica passed over, and why. */
 export interface Skipped { readonly url: string; readonly code: string }
 
@@ -349,6 +337,16 @@ export function keptReplay(directory: Directory, at: bigint): ReplayStore {
 const inUse = (error: unknown): unknown => error instanceof FileInUse ?
   new CommandError("STORAGE", `another process holds this reader's ${error.file}`) : error;
 
+/** The backing's frontier at `at` over `source`, read through the directory's construction and the view's venue. */
+async function readAt(directory: Directory, kept: KeptTerms, view: View, at: bigint, source: Uint8Array, opened: {
+  verifier: ProofVerifier | undefined; evidence: EvidenceStore; store: ReplayStore; answers: boolean }): Promise<FrontierResult & FaultResult> {
+  const { verifier, ...rest } = opened;
+  try {
+    return await readFrontier(source, kept.signed, at, { construction: directory.construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
+      reference: view.file.reference, ...rest });
+  } catch (error) { throw inUse(error); }
+}
+
 /** Where a served read's evidence came from, as outputs name it. */
 const originOf = (supplied: Synced): object => ({ evidence: supplied.origin, ...(supplied.origin === "replica" ? { replica: supplied.url } : {}),
   ...(supplied.skipped.length > 0 ? { skipped: supplied.skipped } : {}) });
@@ -369,13 +367,7 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
       // A read is final at its judging index; where the view could not read further, the output says so.
       const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
       const readOver = async (source: Uint8Array, origin: object) => {
-        let read;
-        try {
-          read = await readFrontier(source, kept.signed, at, { construction: directory.construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
-            reference: view.file.reference, ...opened, answers });
-        } catch (error) {
-          throw inUse(error);
-        }
+        const read = await readAt(directory, kept, view, at, source, { verifier, ...opened, answers });
         use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled }, origin);
       };
       const file = flag(args, "package");
@@ -434,7 +426,7 @@ export async function presentationCommand(argv: readonly string[], role: Role): 
 }
 
 /** The backings whose terms the directory keeps, in name order. */
-function keptBackings(directory: Directory): Uint8Array[] {
+export function keptBackings(directory: Directory): Uint8Array[] {
   let names: string[];
   try { names = readdirSync(directory.file("terms")); } catch { return []; }
   return names.filter(name => /^[0-9a-f]{64}$/.test(name)).sort().map(name => hex32(name, "a kept backing"));
@@ -457,10 +449,9 @@ const roundRefusal = (error: unknown): string | undefined =>
  * SIGTERM or SIGINT.
  */
 async function serve(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, { dir: "value", verifiers: "value", "poll-ms": "value", port: "value", onion: "value" }, 0);
-  const directory = openDirectory(required(args, "dir"), "reader"), venue = requireVenue(directory), construction = directory.construction;
-  const port = Number(integer(flag(args, "port") ?? "0", "--port", 0n, 65535n)), ms = pollMs(args), onion = flag(args, "onion");
-  if (onion !== undefined && !/^[a-z2-7]{55}d\.onion$/.test(onion)) throw new UsageError("--onion takes a v3 onion host: 56 base32 characters and .onion");
+  const args = parseArguments(argv, { dir: "value", verifiers: "value", ...SERVE_FLAGS }, 0);
+  const directory = openDirectory(required(args, "dir"), "reader"), venue = requireVenue(directory);
+  const { port, onion, ms } = serveFlags(args);
   const view = openView(directory);
   let evidence: EvidenceStore | undefined, verifier: Awaited<ReturnType<typeof directoryVerifier>> | undefined;
   try {
@@ -471,33 +462,24 @@ async function serve(argv: readonly string[]): Promise<void> {
   const server = createV3EvidenceService(replica);
   // A stream its file could not finish (storage damage) ended short; the replica's owner is told.
   server.on("evidenceError", (error: unknown) => { event({ event: "evidence", code: "STORAGE", message: (error as Error).message }); });
-  try {
-    await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(port, "127.0.0.1", () => { server.off("error", failed); done(); }); });
-  } catch (error) {
-    await verifier?.close(); evidence.close(); view.close();
-    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CommandError("UNAVAILABLE", `port ${port} is in use`);
-    throw error;
-  }
-  const local = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`, url = onion === undefined ? local : `http://${onion}/`;
+  let listened: number;
+  try { listened = await listenLoopback(server, port); } catch (error) { await verifier?.close(); evidence.close(); view.close(); throw error; }
+  const local = `http://127.0.0.1:${listened}/`, url = onion === undefined ? local : `http://${onion}/`;
   writeReplace(directory.file("replica.json"), `${JSON.stringify({ url }, null, 2)}\n`);
-  let stopping = false, wake: (() => void) | undefined;
-  const stop = () => { stopping = true; wake?.(); };
-  process.once("SIGTERM", stop); process.once("SIGINT", stop);
-  print({ status: "serving", url, port: (server.address() as AddressInfo).port, backings: keptBackings(directory).map(hex),
+  const { stopping, pause: rest } = untilStopped();
+  print({ status: "serving", url, port: listened, backings: keptBackings(directory).map(hex),
     served: keptBackings(directory).map(backing => ({ backing, sequence: replica.selection(backing)?.selection.sequence ?? null })) });
   const round = async (): Promise<void> => {
     const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
     for (const backing of keptBackings(directory)) {
-      if (stopping) return;
+      if (stopping()) return;
       try {
         const kept = keptTerms(directory, backing, venue), before = replica.selection(backing)?.selection.sequence;
         await served(directory, kept, view, evidence!, async supplied => {
           const store = keptReplay(directory, at);
           let read;
-          try {
-            read = await readFrontier(supplied.served.package, kept.signed, at, { construction, ...(verifier === undefined ? {} : { verifier }), venue: view.venue,
-              reference: view.file.reference, evidence: evidence!, store, answers: false });
-          } finally { store.close(); }
+          try { read = await readAt(directory, kept, view, at, supplied.served.package, { verifier, evidence: evidence!, store, answers: false }); }
+          finally { store.close(); }
           // Served only where its own read found the selection canonical: it holds what a read of it needs.
           const canonical = read.canonical?.commitment, selected = supplied.served.selection;
           const final = canonical !== undefined && canonical.sequence === selected.sequence && compareBytes(canonical.operator, selected.operator) === 0 &&
@@ -516,12 +498,12 @@ async function serve(argv: readonly string[]): Promise<void> {
     }
   };
   try {
-    while (!stopping) {
+    while (!stopping()) {
       await round();
-      if (!stopping) await new Promise<void>(done => { wake = done; setTimeout(done, ms); });
+      await rest(ms);
     }
   } finally {
-    await new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); });
+    await closeListener(server);
     await verifier?.close(); evidence.close(); view.close();
   }
   print({ status: "stopped" });

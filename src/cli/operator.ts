@@ -13,9 +13,7 @@
 // silence, past any sequence the lost instance can have signed, then `adopt`;
 // a copy opened without it refuses `COPIED`. The journal serves the construction the directory declares at
 // init (M14g4); a lit operator keeps no parameters and opens no verifier.
-import { readdirSync, rmSync } from "node:fs";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { rmSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../bytes.js";
@@ -26,16 +24,12 @@ import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, event, flag, has, hex, hex32, integer, openDirectory, parseArguments, pause, pollMs, print, readRequired, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Arguments, type Directory } from "./common.js";
 import { directoryVerifier } from "./backend.js";
-import { initRole } from "./reader.js";
+import { initRole, keptBackings } from "./reader.js";
+import { closeListener, listenLoopback, portOf, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { authenticate, keepTerms, keptTerms } from "./terms.js";
 import { createVenue, fresh, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
 
 const commitmentOf = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
-const readToken = (directory: Directory, name: string): string => {
-  const text = new TextDecoder().decode(readRequired(directory.file(name), name)).trim();
-  if (!/^[0-9a-f]{64}$/.test(text)) throw new CommandError("INVALID", `${name} is not 64 hex digits`);
-  return text;
-};
 
 /** The operator's journal over its synced view, with its publisher attached under the journal's outbox. */
 interface Operator {
@@ -139,25 +133,13 @@ async function open(argv: readonly string[]): Promise<void> {
 function servedSilence(directory: Directory, operator: Uint8Array): bigint | undefined {
   const file = requireVenue(directory);
   let least: bigint | undefined;
-  let names: string[] = [];
-  try { names = readdirSync(directory.file("terms")); } catch { /* no terms yet */ }
-  for (const name of names.filter(n => /^[0-9a-f]{64}$/.test(n))) {
-    const kept = keptTerms(directory, hex32(name, "a kept backing"), file);
+  for (const backing of keptBackings(directory)) {
+    const kept = keptTerms(directory, backing, file);
     if (compareBytes(kept.terms.operator, operator) !== 0) continue;
     const duration = kept.terms.silence?.noCommitmentDuration;
     if (duration !== undefined && (least === undefined || duration < least)) least = duration;
   }
   return least;
-}
-
-/** One at a time: the view's sync, the schedule's own journal calls and the service's. */
-function serialized() {
-  let tail: Promise<unknown> = Promise.resolve();
-  return <T>(work: () => Promise<T>): Promise<T> => {
-    const run = tail.then(work, work);
-    tail = run.catch(() => {});
-    return run;
-  };
 }
 
 /** Whether serve commits to keep the held checkpoint alive: at half the window the journal commits in after the venue
@@ -188,15 +170,14 @@ export function servePollsOn(error: unknown): error is CommandError | V3StoreErr
  * with the wallet token, to hand to holders (M12a).
  */
 async function serve(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, { ...POLL, interval: "value", port: "value", onion: "value", "holder-port": "value" }, 0);
+  const args = parseArguments(argv, { ...POLL, ...SERVE_FLAGS, interval: "value", "holder-port": "value" }, 0);
   const directory = openDirectory(required(args, "dir"), "operator");
   const interval = integer(required(args, "interval"), "--interval", 1n, 1n << 32n);
-  const port = Number(integer(flag(args, "port") ?? "0", "--port", 0n, 65535n)), ms = pollMs(args);
-  const onion = flag(args, "onion"), holderPort = flag(args, "holder-port");
-  if (onion !== undefined && !/^[a-z2-7]{55}d\.onion$/.test(onion)) throw new UsageError("--onion takes a v3 onion host: 56 base32 characters and .onion");
-  if (holderPort !== undefined && onion === undefined) throw new UsageError("--holder-port needs --onion");
-  const holdersAt = Number(integer(holderPort ?? "0", "--holder-port", 0n, 65535n));
+  const { port, onion, ms } = serveFlags(args);
+  if (has(args, "holder-port") && onion === undefined) throw new UsageError("--holder-port needs --onion");
+  const holdersAt = portOf(args, "holder-port");
   const op = await openOperator(directory, args), journal = op.journal;
+  // One at a time: the view's sync, the schedule's own journal calls and the service's.
   const silence = servedSilence(directory, op.operator), lag = op.view.venue.lag(), queue = serialized();
   // The service's journal commands take their turn with the schedule's, so neither meets the other's BUSY or a
   // view that moved under it. Serving evidence takes no journal turn and reads the view's settled snapshot, so a
@@ -207,33 +188,28 @@ async function serve(argv: readonly string[]): Promise<void> {
     if (property === "serve") return (value as (...a: unknown[]) => unknown).bind(target);
     return (...parameters: unknown[]) => queue(async () => (value as (...a: unknown[]) => unknown).apply(target, parameters));
   } });
-  const walletToken = readToken(directory, "wallet.token");
-  const server: Server = createV3Service(queued, { walletToken, adminToken: readToken(directory, "admin.token") });
-  const holders: Server | undefined = onion === undefined ? undefined : createV3Service(queued, { walletToken });
-  const listen = (s: Server, at: number) => new Promise<void>((done, failed) => {
-    s.once("error", failed); s.listen(at, "127.0.0.1", () => { s.off("error", failed); done(); });
-  });
+  const walletToken = tokenFile(directory, "wallet.token");
+  const server = createV3Service(queued, { walletToken, adminToken: tokenFile(directory, "admin.token") });
+  const holders = onion === undefined ? undefined : createV3Service(queued, { walletToken });
+  let url: string, holderService: { url: string; port: number } | undefined;
   try {
     // A restarted journal checks its kept reads before it listens, not in its first admission (Next 4 (bb)). A file
     // another handle still holds is left to the first read, which answers BUSY until it is free, as before.
     try { journal.openReads(); } catch (error) { if (!(error instanceof V3StoreError && error.code === "BUSY")) throw error; }
-    await listen(server, port);
-    if (holders !== undefined) await listen(holders, holdersAt);
+    url = `http://127.0.0.1:${await listenLoopback(server, port)}/`;
+    if (holders !== undefined) holderService = { url: `http://${onion}/`, port: await listenLoopback(holders, holdersAt) };
   } catch (error) {
-    await new Promise<void>(done => { if (server.listening) server.close(() => done()); else done(); });
+    await closeListener(server);
+    await queue(async () => {});
     await op.close();
-    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CommandError("UNAVAILABLE", `port ${(error as { port?: number }).port ?? port} is in use`);
     throw error;
   }
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   writeReplace(directory.file("service.json"), `${JSON.stringify({ url, walletToken }, null, 2)}\n`);
-  const holderService = holders === undefined ? undefined : { url: `http://${onion}/`, port: (holders.address() as AddressInfo).port };
   // A holders' file from an earlier run names a listener this one does not run.
   if (holderService !== undefined) writeReplace(directory.file("holders.json"), `${JSON.stringify({ url: holderService.url, walletToken }, null, 2)}\n`);
   else rmSync(directory.file("holders.json"), { force: true });
-  let stopping = false, pendingNoted = false, wake: (() => void) | undefined;
-  const stop = () => { stopping = true; wake?.(); };
-  process.once("SIGTERM", stop); process.once("SIGINT", stop);
+  let pendingNoted = false;
+  const { stopping, pause: rest } = untilStopped();
   print({ status: "serving", url, operator: op.operator, interval, silence: silence ?? null, ...(holderService === undefined ? {} : { holders: holderService }) });
   const tick = async (): Promise<void> => {
     const synced = await op.view.sync(), stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined);
@@ -263,15 +239,15 @@ async function serve(argv: readonly string[]): Promise<void> {
     event({ event: "published", at: s.now, commitment: commitmentOf(commitment) });
   };
   try {
-    while (!stopping) {
+    while (!stopping()) {
       try { await queue(tick); } catch (error) {
         if (!servePollsOn(error)) throw error;
         event({ event: "refused", code: error.code, message: error.message });
       }
-      if (!stopping) await new Promise<void>(done => { wake = done; setTimeout(done, ms); });
+      await rest(ms);
     }
   } finally {
-    for (const s of holders === undefined ? [server] : [server, holders]) await new Promise<void>(done => { s.closeAllConnections(); s.close(() => done()); });
+    for (const s of holders === undefined ? [server] : [server, holders]) await closeListener(s);
     await queue(async () => {});
     await op.close();
   }

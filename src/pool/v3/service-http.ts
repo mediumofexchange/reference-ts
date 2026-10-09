@@ -50,33 +50,42 @@ export interface V3EvidenceSource { serve(backing: Uint8Array, after: bigint): P
 
 /** Every loopback peer: behind an onion service, the Tor daemon. */
 const LOOPBACK: readonly string[] = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
-/** A listener's lifetime bounds on a request and its reply, shared by the operator's and a replica's. */
-function bounded(server: Server): Server {
+type Send = (status: number, value: unknown) => void;
+/**
+ * The one listener the operator's, a replica's and a relay's services share: a non-loopback peer is refused
+ * `LOCAL_ONLY` before `handle` sees the request, a request `handle` throws on is answered by `refusal`'s status and code,
+ * and the listener's lifetime bounds are the same for all three (sixteen connections, a request's headers and body in
+ * fifteen seconds). Replies are JSON, one exchange per connection: a caller's verification blocks its event loop
+ * between requests, so an idle connection the server has timed out meanwhile would be reused before the caller sees it
+ * closed. Journal work keeps its owner and can finish after the caller loses the reply; served evidence has no size to
+ * bound its time by: a write restarts the bound (`timer`).
+ */
+function listener(handle: (request: IncomingMessage, response: ServerResponse, send: Send, timer: NodeJS.Timeout) => Promise<void>,
+  refusal: (error: unknown, server: Server) => { status: number; code: string }): Server {
+  const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
+    response.setHeader("content-type", "application/json"); response.setHeader("cache-control", "no-store");
+    response.setHeader("connection", "close");
+    const send: Send = (status, value) => {
+      const body = JSON.stringify(value);
+      if (Buffer.byteLength(body) > MAX_V3_SERVICE_REPLY_BYTES) throw new EncodingError("response too large");
+      if (!response.destroyed && !response.writableEnded) { response.writeHead(status); response.end(body); }
+    };
+    const timer = setTimeout(() => response.destroy(), 15_000);
+    response.once("close", () => clearTimeout(timer));
+    if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) { request.resume(); send(403, { code: "LOCAL_ONLY" }); return; }
+    try { await handle(request, response, send, timer); } catch (error) {
+      request.resume(); const rejected = refusal(error, server); send(rejected.status, { code: rejected.code });
+    }
+  });
   server.headersTimeout = 10_000; server.requestTimeout = 15_000;
   server.maxHeadersCount = 32; server.maxConnections = 16;
   return server;
-}
-/** The reply helpers both listeners use: JSON headers, one exchange per connection and the bound on its lifetime. A
- * caller's verification blocks its event loop between requests, so an idle connection the server has timed out
- * meanwhile would be reused before the caller sees it closed. Journal work keeps its owner and can finish after the
- * caller loses the reply; served evidence has no size to bound its time by: a write restarts the bound. */
-function exchange(response: ServerResponse) {
-  response.setHeader("content-type", "application/json"); response.setHeader("cache-control", "no-store");
-  response.setHeader("connection", "close");
-  const send = (status: number, value: unknown, maximum = MAX_V3_SERVICE_REPLY_BYTES) => {
-    const body = JSON.stringify(value);
-    if (Buffer.byteLength(body) > maximum) throw new EncodingError("response too large");
-    if (!response.destroyed && !response.writableEnded) { response.writeHead(status); response.end(body); }
-  };
-  const timer = setTimeout(() => response.destroy(), 15_000);
-  response.once("close", () => clearTimeout(timer));
-  return { send, timer };
 }
 /** The one evidence route, `GET /evidence?backing=<hex>&after=<n>`: undefined where the request is another, else
  * once the stream has ended or been cut off. A multi-backing scope serves each holder's backing by name (C2.10.3);
  * `after` is the sequence the reader's evidence was served through, and only what came after it is served. */
 function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { count: number }, request: IncomingMessage, response: ServerResponse,
-  send: (status: number, value: unknown) => void, timer: NodeJS.Timeout): Promise<void> | undefined {
+  send: Send, timer: NodeJS.Timeout): Promise<void> | undefined {
   const asked = request.method === "GET" ? /^\/evidence\?backing=([0-9a-f]{64})&after=(0|[1-9][0-9]{0,19})$/.exec(request.url ?? "") : null;
   if (asked === null) return undefined;
   return (async () => {
@@ -129,38 +138,28 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
   // The journal's construction reads every command and reply (slice 14 M14g3).
   const domain = journal.configurationDomain, construction = journal.construction;
   const streams = { count: 0 };
-  const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
-    const { send, timer } = exchange(response);
-    if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) {
-      request.resume(); send(403, { code: "LOCAL_ONLY" }); return;
-    }
+  const server: Server = listener(async (request, response, send, timer) => {
     const admin = adminToken !== undefined && bearer(request, adminToken);
-    if (!admin && !bearer(request, walletToken)) {
-      request.resume(); send(401, { code: "UNAUTHORIZED" }); return;
+    if (!admin && !bearer(request, walletToken)) { request.resume(); send(401, { code: "UNAUTHORIZED" }); return; }
+    const streamed = evidenceRoute(server, journal, streams, request, response, send, timer);
+    if (streamed !== undefined) { await streamed; return; }
+    if (request.method === "POST" && request.url === "/commands") {
+      const command = parseV3ServiceCommand(await readBody(request), construction);
+      if (command.kind !== "submit" && !admin) { send(403, { code: "ADMIN_REQUIRED" }); return; }
+      let reply;
+      if (command.kind === "submit") {
+        const bytes = hexToBytes(command.record);
+        if (compareBytes(construction.view(construction.decode(bytes), () => undefined).domain, domain) !== 0) {
+          throw new EncodingError("wrong construction domain");
+        }
+        reply = replyFromReceipt(await journal.submit(bytes), construction);
+      } else if (command.kind === "commit") reply = replyFromCommitment("committed", await journal.commit(command.id));
+      else reply = replyFromCommitment("published", await journal.publish());
+      send(200, reply); return;
     }
-    try {
-      const streamed = evidenceRoute(server, journal, streams, request, response, send, timer);
-      if (streamed !== undefined) { await streamed; return; }
-      if (request.method === "POST" && request.url === "/commands") {
-        const command = parseV3ServiceCommand(await readBody(request), construction);
-        if (command.kind !== "submit" && !admin) { send(403, { code: "ADMIN_REQUIRED" }); return; }
-        let reply;
-        if (command.kind === "submit") {
-          const bytes = hexToBytes(command.record);
-          if (compareBytes(construction.view(construction.decode(bytes), () => undefined).domain, domain) !== 0) {
-            throw new EncodingError("wrong construction domain");
-          }
-          reply = replyFromReceipt(await journal.submit(bytes), construction);
-        } else if (command.kind === "commit") reply = replyFromCommitment("committed", await journal.commit(command.id));
-        else reply = replyFromCommitment("published", await journal.publish());
-        send(200, reply); return;
-      }
-      request.resume(); send(404, { code: "NOT_FOUND" });
-    } catch (error) {
-      request.resume(); const rejected = failure(error); send(rejected.status, { code: rejected.code });
-    }
-  });
-  return bounded(server);
+    request.resume(); send(404, { code: "NOT_FOUND" });
+  }, failure);
+  return server;
 }
 
 /**
@@ -171,18 +170,12 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
  */
 export function createV3EvidenceService(source: V3EvidenceSource): Server {
   const streams = { count: 0 };
-  const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
-    const { send, timer } = exchange(response);
-    if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) { request.resume(); send(403, { code: "LOCAL_ONLY" }); return; }
-    try {
-      const streamed = evidenceRoute(server, source, streams, request, response, send, timer);
-      if (streamed !== undefined) { await streamed; return; }
-      request.resume(); send(404, { code: "NOT_FOUND" });
-    } catch (error) {
-      request.resume(); const rejected = failure(error); send(rejected.status, { code: rejected.code });
-    }
-  });
-  return bounded(server);
+  const server: Server = listener(async (request, response, send, timer) => {
+    const streamed = evidenceRoute(server, source, streams, request, response, send, timer);
+    if (streamed !== undefined) { await streamed; return; }
+    request.resume(); send(404, { code: "NOT_FOUND" });
+  }, failure);
+  return server;
 }
 
 /** A relay's refusal of a publication file: the status and code its listener answers. */
@@ -198,20 +191,13 @@ export interface RelayRefusal { readonly status: number; readonly code: string }
 export function createRelayService(token: string, take: (file: unknown, gone: () => boolean) => Promise<object>,
   refused: (error: unknown) => RelayRefusal | undefined): Server {
   if (typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) throw new EncodingError("a 32-byte credential required");
-  const server = createServer({ maxHeaderSize: 8192 }, async (request, response) => {
-    const { send } = exchange(response);
-    if (!LOOPBACK.includes(request.socket.remoteAddress ?? "")) { request.resume(); send(403, { code: "LOCAL_ONLY" }); return; }
+  return listener(async (request, response, send) => {
     if (!bearer(request, token)) { request.resume(); send(401, { code: "UNAUTHORIZED" }); return; }
-    try {
-      if (request.method !== "POST" || request.url !== "/publications") { request.resume(); send(404, { code: "NOT_FOUND" }); return; }
-      send(200, await take(await readBody(request), () => response.destroyed || response.writableEnded));
-    } catch (error) {
-      request.resume();
-      const known = error instanceof EncodingError ? { status: 400, code: "INVALID" } : refused(error);
-      if (known === undefined) server.emit("relayError", error);
-      const rejected = known ?? { status: 503, code: "UNAVAILABLE" };
-      send(rejected.status, { code: rejected.code });
-    }
+    if (request.method !== "POST" || request.url !== "/publications") { request.resume(); send(404, { code: "NOT_FOUND" }); return; }
+    send(200, await take(await readBody(request), () => response.destroyed || response.writableEnded));
+  }, (error, server) => {
+    const known = error instanceof EncodingError ? { status: 400, code: "INVALID" } : refused(error);
+    if (known === undefined) server.emit("relayError", error);
+    return known ?? { status: 503, code: "UNAVAILABLE" };
   });
-  return bounded(server);
 }

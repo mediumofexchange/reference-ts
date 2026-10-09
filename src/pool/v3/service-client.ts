@@ -40,7 +40,14 @@ async function json(response: Response, maximum: number): Promise<unknown> {
   catch { throw new EncodingError("invalid service JSON or UTF-8"); }
 }
 /** A v3 onion service's host: 56 base32 characters, the last its version byte's (3). Tor checks the checksum. */
-const ONION_HOST = /^[a-z2-7]{55}d\.onion$/;
+export const ONION_HOST = /^[a-z2-7]{55}d\.onion$/;
+/** A listener's base URL as a client takes it: `http:` at 127.0.0.1 or a v3 onion host, nothing past the root `/`. */
+function listenerUrl(baseUrl: string): { url: URL; onion: boolean } | undefined {
+  let url: URL; try { url = new URL(baseUrl); } catch { return undefined; }
+  const onion = ONION_HOST.test(url.hostname);
+  return url.protocol === "http:" && (url.hostname === "127.0.0.1" || onion) && !url.username && !url.password && url.pathname === "/" &&
+    !url.search && !url.hash ? { url, onion } : undefined;
+}
 const LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
 const proxyRefusal = (message: string) => new V3ServiceClientError(0, "PROXY", message);
 const PROXY_UNREACHABLE: ReadonlySet<unknown> = new Set(["ECONNREFUSED", "EADDRNOTAVAIL", "EAFNOSUPPORT", "ENETUNREACH", "EHOSTUNREACH"]);
@@ -121,12 +128,11 @@ async function exchangeWith<T>(baseUrl: string, onion: boolean, path: string, to
  * reply is the relay's word: the holder reads its act at the venue by its own read.
  */
 export async function sendToRelay(baseUrl: string, token: string, file: unknown): Promise<unknown> {
-  let url: URL; try { url = new URL(baseUrl); } catch { throw new EncodingError("invalid relay URL"); }
-  const onion = ONION_HOST.test(url.hostname);
-  if (url.protocol !== "http:" || !(url.hostname === "127.0.0.1" || onion) || url.username || url.password || url.pathname !== "/" ||
-      url.search || url.hash || typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) {
+  const listener = listenerUrl(baseUrl);
+  if (listener === undefined || typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) {
     throw new EncodingError("a local or onion relay URL and a 32-byte credential required");
   }
+  const { url, onion } = listener;
   if (onion) onionProxy(url);
   const body = JSON.stringify(file);
   if (Buffer.byteLength(body) > MAX_V3_SERVICE_REQUEST_BYTES) throw new EncodingError("request too large");
@@ -169,14 +175,13 @@ export class V3ServiceClient {
   readonly #operator: Uint8Array;
   readonly #venue: Uint8Array;
   constructor(baseUrl: string, walletToken: string | undefined, expected: ServiceIdentity, adminToken?: string) {
-    let url: URL; try { url = new URL(baseUrl); } catch { throw new EncodingError("invalid service URL"); }
-    const onion = ONION_HOST.test(url.hostname);
+    const listener = listenerUrl(baseUrl);
     // An onion service is a holder's: its admin credential never leaves the operator's loopback (M12a).
-    if (url.protocol !== "http:" || !(url.hostname === "127.0.0.1" || onion) || url.username || url.password ||
-        url.pathname !== "/" || url.search || url.hash || (walletToken !== undefined && !/^[0-9a-f]{64}$/.test(walletToken)) ||
-        (adminToken !== undefined && (onion || walletToken === undefined || !/^[0-9a-f]{64}$/.test(adminToken) || adminToken === walletToken))) {
+    if (listener === undefined || (walletToken !== undefined && !/^[0-9a-f]{64}$/.test(walletToken)) || (adminToken !== undefined &&
+        (listener.onion || walletToken === undefined || !/^[0-9a-f]{64}$/.test(adminToken) || adminToken === walletToken))) {
       throw new EncodingError("a local or onion URL and distinct 32-byte credentials required");
     }
+    const { url, onion } = listener;
     if (onion) onionProxy(url);
     this.#onion = onion;
     this.#baseUrl = url.href; this.#walletToken = walletToken; this.#adminToken = adminToken;

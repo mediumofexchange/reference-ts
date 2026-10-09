@@ -29,7 +29,6 @@ export const LIT_CHAIN = evidenceChain({
 export const {
   genesisEvidenceHash, nextEvidenceHash, snapshotBytes, snapshotDigest, decodeSnapshot, verifyEvidenceOpening,
 } = LIT_CHAIN;
-export const SNAPSHOT_BYTES = LIT_CHAIN.snapshotLength;
 
 function object(value: unknown): asserts value is { readonly [key: string]: unknown } {
   if (value === null || typeof value !== "object") throw new EncodingError("not an object");

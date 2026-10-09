@@ -20,7 +20,6 @@
 // the holder's own links its gap acts to each other and to its funding; a third
 // party's relay sees each act a little before the public and may delay or withhold
 // it (docs/POOL_V3_VISIBILITY.md).
-import type { AddressInfo } from "node:net";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../bytes.js";
@@ -28,10 +27,11 @@ import { createRelayService, type RelayRefusal } from "../pool/v3/service-http.j
 import { sendToRelay, V3ServiceClientError } from "../pool/v3/service-client.js";
 import type { ErgoPublisher } from "../ergo-publisher.js";
 import { VenueError } from "../venue-error.js";
-import { CommandError, event, flag, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, readOptional, required, UsageError,
+import { CommandError, event, flag, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, required, UsageError,
   writeExclusive, writeReplace, type Directory } from "./common.js";
 import { constructions } from "./construction.js";
 import { initRole, unanswered } from "./reader.js";
+import { closeListener, listenerFile, listenLoopback, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { fresh, freshFunding, fundingTree, openPublisher, openView, publisherStore, requireVenue, type SpendBudget, type View } from "./venue.js";
 
 async function init(argv: readonly string[]): Promise<void> {
@@ -151,7 +151,7 @@ async function publish(argv: readonly string[]): Promise<void> {
 export function relayRefusal(error: unknown): RelayRefusal | undefined {
   if (error instanceof CommandError) {
     return { status: ["INVALID", "VENUE", "SUBJECT", "CONFIGURATION"].includes(error.code) ? 400 :
-      ["EARLY", "BUDGET", "UNREPLAYED", "BUSY", "FULL"].includes(error.code) ? 409 : 503, code: error.code };
+      ["EARLY", "BUDGET", "UNREPLAYED", "BUSY"].includes(error.code) ? 409 : 503, code: error.code };
   }
   if (error instanceof VenueError) {
     if (error.code === "TOO_LARGE") return { status: 400, code: "TOO_LARGE" };
@@ -183,15 +183,6 @@ export function relayTurns<R>(judge: (value: unknown) => Promise<R>, after: () =
   return { turn, take, idle: () => tail };
 }
 
-/** The relay's one credential, made at its first `serve` and kept across runs. */
-function relayToken(directory: Directory): string {
-  const path = directory.file("relay.token");
-  if (readOptional(path) === undefined) writeExclusive(path, `${bytesToHex(fresh())}\n`);
-  const text = new TextDecoder().decode(readOptional(path)!).trim();
-  if (!/^[0-9a-f]{64}$/.test(text)) throw new CommandError("INVALID", "relay.token is not 64 hex digits");
-  return text;
-}
-
 /**
  * `serve [--port <p>] [--onion <host>] [--poll-ms <ms>]` (slice 12 M12c): serve this relay to holders. A loop syncs the
  * view each poll, settling what the publisher kept pending; it listens once a first sync has passed. `POST /publications`
@@ -205,15 +196,12 @@ function relayToken(directory: Directory): string {
  * Stops on SIGTERM or SIGINT.
  */
 async function serve(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, { dir: "value", port: "value", onion: "value", "poll-ms": "value" }, 0);
+  const args = parseArguments(argv, { dir: "value", ...SERVE_FLAGS }, 0);
   const directory = openDirectory(required(args, "dir"), "relay"), venue = requireVenue(directory);
-  const port = Number(integer(flag(args, "port") ?? "0", "--port", 0n, 65535n)), ms = pollMs(args), onion = flag(args, "onion");
-  if (onion !== undefined && !/^[a-z2-7]{55}d\.onion$/.test(onion)) throw new UsageError("--onion takes a v3 onion host: 56 base32 characters and .onion");
-  const token = relayToken(directory);
-  let stopping = false, wake: (() => void) | undefined;
-  const stop = () => { stopping = true; wake?.(); };
-  process.once("SIGTERM", stop); process.once("SIGINT", stop);
-  const pause = () => stopping ? Promise.resolve() : new Promise<void>(done => { wake = done; setTimeout(done, ms); });
+  const { port, onion, ms } = serveFlags(args);
+  // The relay's one credential, made at its first `serve` and kept across runs.
+  const token = tokenFile(directory, "relay.token", fresh);
+  const { stopping, stop, pause: rest } = untilStopped(), pause = () => rest(ms);
   await withPublisher(directory, async (view, budget, publisher) => {
     const { turn, take, idle } = relayTurns(value => relayed(judged(value, venue.id), view, budget), () => { if (publisher.failed) stop(); });
     const synced = async (): Promise<boolean> => {
@@ -225,27 +213,21 @@ async function serve(argv: readonly string[]): Promise<void> {
       }
     };
     // Requests are judged over a synced view only.
-    while (!stopping && !await synced()) await pause();
-    if (stopping) return;
+    while (!stopping() && !await synced()) await pause();
+    if (stopping()) return;
     const server = createRelayService(token, take, relayRefusal);
     server.on("relayError", (error: unknown) => { event({ event: "relay", code: "UNAVAILABLE", message: (error as Error).message }); });
-    try {
-      await new Promise<void>((done, failed) => { server.once("error", failed); server.listen(port, "127.0.0.1", () => { server.off("error", failed); done(); }); });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new CommandError("UNAVAILABLE", `port ${port} is in use`);
-      throw error;
-    }
-    const at = (server.address() as AddressInfo).port, url = onion === undefined ? `http://127.0.0.1:${at}/` : `http://${onion}/`;
+    const at = await listenLoopback(server, port), url = onion === undefined ? `http://127.0.0.1:${at}/` : `http://${onion}/`;
     writeReplace(directory.file("relay.json"), `${JSON.stringify({ url, token }, null, 2)}\n`);
     print({ status: "serving", url, port: at, fundingTree: budget.tree, spent: budget.spent() });
     try {
-      while (!stopping) {
+      while (!stopping()) {
         await synced();
         if (publisher.failed) break;
         await pause();
       }
     } finally {
-      await new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); });
+      await closeListener(server);
       await idle();
     }
     if (publisher.failed) throw new CommandError("STORAGE", "the relay's publisher state failed to persist; restart serve from its durable state");
@@ -254,14 +236,7 @@ async function serve(argv: readonly string[]): Promise<void> {
 }
 
 /** A relay file: the relay's URL (loopback, or its v3 onion name) and its one credential. */
-export function parseRelayFile(value: unknown): { readonly url: string; readonly token: string } {
-  const v = value as { url?: unknown; token?: unknown };
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join() !== "token,url" || typeof v.url !== "string" ||
-      !/^http:\/\/(127\.0\.0\.1:[0-9]{1,5}|[a-z2-7]{55}d\.onion(:[0-9]{1,5})?)\/$/.test(v.url) || typeof v.token !== "string" || !/^[0-9a-f]{64}$/.test(v.token)) {
-    throw new CommandError("INVALID", "the relay file is not { url, token } with a loopback or v3 onion URL");
-  }
-  return { url: v.url, token: v.token };
-}
+export const parseRelayFile = (value: unknown) => listenerFile(value, "token", "relay");
 
 /** The relay's answer, checked to name the file's record. */
 export function relayAnswer(value: unknown, record: string): Relayed {

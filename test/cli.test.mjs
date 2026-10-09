@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { CommandError, integer, hex32, openDirectory, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
@@ -22,6 +23,7 @@ import { parsePublicationFile, readPublication } from '../src/cli/relay.js';
 import { keptReplay, openEvidence } from '../src/cli/reader.js';
 import { keptFileDigest, ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
+import { closeListener, listenLoopback, SERVE_FLAGS, serveFlags } from '../src/cli/serve.js';
 import { V3StoreError } from '../src/pool/v3/store.js';
 import { parseVenue, publisherStore, venueText } from '../src/cli/venue.js';
 import { ERGO_SYNTHETIC_REFERENCE, ownErgoProfile } from '../src/ergo-profile.js';
@@ -81,6 +83,21 @@ describe('moe operator serve rules', () => {
     }
     expect(keepAliveDue(1000n, undefined, 16n, 3n)).toBe(false);
     expect(keepAliveDue(1000n, 100n, undefined, 3n)).toBe(false);
+  });
+  it('refuses a serve port in use as UNAVAILABLE naming it, and an --onion that is not a v3 onion host as usage', async () => {
+    const held = createServer(), other = createServer();
+    try {
+      const port = await listenLoopback(held, 0);
+      let refused;
+      try { await listenLoopback(other, port); } catch (error) { refused = error; }
+      expect(refused).toBeInstanceOf(CommandError);
+      expect([refused.code, refused.message]).toEqual(['UNAVAILABLE', `port ${port} is in use`]);
+      await closeListener(other);
+    } finally { await closeListener(held); }
+    expect(serveFlags(parseArguments(['--onion', `${'m'.repeat(55)}d.onion`], SERVE_FLAGS, 0)).onion).toBe(`${'m'.repeat(55)}d.onion`);
+    for (const onion of [`${'m'.repeat(56)}.onion`, `${'m'.repeat(55)}d.onion.example`, '127.0.0.1']) {
+      expect(() => serveFlags(parseArguments(['--onion', onion], SERVE_FLAGS, 0))).toThrow('--onion takes a v3 onion host');
+    }
   });
   it('polls on after a refused budget, an unreplayed transaction or a journal refusal, not after storage, fence or conflict', () => {
     for (const error of [new CommandError('BUDGET', 'x'), new CommandError('UNREPLAYED', 'x'), new V3StoreError('SCHEDULE', 'x'),
