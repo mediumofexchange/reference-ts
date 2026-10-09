@@ -50,6 +50,7 @@
 // lit-v1 §9's) and only on a reference venue (guard.ts). Time is the venue's witnessed index.
 // SQLite fences handles of this journal; it cannot fence another database or
 // a copied key.
+import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -542,6 +543,13 @@ export class V3OperatorJournal {
       }
     }
     return this.reading;
+  }
+  /** Open the kept state of the journal's own reads now, where a read has kept one: §14's check on opening hashes the
+   * whole file, which `serve` pays before it listens rather than in a restarted journal's first admission
+   * (Next 4 (bb)). A file another handle holds leaves it BUSY. */
+  openReads(): void {
+    requireThat(!this.closed, "STORAGE", "store is closed");
+    if (existsSync(`${this.path}.reads`)) this.reads();
   }
 
   /** Memory from the rows, under the fence. Nothing is verified again: the stored state must reproduce (storage

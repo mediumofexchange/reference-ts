@@ -231,6 +231,10 @@ const ANSWER_TABLES = ["answer", "answer_held", "answer_replacement", "answer_pu
 const SCHEMA_VERSION = 11;
 /** Replayed records between keep points inside one read, by default. */
 const KEEP_EVERY = 10_000;
+/** Milliseconds of a read between keep points, whatever it replayed: a read stopped sooner than it replays `every`
+ * records (a restarted journal's whole replay inside a client's idle bound) still keeps its progress (storage
+ * decision item 6's "count or time", Next 4 (bb)). */
+const KEEP_MS = 5_000;
 /** Every table holding a namespace's rows. */
 const NAMESPACE_TABLES = ["namespace", "import", "event", "event_key", "nullifier", "output", "anchor", "demand", "demand_tag", "demand_end",
   "demand_nullifier", "namespace_construction", "total", "spent", "witness"];
@@ -356,74 +360,105 @@ const fillingNodes = (leaves: bigint, ommers: readonly (bigint | undefined)[]): 
 const GROUP = 256;
 /** A kept file's digest (pool-v3 §14's one SHA256 over the whole kept state): SHA256 over the page size, the page
  * count and each group's SHA256 of its pages' SHA256s, a short last page hashed as it lies. Opening hashes every page
- * of the closed file; a keep point rehashes only the pages the write-ahead log names (storage decision M11b12), so
- * recording the digest costs what the read changed, not the file's length. */
+ * of the closed file; a keep point hashes only the page images its write-ahead log committed (storage decision
+ * M11b12), so recording the digest costs what the read changed, not the file's length. */
 class PageDigest {
-  readonly #pageSize: number;
+  readonly pageSize: number;
   #pages = Buffer.alloc(0);
   #groups = Buffer.alloc(0);
   #length = 0;
-  constructor(pageSize: number) { this.#pageSize = pageSize; }
+  constructor(pageSize: number) { this.pageSize = pageSize; }
   /** Every page of the closed file at `path`, read in pieces so memory stays flat. */
   static of(path: string, pageSize: number): PageDigest {
-    const digest = new PageDigest(pageSize);
-    digest.update(path, []);
+    const digest = new PageDigest(pageSize), size = pageSize, fd = openSync(path, "r");
+    try {
+      const length = fstatSync(fd).size, count = Math.ceil(length / size), page = Buffer.alloc(size * GROUP), groups = new Set<number>();
+      digest.#reserve(count);
+      for (let from = 0; from < count; from += GROUP) {
+        const n = Math.min(GROUP, count - from), read = readSync(fd, page, 0, Math.min(n * size, length - from * size), from * size);
+        for (let i = 0; i < n; i++) {
+          hash("sha256", page.subarray(i * size, Math.min((i + 1) * size, read)), "buffer").copy(digest.#pages, 32 * (from + i));
+        }
+        groups.add(from / GROUP);
+      }
+      digest.#regroup(count, groups);
+    } finally { closeSync(fd); }
     return digest;
   }
-  /** Rehash `changed` pages (1-based, as SQLite numbers them) and every page past the last known length. */
-  update(path: string, changed: Iterable<number>): void {
-    const size = this.#pageSize, fd = openSync(path, "r");
-    try {
-      const length = fstatSync(fd).size, count = Math.ceil(length / size), known = this.#length;
-      // Grown by doubling, so a keep point copies no hash list that has room for its new pages.
-      if (32 * count > this.#pages.length) {
-        const grown = Buffer.alloc(Math.max(32 * count, 2 * this.#pages.length)); this.#pages.copy(grown); this.#pages = grown;
-      }
-      const pages = this.#pages, groups = new Set<number>(), page = Buffer.alloc(size * GROUP);
-      const rehash = (from: number, n: number): void => {
-        const read = readSync(fd, page, 0, Math.min(n * size, length - from * size), from * size);
-        for (let i = 0; i < n; i++) {
-          hash("sha256", page.subarray(i * size, Math.min((i + 1) * size, read)), "buffer").copy(pages, 32 * (from + i));
-          groups.add(Math.floor((from + i) / GROUP));
-        }
-      };
-      // Pages past the known length are new (or the file is new): hashed in runs of a group.
-      for (let p = Math.min(known, count); p < count; p += GROUP) rehash(p, Math.min(GROUP, count - p));
-      for (const n of changed) if (n >= 1 && n - 1 < Math.min(known, count)) rehash(n - 1, 1);
-      // A shorter file drops its last group's tail: that group is hashed again.
-      if (count < known && count > 0) groups.add(Math.floor((count - 1) / GROUP));
-      const groupHashes = Buffer.alloc(32 * Math.ceil(count / GROUP));
-      this.#groups.copy(groupHashes, 0, 0, Math.min(this.#groups.length, groupHashes.length));
-      for (const g of groups) {
-        if (g * GROUP >= count) continue;
-        createHash("sha256").update("v3-kept-page-group").update(pages.subarray(32 * g * GROUP, 32 * Math.min(count, (g + 1) * GROUP)))
-          .digest().copy(groupHashes, 32 * g);
-      }
-      this.#groups = groupHashes; this.#length = count;
-    } finally { closeSync(fd); }
+  /** The state a log's commit leaves: its page images over the pages known, at the page count it commits. */
+  apply(log: CommittedLog): void {
+    const count = log.count, known = this.#length;
+    // SQLite writes every page a commit adds to the log, so a page past the known length that the log lacks is no state.
+    // Checked before any hash changes, so a refused log leaves the digest as it was.
+    for (let p = known; p < count; p++) if (!log.pages.has(p + 1)) throw new Error("the write-ahead log lacks a page its commit adds");
+    this.#reserve(count);
+    for (const [n, image] of log.pages) if (n >= 1 && n <= count) image.copy(this.#pages, 32 * (n - 1));
+    this.#regroup(count, new Set([...log.pages.keys()].filter(n => n >= 1 && n <= count).map(n => Math.floor((n - 1) / GROUP))));
+  }
+  /** Room for `count` page hashes, grown by doubling, so a keep point copies no hash list that has room for its new pages. */
+  #reserve(count: number): void {
+    if (32 * count <= this.#pages.length) return;
+    const grown = Buffer.alloc(Math.max(32 * count, 2 * this.#pages.length)); this.#pages.copy(grown); this.#pages = grown;
+  }
+  /** Group hashes at `count` pages, hashed again for the `groups` named and for a shorter file's last group. */
+  #regroup(count: number, groups: Set<number>): void {
+    // A shorter file drops its last group's tail: that group is hashed again.
+    if (count < this.#length && count > 0) groups.add(Math.floor((count - 1) / GROUP));
+    const groupHashes = Buffer.alloc(32 * Math.ceil(count / GROUP)), pages = this.#pages;
+    this.#groups.copy(groupHashes, 0, 0, Math.min(this.#groups.length, groupHashes.length));
+    for (const g of groups) {
+      if (g * GROUP >= count) continue;
+      createHash("sha256").update("v3-kept-page-group").update(pages.subarray(32 * g * GROUP, 32 * Math.min(count, (g + 1) * GROUP)))
+        .digest().copy(groupHashes, 32 * g);
+    }
+    this.#groups = groupHashes; this.#length = count;
   }
   /** The digest, as the party records it. */
   root(): string {
-    const frame = Buffer.alloc(16); frame.writeBigUInt64BE(BigInt(this.#pageSize), 0); frame.writeBigUInt64BE(BigInt(this.#length), 8);
+    const frame = Buffer.alloc(16); frame.writeBigUInt64BE(BigInt(this.pageSize), 0); frame.writeBigUInt64BE(BigInt(this.#length), 8);
     return createHash("sha256").update("v3-kept-file").update(frame).update(this.#groups).digest("hex");
   }
 }
-/** The pages a write-ahead log's frames name, from the frames that carry its header's salts (SQLite's file format, §4.1):
- * every page written since the log was last reset, committed or not, so a superset of what changed. */
-function loggedPages(wal: string): Set<number> {
-  const pages = new Set<number>();
-  if (!existsSync(wal)) return pages;
+/** What a write-ahead log commits: each page's last committed image, by its SHA256, and the page count after the
+ * last commit. */
+interface CommittedLog { readonly pages: ReadonlyMap<number, Buffer>; readonly count: number }
+/** The committed frames of a write-ahead log, as SQLite's recovery reads them (its file format, §4): frames that carry
+ * the header's salts and continue its checksum chain, through the last commit frame among them; later frames (a
+ * transaction not committed, a torn write) are not state. Undefined where the log commits nothing at `pageSize`. */
+function committedLog(wal: string, pageSize: number): CommittedLog | undefined {
+  if (!existsSync(wal)) return undefined;
   const fd = openSync(wal, "r");
   try {
-    const length = fstatSync(fd).size, header = Buffer.alloc(32), frame = Buffer.alloc(24);
-    if (length < 32 || readSync(fd, header, 0, 32, 0) !== 32) return pages;
-    const raw = header.readUInt32BE(8), size = raw === 1 ? 65536 : raw, salt1 = header.readUInt32BE(16), salt2 = header.readUInt32BE(20);
-    for (let at = 32; at + 24 <= length; at += 24 + size) {
-      if (readSync(fd, frame, 0, 24, at) !== 24 || frame.readUInt32BE(8) !== salt1 || frame.readUInt32BE(12) !== salt2) break;
-      pages.add(frame.readUInt32BE(0));
+    const length = fstatSync(fd).size, header = Buffer.alloc(32);
+    if (length < 32 || readSync(fd, header, 0, 32, 0) !== 32) return undefined;
+    const magic = header.readUInt32BE(0), raw = header.readUInt32BE(8), size = raw === 1 ? 65536 : raw;
+    if ((magic & 0xfffffffe) !== 0x377f0682 || size !== pageSize) return undefined;
+    // The checksum reads 32-bit words in the byte order the magic number's low bit names (1: big-endian).
+    const big = (magic & 1) === 1, sum = (bytes: Buffer, s: [number, number]): [number, number] => {
+      let [s0, s1] = s;
+      for (let i = 0; i < bytes.length; i += 8) {
+        s0 = (s0 + (big ? bytes.readUInt32BE(i) : bytes.readUInt32LE(i)) + s1) >>> 0;
+        s1 = (s1 + (big ? bytes.readUInt32BE(i + 4) : bytes.readUInt32LE(i + 4)) + s0) >>> 0;
+      }
+      return [s0, s1];
+    };
+    let chain = sum(header.subarray(0, 24), [0, 0]);
+    if (chain[0] !== header.readUInt32BE(24) || chain[1] !== header.readUInt32BE(28)) return undefined;
+    const salts = header.subarray(16, 24), frame = Buffer.alloc(24 + size);
+    const committed = new Map<number, Buffer>(), pending = new Map<number, Buffer>();
+    let count: number | undefined;
+    for (let at = 32; at + 24 + size <= length; at += 24 + size) {
+      if (readSync(fd, frame, 0, 24 + size, at) !== 24 + size || !frame.subarray(8, 16).equals(salts)) break;
+      chain = sum(frame.subarray(24), sum(frame.subarray(0, 8), chain));
+      if (chain[0] !== frame.readUInt32BE(16) || chain[1] !== frame.readUInt32BE(20)) break;
+      const page = frame.readUInt32BE(0);
+      if (page === 0) break;
+      pending.set(page, hash("sha256", frame.subarray(24), "buffer"));
+      const after = frame.readUInt32BE(4);
+      if (after !== 0) { for (const [n, image] of pending) committed.set(n, image); pending.clear(); count = after; }
     }
+    return count === undefined ? undefined : { pages: committed, count };
   } finally { closeSync(fd); }
-  return pages;
 }
 /** A closed database file's page size from its header (SQLite's file format, §1.3.2), or undefined where it names none. */
 function headerPageSize(path: string): number | undefined {
@@ -447,13 +482,34 @@ function replaceFile(path: string, text: string): void {
   try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(partial, path);
 }
+/** Remove a kept file's files, in order. One another store still holds cannot be removed (Windows): the caller's error. */
+function removeFiles(files: readonly string[]): void {
+  try { for (const file of files) rmSync(file, { force: true }); } catch (error) {
+    if (["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw new FileInUse("kept replay file");
+    throw error;
+  }
+}
 /** A kept file's page digest where it may be reused (§14's digest check): opening it recovers what its write-ahead
  * log committed and drops what it did not, the log is moved into the file, and the closed file must then hash to the
- * digest last recorded, at this layout. */
+ * digest last recorded, at this layout.
+ *
+ * A keep point records its digest before it moves its log into the file (`#recordDigest`). One stopped between its
+ * commit and its digest leaves the file as the recorded digest names it, beside a log whose commit no digest vouches
+ * for: that log is dropped, so the state is the one last vouched for and only that keep point's work is read again
+ * (Next 4 (bb): the whole file was discarded and the history replayed). One stopped after its digest leaves a log
+ * whose commit the digest names, and recovery moves it in. */
 function keptFileHolds(path: string, digest: string): PageDigest | undefined {
   if (!existsSync(path)) return undefined;
   try {
-    const db = new DatabaseSync(path, { readBigInts: true });
+    const raw = headerPageSize(path), log = `${path}-wal`;
+    // The file as it lies, where its log holds a commit: hashed once, and reused below once its log is dropped.
+    let dropped: PageDigest | undefined;
+    if (raw !== undefined && existsSync(digest) && committedLog(log, raw) !== undefined) {
+      const lying = PageDigest.of(path, raw);
+      if (readFileSync(digest, "utf8") === vouched(path, lying)) { removeFiles([log, `${path}-shm`]); dropped = lying; }
+    }
+    // A rollback journal beside the file is played into it as it opens (a kept file keeps none; one there is not its own).
+    const journal = existsSync(`${path}-journal`), db = new DatabaseSync(path, { readBigInts: true });
     let version: bigint, moved: boolean;
     try {
       version = (db.prepare("PRAGMA user_version").get() as { user_version: bigint }).user_version;
@@ -465,7 +521,8 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
     if (!moved || (existsSync(`${path}-wal`) && statSync(`${path}-wal`).size !== 0)) throw new FileInUse("kept replay file");
     const size = headerPageSize(path);
     if (version !== BigInt(SCHEMA_VERSION) || size === undefined || !existsSync(digest)) return undefined;
-    const pages = PageDigest.of(path, size);
+    // With no log or rollback journal left, opening and checkpointing wrote nothing: a dropped log's file is the one just hashed.
+    const pages = dropped !== undefined && !journal && dropped.pageSize === size ? dropped : PageDigest.of(path, size);
     return readFileSync(digest, "utf8") === vouched(path, pages) ? pages : undefined;
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.
@@ -483,13 +540,13 @@ export class ReplayStore {
   #savepoints = 0;
   #replaying = false;
   #sinceKeep = 0;
+  /** When the last keep point recorded its digest, or the store opened (`performance.now()`). */
+  #keptAt = performance.now();
   /** The connection's count of changed rows when the file's digest was last recorded: a read that changed nothing
    * leaves the digest as it is. */
   #digestedAt: bigint | undefined;
   /** A kept file's page hashes as of its last recorded digest. */
   #pages: PageDigest | undefined;
-  /** Pages the log named that are not yet hashed again: a keep point whose log could not be moved in leaves them. */
-  readonly #unhashed = new Set<number>();
   /** A resumed kept walk's mark for this read, moved at its close where the walk changed a row. */
   #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
@@ -520,14 +577,8 @@ export class ReplayStore {
         if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
         this.#kept = { ...kept, path };
         held = keptFileHolds(path, kept.digest);
-        if (held === undefined) {
-          // The log goes before the file: a log left beside a new file would be read into it.
-          try { for (const file of [`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]) rmSync(file, { force: true }); } catch (error) {
-            // A file another store still holds cannot be removed (Windows): the caller's error, as above.
-            if (["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw new FileInUse("kept replay file");
-            throw error;
-          }
-        }
+        // The log goes before the file: a log left beside a new file would be read into it.
+        if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
       }
       const reopened = kept !== undefined && existsSync(path);
       this.#db = new DatabaseSync(path, { readBigInts: true });
@@ -616,22 +667,23 @@ export class ReplayStore {
   /** Whether this store is a party's kept file. */
   get kept(): boolean { return this.#kept !== undefined; }
 
-  /** Record the committed file's digest (a keep point's second half). A crash before this leaves an old
-   * digest, so the next open discards the file and replays in full (storage decision item 6). */
+  /** Record the committed state's digest (a keep point's second half), then move the log into the file. The digest
+   * is computed from the page images the log committed, so it is recorded before the file changes: a crash before it
+   * leaves the file the old digest names and a log the next open drops, one after it a log recovery moves in
+   * (`keptFileHolds`); either way only this keep point's work can be lost (Next 4 (bb)). */
   #recordDigest(): void {
     const changes = this.#changes(), path = this.#kept!.path;
     if (changes !== this.#digestedAt) {
-      // The log names every page written since the last keep point; moved into the file whole, those pages are read
-      // from the file and hashed again. A log another connection keeps from being moved leaves the old digest, and its
-      // pages stay pending: part of it may reach the file meanwhile and the log restart under new salts.
-      for (const page of loggedPages(`${path}-wal`)) this.#unhashed.add(page);
+      // The log holds what changed since the file was last moved in: every committed page image, since a log that was
+      // not moved in at an earlier keep point (another connection kept it) is still there, its images already counted.
+      const log = committedLog(`${path}-wal`, this.#pages!.pageSize);
+      if (log !== undefined) this.#pages!.apply(log);
+      replaceFile(this.#kept!.digest, vouched(path, this.#pages!));
+      // A log another connection keeps from being moved in leaves the file in use; the digest already names its state.
       const checkpoint = this.#db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: bigint; log: bigint; checkpointed: bigint };
       if (checkpoint.busy !== 0n || checkpoint.log !== checkpoint.checkpointed) throw new FileInUse("kept replay file");
-      this.#pages!.update(path, this.#unhashed);
-      this.#unhashed.clear();
-      replaceFile(this.#kept!.digest, vouched(path, this.#pages!));
     }
-    this.#digestedAt = changes; this.#sinceKeep = 0;
+    this.#digestedAt = changes; this.#sinceKeep = 0; this.#keptAt = performance.now();
   }
   /** Move a resumed kept walk's mark to this read's where the walk changed a row since it opened. */
   #moveMark(walk: number): void {
@@ -642,12 +694,13 @@ export class ReplayStore {
   }
   /** Rows this connection has inserted, updated or deleted since it opened. */
   #changes(): bigint { return BigInt((this.#db.prepare("SELECT total_changes() AS c").get() as { c: bigint | number }).c); }
-  /** A keep point inside a walk where one is due: only between checkpoints (no savepoint or replay open),
-   * once `every` records have replayed since the last, so a killed long read keeps its progress. */
+  /** A keep point inside a walk where one is due: only between checkpoints (no savepoint or replay open), once
+   * `every` records have replayed since the last or a record has and `KEEP_MS` have passed, so a killed long read
+   * keeps its progress. */
   keepPoint(): void {
     const kept = this.#kept;
     if (kept === undefined || this.#lost || this.#savepoints !== 0 || this.#replaying || !this.#db.isTransaction ||
-        this.#sinceKeep < (kept.every ?? KEEP_EVERY)) return;
+        this.#sinceKeep === 0 || (this.#sinceKeep < (kept.every ?? KEEP_EVERY) && performance.now() - this.#keptAt < KEEP_MS)) return;
     // The walk takes its write lock again at once, as openWalk took it: while it awaits a verifier or a venue
     // after the keep point, another store's walk is refused, not free to take the walk rows as a crashed read's.
     // A store that wrote in the moment between is found by the file's data version, and this walk stops.
@@ -1128,7 +1181,8 @@ export class ReplayStore {
     // A walk holds its transaction across the reader's awaits, which a host's connection cannot.
     if (this.#hosted) throw new Error("a hosted store runs no walk");
     if (this.#db.isTransaction) throw new Error("a walk or transaction is already open on this store");
-    this.#lost = false; this.#keptMark = undefined;
+    // A read's time between keep points counts from its own start: one shorter than KEEP_MS commits only at its close.
+    this.#lost = false; this.#keptMark = undefined; this.#keptAt = performance.now();
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");

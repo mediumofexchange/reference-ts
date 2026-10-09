@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fieldToBytes } from "../src/pool/field.js";
@@ -8,6 +8,7 @@ import { EMPTY_NOTE_ROOT, NoteTree, notePathProves } from "../src/pool/note-tree
 import { EvidenceRefusal } from "../src/pool/v3/refusals.js";
 import { keptFileDigest, ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
+import { stoppedKeepPoint } from "./support.js";
 
 // The storage module against the runtime's own structures: stored spent-set
 // nodes give RadixSpentSet's root, the frontier gives NoteTree's root, and an
@@ -23,6 +24,21 @@ function append(outputs: bigint[], nfs: bigint[], witness: (cm: bigint) => boole
     evidence: new Uint8Array(32), supply: undefined,
     nullifiers: nfs.map(nf => ({ nf, tag: nf + 1n })), outputs: outputs.map(cm => ({ cm, capsule: undefined, settlement: false, witness: witness(cm) ? mark(cm) : undefined })),
     demand: undefined, ended: undefined, keys: [], history: () => new Uint8Array(32), ...extra };
+}
+
+/** A hot rollback journal for the database at `path`: one a copy of it, switched to rollback mode with a row it lacks,
+ * leaves while a spilled transaction is open, so its page images would write that copy's pages into `path`. */
+function hotJournal(path: string): Buffer {
+  const copy = `${path}.other`;
+  copyFileSync(path, copy);
+  const db = new DatabaseSync(copy);
+  try {
+    db.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE hot (id INTEGER PRIMARY KEY, v BLOB); INSERT INTO hot VALUES (1, x'4141'); PRAGMA cache_size=1;");
+    db.exec("BEGIN; DELETE FROM hot; WITH RECURSIVE g(n) AS (SELECT 10 UNION ALL SELECT n + 1 FROM g WHERE n < 200) INSERT INTO hot SELECT n, randomblob(2000) FROM g;");
+    const journal = readFileSync(`${copy}-journal`);
+    db.exec("ROLLBACK");
+    return journal;
+  } finally { db.close(); rmSync(copy, { force: true }); }
 }
 
 describe("replay storage", () => {
@@ -231,20 +247,71 @@ describe("replay storage", () => {
       // The digest holds, so the file is reused as it was left.
       store = new ReplayStore(path, { digest });
       expect(store.tip(kept[0]!)).toEqual(tip);
-      // A commit whose digest was never recorded, left in the log by a process that stopped: the log is moved into the
-      // file on opening, which then no longer gives the digest, so the file is discarded.
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("reopens a keep point stopped between its commit and its digest as the digest names it, never whole replay (Next 4 (bb))", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-stopped-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    let store = new ReplayStore(path, { digest });
+    try {
+      const kept: number[] = [];
+      for (let round = 0; round < 3; round++) {
+        const { walk } = store.openWalk(context), ns = store.open(fieldToBytes(BigInt(round)), new Uint8Array(32).fill(2), undefined, genesis);
+        for (let i = 0; i < 60; i++) store.append(ns, append([next(), next()], [next()]));
+        kept.push(ns);
+        store.closeWalk(walk);
+      }
+      const tips = kept.map(ns => store.tip(ns)), drop = (ns: number) => `DELETE FROM namespace WHERE ns = ${ns}`;
+      // Stopped before its digest: the file is as the old digest names it, beside a log whose commit no digest vouches
+      // for. The log is dropped and the file reused; only that keep point's work is lost.
       store.close();
+      stoppedKeepPoint(path, digest, drop(kept[0]!), false);
+      expect(statSync(`${path}-wal`).size).toBeGreaterThan(0);
+      expect(vouched()).toBe(true);
+      store = new ReplayStore(path, { digest });
+      expect(kept.map(ns => store.tip(ns))).toEqual(tips);
+      // Stopped after its digest, before the log moved in: recovery moves the log in, and the file gives the digest.
+      store.close();
+      stoppedKeepPoint(path, digest, drop(kept[0]!), true);
+      expect(vouched()).toBe(false);
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(kept[0]!)).toBe(false);
+      expect(store.tip(kept[1]!)).toEqual(tips[1]);
+      // A log whose commit was torn (its last frame cut short) commits nothing: the file is reused as it lies.
+      store.close();
+      stoppedKeepPoint(path, digest, drop(kept[1]!), false);
+      truncateSync(`${path}-wal`, statSync(`${path}-wal`).size - 1);
+      store = new ReplayStore(path, { digest });
+      expect(store.tip(kept[1]!)).toEqual(tips[1]);
+      // A rollback journal beside it too, which opening plays into the file: the file is hashed again after it opens, and
+      // the pages the journal wrote, which no digest names, leave it discarded (review read-back).
+      store.close();
+      stoppedKeepPoint(path, digest, drop(kept[1]!), false);
+      writeFileSync(`${path}-journal`, hotJournal(path));
+      expect(vouched()).toBe(true);
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(kept[1]!)).toBe(false);
+      const fresh = store.open(fieldToBytes(7n), new Uint8Array(32).fill(2), undefined, genesis);
+      store.closeWalk(store.openWalk(context).walk);
+      expect(vouched()).toBe(true);
+      // An unvouched log beside a file the digest does not name either: the file is damaged, and discarded with the log.
+      store.close();
+      stoppedKeepPoint(path, digest, drop(kept[1]!), false);
+      const bytes = readFileSync(path); bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 1; writeFileSync(path, bytes);
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(fresh)).toBe(false);
+      // So is a copy of a stopped file: its identity is not the one the digest names, so its log is not dropped.
+      store.close();
+      const ns = (store = new ReplayStore(path, { digest }), store.open(fieldToBytes(9n), new Uint8Array(32).fill(2), undefined, genesis));
+      store.closeWalk(store.openWalk(context).walk);
+      store.close();
+      stoppedKeepPoint(path, digest, drop(ns), false);
       const crash = join(dir, "crash"), copy = join(crash, "replay.sqlite");
       mkdirSync(crash);
-      const writer = new DatabaseSync(path);
-      try {
-        writer.exec("PRAGMA wal_autocheckpoint=0; DELETE FROM namespace WHERE ns = " + kept[0]);
-        for (const name of ["replay.sqlite", "replay.sqlite-wal", "replay.sha256"]) copyFileSync(join(dir, name), join(crash, name));
-      } finally { writer.close(); }
-      expect(statSync(`${copy}-wal`).size).toBeGreaterThan(0);
+      for (const name of ["replay.sqlite", "replay.sqlite-wal", "replay.sha256"]) copyFileSync(join(dir, name), join(crash, name));
       store = new ReplayStore(copy, { digest: join(crash, "replay.sha256") });
-      expect(store.hasNamespace(kept[0]!)).toBe(false);
-      expect(store.hasNamespace(kept[1]!)).toBe(false);
+      expect(store.hasNamespace(ns)).toBe(false);
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
@@ -269,7 +336,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("hashes again at the next keep point the pages a refused one left, though the log restarted between (M11b12 review)", () => {
+  it("keeps the digest through a keep point another connection kept from moving the log in, though the log restarted between (M11b12 review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-pending-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
     let store = new ReplayStore(path, { digest });

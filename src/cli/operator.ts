@@ -214,6 +214,9 @@ async function serve(argv: readonly string[]): Promise<void> {
     s.once("error", failed); s.listen(at, "127.0.0.1", () => { s.off("error", failed); done(); });
   });
   try {
+    // A restarted journal checks its kept reads before it listens, not in its first admission (Next 4 (bb)). A file
+    // another handle still holds is left to the first read, which answers BUSY until it is free, as before.
+    try { journal.openReads(); } catch (error) { if (!(error instanceof V3StoreError && error.code === "BUSY")) throw error; }
     await listen(server, port);
     if (holders !== undefined) await listen(holders, holdersAt);
   } catch (error) {

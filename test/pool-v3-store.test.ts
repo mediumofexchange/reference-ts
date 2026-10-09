@@ -29,7 +29,7 @@ import { RangeLimitError, type RangeRequest, type RecordKind } from "../src/reco
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordPublisher, type RecordVenue } from "../src/record-venue.js";
 import { VenueError } from "../src/venue-error.js";
 import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
-import { collected } from "./support.js";
+import { collected, stoppedKeepPoint } from "./support.js";
 
 // The pool-v3 operator journal (src/pool/v3/store.ts) on the local reference
 // venue, over records built by witness.ts with proofs a test verifier judges.
@@ -809,6 +809,31 @@ describe("the v3 operator journal", () => {
     await j.submit(issued(5)); expect(verified).toBe(12);
     await j.audit(); expect(verified).toBe(17);
     expect(carried).not.toHaveBeenCalled();
+  });
+
+  it("restarts after a keep point of its reads stopped before its digest by reading only what the last process admitted (Next 4 (bb))", async () => {
+    const venue = FixtureVenue.reference(label, lag), file = path();
+    let verified = 0;
+    const declared = { identities: configuration.circuits, verify: (...args: Parameters<typeof verifier.verify>) => { verified++; return verifier.verify(...args); } };
+    const open = (): Journal => { const j = new V3OperatorJournal(file, { secret: operatorSecret, venue, reference, verifier: declared }); journals.push(j); return j; };
+    const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
+    const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
+    const issued = (n: number): Uint8Array =>
+      encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
+    let j = open(), n = 0;
+    await j.open("genesis", silent); await j.publish();
+    // A history of six checkpoints, each read by the admission after it.
+    for (let c = 2; c <= 7; c++) { await j.submit(issued(n++)); await j.submit(issued(n++)); await j.commit(`c${c}`); await j.publish(); }
+    await j.submit(issued(n++)); await j.commit("c8"); await j.publish();
+    expect(verified).toBe(n);
+    j.close();
+    // The process stopped inside a keep point of its reads: after its commit, before its digest.
+    stoppedKeepPoint(`${file}.reads`, `${file}.reads.sha256`, "DELETE FROM walk_cursor", false);
+    j = open(); venue.advance(venue.witnessedIndex() + lag);
+    // The restarted journal opens its kept reads before it serves; its read of c8 verifies the record the last process
+    // admitted after its last read, beside its own admission, not every record of its history.
+    j.openReads();
+    await j.submit(issued(n++)); expect(verified).toBe(n + 1);
   });
 
   it("holds no transaction on its database while it reads its own history", async () => {
