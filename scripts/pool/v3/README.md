@@ -62,7 +62,7 @@ again. It records `docs/pool-v3-history-store-verification.json`.
 The live command drill (`command-drill.mjs --testnet --authorized-testnet`,
 [M10d](../../../decisions/2026-10.md#2026-10-06--drill-the-moe-commands-live-on-the-testnet-and-keep-the-testnet-context-without-a-difficulty-floor-slice-10-m10d))
 is the live evidence; `testnet.mjs` holds its node and transfer helpers, and
-`node scripts/pool/v3/testnet.mjs --check` checks the transfers offline. The
+`npm run check:pool:v3-transfer` (part of `check:scripts`) checks the transfers offline. The
 store checks' live testnet modes (`store-check.mjs --testnet`,
 `recovery-store-check.mjs`/`scope-store-check.mjs --testnet --authorized-testnet`)
 are retired ([decision](../../../decisions/2026-10.md#2026-10-07--retire-the-store-checks-live-testnet-modes-the-command-drill-is-the-live-evidence-simplify));
