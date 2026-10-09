@@ -2,8 +2,8 @@
 
 The [production requirements](PRODUCTION_REQUIREMENTS.md#release-gates) ask for "an independently reviewed security
 argument" before release. This is that argument for the reference's release target: what the release claims, what each
-claim assumes, and why the checks the code runs imply it. It is written for the external security review (WORK.md
-slice 19), which checks it. Errors in it are findings too. It adds no rule. Each step cites the rule it reads and the
+claim assumes, and why the checks the code runs imply it. It is written for the external security review ([brief](REVIEW_BRIEF.md);
+WORK.md slice 19), which checks it. Errors in it are findings too. It adds no rule. Each step cites the rule it reads and the
 code that holds it, and where the reference does less than a rule asks, it says so.
 
 **Scope.** The construction is `moe/pool/v3` under its one adopted configuration

@@ -1539,3 +1539,38 @@ rests on a disposable probe of bb.js 5.2.0, one desktop, one thread:
   0.24 s;
 - a verifier instance given `[1]_1` alone verifies the spend proof and refuses it
   under a changed public input; with no G1 point the loader refuses.
+
+## The onion routes on the live Tor network
+
+The holders' transport (slice 12 M12a–c) was drilled with fixture proxies; this run puts the operator's holders'
+listener, an M12b replica and an M12c relay behind real onion names on the Tor network (2026-10-09, at `fdbe829`,
+Tor 0.4.9.13 from the signature-checked Expert Bundle, on one laptop). It ran a cut-down lit
+command drill on the synthetic node: a service-side tor with four onion services (one with nothing listening) and a
+client-side tor whose `HTTPTunnelPort` every holder process reached with `NODE_USE_ENV_PROXY=1`, a credential of its
+own and the node direct (`NO_PROXY`). A guard found no holder connection anywhere else. One run of four completed
+every step; the others stopped early, two at drill bugs and one at a submit timeout through Tor.
+
+- **Each role works through Tor.** Syncs read evidence the operator served, and issue, pay, demand and accept
+  completed. A reader holding only the replica read it final, and with the operator stopped a wallet's sync fell to the
+  replica in 14 s. `relay send` refused a wrong token (`UNAUTHORIZED`), answered pending, then final, and an exact
+  resend returned the same transaction.
+- **Latency** (time to Tor's CONNECT answer): on a circuit already built, median 1.2 s (max 2.2 s, 20 samples); on a
+  new circuit with the descriptor cached, median 4.1 s (max 19.2 s, 20); first contact, median 3.9 s after a new
+  identity (max 5.6 s, 15) and 4.5–25.3 s from a fresh client (3), with one 120 s gateway timeout in each case. A steady
+  `wallet sync` took a median 9.5 s through Tor against 5.3 s through the fixture proxy (16 and 15 samples, on a
+  loaded host where a local status read took 3.8 s).
+- **Isolation by credential holds for onion streams:** two streams under one credential shared a rendezvous circuit,
+  and a third under another credential took its own (the control port's circuit list, two runs). Each `moe` process,
+  with its own credential, got its own circuit.
+- **Tor refuses internal addresses** (`403 Forbidden (private address)` for loopback, `localhost`, `[::1]`, 10.0.0.1 and
+  192.168.1.1, in 1–4 ms), and answers an onion's failures with 500 (backend refused), 503 (name not published) or 504
+  (timeout), in eight failures none the 502 the fixture proxy sends; `moe` reads each as `UNAVAILABLE`.
+
+*Findings* (WORK.md Next 4 (bj)): the service client's one 10 s bound per exchange includes Tor's circuit setup,
+which took up to 25 s. A first-contact sync failed `UNAVAILABLE`, a submit failed `UNAVAILABLE` with its record saved for a rerun, and two steady
+syncs exited 0 on kept evidence while the operator was up; an agent gets a stale answer it cannot tell from a fresh
+one but by the evidence field. Node's `fetch` drops a proxy's refusal status, so a holder file naming an internal
+address reads as an operator that did not answer, not as Tor's refusal.
+
+*Limits:* one host, one Tor release, a few samples per case on a loaded laptop; the synthetic chain and lit
+backings, so no real proofs crossed Tor; latency to an onion service on another network was not measured.
