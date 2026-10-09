@@ -211,7 +211,7 @@ again before loading and never lets bb.js read a directory or download (nor run
 while `BB_WASM_PATH` would replace its WASM); `check.mjs` records
 the hashes it loaded. They equal Aztec Ignition transcript00's leading points
 ([proving parameters](../../../docs/POOL_DEPLOYMENT_PROBES.md#proving-parameters));
-that establishes their source, not ceremony trust or an approved v3 configuration.
+that establishes their source, not ceremony trust.
 
 The suite verifies every public-input position under each amended key,
 equal-count spend/burn substitution in both directions, separately provable
@@ -231,5 +231,5 @@ seam. Those tests and real-proof conformance do not close runtime gates.
 The `src/pool/v3/records.ts` codec follows
 [pool-v3 §§5–6 at ca727f6](https://github.com/mediumofexchange/money-from-first-principles/blob/ca727f6/pool-v3.md#5-canonical-statement-records).
 `npm test` checks canonical statement/publication bytes and signature-message
-binding. It has no proof verifier or adopted configuration; these circuit
-fixtures and the byte fixtures do not yet form an admitted runtime path.
+binding with no proof verifier; the runtime admits these bytes in the
+operator journal (`check:pool:v3-store`).

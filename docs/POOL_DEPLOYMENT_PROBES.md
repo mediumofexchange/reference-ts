@@ -64,7 +64,7 @@ Full text: [at fd8ce7e](https://github.com/mediumofexchange/reference-ts/blob/fd
 
 ### Reference operator journal
 
-`npm run check:pool:v3-store` exercises the candidate runtime's operator
+`npm run check:pool:v3-store` exercises the runtime's operator
 journal and prover on the local reference venue. Add `-- --ergo` for the
 synthetic Ergo reference chain: the journal publishes through `ErgoVenue`'s
 `RecordPublisher` interface and the actual `ErgoPublisher`, with invented
@@ -77,13 +77,13 @@ then burns. Holders restore their input notes through the reader. A fresh
 seedless process checks public supply from the served package and venue
 evidence, and a fresh holder process restores the same remaining note. Under
 `--ergo` the evidence contains blocks, while the reader holds its witnessed
-block pin separately beside the candidate keys; wrong pins and withheld
+block pin separately beside the adopted keys; wrong pins and withheld
 sections refuse. Journal and reader entries recompute the reference identity
 from the caller's preimage. The [retained report](pool-v3-store-verification.json)
 owns the source hashes, outcomes and measurements.
 
 These local/synthetic checks cover one genesis segment of one backing and real
-proofs on reference venues. They provide no live-chain finality, adopted configuration, wallet
+proofs on reference venues. They provide no live-chain finality, wallet
 custody, recovery admission, imports or replacement service. The synthetic
 chain's difficulty permits anyone to re-mine it, so its independent pin remains
 an explicit trust input. Restart replay does not establish publisher or venue
@@ -140,7 +140,7 @@ Full text: [at ca368db](https://github.com/mediumofexchange/reference-ts/blob/ca
 `npm run check:pool:local-replay` runs real successor issue, spend and burn
 proofs through an independent reader of one empty-opening segment. The command
 also runs in the Linux/Windows v3 CI job. This extends local evidence scanning
-with state checks; it does not adopt a v3 configuration or reinterpret v2.
+with state checks under the adopted configuration; it does not reinterpret v2.
 The [retained report](pool-v3-local-replay-verification.json) records source,
 bytecode/key hashes, real-proof checks and the resulting public audit.
 Every group is read by the runtime's `readPackage`; the harness adds only its
@@ -151,13 +151,12 @@ observations and canonical state with the selected read across successor imports
 spent predecessors and returned segments; the Ergo pass repeats these reads over
 verified synthetic headers. Selection-independent unresolved/resource fixtures
 require the same refusal from the frontier, including faults inside the adopted
-block. These are candidate reference reads, with no adopted configuration or
-live-chain claim.
+block. These are reference reads, with no live-chain claim.
 
 The fixture issues 10, pays 7 with change 3, then burns 5 with receiver change
-2. A seedless public verifier checks the 439-byte candidate configuration and
+2. A seedless public verifier checks the 439-byte adopted configuration and
 all six source/toolchain/bytecode/key identities against its independently held
-manifest. It derives the candidate domain from that frame and the issuer key
+manifest. It derives the domain from that frame and the issuer key
 from canonical signed constant-root terms under
 [pool-v3 §11](https://github.com/mediumofexchange/money-from-first-principles/blob/916bffb/pool-v3.md#11-configuration-and-backing-evidence-before-adoption).
 It checks every proof under the kind's own key and the issuer's statement signature,
@@ -191,7 +190,7 @@ without interpreting them as valid.
 
 The reader's record reads follow [pool-v3 §13](https://github.com/mediumofexchange/money-from-first-principles/blob/6272040/pool-v3.md#13-record-range-evidence).
 Its venue-evidence verifier is a harness-owned fixture venue record beside the
-selection and candidate manifest: it answers the reader's own requests for the
+selection and runtime manifest: it answers the reader's own requests for the
 operator's commitments, the backing's replacements and K's revocations from
 index zero through the judging index, or returns no answer; its lag is the
 venue's constant. From those answers the reader walks the replacement chain
@@ -381,16 +380,16 @@ that a production reader must establish before returning spendable holdings.
 
 | Boundary | Experiment evidence | Still required |
 |---|---|---|
-| Construction and key routing | Exact configuration preimage and candidate domain; all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Approved configuration/artifact identities after full adoption prerequisites; setup provenance and deployment qualification |
+| Construction and key routing | Exact adopted configuration preimage and domain ([pool-v3 §11.4](https://github.com/mediumofexchange/money-from-first-principles/blob/e7f7f24/pool-v3.md#114-the-adopted-configuration)); all six independently pinned source/toolchain/bytecode/key identities and fixed helper/bounds/profile | Setup provenance (the parameters' trust assumption) and deployment qualification |
 | Backing and scope authority | Canonical signed constant-root terms/name, configuration/venue matching and per-backing issuance keys; header-derived scope root; fixture replacement/reappointment links and revocation checked across each complete scope | Authenticated evidence behind the fixture answers on a live chain: `ErgoVenue` supplies it on the synthetic and testnet reference chains; mainnet stays disabled |
 | Local state | Issue/spend/burn across deduplicated shared ancestry and every scoped snapshot, with per-backing totals, shared spent state and original-tree paths; single-backing demand/withdraw/settle and locks | Qualified deployment of the runtime reader; the multi-backing recovery cases above pass locally |
 | Witness and continuity | Exact fixture-selected signed checkpoint held in §13 answers; whole-scope classification, last-valid continuity and split/rejoin imports; multi-backing publication force and exact ordered adoption; complete-scope receipts and independent backing non-service counts | Authenticated mainnet chain evidence; the selected Ergo profile is read by `ErgoVenue` on the reference chains |
 | Wallet restoration | Seed-only capsule and lit-settlement openings with local or imported-tree paths; independent seedless public audit | Full current state and certified anchors, independent retention and venue/backing discovery; pending invoices still need backup |
 
-The candidate manifest, checkpoint selection and the fixture venue evidence
+Checkpoint selection and the fixture venue evidence
 remain explicit **test fixture assumptions**. Signed terms establish identity,
-and configuration checks bind the candidate keys; neither establishes adoption
-or the force of those terms. `candidateConfigurationChecked` and
+and configuration checks bind the adopted keys; neither establishes
+the force of those terms. `configurationChecked` and
 `signedTermsAuthenticated` report only those narrower successful checks.
 `currentRangeAuthenticated` and `termsAuthorityAuthenticated` are true only
 under the selected verifier: `rangeEvidence: "fixture-verifier"` names the
