@@ -332,7 +332,7 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     requireReplay(at !== undefined && same(at, lastValid.evidenceHash), "CONTINUITY");
   }
   const identity = replayIdentity(context, snapshot, { imported, block, openingIndex, revokedAt, revocations });
-  return store.replay(async () => {
+  const result = await store.replay(async () => {
     const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid, construction);
     const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported, construction);
     if (!isOpening) requireReplay(trail.length >= BigInt(block.length), "ADOPTION");
@@ -352,9 +352,11 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     const adoptionIndices = new Map(imported?.adoptionIndices);
     for (const entry of header.entries) adoptionIndices.set(hex(entry.backing), isOpening ?
       imported?.adoptionIndices.get(hex(entry.backing)) ?? 0n : openingIndex ?? 0n);
-    replayedOutputs(store, state.ns, construction);
     return new ReplayResult(store, state.ns, position, { issued, burned, adoptionIndices, identity }, construction);
   });
+  // Once the savepoint stands: a refused replay leaves nothing known, so a savepoint's rollback need not forget anything.
+  replayedOutputs(store, result.ns, construction);
+  return result;
 }
 
 let code: Uint8Array | undefined;
@@ -535,11 +537,13 @@ interface KnownOutputs {
   readonly position: bigint; readonly leaves: bigint; readonly top: bigint; readonly skipped: bigint | undefined;
   readonly demands: ReadonlyMap<string, Demand>;
 }
-const knownOutputs = new WeakMap<ReplayStore, Map<number, KnownOutputs>>();
+const knownOutputs = new WeakMap<ReplayStore, { readonly generation: number; readonly map: Map<number, KnownOutputs> }>();
+/** What is known of the store's namespaces since its rows last may have gone (`generation`): a discard, collection or
+ * rolled-back walk forgets it, so a namespace number made again is never vouched for by an earlier one's walk. */
 function known(store: ReplayStore): Map<number, KnownOutputs> {
-  let map = knownOutputs.get(store);
-  if (map === undefined) { map = new Map(); knownOutputs.set(store, map); }
-  return map;
+  let held = knownOutputs.get(store);
+  if (held === undefined || held.generation !== store.generation) { held = { generation: store.generation, map: new Map() }; knownOutputs.set(store, held); }
+  return held.map;
 }
 /** Record that this process's own replay wrote namespace `ns` through its tip. */
 function replayedOutputs(store: ReplayStore, ns: number, construction: Construction): void {
@@ -550,8 +554,8 @@ function replayedOutputs(store: ReplayStore, ns: number, construction: Construct
 
 /** Lit-v1 §10: no root in a lit snapshot checks the output set, so a reader resuming a namespace without a note tree
  * rebuilds it from the kept statements: its own output rows through `position` must be exactly, in order, the outputs
- * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`), and each
- * demand row it stands up the trail's demand, since a settlement's output and nullifiers are read from it. A
+ * `trail`'s first `position` records derive (§2), read past where they are already known (`knownOutputs`), and its own
+ * demand rows exactly the demands the trail stands up, since a settlement's output and nullifiers are read from them. A
  * settlement reads its demand from the trail's records, or, one stood up before what is rebuilt (an imported one, or one
  * this process's replay wrote), from the state before it; imported outputs are their own namespaces' (each rebuilt by
  * `keptImportsHold` before a state importing it is reused). The caller has checked the trail's chain at `position`
@@ -561,10 +565,10 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
   if (construction.namespace.tree) return true;
   const from = known(store).get(ns);
   // Rows through a known position are a prefix of those known: a position at or below it holds, at a tip where no row
-  // walked lay past it.
-  if (from !== undefined && from.position >= position) return !tip || from.top <= position;
+  // walked lay past it and no demand row does.
+  if (from !== undefined && from.position >= position) return !tip || (from.top <= position && !store.demandPast(ns, position));
   if (trail === undefined || trail.length < position) return false;
-  const after = from?.position ?? 0n, local = new Map(from?.demands);
+  const after = from?.position ?? 0n, local = new Map(from?.demands), stood = new Map<string, bigint>();
   const derived: { readonly cm: bigint; readonly position: bigint }[] = [];
   let at = after;
   for (const bytes of position === after ? [] : trail.records(after)) {
@@ -583,15 +587,18 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
       const kept = store.presented(ns, at, view.demand.id);
       if (kept === undefined || kept.event.ns !== ns || kept.event.position !== at || !sameDemand(kept.demand, view.demand.value)) return false;
       local.set(view.demand.id, view.demand.value);
+      stood.set(view.demand.id, at);
     }
     for (const cm of view.outputs) derived.push({ cm, position: at });
   }
   // Every own row past the known leaves at or below `position` is a derived output, in order, and none is missing. At the
   // tip no own row may lie past it: one would become visible, and spendable, as the namespace grows. Rows this process
   // already knows are not walked again, so a read resuming checkpoint after checkpoint walks each row once.
-  const leaves = from?.leaves ?? 0n, start = from?.skipped !== undefined && from.skipped < leaves ? from.skipped : leaves;
+  // A first walk reads every own row, whatever its leaf or position: a row below leaf 0 or at position 0 is visible too.
+  const leaves = from?.leaves ?? 0n, start = from === undefined ? undefined : from.skipped !== undefined && from.skipped < leaves ? from.skipped : leaves;
   let k = 0, top = from?.top ?? 0n, skipped: bigint | undefined;
   for (const output of store.ownOutputs(ns, start)) {
+    if (output === undefined) return false;
     if (output.position > top) top = output.position;
     if (output.position > position) {
       if (tip) return false;
@@ -599,11 +606,20 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
       continue;
     }
     // A row below the known leaves that an earlier walk compared (at or below its position) is not compared again.
-    if (output.leaf < leaves && output.position <= after) continue;
+    if (from !== undefined && output.leaf < leaves && output.position <= after) continue;
     const expected = derived[k++];
     if (expected === undefined || expected.cm !== output.cm || expected.position !== output.position) return false;
   }
   if (k !== derived.length || (tip && top > position)) return false;
+  // Every own demand row past the known position (on a first walk, at any position) through `position` is one the trail
+  // stood up there, since a later settlement derives its output and nullifiers from it; at the tip none lies past it. A
+  // demand identity has one row per namespace, so rows matching stood-up demands, as many as there are, are exactly those.
+  let rows = 0;
+  for (const row of store.ownDemands(ns, from === undefined ? undefined : after, position)) {
+    if (typeof row.id !== "string" || row.position === undefined || stood.get(row.id) !== row.position) return false;
+    rows++;
+  }
+  if (rows !== stood.size || (tip && store.demandPast(ns, position))) return false;
   known(store).set(ns, { position, leaves: leaves + BigInt(k), top, skipped, demands: local });
   return true;
 }

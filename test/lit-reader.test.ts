@@ -161,6 +161,43 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
     snapshotNow, publish, successor, pack, current: () => current };
 }
 
+/** A kept replay file, its digest and an evidence file in a fresh directory. */
+function keptFiles(prefix: string) {
+  const directory = mkdtempSync(join(tmpdir(), prefix));
+  return { directory, files: { path: join(directory, "replay.sqlite"), digest: join(directory, "replay.sha256"), evidence: join(directory, "evidence.sqlite") } };
+}
+/** Run `body` on the kept file directly, as damage to it would. */
+function kept<T>(path: string, body: (db: DatabaseSync) => T): T {
+  const db = new DatabaseSync(path, { readBigInts: true });
+  try { return body(db); } finally { db.close(); }
+}
+/** The namespace whose tip is `position`, after `body` ran on it. */
+function namespaceAt(db: DatabaseSync, position: bigint, body: (ns: number) => void): number {
+  const ns = Number((db.prepare("SELECT ns FROM namespace WHERE position = ?").get(position) as { ns: bigint }).ns);
+  body(ns);
+  return ns;
+}
+const demandId = (bytes: Uint8Array): string => hex(statementHash(LIT.decode(bytes).statement));
+/** A demand of Mallory's for 1000 over a note no record created; no record stands it up. */
+function phantomDemand(g: ReturnType<typeof litScope>): Uint8Array {
+  return g.demand([{ backing: g.backing, value: 1000n, owner: pub(MALLORY), rho: b(88) }], [MALLORY], 0n, 1000n);
+}
+/** The demand's rows, as the replay store writes a demand it stood up, in namespace `ns` at `at`. */
+function writeDemand(db: DatabaseSync, bytes: Uint8Array, ns: number, at: bigint): void {
+  const id = demandId(bytes), view = LIT.view(LIT.decode(bytes), () => undefined).demand!.value;
+  const word = (value: bigint): Uint8Array => Uint8Array.from(Buffer.from(value.toString(16).padStart(64, "0"), "hex"));
+  db.prepare("INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, ns, at, view.backing, view.quantity.toString(),
+    word(view.tags[0]!), word(view.tags[1]!), view.presenter, view.instant.toString(), view.deadline.toString());
+  for (const value of view.tags) db.prepare("INSERT OR IGNORE INTO demand_tag VALUES (?, ?, ?)").run(word(value), id, ns);
+  view.nullifiers!.forEach((nf, i) => db.prepare("INSERT INTO demand_nullifier VALUES (?, ?, ?, ?)").run(id, ns, i, word(nf)));
+}
+/** The operator's state reads the demand as standing, so it admits a settlement of it and commits that state. */
+function operatorReadsDemand(g: ReturnType<typeof litScope>, bytes: Uint8Array): void {
+  const operator = g.current().state.store, id = demandId(bytes), value = LIT.view(LIT.decode(bytes), () => undefined).demand!.value;
+  const demand = operator.demand.bind(operator);
+  vi.spyOn(operator, "demand").mockImplementation((n, p, key) => key === id ? value : demand(n, p, key));
+}
+
 describe("lit packages through the one reader (M14d)", () => {
   it("reads an issue and a payment from a lit package with no verifier: derived outputs, totals and the selection's class", async () => {
     const f = litScope();
@@ -490,6 +527,154 @@ describe("lit packages through the one reader (M14d)", () => {
     } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }); }
   });
 
+  // Next 4 (bf): a damaged kept file, its digest recorded again, holding a row no trail record made. The operator's own
+  // state is made to read the same row, so its snapshot includes the act and only the reader's kept-state check can tell:
+  // before the fix the kept read accepted Mallory's 1000 where a full replay refuses.
+  it("discards a kept namespace holding a demand row its trail never stood up, at any position (§10, Next 4 (bf))", async () => {
+    for (const at of [-1n, 0n, 1n, 2n]) {
+      const g = litScope(), { directory, files } = keptFiles("lit-phantom-demand-");
+      let store: ReplayStore | undefined, evidence: EvidenceStore | undefined;
+      try {
+        g.checkpoint(1n, 1n);
+        const minted = g.issue(10n, ALICE); await g.admit(minted);
+        const first = g.checkpoint(2n, 3n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        expect(stateOf(await g.read(first, [], { store, evidence })).state.position).toBe(1n);
+        store.close(); evidence.close();
+        // Below the first record (-1, 0), at the kept tip (1) or one past it (2).
+        const unadmitted = phantomDemand(g);
+        const ns = kept(files.path, db => namespaceAt(db, 1n, ns => writeDemand(db, unadmitted, ns, at)));
+        writeFileSync(files.digest, keptFileDigest(files.path)!);
+        // An operator's journal reopening its admission state checks its tip the same way.
+        store = new ReplayStore(files.path, { digest: files.digest });
+        expect(storedTipHolds(store, ns, LIT, g.trailOf())).toBe(false);
+        store.close();
+        operatorReadsDemand(g, unadmitted);
+        await g.admit(g.spend([g.outputsOf(minted)[0]!], [g.to(6n, BOB), g.to(4n, ALICE)], [ALICE]));
+        await g.admit(g.settle(unadmitted, MALLORY, 900n));
+        g.venue.advance(210n);
+        const second = g.checkpoint(3n, 205n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        const discard = vi.spyOn(store, "discardKept");
+        await expect(g.read(second, [], { store, evidence })).rejects.toMatchObject({ check: "DEMAND" });
+        expect(discard).toHaveBeenCalled();
+        await expect(g.read(second)).rejects.toMatchObject({ check: "DEMAND" });
+      } finally {
+        store?.close(); evidence?.close();
+        rmSync(directory, { recursive: true, force: true, maxRetries: 5 });
+      }
+    }
+  });
+
+  it("refuses a namespace number that already holds rows, and a discard clears them, so a successor never reads them (§10, Next 4 (bf))", async () => {
+    const g = litScope(), { directory, files } = keptFiles("lit-orphan-demand-");
+    let store: ReplayStore | undefined, evidence: EvidenceStore | undefined;
+    try {
+      g.checkpoint(1n, 1n);
+      await g.admit(g.issue(10n, ALICE));
+      const predecessor = g.checkpoint(2n, 3n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      expect(stateOf(await g.read(predecessor, [], { store, evidence })).state.position).toBe(1n);
+      store.close(); evidence.close();
+      // Phantom demand rows under the namespace numbers the successor's read will take next, which this process then
+      // replays itself (so no kept-state check runs on them), under a re-recorded digest.
+      g.successor(3n, predecessor);
+      const unadmitted = phantomDemand(g);
+      kept(files.path, db => {
+        const seq = Number((db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'namespace'").get() as { seq: bigint }).seq);
+        for (let k = 1; k <= 6; k++) writeDemand(db, unadmitted, seq + k, 0n);
+      });
+      writeFileSync(files.digest, keptFileDigest(files.path)!);
+      operatorReadsDemand(g, unadmitted);
+      g.venue.advance(210n); g.checkpoint(3n, 205n);
+      await g.admit(g.settle(unadmitted, MALLORY, 900n));
+      const opened = g.checkpoint(4n, 206n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const discard = vi.spyOn(store, "discardKept");
+      await expect(g.read(opened, [], { store, evidence })).rejects.toMatchObject({ check: "DEMAND" });
+      expect(discard).toHaveBeenCalled();
+      store.close(); evidence.close(); store = undefined; evidence = undefined;
+      await expect(g.read(opened)).rejects.toMatchObject({ check: "DEMAND" });
+      // The discard removed every namespace row, the phantoms under no namespace included.
+      expect(kept(files.path, db => (db.prepare("SELECT count(*) AS n FROM demand WHERE id = ?").get(demandId(unadmitted)) as { n: bigint }).n)).toBe(0n);
+    } finally {
+      store?.close(); evidence?.close();
+      rmSync(directory, { recursive: true, force: true, maxRetries: 5 });
+    }
+  });
+
+  it("refuses a demand's nullifier row held before the demand stands, which its settlement would derive from (§10, Next 4 (bf))", async () => {
+    for (const where of ["kept tip", "next numbers"] as const) {
+      const g = litScope(), { directory, files } = keptFiles("lit-orphan-nullifier-");
+      let store: ReplayStore | undefined, evidence: EvidenceStore | undefined;
+      try {
+        g.checkpoint(1n, 1n);
+        const minted = g.issue(10n, ALICE); await g.admit(minted);
+        const first = g.checkpoint(2n, 3n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        expect(stateOf(await g.read(first, [], { store, evidence })).state.position).toBe(1n);
+        store.close(); evidence.close();
+        if (where === "next numbers") { g.venue.advance(210n); g.successor(3n, first); g.checkpoint(3n, 205n); }
+        // An honest demand the trail stands up after the kept state, with an extra nullifier row under its identity
+        // already in the file: it would join the demand's own when the replay stands it up.
+        const presented = g.demand([g.outputsOf(minted)[0]!], [ALICE], 0n, 100n), id = demandId(presented);
+        kept(files.path, db => {
+          const seq = Number((db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'namespace'").get() as { seq: bigint }).seq);
+          const numbers = where === "kept tip" ? [namespaceAt(db, 1n, () => {})] : [1, 2, 3, 4, 5, 6].map(k => seq + k);
+          for (const ns of numbers) db.prepare("INSERT INTO demand_nullifier VALUES (?, ?, 1, ?)").run(id, ns, b(77));
+        });
+        writeFileSync(files.digest, keptFileDigest(files.path)!);
+        await g.admit(presented);
+        await g.admit(g.settle(presented, BOB, 50n));
+        if (where === "kept tip") g.venue.advance(210n);
+        const second = where === "kept tip" ? g.checkpoint(3n, 205n) : g.checkpoint(4n, 206n);
+        store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+        const discard = vi.spyOn(store, "discardKept");
+        const resumed = stateOf(await g.read(second, [], { store, evidence })), fresh = stateOf(await g.read(second));
+        expect(discard).toHaveBeenCalled();
+        expect([resumed.carrying, resumed.state.history, resumed.state.position]).toEqual([fresh.carrying, fresh.state.history, fresh.state.position]);
+      } finally {
+        store?.close(); evidence?.close();
+        rmSync(directory, { recursive: true, force: true, maxRetries: 5 });
+      }
+    }
+  });
+
+  it("discards a kept namespace holding an output row below leaf 0, which a walk from the known leaves passed over (§10)", async () => {
+    const g = litScope(), { directory, files } = keptFiles("lit-negative-leaf-");
+    let store: ReplayStore | undefined, evidence: EvidenceStore | undefined;
+    try {
+      g.checkpoint(1n, 1n);
+      await g.admit(g.issue(10n, ALICE));
+      const first = g.checkpoint(2n, 3n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      expect(stateOf(await g.read(first, [], { store, evidence })).state.position).toBe(1n);
+      store.close(); evidence.close();
+      const phantom: Opening = { backing: g.backing, value: 1000n, owner: pub(MALLORY), rho: b(88) };
+      const cm = noteCommitment(DOMAIN, phantom), cmKey = key(cm);
+      const ns = kept(files.path, db => namespaceAt(db, 1n, ns => {
+        db.prepare("INSERT INTO output (cm, ns, position, leaf, capsule, settlement) VALUES (?, ?, 1, -1, NULL, 0)").run(cm, ns);
+      }));
+      writeFileSync(files.digest, keptFileDigest(files.path)!);
+      store = new ReplayStore(files.path, { digest: files.digest });
+      expect(storedTipHolds(store, ns, LIT, g.trailOf())).toBe(false);
+      store.close();
+      const operator = g.current().state.store, hasOutput = operator.hasOutput.bind(operator);
+      vi.spyOn(operator, "hasOutput").mockImplementation((n, p, c) => c === cmKey || hasOutput(n, p, c));
+      await g.admit(g.spend([phantom], [g.to(1000n, MALLORY)], [MALLORY]));
+      g.venue.advance(210n);
+      const second = g.checkpoint(3n, 205n);
+      store = new ReplayStore(files.path, { digest: files.digest }); evidence = new EvidenceStore(files.evidence, { construction: LIT });
+      const discard = vi.spyOn(store, "discardKept");
+      await expect(g.read(second, [], { store, evidence })).rejects.toMatchObject({ check: "INPUT" });
+      expect(discard).toHaveBeenCalled();
+      await expect(g.read(second)).rejects.toMatchObject({ check: "INPUT" });
+    } finally {
+      store?.close(); evidence?.close();
+      rmSync(directory, { recursive: true, force: true, maxRetries: 5 });
+    }
+  });
+
   it("judges again a phantom row a lower check passed over: leaves are not unique, so a later walk cannot start past it (§10)", async () => {
     for (const at of [3n, 2n]) {
       const g = litScope(), directory = mkdtempSync(join(tmpdir(), "lit-low-leaf-"));
@@ -523,7 +708,7 @@ describe("lit packages through the one reader (M14d)", () => {
   it("walks each own output row about once in a read resuming checkpoint after checkpoint (§10's rebuild, not per checkpoint)", async () => {
     const g = litScope(), store = new ReplayStore(), walk = store.ownOutputs.bind(store);
     let rows = 0;
-    vi.spyOn(store, "ownOutputs").mockImplementation(function* (ns: number, from: bigint) { for (const row of walk(ns, from)) { rows++; yield row; } });
+    vi.spyOn(store, "ownOutputs").mockImplementation(function* (ns: number, from?: bigint) { for (const row of walk(ns, from)) { rows++; yield row; } });
     g.checkpoint(1n, 1n);
     let last: Commitment | undefined;
     for (let k = 0; k < 20; k++) {
@@ -533,6 +718,28 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(stateOf(await g.read(last!, [], { store })).state.position).toBe(200n);
     // 200 outputs; a walk from leaf 0 at every resumed checkpoint read 1,900.
     expect(rows).toBeLessThanOrEqual(200);
+    store.close();
+  });
+
+  it("keeps what it knows of a namespace across a refused checkpoint, so excluded checkpoints cause no walk from the first row (§10)", async () => {
+    const g = litScope(), store = new ReplayStore(), demands = store.ownDemands.bind(store);
+    let firstWalks = 0;
+    vi.spyOn(store, "ownDemands").mockImplementation(function* (ns: number, after: bigint | undefined, through: bigint) {
+      if (after === undefined) firstWalks++;
+      yield* demands(ns, after, through);
+    });
+    g.checkpoint(1n, 1n);
+    let last: Commitment | undefined, sequence = 2n, index = 3n;
+    for (let k = 0; k < 20; k++) {
+      for (let m = 0; m < 10; m++) await g.admit(g.issue(1n, ALICE));
+      // Every fourth round an excluded checkpoint first: its snapshot misstates the supply (SNAPSHOT, inside the replay).
+      if (k % 4 === 3) { g.checkpoint(sequence++, index, { alter: s => ({ ...s, issued: s.issued + 1n }) }); index += 2n; }
+      last = g.checkpoint(sequence++, index); index += 2n;
+    }
+    expect(stateOf(await g.read(last!, [], { store })).state.position).toBe(200n);
+    // Every namespace here is one this read replayed, so none is walked from its first row; a refusal that forgot what
+    // was known walked the whole namespace again after each of the five exclusions.
+    expect(firstWalks).toBe(0);
     store.close();
   });
 
