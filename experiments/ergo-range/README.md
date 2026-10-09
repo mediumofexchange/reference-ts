@@ -6,12 +6,12 @@ Private probes of the Ergo venue profile, whose runtime code is in `src/`
 is run explicitly, never by `check` or CI, and reads the runtime from `dist/`,
 so run `npm ci` and `npm run build` at the repository root first (Node 24);
 the directory has no dependencies of its own. The probes read nodes with GET
-only. Do not expose a probe as an arbitrary-file or network
+only, but for [node answers](#node-answers)' one refused submission. Do not expose a probe as an arbitrary-file or network
 verification API.
 
 The fixture manifest pins the original public response bytes before parsing;
 Git attributes preserve those raw responses, including trailing whitespace.
-`test/ergo-supplier.test.ts` and the hostile probe read them.
+`test/ergo-supplier.test.ts` reads them.
 
 The v3 replay reads Ergo through `ErgoVenue` over the synthetic reference
 chain (`src/ergo-synthetic.ts`) under `npm run check:pool:ergo-replay`; the
@@ -63,73 +63,33 @@ local browser can read the API and use its key-free routes. These are
 practical sources for the probes, not a hardened or process-contained
 deployment.
 
-## Hostile-input node equivalence
+## Node answers
 
-`hostile-equivalence.mjs` takes the 29 hash-pinned corpus transactions'
-unsigned bytes as `src/ergo-supplier.ts` copies them, mutates them deterministically
-(every byte replaced by four values, deleted, and preceded by 0x00 and 0x80;
-every proper prefix; seeded splices from other seeds) and reads each case
-through `node-read/NodeRead.java`, which frames it as a one-transaction
-version-4 block section, reads it offline with the pinned v6.0.6 node JAR's
-own `BlockTransactionsSerializer` and states the node's ids, its own
-unsigned bytes (`messageToSign`), parsed ErgoTree bytes and register
-constants in that transaction's version context. Every reading the node
-gives (whole cases, prefixes and its rewrites, each rewrite read again) is
-put through the reader's path: its unsigned bytes must hash to the node's
-id, and where the profile's framer reads them the outputs must be the
-node's (`counts.framer`). The node's runtime has no compiler, so a JDK
-compiles the harness; the own node's bundle ([Own nodes](#own-nodes))
-supplies the JAR and runtime:
-
-```powershell
-node experiments/ergo-range/hostile-equivalence.mjs --jdk <jdk-21 dir>
-```
-
-It writes the [retained report](../../docs/ergo-framer-hostile-equivalence-verification.json)
-and keeps its cases and the node's answers in `scratch/hostile-framer/`;
-the run takes about two minutes.
+`record-node-answers.mjs <node> <second node>` asks two real nodes the six
+calls the runtime's node publisher makes (read-only but for one submission
+of non-transaction bytes, which a node refuses) and writes their answers to
+`test/fixtures/ergo-node-answers.json`, against which
+`test/ergo-node-answers.test.ts` checks the node publisher and `MempoolNode`,
+the mempool the synthetic node serves.
 
 ## Retired tooling
 
-On 2026-09-25 the probes whose questions were answered or whose checks the
-runtime's tests now cover retired, together with the Fleet dependency and the
-vendored sigma-rust release build (and its reproducible-build script) that
-only they used: the block-root/Fleet experiment and the range-profile check
-(`check.mjs`, `profile-check.mjs`, formerly `npm run check:ergo:range`), P4's
-chain cost (`chain-cost.mjs`), P2's testnet publication (`publish.mjs`), A10's
-latency collector (`latency.mjs`) and the own-node standing check
-(`header-check.mjs`). Their reports and scripts, and this guide's sections
-for them, are kept at the
-[`1b4857a` revision](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range)
-([decision](../../decisions/2026-09.md#2026-09-25--retire-probes-whose-questions-are-answered)).
-
-The reader's decoder tooling (the unmetered `decoder.mjs` and its corpus,
-the contained and metered derivations with their Wasmtime probe, the stack
-check, the decoder-against-node equivalence driver over the own node's
-retained blocks, and the decoder side of the hostile probe) was retired on
-2026-09-24 when the supplier stopped decoding; the scripts are kept at the
-[`0453955` revision](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range),
-and the reports (`docs/ergo-decoder-*.json`, `docs/ergo-meter*.json`) at
-[`1915d5d`](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/docs).
-
-On 2026-10-04 three real-chain probes retired, their reports having been
-cited only as history since `6e4cea8`: the mainnet header check
-(`header-verify.mjs`), the reference-testnet header check
-(`testnet-header-check.mjs`) and the runtime venue on the mainnet
-(`runtime-sync.mjs`). `test/ergo-headers.test.ts` holds real mainnet and
-testnet recalculation windows for the header rules, and the live testnet
-drill (M10d) runs the runtime venue on a real chain; mainnet stays disabled.
-The scripts, this guide's sections for them and every report retired with
-them are kept at the
-[`1915d5d` revision](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/experiments/ergo-range).
-
-Earlier sessions (2026-09-10 through 2026-09-12) evaluated a Windows-hosted
-contained Ergo node: stable/maintained-Java stock storage, a native RocksDB
-build, WSL and disk/traffic/volume containment controls, a bounded connected
-node-sync, and Windows Job Object process containment of the standalone
-decoder, plus retired `cost-check`/`cost-observer` decoder-cost profiling.
-None cleared its acceptance gate, and all of it is superseded by
-[Own nodes](#own-nodes) above (decision 2026-09-10, own-node evidence
-2026-09-22). The full history, including every retired script and probe
-report, is kept at the immutable
-[`c85af7b` revision](https://github.com/mediumofexchange/reference-ts/tree/c85af7b/experiments/ergo-range).
+Retired probes are kept in Git history, each with its scripts, reports and
+this guide's sections: the 2026-09-10 to 2026-09-12 contained-node and
+decoder-cost evaluations, superseded by [Own nodes](#own-nodes), at
+[`c85af7b`](https://github.com/mediumofexchange/reference-ts/tree/c85af7b/experiments/ergo-range);
+the decoder tooling and the hostile probe's decoder side (2026-09-24) at
+[`0453955`](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range),
+reports at [`1915d5d`](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/docs);
+the range-profile check, Fleet experiment, P4 chain cost, P2 publication, A10
+latency and own-node header check (2026-09-25,
+[decision](../../decisions/2026-09.md#2026-09-25--retire-probes-whose-questions-are-answered)) at
+[`1b4857a`](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range);
+the mainnet and reference-testnet header checks and the mainnet runtime-venue
+probe (2026-10-04; `test/ergo-headers.test.ts` and the live testnet drill
+cover them) at
+[`1915d5d`](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/experiments/ergo-range);
+and the framer's hostile-input node equivalence (2026-10-09; its
+[result](../../docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence)
+is recorded) at
+[`563a477`](https://github.com/mediumofexchange/reference-ts/tree/563a477/experiments/ergo-range).

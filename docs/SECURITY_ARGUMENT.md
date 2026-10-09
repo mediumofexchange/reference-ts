@@ -288,8 +288,8 @@ record and party by party, with collusion and traffic. In short:
   a set of backings fingerprints its holder (§C1.5).
 - Network metadata needs more than A13. An evidence supplier learns which backings an address follows. A command that
   syncs and then submits on one circuit (`pay`, `freshen`, `move-window`) shows the operator which backing the spend
-  moves, even over Tor; `sync` and then `pay --package` on separate circuits avoids it. These are the matrix's
-  [open duties](POOL_V3_VISIBILITY.md#what-the-reference-does-not-do-yet), items 2–3.
+  moves, even over Tor; `sync` and then `pay --package` on separate circuits avoids it. These are the limits of the matrix's
+  [duties](POOL_V3_VISIBILITY.md#wallet-and-deployment-duties-and-their-limits), items 2–3.
 - The record is permanent, so privacy rests on A1, A4 and A7 holding for as long as anyone cares about the history.
   A later break of Poseidon2's hiding or of AES exposes the past, and nothing in the construction gives forward
   secrecy.

@@ -142,9 +142,11 @@ identifies a holder who publishes from an identified address, and that in a smal
 identify the parties ([production requirements](PRODUCTION_REQUIREMENTS.md#release-contract)). Each publication file,
 and the first notes, say what a relay's funding links.
 
-## What the reference does not do yet
+## Wallet and deployment duties and their limits
 
-These are wallet and deployment duties the rules above assume; each is listed in [WORK.md](../WORK.md)'s Next.
+These are wallet and deployment duties the rules above assume. The reference meets each as far as it can (slice 10
+M10c2, slice 12 M12a–c, decisions linked below); what remains is the limit each states. The M12c decision names the
+relay's levers if a deployment needs them.
 
 1. Spend a note named in a request to a fresh one before any reuse (§C1.5, C3.1), should the wallet file
    requests; presented notes are freshened (above).

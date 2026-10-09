@@ -41,8 +41,8 @@ for the remaining acceptance criteria.
 
 ## Build and verify
 
-Use Node.js 24 for all components. The core supports Node.js 20 or newer;
-durable storage and process harnesses require Node.js 24.
+Use Node.js 24.21.0 or newer, the package's floor (replay state and durable
+storage use `node:sqlite`).
 
 ```sh
 git clone https://github.com/mediumofexchange/reference-ts.git

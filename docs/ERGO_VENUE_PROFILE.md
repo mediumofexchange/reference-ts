@@ -540,10 +540,10 @@ the publisher admits only balanced, fully signed transactions, a lost
 answer, an outage and a dropped parent each leave one transaction per
 record, and an invented box is refused beside a node that lacks it.
 
-The candidate v3 journal also uses this neutral publishing interface on the
+The v3 journal also uses this neutral publishing interface on the
 synthetic reference chain (`store-check.mjs --ergo`). Its issue/pay/burn flow
 serves packages and mined block evidence to a fresh seedless reader, whose
-witnessed block pin is held independently beside its candidate keys. Both
+witnessed block pin is held independently beside its adopted keys. Both
 journal and reader require the caller's reference identity preimage. See the
 [journal acceptance](POOL_DEPLOYMENT_PROBES.md#reference-operator-journal)
 for the synthetic report and limits. The explicit `--testnet` path (retired, at `09534a8`) used the same
@@ -551,8 +551,8 @@ journal on the live reference testnet, with throwaway tERG funding and a fresh
 reader fetching its own headers and sections ([live report at 09534a8](https://github.com/mediumofexchange/reference-ts/blob/09534a8/docs/pool-v3-testnet-verification.json));
 the live command drill is the live evidence, last run at `de1f688` before slice 13's command changes ([report](pool-v3-command-testnet-verification.json); a re-run waits on the local machine).
 
-What remains before an Ergo deployment: qualified durable storage/custody, the one-transaction
-condition checked against an adopted configuration, publication on the
+What remains before an Ergo deployment (the one-transaction condition is
+checked against the adopted configuration, above): qualified durable storage/custody, publication on the
 mainnet (real funds), and a latency distribution of kind-4 publications at
 their size and fee (A10 timed the mainnet's own transactions; P2 made two
 correlated testnet observations).
