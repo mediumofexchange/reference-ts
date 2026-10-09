@@ -90,7 +90,7 @@ Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators
   100,000 sats at 1–2 sat/vB). The read-only variant is done (slice 17).
 - Non-blocking, maintainer (2026-10-09): optional, so slice 18's run survives a reboot without a local run. Creating a logon entry was refused as persistence. To allow it, save the two lines in `scratch/dp6/launch.cmd`'s comment as
   `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\moe-dp6.vbs`; `keep.mjs` removes the entry when the report is done. Without it, the next local run restarts the keeper.
-- Deletion list (2026-10-09), refused by the session's check: the merged branch `claude/simplify-docs` (local and remote) and its worktree `scratch/wt/simplify-docs`.
+- Deletion list (2026-10-09): none open.
 
 Roughly **72% done / 28% remaining** (range 62–80%), reassessed 2026-10-09 (direction check; unchanged after (bb)'s fix, which found (bg) beside it): the restart replay was a gate defect at scale and the
 security argument is uncounted work; every budget still holds at 10⁵ otherwise. The external review and its findings, qualified storage and custody, and mainnet remain.
