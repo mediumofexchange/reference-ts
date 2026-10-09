@@ -76,7 +76,7 @@ import { ownVerifier, readFrontier, readPackage } from "./package-reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
-import { FileInUse, ReplayStore } from "./replay-store.js";
+import { FileInUse, KeptStateMismatch, ReplayStore } from "./replay-store.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
 import type { RootTerms } from "./terms.js";
@@ -528,6 +528,8 @@ export class V3OperatorJournal {
     catch (error) {
       // Memory follows the rows only after they commit, so a refusal leaves it as it was; an unexpected failure drops it.
       if (!(error instanceof V3StoreError || error instanceof EncodingError)) this.engine = undefined;
+      // The journal's own replay rows are its state, not a cache to discard: damage to them is named.
+      if (error instanceof KeptStateMismatch) throw new V3StoreError("STORAGE", `the journal's replay rows are damaged: ${error.message}`);
       throw error;
     }
     finally {

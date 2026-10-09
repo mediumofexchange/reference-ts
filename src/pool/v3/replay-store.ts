@@ -135,10 +135,10 @@ const keyBytes = (value: bigint): Uint8Array => {
   if (typeof value !== "bigint" || value < 0n || value >= U256) throw new TypeError("a stored key is a 256-bit value");
   return Uint8Array.from(Buffer.from(value.toString(16).padStart(64, "0"), "hex"));
 };
+/** A stored key's value; a row holding anything but 32 bytes there is damaged kept state (§14), discarded and read again. */
 const key = (value: unknown): bigint => {
-  const b = bytes(value);
-  if (b.length !== 32) throw new Error("a stored key is 32 bytes");
-  return BigInt(`0x${hex(b)}`);
+  if (!(value instanceof Uint8Array) || value.length !== 32) throw new KeptStateMismatch("a stored key is 32 bytes");
+  return BigInt(`0x${hex(value)}`);
 };
 const optional = (value: unknown): bigint | undefined => (value === null || value === undefined ? undefined : BigInt(value as bigint));
 const u64 = (value: bigint): string => value.toString();
@@ -868,7 +868,8 @@ export class ReplayStore {
       this.#db.exec(`RELEASE ${name}`);
       return result;
     } catch (error) {
-      this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
+      // SQLite may have rolled the whole transaction back itself (a full disk, an I/O error): then what was known goes too.
+      if (this.#db.isTransaction) { this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`); } else this.#generation++;
       throw error;
     } finally { this.#savepoints--; }
   }
@@ -881,7 +882,8 @@ export class ReplayStore {
       this.#db.exec(`RELEASE ${name}`);
       return result;
     } catch (error) {
-      this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
+      // SQLite may have rolled the whole transaction back itself (a full disk, an I/O error): then what was known goes too.
+      if (this.#db.isTransaction) { this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`); } else this.#generation++;
       throw error;
     } finally { this.#savepoints--; }
   }
@@ -946,6 +948,10 @@ export class ReplayStore {
             put.run(...Object.values(values));
           }
         };
+        // A copied demand derives from its nullifier rows, so none may wait under its identity here (as `append` refuses).
+        for (const row of from.prepare("SELECT id FROM demand WHERE ns = ? AND position <= ?").iterate(entry.ns, entry.upto)) {
+          if (this.#q.heldDemandRows!.get((row as { id: string }).id, ns) !== undefined) throw new KeptStateMismatch("a demand's rows before it stands");
+        }
         for (const table of facts) copy(table, from.prepare(`SELECT * FROM ${table} WHERE ns = ? AND position <= ?`).iterate(entry.ns, entry.upto));
         copy("demand_tag", from.prepare("SELECT t.* FROM demand_tag t JOIN demand d ON d.id = t.id AND d.ns = t.ns WHERE t.ns = ? AND d.position <= ?")
           .iterate(entry.ns, entry.upto));
@@ -1293,7 +1299,8 @@ export class ReplayStore {
         for (const table of WALK_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE walk = ?`).run(walk);
         this.#db.prepare("DELETE FROM walk WHERE id = ?").run(walk);
       }
-      if (this.#db.isTransaction) this.#db.exec("COMMIT");
+      // A walk whose transaction SQLite already rolled back has nothing to commit, and what it knew goes with it.
+      if (this.#db.isTransaction) this.#db.exec("COMMIT"); else this.#generation++;
     } catch (error) {
       this.#keptMark = undefined;
       this.#rollback();

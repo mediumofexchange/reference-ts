@@ -1,5 +1,6 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { LIT } from "../src/lit/construction.js";
 import { litConfigHash } from "../src/lit/configuration.js";
@@ -12,7 +13,7 @@ import { FIELD_MODULUS } from "../src/pool/field.js";
 import { EMPTY_NOTE_ROOT } from "../src/pool/note-tree.js";
 import { POOL_V3 } from "../src/pool/v3/construction.js";
 import { ReplayRefusal } from "../src/pool/v3/refusals.js";
-import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
 import {
   applyForceRecord, applyJudged, applyRecord, judgeAdopted, openForceState, openSegmentState, StateHandle, type ForceContext,
@@ -270,6 +271,21 @@ describe("lit-v1 records at the one validity seam (M14c)", () => {
     await applyRecord(copied, s.bytes, replay({ segment: NEXT }));
     expect(copied.hasOutput(key(oracle.cm(s.note)))).toBe(true);
     expect(await refusal(copied, s.bytes, replay({ segment: NEXT }))).toBe("DEMAND");
+  });
+
+  it("copies no demand whose identity already holds a nullifier row under the copy's new number (Next 4 (bf))", async () => {
+    const store = new ReplayStore(), first = fresh(store), a = issue(10n, ALICE);
+    await applyRecord(first, a.bytes, replay());
+    const d = demand([a.note], [ALICE]);
+    await applyRecord(first, d.bytes, replay());
+    // A damaged journal holding a stray nullifier row under the number its next copy takes: copied, the demand would read
+    // two nullifiers, and a settlement of it would spend the stray one and miss the honest output.
+    const db = new DatabaseSync(":memory:", { readBigInts: true }), other = new ReplayStore(db);
+    const next = Number((db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'namespace'").get() as { seq: bigint } | undefined)?.seq ?? 0n) + 1;
+    db.prepare("INSERT INTO demand_nullifier VALUES (?, ?, 1, ?)").run(hex(d.id), next, b(77));
+    expect(() => other.copyFrontier(store, first.frontier(), segment => segment)).toThrow(KeptStateMismatch);
+    expect(db.prepare("SELECT count(*) AS n FROM namespace").get()).toEqual({ n: 0n });
+    db.close();
   });
 
   it("adopts an exact settlement, deriving its output from the stored demand, and refuses one whose demand does not stand", async () => {
