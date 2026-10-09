@@ -491,6 +491,34 @@ function removeFiles(files: readonly string[]): void {
     throw error;
   }
 }
+/** The exclusive lock a kept file's one handle holds beside it (`<file>.lock`, as the directory's `lock.db`), from
+ * before the file is judged until the store closes; the operating system releases it if the process dies. A second
+ * handle, in this process or another, is refused rather than opening the file: its opening would move or drop a log
+ * the first still writes, and two writers would record digests over each other's pages (Next 4 (bg)). */
+function lockKept(path: string): DatabaseSync {
+  const lock = new DatabaseSync(`${path}.lock`, { timeout: 0 });
+  try { lock.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE"); } catch (error) {
+    lock.close();
+    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+    throw error;
+  }
+  return lock;
+}
+/** Remove the files of a kept file no handle holds: its log, the file, its digest and its lock. One another handle
+ * holds is left as it is (false). */
+export function removeKeptFile(path: string, digest: string): boolean {
+  let lock: DatabaseSync;
+  try { lock = lockKept(path); } catch (error) {
+    if (error instanceof FileInUse) return false;
+    throw error;
+  }
+  try { removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, digest]); } catch (error) {
+    if (error instanceof FileInUse) return false;
+    throw error;
+  } finally { lock.close(); }
+  rmSync(`${path}.lock`, { force: true });
+  return true;
+}
 /** A kept file's page digest where it may be reused (§14's digest check): opening it recovers what its write-ahead
  * log committed and drops what it did not, the log is moved into the file, and the closed file must then hash to the
  * digest last recorded, at this layout.
@@ -538,6 +566,8 @@ export class ReplayStore {
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
   readonly #kept: (KeptFile & { readonly path: string }) | undefined;
+  /** A kept file's lock, held while the store is open (`lockKept`). */
+  readonly #lock: DatabaseSync | undefined;
   readonly #hosted: boolean;
   #savepoints = 0;
   #replaying = false;
@@ -576,29 +606,35 @@ export class ReplayStore {
       const path = source;
       let held: PageDigest | undefined;
       if (kept !== undefined) {
-        if (path === ":memory:" || typeof kept.digest !== "string" || [path, `${path}-wal`, `${path}-shm`, `${path}-journal`].includes(kept.digest)) {
+        if (path === ":memory:" || typeof kept.digest !== "string" ||
+          [path, `${path}-wal`, `${path}-shm`, `${path}-journal`, `${path}.lock`].includes(kept.digest)) {
           throw new TypeError("a kept store is a file with its own digest");
         }
         if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
         this.#kept = { ...kept, path };
-        held = keptFileHolds(path, kept.digest);
-        // The log goes before the file: a log left beside a new file would be read into it.
-        if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
+        this.#lock = lockKept(path);
+        try {
+          held = keptFileHolds(path, kept.digest);
+          // The log goes before the file: a log left beside a new file would be read into it.
+          if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
+        } catch (error) { this.#lock.close(); throw error; }
       }
       const reopened = kept !== undefined && existsSync(path);
-      this.#db = new DatabaseSync(path, { readBigInts: true });
+      try { this.#db = new DatabaseSync(path, { readBigInts: true }); } catch (error) { this.#lock?.close(); throw error; }
       this.#hosted = false;
-      // Temporary storage in files: a replay's savepoint journals the pages the walk's transaction already
-      // changed, and in memory that journal grows with every record until the walk commits.
-      // A kept file writes ahead into a log, which names the pages each keep point changed, and moves it into the file
-      // only at keep points, so no page changes unnamed.
-      const mode = (this.#db.prepare(`PRAGMA journal_mode=${kept === undefined ? "TRUNCATE" : "WAL"}`).get() as { journal_mode: string }).journal_mode;
-      // SQLite keeps the old mode where it cannot keep a log (no shared memory): every later opening would then discard the file.
-      if (kept !== undefined && mode !== "wal") { this.#db.close(); throw new Error("the kept replay file cannot keep a write-ahead log here"); }
-      this.#db.exec("PRAGMA synchronous=FULL; PRAGMA temp_store=FILE;");
-      if (kept !== undefined) this.#db.exec("PRAGMA wal_autocheckpoint=0");
-      if (!reopened) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
-      if (kept !== undefined) this.#pages = held ?? new PageDigest(Number((this.#db.prepare("PRAGMA page_size").get() as { page_size: bigint }).page_size));
+      try {
+        // Temporary storage in files: a replay's savepoint journals the pages the walk's transaction already
+        // changed, and in memory that journal grows with every record until the walk commits.
+        // A kept file writes ahead into a log, which names the pages each keep point changed, and moves it into the file
+        // only at keep points, so no page changes unnamed.
+        const mode = (this.#db.prepare(`PRAGMA journal_mode=${kept === undefined ? "TRUNCATE" : "WAL"}`).get() as { journal_mode: string }).journal_mode;
+        // SQLite keeps the old mode where it cannot keep a log (no shared memory): every later opening would then discard the file.
+        if (kept !== undefined && mode !== "wal") throw new Error("the kept replay file cannot keep a write-ahead log here");
+        this.#db.exec("PRAGMA synchronous=FULL; PRAGMA temp_store=FILE;");
+        if (kept !== undefined) this.#db.exec("PRAGMA wal_autocheckpoint=0");
+        if (!reopened) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
+        if (kept !== undefined) this.#pages = held ?? new PageDigest(Number((this.#db.prepare("PRAGMA page_size").get() as { page_size: bigint }).page_size));
+      } catch (error) { if (this.#db.isOpen) this.#db.close(); this.#lock?.close(); throw error; }
     }
     // C2.10.6's union is a working set of one connection: it never changes the file, so a kept file's digest stands.
     this.#db.exec("CREATE TEMP TABLE IF NOT EXISTS merging (ns INTEGER PRIMARY KEY, upto INTEGER NOT NULL)");
@@ -675,7 +711,10 @@ export class ReplayStore {
     }).map(([name, sql]) => [name, this.#db.prepare(sql)]));
   }
 
-  close(): void { if (!this.#hosted && this.#db.isOpen) this.#db.close(); }
+  close(): void {
+    if (!this.#hosted && this.#db.isOpen) this.#db.close();
+    if (this.#lock?.isOpen === true) this.#lock.close();
+  }
 
   /** Whether this store is a party's kept file. */
   get kept(): boolean { return this.#kept !== undefined; }

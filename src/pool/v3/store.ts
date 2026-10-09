@@ -50,7 +50,8 @@
 // lit-v1 §9's) and only on a reference venue (guard.ts). Time is the venue's witnessed index.
 // SQLite fences handles of this journal; it cannot fence another database or
 // a copied key.
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -71,12 +72,12 @@ import { EvidenceStore, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, typ
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
-import { keptAnswers, keptStateHolds, storedTipHolds, type KeptAnswers, type SignedTerms } from "./reader.js";
+import { keptAnswers, keptContext, keptStateHolds, storedTipHolds, type KeptAnswers, type SignedTerms } from "./reader.js";
 import { ownVerifier, readFrontier, readPackage } from "./package-reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
-import { FileInUse, KeptStateMismatch, ReplayStore } from "./replay-store.js";
+import { FileInUse, KeptStateMismatch, removeKeptFile, ReplayStore } from "./replay-store.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
 import type { RootTerms } from "./terms.js";
@@ -185,6 +186,13 @@ interface Opened {
   readonly scope: bigint | undefined;
   readonly entries: readonly Scoped[];
 }
+/** When a kept file's digest was last recorded (its keep point), or undefined where none is. */
+function keptAt(digest: string): bigint | undefined {
+  try { return statSync(digest, { bigint: true }).mtimeNs; } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
 function openedOf(frames: ReaderFrames, header: SegmentHeader, entries: readonly Scoped[]): Opened {
   // A reader takes a directory as one whole item: a scope whose directory passes that budget could not be served.
   requireThat(9n + 64n * BigInt(entries.length) <= MAX_ITEM_BYTES, "REFUSED", "the scope's directory would pass a reader's item budget", "RESOURCE");
@@ -260,6 +268,9 @@ export interface V3StoreOptions {
    * the return was signed) and draws a fresh spacing. Also the only way to open a journal whose file is not the one it
    * was made in. */
   readonly restored?: boolean | undefined;
+  /** A handle beside the owner (Next 4 (bg)): it takes no ownership and signs, publishes and keeps nothing in the
+   * journal's database but one lineage row of its evidence; its one operation is `prepareReads`. */
+  readonly beside?: boolean | undefined;
 }
 /** A served §12 package with the selection it names; a reader makes its own selection and judges at its own index. */
 export interface ServedPackage {
@@ -314,10 +325,14 @@ export class V3OperatorJournal {
   private readonly owner: bigint;
   private readonly resumedAt: bigint | undefined;
   private readonly path: string;
+  /** A handle beside the owner (`beside`), which owns nothing. */
+  private readonly beside: boolean;
+  /** The kept state of the journal's own reads under this version's kept context: a file beside the database named
+   * by that context (§14), so two versions never share one (Next 4 (bg)). */
+  private readonly readsPath: string;
   /** The admission state and the imported prefixes it reads, in this database. */
   private readonly replays: ReplayStore;
-  /** The kept state of the journal's own reads, opened at the first read: a file beside the database,
-   * named by the verifier's circuits (§14). */
+  /** The kept state of the journal's own reads, opened at the first read (`readsPath`). */
   private reading: ReplayStore | undefined;
   /** The evidence the journal serves and reads: its own records, heads, directories and snapshots, and what a takeover took. */
   private readonly evidence: EvidenceStore;
@@ -339,8 +354,31 @@ export class V3OperatorJournal {
     this.verifier = ownVerifier(this.construction, verifier); this.proofs = rememberedProofs(this.verifier);
     this.venue = venue; this.lag = venue.lag();
     this.secret = copyBytes(secret); this.operator = ed25519.getPublicKey(this.secret);
-    this.observedIndex = 0n; this.path = path;
+    this.observedIndex = 0n; this.path = path; this.beside = options.beside === true;
+    this.readsPath = `${path}.reads-${bytesToHex(keptContext({ construction: this.construction, domain: this.domain, venue: this.venueId,
+      verifier: this.verifier })).slice(0, 16)}`;
     const now = this.clock();
+    if (this.beside) {
+      // Beside the owner: its rows are read, never written, so the owner's fence, log and recorded clock stay its own.
+      requireThat(existsSync(path), "STORAGE", "there is no journal at this path");
+      this.db = new DatabaseSync(path, { timeout: 5000, readBigInts: true });
+      try {
+        requireThat(this.db.prepare("PRAGMA journal_mode").get()?.journal_mode === "wal", "STORAGE", "the journal keeps no write-ahead log");
+        this.db.exec("BEGIN");
+        try {
+          const meta = this.metadata(); this.identity(meta);
+          const file = fileIdentity(path), kept = this.db.prepare("SELECT identity FROM journal_file WHERE id=1").get()?.identity;
+          requireThat(kept === undefined || kept === file, "COPIED", "this journal's file is not the one it was made in");
+          requireThat(now >= decimal(meta!.observed), "UNAVAILABLE", "the venue's clock is behind what this journal has read");
+          this.owner = meta!.owner as bigint;
+        } finally { this.db.exec("COMMIT"); }
+        this.resumedAt = undefined;
+        this.replays = new ReplayStore(this.db);
+        this.evidence = new EvidenceStore(this.db, { construction: this.construction, beside: true });
+        this.retained = this.evidence.retained();
+      } catch (error) { this.db.close(); this.secret.fill(0); throw error; }
+      return;
+    }
     this.db = new DatabaseSync(path, { timeout: 5000, readBigInts: true });
     try {
       this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
@@ -505,6 +543,7 @@ export class V3OperatorJournal {
    * next operation reads the journal as stored. */
   private transaction<T>(action: () => T): T {
     requireThat(!this.closed, "STORAGE", "store is closed");
+    requireThat(!this.beside, "STORAGE", "a handle beside the owner signs and keeps nothing");
     try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
       // Another handle holds the database past the busy timeout: nothing was read or written here.
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
@@ -528,6 +567,9 @@ export class V3OperatorJournal {
     catch (error) {
       // Memory follows the rows only after they commit, so a refusal leaves it as it was; an unexpected failure drops it.
       if (!(error instanceof V3StoreError || error instanceof EncodingError)) this.engine = undefined;
+      // A replaced owner reads nothing more: its kept reads go to the new owner, whose first read waits (BUSY) only
+      // while this one's read still runs.
+      if (error instanceof V3StoreError && error.code === "FENCED") { this.reading?.close(); this.reading = undefined; }
       // The journal's own replay rows are its state, not a cache to discard: damage to them is named.
       if (error instanceof KeptStateMismatch) throw new V3StoreError("STORAGE", `the journal's replay rows are damaged: ${error.message}`);
       throw error;
@@ -539,7 +581,7 @@ export class V3OperatorJournal {
   /** The store the journal's own reads keep their classes and replays in. */
   private reads(): ReplayStore {
     if (this.reading === undefined) {
-      try { this.reading = new ReplayStore(`${this.path}.reads`, { digest: `${this.path}.reads.sha256` }); } catch (error) {
+      try { this.reading = new ReplayStore(this.readsPath, { digest: `${this.readsPath}.sha256` }); } catch (error) {
         if (error instanceof FileInUse) throw new V3StoreError("BUSY", "another handle is reading this journal's history");
         throw error;
       }
@@ -548,10 +590,61 @@ export class V3OperatorJournal {
   }
   /** Open the kept state of the journal's own reads now, where a read has kept one: §14's check on opening hashes the
    * whole file, which `serve` pays before it listens rather than in a restarted journal's first admission
-   * (Next 4 (bb)). A file another handle holds leaves it BUSY. */
+   * (Next 4 (bb)). A file another handle holds leaves it BUSY.
+   *
+   * Another version's kept reads (another context's file, or the one file kept before Next 4 (bg)) last kept before
+   * this version's are removed where no handle holds them: the version it followed, once this one has kept reads of
+   * its own. A newer one, prepared beside this owner (`prepareReads`), stays. */
   openReads(): void {
     requireThat(!this.closed, "STORAGE", "store is closed");
-    if (existsSync(`${this.path}.reads`)) this.reads();
+    requireThat(!this.beside, "STORAGE", "a handle beside the owner keeps no reads but its prepared ones");
+    if (existsSync(this.readsPath)) this.reads();
+    const own = keptAt(`${this.readsPath}.sha256`);
+    if (own === undefined) return;
+    const directory = dirname(this.path), name = basename(this.path), others = new Set<string>();
+    for (const entry of readdirSync(directory)) {
+      const file = /^(.*\.reads(?:-[0-9a-f]{16})?)(?:-wal|-shm|-journal|\.sha256|\.lock)?$/.exec(entry)?.[1];
+      if (file !== undefined && (file === `${name}.reads` || file.startsWith(`${name}.reads-`)) && join(directory, file) !== this.readsPath) others.add(join(directory, file));
+    }
+    for (const file of others) {
+      const at = keptAt(`${file}.sha256`);
+      if (at === undefined || at < own) removeKeptFile(file, `${file}.sha256`);
+    }
+  }
+  /** Prepare this version's kept reads beside the owner (Next 4 (bg)): read the journal's canonical checkpoint at the
+   * index its kept venue answers reach, as the owner's service reads it, into this version's file, so that once this
+   * version owns the journal its first read classifies and replays only what was committed since. Where the journal's
+   * service reads nothing (no taken term, silence or non-service clause), nothing is read. A file another handle holds
+   * (an owner or a preparation of this version) refuses BUSY; one stopped part way keeps what it read (keep points by
+   * time) and the next resumes it. */
+  async prepareReads(): Promise<{ readonly index: bigint; readonly read: boolean }> {
+    requireThat(!this.closed, "STORAGE", "store is closed");
+    requireThat(this.beside, "STORAGE", "only a handle beside the owner prepares reads");
+    requireThat(!this.busy, "BUSY", "a journal operation is in progress");
+    this.busy = true;
+    try {
+      // One read snapshot: the clock the owner's kept answers reach, and the state signed through it.
+      this.db.exec("BEGIN");
+      let at: bigint, engine: Engine;
+      try {
+        const meta = this.metadata(); this.identity(meta);
+        at = decimal(meta!.observed);
+        try { engine = this.stored(); } catch (error) {
+          if (error instanceof EncodingError) throw new V3StoreError("STORAGE", "stored journal state does not decode");
+          if (error instanceof EvidenceRefusal) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
+          throw error;
+        }
+      } finally { this.db.exec("COMMIT"); }
+      if (engine.opened === undefined || !this.servesByRead(engine.opened)) return { index: at, read: false };
+      await this.currentRead(engine, at);
+      return { index: at, read: true };
+    } finally { this.busy = false; }
+  }
+  /** Whether service reads the journal's canonical checkpoint before each admission and commit: a taken term, or a
+   * scoped backing's silence or non-service clause, whose clock the read gives. */
+  private servesByRead(opened: Opened): boolean {
+    return this.db.prepare("SELECT 1 FROM journal_taken LIMIT 1").get() !== undefined ||
+      opened.entries.some(({ terms }) => terms.silence !== undefined || terms.nonService !== undefined);
   }
 
   /** Memory from the rows, under the fence. Nothing is verified again: the stored state must reproduce (storage
@@ -735,7 +828,8 @@ export class V3OperatorJournal {
    * replays (§14), so a later read verifies only what it has not. The fence is checked first: a replaced
    * owner reads and keeps nothing. */
   private readerOptions(store?: ReplayStore, evidence: EvidenceStore = this.evidence) {
-    this.transaction(() => {});
+    // Beside the owner there is no fence of this handle's to check: it owns nothing.
+    if (!this.beside) this.transaction(() => {});
     // The journal reads its own state, clock and force, never the listing of its carrying checkpoints, which grows
     // by one row per checkpoint and would otherwise be read before every admission (M11c2).
     // An audit (a store of its own) verifies every proof again; the journal's own reads ask only for those it did not verify.
@@ -1028,8 +1122,7 @@ export class V3OperatorJournal {
       ...(this.isHeld(view.now, last) ? {} : { unwitnessedSignedAt: last.at }), ...(this.resumedAt === undefined ? {} : { resumedAt: this.resumedAt }) });
     requireThat(!schedule.lapsed, "STALE", "the operator's term has ended");
     requireThat(action === "admit" ? schedule.admissionOpen : schedule.commitNow, "SCHEDULE", "the scope's signing schedule is closed");
-    if (this.db.prepare("SELECT 1 FROM journal_taken LIMIT 1").get() !== undefined ||
-        opened.entries.some(({ terms }) => terms.silence !== undefined || terms.nonService !== undefined)) {
+    if (this.servesByRead(opened)) {
       const source = await this.currentRead(engine, view.now);
       this.serviceClock(source, view.now);
     }
