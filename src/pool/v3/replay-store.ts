@@ -553,6 +553,8 @@ export class ReplayStore {
   #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
   #lost = false;
+  /** Counts the times rows this store held may have gone: a discard, a collection or a rolled-back write. */
+  #generation = 0;
   /** The last frontier `witness` folded, by its namespace, leaf count and root: the paths of one tip share it. */
   #filling: { readonly key: string; readonly nodes: readonly bigint[] } | undefined;
 
@@ -641,8 +643,12 @@ export class ReplayStore {
       insertDemandEnd: "INSERT INTO demand_end VALUES (?, ?, ?)",
       outputs: `SELECT x.* FROM output x WHERE ${v} ORDER BY x.ns, x.leaf`,
       ownOutputs: "SELECT * FROM output WHERE ns = ? AND leaf >= ? ORDER BY leaf",
+      ownOutputsAll: "SELECT * FROM output WHERE ns = ? ORDER BY leaf",
       ownDemands: "SELECT id, position FROM demand WHERE ns = ? AND position > ? AND position <= ? ORDER BY position",
+      ownDemandsThrough: "SELECT id, position FROM demand WHERE ns = ? AND position <= ? ORDER BY position",
       demandPast: "SELECT 1 FROM demand WHERE ns = ? AND position > ? LIMIT 1",
+      // A namespace number holds no output or demand row before its namespace is made (lit-v1 §10 rebuilds those).
+      heldRows: "SELECT 1 FROM output WHERE ns = ?1 UNION ALL SELECT 1 FROM demand WHERE ns = ?1 LIMIT 1",
       outputOf: `SELECT x.* FROM output x WHERE x.cm = :key AND ${v}`,
       construction: "SELECT construction, tree FROM namespace_construction WHERE ns = ?",
       insertConstruction: "INSERT INTO namespace_construction VALUES (?, ?, ?)",
@@ -732,14 +738,23 @@ export class ReplayStore {
   #dataVersion(): bigint {
     return BigInt((this.#db.prepare("PRAGMA data_version").get() as { data_version: bigint }).data_version);
   }
-  /** Forget every kept row (§14: kept state that fails a check is discarded); a kept file also drops its namespaces. */
+  /** Changes whenever rows this store held may have gone (a discard, a collection or a rolled-back write), so what a
+   * caller learned of its namespaces before is not carried past it (lit-v1 §10's known outputs). */
+  get generation(): number { return this.#generation; }
+  #rollback(): void {
+    this.#generation++;
+    if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+  }
+  /** Forget every kept row (§14: kept state that fails a check is discarded); a kept file also drops its namespaces, and
+   * every namespace row with them, a row under no namespace included. */
   discardKept(): void {
     if (this.#db.isTransaction || this.#replaying) throw new Error("a walk is open on this store");
+    this.#generation++;
     this.#atomic(() => {
       for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
       this.#db.prepare("DELETE FROM kept_context").run();
+      if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
     });
-    if (this.#kept !== undefined) this.collect([]);
   }
   /** The kept note frontier of `ns` (leaf count and completed left subtrees), for §14's snapshot check. */
   frontier(ns: number): { readonly leaves: bigint; readonly ommers: readonly (bigint | undefined)[] } {
@@ -771,6 +786,7 @@ export class ReplayStore {
       const row = this.#q.insertNamespace!.get(segment, identity, genesis.history, genesis.evidence, fieldToBytes(EMPTY_NOTE_ROOT),
         encodeOmmers([]), EMPTY_SPENT) as { ns: bigint };
       const ns = Number(row.ns);
+      if (this.#holdsRows(ns)) throw new KeptStateMismatch("a new namespace's number holds rows");
       this.#q.insertConstruction!.run(ns, construction.name, construction.tree ? 1 : 0);
       for (const [name, entry] of imports?.segments ?? []) this.#q.insertImport!.run(ns, unhex(name), entry.ns, entry.upto);
       if (construction.tree) this.#q.insertAnchor!.run(fieldToBytes(EMPTY_NOTE_ROOT), ns, 0n);
@@ -849,7 +865,7 @@ export class ReplayStore {
       this.#db.exec(`RELEASE ${name}`);
       return result;
     } catch (error) {
-      this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
+      this.#generation++; this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
       throw error;
     } finally { this.#savepoints--; }
   }
@@ -862,7 +878,7 @@ export class ReplayStore {
       this.#db.exec(`RELEASE ${name}`);
       return result;
     } catch (error) {
-      this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
+      this.#generation++; this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`);
       throw error;
     } finally { this.#savepoints--; }
   }
@@ -876,6 +892,7 @@ export class ReplayStore {
     for (const ns of keep) { live.add(ns); for (const entry of this.imports(ns).values()) live.add(entry.ns); }
     const dead = (this.#db.prepare("SELECT ns FROM namespace").all() as { ns: bigint }[]).map(r => Number(r.ns)).filter(ns => !live.has(ns));
     if (dead.length === 0) return;
+    this.#generation++;
     this.#atomic(() => {
       for (const table of NAMESPACE_TABLES) {
         const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
@@ -914,6 +931,7 @@ export class ReplayStore {
         // imported namespace answers only from its fact rows.
         const ns = Number((this.#q.insertNamespace!.get(tip.segment, name_, at?.history ?? new Uint8Array(32), at?.evidence ?? new Uint8Array(32),
           fieldToBytes(at?.noteRoot ?? EMPTY_NOTE_ROOT), encodeOmmers([]), EMPTY_SPENT) as { ns: bigint }).ns);
+        if (this.#holdsRows(ns)) throw new KeptStateMismatch("a new namespace's number holds rows");
         this.#db.prepare("UPDATE namespace SET position = ? WHERE ns = ?").run(entry.upto, ns);
         const construction = source.construction(entry.ns);
         this.#q.insertConstruction!.run(ns, construction.name, construction.tree ? 1 : 0);
@@ -1066,18 +1084,24 @@ export class ReplayStore {
     return { cm: key(row["cm"]), ns: Number(row["ns"] as bigint), position: BigInt(row["position"] as bigint), leaf: BigInt(row["leaf"] as bigint),
       capsule: row["capsule"] === null ? undefined : bytes(row["capsule"]), settlement: row["settlement"] === 1n };
   }
-  /** A namespace's own outputs from leaf `from` on, in leaf order (lit-v1 §10's rebuild reads them past what it checked). */
-  *ownOutputs(ns: number, from: bigint): Generator<StoredOutput> {
-    for (const row of this.#q.ownOutputs!.iterate(ns, from)) yield this.#output(row as Record<string, unknown>);
+  /** A namespace's own outputs from leaf `from` on, or all of them, in leaf order (lit-v1 §10's rebuild reads them past
+   * what it checked). */
+  *ownOutputs(ns: number, from?: bigint): Generator<StoredOutput> {
+    const rows = from === undefined ? this.#q.ownOutputsAll!.iterate(ns) : this.#q.ownOutputs!.iterate(ns, from);
+    for (const row of rows) yield this.#output(row as Record<string, unknown>);
   }
-  /** A namespace's own demands stood up past position `after` through `through`, each identity with its position, in
-   * position order (lit-v1 §10's rebuild reads them as it reads the outputs). */
-  ownDemands(ns: number, after: bigint, through: bigint): { readonly id: string; readonly position: bigint }[] {
-    return this.#q.ownDemands!.all(ns, after, through).map(row => {
-      const r = row as { id: string; position: bigint };
-      return { id: r.id, position: BigInt(r.position) };
-    });
+  /** A namespace's own demands stood up past position `after` (or from its first) through `through`, each identity with
+   * its position, in position order (lit-v1 §10's rebuild reads them as it reads the outputs). A position stored as
+   * something other than an integer is returned as undefined, which matches no record's. */
+  *ownDemands(ns: number, after: bigint | undefined, through: bigint): Generator<{ readonly id: unknown; readonly position: bigint | undefined }> {
+    const rows = after === undefined ? this.#q.ownDemandsThrough!.iterate(ns, through) : this.#q.ownDemands!.iterate(ns, after, through);
+    for (const row of rows) {
+      const r = row as { id: unknown; position: unknown };
+      yield { id: r.id, position: typeof r.position === "bigint" ? r.position : undefined };
+    }
   }
+  /** Whether a namespace number holds an output or demand row: none may before its namespace is made. */
+  #holdsRows(ns: number): boolean { return this.#q.heldRows!.get(ns) !== undefined; }
   /** Whether a namespace holds an own demand row past `position`. */
   demandPast(ns: number, position: bigint): boolean { return this.#q.demandPast!.get(ns, position) !== undefined; }
   /** Every visible output, in namespace then leaf order. */
@@ -1239,7 +1263,7 @@ export class ReplayStore {
       return { walk, resumed: false };
     } catch (error) {
       // A walk that did not open leaves no transaction behind.
-      if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+      this.#rollback();
       throw error;
     }
   }
@@ -1251,7 +1275,7 @@ export class ReplayStore {
     // A walk that lost its file at a keep point leaves it to the store that took it: nothing to drop or digest here.
     if (this.#lost) {
       this.#lost = false; this.#keptMark = undefined;
-      if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+      this.#rollback();
       return;
     }
     try {
@@ -1266,7 +1290,7 @@ export class ReplayStore {
       if (this.#db.isTransaction) this.#db.exec("COMMIT");
     } catch (error) {
       this.#keptMark = undefined;
-      if (this.#db.isTransaction) this.#db.exec("ROLLBACK");
+      this.#rollback();
       throw error;
     }
     if (this.#kept !== undefined) this.#recordDigest();

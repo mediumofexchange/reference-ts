@@ -535,11 +535,13 @@ interface KnownOutputs {
   readonly position: bigint; readonly leaves: bigint; readonly top: bigint; readonly skipped: bigint | undefined;
   readonly demands: ReadonlyMap<string, Demand>;
 }
-const knownOutputs = new WeakMap<ReplayStore, Map<number, KnownOutputs>>();
+const knownOutputs = new WeakMap<ReplayStore, { readonly generation: number; readonly map: Map<number, KnownOutputs> }>();
+/** What is known of the store's namespaces since its rows last may have gone (`generation`): a discard, collection or
+ * rolled-back write forgets it, so a namespace number made again is never vouched for by an earlier one's walk. */
 function known(store: ReplayStore): Map<number, KnownOutputs> {
-  let map = knownOutputs.get(store);
-  if (map === undefined) { map = new Map(); knownOutputs.set(store, map); }
-  return map;
+  let held = knownOutputs.get(store);
+  if (held === undefined || held.generation !== store.generation) { held = { generation: store.generation, map: new Map() }; knownOutputs.set(store, held); }
+  return held.map;
 }
 /** Record that this process's own replay wrote namespace `ns` through its tip. */
 function replayedOutputs(store: ReplayStore, ns: number, construction: Construction): void {
@@ -590,7 +592,8 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
   // Every own row past the known leaves at or below `position` is a derived output, in order, and none is missing. At the
   // tip no own row may lie past it: one would become visible, and spendable, as the namespace grows. Rows this process
   // already knows are not walked again, so a read resuming checkpoint after checkpoint walks each row once.
-  const leaves = from?.leaves ?? 0n, start = from?.skipped !== undefined && from.skipped < leaves ? from.skipped : leaves;
+  // A first walk reads every own row, whatever its leaf or position: a row below leaf 0 or at position 0 is visible too.
+  const leaves = from?.leaves ?? 0n, start = from === undefined ? undefined : from.skipped !== undefined && from.skipped < leaves ? from.skipped : leaves;
   let k = 0, top = from?.top ?? 0n, skipped: bigint | undefined;
   for (const output of store.ownOutputs(ns, start)) {
     if (output.position > top) top = output.position;
@@ -600,16 +603,20 @@ function keptOutputsHold(store: ReplayStore, ns: number, construction: Construct
       continue;
     }
     // A row below the known leaves that an earlier walk compared (at or below its position) is not compared again.
-    if (output.leaf < leaves && output.position <= after) continue;
+    if (from !== undefined && output.leaf < leaves && output.position <= after) continue;
     const expected = derived[k++];
     if (expected === undefined || expected.cm !== output.cm || expected.position !== output.position) return false;
   }
   if (k !== derived.length || (tip && top > position)) return false;
-  // Every own demand row past the known position through `position` is one the trail stood up there, since a later
-  // settlement derives its output and nullifiers from it; at the tip none lies past it. A demand identity has one row per
-  // namespace, so rows matching stood-up demands, as many as there are, are exactly those.
-  const rows = store.ownDemands(ns, after, position);
-  if (rows.length !== stood.size || rows.some(row => stood.get(row.id) !== row.position) || (tip && store.demandPast(ns, position))) return false;
+  // Every own demand row past the known position (on a first walk, at any position) through `position` is one the trail
+  // stood up there, since a later settlement derives its output and nullifiers from it; at the tip none lies past it. A
+  // demand identity has one row per namespace, so rows matching stood-up demands, as many as there are, are exactly those.
+  let rows = 0;
+  for (const row of store.ownDemands(ns, from === undefined ? undefined : after, position)) {
+    if (typeof row.id !== "string" || row.position === undefined || stood.get(row.id) !== row.position) return false;
+    rows++;
+  }
+  if (rows !== stood.size || (tip && store.demandPast(ns, position))) return false;
   known(store).set(ns, { position, leaves: leaves + BigInt(k), top, skipped, demands: local });
   return true;
 }

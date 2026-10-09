@@ -81,7 +81,7 @@ import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, 
   type SegmentState } from "./state.js";
 import type { RootTerms } from "./terms.js";
 
-const PROFILE = "pool-store/v3/8";
+const PROFILE = "pool-store/v3/9";
 /** Signed rows read at a time while serving. */
 const SERVE_PAGE = 256n;
 const U64 = 1n << 64n;
