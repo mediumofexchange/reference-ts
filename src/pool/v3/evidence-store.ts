@@ -45,7 +45,26 @@ import { FileInUse } from "./replay-store.js";
 import type { TrailSink } from "./trail.js";
 
 /** What one served package part holds before it is sent: a bound on the memory serving takes, not on what is served. */
-export const SERVED_PART_ITEMS = 1024, SERVED_PART_BYTES = 1_048_576;
+const SERVED_PART_ITEMS = 1024, SERVED_PART_BYTES = 1_048_576;
+/** The served package part being filled, as a journal and a replica serve (§12): each item once by kind and hash, full
+ * at either bound, packed in kind then hash order. */
+export function partPacker(construction: Construction) {
+  const batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
+  let held = 0;
+  return {
+    add(kind: number, payload: Uint8Array, hash: Uint8Array = sha256(payload)): void {
+      const key = `${kind}:${bytesToHex(hash)}`;
+      if (!batch.has(key)) { batch.set(key, { kind, payload, hash }); held += payload.length; }
+    },
+    full: (): boolean => batch.size >= SERVED_PART_ITEMS || held >= SERVED_PART_BYTES,
+    empty: (): boolean => batch.size === 0,
+    packed(): EvidencePart {
+      const items = [...batch.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash));
+      batch.clear(); held = 0;
+      return { package: construction.reader.package.encodeEvidencePackage(items) };
+    },
+  };
+}
 /** A whole item's local per-object budget; a trail is bounded per record instead. */
 export const MAX_ITEM_BYTES = 1_048_576n;
 /** The bytes one batch may take by default: a party's storage quota, never a protocol bound. A file is
@@ -184,7 +203,17 @@ const SERVED_SCHEMA = `CREATE TABLE IF NOT EXISTS served_object (operator BLOB, 
   CREATE INDEX IF NOT EXISTS served_top_sequence ON served_top(operator, segment, sequence, position);
   CREATE TABLE IF NOT EXISTS served_selection (backing BLOB PRIMARY KEY, package BLOB NOT NULL) WITHOUT ROWID;
   CREATE TABLE IF NOT EXISTS served_operator (operator BLOB PRIMARY KEY, sequence INTEGER NOT NULL) WITHOUT ROWID;`;
-/** Lineage rows kept: a kept walk whose mark is older is resumed no more, and its next read judges every checkpoint once. */
+/** What a read of kept evidence asks, on the party's connection or a replica's serving one. */
+const READ_SQL = {
+  object: "SELECT payload FROM object WHERE kind = ? AND hash = ?",
+  head: "SELECT header FROM segment_head WHERE segment = ?",
+  headTerm: "SELECT terms, signature FROM segment_terms WHERE segment = ? AND i = ?",
+  step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
+  entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
+  // A forward step: the kept values of a segment at one position; two say a fork.
+  at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
+} as const;
+/** Lineage rows kept:a kept walk whose mark is older is resumed no more, and its next read judges every checkpoint once. */
 const LINEAGE_KEPT = 65_536n;
 
 /** A kept position a trail is assembled after: its chain value and the frame bytes of its records. */
@@ -269,21 +298,15 @@ export class EvidenceStore {
       release: "DELETE FROM item WHERE batch = ?",
       releaseBatch: "DELETE FROM batch WHERE id = ?",
       keep: "INSERT INTO object VALUES (?, ?, ?) ON CONFLICT(kind, hash) DO UPDATE SET payload = excluded.payload WHERE payload != excluded.payload",
-      object: "SELECT payload FROM object WHERE kind = ? AND hash = ?",
+      ...READ_SQL,
       // A header or verified terms field supplied again replaces a kept one that storage damaged.
       putHead: "INSERT INTO segment_head VALUES (?, ?) ON CONFLICT(segment) DO UPDATE SET header = excluded.header WHERE header != excluded.header",
       putTerms: `INSERT INTO segment_terms VALUES (?, ?, ?, ?) ON CONFLICT(segment, i) DO UPDATE SET terms = excluded.terms, signature = excluded.signature
         WHERE terms != excluded.terms OR signature != excluded.signature`,
-      head: "SELECT header FROM segment_head WHERE segment = ?",
-      headTerm: "SELECT terms, signature FROM segment_terms WHERE segment = ? AND i = ?",
       // A record supplied again under its chain value replaces a kept row that storage damaged.
       record: `INSERT INTO chain VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(evidence) DO UPDATE SET segment = excluded.segment, prev = excluded.prev,
         position = excluded.position, size = excluded.size, bytes = excluded.bytes WHERE segment != excluded.segment OR prev != excluded.prev
         OR position != excluded.position OR size != excluded.size OR bytes != excluded.bytes`,
-      step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
-      entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
-      // A forward step: the kept values of a segment at one position; two say a fork.
-      at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
       supplied: "SELECT sequence FROM supplier WHERE source = ?",
       supply: "INSERT INTO supplier VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET sequence = excluded.sequence",
       ...(this.#indexed ? {
@@ -356,22 +379,8 @@ export class EvidenceStore {
       db.exec("BEGIN");
       const highest = (db.prepare("SELECT sequence FROM served_operator WHERE operator = ?").get(by) as { sequence: bigint } | undefined)?.sequence ?? 0n;
       const from = after <= through ? after : after <= highest ? through : 0n;
-      const q = Object.fromEntries(Object.entries({
-        object: "SELECT payload FROM object WHERE kind = ? AND hash = ?",
-        head: "SELECT header FROM segment_head WHERE segment = ?",
-        headTerm: "SELECT terms, signature FROM segment_terms WHERE segment = ? AND i = ?",
-        step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
-        entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
-        at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
-      }).map(([name, sql]) => [name, db.prepare(sql)]));
-      const evidence = new EvidenceBatch(construction, db, q, 0n, 0n);
-      const batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
-      let held = 0;
-      const packed = (): EvidencePart => {
-        const items = [...batch.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash));
-        batch.clear(); held = 0;
-        return { package: construction.reader.package.encodeEvidencePackage(items) };
-      };
+      const q = Object.fromEntries(Object.entries(READ_SQL).map(([name, sql]) => [name, db.prepare(sql)]));
+      const evidence = new EvidenceBatch(construction, db, q, 0n, 0n), part = partPacker(construction);
       // In (sequence, kind, hash) order from a mark no row at `from` passes (kinds are below 9).
       const page = db.prepare(`SELECT sequence, kind, hash FROM served_object WHERE operator = ? AND (sequence, kind, hash) > (?, ?, ?) AND sequence <= ?
         ORDER BY sequence, kind, hash LIMIT 256`);
@@ -383,11 +392,11 @@ export class EvidenceStore {
           const kind = row.kind === 3n ? 3 : 4, payload = evidence.object(kind, mark[2]);
           // Damage ends the stream short of its end mark, so the reader keeps its mark and asks another source.
           if (payload === undefined) throw new EvidenceRefusal("unresolved-evidence");
-          batch.set(`${kind}:${bytesToHex(mark[2])}`, { kind, payload, hash: mark[2] }); held += payload.length;
-          if (batch.size >= SERVED_PART_ITEMS || held >= SERVED_PART_BYTES) yield packed();
+          part.add(kind, payload, mark[2]);
+          if (part.full()) yield part.packed();
         }
       }
-      if (batch.size > 0) yield packed();
+      if (!part.empty()) yield part.packed();
       // Each segment's tops indexed in range, furthest first; one that a served top or the reader's base reaches is left out.
       const tops = db.prepare(`SELECT segment, evidence, position FROM served_top WHERE operator = ? AND sequence > ? AND sequence <= ?
         ORDER BY segment, position DESC`).all(by, from, through) as { segment: Uint8Array; evidence: Uint8Array; position: bigint }[];

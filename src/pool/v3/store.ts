@@ -67,7 +67,7 @@ import { decodeCommitment, encodeCommitment, signCommitment, verifyCommitment, t
 import { scopeSchedule } from "../schedule.js";
 import type { Snapshot } from "./commitments.js";
 import { POOL_V3, type Construction, type ReaderFrames } from "./construction.js";
-import { EvidenceStore, MAX_ITEM_BYTES, SERVED_PART_BYTES, SERVED_PART_ITEMS, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailTip } from "./evidence-store.js";
+import { EvidenceStore, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
@@ -1436,18 +1436,8 @@ export class V3OperatorJournal {
       const through = selected.commitment.sequence, from = after < through ? after : through;
       // Each segment's tops that no other of them reaches: one in the common case, one per fork where snapshots of a taken
       // predecessor lie on two (Next 4 (o)).
-      const tops = new Map<string, { readonly tip: TrailTip; readonly trail: StoredTrail }[]>(), batch = new Map<string, { kind: number; payload: Uint8Array; hash: Uint8Array }>();
-      let held = 0;
-      const add = (kind: number, payload: Uint8Array): void => {
-        const hash = sha256(payload), key = `${kind}:${bytesToHex(hash)}`;
-        if (!batch.has(key)) { batch.set(key, { kind, payload, hash }); held += payload.length; }
-      };
-      const full = (): boolean => batch.size >= SERVED_PART_ITEMS || held >= SERVED_PART_BYTES;
-      const packed = (): EvidencePart => {
-        const items = [...batch.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash));
-        batch.clear(); held = 0;
-        return { package: this.frames.package.encodeEvidencePackage(items) };
-      };
+      const tops = new Map<string, { readonly tip: TrailTip; readonly trail: StoredTrail }[]>();
+      const { add, full, empty, packed } = partPacker(this.construction);
       // A snapshot names the furthest record of its segment that a reader of it needs. Every segment this journal
       // signed keeps its trail, so an own snapshot without one is damage, never a shorter package; a taken snapshot
       // is served as it was taken, with its trail where that came too.
@@ -1504,7 +1494,7 @@ export class V3OperatorJournal {
           if (full()) yield packed();
         }
       }
-      if (batch.size > 0) yield packed();
+      if (!empty()) yield packed();
       // A reader served through `from` holds what this journal's own checkpoints through it name of each segment.
       const order = [...tops.values()].flatMap(frontier => frontier.map(top => top.tip).sort((a, b) =>
         a.position > b.position ? -1 : a.position < b.position ? 1 : compareBytes(a.evidence, b.evidence)));
