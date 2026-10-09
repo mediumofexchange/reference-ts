@@ -82,9 +82,10 @@ describe("real-proof gate", () => {
 });
 
 describe("real-proof groups", () => {
-  // The serial check:pool:v3 before CI split it into groups; nothing may drop out.
+  // The serial check:pool:v3 before CI split it into groups; nothing may drop out (the proof-free offline transfer check
+  // moved to check:scripts).
   const serial = [
-    "testnet.mjs --check", "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
+    "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
     "recovery-store-check.mjs", "recovery-store-check.mjs --ergo", "succession-store-check.mjs", "succession-store-check.mjs --ergo",
     "scope-store-check.mjs", "scope-store-check.mjs --ergo", "redemption-store-check.mjs", "redemption-store-check.mjs --ergo",
     "command-drill.mjs", "local-check.mjs",
@@ -92,7 +93,7 @@ describe("real-proof groups", () => {
 
   it("runs every script of the serial check once, each in one group", () => {
     expect(runner.SCRIPTS.map(entry => [entry.script, ...entry.args].join(" "))).toEqual(serial);
-    expect(runner.GROUPS).toEqual(["stores", "history", "redemption", "drill", "replay"]);
+    expect(runner.GROUPS).toEqual(["history", "stores", "redemption", "drill", "replay"]);
     for (const group of runner.GROUPS) expect(runner.SCRIPTS.some(entry => entry.group === group)).toBe(true);
   });
 
