@@ -119,6 +119,11 @@ function proofKey(kind: number, inputs: readonly bigint[], proof: Uint8Array): s
   frame.set(proof, 5 + 32 * inputs.length);
   return bytesToHex(sha256(frame));
 }
+/** A call's inputs and proof copied once, so its key and its verdict read the same values; the call as given where
+ * either is not what a decoded record passes (its key is then undefined). */
+const ownedCall = (inputs: bigint[], proof: Uint8Array): [bigint[], Uint8Array] =>
+  Array.isArray(inputs) && proof instanceof Uint8Array
+    ? [Array.from({ length: inputs.length }, (_, i) => inputs[i]!), new Uint8Array(proof)] : [inputs, proof];
 /**
  * The journal's verifier twice over one memory (WORK.md Next 4 (ay)): admission's, which remembers each proof it
  * verified, and its own reads', which ask the verifier only for a proof not remembered. A verdict depends on the
@@ -129,7 +134,8 @@ function proofKey(kind: number, inputs: readonly bigint[], proof: Uint8Array): s
  */
 export function rememberedProofs(verifier: DeclaredVerifier): { readonly admitting: DeclaredVerifier; readonly reading: DeclaredVerifier } {
   const verified = new Set<string>();
-  const admitting: DeclaredVerifier = { ...verifier, async verify(kind, inputs, proof) {
+  const admitting: DeclaredVerifier = { ...verifier, async verify(kind, given, givenProof) {
+    const [inputs, proof] = ownedCall(given, givenProof);
     const key = proofKey(kind, inputs, proof), verdict = await verifier.verify(kind, inputs, proof);
     if (verdict === true && key !== undefined) {
       verified.delete(key); verified.add(key);
@@ -137,7 +143,8 @@ export function rememberedProofs(verifier: DeclaredVerifier): { readonly admitti
     }
     return verdict;
   } };
-  const reading: DeclaredVerifier = { ...verifier, verify(kind, inputs, proof) {
+  const reading: DeclaredVerifier = { ...verifier, verify(kind, given, givenProof) {
+    const [inputs, proof] = ownedCall(given, givenProof);
     const key = proofKey(kind, inputs, proof);
     return key !== undefined && verified.has(key) ? true : verifier.verify(kind, inputs, proof);
   } };
