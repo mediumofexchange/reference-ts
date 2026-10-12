@@ -468,9 +468,10 @@ describe("replay storage", () => {
       for (let i = 0; i < 10; i++) store.append(walked, append([next()], [next()]));
       store.closeWalk(walk);
       const recorded = readFileSync(digest);
-      // The digest cannot be replaced for a moment (here a directory in its place): the commit stands, unnamed.
+      // The digest cannot be replaced for a moment (here a directory in its place: EISDIR, on Windows EPERM): the commit
+      // stands, unnamed.
       rmSync(digest); mkdirSync(digest);
-      expect(() => store.open(fieldToBytes(2n), new Uint8Array(32).fill(2), undefined, genesis)).toThrow(expect.objectContaining({ code: "EISDIR" }));
+      expect(() => store.open(fieldToBytes(2n), new Uint8Array(32).fill(2), undefined, genesis)).toThrow(expect.objectContaining({ syscall: "rename" }));
       rmSync(digest, { recursive: true }); writeFileSync(digest, recorded);
       // The failure has passed by the close, which records the digest before SQLite moves the log in.
       store.close();
