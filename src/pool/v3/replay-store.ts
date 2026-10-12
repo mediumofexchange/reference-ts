@@ -23,9 +23,9 @@
 //   segment imports from a read is copied in (`copyFrontier`).
 import { sha256 } from "@noble/hashes/sha2.js";
 import { createHash, hash, randomBytes } from "node:crypto";
-import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileIdentity } from "../../file-identity.js";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
@@ -485,6 +485,18 @@ function replaceFile(path: string, text: string): void {
   try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(partial, path);
 }
+/** The partial files `replaceFile` leaves beside `path` where it stopped before its rename (a crash): only a store that
+ * holds the kept file's lock and none of whose stores is open removes them, since no other writes one then. */
+function partialDigests(path: string): string[] {
+  const directory = dirname(path), name = basename(path);
+  let entries: string[];
+  try { entries = readdirSync(directory); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  return entries.filter(entry => entry.startsWith(`${name}.`) && /^\.\d+\.[0-9a-f]{8}\.partial$/.test(entry.slice(name.length)))
+    .map(entry => join(directory, entry));
+}
 /** Remove a kept file's files, in order. One another store still holds cannot be removed (Windows): the caller's error. */
 function removeFiles(files: readonly string[]): void {
   try { for (const file of files) rmSync(file, { force: true }); } catch (error) {
@@ -537,7 +549,7 @@ function lockKept(path: string): KeptLock {
     },
   };
 }
-/** Remove the files of a kept file no store holds: its log, the file and its digest, and `also` (a marker of the
+/** Remove the files of a kept file no store holds: its log, the file, its digest and any partial copy of it, and `also` (a marker of the
  * caller's). One a store holds, in this process or another, is left as it is (false). Its lock file stays: removed, a
  * store opening the file meanwhile and one after would each hold a lock of their own. */
 export function removeKeptFile(path: string, digest: string, also: readonly string[] = []): boolean {
@@ -547,7 +559,7 @@ export function removeKeptFile(path: string, digest: string, also: readonly stri
     if (error instanceof FileInUse) return false;
     throw error;
   }
-  try { removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, digest, ...also]); } catch (error) {
+  try { removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, digest, ...partialDigests(digest), ...also]); } catch (error) {
     if (error instanceof FileInUse) return false;
     throw error;
   } finally { lock.release(); }
@@ -638,7 +650,7 @@ export class ReplayStore {
 
   /** A private in-memory database by default: short reads and tests run the same code. A path with `kept`
    * is the party's kept state (§14): reopened only where the digest check passes, discarded otherwise, and
-   * committed with a new digest at each keep point. A path without `kept` is a new file used once.
+   * committed with a new digest at each keep point (a walk's, and every commit outside a walk). A path without `kept` is a new file used once.
    *
    * A host's open connection (one that reads integers as BigInt) places the store in the host's database
    * instead: the host owns its transactions and durability, a write made while the host's transaction is
@@ -663,6 +675,8 @@ export class ReplayStore {
         // A file another store of this process holds was judged when that store opened it, and is shared as it stands.
         if (this.#lock.first) {
           try {
+            // A replacement of the digest stopped before its rename left its partial file (Next 4 (bo)): no store writes one now.
+            removeFiles(partialDigests(kept.digest));
             held = keptFileHolds(path, kept.digest);
             // The log goes before the file: a log left beside a new file would be read into it.
             if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
@@ -690,8 +704,12 @@ export class ReplayStore {
     }
     // C2.10.6's union is a working set of one connection: it never changes the file, so a kept file's digest stands.
     this.#db.exec("CREATE TEMP TABLE IF NOT EXISTS merging (ns INTEGER PRIMARY KEY, upto INTEGER NOT NULL)");
-    // A reopened kept file passed the digest check: its recorded digest is the file's until a row changes.
+    // A reopened kept file passed the digest check: its recorded digest is the file's until a row changes. A new one
+    // records its digest over its layout at once, so every commit the file holds is vouched for (Next 4 (bm)).
     if (this.#kept !== undefined && existsSync(this.#kept.digest)) this.#digestedAt = this.#changes();
+    else if (this.#kept !== undefined) {
+      try { this.#recordDigest(); } catch (error) { this.close(); throw error; }
+    }
     const v = visible("x");
     this.#q = Object.fromEntries(Object.entries({
       tip: "SELECT * FROM namespace WHERE ns = ?",
@@ -852,16 +870,14 @@ export class ReplayStore {
     });
   }
   /** Deletions that commit only if `body` returns. Outside a transaction, a kept file commits them as a keep point does,
-   * with their digest: a log no digest vouches for is dropped on opening, which would restore what a discard had just
-   * rejected (§14). A file another store is writing refuses them as in use, before they commit or, where its log keeps
-   * the file from moving in, after: they then stand, vouched, and a retry finds them done. */
+   * with their digest (`#atomic`): a log no digest vouches for is dropped on opening, which would restore what a discard
+   * had just rejected (§14). A file another store is writing refuses them as in use, before they commit or, where its log
+   * keeps the file from moving in, after: they then stand, vouched, and a retry finds them done. */
   #forget(body: () => void): void {
-    const own = !this.#db.isTransaction;
     try { this.#atomic(body); } catch (error) {
       if (this.#kept !== undefined && error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
       throw error;
     }
-    if (own && this.#kept !== undefined) this.#recordDigest();
   }
   /** The kept note frontier of `ns` (leaf count and completed left subtrees), for §14's snapshot check. */
   frontier(ns: number): { readonly leaves: bigint; readonly ommers: readonly (bigint | undefined)[] } {
@@ -964,32 +980,41 @@ export class ReplayStore {
   /** Synchronous writes that stand only if `body` returns. */
   atomic<T>(body: () => T): T { return this.#atomic(body); }
 
-  #atomic<T>(body: () => T): T {
-    const name = `s${this.#savepoints++}`;
+  /** Writes inside a savepoint. Outside a walk or transaction the savepoint is its own transaction, and on a kept file
+   * its commit is a keep point: it records its digest (Next 4 (bm)). A commit no digest names would be moved into the
+   * file by the last store's close, and the next opening would discard the whole file. `vouch` false: the writes touch
+   * this connection's temporary tables only, never the file. */
+  #atomic<T>(body: () => T, vouch = true): T {
+    const own = !this.#db.isTransaction, name = `s${this.#savepoints++}`;
     this.#db.exec(`SAVEPOINT ${name}`);
+    let result: T;
     try {
-      const result = body();
+      result = body();
       this.#db.exec(`RELEASE ${name}`);
-      return result;
     } catch (error) {
       // SQLite may have rolled the whole transaction back itself (a full disk, an I/O error): then what was known goes too.
       if (this.#db.isTransaction) { this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`); } else this.#generation++;
       throw error;
     } finally { this.#savepoints--; }
+    if (own && vouch && this.#kept !== undefined) this.#recordDigest();
+    return result;
   }
 
   async #savepoint<T>(body: () => Promise<T>): Promise<T> {
-    const name = `s${this.#savepoints++}`;
+    const own = !this.#db.isTransaction, name = `s${this.#savepoints++}`;
     this.#db.exec(`SAVEPOINT ${name}`);
+    let result: T;
     try {
-      const result = await body();
+      result = await body();
       this.#db.exec(`RELEASE ${name}`);
-      return result;
     } catch (error) {
       // SQLite may have rolled the whole transaction back itself (a full disk, an I/O error): then what was known goes too.
       if (this.#db.isTransaction) { this.#db.exec(`ROLLBACK TO ${name}`); this.#db.exec(`RELEASE ${name}`); } else this.#generation++;
       throw error;
     } finally { this.#savepoints--; }
+    // As `#atomic`: a replay outside a walk on a kept file is a keep point.
+    if (own && this.#kept !== undefined) this.#recordDigest();
+    return result;
   }
 
   /** Drop every namespace that neither `keep` nor anything they import reads. Kept classes, scopes, bases and
@@ -1285,6 +1310,7 @@ export class ReplayStore {
   unionFacts(entries: readonly ImportEntry[]): UnionFacts {
     const m = "JOIN merging m ON x.ns = m.ns AND x.position <= m.upto";
     const any = (sql: string): boolean => this.#db.prepare(sql).get() !== undefined;
+    // `merging` is a temporary table: nothing here changes a kept file, so no digest is recorded.
     return this.#atomic(() => {
       const put = this.#db.prepare("INSERT INTO merging VALUES (?, ?)");
       for (const entry of entries) put.run(entry.ns, entry.upto);
@@ -1309,7 +1335,7 @@ export class ReplayStore {
         }
         return { repeatedNullifier, repeatedOutput, repeatedRecovery, shared, supply };
       } finally { this.#db.exec("DELETE FROM merging"); }
-    });
+    }, false);
   }
 
   // --- A read's walk: verdicts, valid candidates, scopes, bases, publications ---------------

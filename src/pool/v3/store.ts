@@ -615,9 +615,11 @@ export class V3OperatorJournal {
     }
     return this.reading;
   }
-  /** Open the kept state of the journal's own reads now, where a read has kept one: §14's check on opening hashes the
-   * whole file, which `serve` pays before it listens rather than in a restarted journal's first admission
-   * (Next 4 (bb)). A file another process holds leaves it BUSY.
+  /** Open the kept state of the journal's own reads now: §14's check on opening hashes the whole file, which `serve`
+   * pays before it listens rather than in a restarted journal's first admission (Next 4 (bb)). One no read has kept yet
+   * is begun, so `serve` holds its version's file from its start: a `prepare` of the same version beside it is refused
+   * BUSY, rather than holding the file and leaving the service's admissions BUSY while it reads (Next 4 (bn)). A file
+   * another process holds leaves it BUSY.
    *
    * Serving marks this version's reads as served (`<file>.served`). Other versions' reads that have served, and the one
    * file kept before Next 4 (bg), are removed where no handle holds them: a version this one replaced. One prepared
@@ -626,7 +628,7 @@ export class V3OperatorJournal {
     requireThat(!this.closed, "STORAGE", "store is closed");
     requireThat(!this.beside, "STORAGE", "a handle beside the owner keeps no reads but its prepared ones");
     // Marked served and the replaced versions removed even where another process still holds this version's file.
-    try { if (existsSync(this.readsPath)) this.reads(); } finally { this.removeReplacedReads(); }
+    try { this.reads(); } finally { this.removeReplacedReads(); }
   }
   private removeReplacedReads(): void {
     writeFileSync(`${this.readsPath}.served`, "");
