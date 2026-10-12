@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-12` [Judge each slice against a practical medium of exchange for ordinary holders, and reopen the second venue (direction)](decisions/2026-10.md#2026-10-12--judge-each-slice-against-a-practical-medium-of-exchange-for-ordinary-holders-and-reopen-the-second-venue-direction)
 - `2026-10-12` [Prepare a new version's kept reads beside the serving operator, and hold one handle per kept file (Next 4 (bg))](decisions/2026-10.md#2026-10-12--prepare-a-new-versions-kept-reads-beside-the-serving-operator-and-hold-one-handle-per-kept-file-next-4-bg)
 - `2026-10-09` [Rebuild a kept lit namespace's own demand rows from its trail at any position, and make no namespace over rows it already holds (Next 4 (bf), slice 19 M19b)](decisions/2026-10.md#2026-10-09--rebuild-a-kept-lit-namespaces-own-demand-rows-from-its-trail-at-any-position-and-make-no-namespace-over-rows-it-already-holds-next-4-bf-slice-19-m19b)
 - `2026-10-09` [One loopback listener and one serve frame for the operator, a replica and a relay (simplify)](decisions/2026-10.md#2026-10-09--one-loopback-listener-and-one-serve-frame-for-the-operator-a-replica-and-a-relay-simplify)
