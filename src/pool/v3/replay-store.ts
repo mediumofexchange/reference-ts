@@ -831,11 +831,22 @@ export class ReplayStore {
   discardKept(): void {
     if (this.#db.isTransaction || this.#replaying) throw new Error("a walk is open on this store");
     this.#generation++;
-    this.#atomic(() => {
+    this.#forget(() => {
       for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
       this.#db.prepare("DELETE FROM kept_context").run();
       if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
     });
+  }
+  /** Deletions that stand only if `body` returns. Outside a transaction, a kept file commits them as a keep point does,
+   * with their digest: a log no digest vouches for is dropped on opening, which would restore what a discard had just
+   * rejected (§14). A file another store is writing refuses them as in use. */
+  #forget(body: () => void): void {
+    const own = !this.#db.isTransaction;
+    try { this.#atomic(body); } catch (error) {
+      if (this.#kept !== undefined && error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      throw error;
+    }
+    if (own && this.#kept !== undefined) this.#recordDigest();
   }
   /** The kept note frontier of `ns` (leaf count and completed left subtrees), for §14's snapshot check. */
   frontier(ns: number): { readonly leaves: bigint; readonly ommers: readonly (bigint | undefined)[] } {
@@ -976,7 +987,7 @@ export class ReplayStore {
     const dead = (this.#db.prepare("SELECT ns FROM namespace").all() as { ns: bigint }[]).map(r => Number(r.ns)).filter(ns => !live.has(ns));
     if (dead.length === 0) return;
     this.#generation++;
-    this.#atomic(() => {
+    this.#forget(() => {
       for (const table of NAMESPACE_TABLES) {
         const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
         for (const ns of dead) drop.run(ns);
@@ -1048,7 +1059,7 @@ export class ReplayStore {
     const read = (sql: string): boolean => this.#db.prepare(sql).get(ns) !== undefined;
     if (read("SELECT 1 FROM import WHERE source = ? LIMIT 1") || read("SELECT 1 FROM base_import WHERE ns = ? LIMIT 1") ||
         read("SELECT 1 FROM verdict WHERE ns = ? LIMIT 1")) throw new Error("the namespace is still read");
-    this.#atomic(() => { for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`).run(ns); });
+    this.#forget(() => { for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`).run(ns); });
   }
 
   // --- Reads at (ns, p) -------------------------------------------------------------------

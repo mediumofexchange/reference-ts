@@ -395,6 +395,34 @@ describe("replay storage", () => {
     } finally { for (const store of stores) store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it("keeps a discard and a collection through a crash right after them: each commits with its digest (§14, review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-discard-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7);
+    /** The store stopped where it stands: its files as they lie, written back in place so the file keeps its identity. */
+    const crashed = (store: ReplayStore): ReplayStore => {
+      const lying = [path, `${path}-wal`, digest].map(file => [file, existsSync(file) ? readFileSync(file) : undefined] as const);
+      store.close();
+      for (const [file, bytes] of lying) if (bytes === undefined) rmSync(file, { force: true }); else writeFileSync(file, bytes);
+      rmSync(`${path}-shm`, { force: true });
+      return new ReplayStore(path, { digest });
+    };
+    let store = new ReplayStore(path, { digest });
+    try {
+      const { walk } = store.openWalk(context), segments = [1n, 2n].map(n => store.open(fieldToBytes(n), new Uint8Array(32).fill(2), undefined, genesis));
+      for (const ns of segments) for (let i = 0; i < 20; i++) store.append(ns, append([next()], [next()]));
+      store.keepAnswer(1, new Uint8Array(32).fill(5), () => ({ through: 9n, value: 3n }));
+      store.closeWalk(walk);
+      store.collect([segments[1]!]);
+      store = crashed(store);
+      expect([store.hasNamespace(segments[0]!), store.hasNamespace(segments[1]!)]).toEqual([false, true]);
+      expect(store.keptAnswer(1, new Uint8Array(32).fill(5))).toEqual({ through: 9n, value: 3n });
+      store.discardKept();
+      store = crashed(store);
+      expect(store.hasNamespace(segments[1]!)).toBe(false);
+      expect(store.keptAnswer(1, new Uint8Array(32).fill(5))).toBeUndefined();
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it("keeps one object per venue position: a position answered for a second backing leaves the read unresolved (§13.1)", () => {
     const store = new ReplayStore(), backingA = new Uint8Array(32).fill(1), backingB = new Uint8Array(32).fill(2);
     try {
