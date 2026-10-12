@@ -818,7 +818,10 @@ export class V3OperatorJournal {
   private rescopeTarget(engine: Engine, spec: OwnRescope, at: bigint): { readonly opened: Opened; readonly taken: readonly Scoped[];
     readonly links: ReadonlyMap<string, ChainLink> } {
     const old = engine.opened, taken = this.scoped(spec.take), links = new Map<string, ChainLink>();
-    requireThat(spec.keep.length === 0 || (old !== undefined && !engine.pendingReturn), "STALE", "only an adopted segment's backings can be kept");
+    // A pending opening's backings are kept once it is witnessed: its term may end, or another backing of its scope
+    // lapse, before it is adopted, and its own checkpoint is then the canonical state each kept backing imports.
+    requireThat(spec.keep.length === 0 || (old !== undefined && (!engine.pendingReturn || this.isHeld(at, engine.last!))), "STALE",
+      "only an adopted or witnessed segment's backings can be kept");
     const kept = spec.keep.map(name => {
       const entry = old?.entries.find(scoped => same(scoped.backing, name));
       requireThat(entry !== undefined, "REFUSED", "a kept backing is outside the active scope", "SCOPE");
@@ -849,7 +852,8 @@ export class V3OperatorJournal {
     }
     if (old !== undefined && !lapsed) {
       const last = engine.last!;
-      requireThat(!engine.pendingReturn && same(last.segment, old.segment) && last.length === engine.state!.position &&
+      // A witnessed pending opening has no tail: nothing is co-signed before its adoption.
+      requireThat(same(last.segment, old.segment) && last.length === engine.state!.position &&
         this.isHeld(at, last), "STALE", "an elective scope change first witnesses the whole tail", "TAIL");
     }
     const sequence = this.nextSequence(engine);
@@ -1241,7 +1245,8 @@ export class V3OperatorJournal {
    * returns from its one canonical checkpoint (C2.10.3). Old bytes stay as evidence, not live accepted state. */
   private returnOpening(engine: Engine, source: StateRead, at: bigint, restored?: bigint): Opened {
     const old = engine.opened!;
-    requireThat(!engine.pendingReturn && source.clock?.boundary !== null && source.clock?.boundary !== undefined &&
+    // The canonical checkpoint is the active segment's: for a pending opening, the opening itself, witnessed.
+    requireThat(source.clock?.boundary !== null && source.clock?.boundary !== undefined &&
       BigInt(source.clock.boundary) <= at && same(source.canonical.segment, old.segment), "STALE", "return needs the active segment's witnessed silence boundary", "SILENCE");
     const sequence = restored ?? this.nextSequence(engine), predecessor = source.canonical.commitment;
     const header: SegmentHeader = { ...old.header, sequence, entries: old.header.entries.map(({ backing, link }) => ({ backing, link,
@@ -1263,7 +1268,11 @@ export class V3OperatorJournal {
       }
       const view = this.view(engine);
       this.exclusive(view);
-      requireThat(engine.opened !== undefined && !engine.pendingReturn, "STALE", "a return is already pending or no segment exists");
+      requireThat(engine.opened !== undefined, "STALE", "no segment exists");
+      // A pending opening is left by its adoption, or, once witnessed, by a return from it: where its own silence boundary
+      // passes before it is adopted, only a new segment can return (C2b.4.1), and that segment's block reaches back
+      // through both gaps from the adoption index it inherits.
+      requireThat(!engine.pendingReturn || this.isHeld(view.now, engine.last!), "STALE", "a return is already pending: publish and adopt it");
       const fence = this.restoration();
       requireThat(fence?.opening === undefined, "RESTORED", "the restoration's opening is signed: adopt it");
       const schedule = scopeSchedule({ now: view.now, lag: view.lag, boundaries: view.boundaries,
