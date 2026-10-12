@@ -116,10 +116,12 @@ async function exchangeWith<T>(baseUrl: string, onion: boolean, path: string, to
         ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
         headers: { ...(token === undefined ? {} : { authorization: `Bearer ${token}` }), "content-type": "application/json", "accept-encoding": "identity" } });
     } catch (error) {
-      // A proxy that refused the tunnel itself (Tor refuses an internal address 403) is the holder's own route, named
-      // with its status; one that answered the service's failure (Tor's 500, 503, 504) leaves a service that did not answer.
+      // A proxy that refused to tunnel a URL that is no onion (Tor refuses an internal address 403) is the holder's own
+      // route, named with its status. An onion's refusal stays a service that did not answer, whatever its status: Tor
+      // also answers 403 for the service's own END reasons (connection refused or reset), so a source could otherwise
+      // stop a holder's read instead of being passed over.
       const refused = tunnelStatus(error);
-      if (refused !== undefined && refused < 500) throw proxyRefusal(`the proxy refused the tunnel (${refused})`);
+      if (refused !== undefined && proxy === undefined && refused < 500) throw proxyRefusal(`the proxy refused the tunnel (${refused})`);
       // An onion request opens a connection to the proxy alone: a connection that fails is the proxy's, named rather than
       // read as an operator that did not answer (a name with several addresses fails as an AggregateError).
       const cause = (error as { cause?: unknown }).cause;

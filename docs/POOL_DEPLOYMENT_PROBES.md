@@ -1587,7 +1587,7 @@ syncs exited 0 on kept evidence while the operator was up; an agent gets a stale
 one but by the evidence field. Node's `fetch` drops a proxy's refusal status, so a holder file naming an internal
 address reads as an operator that did not answer, not as Tor's refusal. Both fixed
 ([decision](../decisions/2026-10.md#2026-10-12--give-an-onion-exchange-time-for-tors-circuit-and-name-a-proxys-refusal-of-a-tunnel-next-4-bj)):
-an onion exchange's response may begin 50 s later, and a refused tunnel refuses as `PROXY`.
+an onion exchange's response may begin 50 s later, and a proxy's refusal to tunnel an internal address refuses as `PROXY`.
 
 *Limits:* one host, one Tor release, a few samples per case on a loaded laptop; the synthetic chain and lit
 backings, so no real proofs crossed Tor; latency to an onion service on another network was not measured.

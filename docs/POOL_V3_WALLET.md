@@ -639,9 +639,9 @@ unless `fetch` will tunnel it through a loopback `http:` proxy: the environment 
 `--use-env-proxy`), `http_proxy` (or, where it is unset, `HTTP_PROXY`) such a proxy, and `NO_PROXY` not exempting it;
 a proxy that does not answer refuses as `PROXY` too. A remote proxy is refused because it could answer for the onion
 and take the wallet token. A malformed `HTTP_PROXY` stops Node before `moe` runs. `NO_PROXY=127.0.0.1` keeps a local
-node and a loopback service direct: Tor refuses connections to internal addresses (403), and a proxy's refusal of a
-tunnel (below 500) refuses as `PROXY` with its status, while its answer for an onion that failed (Tor's 500, 503 or
-504) reads as a service that did not answer. A remote node goes through the same proxy. `init` fetches
+node and a loopback service direct: Tor refuses connections to internal addresses (403), and a proxy's refusal to
+tunnel a URL that is no onion (below 500) refuses as `PROXY` with its status. Any failure the proxy answers for an
+onion (Tor's 403 for a connection the service refused, 500, 502, 503 or 504) reads as a service that did not answer. A remote node goes through the same proxy. `init` fetches
 the proving parameters, so run it under the same environment or copy them with `--parameters`.
 
 An onion exchange waits 50 s longer than a loopback one (10 s) for its response to begin, since Tor builds the circuit

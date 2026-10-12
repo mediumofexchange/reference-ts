@@ -134,9 +134,9 @@ for `sync`, 256 MiB for `package`), and the evidence store's own quota
 bounds the parts of one sync together. These are local limits, not protocol
 bounds.
 
-The client aborts a command after ten seconds, and a served stream ten seconds
-after its last chunk; through an onion service, the response may begin fifty
-seconds later, while Tor builds the circuit ([(bj)](../decisions/2026-10.md#2026-10-12--give-an-onion-exchange-time-for-tors-circuit-and-name-a-proxys-refusal-of-a-tunnel-next-4-bj)). The server closes a pending command response after
+The client waits ten seconds for a command's response to begin and ten more for
+its reply, and aborts a served stream ten seconds after its last chunk; through
+an onion service, the response may begin fifty seconds later, while Tor builds the circuit ([(bj)](../decisions/2026-10.md#2026-10-12--give-an-onion-exchange-time-for-tors-circuit-and-name-a-proxys-refusal-of-a-tunnel-next-4-bj)). The server closes a pending command response after
 fifteen seconds measured from the request callback, after headers arrive. A
 served stream is closed fifteen seconds after its last write. Each side also
 ends a stream once the time it waited on the other passes fifteen seconds and
