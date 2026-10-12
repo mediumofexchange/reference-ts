@@ -45,7 +45,8 @@ Sidechains, Liquid (federated), Lightning and ecash (Fedimint, Cashu) give no in
 
 **Second venue: Bitcoin.** This agrees with the 2026-08-27 direction and adds new evidence:
 - *For Bitcoin:* it has the deepest PoW by four orders of magnitude, practically no deep reorgs, and cheap header verification. Depth 2–3 (a lag of 30–40 min, with high variance) plausibly gives more safety than Ergo at depth 10. Core v30 removed the 80-byte OP_RETURN obstacle, so kinds 1–3 fit in one OP_RETURN each, and a kind-4 run maps onto adjacent OP_RETURN outputs, as on Ergo. The chain is also the native home of the most widely held asset, which is a prerequisite for atomic BTC legs (C3).
-- *Against Bitcoin:* (a) §13.2 exhaustion costs about 118 MB/day if records sit in OP_RETURN, or about 236 MB/day if they sit in the witness ([probe 2](#results-of-probes-1-and-2-slice-16)). That is 29–58× Ergo's sections. A year from the anchor is about 43–86 GB, so a Bitcoin reader is a desktop or server role, not a phone. The 2026-08-27 plan to "anchor roots, serve leaves" does not avoid this, because absence still needs exhaustion. (b) The data policy is contested at the social layer. BIP-110 failed, but filtering nodes (Knots, 21% of reachable nodes in Aug 2025) and pool policy could delay records. (c) Cost: about 1,000 sats per KB in OP_RETURN, or about 250 sats in witness, at 1 sat/vB (mempool.space recommended 1 sat/vB on 2026-10-05). Since 2025 the busiest block median was 13 sat/vB, and the 2024-04-20 halving reached medians of 491–1,178 sat/vB (mempool.space fee-rate history, [slice 20](#absence-for-one-subject-slice-20)).- *Security note for a Bitcoin profile:* the section rule must refuse Bitcoin's duplicated-last-leaf Merkle mutation (CVE-2012-2459) and 64-byte-transaction ambiguity. It must also bind the witness commitment if records sit in the witness.
+- *Against Bitcoin:* (a) §13.2 exhaustion costs about 118 MB/day if records sit in OP_RETURN, or about 236 MB/day if they sit in the witness ([probe 2](#results-of-probes-1-and-2-slice-16)). That is 29–58× Ergo's sections. A year from the anchor is about 43–86 GB, so a Bitcoin reader is a desktop or server role, not a phone. The 2026-08-27 plan to "anchor roots, serve leaves" does not avoid this, because absence still needs exhaustion. (b) The data policy is contested at the social layer. BIP-110 failed, but filtering nodes (Knots, 21% of reachable nodes in Aug 2025) and pool policy could delay records. (c) Cost: about 1,000 sats per KB in OP_RETURN, or about 250 sats in witness, at 1 sat/vB (mempool.space recommended 1 sat/vB on 2026-10-05). Since 2025 the busiest block median was 13 sat/vB, and the 2024-04-20 halving reached medians of 491–1,178 sat/vB (mempool.space fee-rate history, [slice 20](#absence-for-one-subject-slice-20)).
+- *Security note for a Bitcoin profile:* the section rule must refuse Bitcoin's duplicated-last-leaf Merkle mutation (CVE-2012-2459) and 64-byte-transaction ambiguity. It must also bind the witness commitment if records sit in the witness.
 
 **Cheapest decisive probes, in order:**
 1. *Offline policy probe* (hours, GET only). Over the last 2,016 mainnet blocks, count OP_RETURN outputs larger than 83 B and multi-OP_RETURN transactions, grouped by pool tag. **It falsifies the plan** if major pools exclude them, which would leave only the witness envelope, itself censorable by the same filters.
@@ -162,7 +163,7 @@ The per-subject columns multiply by the holder's subject count. Exhaustion's col
 - *Per-block cost:* its blocks come every 2.87 s, 30,127 a day. One namespace's absence in a block costs a 404-byte header plus 0.7–1.9 KB of proof. That is estimated from the namespaced tree's layout at the measured square widths (median 8, p90 32): the row path with its neighbouring leaf, the row root and its path to the data root, and twice that, slightly overcounted, when the namespace falls between two rows. That is 5–9 times Ergo's exhaustion for one subject, and more for three.
 - *Trust:* finality is a validator vote with a 7-day trusting period. Independent verification from the anchor fails for any holder offline longer than that.
 - *Retention:* nodes keep data for a week, so reads from index zero depend on archival suppliers.
-- *Cost:* its fees are below Ergo's gross cost, but not below Ergo's net cost once box value is recovered.
+- *Cost:* a 136 B record costs less than Ergo's fee alone. A 15.5 KB release costs less than Ergo's gross cost, but not less than Ergo's net cost once box value is recovered.
 - *Other chains:* other data-availability chains share the per-block shape (judgment; not measured).
 
 **Bitcoin is no phone venue under any design available today.**
@@ -194,17 +195,19 @@ It has these costs:
   - *Cost to the attacker:* a stranger can race each honest append. At the minimum fee that costs at least 0.0011 ERG per contested block, about $0.26 a day. Against fee replacement it becomes a fee war.
   - *The registry is one box,* so every new subject's first append competes globally, including a key's first revocation.
   - *Motivated attackers:* a thief of K can race K's revocation, which keeps the thief's issuance standing (C2b.1). A competitor can race an operator's commitments so that the operator looks silent.
-  - *Mitigations:* several lanes per subject raise the attacker's cost linearly. Owner lanes, where a subject-bound spend key is required for kinds 1–3, defeat strangers but not a thief holding K. Kind 4 stays open to every holder.
+  - *Mitigations:* several lanes per subject raise the attacker's cost linearly. Owner lanes, where a subject-bound spend key is required for kinds 1–3, defeat strangers. Whether they also defeat a thief holding K is a design choice: if K binds each lane's key once and no later binding can disable an earlier lane, a thief can add lanes but cannot spend the honest one. Kind 4 stays open to every holder.
   - *Log growth:* strangers' appends lengthen a subject's log, bounded by their fees.
 - **Storage rent.** Ergo lets anyone spend a box older than 1,051,200 blocks (about four years) whose value does not cover its storage fee, by default 1.25·10⁶ nanoERG a byte (protocol rule; not re-verified against source).
   - *The risk:* an idle log, such as an obligor key that is never revoked, could then be taken and its head rewritten.
   - *The fix:* the guard must require a rent reserve on every append.
 - **A specification change.** §13.2 requires that "absence is proven by exhaustion rather than reported". Relaxing that is a pool-v4 question under C0a. It would come with a new Ergo venue identity whose attribution is by log rather than by location, and scripts would enter the record path, which venue-ergo keeps free of them.
 
-**The succinct proof of exhaustion keeps exhaustion's trust.**
+**The succinct proof of exhaustion keeps exhaustion's trust in the venue.**
 - *How it works:* a prover runs §13.2's scan over a range's headers and sections, and proves in the declared proof system that the scan matches the roots. One proof per period can commit to a map from each kind and subject to its objects. A phone then checks one proof per period and a lookup per subject.
 - *What it avoids:* the contended box, the rent and a new attribution rule.
 - *Trust:* the phone still chooses the most-work chain among the suppliers' proofs.
+  - *The proof system:* the phone also relies on the proof system's soundness and its setup. These are a primitive E already declares.
+  - *The difficulty rule:* exhaustion's trust holds only if the circuit checks the difficulty rule from the anchor, as venue-ergo §3 does. Otherwise the proof inherits the suffix proof's honest-prover assumption. The probe's scope includes that check.
 - *Cost:* Ergo hashes with Blake2b-256 over 64-bit words, which is costly in a BN254 circuit. Proving about 6 MB of sections and 719 headers' Autolykos checks a day is unmeasured.
 - *Specification:* it too needs §13.2 to admit a verified proof in place of retained evidence, a pool-v4 question.
 - *Fit:* it shares machinery with the succinct relation that a phone already needs for the kind-4 trail.
@@ -217,7 +220,7 @@ It has these costs:
 - *The state-root log is the fallback,* if that cost fails. Its testnet probe must pass three gates:
   1. the attacker's cost per block of delay, against a demand's C3.3 window and a key thief's gain;
   2. rent reserves;
-  3. a stated answer to forged absence at Ergo's measured mining concentration.
+  3. no single miner holds a majority of recent blocks when the log is adopted, re-measured then. Today this gate fails: one address mined 51% of recent blocks.
 - *If neither route passes,* a phone's absence stays at Ergo's exhaustion: about 2 GB a year from the anchor, workable in steady state on Wi-Fi but heavy for a first sync.
 - *Not pursued as venues:* Celestia and other namespaced data-availability chains.
 - *Bitcoin:* its mainnet publication (real funds; Open questions) stays held. A Bitcoin-venue backing cannot reach phone holders, so it serves only desktop-held backings that want its security budget. That case is weighed after the phone path is decided.
