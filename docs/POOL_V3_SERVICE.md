@@ -193,8 +193,8 @@ first admission or keep-alive commit replays the whole history inside `serve`'s 
    writes the new version's reads file. It prints `{ "status": "prepared", "index": … }`, or `unneeded` where the
    scope has no silence or non-service clause and no taken term, so `serve` never reads its history.
    - It can take as long as a whole replay. Stopped part way, it resumes where it kept its progress.
-   - `BUSY` means another process holds this version's reads file (a `serve` of the same version, or another
-     `prepare`), or the journal's write lock, which the one lineage row it adds to `journal.db` waits on for 5 s.
+   - `BUSY` means another process holds this version's reads file (a `serve` of the same version, which holds it from
+     its start, or another `prepare`), or the journal's write lock, which the one lineage row it adds to `journal.db` waits on for 5 s.
    - Besides the reads file it leaves its lock file (`<reads file>.lock`), and SQLite's `-wal`/`-shm` files beside
      `journal.db` and `venue.db` where no `serve` runs.
 3. If the old `serve` kept running for long (many admissions), run `prepare` again; it reads only what is new.
