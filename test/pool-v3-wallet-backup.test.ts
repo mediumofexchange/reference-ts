@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
@@ -258,6 +258,13 @@ describe.skipIf(!supported)("v3 wallet offline handoff and seed restoration", ()
     expect((await copy.fulfill("second", served, f.signed, { uncredited: true })).request).toEqual(f.second);
     expect(copy.restoredRequests()).toEqual(["unpaid"]);
     expect(copy.request("fresh", f.backing, 1n).cm).not.toBe(f.unpaid.cm);
+    // A second name of one file (a hard link) keeps its own write-ahead log and lock index: neither the owner fence nor
+    // the file's identity holds across the two, so the wallet refuses the file under either name.
+    copy.close();
+    linkSync(f.path("backup"), f.path("linked"));
+    for (const name of ["backup", "linked"]) throws(() => V3Wallet.open(f.path(name), f.reader), expect.objectContaining({ code: "STORAGE" }));
+    rmSync(f.path("linked"));
+    track(V3Wallet.open(f.path("backup"), f.reader)).close();
   });
 
   it("acts on nothing once a read shows another instance of its seed spending a note it held, until its restoration is recorded (M13f)", async () => {

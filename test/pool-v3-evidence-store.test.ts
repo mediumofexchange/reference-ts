@@ -507,9 +507,16 @@ describe("v3 evidence store", () => {
     }, whole);
     // The top row's position: not a shorter trail, but none.
     damaged(() => file.sql("UPDATE chain SET position = 0 WHERE evidence = ?", chain[4]!), batch => expect(servedAt(4)(batch)).toBeUndefined(), whole);
-    // A chain value under another key, a missing record, a moved position, a changed link read alone.
-    damaged(() => file.sql("UPDATE chain SET evidence = ? WHERE position = 3", b(1)), batch => expect(() => whole(batch)).toThrow(unresolved), whole);
-    damaged(() => file.sql("DELETE FROM chain WHERE evidence = ?", chain[3]!), batch => expect(() => recordsOf(servedAt(4)(batch), 2n)).toThrow(unresolved), whole);
+    // A chain value under another key or a missing record below the top: the top's own step reads the row before it (its
+    // frame size continues that row's), so the trail through it is none. A moved position, a changed link read alone.
+    damaged(() => file.sql("UPDATE chain SET evidence = ? WHERE position = 3", b(1)), batch => expect(servedAt(4)(batch)).toBeUndefined(), whole);
+    damaged(() => file.sql("DELETE FROM chain WHERE evidence = ?", chain[3]!), batch => expect(servedAt(4)(batch)).toBeUndefined(), whole);
+    damaged(() => file.sql("DELETE FROM chain WHERE evidence = ?", chain[2]!), batch => expect(() => recordsOf(servedAt(4)(batch), 1n)).toThrow(unresolved), whole);
+    // A row's frame size, stated before a served trail's records (§10): the trail it tops is none, one it lies inside unresolved.
+    damaged(() => file.sql("UPDATE chain SET size = size + 1 WHERE position = 2"), batch => {
+      expect(servedAt(2)(batch)).toBeUndefined();
+      expect(() => whole(batch)).toThrow(unresolved);
+    }, whole);
     damaged(() => file.sql("UPDATE chain SET position = 9 WHERE position = 2"), batch => expect(() => whole(batch)).toThrow(unresolved), whole);
     damaged(() => file.sql("UPDATE chain SET prev = ? WHERE position = 2", b(1)), batch => expect(() => servedAt(4)(batch)!.evidence(2n)).toThrow(unresolved),
       batch => servedAt(4)(batch)!.evidence(2n));

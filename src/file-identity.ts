@@ -15,3 +15,11 @@ export function fileIdentity(path: string): string {
   const { ino, birthtimeNs } = statSync(path, { bigint: true });
   return BIRTH_TIME && birthtimeNs !== 0n ? `${ino}:${birthtimeNs}` : `${ino}`;
 }
+
+/** Whether the file at `path` has another name (a hard link). SQLite keeps a database's write-ahead log and its lock
+ * index under the name it was opened by, so two names are two databases over one file: neither sees the other's
+ * uncheckpointed writes or locks, and both pass the owner fence and the identity above (audit of the journal). A store
+ * whose fence guards what it signs or spends refuses such a file. */
+export function otherNames(path: string): boolean {
+  return statSync(path, { bigint: true }).nlink > 1n;
+}

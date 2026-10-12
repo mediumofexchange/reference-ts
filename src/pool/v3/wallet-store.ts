@@ -28,7 +28,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
-import { fileIdentity } from "../../file-identity.js";
+import { fileIdentity, otherNames } from "../../file-identity.js";
 import { verifySignatureStrict } from "../../keys.js";
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
@@ -464,6 +464,8 @@ export class V3Wallet {
       this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA temp_store=MEMORY;");
       requireThat(this.db.prepare("PRAGMA journal_mode").get()?.journal_mode === "wal" &&
         this.db.prepare("PRAGMA synchronous").get()?.synchronous === 2, "STORAGE", "WAL and FULL synchronization required");
+      // Its owner fence holds only over one name of the file.
+      requireThat(!otherNames(path), "STORAGE", "the wallet's file has another name (a hard link), which SQLite reads as another database");
       this.db.exec("BEGIN IMMEDIATE");
       // An earlier receiver-only profile's seed is never silently replaced.
       requireThat(this.db.prepare("SELECT 1 FROM sqlite_schema WHERE name='receiver_identity'").get() === undefined,

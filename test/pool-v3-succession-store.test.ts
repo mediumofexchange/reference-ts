@@ -90,7 +90,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
       if (selected === undefined) throw new Error("missing active header");
       return { domain, header: selected };
     };
-    return { venue, signed, backing, context, funded, input, inputs, create, replace, issue, spend, read, openingContext };
+    return { directory, venue, signed, backing, context, funded, input, inputs, create, replace, issue, spend, read, openingContext };
   }
   async function fundedFixture(silence = false) {
     const f = fixture(silence), a = f.create();
@@ -173,6 +173,16 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     await expect(successor.takeover("empty-lie", f.signed, encodeEvidencePackage([])))
       .rejects.toMatchObject({ code: "UNAVAILABLE" });
     expect((await successor.takeover("retry", f.signed, f.held.package)).sequence).toBe(1n);
+  });
+
+  it("refuses a taken object that no longer reads back as damage, never serving without it", async () => {
+    const f = await transferred();
+    f.successor.close();
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(join(f.directory, "b.db"));
+    expect(Number(db.prepare(`UPDATE object SET payload = zeroblob(length(payload))
+      WHERE kind = 4 AND hash = (SELECT hash FROM journal_taken WHERE kind = 4 ORDER BY hash LIMIT 1)`).run().changes)).toBe(1);
+    db.close();
+    await expect(f.create(bSecret, "b").package()).rejects.toMatchObject({ code: "STORAGE", message: "a taken object is missing" });
   });
 
   it("keeps nothing of a refused takeover's evidence: later attempts cannot lean on it", async () => {

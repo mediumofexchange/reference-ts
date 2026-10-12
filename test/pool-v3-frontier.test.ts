@@ -119,7 +119,7 @@ async function compactFixture(failure: "PROOF" | "SIGNATURE" = "PROOF", validTai
     readPackage(pack([...items, ...faults.map(payload => ({ kind: 7, payload })),
       { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
     f.selection(commitment), options);
-  return { f, opening, predecessor, hostile, selected, fault, compactItems, readCompact, readSelected };
+  return { f, opening, predecessor, hostile, selected, fault, compactItems, readCompact, readSelected, verifier: proofVerifier };
 }
 
 // Each read keeps its state in its own store under its own verifier. Compare
@@ -429,5 +429,24 @@ describe("single-backing compact fault packages", () => {
     const actual = await pending;
     expect({ ...actual, canonical: canonicalEvidence(actual.canonical) })
       .toEqual({ ...expected, canonical: canonicalEvidence(expected.canonical) });
+  });
+
+  it("lets a successor journal take over past a compact exclusion only from evidence it keeps and serves (C2.7.4)", async () => {
+    const f = await compactFixture(); f.f.replace();
+    const { V3OperatorJournal } = await import("../src/pool/v3/store.js"), dir = mkdtempSync(join(tmpdir(), "moe-compact-takeover-"));
+    const j = new V3OperatorJournal(join(dir, "journal.db"), { secret: nextSecret, venue: f.f.venue, reference, verifier: f.verifier });
+    try {
+      // A fault is one read's own item, which the journal neither keeps nor serves: the takeover refuses before it signs,
+      // rather than publishing an opening that neither it nor a reader of it could read again.
+      await expect(j.takeover("compact", f.f.signed, pack([...f.compactItems, { kind: 7, payload: f.fault }]))).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      expect((await j.status()).signed).toBeUndefined();
+      // The whole trail is evidence it keeps: it takes over, adopts, and a fresh reader reads what it serves alone.
+      expect((await j.takeover("complete", f.f.signed, pack(f.f.items))).sequence).toBe(1n);
+      await j.publish(); f.f.venue.advance(f.f.venue.witnessedIndex() + lag + 1n);
+      expect(await j.adopt()).toEqual([]);
+      const served = await j.package();
+      expect((await readPackage(served.package, { ...served.selection, judgingIndex: f.f.venue.witnessedIndex(), mode: "current-fixture" },
+        { ...f.f.options, verifier: f.verifier })).state).toBeDefined();
+    } finally { j.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 });

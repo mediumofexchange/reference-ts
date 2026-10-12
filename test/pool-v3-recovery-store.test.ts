@@ -8,7 +8,7 @@ import { NoteTree } from "../src/pool/note-tree.js";
 import { commitmentOf, ownerOf } from "../src/pool/notes.js";
 import { prepareExactOutput, deriveSettlementOwnerSecret } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, encodeReceipt, verifyReceipt } from "../src/pool/v3/commitments.js";
-import { segmentIdentity } from "../src/pool/v3/headers.js";
+import { decodeSegmentHeader, segmentIdentity } from "../src/pool/v3/headers.js";
 import { ScopeTree } from "../src/pool/scope.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
@@ -418,6 +418,35 @@ describe("v3 recovery journal and independent package reader", () => {
     const old = items.findIndex(item => item.kind === 4);
     await expect(f.read({ ...served, package: encodeEvidencePackage(items.filter((_, i) => i !== old)) }))
       .rejects.toMatchObject({ status: "unresolved-evidence" });
+  });
+
+  it("leaves a return witnessed but not adopted before its own silence boundary by a return from it, whose block reaches back through both gaps (C2b.4.1)", async () => {
+    const f = await fixture(); f.venue.advance(7n);
+    const first = f.demand(6n);
+    await f.venue.publishRecord(4, f.backing, f.publication(1, first));
+    const opening = await f.j.return("return");
+    // One pending opening at a time: until it is witnessed, no return leaves it.
+    await expect(f.j.return("early")).rejects.toMatchObject({ code: "STALE", message: "a return is already pending: publish and adopt it" });
+    await f.j.publish();
+    // Witnessed, before its own silence boundary: adoption is the way, not another return.
+    await expect(f.j.return("before-silence")).rejects.toMatchObject({ code: "STALE", check: "SILENCE" });
+    // Not adopted while its own segment falls silent: it is retired, and only a new segment returns, from it.
+    f.venue.advance(f.venue.witnessedIndex() + 6n);
+    await expect(f.j.adopt()).rejects.toMatchObject({ code: "STALE", check: "SILENCE" });
+    const again = await f.j.return("again");
+    expect(again.sequence).toBe(opening.sequence + 1n);
+    await f.j.publish();
+    // The first gap's forced demand, never adopted, is in the new segment's block.
+    expect((await f.j.adopt()).map(bytes => decodeReceipt(bytes).statementHash)).toEqual([statementHash(first)]);
+    await f.j.commit("served"); await f.j.publish();
+    const served = await f.j.package();
+    // The new segment opens from the pending opening, which a reader holds as the canonical checkpoint before it.
+    const headers = decodeEvidencePackage(served.package).filter(item => item.kind === 6).map(item => decodeSegmentHeader(decodeTrail(item.payload).header));
+    expect(headers.find(header => header.sequence === again.sequence)!.entries[0]!.opening).toMatchObject({ sequence: opening.sequence, root: opening.root });
+    const result = await f.read(served);
+    expect(result.state.position).toBe(1n);
+    expect(result.state.issued - result.state.burned).toBe(10n);
+    expect(result.state.demands().length).toBe(1);
   });
 
   it("names an adopted block the opening's state refuses, and keeps none of it (C2b.4.2)", async () => {

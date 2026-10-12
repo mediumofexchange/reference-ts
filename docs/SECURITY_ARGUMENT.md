@@ -384,12 +384,14 @@ non-service aggregate and the replacement rule, which the holder accepted with t
   exposing it (C2.8, [service](POOL_V3_SERVICE.md)).
   - A restarted operator resumes from its latest signed commitment and waits the lag.
   - A directory restored from a copy signs only a return at a skipped sequence, once silence is witnessed (M13d).
+  - A journal file with a second name (a hard link) is refused: SQLite's owner fence and the file identity hold over
+    one name only.
   - Exact retries return the original receipt (invariant 26).
 
 **Evidence.** The [recovery](pool-v3-recovery-store-verification.json), [succession](pool-v3-succession-store-verification.json)
 and [scope](pool-v3-scope-store-verification.json) reports, each also on the synthetic Ergo venue, with real proofs. The
 live testnet scope drill and recovery are historical ([production requirements](PRODUCTION_REQUIREMENTS.md#release-gates)).
-`pool-v3-recovery-store`, `pool-v3-succession-store`, `pool-v3-store` and `pool-v3-fault-evidence`; audit areas 27, 28
+`pool-v3-recovery-store`, `pool-v3-succession-store`, `pool-v3-store` and `pool-v3-fault-evidence`; audit areas 27 (the journal included), 28
 and 31.
 
 **What does not stay in its compartment.** These failures reach past one backing:

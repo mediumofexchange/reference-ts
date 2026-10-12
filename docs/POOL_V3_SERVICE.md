@@ -150,8 +150,8 @@ separately. Serving holds no journal
 operation: its rows are never changed, so commands run while a stream is read.
 A stream that fails after its headers ends short of its end mark, which the
 client refuses; the server emits `evidenceError` with the cause. A trail is
-read forward by position (an index on its kept rows), one lookup and one check
-per record, giving up the process's turn every 256 records, so its first record
+read forward by position (an index on its kept rows), each record's chain step
+and frame size checked, giving up the process's turn every 256 records, so its first record
 needs no walk and commands are answered meanwhile. A fork kept beside the
 served trail, or a resumed position with two kept values, falls back to one
 walk back over its kept links (about 7.5 µs per record served, giving up the
@@ -161,6 +161,17 @@ cancel or roll back journal work. Recover an uncertain submit or commit by its
 exact saved statement or command ID. Reopening the journal fences older owners
 and reads its state from rows without verifying a proof again; it refuses
 stored state that does not reproduce its own tip and the last signed snapshot.
+A commitment signs over the records admitted since the last one only after
+they read back, and `audit` reads the whole active trail. A journal or wallet
+database with another name (a hard link) is refused `STORAGE`: SQLite keeps
+the write-ahead log and lock index per name, so neither the owner fence nor
+the file's identity holds across names. Renaming the file itself is not seen:
+move a directory whole, with no command running in it
+([audit](../decisions/2026-10.md#2026-10-12--take-over-only-from-evidence-the-journal-keeps-leave-a-witnessed-pending-opening-and-refuse-the-journals-own-damage-by-name-audit-of-the-journal)).
+A return or scope-change opening serves nothing until `adopt` takes its block.
+One witnessed but not adopted before its own silence boundary, or before another
+scoped backing's term ends, is left by a return from it or by a `rescope` that
+keeps its live backings; the new segment's block reaches back through both gaps.
 Operation failures expose bounded codes rather than internal error text.
 
 ## Upgrading the operator
@@ -196,8 +207,8 @@ shows either ([decision](../decisions/2026-10.md#2026-10-07--restore-an-operator
 Construction C2.4.1). Resuming on it would co-sign other statements at the same positions. The procedure:
 
 1. Stop the instance being replaced, or be sure it is gone. Two live instances of one key cannot see each other.
-2. Restore the whole directory, never `journal.db` alone. Leave out any `journal.db-wal` or `journal.db-shm` newer
-   than the database.
+2. Restore the whole directory, never `journal.db` alone, and as a copy, never a hard link. Leave out any
+   `journal.db-wal` or `journal.db-shm` newer than the database.
 3. Run `moe operator restore --dir <d> --id <id>`.
    - It records the restoration. From then on the journal signs nothing but C2b.4's return, once the scope's silence
      boundary is witnessed, at a sequence at least 2¹⁶ past its own and the record's latest; the step is random per

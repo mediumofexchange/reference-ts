@@ -75,12 +75,13 @@ read, not to reproduce.
   it; the six relations; the state machine (`state`, `recovery`, the replay store's reads and append, `spent-set`,
   `capsules`, `verify-ahead`, the reader's trail replay); the neutral core, Ergo venue and publisher; the wallet and
   `cli/wallet.ts` custody; the service transport, replica and relay serving; the multi-backing and recovery readers;
-  the lit runtime. Sensitive patches record their adversarial reviews in their decisions. These are AI reviews: they
-  are not the independent review the release gate asks for.
-- **Not audited as an area** (each slice's patches were reviewed): the operator journal and served trail
-  (`store.ts`, `trail.ts`), the reader beyond its trail replay, `construction.ts`, `guard.ts`, `refusals.ts`; the Ergo
-  header verifier's work and difficulty rules (`src/ergo-headers.ts`); the proving-parameter loader; `file-identity.ts`
-  and `evidence-chain.ts`; the shared note tree, scope and schedule (exercised by real proofs only); the `moe` commands
+  the lit runtime; the operator journal and served trail (`store.ts`, `trail.ts`, with `file-identity.ts`; its
+  multi-backing and lit restorations untested). Sensitive patches record their adversarial reviews in their decisions.
+  These are AI reviews: they are not the independent review the release gate asks for.
+- **Not audited as an area** (each slice's patches were reviewed): the reader beyond its trail replay,
+  `construction.ts`, `guard.ts`, `refusals.ts`; the Ergo header verifier's work and difficulty rules
+  (`src/ergo-headers.ts`); the proving-parameter loader; `evidence-chain.ts`; the shared note tree, scope and schedule
+  (exercised by real proofs only); the `moe` commands
   other than the wallet's custody and serving, the compiled-relation loader and key files (`src/cli/`,
   `src/pool/v3/{programs,verifier}.ts`, `src/keys.ts`); the replay harness and check tooling (`scripts/`); the Ergo
   experiments; the retained reports; and the specification documents (Construction, pool-v1/v2 layouts, authority,

@@ -134,6 +134,28 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
     expect(decodeReceipt(await a.submit(f.issue(ctx, f.output(f.y.name, 43, 1n), issuerY))).position).toBe(1n);
   });
 
+  it("keeps a live backing of a witnessed opening whose other backing's term ends before it is adopted (C2.10.9)", async () => {
+    const f = await shared();
+    // An elective change over the witnessed tail leaves a pending opening, which the venue holds.
+    const pending = await f.a.rescope("same", { keep: [f.x.name, f.y.name] });
+    // Not yet witnessed, it is left only by its adoption.
+    await expect(f.a.rescope("too-soon", { keep: [f.y.name] })).rejects.toMatchObject({ code: "STALE",
+      message: "only an adopted or witnessed segment's backings can be kept" });
+    await f.a.publish();
+    const toB = await f.replace(bSecret, f.x.name);
+    f.venue.advance(toB.effective);
+    await expect(f.a.adopt()).rejects.toMatchObject({ code: "STALE", message: "the operator's term has ended" });
+    // y is still this key's: kept from the pending opening, the canonical state it imports.
+    const opening = await f.a.rescope("keep-y", { keep: [f.y.name] });
+    expect(opening.sequence).toBe(pending.sequence + 1n);
+    await f.a.publish(); expect(await f.a.adopt()).toEqual([]);
+    const ctx = await f.context(f.a);
+    expect(ctx.header.entries).toEqual([expect.objectContaining({ backing: f.y.name, opening: expect.objectContaining({ sequence: pending.sequence }) })]);
+    await f.a.submit(f.issue(ctx, f.output(f.y.name, 51, 1n), f.y.issuer)); await f.a.commit("y-only"); await f.a.publish();
+    const read = await f.read(await f.a.package(f.y.name), f.y.name);
+    expect(read.state.issued).toBe(21n);
+  });
+
   it("splits at x's term end, rejoins after the tail is witnessed, and spends across both backings", async () => {
     const f = await shared(), toB = await f.replace(bSecret, f.x.name);
     f.venue.advance(toB.effective);
