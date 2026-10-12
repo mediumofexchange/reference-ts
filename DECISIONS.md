@@ -36,7 +36,7 @@ as current instructions.
 
 ## Index
 
-- `2026-10-12` [A succinct trail relation costs one 4-vCPU prover 12–16 hours a day at the design point, over half of it SHA-256 (slice 27, Next 9)](decisions/2026-10.md#2026-10-12--a-succinct-trail-relation-costs-one-4-vcpu-prover-1216-hours-a-day-at-the-design-point-over-half-of-it-sha-256-slice-27-next-9)
+- `2026-10-12` [A succinct trail relation takes one 4-vCPU prover 13–19 hours a day at the design point, over half of it SHA-256 (slice 27, Next 9)](decisions/2026-10.md#2026-10-12--a-succinct-trail-relation-takes-one-4-vcpu-prover-1319-hours-a-day-at-the-design-point-over-half-of-it-sha-256-slice-27-next-9)
 - `2026-10-12` [Rest a lit retry past a canonical nullifier on the venue's depth, and spend a free note of the failed payment where a selection allows (slice 26, Next 4 (bq))](decisions/2026-10.md#2026-10-12--rest-a-lit-retry-past-a-canonical-nullifier-on-the-venues-depth-and-spend-a-free-note-of-the-failed-payment-where-a-selection-allows-slice-26-next-4-bq)
 - `2026-10-12` [Vouch every commit of a kept file, retry an unrecorded digest at close, and hold serve's reads from its start (slice 25, Next 4 (bm), (bn), (bo))](decisions/2026-10.md#2026-10-12--vouch-every-commit-of-a-kept-file-retry-an-unrecorded-digest-at-close-and-hold-serves-reads-from-its-start-slice-25-next-4-bm-bn-bo)
 - `2026-10-12` [Close the code review to 6808f22: bound the service's waiting commands, share a kept file's page hashes in one process, and copy a remembered proof call once](decisions/2026-10.md#2026-10-12--close-the-code-review-to-6808f22-bound-the-services-waiting-commands-share-a-kept-files-page-hashes-in-one-process-and-copy-a-remembered-proof-call-once)

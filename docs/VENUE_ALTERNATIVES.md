@@ -212,7 +212,7 @@ It has these costs:
 - *Specification:* it too needs §13.2 to admit a verified proof in place of retained evidence: pool-v4, or a later venue-ergo version under a new venue identity ([slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21)).
 - *Fit:* it shares machinery with the succinct relation that a phone already needs for the kind-4 trail.
 
-**The venue is one of a phone's two costs.** A backing's kind-4 publications are its pool's trail: 15.6 GB at the design point, the larger part. A route above makes the venue part proportional, but reading the trail still needs the succinct relation (WORK Next 9), which would cost one 4-vCPU prover 12–16 hours a day at the design point ([slice 27](POOL_DEPLOYMENT_PROBES.md#the-trails-succinct-relation-slice-27)).
+**The venue is one of a phone's two costs.** A backing's kind-4 publications are its pool's trail: 15.6 GB at the design point, the larger part. A route above makes the venue part proportional, but reading the trail still needs the succinct relation (WORK Next 9), within one prover's day at the design point's mean ([slice 27](POOL_DEPLOYMENT_PROBES.md#the-trails-succinct-relation-slice-27)).
 
 **Recommendation (judgment).**
 - *Release venue:* Ergo stays the release's venue.
