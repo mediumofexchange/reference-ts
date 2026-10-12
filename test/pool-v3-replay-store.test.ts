@@ -423,6 +423,24 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it("keeps a kept file whose opening meets a failure of the system: the caller's error, never damage to discard (review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-system-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    let store = new ReplayStore(path, { digest });
+    try {
+      const { walk } = store.openWalk(new Uint8Array(32).fill(7)), ns = store.open(fieldToBytes(1n), new Uint8Array(32).fill(2), undefined, genesis);
+      store.closeWalk(walk);
+      store.close();
+      // The digest cannot be read (here a directory in its place, EISDIR; as EMFILE, EIO or EACCES would leave it).
+      const recorded = readFileSync(digest);
+      rmSync(digest); mkdirSync(digest);
+      expect(() => new ReplayStore(path, { digest })).toThrow(expect.objectContaining({ code: "EISDIR" }));
+      expect(existsSync(path)).toBe(true);
+      rmSync(digest, { recursive: true }); writeFileSync(digest, recorded);
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(ns)).toBe(true);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it("keeps one object per venue position: a position answered for a second backing leaves the read unresolved (§13.1)", () => {
     const store = new ReplayStore(), backingA = new Uint8Array(32).fill(1), backingB = new Uint8Array(32).fill(2);
     try {

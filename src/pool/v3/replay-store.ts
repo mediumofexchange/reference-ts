@@ -592,8 +592,21 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
     // Another store holding the file is the caller's error, never damage to discard.
     if (error instanceof FileInUse) throw error;
     if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+    // Nor is a failure of the system the file lies on (no descriptor left, an I/O or permission error): the file may
+    // be sound, and discarding it would replay the whole history once the failure passes.
+    if (systemFailure(error)) throw error;
     return undefined;
   }
+}
+/** SQLite's primary result codes for a failure of the system rather than of the file: SQLITE_PERM, SQLITE_NOMEM,
+ * SQLITE_IOERR, SQLITE_FULL, SQLITE_CANTOPEN. */
+const SQLITE_SYSTEM = new Set([3, 7, 10, 13, 14]);
+/** An operating system's error (one that names its system call), other than a file not there, or SQLite's report of one. */
+function systemFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { errno, syscall, code, errcode } = error as NodeJS.ErrnoException & { errcode?: unknown };
+  if (typeof errno === "number" && typeof syscall === "string") return code !== "ENOENT";
+  return code === "ERR_SQLITE_ERROR" && typeof errcode === "number" && SQLITE_SYSTEM.has(errcode & 0xff);
 }
 
 export class ReplayStore {
