@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { request as httpRequest, type Server } from "node:http";
+import { connect } from "node:net";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
@@ -8,6 +9,8 @@ import { POOL_V3 } from "../src/pool/v3/construction.js";
 import { encodeRecord } from "../src/pool/v3/records.js";
 import { signCommitment } from "../src/venue-records.js";
 import { readServed, V3_SERVICE_PROFILE } from "../src/pool/v3/service-wire.js";
+import type { Turns } from "../src/pool/v3/service-http.js";
+import { serialized } from "../src/cli/serve.js";
 import type { ServedEvidence, V3OperatorJournal } from "../src/pool/v3/store.js";
 
 // Mock only the journal boundary. Process acceptance covers actual persistence.
@@ -35,14 +38,14 @@ describe("v3 service HTTP trust boundary", () => {
       server.closeAllConnections(); server.close(() => resolve());
     })));
   });
-  async function fixture(credentials: { walletToken: string; adminToken?: string } = { walletToken: TOKEN, adminToken: ADMIN }) {
+  async function fixture(credentials: { walletToken: string; adminToken?: string } = { walletToken: TOKEN, adminToken: ADMIN }, turns?: Turns) {
     const commitment = signCommitment(secret, 2n, b(9));
     const journal = { configurationDomain: domain.slice(), construction: POOL_V3, submit: vi.fn(async (_bytes: Uint8Array) => receipt.slice()),
       commit: vi.fn(async (_id: string) => commitment), publish: vi.fn(async () => commitment),
       serve: vi.fn(async (_backing: Uint8Array, _after: bigint): Promise<ServedEvidence> => ({
         selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12),
         parts: [{ package: b(13) }, { trail: { size: 200_000n, chunks: [new Uint8Array(200_000).fill(7)] } }] })) };
-    const server = createV3Service(journal as unknown as V3OperatorJournal, credentials);
+    const server = createV3Service(journal as unknown as V3OperatorJournal, credentials, turns);
     servers.push(server);
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
@@ -229,6 +232,76 @@ describe("v3 service HTTP trust boundary", () => {
     f.journal.submit.mockRejectedValueOnce(new V3StoreError("REFUSED", "proof secret", "PROOF"));
     expect(await raw(f.url, command({ kind: "submit", record: bytesToHex(record()) })))
       .toEqual({ status: 400, body: { code: "REFUSED" } });
+  });
+
+  /** A submit over its own connection, as `node:http` sends it: the reply, and `close` to drop the connection unanswered. */
+  function submitting(url: string) {
+    const body = JSON.stringify(command({ kind: "submit", record: bytesToHex(record()) }));
+    let close!: () => void;
+    const reply = new Promise<{ status: number | undefined; body: unknown }>((resolve, reject) => {
+      const request = httpRequest(new URL("/commands", url), { method: "POST", agent: false, headers: { authorization: `Bearer ${TOKEN}`,
+        "content-type": "application/json", "content-length": String(Buffer.byteLength(body)) } }, response => {
+        const chunks: Buffer[] = [];
+        response.on("data", chunk => chunks.push(Buffer.from(chunk)));
+        response.on("end", () => resolve({ status: response.statusCode, body: JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+      });
+      request.on("error", reject); request.end(body);
+      close = () => request.destroy();
+    });
+    return { reply, close };
+  }
+
+  it("bounds the commands waiting for the owner's turn, refusing the next BUSY, and runs none whose caller left before its turn", async () => {
+    // The owner's turns, as operator serve's: its schedule and both listeners' commands, one at a time.
+    const queue = serialized(), asked: number[] = [];
+    const turns: Turns = work => { asked.push(asked.length); return queue(work); };
+    const f = await fixture({ walletToken: TOKEN }, turns);
+    // The schedule's tick holds the turn (a slow sync) while holders' submits arrive.
+    let release!: () => void;
+    const tick = queue(() => new Promise<void>(done => { release = done; }));
+    const waiting = Array.from({ length: 8 }, () => submitting(f.url));
+    await vi.waitFor(() => expect(asked).toHaveLength(8));
+    // A ninth waits for no turn: the listener refuses it BUSY at once, which the client reports.
+    expect(await submitting(f.url).reply).toEqual({ status: 409, body: { code: "BUSY" } });
+    expect(asked).toHaveLength(8);
+    // Seven callers leave (a closed connection frees the connection, not the turn it asked for); one stays.
+    for (const left of waiting.slice(0, 7)) { left.close(); await left.reply.catch(() => undefined); }
+    await vi.waitFor(async () => expect(await new Promise(done => f.server.getConnections((_, n) => done(n)))).toBe(1));
+    // The schedule's next turn waits behind the commands asked before it, never a queue the closed connections built.
+    const next = queue(async () => f.journal.submit.mock.calls.length);
+    release(); await tick;
+    expect(await waiting[7]!.reply).toEqual({ status: 200, body: expect.objectContaining({}) });
+    expect(await next).toBe(1);
+    expect(f.journal.submit).toHaveBeenCalledOnce();
+    // The bound is on what waits: once those have ended, a submit is taken again.
+    expect((await submitting(f.url).reply).status).toBe(200);
+    expect(f.journal.submit).toHaveBeenCalledTimes(2);
+  });
+
+  it("finishes a submit that started though its caller leaves", async () => {
+    const queue = serialized(), f = await fixture({ walletToken: TOKEN }, work => queue(work));
+    let finish!: () => void, finished = false;
+    f.journal.submit.mockImplementationOnce(() => new Promise<Uint8Array<ArrayBuffer>>(done => { finish = () => { finished = true; done(receipt.slice()); }; }));
+    const left = submitting(f.url);
+    await vi.waitFor(() => expect(f.journal.submit).toHaveBeenCalledOnce());
+    left.close(); await left.reply.catch(() => undefined);
+    await vi.waitFor(async () => expect(await new Promise(done => f.server.getConnections((_, n) => done(n)))).toBe(0));
+    finish(); await queue(async () => {});
+    expect(finished).toBe(true);
+  });
+
+  it("serves one exchange per connection: a request pipelined behind the first never reaches the journal", async () => {
+    const f = await fixture({ walletToken: TOKEN }), body = JSON.stringify(command({ kind: "submit", record: bytesToHex(record()) }));
+    const one = `POST /commands HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${TOKEN}\r\nContent-Type: application/json\r\n` +
+      `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
+    const answered = await new Promise<string>(done => {
+      const socket = connect(Number(new URL(f.url).port), "127.0.0.1");
+      let out = "";
+      socket.on("data", chunk => { out += String(chunk); }); socket.on("close", () => done(out)); socket.on("error", () => done(out));
+      socket.write(one.repeat(3)); socket.setTimeout(2000, () => socket.destroy());
+    });
+    expect(answered.startsWith("HTTP/1.1 200 ")).toBe(true);
+    expect(f.journal.submit).toHaveBeenCalledOnce();
   });
 });
 
