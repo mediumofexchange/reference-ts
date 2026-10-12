@@ -35,6 +35,7 @@ describe("a replica of a lit operator's evidence", () => {
   let service: typeof import("../src/pool/v3/service-http.js");
   let V3Replica: typeof import("../src/pool/v3/replica.js").V3Replica;
   let passedOver: typeof import("../src/cli/reader.js").passedOver;
+  let ownSources: typeof import("../src/cli/reader.js").ownSources;
   let readRepaired: typeof import("../src/cli/reader.js").readRepaired;
   const closing: { close(): void }[] = [], servers: Server[] = [], directories: string[] = [], scratch = resolve("scratch");
   beforeAll(async () => {
@@ -42,7 +43,7 @@ describe("a replica of a lit operator's evidence", () => {
     ({ V3Wallet } = await import("../src/pool/v3/wallet-store.js"));
     service = await import("../src/pool/v3/service-http.js");
     ({ V3Replica } = await import("../src/pool/v3/replica.js"));
-    ({ passedOver, readRepaired } = await import("../src/cli/reader.js"));
+    ({ passedOver, readRepaired, ownSources } = await import("../src/cli/reader.js"));
   });
   afterEach(async () => {
     await Promise.all(servers.splice(0).map(server => new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); })));
@@ -246,6 +247,14 @@ describe("a replica of a lit operator's evidence", () => {
     expect(passedOver(new EncodingError("truncated served evidence"))).toBe("INVALID");
     expect(passedOver(new EvidenceRefusal("unresolved-evidence"))).toBe("EVIDENCE");
     expect(passedOver(new Error("a programming failure"))).toBeUndefined();
+  });
+
+  it("never asks itself: its listener by the URL a client keeps, and its onion name at any port a replica list names", () => {
+    const onion = `${"m".repeat(55)}d.onion`, other = `${"n".repeat(55)}d.onion`;
+    // At port 80 a client keeps the URL without it, as `syncSources` compares.
+    expect(ownSources("http://127.0.0.1:80/", undefined, [`http://${onion}/`])).toEqual(["http://127.0.0.1/"]);
+    expect(ownSources("http://127.0.0.1:8080/", onion, [`http://${onion}:8080/`, `http://${other}/`, "http://127.0.0.1:9/", `http://${onion}/`]))
+      .toEqual(["http://127.0.0.1:8080/", `http://${onion}/`, `http://${onion}:8080/`]);
   });
 
   it("repairs a read a source left unresolved past its mark: from nothing, then from the next source (audit 30 (au))", async () => {
