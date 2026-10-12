@@ -3,35 +3,109 @@
   "toolchain": "Noir 1.0.0-beta.26 (noir_wasm), Barretenberg 5.2.0 (bb.js native bb), UltraHonk",
   "recursion": {
     "note": "rec.mjs: genuine conformance-build proofs verified with verify_proof_with_type(.., 6); inner keys derived from the shipped programs have the manifest's vk identities",
-    "spend": { "count1": 704135, "count2": 1470656, "count4": 3003697 },
-    "issue1": 703957, "demand1": 704143, "settle1": 704151,
-    "spendProved": { "gates": 704135, "proveS": 15.4, "verified": true },
+    "spend": {
+      "count1": 704135,
+      "count2": 1470656,
+      "count4": 3003697
+    },
+    "issue1": 703957,
+    "demand1": 704143,
+    "settle1": 704151,
+    "spendProved": {
+      "gates": 704135,
+      "proveS": 15.4,
+      "verified": true
+    },
     "tamperedOuterVerifies": false,
     "marginalGates": 766520.5
   },
   "sha256": {
     "note": "prim.mjs nr/sha_<n>.nr (words) and nr/shab_64.nr (bytes packed into words); the first blocks are hidden by the constant tables",
-    "words": { "1": 33944, "8": 34596, "64": 257140, "128": 511476, "256": 1020148 },
+    "words": {
+      "1": 33944,
+      "8": 34596,
+      "64": 257140,
+      "128": 511476,
+      "256": 1020148
+    },
     "bytes64": 268963,
     "gatesPerCompression": 3974,
     "bytePackingPerCompression": 184.7
   },
-  "poseidon2": { "note": "nr/p2_<n>.nr", "8": 609, "64": 4697, "gatesPerPermutation": 73 },
+  "poseidon2": {
+    "note": "nr/p2_<n>.nr",
+    "8": 609,
+    "64": 4697,
+    "gatesPerPermutation": 73
+  },
   "proofHash": {
     "note": "step.mjs phash: SHA-256 over the 458 proof fields as 14,656 big-endian bytes (230 compressions), equal to node's digest; a wrong digest is refused",
-    "gates": 1130912, "marginalInStep": 1128057
+    "gates": 1130912,
+    "marginalInStep": 1128057
   },
   "ed25519": {
     "note": "ed.mjs: willemolding/noir-ed25519 f9e0b44 (unaudited; RFC 8032 cofactored), standalone circuits with tables; @noble/curves signatures accepted, a flipped message byte refused",
-    "86": 219706, "126": 220164, "147": 220432, "410": 276307
+    "86": 219706,
+    "126": 220164,
+    "147": 220432,
+    "410": 276307
   },
-  "signedLengths": { "note": "lengths.mjs", "issueStatement": 410, "spendStatement": 538, "acceptance": 126, "release": 147, "withdrawal": 86 },
+  "signedLengths": {
+    "note": "lengths.mjs",
+    "issueStatement": 410,
+    "spendStatement": 538,
+    "acceptance": 126,
+    "release": 147,
+    "withdrawal": 86
+  },
   "spentSet": {
     "note": "spent-depth.mjs: RadixSpentSet hashes per insertion over the last 10^4 inserts below each size (one leaf plus nodes); node frames take two compressions, leaf frames one",
-    "hashesPerInsert": { "1e4": 13.16, "1e5": 17.85, "1e6": 21.26, "2e6": 22.26 }
+    "hashesPerInsert": {
+      "1e4": 13.16,
+      "1e5": 17.85,
+      "1e6": 21.26,
+      "2e6": 22.26
+    },
+    "budget": {
+      "depth": 32,
+      "note": "a fixed leaf pays its path budget: the deepest old path among the last 1e4 of 2e6 random inserts was 25 (review depth.mjs); a hostile path of 21+j costs about 2^(22+j) nullifier grinds"
+    }
   },
   "steps": {
-    "v3": { "parts": "spend recursion + accumulator recursion + proofHash + 178 SHA-256 compressions + 256 Poseidon2", "gates": 3324772, "rows": "2^22", "proveS": [62.42, 47.33], "verified": true },
-    "lever": { "parts": "spend recursion + accumulator recursion + 24 SHA-256 compressions + 601 Poseidon2", "gates": 1609950, "rows": "2^21", "proveS": [22.54, 22.22], "verified": true }
+    "v3": {
+      "parts": "spend recursion + accumulator recursion + proofHash + 178 SHA-256 compressions + 256 Poseidon2",
+      "gates": 3324772,
+      "rows": "2^22",
+      "proveS": [
+        62.42,
+        47.33
+      ],
+      "verified": true,
+      "reviewReruns": {
+        "note": "the same program and witness, rerun by the reviewer; the first 62.42 s run above also downloaded the CRS",
+        "warmWriteVkS": 64.8,
+        "precomputedKeyS": 50.1,
+        "coldPageCacheS": 83
+      },
+      "measuredParts": {
+        "compressions": 178,
+        "poseidon2": 256,
+        "note": "the model at 2e6 nullifiers has 194 and 320; time scales per gate"
+      }
+    },
+    "lever": {
+      "parts": "spend recursion + accumulator recursion + 24 SHA-256 compressions + 601 Poseidon2",
+      "gates": 1609950,
+      "rows": "2^21",
+      "proveS": [
+        22.54,
+        22.22
+      ],
+      "verified": true
+    }
+  },
+  "setOperations": {
+    "note": "estimate (review): repeated-statement, output-uniqueness, lock-tag and anchor-history lookups and inserts, about 7-8 a spend over Poseidon2 trees",
+    "gates": 60000
   }
 }

@@ -1,65 +1,97 @@
 {
-  "method": "one leaf per statement (its recursion, hashes and the previous leaf); prove times include key computation (--write_vk), so an upper bound",
+  "method": "one leaf per statement; per-gate times from the v3 leaf (47.3 s, and the review's warm 64.8 s rerun; the 62.4 s run downloaded the CRS); slice 21 proved a 2^22 leaf with a precomputed key at 16.8 us a gate",
   "usPerGate": [
     14.24,
-    18.77
+    19.49
   ],
   "v3": {
-    "at1e6": {
-      "spentSetSize": "1e6",
-      "hashesPerInsert": 21.26,
-      "parts": {
-        "recursion": 766521,
-        "proofHash": 1128057,
-        "otherSha": 99809,
-        "spentSet": 674042,
-        "noteTree": 23360,
-        "accumulator": 766521
-      },
-      "gates": 3458309,
-      "shaShare": 0.55,
-      "secondsPerStatement": [
-        49.2,
-        64.9
-      ],
-      "hoursPerDay": [
-        12.3,
-        16.2
-      ],
-      "hoursPerPeakDay": [
-        137,
-        180
-      ]
-    },
-    "at2e6": {
-      "spentSetSize": "2e6",
-      "hashesPerInsert": 22.26,
+    "meanPath": {
       "parts": {
         "recursion": 766521,
         "proofHash": 1128057,
         "otherSha": 99809,
         "spentSet": 707312,
         "noteTree": 23360,
+        "setOperations": 60000,
         "accumulator": 766521
       },
-      "gates": 3491578,
-      "shaShare": 0.554,
+      "shaShare": 0.545,
+      "gates": 3551578,
+      "within2to22": true,
       "secondsPerStatement": [
-        49.7,
-        65.6
+        50.6,
+        69.2
       ],
       "hoursPerDay": [
-        12.4,
-        16.4
+        12.6,
+        17.3
       ],
       "hoursPerPeakDay": [
-        138,
-        182
+        140,
+        192
+      ]
+    },
+    "depth32Budget": {
+      "spentSet": 1097897,
+      "gates": 3942164,
+      "within2to22": true,
+      "secondsPerStatement": [
+        56.1,
+        76.8
+      ],
+      "hoursPerDay": [
+        14,
+        19.2
+      ],
+      "hoursPerPeakDay": [
+        156,
+        213
+      ]
+    },
+    "settleWithSignatures": {
+      "gates": 4382760,
+      "within2to22": false,
+      "secondsPerStatement": [
+        62.4,
+        85.4
+      ],
+      "hoursPerDay": [
+        15.6,
+        21.4
+      ],
+      "hoursPerPeakDay": [
+        173,
+        237
       ]
     }
   },
+  "peakCatchUpDays": [
+    13,
+    39
+  ],
+  "treeOfProofs": {
+    "note": "leaves without the accumulator plus one merge node a statement",
+    "gates": 3175643,
+    "within2to22": true,
+    "secondsPerStatement": [
+      67.5,
+      84.2
+    ],
+    "hoursPerDay": [
+      16.9,
+      21
+    ],
+    "hoursPerPeakDay": [
+      188,
+      234
+    ],
+    "machinesForPeakDay": [
+      8,
+      10
+    ]
+  },
   "lever": {
-    "note": "pool-v4 candidate: Poseidon2 proof digest (153 permutations over 458 fields) and an indexed spent tree of depth 32 (96 a nullifier); measured as one leaf",
+    "note": "pool-v4 candidate: Poseidon2 proof digest (153 permutations) and a Poseidon2 spent tree (96 a nullifier, depth 32; an order-independent tree as pool-spent C1.2.9 requires costs about 60k more a spend), measured as one leaf without set operations",
     "gates": 1609950,
     "secondsPerStatement": [
       22.2,
@@ -77,28 +109,28 @@
   "signatures": {
     "issue": 276307,
     "settle": 440596,
-    "withdrawal": 219706,
-    "note": "Ed25519 gates added to the kind (standalone circuits, tables included: an upper bound); withdrawal has no proof to recurse"
+    "withdrawal": 219706
   },
   "phone": {
     "withRelations": {
       "headers": 160000,
       "outputs": 435600,
-      "proofs": 29312,
-      "totalMB": 0.62
+      "nullifiers": 57600,
+      "proofs": 29312
     },
+    "withRelationsMB": 0.68,
     "today": {
       "trail": 14246575.342465753,
       "sections": [
         3960000,
         6000000
       ],
-      "headers": 160000,
-      "totalMB": [
-        18.4,
-        20.4
-      ]
+      "headers": 160000
     },
-    "restoreOutputsMB": 484
+    "todayMB": [
+      18.4,
+      20.4
+    ],
+    "restoreMB": 548
   }
 }
