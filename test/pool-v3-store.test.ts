@@ -29,7 +29,7 @@ import { RangeLimitError, type RangeRequest, type RecordKind } from "../src/reco
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordPublisher, type RecordVenue } from "../src/record-venue.js";
 import { VenueError } from "../src/venue-error.js";
 import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
-import { collected, stoppedKeepPoint } from "./support.js";
+import { collected, heldElsewhere, stoppedKeepPoint } from "./support.js";
 
 // The pool-v3 operator journal (src/pool/v3/store.ts) on the local reference
 // venue, over records built by witness.ts with proofs a test verifier judges.
@@ -855,15 +855,16 @@ describe("the v3 operator journal", () => {
     let owner = open(), n = 0;
     await owner.open("genesis", silent); await owner.publish();
     for (let c = 2; c <= 5; c++) { await owner.submit(issued(n++)); await owner.submit(issued(n++)); await owner.commit(`c${c}`); await owner.publish(); }
-    // A handle beside the owner signs and keeps nothing, and prepares nothing while the owner holds this version's reads.
-    const busy = open(true);
+    // A handle beside the owner signs and keeps nothing, and prepares nothing while another process holds this
+    // version's reads (a serve of the same version).
+    owner.close();
+    const busy = open(true), elsewhere = await heldElsewhere(readsOf(file));
     expect(await refusal(busy.submit(issued(n)))).toEqual(["STORAGE", undefined]);
     expect(await refusal(busy.prepareReads())).toEqual(["BUSY", undefined]);
-    busy.close();
+    await elsewhere.release(); busy.close();
     // A new owner that has not read yet, serving while the preparation reads: its commands keep venue answers and
     // publish in the journal's database meanwhile. The kept reads so far are removed, as another version's file is
     // not this one's.
-    owner.close();
     const reads = readsOf(file);
     expect(removeKeptFile(reads, `${reads}.sha256`)).toBe(true);
     owner = open(); venue.advance(venue.witnessedIndex() + lag);
@@ -928,9 +929,11 @@ describe("the v3 operator journal", () => {
     for (const stays of [held, prepared]) for (const suffix of ["", "-wal", ".sha256"]) expect(left.has(basename(`${stays}${suffix}`))).toBe(true);
     for (const stays of [reads, `${reads}.sha256`, `${reads}.served`, `${older}.lock`, join(directory, "journal.db.readsx"),
       join(directory, "other.db.reads-0123456789abcdef")]) expect(left.has(basename(stays))).toBe(true);
-    // Its own reads are open: a second handle of this version is refused.
-    const second = journal(file, venue);
+    // Its own reads held by another process: an owner of this version is refused them.
+    owner.close();
+    const elsewhere = await heldElsewhere(reads), second = journal(file, venue);
     expect(() => second.openReads()).toThrow(expect.objectContaining({ code: "BUSY" }));
+    await elsewhere.release();
   });
 
   it("holds no transaction on its database while it reads its own history", async () => {

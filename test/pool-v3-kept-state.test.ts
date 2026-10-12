@@ -29,6 +29,7 @@ import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTer
 import { tagOf } from "../src/pool/v3/recovery.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
+import { heldElsewhere } from "./support.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
 /** A witness predicate's mark for every output but 108: a nullifier, and an opening of `backing` worth one unit
@@ -712,15 +713,18 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(() => new ReplayStore("file", { digest: "file.lock" })).toThrow(TypeError);
   });
 
-  it("keeps one handle per kept file: a second, in this process or another, is refused until the first closes (Next 4 (bg))", () => {
-    const kept = files(), first = opened(kept.path, kept);
-    expect(existsSync(`${kept.path}.lock`)).toBe(true);
-    // Refused before it judges the file: the first handle's log and digest stay as they are.
+  it("keeps a kept file to one process: another is refused until the first closes it (Next 4 (bg))", async () => {
+    const kept = files();
+    // Another process holds it: a store here is refused before it judges the file, and removal leaves it.
+    const elsewhere = await heldElsewhere(kept.path);
     expect(() => new ReplayStore(kept.path, kept)).toThrow(FileInUse);
     expect(removeKeptFile(kept.path, kept.digest)).toBe(false);
-    expect(existsSync(kept.path)).toBe(true);
+    await elsewhere.release();
+    // Stores of one process share the lock until the last closes; removal leaves a file one of them holds.
+    const first = opened(kept.path, kept), second = opened(kept.path, kept);
+    expect(existsSync(`${kept.path}.lock`)).toBe(true);
     first.close();
-    const second = opened(kept.path, kept);
+    expect(removeKeptFile(kept.path, kept.digest)).toBe(false);
     second.close();
     // A file no handle holds is removed with its digest and the caller's files; its lock stays, so no two handles hold
     // locks of their own on one path.
