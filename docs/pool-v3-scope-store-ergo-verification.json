@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 813
+      "elapsedMs": 1109
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 589
+      "elapsedMs": 858
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 1747
+      "elapsedMs": 2660
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 1699
+      "elapsedMs": 2638
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 594
+      "elapsedMs": 850
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 1709
+      "elapsedMs": 2641
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 1692
+      "elapsedMs": 2637
     }
   ],
   "transactions": [
@@ -110,8 +110,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "f5f5e443e5a36d1f32187b536701e9fd9a17358487775ad2e10e89dd523adcc7",
-      "history": "ea6877b23d801bfb50c23190d1a9f754ca26d4cb1c8b157a8b854ddebb4e8a67",
+      "spentRoot": "a369b3ff03b02047b7b0a1a740af3a1cdb8f40e4dd8355a7ff59347b22516a0d",
+      "history": "537b068a1a623c4507debaddaa7bc0ee3a41894df8d9fee9fa4eb4fbb2dacfdb",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -166,8 +166,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "f5f5e443e5a36d1f32187b536701e9fd9a17358487775ad2e10e89dd523adcc7",
-      "history": "ea6877b23d801bfb50c23190d1a9f754ca26d4cb1c8b157a8b854ddebb4e8a67",
+      "spentRoot": "a369b3ff03b02047b7b0a1a740af3a1cdb8f40e4dd8355a7ff59347b22516a0d",
+      "history": "537b068a1a623c4507debaddaa7bc0ee3a41894df8d9fee9fa4eb4fbb2dacfdb",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -225,7 +225,7 @@
       ]
     }
   },
-  "elapsedMs": 22012,
+  "elapsedMs": 33101,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -282,7 +282,7 @@
     "dist/pool/v3/verify-ahead.js": "ac0418efa0aada00095d7d0d827efefe90b34d7e457e1bd9d53fea0f8d0a4315",
     "dist/pool/v3/wallet-backup.js": "ed2c1d580e7c49ae2cd80aa5d3cc7fd6edfc0c68a3135aa7a5ea931ad63e31dc",
     "dist/pool/v3/wallet-request.js": "a9e017276511b5af8a909465d504a60456c79fdbfc50e0f2683bc971a9e3cda2",
-    "dist/pool/v3/wallet-store.js": "7a11bcf43f3169e569b27bb60a39fd89a02670b4998915b045e842927e8d0f78",
+    "dist/pool/v3/wallet-store.js": "5d863c95cc4156f8dcac4104f998f55bcd23984e33fff8134dd1a2dfeda7429f",
     "dist/pool/v3/witness.js": "e4e2cce534c8d54cdec4ad899897b0d315c3528a2b0c80a9cc2a9e33a289f508",
     "dist/record-range.js": "4e5132808c4aa8c01495134363958e53ea1aeda3df162ac35bcc7f5457c5db6f",
     "dist/record-venue.js": "1279786d8f84a5af4138d84414fa4ba4fbb207df265bf248aeac7fb9ba5fe1b2",
@@ -365,7 +365,7 @@
     "src/pool/v3/verify-ahead.ts": "7f67861fb3e768576b60d0d896c3b26c61b4096809b8eb2d4b1dbaacf3b9561e",
     "src/pool/v3/wallet-backup.ts": "b51105bfdba12ec8a23a882d90da366198b94f78f3ae782511eea52494f9d06e",
     "src/pool/v3/wallet-request.ts": "65f043159a6f3eeabfa092f9ca25545355a932e843b702219fcf678fc45c6470",
-    "src/pool/v3/wallet-store.ts": "ea4d96dbfeded3fbd97cfcb89e97d31504f9b4cbb5097dce63049aeb1bacfc85",
+    "src/pool/v3/wallet-store.ts": "7563a7c2b78cdcc7e835cfad0ed35d227278188636c4a7043ff41532fb881e1d",
     "src/pool/v3/witness.ts": "3d48d91112d90bdf8c5a07b1df7878d130c5c9cc1a9437278e54588f2105e760",
     "src/record-range.ts": "d1dee26da4bb12364650470bffdbd322292a51167cab4db1bdf525e4f7159dac",
     "src/record-venue.ts": "2283ccb169c66174805bd2fea6c3531dd8faf7744cc42faa313ab45fc664988b",

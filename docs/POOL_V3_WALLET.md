@@ -262,8 +262,10 @@ fails: its request is then paid again under another alias, into the same exact
 output, so a door admits at most one of them however the failure was judged
 (Next 4 (bd)). A lit request names only a key and a lit output derives from its
 statement's nullifiers, so a lit retry spends a note the failed payment spends,
-unless one of its inputs is spent in canonical history, which no door then admits;
-where no such note is free it refuses (`CONFLICT`) until a sync decides. Release
+unless one of its inputs is spent in canonical history, which no door then admits
+short of a reorganization past the depth (A9); it still spends one of the failed
+payment's notes where one is free and a selection allows (Next 4 (bq)). Where a note
+must be met and none is free it refuses (`CONFLICT`) until a sync decides. Release
 with other outputs (cancellation), same-segment tail repair (C2.10.9a) and
 release of never-admitted inputs are not implemented. Multi-backing payments and
 cross-backing fees are refused. Payments and acts are one kind of saved record

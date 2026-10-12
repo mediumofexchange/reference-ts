@@ -550,6 +550,49 @@ describe("the one wallet holding lit notes", () => {
     expect(again.inputs.some(nf => p.inputs.includes(nf))).toBe(false);
   });
 
+  it("spends a free note of a failed payment whose other input is canonically spent where a selection allows, and otherwise any (Next 4 (bq))", async () => {
+    const retry = async (extra: readonly bigint[]) => {
+      const f = await fixture(), payer = f.open("payer"), shop = f.open("shop");
+      await f.issue(payer.keyedRequest("a", f.backing, 10n)); await f.issue(payer.keyedRequest("b", f.backing, 2n)); await f.checkpoint();
+      await payer.sync(await f.served(), f.signed);
+      const order = { request: shop.keyedRequest("invoice", f.backing, 12n), value: 12n };
+      const x = await payer.prepare("x", order, await f.served(), f.signed);
+      markFailed(f.path("payer"), "x");
+      // Another payment spends the 10 alone in canonical history: x is never admitted while that nullifier stays canonical (A9).
+      const y = await payer.prepare("y", { request: shop.keyedRequest("other", f.backing, 9n), value: 9n }, await f.served(), f.signed);
+      expect([x.inputs.length, y.inputs.length, x.inputs.includes(y.inputs[0]!)]).toEqual([2, 1, true]);
+      await payer.submit("y", f.service); await f.checkpoint();
+      for (const [i, value] of extra.entries()) await f.issue(payer.keyedRequest(`e${i}`, f.backing, value));
+      await f.checkpoint();
+      const again = await payer.prepare("x-2", order, await f.served(), f.signed);
+      return { free: x.inputs.find(nf => nf !== y.inputs[0])!, inputs: again.inputs };
+    };
+    // The 20 covers it alone; the retry spends the 2 beside it, so x stays unadmittable past a reorganization too.
+    const met = await retry([20n]);
+    expect([met.inputs.length, met.inputs.includes(met.free)]).toEqual([2, true]);
+    // No selection with the 2 covers 12 (2 + 7, 2 + 1): the retry spends any notes, as before.
+    const unmet = await retry([7n, 7n]);
+    expect([unmet.inputs.length, unmet.inputs.includes(unmet.free)]).toEqual([2, false]);
+
+    // Two such payments, each met alone by a pair with the 20 but not together: the retry meets the first in turn.
+    const f = await fixture(), payer = f.open("payer"), shop = f.open("shop");
+    await f.issue(payer.keyedRequest("a", f.backing, 10n)); await f.issue(payer.keyedRequest("b", f.backing, 2n)); await f.checkpoint();
+    const order = { request: shop.keyedRequest("invoice", f.backing, 12n), value: 12n };
+    const x = await payer.prepare("x", order, await f.served(), f.signed);
+    markFailed(f.path("payer"), "x");
+    const y = await payer.prepare("y", { request: shop.keyedRequest("other", f.backing, 9n), value: 9n }, await f.served(), f.signed);
+    await payer.submit("y", f.service); await f.checkpoint();
+    await f.issue(payer.keyedRequest("c", f.backing, 7n)); await f.issue(payer.keyedRequest("d", f.backing, 7n)); await f.checkpoint();
+    const x2 = await payer.prepare("x-2", order, await f.served(), f.signed);
+    markFailed(f.path("payer"), "x-2");
+    const z = await payer.prepare("z", { request: shop.keyedRequest("third", f.backing, 6n), value: 6n }, await f.served(), f.signed);
+    await payer.submit("z", f.service); await f.checkpoint();
+    await f.issue(payer.keyedRequest("e", f.backing, 20n)); await f.checkpoint();
+    const x3 = await payer.prepare("x-3", order, await f.served(), f.signed);
+    const freeX = x.inputs.find(nf => nf !== y.inputs[0])!, freeX2 = x2.inputs.find(nf => nf !== z.inputs[0])!;
+    expect([x2.inputs.includes(z.inputs[0]!), x3.inputs.length, x3.inputs.includes(freeX), x3.inputs.includes(freeX2)]).toEqual([true, 2, true, false]);
+  });
+
   it("refuses paying a failed payment's request again where no note it spends is free, or where it is final (Next 4 (bd))", async () => {
     const f = await fixture(), payer = f.open("payer"), shop = f.open("shop");
     await f.issue(payer.keyedRequest("a", f.backing, 10n)); await f.checkpoint();

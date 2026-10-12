@@ -223,7 +223,9 @@ drill pays and fulfills with real proofs from separate installs ([separate insta
 **Residual.**
 - The window since the last witnessing (§C4 "Double-spend"). A payee should treat a payment as pending until its
   checkpoint is witnessed.
-- A venue reorganization past the depth (A9) undoes witnessed payments.
+- A venue reorganization past the depth (A9) undoes witnessed payments. It can also admit a failed lit payment
+  beside its retry, so the payer pays one request twice, unless the retry spent a note of the failed payment: it
+  spends a free one where a one- or two-note selection covering the order allows (Next 4 (bq)).
 - Whoever holds a request frame can pay it first: the payee is paid, by someone else, and the intended payer's
   `prepare` refuses the request as paid.
 
