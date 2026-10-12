@@ -158,6 +158,14 @@ jobs:
 
       - run: npm ci
 
+      # The tests write their kept files under os.tmpdir(). On a hosted Windows runner that is the system drive, where a
+      # flush costs 4-9 ms against 0.3 ms on the runner's own drive, so the kept-file tests ran flush-bound (3-4.6x
+      # slower, a timeout on a slow host). Defender is not the cause (decisions/2026-10.md, slice 24).
+      - name: Temporary files on the runner's own drive (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: printf 'TEMP=%s\nTMP=%s\n' "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - name: Reference, installed package and durable payment acceptance
         run: npm run check
 
