@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { spawn } from "node:child_process";
 import { createServer, type RequestListener, type Server } from "node:http";
+import { connect } from "node:net";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
@@ -240,4 +244,67 @@ describe("bounded v3 local service client", () => {
     await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing)).rejects.toMatchObject({ name: "AbortError" });
     expect(Date.now() - started).toBeLessThan(14_000);
   }, 15_000);
+});
+
+// Next 4 (bj): through a proxy, as Tor's HTTPTunnelPort answers. A fresh client's first circuit took up to 25 s on the
+// live network, so an onion's response may begin past the ten-second bound. A proxy's refusal to tunnel a URL that is
+// no onion (Tor refuses an internal address 403) is the holder's own route, named with its status; any refusal for an
+// onion leaves a service that did not answer, 403 included, which Tor also sends for the service's own END reasons
+// (connection refused or reset). Each client runs in a child (onion-client.child.ts, under vite-node, which vitest 3
+// installs; a later vitest without it needs another TypeScript runner here).
+describe("the service client through a proxy (Next 4 (bj))", () => {
+  const ONION = `${"m".repeat(55)}d.onion`, DOWN = `${"n".repeat(55)}d.onion`, REFUSED = `${"o".repeat(55)}d.onion`, CIRCUIT_MS = 11_000;
+  const PROXY_VARIABLES = ["http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "no_proxy", "NO_PROXY", "NODE_USE_ENV_PROXY", "NODE_OPTIONS"];
+  /** A CONNECT-only proxy: `ONION` to `port` once the circuit's delay has passed, 503 for `DOWN`, 403 for `REFUSED` (as
+   * Tor relays a service's refused connection) and for anything else (as Tor refuses an internal address). */
+  async function proxy(port: () => number): Promise<number> {
+    const server = createServer((_, response) => response.writeHead(405).end()).on("connect", (request, client, head) => {
+      if (request.url === `${DOWN}:80`) { client.end("HTTP/1.1 503 Service Unavailable\r\n\r\n"); return; }
+      if (request.url === `${REFUSED}:80`) { client.end("HTTP/1.0 403 Forbidden (connection refused)\r\n\r\n"); return; }
+      if (request.url !== `${ONION}:80`) { client.end("HTTP/1.1 403 Forbidden\r\n\r\n"); return; }
+      const circuit = setTimeout(() => {
+        const upstream = connect(port(), "127.0.0.1", () => {
+          client.write("HTTP/1.1 200 Connection established\r\n\r\n");
+          if (head.length > 0) upstream.write(head);
+          client.pipe(upstream); upstream.pipe(client);
+        });
+        upstream.on("error", () => client.destroy()); client.on("close", () => upstream.destroy());
+      }, CIRCUIT_MS);
+      client.on("error", () => clearTimeout(circuit)); client.on("close", () => clearTimeout(circuit));
+    });
+    servers.push(server);
+    await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+    return (server.address() as { port: number }).port;
+  }
+  const children: ReturnType<typeof spawn>[] = [];
+  afterEach(() => { for (const child of children.splice(0)) child.kill(); });
+  /** The client's answer for `url` from a process with Node's environment proxy at `proxied`. */
+  async function client(url: string, proxied: number): Promise<Record<string, unknown>> {
+    const base = Object.fromEntries(Object.entries(process.env).filter(([key]) => !PROXY_VARIABLES.includes(key))) as Record<string, string>;
+    const runner = join(dirname(fileURLToPath(import.meta.url)), "..", "node_modules", "vite-node", "vite-node.mjs");
+    const child = join(dirname(fileURLToPath(import.meta.url)), "onion-client.child.ts");
+    const out = await new Promise<string>((done, failed) => {
+      const process_ = spawn(process.execPath, [runner, child, url, bytesToHex(operator), bytesToHex(reference.label), String(reference.lag), bytesToHex(backing)],
+        { env: { ...base, NODE_USE_ENV_PROXY: "1", HTTP_PROXY: `http://127.0.0.1:${proxied}` }, stdio: ["ignore", "pipe", "inherit"] });
+      children.push(process_);
+      let text = ""; process_.stdout.on("data", chunk => { text += chunk; }); process_.on("error", failed); process_.on("close", () => done(text));
+    });
+    expect(out.trim(), `the client for ${url} printed nothing`).not.toBe("");
+    return JSON.parse(out.trim().split("\n").at(-1)!) as Record<string, unknown>;
+  }
+
+  it("waits past the bound for an onion's circuit, names a refused tunnel to a loopback URL PROXY and leaves a failed onion unanswered", async () => {
+    const service = await serving(served()), port = Number(new URL(service).port), proxied = await proxy(() => port);
+    const [onion, internal, down, refused] = await Promise.all([client(`http://${ONION}/`, proxied), client(service, proxied),
+      client(`http://${DOWN}/`, proxied), client(`http://${REFUSED}/`, proxied)]);
+    // Read through a circuit that took longer than the bound a loopback listener has.
+    expect(onion).toMatchObject({ sequence: "1" });
+    expect(onion["ms"]).toBeGreaterThan(CIRCUIT_MS);
+    // A loopback URL that the environment proxy tunnels is refused by the proxy (as by Tor), and named so.
+    expect(internal).toMatchObject({ name: "V3ServiceClientError", code: "PROXY", status: 0, message: "the proxy refused the tunnel (403)" });
+    // The proxy's answer for an onion that failed, 403 included: the service did not answer (`unanswered`,
+    // src/cli/reader.ts), so a holder passes to a replica, then its kept package.
+    expect(down).toMatchObject({ name: "TypeError", message: "fetch failed" });
+    expect(refused).toMatchObject({ name: "TypeError", message: "fetch failed" });
+  }, 25_000);
 });

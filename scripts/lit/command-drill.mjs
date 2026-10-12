@@ -67,16 +67,17 @@ const check = async (label, fn) => { await fn(); checks.push(label); process.std
 const pause = ms => new Promise(done => setTimeout(done, ms));
 
 const node = await serveSyntheticNode();
-// The onion service as Tor's HTTPTunnelPort reaches it: CONNECT only, the onion name to the holders' listener, a 502
-// where that does not answer, and every other target refused (Tor refuses internal addresses).
+// The onion service as Tor's HTTPTunnelPort reaches it, with Tor's statuses (live run, Next 4 (bj)): CONNECT only, the
+// onion name to the holders' listener, 500 where that refuses, 503 for a name not published, and 403 for every other
+// target (Tor refuses internal addresses).
 const ONION = `${"m".repeat(55)}d.onion`, REPLICA = `${"r".repeat(55)}d.onion`, DOWN = `${"n".repeat(55)}d.onion`;
 const RELAY = `${"l".repeat(55)}d.onion`;
 const tor = { holders: 0, replica: 0, relay: 0, tunnels: 0, refused: [] };
 const torProxy = createServer((_, response) => response.writeHead(405).end()).on("connect", (request, client, head) => {
   // An onion service that is down answers an error status (Tor answers 500, 503 or 504; moe reads each as UNAVAILABLE).
-  if (request.url === `${DOWN}:80`) { client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
+  if (request.url === `${DOWN}:80`) { client.end("HTTP/1.1 503 Service Unavailable\r\n\r\n"); return; }
   const port = request.url === `${ONION}:80` ? tor.holders : request.url === `${REPLICA}:80` ? tor.replica : request.url === `${RELAY}:80` ? tor.relay : 0;
-  if (port === 0) { tor.refused.push(request.url); client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); return; }
+  if (port === 0) { tor.refused.push(request.url); client.end("HTTP/1.1 403 Forbidden\r\n\r\n"); return; }
   tor.tunnels++;
   let joined = false;
   const upstream = connect(port, "127.0.0.1", () => {
@@ -84,7 +85,7 @@ const torProxy = createServer((_, response) => response.writeHead(405).end()).on
     if (head.length > 0) upstream.write(head);
     client.pipe(upstream); upstream.pipe(client);
   });
-  upstream.on("error", () => { if (!joined) client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"); else client.destroy(); });
+  upstream.on("error", () => { if (!joined) client.end("HTTP/1.1 500 Internal Server Error\r\n\r\n"); else client.destroy(); });
   client.on("error", () => upstream.destroy()); client.on("close", () => upstream.destroy());
 });
 await new Promise(done => torProxy.listen(0, "127.0.0.1", done));

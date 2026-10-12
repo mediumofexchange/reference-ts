@@ -51,6 +51,18 @@ function listenerUrl(baseUrl: string): { url: URL; onion: boolean } | undefined 
 const LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
 const proxyRefusal = (message: string) => new V3ServiceClientError(0, "PROXY", message);
 const PROXY_UNREACHABLE: ReadonlySet<unknown> = new Set(["ECONNREFUSED", "EADDRNOTAVAIL", "EAFNOSUPPORT", "ENETUNREACH", "EHOSTUNREACH"]);
+/** How much longer an onion exchange waits for its response to begin: the circuit to the service is built first. On the
+ * live Tor network that took up to 25 s from a fresh client (Next 4 (bj)); Tor's own gateway gives up at 120 s. */
+export const ONION_CIRCUIT_MS = 50_000;
+/** The status a proxy answered a tunnel with, where it refused one: Node's `fetch` (undici 7.29.1) keeps it only in its
+ * abort's message, two causes down. */
+export function tunnelStatus(error: unknown): number | undefined {
+  for (let cause = error, depth = 0; cause instanceof Error && depth < 4; cause = cause.cause, depth++) {
+    const refused = /^Proxy response \(([0-9]{3})\) !== 200 when HTTP Tunneling$/.exec(cause.message);
+    if (refused !== null && (cause as { code?: unknown }).code === "UND_ERR_ABORTED") return Number(refused[1]);
+  }
+  return undefined;
+}
 /** Whether `NO_PROXY` exempts `url`, as Node 24's bundled undici (`EnvHttpProxyAgent`, 7.29.1) matches it: entries split
  * on commas and whitespace, a lone `*` exempts every host, `.x` and `*.x` read as `x`, which matches the host and its
  * subdomains, and an entry's `:port` limits it to that port. */
@@ -89,13 +101,14 @@ function refusal(status: number, value: unknown): V3ServiceClientError {
   return new V3ServiceClientError(status, typeof code === "string" && /^[A-Z_]{1,32}$/.test(code) ? code : "UNAVAILABLE", "service request failed");
 }
 
-/** One exchange with a loopback or onion listener at `baseUrl`. `read` is given the response while the connection is
- * held, and a call that restarts the bound (ten seconds by default): a command's reply is bounded whole, a stream between
- * its chunks. */
+/** One exchange with a loopback or onion listener at `baseUrl`. The response must begin within the bound (ten seconds by
+ * default), an onion's within `ONION_CIRCUIT_MS` more; `read` is then given it while the connection is held, and a call
+ * that restarts the bound: a command's reply is bounded whole, a stream between its chunks. */
 async function exchangeWith<T>(baseUrl: string, onion: boolean, path: string, token: string | undefined, body: string | undefined, type: string,
   read: (response: Response, progress: () => void) => Promise<T>, bound = 10_000): Promise<T> {
   const url = new URL(path, baseUrl), proxy = onion ? onionProxy(url) : undefined;
-  const abort = new AbortController(), timer = setTimeout(() => abort.abort(), bound);
+  const abort = new AbortController();
+  let timer = setTimeout(() => abort.abort(), onion ? bound + ONION_CIRCUIT_MS : bound);
   try {
     let response: Response;
     try {
@@ -103,14 +116,21 @@ async function exchangeWith<T>(baseUrl: string, onion: boolean, path: string, to
         ...(body === undefined ? {} : { body }), redirect: "manual", signal: abort.signal,
         headers: { ...(token === undefined ? {} : { authorization: `Bearer ${token}` }), "content-type": "application/json", "accept-encoding": "identity" } });
     } catch (error) {
-      // An onion request opens a connection to the proxy alone, and Tor answers an onion's failure with a status: a
-      // connection that fails is the proxy's, named rather than read as an operator that did not answer (a name with
-      // several addresses fails as an AggregateError).
+      // A proxy that refused to tunnel a URL that is no onion (Tor refuses an internal address 403) is the holder's own
+      // route, named with its status. An onion's refusal stays a service that did not answer, whatever its status: Tor
+      // also answers 403 for the service's own END reasons (connection refused or reset), so a source could otherwise
+      // stop a holder's read instead of being passed over.
+      const refused = tunnelStatus(error);
+      if (refused !== undefined && proxy === undefined && refused < 500) throw proxyRefusal(`the proxy refused the tunnel (${refused})`);
+      // An onion request opens a connection to the proxy alone: a connection that fails is the proxy's, named rather than
+      // read as an operator that did not answer (a name with several addresses fails as an AggregateError).
       const cause = (error as { cause?: unknown }).cause;
       if (proxy !== undefined && error instanceof TypeError && (cause instanceof AggregateError ||
           PROXY_UNREACHABLE.has((cause as { code?: unknown } | undefined)?.code))) throw proxyRefusal("the proxy did not answer");
       throw error;
     }
+    // The response began, over a circuit that stands: the bound counts from here.
+    clearTimeout(timer); timer = setTimeout(() => abort.abort(), bound);
     // A refusal is a bounded JSON reply on every route.
     if ((response.status >= 300 && response.status < 400) || response.headers.get("content-type") !== (response.ok ? type : "application/json") ||
         ![null, "identity"].includes(response.headers.get("content-encoding"))) throw new EncodingError("unexpected service response");
@@ -124,7 +144,7 @@ async function exchangeWith<T>(baseUrl: string, onion: boolean, path: string, to
  * relay's one credential, answering its bounded JSON reply. An onion URL is reached only through the holder's loopback
  * proxy, refused `PROXY` before any connection otherwise (M12a). The bound passes the relay listener's own fifteen
  * seconds, so a publication still in flight there usually ends as a reply that did not come (an onion circuit's setup
- * counts against this bound alone); either way the file is sent again, and the relay answers a resend as the same. The
+ * has `ONION_CIRCUIT_MS` of its own); either way the file is sent again, and the relay answers a resend as the same. The
  * reply is the relay's word: the holder reads its act at the venue by its own read.
  */
 export async function sendToRelay(baseUrl: string, token: string, file: unknown): Promise<unknown> {
