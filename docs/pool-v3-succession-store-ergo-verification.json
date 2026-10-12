@@ -22,25 +22,25 @@
       "name": "A issue 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1309
+      "elapsedMs": 779
     },
     {
       "name": "B inherited spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3141
+      "elapsedMs": 1762
     },
     {
       "name": "A imported double spend refused",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 3105
+      "elapsedMs": 1713
     },
     {
       "name": "A revoked issue refused",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 993
+      "elapsedMs": 602
     }
   ],
   "transactions": [
@@ -95,7 +95,7 @@
     "supply": "10",
     "position": "0",
     "spentRoot": "7c508ac3c03f76246a4225622a9f91b7924c7bf0007f260f20f80d1921a92d71",
-    "history": "90d1ccc745de64ec6b7719818e911cb9629f2d647f0457c92790f8412de8836e",
+    "history": "daee36572285fa8f0e5e09c596ad73f1a1c75e694d386b47e178a814a1ba505a",
     "canonical": {
       "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
       "sequence": "5",
@@ -153,7 +153,7 @@
       }
     ]
   },
-  "elapsedMs": 27265,
+  "elapsedMs": 16227,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -201,7 +201,7 @@
     "dist/pool/v3/scope-evidence.js": "756dd7a2d4e4d3a7720178761382ca572b8450724ae31dfa51262b3e0befa26d",
     "dist/pool/v3/scope-reader.js": "42db24e1fc6387c5b6fa9fe51ea20e8d000ef87ba7a5a68ea0e5c71d286f1ffb",
     "dist/pool/v3/state.js": "62c8d90c0c42ada7e4cc67715d17f6f8de8e46fda9bd34ac88e083db6134dcbd",
-    "dist/pool/v3/store.js": "7043a91887763c2dd1765d003aa322f2cb53a30fba62c421195aca77ed054876",
+    "dist/pool/v3/store.js": "b0ddb80aa10bdabeb9d45f59cd5ddbb518cb54ee478f9cce8911b89fde69192c",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
@@ -279,7 +279,7 @@
     "src/pool/v3/scope-evidence.ts": "b37ae977f1f5c1c5d61ec5d444794c24397907115e6ae9a9f0309ceb4542a879",
     "src/pool/v3/scope-reader.ts": "59a4ec79cf20ba3514ee793200c53927c5e340a54719161a494573d0c90d2ca2",
     "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
-    "src/pool/v3/store.ts": "2a1bb58964cc8c1b7b340b5c9c4bc9eb8757b8db47dc8fc036d3b75606d693f5",
+    "src/pool/v3/store.ts": "e79d1ce76ec48de5fe9f8206dea39a399c6b27042921b721423581a180899ec7",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
     "src/pool/v3/trail.ts": "7cf64e03a6d0ecc2ab50580cd789b8fd7e4b4fc610de3d1a76746b5111003a9e",
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",

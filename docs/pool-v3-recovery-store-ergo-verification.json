@@ -19,55 +19,55 @@
       "name": "issue 0",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1472
+      "elapsedMs": 780
     },
     {
       "name": "issue 1",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1115
+      "elapsedMs": 580
     },
     {
       "name": "service demand withdrawn",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2852
+      "elapsedMs": 1449
     },
     {
       "name": "service demand settled",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2620
+      "elapsedMs": 1427
     },
     {
       "name": "service settlement at inclusive horizon",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2599
+      "elapsedMs": 1427
     },
     {
       "name": "unanswered request",
       "kind": 7,
       "bytes": 14656,
-      "elapsedMs": 1411
+      "elapsedMs": 767
     },
     {
       "name": "forced first demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2600
+      "elapsedMs": 1422
     },
     {
       "name": "forced second demand",
       "kind": 4,
       "bytes": 14656,
-      "elapsedMs": 2607
+      "elapsedMs": 1481
     },
     {
       "name": "forced settlement at return index",
       "kind": 6,
       "bytes": 14656,
-      "elapsedMs": 2613
+      "elapsedMs": 1473
     }
   ],
   "transactions": [
@@ -114,13 +114,13 @@
     "position": "4",
     "adoptionIndex": "31",
     "spentRoot": "fffd456a20d0d582a358aaf322350494f197abdd3494f66bce0903d8c5b59e78",
-    "history": "5e2966170004358c4f53dccb6a56e9eee06586a6bd60a88431641e166e1af8d8",
+    "history": "1b379c5e2b8d0a7103dec4767e44e4b0081e38b056c72ec65e23728998d7795c",
     "canonicalIndex": "33",
     "force": [
       {
         "index": "25",
         "kind": 4,
-        "sha256": "b12ad7e40be5dcce9977969f101174a32c62a96c16fb3843233045c0c03ec2e4"
+        "sha256": "009d2648b2e22906621403cb7c0d20e2b54db6f5fc63e2846c5e9a569ef83e41"
       },
       {
         "index": "27",
@@ -130,12 +130,12 @@
       {
         "index": "29",
         "kind": 4,
-        "sha256": "bdaf03fe74bc89ae763ed621618d6e50a3d8a98608947ec318b1cb9a1a83e7d3"
+        "sha256": "ae4bd6961478063ab5d57fc6038b653b4bc90d892a61553bc9789f322f9ce9c9"
       },
       {
         "index": "31",
         "kind": 6,
-        "sha256": "9941a6cbc558258ee9c4f21b83126651e818d84fde0180b091c8f9638f1b2ea2"
+        "sha256": "6e7f984e58fb01ebfbb3670dbc62f944bdc1f0bd586d80bde76eaf43ae4f3e39"
       }
     ],
     "clock": {
@@ -156,7 +156,7 @@
       "snapshotIndex": "31"
     }
   },
-  "elapsedMs": 36564,
+  "elapsedMs": 21138,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -204,7 +204,7 @@
     "dist/pool/v3/scope-evidence.js": "756dd7a2d4e4d3a7720178761382ca572b8450724ae31dfa51262b3e0befa26d",
     "dist/pool/v3/scope-reader.js": "42db24e1fc6387c5b6fa9fe51ea20e8d000ef87ba7a5a68ea0e5c71d286f1ffb",
     "dist/pool/v3/state.js": "62c8d90c0c42ada7e4cc67715d17f6f8de8e46fda9bd34ac88e083db6134dcbd",
-    "dist/pool/v3/store.js": "7043a91887763c2dd1765d003aa322f2cb53a30fba62c421195aca77ed054876",
+    "dist/pool/v3/store.js": "b0ddb80aa10bdabeb9d45f59cd5ddbb518cb54ee478f9cce8911b89fde69192c",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
@@ -282,7 +282,7 @@
     "src/pool/v3/scope-evidence.ts": "b37ae977f1f5c1c5d61ec5d444794c24397907115e6ae9a9f0309ceb4542a879",
     "src/pool/v3/scope-reader.ts": "59a4ec79cf20ba3514ee793200c53927c5e340a54719161a494573d0c90d2ca2",
     "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
-    "src/pool/v3/store.ts": "2a1bb58964cc8c1b7b340b5c9c4bc9eb8757b8db47dc8fc036d3b75606d693f5",
+    "src/pool/v3/store.ts": "e79d1ce76ec48de5fe9f8206dea39a399c6b27042921b721423581a180899ec7",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
     "src/pool/v3/trail.ts": "7cf64e03a6d0ecc2ab50580cd789b8fd7e4b4fc610de3d1a76746b5111003a9e",
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
