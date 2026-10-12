@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { request as httpRequest, type Server } from "node:http";
+import { connect } from "node:net";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
@@ -287,6 +288,20 @@ describe("v3 service HTTP trust boundary", () => {
     await vi.waitFor(async () => expect(await new Promise(done => f.server.getConnections((_, n) => done(n)))).toBe(0));
     finish(); await queue(async () => {});
     expect(finished).toBe(true);
+  });
+
+  it("serves one exchange per connection: a request pipelined behind the first never reaches the journal", async () => {
+    const f = await fixture({ walletToken: TOKEN }), body = JSON.stringify(command({ kind: "submit", record: bytesToHex(record()) }));
+    const one = `POST /commands HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${TOKEN}\r\nContent-Type: application/json\r\n` +
+      `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
+    const answered = await new Promise<string>(done => {
+      const socket = connect(Number(new URL(f.url).port), "127.0.0.1");
+      let out = "";
+      socket.on("data", chunk => { out += String(chunk); }); socket.on("close", () => done(out)); socket.on("error", () => done(out));
+      socket.write(one.repeat(3)); socket.setTimeout(2000, () => socket.destroy());
+    });
+    expect(answered.startsWith("HTTP/1.1 200 ")).toBe(true);
+    expect(f.journal.submit).toHaveBeenCalledOnce();
   });
 });
 

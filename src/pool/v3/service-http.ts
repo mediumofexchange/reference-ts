@@ -85,8 +85,9 @@ type Send = (status: number, value: unknown) => void;
  * and the listener's lifetime bounds are the same for all three (sixteen connections, a request's headers and body in
  * fifteen seconds). Replies are JSON, one exchange per connection: a caller's verification blocks its event loop
  * between requests, so an idle connection the server has timed out meanwhile would be reused before the caller sees it
- * closed. Journal work keeps its owner and can finish after the caller loses the reply; served evidence has no size to
- * bound its time by: a write restarts the bound (`timer`).
+ * closed; a request pipelined behind the first never reaches `handle` (`maxRequestsPerSocket`), so one connection asks
+ * for one exchange's work. Journal work keeps its owner and can finish after the caller loses the reply; served
+ * evidence has no size to bound its time by: a write restarts the bound (`timer`).
  */
 function listener(handle: (request: IncomingMessage, response: ServerResponse, send: Send, timer: NodeJS.Timeout) => Promise<void>,
   refusal: (error: unknown, server: Server) => { status: number; code: string }): Server {
@@ -106,7 +107,7 @@ function listener(handle: (request: IncomingMessage, response: ServerResponse, s
     }
   });
   server.headersTimeout = 10_000; server.requestTimeout = 15_000;
-  server.maxHeadersCount = 32; server.maxConnections = 16;
+  server.maxHeadersCount = 32; server.maxConnections = 16; server.maxRequestsPerSocket = 1;
   return server;
 }
 /** The one evidence route, `GET /evidence?backing=<hex>&after=<n>`: undefined where the request is another, else

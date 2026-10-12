@@ -145,7 +145,8 @@ the peer, never its own reads of rows, and the client only its waits for
 chunks, refusing a dripping source, or one slower than that rule, as one that
 did not answer. At most
 eight streams are served at once (`BUSY` otherwise), so slow readers leave
-connections for commands. Commands take the
+connections for commands. A connection carries one exchange: a request
+pipelined behind the first never reaches the service. Commands take the
 owner's journal turns, which `operator serve` shares with its schedule: at most
 eight of a listener's wait for or hold one (`BUSY` otherwise), and one whose
 connection closed before its turn runs nothing, so closed connections queue no
