@@ -43,6 +43,34 @@ function failure(error: unknown): { status: number; code: string } {
 
 /** Evidence streams served at once, of the sixteen connections. */
 const MAX_EVIDENCE_STREAMS = 8;
+/** Commands waiting for or holding a journal turn, of one listener's: the connections its streams leave for commands. A
+ * caller that closes its connection frees the connection but not the turn it asked for, so without this bound closed
+ * connections would queue journal work without end; with it the owner's own work, queued in the same turns, waits
+ * behind at most this many of each listener's commands. */
+const MAX_WAITING_COMMANDS = 8;
+
+/** Work one at a time, in order, as its owner runs it: the operator's schedule and its listeners' commands. */
+export type Turns = <T>(work: () => Promise<T>) => Promise<T>;
+/**
+ * Requests' work in `turns` (slice 12 M12c): at most `bound` requests wait for or hold a turn, and the next is refused
+ * by `busy` before it asks for one; a request whose caller is gone by its turn (its connection closed or timed out) is
+ * refused by `gone` and does no work, so a long turn of the owner's holds no queue of work for nobody. Work that has
+ * started keeps its owner and finishes though its caller leaves.
+ */
+export function waitingTurns(turns: Turns, bound: number, busy: () => Error, gone: () => Error):
+  <T>(work: () => Promise<T>, left: () => boolean) => Promise<T> {
+  let waiting = 0;
+  return async (work, left) => {
+    if (waiting >= bound) throw busy();
+    waiting++;
+    try {
+      return await turns(async () => {
+        if (left()) throw gone();
+        return work();
+      });
+    } finally { waiting--; }
+  };
+}
 
 /** What serves evidence by the one wire: an operator's journal, or a replica's kept evidence (M12b). `after` is a
  * sequence of the operator's; a source that holds no selection for the backing refuses as the journal does. */
@@ -128,8 +156,10 @@ function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { coun
 /** Bind to 127.0.0.1. The server also refuses non-loopback connections. Behind an onion service every peer is the
  * loopback Tor daemon, so that listener takes no admin credential and has its own sixteen connections.
  * Credentials permit operations; protocol proofs/signatures remain authoritative.
- * Connection timeouts never cancel or roll back accepted journal operations. */
-export function createV3Service(journal: V3OperatorJournal, credentials: V3ServiceCredentials): Server {
+ * Connection timeouts never cancel or roll back accepted journal operations. Each command's journal call takes its turn in
+ * `turns` (the owner's, shared with its own work) as `waitingTurns` says: past `MAX_WAITING_COMMANDS` of this listener's
+ * it is refused `BUSY`, and one whose caller is gone by its turn calls nothing. Serving evidence takes no turn. */
+export function createV3Service(journal: V3OperatorJournal, credentials: V3ServiceCredentials, turns: Turns = work => work()): Server {
   const { walletToken, adminToken } = credentials;
   if (![walletToken, ...(adminToken === undefined ? [] : [adminToken])].every(token => typeof token === "string" && /^[0-9a-f]{64}$/.test(token)) ||
       walletToken === adminToken) {
@@ -138,6 +168,8 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
   // The journal's construction reads every command and reply (slice 14 M14g3).
   const domain = journal.configurationDomain, construction = journal.construction;
   const streams = { count: 0 };
+  const turn = waitingTurns(turns, MAX_WAITING_COMMANDS, () => new V3StoreError("BUSY", "the service is busy; send the command again"),
+    () => new V3StoreError("UNAVAILABLE", "the command's connection closed before its turn"));
   const server: Server = listener(async (request, response, send, timer) => {
     const admin = adminToken !== undefined && bearer(request, adminToken);
     if (!admin && !bearer(request, walletToken)) { request.resume(); send(401, { code: "UNAUTHORIZED" }); return; }
@@ -146,15 +178,18 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
     if (request.method === "POST" && request.url === "/commands") {
       const command = parseV3ServiceCommand(await readBody(request), construction);
       if (command.kind !== "submit" && !admin) { send(403, { code: "ADMIN_REQUIRED" }); return; }
+      const gone = () => response.destroyed || response.writableEnded;
       let reply;
       if (command.kind === "submit") {
         const bytes = hexToBytes(command.record);
         if (compareBytes(construction.view(construction.decode(bytes), () => undefined).domain, domain) !== 0) {
           throw new EncodingError("wrong construction domain");
         }
-        reply = replyFromReceipt(await journal.submit(bytes), construction);
-      } else if (command.kind === "commit") reply = replyFromCommitment("committed", await journal.commit(command.id));
-      else reply = replyFromCommitment("published", await journal.publish());
+        reply = replyFromReceipt(await turn(() => journal.submit(bytes), gone), construction);
+      } else if (command.kind === "commit") {
+        const id = command.id;
+        reply = replyFromCommitment("committed", await turn(() => journal.commit(id), gone));
+      } else reply = replyFromCommitment("published", await turn(() => journal.publish(), gone));
       send(200, reply); return;
     }
     request.resume(); send(404, { code: "NOT_FOUND" });
