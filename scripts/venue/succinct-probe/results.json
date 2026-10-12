@@ -14,27 +14,51 @@
    "1280": 64418,
    "2560": 128598
   },
+  "leaf": {
+   "compressions": 103,
+   "gates": 4097581,
+   "rows": 4194304
+  },
   "prove": [
    {
-    "gates": 662515,
-    "padded": 1048576,
-    "seconds": 13.18,
-    "peakMiB": 981
+    "circuit": "leaf_103",
+    "gates": 4097581,
+    "seconds": [
+     68.9,
+     68.89
+    ],
+    "peakMiB": 5830
    },
    {
+    "circuit": "b2b_10240",
+    "gates": 2638975,
+    "seconds": [
+     46.61,
+     42.98
+    ],
+    "peakMiB": 3819
+   },
+   {
+    "circuit": "b2b_5120",
     "gates": 1321335,
-    "padded": 2097152,
-    "seconds": 24.27,
+    "seconds": [
+     24.27,
+     20.78
+    ],
     "peakMiB": 1932
    },
    {
-    "gates": 2638975,
-    "padded": 4194304,
-    "seconds": 46.61,
-    "peakMiB": 3819
+    "circuit": "b2b_2560",
+    "gates": 662515,
+    "seconds": [
+     13.18,
+     11.13
+    ],
+    "peakMiB": 996
    }
   ],
   "proofBytes": 14656,
+  "nativeVerifyMs": 16,
   "recursion": {
    "one": 704636,
    "two": 1471658,
@@ -49,7 +73,8 @@
    "merkleCompressions": 19290
   },
   "autolykosPerHeader": 2152,
-  "nativeHeaderMs": 11.22
+  "nativeHeaderMs": 11.22,
+  "maxBlockSize": 1271009
  },
  "derived": {
   "gatesPerCompression": 32941,
@@ -57,18 +82,27 @@
    "blake2b": 257.4,
    "blake2sBlackBox": 50.1
   },
-  "microsecondsPerPaddedGate": 11.11,
+  "microsecondsPerGate": 16.81,
   "recursionGates": 767022,
-  "compressionsPerChainedProof": 103,
+  "leafOverheadGates": 704658,
   "perDay": {
    "sectionCompressions": 53391,
-   "sectionProofs": 519,
-   "sectionProverHours": 6.7,
+   "sectionLeaves": 509,
+   "sectionProverHours": 9.9,
+   "keepsUpTimes": 2.4,
+   "treeProverHours": 11.1,
    "autolykosCompressions": 1552022,
-   "autolykosProofs": 15069,
-   "autolykosProverHours": 195.1,
-   "nativeHeaderSeconds": 8.1
+   "autolykosProverHours": 287.5,
+   "blake2sEfficientGadgetHours": 1.9,
+   "nativeHeaderSeconds": 8.1,
+   "readerMinimumBytes": 3963092
   },
-  "parsingBreakEvenGatesPerUnsignedByte": 461
+  "scanBudgetGatesPerUnsignedByte": 666,
+  "spam": {
+   "proverHoursPerExtraMegabyte": 1.5,
+   "extraMegabytesToExceedADay": 9.4,
+   "fullBlocksMegabytesPerDay": 917,
+   "fullBlocksProverHours": 1375
+  }
  }
 }
