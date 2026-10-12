@@ -1,0 +1,82 @@
+name: Windows I/O probe
+
+# Slice 24 probe (Next 7), deleted before the slice merges: where the kept-file tests' time goes on hosted Windows
+# runners. Each runner measures file and SQLite operations and the kept-file test files on the system drive's temp
+# directory (os.tmpdir(), where the tests write) and on the runner's temp directory, then again with both excluded
+# from Defender's real-time scan.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: probe ${{ matrix.os }} ${{ matrix.n }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        n: [1, 2, 3, 4, 5, 6]
+        include:
+          - os: ubuntu-latest
+            n: 0
+    env:
+      TESTS: test/pool-v3-replay-store.test.ts test/pool-v3-kept-state.test.ts test/pool-v3-kept-walk.test.ts test/pool-v3-frontier.test.ts test/lit-reader.test.ts test/cli.test.mjs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Host
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "TEMP=$env:TEMP RUNNER_TEMP=$env:RUNNER_TEMP WORKSPACE=$env:GITHUB_WORKSPACE"
+          Get-CimInstance Win32_Processor | Select-Object Name, NumberOfLogicalProcessors | Format-List
+          Get-Volume | Where-Object DriveLetter | Select-Object DriveLetter, FileSystem, Size, SizeRemaining | Format-Table
+          Get-PhysicalDisk | Select-Object FriendlyName, MediaType, BusType, Size | Format-Table
+          try { Get-MpComputerStatus | Select-Object AMRunningMode, RealTimeProtectionEnabled, OnAccessProtectionEnabled, BehaviorMonitorEnabled, AntivirusSignatureLastUpdated | Format-List } catch { "Defender status unavailable: $_" }
+          try { (Get-MpPreference).ExclusionPath } catch { "no preference" }
+      - name: Operations, Defender as found
+        shell: bash
+        run: |
+          mkdir -p scratch/probe
+          node scripts/probe/win-io.mjs ops "$(node -p 'require("os").tmpdir()')" "os-tmp" scratch/probe/ops-tmp.json > /dev/null
+          node scripts/probe/win-io.mjs ops "$RUNNER_TEMP/probe" "runner-temp" scratch/probe/ops-runner.json > /dev/null
+      - name: Kept-file tests on os.tmpdir(), Defender as found
+        shell: bash
+        continue-on-error: true
+        run: npx vitest run $TESTS --reporter=json --outputFile=scratch/probe/vt-tmp.json --testTimeout=300000 > /dev/null
+      - name: Kept-file tests on the runner's temp directory, Defender as found
+        shell: bash
+        continue-on-error: true
+        run: TEMP="$RUNNER_TEMP" TMP="$RUNNER_TEMP" npx vitest run $TESTS --reporter=json --outputFile=scratch/probe/vt-runner.json --testTimeout=300000 > /dev/null
+      - name: Exclude the temp directories from Defender's real-time scan
+        if: runner.os == 'Windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Add-MpPreference -ExclusionPath $env:TEMP, $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE
+          (Get-MpPreference).ExclusionPath
+      - name: Operations and kept-file tests on os.tmpdir(), excluded
+        if: runner.os == 'Windows'
+        shell: bash
+        continue-on-error: true
+        run: |
+          node scripts/probe/win-io.mjs ops "$(node -p 'require("os").tmpdir()')" "os-tmp-excluded" scratch/probe/ops-tmp-x.json > /dev/null
+          npx vitest run $TESTS --reporter=json --outputFile=scratch/probe/vt-tmp-x.json --testTimeout=300000 > /dev/null
+      - name: Summary
+        if: always()
+        shell: bash
+        run: node scripts/probe/win-io.mjs summary scratch/probe/summary.md scratch/probe/ops-tmp.json scratch/probe/ops-runner.json scratch/probe/ops-tmp-x.json scratch/probe/vt-tmp.json scratch/probe/vt-runner.json scratch/probe/vt-tmp-x.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: win-io-${{ matrix.os }}-${{ matrix.n }}
+          path: scratch/probe
