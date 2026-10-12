@@ -66,8 +66,9 @@ read, not to reproduce.
   dispositioned every letter open before it. Two bear on the argument:
   - **(bh)**, A15: the commitment's signed message names no venue, so one operator key on two venues lets anyone
     copy its commitments between them ([open items](SECURITY_ARGUMENT.md#open-items-this-argument-found)).
-  - **(bg)**: a kept read discarded for good reason (a new code version, a damaged file) is replayed whole inside an
-    admission's turn, which at scale can lapse a short silence window. Availability, not validity.
+  - **(bg)**, fixed for upgrades: a new version prepares its kept reads beside the serving operator
+    (`moe operator prepare`, [decision](../decisions/2026-10.md#2026-10-12--prepare-a-new-versions-kept-reads-beside-the-serving-operator-and-hold-one-handle-per-kept-file-next-4-bg)). A damaged or copied reads file found at a restart is still replayed
+    whole in the first read, which at scale can lapse a short silence window. Availability, not validity.
 - **Internal audits.** One area per run by AI instances, recorded in the decision log (`decisions/`, search "audit") and
   the audit commits (`git log --grep audit`): shared encoding; the shared primitives with the retired v2 relations; v3
   records, codecs and evidence store; the range verifier; the Ergo node-JSON intake and header store as the venue uses

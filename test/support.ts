@@ -50,3 +50,16 @@ export async function collected<T>(items: Iterable<T> | AsyncIterable<T>): Promi
   for await (const item of items) out.push(item);
   return out;
 }
+
+/** Another process holding a kept file's lock (`<file>.lock`), as a second `moe` process would, until released. */
+export async function heldElsewhere(path: string): Promise<{ release(): Promise<void> }> {
+  const { spawn } = await import("node:child_process");
+  const child = spawn(process.execPath, ["--no-warnings", "-e", `const { DatabaseSync } = require("node:sqlite");
+const lock = new DatabaseSync(process.argv[1], { timeout: 0 }); lock.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE");
+process.stdout.write("held\\n"); process.stdin.resume(); process.stdin.on("end", () => process.exit(0));`, `${path}.lock`], { stdio: ["pipe", "pipe", "inherit"] });
+  await new Promise<void>((done, failed) => {
+    child.stdout.on("data", chunk => { if (String(chunk).includes("held")) done(); });
+    child.on("exit", status => failed(new Error(`the lock holder exited ${status}`)));
+  });
+  return { release: () => new Promise<void>(done => { child.removeAllListeners("exit"); child.on("exit", () => done()); child.stdin.end(); }) };
+}

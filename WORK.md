@@ -1,9 +1,10 @@
 # Current work
 
-Updated: 2026-10-09
+Updated: 2026-10-12
 
 ## Goal
-Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators-restart-replay-before-the-10-run-and-write-the-security-argument-the-external-review-needs)): **slice 18 (local, running) → (bg) → (bj) → public pages; slice 19 is done but for commissioning the review.** (bb) is fixed ([decision](decisions/2026-10.md#2026-10-09--record-a-kept-files-digest-before-its-log-moves-in-and-keep-a-long-reads-progress-by-time-next-4-bb)).
+Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators-restart-replay-before-the-10-run-and-write-the-security-argument-the-external-review-needs)): **slice 18 (local, running) → (bj) → venue research (Next 12) → public pages; slice 19 is done but for commissioning the review.**
+**[Direction 2026-10-12](decisions/2026-10.md#2026-10-12--judge-each-slice-against-a-practical-medium-of-exchange-for-ordinary-holders-and-reopen-the-second-venue-direction):** before building, ask what a near-ideal, practical medium of exchange would be for the paper's problems and for an ordinary holder (phone, no node, low fees, quick settlement, manageable recovery, readable terms), judge the planned slice against it, and change course where clearly better, small or fundamental (normative changes via C0a). The next direction check weighs a phone-first holder path for release. (bg) is fixed for upgrades ([decision](decisions/2026-10.md#2026-10-12--prepare-a-new-versions-kept-reads-beside-the-serving-operator-and-hold-one-handle-per-kept-file-next-4-bg), #173). (bb) is fixed ([decision](decisions/2026-10.md#2026-10-09--record-a-kept-files-digest-before-its-log-moves-in-and-keep-a-long-reads-progress-by-time-next-4-bb)).
 - **Slice 18, the 10⁶ design-point run (local machine): running since 2026-10-09 04:18 UTC** on `bc43e79` (worktree `scratch/wt/dp6`, built there). *Goal:* the [design point](docs/PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets) itself: admission during the journal's own read
   ([slice 15](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15) extrapolates either side of ≤ 1 s), a reader's memory ([M11c3](docs/POOL_DEPLOYMENT_PROBES.md#the-design-point-m11c3) extrapolates just under 1 GiB), and a restart's first admission at 10⁵ and 10⁶. *Method:* `scratch/dp6/` ([slice 15's](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15) driver for Windows):
   marks at 10⁵ and 10⁶, each followed by a restart of `serve` and its first admission; holdings capped at 25,000 ((az)); silence 4,096 blocks, past any wait's mining; above-normal priority; host CPU beside serve's; `keep.mjs` restarts a failed driver. A smoke run (marks 300/600, `serve` killed at 278) resumed in 2.2 s, restarts 1.1–1.3 s.
@@ -40,7 +41,7 @@ Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators
    (accepted): a lost instance's statement in flight at a restoration lands beside a retry; a note another instance received and
    spent between two reads is never held. Slice 15 ([edges](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15)) fixed (ay); (bb) is fixed (Goal). Open beside it: a restarted `serve`'s first admission
    reads what the previous process admitted since its last kept read ([slice 15](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15), [(bb)](docs/POOL_DEPLOYMENT_PROBES.md#the-restart-read-next-4-bb)).
-   **(bg)** (Durable operation gate): kept reads discarded for good reason (a new code version names another kept context, §14; a damaged or copied file) are replayed whole inside an admission's turn (hours at 10⁶, [decision](decisions/2026-10.md#2026-10-09--record-a-kept-files-digest-before-its-log-moves-in-and-keep-a-long-reads-progress-by-time-next-4-bb)), which can lapse a short silence window. Levers: the new version's read made before it serves (a command that builds the kept reads, or `serve` reading before it listens), the read moved off the admission turn, proofs remembered in rows (declined in slice 15). Owner: after slice 18's relaunch, cloud or local.
+   **(bg)** fixed for upgrades ([decision](decisions/2026-10.md#2026-10-12--prepare-a-new-versions-kept-reads-beside-the-serving-operator-and-hold-one-handle-per-kept-file-next-4-bg)): `moe operator prepare` builds a new version's kept reads beside the serving operator (read-only; reads files named by context; one handle per kept file; `serve` removes versions that served), so its first read classifies only what is new ([upgrade](docs/POOL_V3_SERVICE.md#upgrading-the-operator); probe at 3·10³: 17.7 s unprepared, 0.07 s prepared). Accepted: a damaged or copied reads file still replays whole in the first admission; a rescope's other backings and `adopt`'s read below the kept index are not prepared.
    **(bh)** (slice 19 M19a, [argument](docs/SECURITY_ARGUMENT.md) A15): the commitment's signed message names no venue, so an operator key on two venues lets anyone copy its commitments across: one copy ends that journal's service (`CONFLICT`), a higher copied sequence drops the operator's later ones (C2.3.3) and lapses their receipts. The reference makes a fresh key per directory and takes no imported one; the protocol rules' party duty 12 states it. Waiting: a venue-bound commitment context, a v4 candidate.
    Waiting on its trigger: (az) a wallet's read holds memory per holding beyond a reader's ([slice 15](docs/POOL_DEPLOYMENT_PROBES.md#the-design-points-two-edges-slice-15));
    the lever, rows and a streamed view, is taken if a holder must pass about 1.5·10⁵. (bc), (be), (bd) fixed ((bc)'s limit and levers in its decision);
@@ -70,8 +71,9 @@ Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators
    Ergo fits best but its mining is concentrated; Bitcoin is second. Probes 1 and 2 (slice 16, [results](docs/VENUE_ALTERNATIVES.md#results-of-probes-1-and-2-slice-16)) keep it:
    AntPool's template group (a third of blocks) delays records over 83 B; its reader fails the declared transfer budget. Read-only
    probe 3 (slice 17, [results](docs/VENUE_ALTERNATIVES.md#results-of-read-only-probe-3-slice-17)): records reach mempool.space's mempool before mining and
-   their wait sets C3.3's margin, so the depth. Next: mainnet publication of our own records once funded (Open questions); `venue-bitcoin.md`, with
-   its reader's own budget line, after release (Ergo is the release's venue, its concentration a stated residual risk in slice 19). BTC/XMR as chain-asset terms.
+   their wait sets C3.3's margin, so the depth. **Reopened ([direction 2026-10-12](decisions/2026-10.md#2026-10-12--judge-each-slice-against-a-practical-medium-of-exchange-for-ordinary-holders-and-reopen-the-second-venue-direction)):** a read-only slice compares venues on what a phone pays to prove
+   absence for one subject (subject/namespace-committed blocks, e.g. a data-availability chain's namespaced Merkle tree; Ergo's state root as a proportional range source;
+   ordering records apart from bulk publications), with a release's cost calm and congested; Bitcoin publication waits for it. Ergo stays the release's venue. BTC/XMR as chain-asset terms; Lightning/ecash as payout rails, not venues.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
@@ -87,8 +89,7 @@ Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators
 - Non-blocking, maintainer (2026-10-08): the external security review, release assurance's one remaining item; commissioning it lies
   outside the standing authorization. Slice 13's own part is done; the [security argument](docs/SECURITY_ARGUMENT.md) is its target and slice 19 M19b writes its brief; rolling AI reviews continue meanwhile (Next 6).
 - Non-blocking, maintainer (2026-10-08): Bitcoin probe 3's decisive part publishes 136 B and 15.5 KB records on mainnet against
-  fee (Next 12), which spends real funds outside the standing authorization: fund or authorize a small budget (under about
-  100,000 sats at 1–2 sat/vB). The read-only variant is done (slice 17).
+  fee (Next 12), which spends real funds outside the standing authorization. Held: the venue comparison (Next 12) comes first.
 - Deletion list (2026-10-09): none open.
 
 Roughly **72% done / 28% remaining** (range 62–80%), reassessed 2026-10-09 (direction check; unchanged after (bb)'s fix, which found (bg) beside it): the restart replay was a gate defect at scale and the

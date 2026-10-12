@@ -23,12 +23,13 @@ import { readFrontier, readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodePublication, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { withdrawalRecord } from "../src/pool/v3/witness.js";
-import { keptFileDigest, KeptStateMismatch, ReplayStore } from "../src/pool/v3/replay-store.js";
+import { FileInUse, keptFileDigest, KeptStateMismatch, removeKeptFile, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState, type WitnessPredicate } from "../src/pool/v3/state.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage, type RootTerms } from "../src/pool/v3/terms.js";
 import { tagOf } from "../src/pool/v3/recovery.js";
 import { decodeTrail, encodeTrail } from "../src/pool/v3/trail.js";
 import { describeState } from "./pool-v3-state-description.js";
+import { heldElsewhere } from "./support.js";
 
 const b = (n: number) => new Uint8Array(32).fill(n);
 /** A witness predicate's mark for every output but 108: a nullifier, and an opening of `backing` worth one unit
@@ -709,6 +710,28 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(() => new ReplayStore(":memory:", { digest: "x" })).toThrow(TypeError);
     expect(() => new ReplayStore("same", { digest: "same" })).toThrow(TypeError);
     expect(() => new ReplayStore("file", { digest: "d", every: 0 })).toThrow(TypeError);
+    expect(() => new ReplayStore("file", { digest: "file.lock" })).toThrow(TypeError);
+  });
+
+  it("keeps a kept file to one process: another is refused until the first closes it (Next 4 (bg))", async () => {
+    const kept = files();
+    // Another process holds it: a store here is refused before it judges the file, and removal leaves it.
+    const elsewhere = await heldElsewhere(kept.path);
+    expect(() => new ReplayStore(kept.path, kept)).toThrow(FileInUse);
+    expect(removeKeptFile(kept.path, kept.digest)).toBe(false);
+    await elsewhere.release();
+    // A store here holds it; removal leaves a file this process holds. (Stores of one process share the lock: the
+    // wallet's fencing tests open a second handle while a replaced one stays open.)
+    const first = opened(kept.path, kept);
+    expect(existsSync(`${kept.path}.lock`)).toBe(true);
+    expect(removeKeptFile(kept.path, kept.digest)).toBe(false);
+    first.close();
+    // A file no handle holds is removed with its digest and the caller's files; its lock stays, so no two handles hold
+    // locks of their own on one path.
+    writeFileSync(`${kept.path}.served`, "");
+    expect(removeKeptFile(kept.path, kept.digest, [`${kept.path}.served`])).toBe(true);
+    for (const file of [kept.path, kept.digest, `${kept.path}-wal`, `${kept.path}.served`]) expect(existsSync(file)).toBe(false);
+    expect(existsSync(`${kept.path}.lock`)).toBe(true);
   });
 });
 

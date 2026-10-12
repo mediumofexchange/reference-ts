@@ -406,8 +406,9 @@ and 31.
 **Residual.**
 - A remedy needs the evidence: a holder whose backing nobody replicated waits (§C4 "Data withholding").
 - Nothing can be witnessed while the venue is down, and every clock stops with it.
-- A restart after a code version that names another kept context, or after a damaged reads file, replays the whole
-  history inside an admission. That could lapse a short silence window (WORK.md Next 4 (bg)).
+- A restart after a damaged or copied reads file replays the whole history inside an admission, which could lapse a
+  short silence window. A new code version prepares its reads beside the serving operator first
+  ([decision](../decisions/2026-10.md#2026-10-12--prepare-a-new-versions-kept-reads-beside-the-serving-operator-and-hold-one-handle-per-kept-file-next-4-bg)); one not prepared costs the same replay.
 
 ## Lit notes
 

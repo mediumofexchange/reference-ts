@@ -172,12 +172,14 @@ function absolute(path: string): string {
   return isAbsolute(path) ? path : resolve(path);
 }
 
-/** Open an existing directory of `role`, or of any role for a command every directory takes (`moe venue audit`). */
-export function openDirectory(dir: string, role: Role | "any"): Directory {
+/** Open an existing directory of `role`, or of any role for a command every directory takes (`moe venue audit`).
+ * `beside` takes no process lock, for a command that only reads the directory's databases beside the process holding
+ * it and writes files of its own (`moe operator prepare`, Next 4 (bg)). */
+export function openDirectory(dir: string, role: Role | "any", options: { readonly beside?: boolean } = {}): Directory {
   const path = absolute(dir);
   requirePrivate(path);
   prepare(path);
-  lock(path);
+  if (options.beside !== true) lock(path);
   const config = readConfig(path);
   if (role !== "any" && config.role !== role) throw new CommandError("ROLE", `the directory is a ${config.role} directory, not a ${role} directory`);
   return directory(path, config);

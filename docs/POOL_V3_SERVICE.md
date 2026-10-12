@@ -162,6 +162,31 @@ and reads its state from rows without verifying a proof again; it refuses
 stored state that does not reproduce its own tip and the last signed snapshot.
 Operation failures expose bounded codes rather than internal error text.
 
+## Upgrading the operator
+
+The journal's own reads keep their classes and replays in a file named by the version's kept context
+(`journal.db.reads-<context>`, pool-v3 §14). A new version of `moe` names another context, so without preparation its
+first admission or keep-alive commit replays the whole history inside `serve`'s turn, linear in the history
+([decision](../decisions/2026-10.md#2026-10-12--prepare-a-new-versions-kept-reads-beside-the-serving-operator-and-hold-one-handle-per-kept-file-next-4-bg),
+[probe](POOL_DEPLOYMENT_PROBES.md#a-new-versions-kept-reads-prepared-beside-the-operator-next-4-bg)). The procedure:
+
+1. Install the new version beside the old one (its own install tree).
+2. With the old `serve` still running, run the new version's `moe operator prepare --dir <d>`. It takes no directory
+   lock, owns and signs nothing, reads `journal.db` and the view as they stand (the view through its last sync), and
+   writes the new version's reads file. It prints `{ "status": "prepared", "index": … }`, or `unneeded` where the
+   scope has no silence or non-service clause and no taken term, so `serve` never reads its history.
+   - It can take as long as a whole replay. Stopped part way, it resumes where it kept its progress.
+   - `BUSY` means another process holds this version's reads file (a `serve` of the same version, or another
+     `prepare`), or the journal's write lock, which the one lineage row it adds to `journal.db` waits on for 5 s.
+   - Besides the reads file it leaves its lock file (`<reads file>.lock`), and SQLite's `-wal`/`-shm` files beside
+     `journal.db` and `venue.db` where no `serve` runs.
+3. If the old `serve` kept running for long (many admissions), run `prepare` again; it reads only what is new.
+4. Stop the old `serve` and start the new one. Its first read classifies and replays only what was committed since
+   the preparation. Once it serves, the old version's reads file is removed; a file prepared for a later version stays.
+
+Rolling back to a version whose reads file was removed costs a whole replay unless that version is prepared the same way
+first. A damaged or copied reads file found at a restart is replayed in full in the first read.
+
 ## Restoring an operator directory
 
 An operator directory restored from a copy or a backup holds a book its lost instance may have extended. That instance

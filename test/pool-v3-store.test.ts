@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import type { Server } from "node:http";
@@ -14,7 +14,7 @@ import { decodeReceipt, decodeSnapshot, verifyReceipt } from "../src/pool/v3/com
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
-import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import { removeKeptFile, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import { ReferenceVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
@@ -29,7 +29,7 @@ import { RangeLimitError, type RangeRequest, type RecordKind } from "../src/reco
 import { FixtureVenue, LOCAL_REFERENCE, localVenueIdentity, type RecordPublisher, type RecordVenue } from "../src/record-venue.js";
 import { VenueError } from "../src/venue-error.js";
 import { encodeCommitment, encodeRevocation, isEquivocation, signCommitment, signRevocation } from "../src/venue-records.js";
-import { collected, stoppedKeepPoint } from "./support.js";
+import { collected, heldElsewhere, stoppedKeepPoint } from "./support.js";
 
 // The pool-v3 operator journal (src/pool/v3/store.ts) on the local reference
 // venue, over records built by witness.ts with proofs a test verifier judges.
@@ -151,6 +151,12 @@ describe("the v3 operator journal", () => {
     mkdirSync(scratch, { recursive: true });
     const directory = mkdtempSync(join(scratch, "pool-v3-store-")); directories.push(directory);
     return join(directory, "journal.db");
+  }
+  /** The journal's kept reads: the one file of its version's kept context (Next 4 (bg)). */
+  function readsOf(file: string): string {
+    const found = readdirSync(dirname(file)).filter(name => /^journal\.db\.reads-[0-9a-f]{16}$/.test(name));
+    expect(found).toHaveLength(1);
+    return join(dirname(file), found[0]!);
   }
   /** A verifier that accepts exactly the stand-in proofs whose first byte is the kind. */
   const verifier = { verify: (kind: number, _inputs: bigint[], proof: Uint8Array) => proof[0] === kind, identities: configuration.circuits };
@@ -828,12 +834,109 @@ describe("the v3 operator journal", () => {
     expect(verified).toBe(n);
     j.close();
     // The process stopped inside a keep point of its reads: after its commit, before its digest.
-    stoppedKeepPoint(`${file}.reads`, `${file}.reads.sha256`, "DELETE FROM walk_cursor", false);
+    const reads = readsOf(file);
+    stoppedKeepPoint(reads, `${reads}.sha256`, "DELETE FROM walk_cursor", false);
     j = open(); venue.advance(venue.witnessedIndex() + lag);
     // The restarted journal opens its kept reads before it serves; its read of c8 verifies the record the last process
     // admitted after its last read, beside its own admission, not every record of its history.
     j.openReads();
     await j.submit(issued(n++)); expect(verified).toBe(n + 1);
+  });
+
+  it("prepares its kept reads beside a serving owner, whose first read then verifies only what was admitted since (Next 4 (bg))", async () => {
+    const venue = FixtureVenue.reference(label, lag), file = path();
+    let verified = 0, during: () => Promise<void> = async () => {};
+    const counted = { identities: configuration.circuits, verify: async (...args: Parameters<typeof verifier.verify>) => { verified++; await during(); return verifier.verify(...args); } };
+    const open = (beside = false): Journal => { const j = new V3OperatorJournal(file, { ...(beside ? { operator } : { secret: operatorSecret }), venue, reference, verifier: counted, beside }); journals.push(j); return j; };
+    const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
+    const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
+    const issued = (n: number): Uint8Array =>
+      encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
+    let owner = open(), n = 0;
+    await owner.open("genesis", silent); await owner.publish();
+    for (let c = 2; c <= 5; c++) { await owner.submit(issued(n++)); await owner.submit(issued(n++)); await owner.commit(`c${c}`); await owner.publish(); }
+    // A handle beside the owner signs and keeps nothing, and prepares nothing while another process holds this
+    // version's reads (a serve of the same version).
+    owner.close();
+    const busy = open(true), elsewhere = await heldElsewhere(readsOf(file));
+    expect(await refusal(busy.submit(issued(n)))).toEqual(["STORAGE", undefined]);
+    expect(await refusal(busy.prepareReads())).toEqual(["BUSY", undefined]);
+    await elsewhere.release(); busy.close();
+    // A new owner that has not read yet, serving while the preparation reads: its commands keep venue answers and
+    // publish in the journal's database meanwhile. The kept reads so far are removed, as another version's file is
+    // not this one's.
+    const reads = readsOf(file);
+    expect(removeKeptFile(reads, `${reads}.sha256`)).toBe(true);
+    owner = open(); venue.advance(venue.witnessedIndex() + lag);
+    await owner.status();
+    const beside = open(true), before = verified;
+    let served = false;
+    during = async () => {
+      if (served) return;
+      served = true; venue.advance(venue.witnessedIndex() + 1n);
+      expect((await owner.status()).signed?.held).toBe(true);
+      await owner.publish();
+    };
+    const prepared = await beside.prepareReads();
+    expect(prepared).toEqual({ index: venue.witnessedIndex() - 1n, read: true });
+    // The preparation replayed the whole history once, each record verified once.
+    expect(served).toBe(true); expect(verified - before).toBe(n);
+    // Prepared again, nothing is new: it resumes its kept walk and verifies nothing.
+    during = async () => {};
+    expect(await beside.prepareReads()).toEqual({ ...prepared, index: venue.witnessedIndex() }); expect(verified - before).toBe(n);
+    beside.close();
+    // The owner's first read resumes the prepared walk: it verifies its own admission only, not the history (main: n + 1).
+    const at = verified;
+    expect(decodeReceipt(await owner.submit(issued(n++))).position).toBe(BigInt(n));
+    expect(verified - at).toBe(1);
+  });
+
+  it("removes the kept reads of versions that served before it, never one prepared for a later version (Next 4 (bg))", async () => {
+    const venue = FixtureVenue.reference(label, lag);
+    const silent = signedTerms(termsFields({ silence: { noCommitmentDuration: 50n, challengeWindow: 5n } })), name = rootTermsName(silent.terms);
+    const own: SegmentContext = { domain, header: { ...header, entries: [{ backing: name, link: name }] } };
+    const issued = (n: number): Uint8Array =>
+      encodeRecord(authorizeIssue(record(issueTask(own, prepareExactOutput(payerSeed, domain, b(100 + n), name, 1n))), issuerSecret));
+    const file = path();
+    let owner = journal(file, venue);
+    await owner.open("genesis", silent); await owner.publish();
+    await owner.submit(issued(0)); await owner.commit("c2"); await owner.publish();
+    await owner.submit(issued(1));
+    const reads = readsOf(file), directory = dirname(file);
+    // Other versions' files beside this one's: the unnamed one kept before (bg), one that served, one that served whose
+    // lock another handle holds, and one prepared for a later version, kept after this one's digest.
+    const write = (name: string, served: boolean): string => {
+      const other = join(directory, name);
+      for (const suffix of ["", "-wal", ".sha256", ".lock", ...(served ? [".served"] : [])]) writeFileSync(`${other}${suffix}`, "");
+      return other;
+    };
+    const legacy = write("journal.db.reads", false), older = write("journal.db.reads-0123456789abcdef", true);
+    const held = write("journal.db.reads-00000000000000aa", true), prepared = write("journal.db.reads-fedcba9876543210", false);
+    const { DatabaseSync } = await import("node:sqlite");
+    const lock = new DatabaseSync(`${held}.lock`, { timeout: 0 }); lock.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE");
+    onTestFinished(() => { if (lock.isOpen) lock.close(); });
+    // Unrelated files beside the journal stay.
+    writeFileSync(join(directory, "journal.db.readsx"), ""); writeFileSync(join(directory, "other.db.reads-0123456789abcdef"), "");
+    // Restarted, however often: the later version's prepared file stays.
+    for (let restart = 0; restart < 2; restart++) {
+      owner.close(); owner = journal(file, venue);
+      owner.openReads();
+      venue.advance(venue.witnessedIndex() + lag);
+      await owner.submit(issued(2 + restart));
+    }
+    const left = new Set(readdirSync(directory));
+    for (const gone of [legacy, older]) for (const suffix of ["", "-wal", ".sha256", ".served"]) expect(left.has(basename(`${gone}${suffix}`))).toBe(false);
+    for (const stays of [held, prepared]) for (const suffix of ["", "-wal", ".sha256"]) expect(left.has(basename(`${stays}${suffix}`))).toBe(true);
+    for (const stays of [reads, `${reads}.sha256`, `${reads}.served`, `${older}.lock`, join(directory, "journal.db.readsx"),
+      join(directory, "other.db.reads-0123456789abcdef")]) expect(left.has(basename(stays))).toBe(true);
+    // Its own reads held by another process: an owner of this version is refused them, and still marks its version served.
+    owner.close(); rmSync(`${reads}.served`);
+    const elsewhere = await heldElsewhere(reads), second = journal(file, venue);
+    expect(() => second.openReads()).toThrow(expect.objectContaining({ code: "BUSY" }));
+    expect(existsSync(`${reads}.served`)).toBe(true);
+    await elsewhere.release();
+    // Closed before the directory is removed (Windows refuses to remove a file held open).
+    lock.close();
   });
 
   it("holds no transaction on its database while it reads its own history", async () => {

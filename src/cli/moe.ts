@@ -15,7 +15,7 @@ const USAGE = `usage: moe <role> <command> --dir <directory> ...
 roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show, service add, request, pay, freshen,
               move-window, reprove, submit, status, sync, fulfill, fulfillment, demand, withdraw, settle, presentation, publish;
               with --backer at init: venue create, terms create, issue, accept, burn, publish-acceptance)
-       operator (init, venue create, open, serve, return, adopt, restore)
+       operator (init, venue create, open, serve, return, adopt, restore, prepare: a new version's kept reads beside serve)
        reader (init, terms add|show, service add, supply, presentation)
        relay (init, publish, serve, send)
        venue (audit: any role's directory, after a restore or a copy, before any other command)
