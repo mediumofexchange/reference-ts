@@ -1,8 +1,0 @@
-{"dir":"scratch/succinct-probe/leaf_103","exit":0,"proveS":68.903388555,"peakMiB":5830,"proof":14656,"verified":true}
-{"dir":"scratch/succinct-probe/leaf_103","exit":0,"proveS":68.888423722,"peakMiB":5818,"proof":14656,"verified":true}
-write_vk failed
-{"dir":"scratch/succinct-probe/b2b_2560","exit":0,"proveS":11.132196949,"peakMiB":996,"proof":14656,"verified":true}
-write_vk failed
-{"dir":"scratch/succinct-probe/b2b_5120","exit":0,"proveS":20.781139584,"peakMiB":1932,"proof":14656,"verified":true}
-write_vk failed
-{"dir":"scratch/succinct-probe/b2b_10240","exit":0,"proveS":42.980243021,"peakMiB":3818,"proof":14656,"verified":true}
