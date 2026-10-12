@@ -142,7 +142,7 @@ Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumof
 **Exhaustion follows the venue's carriage, not the subject's records.** §13.2 proves absence by reading every object the venue holds in the range. On a chain whose blocks commit nothing by subject, that means every transaction section. Three routes make a phone's cost follow its subjects instead:
 - *A namespace commitment in each block*, such as a namespaced Merkle tree over the block's data. The phone needs one proof per block per subject, so its cost follows the number of blocks.
 - *A per-subject log in the venue's state that consensus enforces.* The phone needs one proof at the range's end, so its cost follows the subject's records. The header chain can be shortened by a suffix proof.
-- *A succinct proof of the exhaustion itself.* The proof shows that the scan over the range's sections matches the headers' roots and found exactly these objects. The phone checks headers, or a proof of them, and one proof. The trust stays exhaustion's, plus the relation's correctness, and the venue is unchanged. Measured in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21): the hashing of a day costs a 4-vCPU prover about 10 hours; the scan is unmeasured.
+- *A succinct proof of the exhaustion itself.* The proof shows that the scan over the range's sections matches the headers' roots and found exactly these objects. The phone checks headers, or a proof of them, and one proof. The trust stays exhaustion's, plus the relation's correctness, and the venue is unchanged. Measured in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21): the hashing of a day costs a 4-vCPU prover about 10 hours; with the scan ([slice 22](#the-attribution-scans-cost-slice-22)), about 14.
 
 | One subject's reads | Ergo, exhaustion (today) | Ergo, state-root log (design, not built) | Celestia, namespace proofs | Bitcoin, exhaustion |
 |---|---|---|---|---|
@@ -216,8 +216,8 @@ It has these costs:
 
 **Recommendation (judgment).**
 - *Release venue:* Ergo stays the release's venue.
-- *Next probe:* the succinct proof of exhaustion. It is the cheapest decisive probe and can run in the cloud. It measures the declared proof system's proving cost for Blake2b-256 per byte and for an Autolykos header check, scaled to a day of Ergo sections, against what a volunteer or operator prover could carry. Done in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21): the hashing passes, and the attribution scan's cost decides the route.
-- *The state-root log is the fallback,* if that cost fails. The hashing passed in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21), so the log is deferred unless the scan fails. Its testnet probe must pass three gates:
+- *Next probe:* the succinct proof of exhaustion. It is the cheapest decisive probe and can run in the cloud. It measures the declared proof system's proving cost for Blake2b-256 per byte and for an Autolykos header check, scaled to a day of Ergo sections, against what a volunteer or operator prover could carry. Done in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21): the hashing passes; the attribution scan passes too ([slice 22](#the-attribution-scans-cost-slice-22)).
+- *The state-root log is the fallback,* if that cost fails. The hashing passed in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21), so the log is deferred unless the scan fails; it passed in [slice 22](#the-attribution-scans-cost-slice-22). Its testnet probe must pass three gates:
   1. the attacker's cost per block of delay, against a demand's C3.3 window and a key thief's gain;
   2. rent reserves;
   3. no single miner holds a majority of recent blocks when the log is adopted, re-measured then. Today this gate fails: one address mined 51% of recent blocks.
@@ -273,6 +273,38 @@ Proving time follows the gates a circuit fills, not its padded rows. Smaller cir
 - *Gadget:* the Noir Blake2b is straightforward, not tuned.
 - *Not measured:* the attribution scan, the map, the period fold, a phone's header check, and Ergo's fee and size policy.
 - *Window:* two days of Ergo. The cost grows with Ergo's use, linearly in unsigned bytes and transactions.
+
+### The attribution scan's cost (slice 22)
+
+Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/c5eeece/scripts/venue/scan-probe); [decision](../decisions/2026-10.md#2026-10-12--the-attribution-scan-costs-about-180-gates-a-byte-under-a-third-of-its-budget-so-the-succinct-route-has-not-failed-and-attributes-by-subject-slice-22)). The question: [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21) left the route to the attribution scan, which must read every unsigned byte under venue-ergo §5's grammar so that no prover can call a grammatical transaction ungrammatical and omit its record. One 4-vCPU prover keeps up while the scan adds at most about 660 gates a byte.
+
+**The scan costs under a third of its budget.** The circuit reads one byte a step, so a crafted transaction costs no more per byte than any other. Each step looks up its byte's class under the current field, forms a key from the mode, that class and five zero tests (the bytes left in a field, a VLQ's value against 0 and 32, the two loop counters against 1), and applies the action a table names for the key: the next mode, an error, and linear updates of the counters, the VLQ, the subject's two halves and the output's shape. Separate checks catch a non-minimal VLQ, one past its bytes or bound, and a byte of the pay-to-public-key prefix or the fee tree that differs. Transactions sit back to back; at each start the previous one counts only if it ended inside the grammar, and the machine restarts.
+
+| Measured (one 4-vCPU Xeon at 2.10 GHz) | Value |
+|---|---|
+| Scan per unsigned byte, transactions back to back | 181.5 gates attributing every output with §6's shape whatever its tree; 216.5 matching §6's four locations (between 1,024 and 2,048 bytes; 512 to 1,024 gives the same) |
+| Constant tables and frame, once a circuit | about 25,700 gates |
+| A first draft as branching Noir | about 1,280 gates a byte: every branch's selects and every field-to-integer cast are paid on every byte |
+| Prove time per gate, A/B at 2^19 rows on one idle host (the faster of two proofs, two runs) | scan 17.4–18.0 µs, Blake2b 17.8–18.5 µs: the scan proves no slower per gate |
+| The machine against the reference's framer (`frameTransaction`) | validity and shaped outputs agree on all 43,390 transactions: 1,390 of mainnet, 2,000 synthetic record transactions, 40,000 mutations of either |
+| The circuit against the machine | validity and entries agree on 450 transactions packed into 357 buffers of 1,024 bytes, both variants (195 inside the grammar; 332 and 381 entries) |
+| A day of Ergo mainnet (720 blocks to height 1,892,959) | 4,994 transactions, 4.16 MB unsigned; 541 inside §5's grammar; no output with §6's shape at any tree |
+
+**A day's proof takes one machine about 14 hours so far.** On slice 21's day, its 9.9 hours of hashing grow to 13.9 hours with the scan by shape and 14.6 by location: one 4-vCPU prover keeps up 1.7 times. The busier day measured here (4.16 MB) takes 14.9 and 15.7 hours. Proving time is gates times slice 21's 16.8 µs a gate at 2^22 rows, each leaf carrying its recursive verification and the scan's tables. The leaf's bindings, the map and the fold are not yet in it; they spend the remaining margin.
+
+**Attribute by subject, not by location.** An entry by shape alone names the subject, the transaction and the output; the phone fetches the transactions its subjects' entries name, checks them against their ids and applies §6 itself (its locations, kinds 1–3's exact lengths, kind-4 runs). Absence stays proven: every object §6 attributes is an output with the shape, so a subject with no entry has no object. One proof chain then serves every Ergo venue at once, where location matching needs a chain per venue's scripts, and it costs 35 fewer gates a byte. What it adds is entries for shaped outputs at other trees: none on the day measured. Anyone can add them at a fee each, keeping the box's value at a tree of their own, and a phone pays the bytes of each such transaction under its subjects (up to the 98,304-byte relay limit). An entry that also carries its tree's fingerprint lets the phone or the map pass over them, at 192.5 gates a byte (measured in review); that is the map's choice. Fetching by subject tells a supplier which subjects a phone follows, which exhaustion never reveals: the levers are fetching a period's whole map, and transactions through a relay or in batches.
+
+**Spam now costs more prover time per byte.** Each extra unsigned MB a day costs 2.48 prover hours (hashing and scan), so about 4.1 MB more a day outruns one machine; slice 21 put that at 9.7 MB. Ergo charges by transaction (the publisher pays 1.1 mERG each), so that is about 0.05 ERG a day in 98,304-byte transactions and 0.29 ERG in 15.5 KB ones (estimates; Ergo's fee policy not re-verified). Spam dense in shaped outputs, about 11,600 a MB, also loads the map and fold, whose cost per entry is unmeasured. A tree of proofs lets several machines share a day; it threatens liveness, not soundness.
+
+**Not measured here; the next steps.**
+- *The leaf:* transaction starts and lengths bound to the Blake2b segmentation (here they are witnesses, and a wrong start or length drops an entry), each entry bound to its transaction's id, a transaction across leaves (the machine's state, about 15 field elements, as a leaf's input and output), and the challenges (the tree fingerprint's point, the entries' multiset challenges) derived in the circuit from the range's header ids.
+- *The map and the fold:* entries sorted by subject so that a phone proves its subject absent or reads the period's whole map, and the period fold.
+- *The specification:* the C0a proposal for §13.2, as slice 21 left it.
+
+**Limits.**
+- *Host:* one host; gate counts are exact, timings are two runs.
+- *Tests:* agreement with the reference's own framer, not with the node; mutations are random, and the review added 86 targeted hostile cases (78 also through the circuit, packed several to a buffer). The gate counts include a test-only validity sum of a few gates a byte.
+- *Window:* one day of Ergo for the size and the shaped-output count.
 
 ## 5. Backing assets (terms, not backings)
 
