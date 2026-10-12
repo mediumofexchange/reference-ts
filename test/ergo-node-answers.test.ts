@@ -61,7 +61,7 @@ describe("the node publisher on recorded node answers", () => {
   });
 
   it("takes a refused submission as not accepted", async () => {
-    await expect(recordedNode.submit(Uint8Array.of(0), new Uint8Array(32))).rejects.toThrow(/HTTP 400/);
+    await expect(recordedNode.submit(Uint8Array.of(0), new Uint8Array(32), () => {})).rejects.toThrow(/HTTP 400/);
   });
 });
 

@@ -394,6 +394,8 @@ try {
     await ok(wallet("publish-acceptance", BK, "answer", backing, "--out", relayed));
     const sent = await ok(["relay", "publish", "--dir", RL, relayed]);
     assert.equal(sent.status, "pending");
+    // Nothing is mined: the relay's wait ends UNWITNESSED within its polls, and a rerun publishes again (Next 4 (bi)).
+    await refused(["relay", "publish", "--dir", RL, relayed, "--wait", "1", "--poll-ms", "10"], "UNWITNESSED");
     await settled(["relay", "publish", "--dir", RL, relayed], out => out.status === "final");
     const settlement = await ok(wallet("settle", SH, "settle-1", backing, "--acceptance", acceptance));
     assert.deepEqual([settlement.kind, settlement.demand], ["settlement", shown.demand]);

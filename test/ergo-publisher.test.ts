@@ -795,6 +795,58 @@ describe("replacement, settlement and supplier cost", () => {
     expect(n.submitted).toHaveLength(0);
   });
 
+  it("lets a supplier that works before its broadcast ask the fence and readiness again, and refuses it once its walk ended (Next 4 (bi))", async () => {
+    // Ready in the turn and at the publisher's own check, not by the time the supplier's work (a budget's read) is done.
+    const n = funded([10_000_000n]);
+    let ready = true;
+    const reading: ErgoPublishingSupplier = { name: "reading", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: async (signed, id, proceed) => { ready = false; await n.unspentBoxes(TREE); proceed?.(); return n.submit(signed, id); } };
+    const check = (): void => { if (!ready) throw new VenueError("the chain is short"); };
+    await expect(publisher([reading]).publish(request(), check)).rejects.toThrow(new VenueError("the chain is short"));
+    expect(n.submitted).toHaveLength(0);
+
+    // The supplier's work outlasts its walk's deadline: the publication's turn ends, and what it sends afterwards is refused.
+    let release!: () => void, late: unknown;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const slow: ErgoPublishingSupplier = { ...reading, submit: async (signed, id, proceed) => {
+      await held;
+      try { proceed?.(); } catch (error) { late = error; throw error; }
+      return n.submit(signed, id);
+    } };
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [slow], timeoutMs: 100 });
+    await expect(p.publish(request(), () => {})).rejects.toThrow(/kept and sent again/);
+    release();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(late).toEqual(new VenueError("this submission's call ended before the supplier sent it"));
+    expect(n.submitted).toHaveLength(0);
+  });
+
+  it("fences the owner again at a supplier's proceed, and shares one walk's refusal there with the others (Next 4 (bi))", async () => {
+    const tick = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    // Another owner takes the outbox while the supplier works: refused, nothing sent, the publisher poisoned.
+    const n = funded([10_000_000n]);
+    let fenced = false;
+    const persistence: ErgoPublisherPersistence = { load: () => undefined, save: () => {}, guard: () => { if (fenced) throw new VenueError("fenced"); } };
+    const fencing: ErgoPublishingSupplier = { name: "fencing", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: async (signed, id, proceed) => { fenced = true; await tick(1); proceed(); return n.submit(signed, id); } };
+    const owned = new ErgoPublisher({ secretKey: SECRET, suppliers: [fencing], persistence });
+    await expect(owned.publish(request())).rejects.toThrow(new VenueError("fenced"));
+    expect([n.submitted.length, owned.failed]).toEqual([0, true]);
+
+    // One walk's supplier finds the caller unready; the other's, later and ready again, shares that refusal.
+    const m = funded([10_000_000n]), posted: string[] = [];
+    let ready = true;
+    const walk = (name: string, delay: number): ErgoPublishingSupplier => ({ name, unspentBoxes: t => m.unspentBoxes(t), hasBox: id => m.hasBox(id),
+      hasTransaction: id => m.hasTransaction(id), submit: async (signed, id, proceed) => {
+        await tick(delay);
+        if (name === "first") ready = false; else ready = true;
+        proceed(); posted.push(name); return m.submit(signed, id);
+      } });
+    await expect(publisher([walk("first", 5), walk("second", 30)]).publish(request(), () => { if (!ready) throw new VenueError("the chain is short"); }))
+      .rejects.toThrow(new VenueError("the chain is short"));
+    expect([posted, m.submitted]).toEqual([[], []]);
+  });
+
   it("builds no replacement while no supplier answers whether a transaction the record had before is held", async () => {
     const n = funded([10_000_000n]);
     n.refuse = () => true;
@@ -1061,10 +1113,10 @@ describe("a node as a publishing supplier", () => {
   it("takes a submission as accepted only where the node answers with the transaction's id", async () => {
     const id = new Uint8Array(32).fill(0xab);
     const { calls, fetch } = recording(() => new Response(`"${hex(id)}"`));
-    await ergoNodePublisher("http://node", { fetch }).submit(Uint8Array.of(1, 2, 3), id);
+    await ergoNodePublisher("http://node", { fetch }).submit(Uint8Array.of(1, 2, 3), id, () => {});
     expect(calls).toEqual([{ url: "http://node/transactions/bytes", method: "POST", body: '"010203"' }]);
-    await expect(ergoNodePublisher("http://node", { fetch }).submit(Uint8Array.of(1), new Uint8Array(32))).rejects.toThrow(/did not accept/);
+    await expect(ergoNodePublisher("http://node", { fetch }).submit(Uint8Array.of(1), new Uint8Array(32), () => {})).rejects.toThrow(/did not accept/);
     const refusing = recording(() => new Response('{ "error" : 400, "reason" : "bad.request", "detail" : "Can not parse transaction bytes: null" }', { status: 400 }));
-    await expect(ergoNodePublisher("http://node", { fetch: refusing.fetch }).submit(Uint8Array.of(0), id)).rejects.toThrow(/400/);
+    await expect(ergoNodePublisher("http://node", { fetch: refusing.fetch }).submit(Uint8Array.of(0), id, () => {})).rejects.toThrow(/400/);
   });
 });

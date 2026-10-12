@@ -25,9 +25,12 @@ import { keptFileDigest, ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
 import { closeListener, listenLoopback, SERVE_FLAGS, serveFlags } from '../src/cli/serve.js';
 import { V3StoreError } from '../src/pool/v3/store.js';
-import { parseVenue, publisherStore, venueText } from '../src/cli/venue.js';
+import { parseVenue, publisherStore, publishingSuppliers, SpendBudget, venueText } from '../src/cli/venue.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { ErgoPublisher, payToPublicKeyTree, verifyErgoProof } from '../src/ergo-publisher.js';
+import { VenueError } from '../src/venue-error.js';
 import { ERGO_SYNTHETIC_REFERENCE, ownErgoProfile } from '../src/ergo-profile.js';
-import { SYNTHETIC_SCRIPTS } from '../src/ergo-synthetic.js';
+import { MempoolNode, plainBox, SYNTHETIC_ANCHOR_HEIGHT, SYNTHETIC_SCRIPTS } from '../src/ergo-synthetic.js';
 
 describe('moe command arguments', () => {
   it('reads positionals and declared flags, refusing unknown, repeated and valueless ones', () => {
@@ -165,6 +168,52 @@ describe('moe wallet and relay files', () => {
       const c = publisherStore(join(dir, 'relay.db'));
       expect(c.persistence.load()).toBe('first');
       c.close();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('sends a funding directory\'s transaction only where the publisher\'s proceed passes after the budget\'s read (Next 4 (bi))', async () => {
+    const posted = [];
+    const server = createServer((request, response) => {
+      request.resume();
+      request.on('end', () => {
+        if (request.url.startsWith('/transactions/bytes')) { posted.push(request.url); response.end(JSON.stringify('11'.repeat(32))); return; }
+        response.end('[]'); // the funding key's unspent boxes: none listed
+      });
+    });
+    try {
+      const port = await listenLoopback(server, 0), read = [];
+      const budget = { tree: new Uint8Array(36), authorize: async (signed, id, boxes) => { read.push(boxes.length); } };
+      const [supplier] = publishingSuppliers({ config: { nodes: [`http://127.0.0.1:${port}`] } }, budget);
+      const signed = new Uint8Array([1]), id = new Uint8Array(32).fill(0x11);
+      await expect(supplier.submit(signed, id, () => { throw new CommandError('ENDED', 'the walk ended'); })).rejects.toThrow('the walk ended');
+      expect([read, posted]).toEqual([[0], []]);
+      await supplier.submit(signed, id, () => {});
+      expect([read, posted]).toEqual([[0, 0], ['/transactions/bytes']]);
+    } finally { await closeListener(server); }
+  });
+  it('reserves a transaction in the spend budget only once the publisher\'s proceed passes (Next 4 (bi))', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'moe-budget-'));
+    try {
+      const secret = new Uint8Array(32).fill(7), tree = payToPublicKeyTree(secp256k1.getPublicKey(secret, true));
+      const node = new MempoolNode('node', verifyErgoProof), box = plainBox(tree, 10_000_000n, SYNTHETIC_ANCHOR_HEIGHT);
+      node.fund(box);
+      let built;
+      const capture = { name: 'capture', unspentBoxes: t => node.unspentBoxes(t), hasBox: id => node.hasBox(id), hasTransaction: async () => false,
+        submit: async (signed, id) => { built = { signed, id }; } };
+      await new ErgoPublisher({ secretKey: secret, suppliers: [capture] })
+        .publish({ location: SYNTHETIC_SCRIPTS[4], subject: new Uint8Array(32).fill(1), record: new Uint8Array(100).fill(2), height: SYNTHETIC_ANCHOR_HEIGHT });
+      const budget = new SpendBudget({ config: { spendBudgetNanoErg: '1000000000' }, file: name => join(dir, name) }, tree);
+      try {
+        const ended = () => { throw new VenueError('this submission\'s call ended before the supplier sent it'); };
+        await expect(budget.authorize(built.signed, built.id, [box], ended)).rejects.toThrow('call ended');
+        expect([budget.spent(), budget.take()]).toEqual([0n, undefined]);
+        await budget.authorize(built.signed, built.id, [box], () => {});
+        const spent = budget.spent();
+        expect(spent > 0n).toBe(true);
+        // An exact resubmission reserves nothing more, and is refused where the publisher no longer sends it.
+        await expect(budget.authorize(built.signed, built.id, [box], ended)).rejects.toThrow('call ended');
+        await budget.authorize(built.signed, built.id, [box], () => {});
+        expect(budget.spent()).toBe(spent);
+      } finally { budget.close(); }
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
   it('reads a publication file of exactly its fields, at kind 4 only', () => {
