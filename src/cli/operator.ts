@@ -194,7 +194,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   let url: string, holderService: { url: string; port: number } | undefined;
   try {
     // A restarted journal checks its kept reads before it listens, not in its first admission (Next 4 (bb)). A file
-    // another handle still holds is left to the first read, which answers BUSY until it is free, as before.
+    // another process still holds is left to the first read, which answers BUSY until it is free, as before.
     try { journal.openReads(); } catch (error) { if (!(error instanceof V3StoreError && error.code === "BUSY")) throw error; }
     url = `http://127.0.0.1:${await listenLoopback(server, port)}/`;
     if (holders !== undefined) holderService = { url: `http://${onion}/`, port: await listenLoopback(holders, holdersAt) };
@@ -315,7 +315,8 @@ async function restore(argv: readonly string[]): Promise<void> {
  * the journal and the view as they stand (the view through its last sync) and writes this version's reads file. Prints
  * `prepared` with the index read at, or `unneeded` where the journal's service reads nothing (no silence, non-service
  * clause or taken term). Idempotent: a second run reads only what is new; a run stopped part way resumes. `BUSY`
- * where this version's reads file is held: a `serve` of this same version, or another `prepare`. Then stop the old
+ * where another process holds this version's reads file (a `serve` of this same version, or another `prepare`), or the
+ * journal's write lock for the one lineage row it adds. Then stop the old
  * `serve` and start the new one (run `prepare` once more first if the old one served on for long).
  */
 async function prepareReads(argv: readonly string[]): Promise<void> {

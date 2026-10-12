@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
@@ -929,10 +929,11 @@ describe("the v3 operator journal", () => {
     for (const stays of [held, prepared]) for (const suffix of ["", "-wal", ".sha256"]) expect(left.has(basename(`${stays}${suffix}`))).toBe(true);
     for (const stays of [reads, `${reads}.sha256`, `${reads}.served`, `${older}.lock`, join(directory, "journal.db.readsx"),
       join(directory, "other.db.reads-0123456789abcdef")]) expect(left.has(basename(stays))).toBe(true);
-    // Its own reads held by another process: an owner of this version is refused them.
-    owner.close();
+    // Its own reads held by another process: an owner of this version is refused them, and still marks its version served.
+    owner.close(); rmSync(`${reads}.served`);
     const elsewhere = await heldElsewhere(reads), second = journal(file, venue);
     expect(() => second.openReads()).toThrow(expect.objectContaining({ code: "BUSY" }));
+    expect(existsSync(`${reads}.served`)).toBe(true);
     await elsewhere.release();
   });
 

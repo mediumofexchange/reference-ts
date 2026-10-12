@@ -373,7 +373,7 @@ export class V3OperatorJournal {
           const meta = this.metadata(); this.identity(meta);
           const file = fileIdentity(path), kept = this.db.prepare("SELECT identity FROM journal_file WHERE id=1").get()?.identity;
           requireThat(kept === undefined || kept === file, "COPIED", "this journal's file is not the one it was made in");
-          requireThat(now >= decimal(meta!.observed), "UNAVAILABLE", "the venue's clock is behind what this journal has read");
+          // The owner may have read past this handle's view since it opened: `prepareReads` reads at the lower of the two.
           this.owner = meta!.owner as bigint;
         } finally { this.db.exec("COMMIT"); }
         this.resumedAt = undefined;
@@ -594,7 +594,7 @@ export class V3OperatorJournal {
   }
   /** Open the kept state of the journal's own reads now, where a read has kept one: §14's check on opening hashes the
    * whole file, which `serve` pays before it listens rather than in a restarted journal's first admission
-   * (Next 4 (bb)). A file another handle holds leaves it BUSY.
+   * (Next 4 (bb)). A file another process holds leaves it BUSY.
    *
    * Serving marks this version's reads as served (`<file>.served`). Other versions' reads that have served, and the one
    * file kept before Next 4 (bg), are removed where no handle holds them: a version this one replaced. One prepared
@@ -602,7 +602,10 @@ export class V3OperatorJournal {
   openReads(): void {
     requireThat(!this.closed, "STORAGE", "store is closed");
     requireThat(!this.beside, "STORAGE", "a handle beside the owner keeps no reads but its prepared ones");
-    if (existsSync(this.readsPath)) this.reads();
+    // Marked served and the replaced versions removed even where another process still holds this version's file.
+    try { if (existsSync(this.readsPath)) this.reads(); } finally { this.removeReplacedReads(); }
+  }
+  private removeReplacedReads(): void {
     writeFileSync(`${this.readsPath}.served`, "");
     const directory = dirname(this.path), name = basename(this.path), others = new Set<string>();
     for (const entry of readdirSync(directory)) {
@@ -616,8 +619,8 @@ export class V3OperatorJournal {
   /** Prepare this version's kept reads beside the owner (Next 4 (bg)): read the journal's canonical checkpoint at the
    * index its kept answer of this key's held commitments reaches, as the owner's service reads it, into this version's file, so that once this
    * version owns the journal its first read classifies and replays only what was committed since. Where the journal's
-   * service reads nothing (no taken term, silence or non-service clause), nothing is read. A file another handle holds
-   * (an owner or a preparation of this version) refuses BUSY; one stopped part way keeps what it read (keep points by
+   * service reads nothing (no taken term, silence or non-service clause), nothing is read. A file another process holds
+   * (an owner or a preparation of this version) refuses BUSY, as does a journal whose write lock the lineage row waits on; one stopped part way keeps what it read (keep points by
    * time) and the next resumes it. */
   async prepareReads(): Promise<{ readonly index: bigint; readonly read: boolean }> {
     requireThat(!this.closed, "STORAGE", "store is closed");
@@ -636,8 +639,7 @@ export class V3OperatorJournal {
         // Each preparation reads the view's clock afresh, not past this handle's last one.
         this.observedIndex = 0n;
         const held = this.replays.keptAnswer(1, this.operator), witnessed = this.clock();
-        requireThat(held !== undefined, "UNAVAILABLE", "the journal has read none of its commitments on the venue");
-        at = held.through < witnessed ? held.through : witnessed;
+        at = held === undefined || held.through > witnessed ? witnessed : held.through;
         // The owner may have signed past the view this handle opened: its signed rows are checked against its own clock.
         this.observedIndex = decimal(meta!.observed) > witnessed ? decimal(meta!.observed) : witnessed;
         try { engine = this.stored(); } catch (error) {
@@ -647,6 +649,7 @@ export class V3OperatorJournal {
         }
       } finally { this.db.exec("COMMIT"); }
       if (engine.opened === undefined || !this.servesByRead(engine.opened)) return { index: at, read: false };
+      requireThat(this.replays.keptAnswer(1, this.operator) !== undefined, "UNAVAILABLE", "the journal has read none of its commitments on the venue");
       await this.currentRead(engine, at);
       // The walk's batches stood at the owner's last lineage row when each began. Marked now at a row written after all
       // it read, the evidence restored to before that no longer resumes it (§14: a class is reused only while its
