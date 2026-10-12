@@ -323,8 +323,10 @@ until the journal is reopened.
   header it kept buries that block at the depth. While the best chain is
   shorter than the clock's depth, `publishRecord` refuses (`VenueError`), and
   the publisher asks the same in its turn and before each transaction it
-  sends, so no record signed at or below the clock is included inside its
-  lag. A
+  sends (a supplier that works first, as the commands' spend budget reads
+  the key's boxes, asks again immediately before its broadcast, and sends
+  nothing once that transaction's walk has ended), so no record signed at or
+  below the clock is included inside its lag. A
   failure of the view's own during a sync leaves it failed. A supplier
   that misses one section is not asked again in that sync, and the one that
   supplied the last section is asked first. A section answer is read by
