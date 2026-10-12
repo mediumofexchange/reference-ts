@@ -1,0 +1,116 @@
+{
+ "gates": {
+  "generic": {
+   "512": 118932,
+   "1024": 211542,
+   "2048": 397417
+  },
+  "venue": {
+   "512": 136993,
+   "1024": 247523,
+   "2048": 469238
+  }
+ },
+ "unpackedSingleTransaction": {
+  "generic": {
+   "256": 66972,
+   "512": 107782,
+   "1024": 189972,
+   "2048": 355418
+  },
+  "venue": {
+   "256": 76073,
+   "512": 126354,
+   "1024": 226976,
+   "2048": 429286
+  }
+ },
+ "firstBranchingDraft": {
+  "parse": {
+   "256": 329205,
+   "512": 657013
+  }
+ },
+ "proveAB": {
+  "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 threads, idle",
+  "runs": [
+   {
+    "venue2_2048": {
+     "gates": 469238,
+     "proveS": [
+      11.49,
+      8.43
+     ]
+    },
+    "b2b_1536": {
+     "gates": 398987,
+     "proveS": [
+      7.57,
+      7.37
+     ]
+    }
+   },
+   {
+    "venue2_2048": {
+     "gates": 469238,
+     "proveS": [
+      8.64,
+      8.17
+     ]
+    },
+    "b2b_1536": {
+     "gates": 398987,
+     "proveS": [
+      7.09,
+      7.48
+     ]
+    }
+   }
+  ],
+  "note": "both 2^19 rows; scan buffer 1,370 of 2,048 bytes filled with synthetic record transactions; both proofs verified"
+ },
+ "tests": {
+  "simulatorAgainstFramer": {
+   "transactions": 43390,
+   "mainnet": 1390,
+   "mainnetTip": 1892950,
+   "synthetic": 2000,
+   "mutated": 40000,
+   "insideGrammar": 9458,
+   "venueEntries": 18348,
+   "mismatches": 0,
+   "variants": [
+    "generic",
+    "venue"
+   ]
+  },
+  "circuitAgainstSimulator": [
+   {
+    "variant": "venue",
+    "L": 1024,
+    "transactions": 450,
+    "buffers": 357,
+    "insideGrammar": 195,
+    "entries": 332,
+    "mismatches": 0
+   },
+   {
+    "variant": "generic",
+    "L": 1024,
+    "transactions": 450,
+    "buffers": 357,
+    "insideGrammar": 195,
+    "entries": 381,
+    "mismatches": 0
+   }
+  ]
+ },
+ "day": {
+  "file": "fetch.mjs 720 <file> 1892959",
+  "insideGrammar": 541,
+  "insideGrammarBytes": 386767,
+  "shapedOutputs": 0,
+  "largestTransaction": 30301,
+  "simulatorFramerMismatches": 0
+ }
+}
