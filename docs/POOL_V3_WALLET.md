@@ -639,8 +639,17 @@ unless `fetch` will tunnel it through a loopback `http:` proxy: the environment 
 `--use-env-proxy`), `http_proxy` (or, where it is unset, `HTTP_PROXY`) such a proxy, and `NO_PROXY` not exempting it;
 a proxy that does not answer refuses as `PROXY` too. A remote proxy is refused because it could answer for the onion
 and take the wallet token. A malformed `HTTP_PROXY` stops Node before `moe` runs. `NO_PROXY=127.0.0.1` keeps a local
-node direct (Tor refuses connections to internal addresses); a remote node goes through the same proxy. `init` fetches
+node and a loopback service direct: Tor refuses connections to internal addresses (403), and a proxy's refusal of a
+tunnel (below 500) refuses as `PROXY` with its status, while its answer for an onion that failed (Tor's 500, 503 or
+504) reads as a service that did not answer. A remote node goes through the same proxy. `init` fetches
 the proving parameters, so run it under the same environment or copy them with `--parameters`.
+
+An onion exchange waits 50 s longer than a loopback one (10 s) for its response to begin, since Tor builds the circuit
+first: from a fresh client that took up to 25 s on the live network
+([probes](POOL_DEPLOYMENT_PROBES.md#the-onion-routes-on-the-live-tor-network)). Once the response begins, the same
+bound holds between its chunks. Where no source answers in time, a read uses the package the last sync kept and says
+so (`evidence: "kept"`, the sources passed over in `skipped`): an agent that needs the operator's latest state checks
+`evidence`, as the exit code is 0 for a read over kept evidence.
 
 Tor gives each distinct proxy credential its own circuit (`IsolateSOCKSAuth`, on by default), and each command is one
 process over one backing, so a fresh `<isolation>` per command keeps commands apart. Within one command the operator
