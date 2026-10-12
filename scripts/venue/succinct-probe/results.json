@@ -1,0 +1,74 @@
+{
+ "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 vCPU, 15 GB (cloud container)",
+ "measured": {
+  "blake2b": {
+   "100": 35469,
+   "1280": 333105,
+   "2560": 662515,
+   "5120": 1321335,
+   "10240": 2638975
+  },
+  "blake2s": {
+   "100": 17408,
+   "640": 32328,
+   "1280": 64418,
+   "2560": 128598
+  },
+  "prove": [
+   {
+    "gates": 662515,
+    "padded": 1048576,
+    "seconds": 13.18,
+    "peakMiB": 981
+   },
+   {
+    "gates": 1321335,
+    "padded": 2097152,
+    "seconds": 24.27,
+    "peakMiB": 1932
+   },
+   {
+    "gates": 2638975,
+    "padded": 4194304,
+    "seconds": 46.61,
+    "peakMiB": 3819
+   }
+  ],
+  "proofBytes": 14656,
+  "recursion": {
+   "one": 704636,
+   "two": 1471658,
+   "twoSeconds": 28.36
+  },
+  "day": {
+   "blocks": 721.2,
+   "transactions": 4832,
+   "unsignedBytes": 3813300,
+   "signedBytes": 4344044,
+   "idCompressions": 32659,
+   "merkleCompressions": 19290
+  },
+  "autolykosPerHeader": 2152,
+  "nativeHeaderMs": 11.22
+ },
+ "derived": {
+  "gatesPerCompression": 32941,
+  "gatesPerByte": {
+   "blake2b": 257.4,
+   "blake2sBlackBox": 50.1
+  },
+  "microsecondsPerPaddedGate": 11.11,
+  "recursionGates": 767022,
+  "compressionsPerChainedProof": 103,
+  "perDay": {
+   "sectionCompressions": 53391,
+   "sectionProofs": 519,
+   "sectionProverHours": 6.7,
+   "autolykosCompressions": 1552022,
+   "autolykosProofs": 15069,
+   "autolykosProverHours": 195.1,
+   "nativeHeaderSeconds": 8.1
+  },
+  "parsingBreakEvenGatesPerUnsignedByte": 461
+ }
+}

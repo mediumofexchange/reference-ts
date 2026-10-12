@@ -1,0 +1,27 @@
+{
+ "measured": "2026-10-12T09:54:37.540Z",
+ "node": "https://node.ergo.watch",
+ "window": {
+  "heights": [
+   1891466,
+   1892905
+  ],
+  "blocks": 1440,
+  "days": 1.997
+ },
+ "perDay": {
+  "blocks": 721.2,
+  "transactions": 4832,
+  "unsignedBytes": 3813300,
+  "signedBytes": 4344044,
+  "idCompressions": 32659,
+  "merkleCompressions": 19290,
+  "autolykosCompressions": 1551990
+ },
+ "autolykosPerHeader": 2152,
+ "maxBlock": {
+  "c": 908,
+  "height": 1891510,
+  "transactions": 47
+ }
+}
