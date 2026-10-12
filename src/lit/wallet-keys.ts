@@ -20,11 +20,18 @@ function u64(value: unknown, what: string): bigint {
   if (typeof value !== "bigint" || value < 0n || value > MAX_U64) throw new EncodingError(`${what} outside u64`);
   return value;
 }
-function root(seed: Uint8Array, domain: Uint8Array, info: Uint8Array): Uint8Array {
-  return new Uint8Array(hkdfSync("sha256", field32(seed, "seed"), field32(domain, "domain"), info, 32));
+/** `use` over an owned copy of a secret, the copy zeroed after use, so no derivation leaves one behind. */
+function withSecret<T>(value: Uint8Array, what: string, use: (own: Uint8Array) => T): T {
+  const own = field32(value, what);
+  try { return use(own); } finally { own.fill(0); }
 }
+function root(seed: Uint8Array, domain: Uint8Array, info: Uint8Array): Uint8Array {
+  return withSecret(seed, "seed", own => new Uint8Array(hkdfSync("sha256", own, field32(domain, "domain"), info, 32)));
+}
+/** The digest copied out, and its buffer zeroed: a derived secret leaves no second copy behind. */
 function hmac(key: Uint8Array, message: Uint8Array): Uint8Array {
-  return new Uint8Array(createHmac("sha256", key).update(message).digest());
+  const digest = createHmac("sha256", key).update(message).digest();
+  try { return new Uint8Array(digest); } finally { digest.fill(0); }
 }
 /** HMAC under a root derived for this one secret, the root zeroed after use. */
 function derived(seed: Uint8Array, domain: Uint8Array, info: Uint8Array, message: Uint8Array): Uint8Array {
@@ -42,7 +49,7 @@ export function ownerRoot(seed: Uint8Array, domain: Uint8Array): Uint8Array { re
 /** `ownerSecret` for `backing` and `index` under an `ownerRoot`. */
 export function ownerSecretAt(ownerRootIn: Uint8Array, backing: Uint8Array, index: bigint): Uint8Array {
   const w = new ByteWriter(); w.key32(field32(backing, "backing"), "backing"); w.u64(u64(index, "owner index"));
-  return hmac(field32(ownerRootIn, "owner root"), w.finish());
+  return withSecret(ownerRootIn, "owner root", own => hmac(own, w.finish()));
 }
 /** K's `acceptSecret = HMAC-SHA256(settlementRoot, demand || u64 acceptanceDeadline)`. */
 export function acceptSecret(seed: Uint8Array, domain: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array {
@@ -54,7 +61,7 @@ export function settlementRoot(seed: Uint8Array, domain: Uint8Array): Uint8Array
 /** `acceptSecret` for `demand` and `deadline` under a `settlementRoot`. */
 export function acceptSecretAt(settlementRootIn: Uint8Array, demand: Uint8Array, deadline: bigint): Uint8Array {
   const w = new ByteWriter(); w.key32(field32(demand, "demand"), "demand"); w.u64(u64(deadline, "acceptance deadline"));
-  return hmac(field32(settlementRootIn, "settlement root"), w.finish());
+  return withSecret(settlementRootIn, "settlement root", own => hmac(own, w.finish()));
 }
 /** `presentSecret = HMAC-SHA256(presenterRoot, tag_1 || tag_2 || u64 instant || u64 deadline)`, the tags in the demand's
  * input order and `tag_2` 32 zero bytes for a demand over one note: every field is public in the demand, so a restored
@@ -81,5 +88,5 @@ export function issueNonce(seed: Uint8Array, domain: Uint8Array, backing: Uint8A
 }
 /** The key (§1) of a derived secret: an Ed25519 public key is canonical and, from a hashed seed, never of small order. */
 export function publicKeyOf(secret: Uint8Array): Uint8Array {
-  return ed25519.getPublicKey(field32(secret, "secret"));
+  return withSecret(secret, "secret", own => ed25519.getPublicKey(own));
 }

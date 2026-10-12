@@ -119,6 +119,11 @@ function proofKey(kind: number, inputs: readonly bigint[], proof: Uint8Array): s
   frame.set(proof, 5 + 32 * inputs.length);
   return bytesToHex(sha256(frame));
 }
+/** A call's inputs and proof copied once, so its key and its verdict read the same values; the call as given where
+ * either is not what a decoded record passes (its key is then undefined). */
+const ownedCall = (inputs: bigint[], proof: Uint8Array): [bigint[], Uint8Array] =>
+  Array.isArray(inputs) && proof instanceof Uint8Array
+    ? [Array.from({ length: inputs.length }, (_, i) => inputs[i]!), new Uint8Array(proof)] : [inputs, proof];
 /**
  * The journal's verifier twice over one memory (WORK.md Next 4 (ay)): admission's, which remembers each proof it
  * verified, and its own reads', which ask the verifier only for a proof not remembered. A verdict depends on the
@@ -129,7 +134,8 @@ function proofKey(kind: number, inputs: readonly bigint[], proof: Uint8Array): s
  */
 export function rememberedProofs(verifier: DeclaredVerifier): { readonly admitting: DeclaredVerifier; readonly reading: DeclaredVerifier } {
   const verified = new Set<string>();
-  const admitting: DeclaredVerifier = { ...verifier, async verify(kind, inputs, proof) {
+  const admitting: DeclaredVerifier = { ...verifier, async verify(kind, given, givenProof) {
+    const [inputs, proof] = ownedCall(given, givenProof);
     const key = proofKey(kind, inputs, proof), verdict = await verifier.verify(kind, inputs, proof);
     if (verdict === true && key !== undefined) {
       verified.delete(key); verified.add(key);
@@ -137,7 +143,8 @@ export function rememberedProofs(verifier: DeclaredVerifier): { readonly admitti
     }
     return verdict;
   } };
-  const reading: DeclaredVerifier = { ...verifier, verify(kind, inputs, proof) {
+  const reading: DeclaredVerifier = { ...verifier, verify(kind, given, givenProof) {
+    const [inputs, proof] = ownedCall(given, givenProof);
     const key = proofKey(kind, inputs, proof);
     return key !== undefined && verified.has(key) ? true : verifier.verify(kind, inputs, proof);
   } };
@@ -585,9 +592,10 @@ export class V3OperatorJournal {
     catch (error) {
       // Memory follows the rows only after they commit, so a refusal leaves it as it was; an unexpected failure drops it.
       if (!(error instanceof V3StoreError || error instanceof EncodingError)) this.engine = undefined;
-      // A replaced owner reads nothing more: its kept reads go to the new owner, whose first read waits (BUSY) while this
-      // handle holds the file: in this process until the failed read ends here; in another, until that process's next
-      // operation or close.
+      // A replaced owner reads nothing more: its kept reads go to the new owner. In another process, the new owner's
+      // first read waits (BUSY) while this handle holds the file, until this process's next operation or close. In this
+      // process the two stores share the file's lock and page hashes, and the new owner's read waits only while a walk of
+      // this handle's is open, until the failed read ends here.
       if (error instanceof V3StoreError && error.code === "FENCED") { this.reading?.close(); this.reading = undefined; }
       // The journal's own replay rows are its state, not a cache to discard: damage to them is named.
       if (error instanceof KeptStateMismatch) throw new V3StoreError("STORAGE", `the journal's replay rows are damaged: ${error.message}`);

@@ -1277,4 +1277,30 @@ describe("the journal's remembered proofs (WORK.md Next 4 (ay))", () => {
     await reading.verify(1, [BigInt(REMEMBERED_PROOFS - 1)], new Uint8Array([1]));
     expect(asked).toEqual([2]);
   });
+
+  it("remembers the call it verified, read once, not a proof's claimed length or an input read again", async () => {
+    const { rememberedProofs } = await import("../src/pool/v3/store.js");
+    const asked: Array<[readonly bigint[], number[]]> = [];
+    // As a real verifier does, it copies the proof at its real length.
+    const inner = { identities: configuration.circuits, parallel: 1, verify: (_kind: number, inputs: readonly bigint[], given: Uint8Array) => {
+      const proof = [...new Uint8Array(given)];
+      asked.push([[...inputs], proof]);
+      return inputs[0] === 5n && proof.length === 3 && proof.every(byte => byte === 7);
+    } };
+    const { admitting, reading } = rememberedProofs(inner);
+    // A proof whose length getter claims a byte more than it holds is verified and remembered as the bytes it holds.
+    class Lying extends Uint8Array { override get length(): number { return 4; } }
+    expect(await admitting.verify(1, [5n], new Lying([7, 7, 7]))).toBe(true);
+    asked.length = 0;
+    expect(await reading.verify(1, [5n], new Uint8Array([7, 7, 7, 0]))).toBe(false);
+    expect(asked).toEqual([[[5n], [7, 7, 7, 0]]]);
+    // An input that reads 9n first and 5n after is verified and remembered as the one value read.
+    let reads = 0;
+    const shifting: bigint[] = [];
+    Object.defineProperty(shifting, 0, { enumerable: true, get: () => reads++ === 0 ? 9n : 5n });
+    expect(await admitting.verify(1, shifting, new Uint8Array([7, 7, 7]))).toBe(false);
+    asked.length = 0;
+    expect(await reading.verify(1, [9n], new Uint8Array([7, 7, 7]))).toBe(false);
+    expect(asked).toEqual([[[9n], [7, 7, 7]]]);
+  });
 });

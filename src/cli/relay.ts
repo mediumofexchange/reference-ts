@@ -23,7 +23,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../bytes.js";
-import { createRelayService, type RelayRefusal } from "../pool/v3/service-http.js";
+import { createRelayService, waitingTurns, type RelayRefusal } from "../pool/v3/service-http.js";
 import { sendToRelay, V3ServiceClientError } from "../pool/v3/service-client.js";
 import type { ErgoPublisher } from "../ergo-publisher.js";
 import { VenueError } from "../venue-error.js";
@@ -31,7 +31,7 @@ import { CommandError, event, flag, integer, openDirectory, parseArguments, paus
   writeExclusive, writeReplace, type Directory } from "./common.js";
 import { constructions } from "./construction.js";
 import { initRole, unanswered } from "./reader.js";
-import { closeListener, listenerFile, listenLoopback, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
+import { closeListener, listenerFile, listenLoopback, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { fresh, freshFunding, fundingTree, openPublisher, openView, publisherStore, requireVenue, type SpendBudget, type View } from "./venue.js";
 
 async function init(argv: readonly string[]): Promise<void> {
@@ -163,24 +163,17 @@ export function relayRefusal(error: unknown): RelayRefusal | undefined {
 
 /**
  * The relay's turns (slice 12 M12c): `turn` runs work one at a time, the loop's syncs and requests alike, and `take`
- * runs a request's `judge` in its turn. Two requests wait at most beside the work running; a third is refused `BUSY`,
- * and a request whose connection is gone by its turn is dropped unjudged (`GONE`), so a long sync holds no queue of
- * files spent for nobody. `after` runs once each request ends.
+ * runs a request's `judge` in its turn as `waitingTurns` says. Two requests wait at most beside the work running; a third
+ * is refused `BUSY`, and a request whose connection is gone by its turn is dropped unjudged (`GONE`), so a long sync
+ * holds no queue of files spent for nobody. `after` runs once each request ends.
  */
 export function relayTurns<R>(judge: (value: unknown) => Promise<R>, after: () => void = () => {}) {
-  let tail: Promise<unknown> = Promise.resolve(), waiting = 0;
-  const turn = <T>(work: () => Promise<T>): Promise<T> => { const run = tail.then(work, work); tail = run.catch(() => {}); return run; };
+  const turn = serialized(), waiting = waitingTurns(turn, 2, () => new CommandError("BUSY", "the relay is busy; send the file again"),
+    () => new CommandError("GONE", "the request's connection closed before its turn"));
   const take = async (value: unknown, gone: () => boolean): Promise<R> => {
-    if (waiting >= 2) throw new CommandError("BUSY", "the relay is busy; send the file again");
-    waiting++;
-    try {
-      return await turn(async () => {
-        if (gone()) throw new CommandError("GONE", "the request's connection closed before its turn");
-        return judge(value);
-      });
-    } finally { waiting--; after(); }
+    try { return await waiting(() => judge(value), gone); } finally { after(); }
   };
-  return { turn, take, idle: () => tail };
+  return { turn, take, idle: () => turn(async () => {}) };
 }
 
 /**

@@ -210,8 +210,8 @@ describe("replay storage", () => {
       first.append(ns, append([next()], []));
       first.keepPoint();
       expect(existsSync(digest)).toBe(true);
-      // A second store would take the first's rows: it is refused, at its opening (its check cannot move the log in
-      // while the first holds the write lock) or at its walk.
+      // A second store would take the first's rows: it is refused at its walk (a store of this process shares the file
+      // as the first judged it).
       expect(() => {
         const second = new ReplayStore(path, { digest });
         try { second.openWalk(context); } finally { second.close(); }
@@ -360,6 +360,82 @@ describe("replay storage", () => {
       store.closeWalk(walk);
       expect(vouched()).toBe(true);
       store.close();
+      store = new ReplayStore(path, { digest });
+      expect(store.hasNamespace(ns)).toBe(true);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("shares a kept file between two stores of one process: each digest names both stores' commits, and a later opening leaves the first's log (review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-shared-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    const stores: ReplayStore[] = [];
+    const opened = () => { const store = new ReplayStore(path, { digest }); stores.push(store); return store; };
+    const walked = (store: ReplayStore, segment: number, records: number) => {
+      const { walk } = store.openWalk(context), ns = store.open(fieldToBytes(BigInt(segment)), new Uint8Array(32).fill(2), undefined, genesis);
+      for (let i = 0; i < records; i++) store.append(ns, append([next(), next()], [next()]));
+      store.closeWalk(walk);
+      return ns;
+    };
+    try {
+      const first = opened(), kept = [walked(first, 1, 20)];
+      // The second grows the file past the pages the first had hashed; the first's next keep point hashes them too.
+      const second = opened();
+      kept.push(walked(second, 2, 200), walked(first, 3, 20));
+      expect(vouched()).toBe(true);
+      // A commit of the first's that no digest names yet (written outside a walk) stays in its log: a third opening
+      // neither drops that log nor discards the file under it.
+      kept.push(first.open(fieldToBytes(4n), new Uint8Array(32).fill(2), undefined, genesis));
+      const third = opened();
+      for (const ns of kept) expect(third.hasNamespace(ns)).toBe(true);
+      first.closeWalk(first.openWalk(context).walk);
+      for (const store of stores.splice(0)) store.close();
+      expect(vouched()).toBe(true);
+      const reopened = opened();
+      for (const ns of kept) expect(reopened.hasNamespace(ns)).toBe(true);
+    } finally { for (const store of stores) store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("keeps a discard and a collection through a crash right after them: each commits with its digest (§14, review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-discard-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7);
+    /** The store stopped where it stands: its files as they lie, written back in place so the file keeps its identity. */
+    const crashed = (store: ReplayStore): ReplayStore => {
+      const lying = [path, `${path}-wal`, digest].map(file => [file, existsSync(file) ? readFileSync(file) : undefined] as const);
+      store.close();
+      for (const [file, bytes] of lying) if (bytes === undefined) rmSync(file, { force: true }); else writeFileSync(file, bytes);
+      rmSync(`${path}-shm`, { force: true });
+      return new ReplayStore(path, { digest });
+    };
+    let store = new ReplayStore(path, { digest });
+    try {
+      const { walk } = store.openWalk(context), segments = [1n, 2n].map(n => store.open(fieldToBytes(n), new Uint8Array(32).fill(2), undefined, genesis));
+      for (const ns of segments) for (let i = 0; i < 20; i++) store.append(ns, append([next()], [next()]));
+      store.keepAnswer(1, new Uint8Array(32).fill(5), () => ({ through: 9n, value: 3n }));
+      store.closeWalk(walk);
+      store.collect([segments[1]!]);
+      store = crashed(store);
+      expect([store.hasNamespace(segments[0]!), store.hasNamespace(segments[1]!)]).toEqual([false, true]);
+      expect(store.keptAnswer(1, new Uint8Array(32).fill(5))).toEqual({ through: 9n, value: 3n });
+      store.discardKept();
+      store = crashed(store);
+      expect(store.hasNamespace(segments[1]!)).toBe(false);
+      expect(store.keptAnswer(1, new Uint8Array(32).fill(5))).toBeUndefined();
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("keeps a kept file whose opening meets a failure of the system: the caller's error, never damage to discard (review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-system-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    let store = new ReplayStore(path, { digest });
+    try {
+      const { walk } = store.openWalk(new Uint8Array(32).fill(7)), ns = store.open(fieldToBytes(1n), new Uint8Array(32).fill(2), undefined, genesis);
+      store.closeWalk(walk);
+      store.close();
+      // The digest cannot be read (here a directory in its place, EISDIR; as EMFILE, EIO or EACCES would leave it).
+      const recorded = readFileSync(digest);
+      rmSync(digest); mkdirSync(digest);
+      expect(() => new ReplayStore(path, { digest })).toThrow(expect.objectContaining({ code: "EISDIR" }));
+      expect(existsSync(path)).toBe(true);
+      rmSync(digest, { recursive: true }); writeFileSync(digest, recorded);
       store = new ReplayStore(path, { digest });
       expect(store.hasNamespace(ns)).toBe(true);
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }

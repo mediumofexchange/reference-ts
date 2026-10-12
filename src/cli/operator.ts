@@ -180,17 +180,13 @@ async function serve(argv: readonly string[]): Promise<void> {
   // One at a time: the view's sync, the schedule's own journal calls and the service's.
   const silence = servedSilence(directory, op.operator), lag = op.view.venue.lag(), queue = serialized();
   // The service's journal commands take their turn with the schedule's, so neither meets the other's BUSY or a
-  // view that moved under it. Serving evidence takes no journal turn and reads the view's settled snapshot, so a
+  // view that moved under it. Each listener bounds its own commands waiting and skips one whose caller left before its
+  // turn (`createV3Service`), so the schedule's tick waits behind at most that many of each, never a queue a holder's
+  // closed connections built. Serving evidence takes no journal turn and reads the view's settled snapshot, so a
   // holder's sync neither waits for the schedule nor holds it up.
-  const queued = new Proxy(journal, { get(target, property) {
-    const value: unknown = Reflect.get(target, property, target);
-    if (typeof value !== "function") return value;
-    if (property === "serve") return (value as (...a: unknown[]) => unknown).bind(target);
-    return (...parameters: unknown[]) => queue(async () => (value as (...a: unknown[]) => unknown).apply(target, parameters));
-  } });
   const walletToken = tokenFile(directory, "wallet.token");
-  const server = createV3Service(queued, { walletToken, adminToken: tokenFile(directory, "admin.token") });
-  const holders = onion === undefined ? undefined : createV3Service(queued, { walletToken });
+  const server = createV3Service(journal, { walletToken, adminToken: tokenFile(directory, "admin.token") }, queue);
+  const holders = onion === undefined ? undefined : createV3Service(journal, { walletToken }, queue);
   let url: string, holderService: { url: string; port: number } | undefined;
   try {
     // A restarted journal checks its kept reads before it listens, not in its first admission (Next 4 (bb)). A file

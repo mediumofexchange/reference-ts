@@ -432,6 +432,13 @@ export function keptBackings(directory: Directory): Uint8Array[] {
   return names.filter(name => /^[0-9a-f]{64}$/.test(name)).sort().map(name => hex32(name, "a kept backing"));
 }
 
+/** The sources a replica never asks (`syncSources`' `except`): its loopback listener by the URL a client keeps (`new
+ * URL(url).href`, which drops a default port), and with `onion`, its onion name at any port a replica list names. */
+export function ownSources(local: string, onion: string | undefined, listed: readonly string[]): string[] {
+  const own = onion === undefined ? [local] : [local, `http://${onion}/`, ...listed.filter(url => new URL(url).hostname === onion)];
+  return [...new Set(own.map(url => new URL(url).href))];
+}
+
 /** What a replica's round reports instead of stopping: a source that did not answer or refused, evidence that does not
  * frame, assemble or fit, a verifier or replay file another process holds. */
 const roundRefusal = (error: unknown): string | undefined =>
@@ -489,7 +496,7 @@ async function serve(argv: readonly string[]): Promise<void> {
             print({ ...supplyOf(kept, at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null }, originOf(supplied), directory),
               served: now ?? null });
           }
-        }, [local, url]);
+        }, ownSources(local, onion, replicaUrls(directory, kept.terms.operator)));
       } catch (error) {
         const code = roundRefusal(error);
         if (code === undefined) throw error;
