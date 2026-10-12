@@ -1,0 +1,1514 @@
+{
+ "generated": "2026-10-12T23:38:42.243Z",
+ "assets": {
+  "BTC": {
+   "priceUsd": 81835,
+   "marketCapUsd": 1645077144406,
+   "volume24hUsd": 27429762346,
+   "circulating": 20097262,
+   "maxSupply": 21000000,
+   "rank": 1,
+   "attackCostPerHourUsd": 2822902,
+   "nicehashRentable": "0%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "SHA-256",
+    "networkHashrate": 999556347260330600000,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 1.1742762331441572,
+    "topByReportedHashrate": [
+     {
+      "pool": "foundrydigital.com",
+      "shareOfNetwork": 0.23140406494438323
+     },
+     {
+      "pool": "antpool.com",
+      "shareOfNetwork": 0.20909276457785
+     },
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.1557709012811338
+     }
+    ],
+    "blocks1000Attributed": 992,
+    "topByBlocks1000": [
+     {
+      "pool": "foundrydigital.com",
+      "blocks": 255
+     },
+     {
+      "pool": "antpool.com",
+      "blocks": 211
+     },
+     {
+      "pool": "f2pool.com",
+      "blocks": 173
+     }
+    ],
+    "poolsForMajorityOfLast1000": 3,
+    "blockTimeTarget": 600,
+    "blockTimeAverage": 561,
+    "supply": {
+     "circulating": 20097333.54155096,
+     "total": 21000000,
+     "emission24": 481.3
+    }
+   },
+   "onchainPools1w": {
+    "blocks": 1061,
+    "top": [
+     {
+      "pool": "Foundry USA",
+      "share": 0.2582469368520264
+     },
+     {
+      "pool": "AntPool",
+      "share": 0.20923656927426956
+     },
+     {
+      "pool": "F2Pool",
+      "share": 0.17247879359095195
+     },
+     {
+      "pool": "ViaBTC",
+      "share": 0.09707822808671066
+     }
+    ],
+    "nakamoto": 3
+   },
+   "feeRates": {
+    "recommended": {
+     "fastestFee": 1,
+     "halfHourFee": 1,
+     "hourFee": 1,
+     "economyFee": 1,
+     "minimumFee": 1
+    },
+    "medianOfBucketMedians2026": 1,
+    "busiestBucketMedianSince2024": {
+     "satPerVB": 1178,
+     "at": "2024-04-20T05:36:35.000Z"
+    },
+    "busiestBucketMedianSince2025": {
+     "satPerVB": 13,
+     "at": "2025-05-16T18:01:04.000Z"
+    },
+    "busiestBucketMedianSince2026": {
+     "satPerVB": 5,
+     "at": "2026-02-05T17:37:31.000Z"
+    }
+   },
+   "blockchair": {
+    "addressesWithBalance": 59896995,
+    "nodes": 216,
+    "transactions24h": 750074,
+    "blocks24h": 153,
+    "medianFeeNative24h": 39,
+    "averageFeeNative24h": 381,
+    "mempoolTransactions": 42666
+   },
+   "bitnodesReachable": 25130
+  },
+  "XMR": {
+   "priceUsd": 532.05,
+   "marketCapUsd": 10019314441,
+   "volume24hUsd": 111865870,
+   "circulating": 18816782.844952602,
+   "maxSupply": null,
+   "rank": 14,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "RandomX",
+    "networkHashrate": 6377884676,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.9424192877958523,
+    "topByReportedHashrate": [
+     {
+      "pool": "supportxmr.com",
+      "shareOfNetwork": 0.286136399246489
+     },
+     {
+      "pool": "nanopool.org",
+      "shareOfNetwork": 0.1868351562523612
+     },
+     {
+      "pool": "pool.kryptex.com",
+      "shareOfNetwork": 0.1500075439746004
+     }
+    ],
+    "blocks1000Attributed": 978,
+    "topByBlocks1000": [
+     {
+      "pool": "supportxmr.com",
+      "blocks": 316
+     },
+     {
+      "pool": "nanopool.org",
+      "blocks": 178
+     },
+     {
+      "pool": "pool.kryptex.com",
+      "blocks": 165
+     }
+    ],
+    "poolsForMajorityOfLast1000": 3,
+    "blockTimeTarget": 120,
+    "blockTimeAverage": 117.7,
+    "supply": {
+     "circulating": 18816836.338401515,
+     "total": -1,
+     "emission24": 440.3
+    }
+   },
+   "feePerByteAtomic": 20000
+  },
+  "LTC": {
+   "priceUsd": 61.18,
+   "marketCapUsd": 4750224708,
+   "volume24hUsd": 293468199,
+   "circulating": 77707879.66360603,
+   "maxSupply": 84000000,
+   "rank": 23,
+   "attackCostPerHourUsd": 49734,
+   "nicehashRentable": "9%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Scrypt",
+    "networkHashrate": 2324289563264957,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 1.0452617235891561,
+    "topByReportedHashrate": [
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.3673988209870829
+     },
+     {
+      "pool": "viabtc.com",
+      "shareOfNetwork": 0.24388956441528054
+     },
+     {
+      "pool": "antpool.com",
+      "shareOfNetwork": 0.20049137050953508
+     }
+    ],
+    "blocks1000Attributed": 827,
+    "topByBlocks1000": [
+     {
+      "pool": "f2pool.com",
+      "blocks": 361
+     },
+     {
+      "pool": "viabtc.com",
+      "blocks": 234
+     },
+     {
+      "pool": "antpool.com",
+      "blocks": 191
+     }
+    ],
+    "poolsForMajorityOfLast1000": 2,
+    "blockTimeTarget": 150,
+    "blockTimeAverage": 157.4,
+    "supply": {
+     "circulating": 77710723.4206068,
+     "total": 84000000,
+     "emission24": 6125
+    }
+   },
+   "onchainPools1w": {
+    "blocks": 3754,
+    "top": [
+     {
+      "pool": "F2Pool",
+      "share": 0.34736281299946725
+     },
+     {
+      "pool": "ViaBTC",
+      "share": 0.22615876398508258
+     },
+     {
+      "pool": "AntPool",
+      "share": 0.19179541822056473
+     },
+     {
+      "pool": "Kupool",
+      "share": 0.05221097496004262
+     }
+    ],
+    "nakamoto": 2
+   },
+   "blockchair": {
+    "addressesWithBalance": 9123167,
+    "nodes": 854,
+    "transactions24h": 153383,
+    "blocks24h": 557,
+    "medianFeeNative24h": 826,
+    "averageFeeNative24h": 5108,
+    "mempoolTransactions": 400
+   }
+  },
+  "ZEC": {
+   "priceUsd": 1171.67,
+   "marketCapUsd": 19907043155,
+   "volume24hUsd": 880197512,
+   "circulating": 16981864.2280448,
+   "maxSupply": 21000000,
+   "rank": 10,
+   "attackCostPerHourUsd": 66363,
+   "nicehashRentable": "1%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Equihash",
+    "networkHashrate": 26022524128,
+    "unit": "Sol/s",
+    "poolsReportedHashrateOverNetwork": 1.203476019234532,
+    "topByReportedHashrate": [
+     {
+      "pool": "viabtc.com",
+      "shareOfNetwork": 0.3922908172468887
+     },
+     {
+      "pool": "foundrydigital.com",
+      "shareOfNetwork": 0.18948076803566255
+     },
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.18088242665650148
+     }
+    ],
+    "blocks1000Attributed": 958,
+    "topByBlocks1000": [
+     {
+      "pool": "viabtc.com",
+      "blocks": 322
+     },
+     {
+      "pool": "foundrydigital.com",
+      "blocks": 170
+     },
+     {
+      "pool": "f2pool.com",
+      "blocks": 148
+     }
+    ],
+    "poolsForMajorityOfLast1000": 3,
+    "blockTimeTarget": 75,
+    "blockTimeAverage": 75.6,
+    "supply": {
+     "circulating": 16226349.42,
+     "total": 21000000,
+     "emission24": -1
+    }
+   },
+   "blockchair": {
+    "addressesWithBalance": 850530,
+    "nodes": 978,
+    "transactions24h": 7437,
+    "blocks24h": 1146,
+    "medianFeeNative24h": 10000,
+    "averageFeeNative24h": 92169941,
+    "mempoolTransactions": 4
+   }
+  },
+  "BCH": {
+   "priceUsd": 266.12,
+   "marketCapUsd": 5354973848,
+   "volume24hUsd": 197198980,
+   "circulating": 20101921.77165076,
+   "maxSupply": 21000000,
+   "rank": 22,
+   "attackCostPerHourUsd": 9385,
+   "nicehashRentable": "0%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "SHA-256",
+    "networkHashrate": 3432576615132648400,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.7696573711043636,
+    "topByReportedHashrate": [
+     {
+      "pool": "tpool.io",
+      "shareOfNetwork": 0.21777441146694845
+     },
+     {
+      "pool": "viabtc.com",
+      "shareOfNetwork": 0.14047890072414274
+     },
+     {
+      "pool": "antpool.com",
+      "shareOfNetwork": 0.11070401118645251
+     }
+    ],
+    "blocks1000Attributed": 472,
+    "topByBlocks1000": [
+     {
+      "pool": "viabtc.com",
+      "blocks": 151
+     },
+     {
+      "pool": "antpool.com",
+      "blocks": 110
+     },
+     {
+      "pool": "nicehash.com",
+      "blocks": 46
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 600,
+    "blockTimeAverage": 608,
+    "supply": {
+     "circulating": 20101943.64665076,
+     "total": 21000000,
+     "emission24": -1
+    }
+   },
+   "blockchair": {
+    "addressesWithBalance": 25733643,
+    "nodes": 782,
+    "transactions24h": 11066,
+    "blocks24h": 139,
+    "medianFeeNative24h": 454,
+    "averageFeeNative24h": 1956,
+    "mempoolTransactions": 97
+   }
+  },
+  "DOGE": {
+   "priceUsd": 0.082267,
+   "marketCapUsd": 12867532691,
+   "volume24hUsd": 623225670,
+   "circulating": 156299126383.7052,
+   "maxSupply": null,
+   "rank": 12,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Scrypt",
+    "networkHashrate": 2401714193498139,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 1.011478893695996,
+    "topByReportedHashrate": [
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.35555489803403567
+     },
+     {
+      "pool": "viabtc.com",
+      "shareOfNetwork": 0.23602723866740236
+     },
+     {
+      "pool": "antpool.com",
+      "shareOfNetwork": 0.1940280826342883
+     }
+    ],
+    "blocks1000Attributed": 847,
+    "topByBlocks1000": [
+     {
+      "pool": "f2pool.com",
+      "blocks": 357
+     },
+     {
+      "pool": "viabtc.com",
+      "blocks": 216
+     },
+     {
+      "pool": "antpool.com",
+      "blocks": 188
+     }
+    ],
+    "poolsForMajorityOfLast1000": 2,
+    "blockTimeTarget": 60,
+    "blockTimeAverage": 63.1,
+    "supply": {
+     "circulating": 168160693127,
+     "total": -1,
+     "emission24": -1
+    }
+   },
+   "blockchair": {
+    "addressesWithBalance": 8478329,
+    "nodes": 490,
+    "transactions24h": 18390,
+    "blocks24h": 1378,
+    "medianFeeNative24h": 11250000,
+    "averageFeeNative24h": 39785540,
+    "mempoolTransactions": 23
+   }
+  },
+  "GRIN": {
+   "priceUsd": 0.01014042,
+   "marketCapUsd": 8832.88,
+   "volume24hUsd": 6928.56,
+   "circulating": 871023,
+   "maxSupply": null,
+   "rank": 9572,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Cuckatoo32",
+    "networkHashrate": 3864,
+    "unit": "Gps",
+    "poolsReportedHashrateOverNetwork": 1.0261154244306419,
+    "topByReportedHashrate": [
+     {
+      "pool": "2miners.com",
+      "shareOfNetwork": 0.43299948240165637
+     },
+     {
+      "pool": "pool.easygrin.org",
+      "shareOfNetwork": 0.38819875776397517
+     },
+     {
+      "pool": "solo.easygrin.org",
+      "shareOfNetwork": 0.11438923395445134
+     }
+    ],
+    "blocks1000Attributed": 892,
+    "topByBlocks1000": [
+     {
+      "pool": "2miners.com",
+      "blocks": 435
+     },
+     {
+      "pool": "pool.easygrin.org",
+      "blocks": 326
+     },
+     {
+      "pool": "solo.easygrin.org",
+      "blocks": 119
+     }
+    ],
+    "poolsForMajorityOfLast1000": 2,
+    "blockTimeTarget": 60,
+    "blockTimeAverage": 59.9,
+    "supply": {
+     "circulating": 243583920,
+     "total": 871023,
+     "emission24": 87060
+    }
+   }
+  },
+  "FIRO": {
+   "priceUsd": 1.022,
+   "marketCapUsd": 19699692,
+   "volume24hUsd": 118036,
+   "circulating": 19137963.32599005,
+   "maxSupply": 21400000,
+   "rank": 868,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "FiroPoW",
+    "networkHashrate": 11608012927,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 1.037355932899712,
+    "topByReportedHashrate": [
+     {
+      "pool": "woolypooly.com",
+      "shareOfNetwork": 0.941033879673935
+     },
+     {
+      "pool": "cedric-crispin.com",
+      "shareOfNetwork": 0.0858481757615982
+     },
+     {
+      "pool": "rplant.xyz",
+      "shareOfNetwork": 0.010473877464178672
+     }
+    ],
+    "blocks1000Attributed": 961,
+    "topByBlocks1000": [
+     {
+      "pool": "woolypooly.com",
+      "blocks": 862
+     },
+     {
+      "pool": "cedric-crispin.com",
+      "blocks": 76
+     },
+     {
+      "pool": "pooly.ca",
+      "blocks": 14
+     }
+    ],
+    "poolsForMajorityOfLast1000": 1,
+    "blockTimeTarget": 150,
+    "blockTimeAverage": 151.6,
+    "supply": {
+     "circulating": 0,
+     "total": 19138157.07599005,
+     "emission24": -1
+    }
+   }
+  },
+  "DASH": {
+   "priceUsd": 49.1,
+   "marketCapUsd": 631368599,
+   "volume24hUsd": 58588475,
+   "circulating": 12858408.35719484,
+   "maxSupply": 18920000,
+   "rank": 102,
+   "attackCostPerHourUsd": 448,
+   "nicehashRentable": "1%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "X11",
+    "networkHashrate": 6379152098081598,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.63278863083166,
+    "topByReportedHashrate": [
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.22886544520116944
+     },
+     {
+      "pool": "viabtc.com",
+      "shareOfNetwork": 0.16890958967065695
+     },
+     {
+      "pool": "antpool.com",
+      "shareOfNetwork": 0.07571539172819731
+     }
+    ],
+    "blocks1000Attributed": 0,
+    "topByBlocks1000": [
+     {
+      "pool": "emcd.io",
+      "blocks": 0
+     },
+     {
+      "pool": "binance.com",
+      "blocks": 0
+     },
+     {
+      "pool": "f2pool.com",
+      "blocks": 0
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 150,
+    "blockTimeAverage": 157.1,
+    "supply": {
+     "circulating": 12404136.1145843,
+     "total": 18900000,
+     "emission24": -1
+    }
+   },
+   "blockchair": {
+    "addressesWithBalance": 1754034,
+    "nodes": 49,
+    "transactions24h": 10382,
+    "blocks24h": 552,
+    "medianFeeNative24h": 823,
+    "averageFeeNative24h": 3185,
+    "mempoolTransactions": 28
+   }
+  },
+  "ERG": {
+   "priceUsd": 0.321198,
+   "marketCapUsd": 26814056,
+   "volume24hUsd": 182423,
+   "circulating": 83478324,
+   "maxSupply": null,
+   "rank": 718,
+   "attackCostPerHourUsd": 31,
+   "nicehashRentable": "11%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Autolykos 2",
+    "networkHashrate": 548102641783,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.8159812444911877,
+    "topByReportedHashrate": [
+     {
+      "pool": "2miners.com",
+      "shareOfNetwork": 0.4990315025397922
+     },
+     {
+      "pool": "herominers.com",
+      "shareOfNetwork": 0.23552884783779196
+     },
+     {
+      "pool": "woolypooly.com",
+      "shareOfNetwork": 0.037462568918121324
+     }
+    ],
+    "blocks1000Attributed": 846,
+    "topByBlocks1000": [
+     {
+      "pool": "2miners.com",
+      "blocks": 515
+     },
+     {
+      "pool": "herominers.com",
+      "blocks": 246
+     },
+     {
+      "pool": "woolypooly.com",
+      "blocks": 50
+     }
+    ],
+    "poolsForMajorityOfLast1000": 1,
+    "blockTimeTarget": 120,
+    "blockTimeAverage": 122.4,
+    "supply": {
+     "circulating": 83478441,
+     "total": 97739924,
+     "emission24": 2115
+    }
+   },
+   "onchainMiners": {
+    "blocks": 720,
+    "heights": [
+     1892585,
+     1893304
+    ],
+    "top": [
+     {
+      "miner": "2TH22DBY",
+      "share": 0.5152777777777777
+     },
+     {
+      "miner": "yi5CLS9V",
+      "share": 0.23055555555555557
+     },
+     {
+      "miner": "i99zk4u9",
+      "share": 0.08055555555555556
+     }
+    ],
+    "nakamoto": 1
+   }
+  },
+  "KAS": {
+   "priceUsd": 0.03852333,
+   "marketCapUsd": 1069117523,
+   "volume24hUsd": 16887614,
+   "circulating": 27751591655.20038,
+   "maxSupply": 28704026601,
+   "rank": 78,
+   "attackCostPerHourUsd": 4185,
+   "nicehashRentable": "9%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "kHeavyHash",
+    "networkHashrate": 382050789625069630,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.8349144369049312,
+    "topByReportedHashrate": [
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.2545271268398725
+     },
+     {
+      "pool": "humpool.com",
+      "shareOfNetwork": 0.2527674398861214
+     },
+     {
+      "pool": "viabtc.com",
+      "shareOfNetwork": 0.1266562168654708
+     }
+    ],
+    "blocks1000Attributed": 120,
+    "topByBlocks1000": [
+     {
+      "pool": "humpool.com",
+      "blocks": 49
+     },
+     {
+      "pool": "k1pool.com",
+      "blocks": 30
+     },
+     {
+      "pool": "kaspa-pool.org",
+      "blocks": 20
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 1,
+    "blockTimeAverage": 0.1,
+    "supply": {
+     "circulating": 27752686206.16714,
+     "total": 28500000000,
+     "emission24": 1781610
+    }
+   }
+  },
+  "DCR": {
+   "priceUsd": 16.44,
+   "marketCapUsd": 290030471,
+   "volume24hUsd": 945479,
+   "circulating": 17643331.53126912,
+   "maxSupply": 21000000,
+   "rank": 151,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Blake3",
+    "networkHashrate": 11442961440742,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.12591141566317937,
+    "topByReportedHashrate": [
+     {
+      "pool": "woolypooly.com",
+      "shareOfNetwork": 0.08751859159136179
+     },
+     {
+      "pool": "cedric-crispin.com",
+      "shareOfNetwork": 0.030713918070339165
+     },
+     {
+      "pool": "suprnova.cc",
+      "shareOfNetwork": 0.0076789060014784295
+     }
+    ],
+    "blocks1000Attributed": 248,
+    "topByBlocks1000": [
+     {
+      "pool": "woolypooly.com",
+      "blocks": 177
+     },
+     {
+      "pool": "cedric-crispin.com",
+      "blocks": 53
+     },
+     {
+      "pool": "suprnova.cc",
+      "blocks": 18
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 300,
+    "blockTimeAverage": 311,
+    "supply": {
+     "circulating": 17644156.88216884,
+     "total": 17644065.0745048,
+     "emission24": 1416
+    }
+   }
+  },
+  "XEC": {
+   "priceUsd": 0.00000693,
+   "marketCapUsd": 139178401,
+   "volume24hUsd": 3741539,
+   "circulating": 20095795297580,
+   "maxSupply": 21000000000000,
+   "rank": 231,
+   "attackCostPerHourUsd": 107,
+   "nicehashRentable": "3%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "SHA-256",
+    "networkHashrate": 38061184801425670,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.6269402326738178,
+    "topByReportedHashrate": [
+     {
+      "pool": "pool.kryptex.com",
+      "shareOfNetwork": 0.11369931403945628
+     },
+     {
+      "pool": "solopool.org",
+      "shareOfNetwork": 0.08800386214880258
+     },
+     {
+      "pool": "hash-hut.net",
+      "shareOfNetwork": 0.08146197308079453
+     }
+    ],
+    "blocks1000Attributed": 571,
+    "topByBlocks1000": [
+     {
+      "pool": "mining-dutch.nl",
+      "blocks": 171
+     },
+     {
+      "pool": "pool.kryptex.com",
+      "blocks": 100
+     },
+     {
+      "pool": "solopool.org",
+      "blocks": 73
+     }
+    ],
+    "poolsForMajorityOfLast1000": 7,
+    "blockTimeTarget": 600,
+    "blockTimeAverage": 650,
+    "supply": {
+     "circulating": 20096199021781.93,
+     "total": 21000000000000,
+     "emission24": 415630000
+    }
+   },
+   "blockchair": {
+    "addressesWithBalance": 15839107,
+    "nodes": 782,
+    "transactions24h": 9356,
+    "blocks24h": 129,
+    "medianFeeNative24h": 536,
+    "averageFeeNative24h": 613,
+    "mempoolTransactions": 2
+   }
+  },
+  "ZANO": {
+   "priceUsd": 5.06,
+   "marketCapUsd": 78159380,
+   "volume24hUsd": 1101084,
+   "circulating": 15453098.5,
+   "maxSupply": null,
+   "rank": 339,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "ProgPowZ",
+    "networkHashrate": 245796762311,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 1.056086846536884,
+    "topByReportedHashrate": [
+     {
+      "pool": "woolypooly.com",
+      "shareOfNetwork": 0.5569438654313537
+     },
+     {
+      "pool": "herominers.com",
+      "shareOfNetwork": 0.2930026976469127
+     },
+     {
+      "pool": "luckypool.io",
+      "shareOfNetwork": 0.19116317184254955
+     }
+    ],
+    "blocks1000Attributed": 481,
+    "topByBlocks1000": [
+     {
+      "pool": "woolypooly.com",
+      "blocks": 228
+     },
+     {
+      "pool": "herominers.com",
+      "blocks": 129
+     },
+     {
+      "pool": "luckypool.io",
+      "blocks": 119
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 60,
+    "blockTimeAverage": 58.6,
+    "supply": {
+     "circulating": 15453915.6,
+     "total": 15453823.38,
+     "emission24": 1463
+    }
+   }
+  },
+  "BEAM": {
+   "priceUsd": 0.00944574,
+   "marketCapUsd": 1903829,
+   "volume24hUsd": 58582,
+   "circulating": 201543500,
+   "maxSupply": null,
+   "rank": 2417,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "BeamHash",
+    "networkHashrate": 53458.64375,
+    "unit": "Sol/s",
+    "poolsReportedHashrateOverNetwork": 0.677298514517589,
+    "topByReportedHashrate": [
+     {
+      "pool": "2miners.com",
+      "shareOfNetwork": 0.5979124750990339
+     },
+     {
+      "pool": "herominers.com",
+      "shareOfNetwork": 0.0662755309799643
+     },
+     {
+      "pool": "sunpool.top",
+      "shareOfNetwork": 0.013129214487413927
+     }
+    ],
+    "blocks1000Attributed": 785,
+    "topByBlocks1000": [
+     {
+      "pool": "2miners.com",
+      "blocks": 593
+     },
+     {
+      "pool": "herominers.com",
+      "blocks": 186
+     },
+     {
+      "pool": "sunpool.top",
+      "blocks": 6
+     }
+    ],
+    "poolsForMajorityOfLast1000": 1,
+    "blockTimeTarget": 60,
+    "blockTimeAverage": 62.4,
+    "supply": {
+     "circulating": 0,
+     "total": 262800000,
+     "emission24": -1
+    }
+   }
+  },
+  "DGB": {
+   "priceUsd": 0.00338877,
+   "marketCapUsd": 62729703,
+   "volume24hUsd": 3150062,
+   "circulating": 18512075186.62622,
+   "maxSupply": 21000000000,
+   "rank": 401,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "SHA-256",
+    "networkHashrate": 47175857725860260,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.3878949856921784,
+    "topByReportedHashrate": [
+     {
+      "pool": "solopool.org",
+      "shareOfNetwork": 0.09061368487050848
+     },
+     {
+      "pool": "mining-dutch.nl",
+      "shareOfNetwork": 0.057896351324462955
+     },
+     {
+      "pool": "pool.kryptex.com",
+      "shareOfNetwork": 0.044814295628723744
+     }
+    ],
+    "blocks1000Attributed": 159,
+    "topByBlocks1000": [
+     {
+      "pool": "mining-dutch.nl",
+      "blocks": 54
+     },
+     {
+      "pool": "solopool.org",
+      "blocks": 27
+     },
+     {
+      "pool": "molepool.com",
+      "blocks": 21
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 15,
+    "blockTimeAverage": 15,
+    "supply": {
+     "circulating": 18512962514.3973,
+     "total": 21000000000,
+     "emission24": 1446710
+    }
+   }
+  },
+  "BSV": {
+   "priceUsd": 18.29,
+   "marketCapUsd": 367617851,
+   "volume24hUsd": 2345345,
+   "circulating": 20096009.375,
+   "maxSupply": 21000000,
+   "rank": 128,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "SHA-256",
+    "networkHashrate": 198779759696128130,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.37783069997050867,
+    "topByReportedHashrate": [
+     {
+      "pool": "pool.kryptex.com",
+      "shareOfNetwork": 0.187500986356759
+     },
+     {
+      "pool": "gorillanode.io",
+      "shareOfNetwork": 0.07168590779283751
+     },
+     {
+      "pool": "kardanpool.com",
+      "shareOfNetwork": 0.06167758176754957
+     }
+    ],
+    "blocks1000Attributed": 554,
+    "topByBlocks1000": [
+     {
+      "pool": "pool.kryptex.com",
+      "blocks": 173
+     },
+     {
+      "pool": "taal.com",
+      "blocks": 109
+     },
+     {
+      "pool": "gorillanode.io",
+      "blocks": 109
+     }
+    ],
+    "poolsForMajorityOfLast1000": 5,
+    "blockTimeTarget": 600,
+    "blockTimeAverage": 702,
+    "supply": {
+     "circulating": 20096237.5,
+     "total": 21000000,
+     "emission24": 384.4
+    }
+   }
+  },
+  "ETC": {
+   "priceUsd": 8,
+   "marketCapUsd": 1271314526,
+   "volume24hUsd": 53826881,
+   "circulating": 158749953.68155706,
+   "maxSupply": 210700000,
+   "rank": 69,
+   "attackCostPerHourUsd": 20057,
+   "nicehashRentable": "0%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Etchash",
+    "networkHashrate": 177045548657880,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 1.0010936357443143,
+    "topByReportedHashrate": [
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.5070002605011772
+     },
+     {
+      "pool": "2miners.com",
+      "shareOfNetwork": 0.2732913449423822
+     },
+     {
+      "pool": "k1pool.com",
+      "shareOfNetwork": 0.1254363510767124
+     }
+    ],
+    "blocks1000Attributed": 446,
+    "topByBlocks1000": [
+     {
+      "pool": "2miners.com",
+      "blocks": 275
+     },
+     {
+      "pool": "k1pool.com",
+      "blocks": 132
+     },
+     {
+      "pool": "gtpool.io",
+      "blocks": 27
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 13,
+    "blockTimeAverage": 13.6,
+    "supply": {
+     "circulating": 156559601.62289637,
+     "total": 158750546.47515705,
+     "emission24": -1
+    }
+   }
+  },
+  "CKB": {
+   "priceUsd": 0.00148461,
+   "marketCapUsd": 74087768,
+   "volume24hUsd": 34594838,
+   "circulating": 49694474131.08175,
+   "maxSupply": null,
+   "rank": 354,
+   "attackCostPerHourUsd": 469,
+   "nicehashRentable": "2%",
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Eaglesong",
+    "networkHashrate": 104237151626863580,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.8976538511512078,
+    "topByReportedHashrate": [
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.4492717792979826
+     },
+     {
+      "pool": "antpool.com",
+      "shareOfNetwork": 0.21009783611888355
+     },
+     {
+      "pool": "2miners.com",
+      "shareOfNetwork": 0.10953440602214627
+     }
+    ],
+    "blocks1000Attributed": 334,
+    "topByBlocks1000": [
+     {
+      "pool": "antpool.com",
+      "blocks": 207
+     },
+     {
+      "pool": "2miners.com",
+      "blocks": 109
+     },
+     {
+      "pool": "dxpool.com",
+      "blocks": 18
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 10,
+    "blockTimeAverage": 9.3,
+    "supply": {
+     "circulating": 49694813761.8633,
+     "total": 50548572869.51974,
+     "emission24": 6109240
+    }
+   }
+  },
+  "ALPH": {
+   "priceUsd": 0.067784,
+   "marketCapUsd": 9515784,
+   "volume24hUsd": 116131,
+   "circulating": 140378049.95316237,
+   "maxSupply": null,
+   "rank": 1261,
+   "mps": {
+    "snapshot": "2026-10-12T23:37:55.000Z",
+    "algo": "Blake3",
+    "networkHashrate": 5581161553000000,
+    "unit": "H/s",
+    "poolsReportedHashrateOverNetwork": 0.9729543705453878,
+    "topByReportedHashrate": [
+     {
+      "pool": "f2pool.com",
+      "shareOfNetwork": 0.5535414445611884
+     },
+     {
+      "pool": "herominers.com",
+      "shareOfNetwork": 0.18052384189506204
+     },
+     {
+      "pool": "pool.kryptex.com",
+      "shareOfNetwork": 0.07040838458395311
+     }
+    ],
+    "blocks1000Attributed": 427,
+    "topByBlocks1000": [
+     {
+      "pool": "herominers.com",
+      "blocks": 168
+     },
+     {
+      "pool": "pool.kryptex.com",
+      "blocks": 85
+     },
+     {
+      "pool": "whalepool.com",
+      "blocks": 44
+     }
+    ],
+    "poolsForMajorityOfLast1000": null,
+    "blockTimeTarget": 60,
+    "blockTimeAverage": 8.4,
+    "supply": {
+     "circulating": 140378049.95316237,
+     "total": 163034801,
+     "emission24": -1
+    }
+   }
+  }
+ },
+ "sources": {
+  "coingecko-markets.json": {
+   "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,monero,litecoin,zcash,bitcoin-cash,dogecoin,grin,zcoin,dash,ergo,kaspa,decred,ecash,zano,beam,digibyte,bitcoin-cash-sv,ethereum-classic,nervos-network,alephium&per_page=50",
+   "fetched": "2026-10-12T23:38:42.536Z",
+   "sha256": "d13f823c1974f388c3a7224a9b3e753527bc335bc598a7e0df60ec2850253223"
+  },
+  "crypto51.html": {
+   "url": "https://www.crypto51.app/",
+   "fetched": "2026-10-12T23:38:42.977Z",
+   "sha256": "f820666833bd450a33bdc5e222fe34374bcb9b2bc63c9a4ea51bf2797b8c62cb"
+  },
+  "mps-bitcoin.html": {
+   "url": "https://miningpoolstats.stream/bitcoin",
+   "fetched": "2026-10-12T23:38:43.866Z",
+   "sha256": "06a60618a49f20ec46bfa60b307dee1da04c946c4a8280d87ffd0e84afa68a7f"
+  },
+  "mps-bitcoin.json": {
+   "url": "https://data.miningpoolstats.stream/data/bitcoin.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:44.261Z",
+   "sha256": "c9e66552d897f2cdd57f2498c6acfb730e900959e6159a3b67b8459e977e8f66"
+  },
+  "mps-monero.html": {
+   "url": "https://miningpoolstats.stream/monero",
+   "fetched": "2026-10-12T23:38:45.002Z",
+   "sha256": "6ac4966b7881a47d73a57dd2df49902e99160e176eea83e1a68389565e3ab9a8"
+  },
+  "mps-monero.json": {
+   "url": "https://data.miningpoolstats.stream/data/monero.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:45.175Z",
+   "sha256": "c81c690c22803e4a515b0c7769052620cc5df168022f124b134ae776be01711f"
+  },
+  "mps-litecoin.html": {
+   "url": "https://miningpoolstats.stream/litecoin",
+   "fetched": "2026-10-12T23:38:45.916Z",
+   "sha256": "c45b52fe4c8573fd26c7587a82bcde780deb8f7aff86fba3e4516393b0f31f4f"
+  },
+  "mps-litecoin.json": {
+   "url": "https://data.miningpoolstats.stream/data/litecoin.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:46.147Z",
+   "sha256": "422d46988acc398d63a5351a46c3f573fc6455c63212f2893e67d97c2bb524f4"
+  },
+  "mps-zcash.html": {
+   "url": "https://miningpoolstats.stream/zcash",
+   "fetched": "2026-10-12T23:38:46.885Z",
+   "sha256": "bb45233ec58cc0cde42abc114dd3db4068454504c66964c2f8042160e30b6593"
+  },
+  "mps-zcash.json": {
+   "url": "https://data.miningpoolstats.stream/data/zcash.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:47.052Z",
+   "sha256": "8c42e787b688dbb8df32430c4c85e85fef0f00abb9e3fff9e310ba633698c2a3"
+  },
+  "mps-bitcoincash.html": {
+   "url": "https://miningpoolstats.stream/bitcoincash",
+   "fetched": "2026-10-12T23:38:47.780Z",
+   "sha256": "303019f106523afa8c84e1a0ff6038b2b0c20808074d3e73fa4130da3dc6b41f"
+  },
+  "mps-bitcoincash.json": {
+   "url": "https://data.miningpoolstats.stream/data/bitcoincash.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:48.030Z",
+   "sha256": "709ae746f382e64eaf85bdd4b3bb1cd0c27c9be29c981145404a867f4d24b01a"
+  },
+  "mps-dogecoin.html": {
+   "url": "https://miningpoolstats.stream/dogecoin",
+   "fetched": "2026-10-12T23:38:48.766Z",
+   "sha256": "d3dbd47da6328c7c6044f3718912ba3cd3ddceadb8292cc83984615d53dbd6eb"
+  },
+  "mps-dogecoin.json": {
+   "url": "https://data.miningpoolstats.stream/data/dogecoin.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:48.992Z",
+   "sha256": "74abdf8dcbdd597c03f7f5133ceb562a619aa46d5687fbee4b0e4c8d17bebbfb"
+  },
+  "mps-grin.html": {
+   "url": "https://miningpoolstats.stream/grin",
+   "fetched": "2026-10-12T23:38:49.727Z",
+   "sha256": "ee9502d927e8f5b8c102415ddd7512dfd7c0cc16ad9fde8cbaaf84b9cc195985"
+  },
+  "mps-grin.json": {
+   "url": "https://data.miningpoolstats.stream/data/grin.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:49.920Z",
+   "sha256": "a3345f0ba1e91eb274d0a08292de12c2b2f8dfdaca6496970ab60edfd31ef47e"
+  },
+  "mps-firo.html": {
+   "url": "https://miningpoolstats.stream/firo",
+   "fetched": "2026-10-12T23:38:50.653Z",
+   "sha256": "f95c2774124d39d2147f4101388ce313cc1ede2971a50d1025c5ee86fe255677"
+  },
+  "mps-firo.json": {
+   "url": "https://data.miningpoolstats.stream/data/firo.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:50.847Z",
+   "sha256": "2ef09e905b1ba24aef91f7e92663d2ac4b8981b24d9f119dd90323fdd9121598"
+  },
+  "mps-dash.html": {
+   "url": "https://miningpoolstats.stream/dash",
+   "fetched": "2026-10-12T23:38:51.583Z",
+   "sha256": "054efc8af2d392ee6222d2a3bf67c6afc91e3e6923ce213586b56a6284addc4b"
+  },
+  "mps-dash.json": {
+   "url": "https://data.miningpoolstats.stream/data/dash.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:51.782Z",
+   "sha256": "4e5ad141fbeeab57bdf0ac3c923e154f72cc840754d479a40c459531bf309d98"
+  },
+  "mps-ergo.html": {
+   "url": "https://miningpoolstats.stream/ergo",
+   "fetched": "2026-10-12T23:38:52.508Z",
+   "sha256": "d1a576f0a4e716023d001a14619526b54229f3c333c7c17de7d4b4a4b9021dd4"
+  },
+  "mps-ergo.json": {
+   "url": "https://data.miningpoolstats.stream/data/ergo.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:52.708Z",
+   "sha256": "b4d0370c6947d43d356a4d7219e0f703420efc76b9257893ac1b43ca56cc94a7"
+  },
+  "mps-kaspa.html": {
+   "url": "https://miningpoolstats.stream/kaspa",
+   "fetched": "2026-10-12T23:38:53.444Z",
+   "sha256": "ae4e0d97a954876ac18e99204c7ec37c04c679172b12c86ed5902b8ecf0a36f3"
+  },
+  "mps-kaspa.json": {
+   "url": "https://data.miningpoolstats.stream/data/kaspa.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:53.667Z",
+   "sha256": "4a8aba541c136b2df28194e9224d65ae3ba1cde4e5f805315e49eea3eac79b5f"
+  },
+  "mps-decred.html": {
+   "url": "https://miningpoolstats.stream/decred",
+   "fetched": "2026-10-12T23:38:54.404Z",
+   "sha256": "c38fc7a0610569059c6066dbb53771d8a58dc25ef4b2dcc6ca94d23c3d61134c"
+  },
+  "mps-decred.json": {
+   "url": "https://data.miningpoolstats.stream/data/decred.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:54.595Z",
+   "sha256": "6538eea4dc65b465d22c20ab052286c5aa30424ed92d6ab12326e0ca9c5a5cdf"
+  },
+  "mps-ecash.html": {
+   "url": "https://miningpoolstats.stream/ecash",
+   "fetched": "2026-10-12T23:38:55.337Z",
+   "sha256": "2abd46db63c45e42f65071f1e6bde010a8a60a84426b8fd7dcce071f28b740b0"
+  },
+  "mps-ecash.json": {
+   "url": "https://data.miningpoolstats.stream/data/ecash.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:55.500Z",
+   "sha256": "90a8a7b5b3e3d2e2a83a820c7217038814f6bb2ec4c571ef8a62d93791afa0bc"
+  },
+  "mps-zano.html": {
+   "url": "https://miningpoolstats.stream/zano",
+   "fetched": "2026-10-12T23:38:56.237Z",
+   "sha256": "48ff48c71c3f30d1e149a6f199c243307dfb5c4940a618c6ce9d7c65db6bcb5e"
+  },
+  "mps-zano.json": {
+   "url": "https://data.miningpoolstats.stream/data/zano.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:56.398Z",
+   "sha256": "8661b8486bd9407e36f573e3ad953fbd7fd7662e10c43f10cd95ec615e907cab"
+  },
+  "mps-beam.html": {
+   "url": "https://miningpoolstats.stream/beam",
+   "fetched": "2026-10-12T23:38:57.126Z",
+   "sha256": "104e2bf93f2dd7d324eedd6801d784a8de9389545a3ad29faca1fb96a7462b9c"
+  },
+  "mps-beam.json": {
+   "url": "https://data.miningpoolstats.stream/data/beam.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:57.323Z",
+   "sha256": "cf12c686367743a71c11eabb318204bd6a4befd1ed282c3f1ddc896fd00f1486"
+  },
+  "mps-digibyte-sha.html": {
+   "url": "https://miningpoolstats.stream/digibyte-sha",
+   "fetched": "2026-10-12T23:38:58.173Z",
+   "sha256": "e56efe92e6c8ee3bf3cee3fad1dd6bb69e2611b779e1186da6e9698fa68729df"
+  },
+  "mps-digibyte-sha.json": {
+   "url": "https://data.miningpoolstats.stream/data/digibyte-sha.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:58.344Z",
+   "sha256": "0fad530a8a91c2153ca9021e6dac88b73588a89d1e640b3dc1b95b8cfbdae528"
+  },
+  "mps-bitcoinsv.html": {
+   "url": "https://miningpoolstats.stream/bitcoinsv",
+   "fetched": "2026-10-12T23:38:59.072Z",
+   "sha256": "f552f9131bc3e3c671f411411253c56975dc754b7bdfe1814b7287289870fd51"
+  },
+  "mps-bitcoinsv.json": {
+   "url": "https://data.miningpoolstats.stream/data/bitcoinsv.js?t=1791848275",
+   "fetched": "2026-10-12T23:38:59.274Z",
+   "sha256": "fc0166ae8794dcd6961ed26025f6f55e34b26d80ba73c8d54a9629f9de7de27f"
+  },
+  "mps-ethereumclassic.html": {
+   "url": "https://miningpoolstats.stream/ethereumclassic",
+   "fetched": "2026-10-12T23:39:00.118Z",
+   "sha256": "5e463be80aa8fce748f53503b4f904f749cfdd6bb24de4d85328fa7bb49a00d9"
+  },
+  "mps-ethereumclassic.json": {
+   "url": "https://data.miningpoolstats.stream/data/ethereumclassic.js?t=1791848275",
+   "fetched": "2026-10-12T23:39:00.340Z",
+   "sha256": "d729b2fa362892ab8e51b1fa03f0da08f05295ac5708ff0bd4ba565826c7611b"
+  },
+  "mps-nervos.html": {
+   "url": "https://miningpoolstats.stream/nervos",
+   "fetched": "2026-10-12T23:39:01.113Z",
+   "sha256": "647124c66d02f1e82d5748358c113c278c3b56323ef25b6659aa6e9e1bf99d31"
+  },
+  "mps-nervos.json": {
+   "url": "https://data.miningpoolstats.stream/data/nervos.js?t=1791848275",
+   "fetched": "2026-10-12T23:39:01.308Z",
+   "sha256": "890fbb4c7fb52180f8a0b651cbf23f0dd36e7923256af3b8ce31af096aace0a3"
+  },
+  "mps-alephium.html": {
+   "url": "https://miningpoolstats.stream/alephium",
+   "fetched": "2026-10-12T23:39:02.044Z",
+   "sha256": "f3c9e43114ee99744b4e9b06fc5ea5e4e8c3da8c0e6d31aef8245fdc20783079"
+  },
+  "mps-alephium.json": {
+   "url": "https://data.miningpoolstats.stream/data/alephium.js?t=1791848275",
+   "fetched": "2026-10-12T23:39:02.248Z",
+   "sha256": "8bcfbe26604576cacbfb34800b9a9b1930c024b4c6543f33018491dcfb0003ba"
+  },
+  "pools-BTC.json": {
+   "url": "https://mempool.space/api/v1/mining/pools/1w",
+   "fetched": "2026-10-12T23:39:02.423Z",
+   "sha256": "3ba42f49ed558764f756e975960d66ef8f6ffe67a05e4712de4d02023e951bd0"
+  },
+  "pools-LTC.json": {
+   "url": "https://litecoinspace.org/api/v1/mining/pools/1w",
+   "fetched": "2026-10-12T23:39:02.730Z",
+   "sha256": "a67a78ad9414fec6e0193a178cbef50809e242863148bb5d291f163ffed1ad09"
+  },
+  "ergo-blocks-0.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=0&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:03.044Z",
+   "sha256": "4f18fed67697d0af219c594a824d056896f065358b6818a3687a8d0a0d192d62"
+  },
+  "ergo-blocks-100.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=100&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:03.231Z",
+   "sha256": "3881cf121c738ac08a0e18f3396a6f27da833c7819231d36247d8b84f8ebab12"
+  },
+  "ergo-blocks-200.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=200&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:03.421Z",
+   "sha256": "61bacda7907632dca1f65a50fe9ac82acc85b691e9d0ed61c5239a1f569b62c5"
+  },
+  "ergo-blocks-300.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=300&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:03.612Z",
+   "sha256": "d7acbfe4c47970716bd6d08723e28d42f0c30d725182de3ccdb2e83c53ef09c0"
+  },
+  "ergo-blocks-400.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=400&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:03.798Z",
+   "sha256": "b410f7998a22fd4d2bb538ce661e9421613cfb864c663aecce368f3bac4c24dd"
+  },
+  "ergo-blocks-500.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=500&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:03.990Z",
+   "sha256": "efcbc585df913c669a310383be0a03d45b9ecfab51fc07224d78f688eee797f8"
+  },
+  "ergo-blocks-600.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=600&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:04.200Z",
+   "sha256": "f6ef23aa7875f43024cd545c35c64b3ea4004ec846a83ced478a8867ed5bfdd4"
+  },
+  "ergo-blocks-700.json": {
+   "url": "https://api.ergoplatform.com/api/v1/blocks?offset=700&limit=100&sortBy=height&sortDirection=desc",
+   "fetched": "2026-10-12T23:39:04.406Z",
+   "sha256": "14cd73d12391a124fb9c8ff98182b90471d5860da93edb12fd3cc4ea5998926d"
+  },
+  "fees-BTC.json": {
+   "url": "https://mempool.space/api/v1/fees/recommended",
+   "fetched": "2026-10-12T23:39:04.430Z",
+   "sha256": "e94aef800d5d0a15a4f78a96d8fc4bc48d8c6c9f3a1b58ca1428d2fddf6f4774"
+  },
+  "feerates-BTC-3y.json": {
+   "url": "https://mempool.space/api/v1/mining/blocks/fee-rates/3y",
+   "fetched": "2026-10-12T23:39:04.537Z",
+   "sha256": "db2238774f6e1834269298c9a57d39b8280ec399095c9505ba02d77c0e00bb8d"
+  },
+  "fees-LTC.json": {
+   "url": "https://litecoinspace.org/api/v1/fees/recommended",
+   "fetched": "2026-10-12T23:39:04.727Z",
+   "sha256": "e94aef800d5d0a15a4f78a96d8fc4bc48d8c6c9f3a1b58ca1428d2fddf6f4774"
+  },
+  "feerates-LTC-3y.json": {
+   "url": "https://litecoinspace.org/api/v1/mining/blocks/fee-rates/3y",
+   "error": "Error: HTTP 504"
+  },
+  "xmr-networkinfo.json": {
+   "url": "https://xmrchain.net/api/networkinfo",
+   "fetched": "2026-10-12T23:49:44.446Z",
+   "sha256": "05a7b3f7bf3342b5e7062942951cf7b34d159b2b5f4114235825606117b424ad"
+  },
+  "blockchair-stats.json": {
+   "url": "https://api.blockchair.com/stats",
+   "fetched": "2026-10-12T23:49:45.045Z",
+   "sha256": "abc73c1ae2dd88c3c9147feef7e8a7671382ea178b623036376454095a23a5f9"
+  },
+  "bitnodes.json": {
+   "url": "https://bitnodes.io/api/v1/snapshots/latest/?field=total",
+   "fetched": "2026-10-12T23:49:46.744Z",
+   "sha256": "05b83cbc75ba00d29cc912b5d1d13a4b422f2d13db85f8d00cae0afa37eb4361"
+  }
+ }
+}
