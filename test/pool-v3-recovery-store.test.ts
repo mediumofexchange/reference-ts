@@ -428,6 +428,8 @@ describe("v3 recovery journal and independent package reader", () => {
     // One pending opening at a time: until it is witnessed, no return leaves it.
     await expect(f.j.return("early")).rejects.toMatchObject({ code: "STALE", message: "a return is already pending: publish and adopt it" });
     await f.j.publish();
+    // Witnessed, before its own silence boundary: adoption is the way, not another return.
+    await expect(f.j.return("before-silence")).rejects.toMatchObject({ code: "STALE", check: "SILENCE" });
     // Not adopted while its own segment falls silent: it is retired, and only a new segment returns, from it.
     f.venue.advance(f.venue.witnessedIndex() + 6n);
     await expect(f.j.adopt()).rejects.toMatchObject({ code: "STALE", check: "SILENCE" });

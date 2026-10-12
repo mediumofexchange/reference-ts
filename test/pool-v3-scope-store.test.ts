@@ -137,7 +137,11 @@ describe.skipIf(!supported)("v3 journal over a multi-backing scope", () => {
   it("keeps a live backing of a witnessed opening whose other backing's term ends before it is adopted (C2.10.9)", async () => {
     const f = await shared();
     // An elective change over the witnessed tail leaves a pending opening, which the venue holds.
-    const pending = await f.a.rescope("same", { keep: [f.x.name, f.y.name] }); await f.a.publish();
+    const pending = await f.a.rescope("same", { keep: [f.x.name, f.y.name] });
+    // Not yet witnessed, it is left only by its adoption.
+    await expect(f.a.rescope("too-soon", { keep: [f.y.name] })).rejects.toMatchObject({ code: "STALE",
+      message: "only an adopted or witnessed segment's backings can be kept" });
+    await f.a.publish();
     const toB = await f.replace(bSecret, f.x.name);
     f.venue.advance(toB.effective);
     await expect(f.a.adopt()).rejects.toMatchObject({ code: "STALE", message: "the operator's term has ended" });

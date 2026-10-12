@@ -82,7 +82,9 @@ import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, 
   type SegmentState } from "./state.js";
 import type { RootTerms } from "./terms.js";
 
-const PROFILE = "pool-store/v3/9";
+/** The database's layout and the meaning of its rows. `/10`: a taken directory or snapshot is named only where kept, so
+ * an earlier journal, which may name one never kept, refuses to open (journal audit). */
+const PROFILE = "pool-store/v3/10";
 /** Signed rows read at a time while serving. */
 const SERVE_PAGE = 256n;
 const U64 = 1n << 64n;
@@ -525,7 +527,8 @@ export class V3OperatorJournal {
   /** Whether this journal signed `sequence` by its rows: at or below its latest signed row and outside every skip.
    * Every such sequence keeps its row, so one without it is a lost row, never another signer's. */
   private signedBy(sequence: bigint): boolean {
-    return sequence < SQLITE_LIMIT &&
+    // Sequence 0 is none it signs (it signs from 1): one held is another signer's.
+    return sequence > 0n && sequence < SQLITE_LIMIT &&
       this.db.prepare("SELECT 1 FROM journal_signed WHERE sequence>=? LIMIT 1").get(sequence) !== undefined &&
       this.db.prepare("SELECT 1 FROM journal_skipped WHERE below<? AND ?<sequence").get(sequence, sequence) === undefined;
   }
@@ -1777,7 +1780,8 @@ export class V3OperatorJournal {
    *   segment must be its row's.
    * - the whole active trail reads back to the admission state's tip, record by record.
    * Records admitted after the canonical checkpoint are not proved again here: no reader has judged them.
-   * A failure is STORAGE; evidence that no longer reads is UNAVAILABLE, as for any of the journal's reads.
+   * A failure is STORAGE, the active trail's damage included; the canonical read's evidence that no longer reads is
+   * UNAVAILABLE, as for any of the journal's reads.
    */
   async audit(): Promise<void> {
     return this.run(async engine => {

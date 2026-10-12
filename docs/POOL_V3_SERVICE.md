@@ -165,7 +165,8 @@ A commitment signs over the records admitted since the last one only after
 they read back, and `audit` reads the whole active trail. A journal or wallet
 database with another name (a hard link) is refused `STORAGE`: SQLite keeps
 the write-ahead log and lock index per name, so neither the owner fence nor
-the file's identity holds across names
+the file's identity holds across names. Renaming the file itself is not seen:
+move a directory whole, with no command running in it
 ([audit](../decisions/2026-10.md#2026-10-12--take-over-only-from-evidence-the-journal-keeps-leave-a-witnessed-pending-opening-and-refuse-the-journals-own-damage-by-name-audit-of-the-journal)).
 A return or scope-change opening serves nothing until `adopt` takes its block.
 One witnessed but not adopted before its own silence boundary, or before another

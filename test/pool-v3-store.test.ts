@@ -802,6 +802,16 @@ describe("the v3 operator journal", () => {
     try { expect(kept.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 0 }); } finally { kept.close(); }
   });
 
+  it("names another signer's commitment at sequence 0, which the journal never signs, as a conflict, never a lost row", async () => {
+    const { file, venue, j } = await opened();
+    venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 0n, b(9))));
+    venue.advance(venue.witnessedIndex() + lag);
+    expect(await refusal(j.commit("c2"))).toEqual(["CONFLICT", undefined]);
+    j.close();
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(file);
+    try { expect(db.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 1 }); } finally { db.close(); }
+  });
+
   it("refuses a file with another name, over which its owner fence does not hold, and names a commitment past the row space as a conflict", async () => {
     const { file, venue, j } = await opened();
     j.close();
