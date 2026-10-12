@@ -14,6 +14,9 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const AGENTS_MD_MAX_LINES = 200;
 const WORK_MD_MAX_LINES = 100;
+// Lines alone can be met by lengthening them; the byte cap keeps the handoff
+// as cheap to load as its line count suggests.
+const WORK_MD_MAX_BYTES = 20 * 1024;
 
 const problems = [];
 const fail = (msg) => problems.push(msg);
@@ -52,6 +55,14 @@ if (workLines.length > WORK_MD_MAX_LINES) {
   fail(
     `WORK.md is ${workLines.length} lines, over the ${WORK_MD_MAX_LINES}-line budget.\n` +
       `      Replace stale state and move durable reasoning to decisions/.`,
+  );
+}
+
+const workBytes = Buffer.byteLength(readFileSync("WORK.md", "utf8"));
+if (workBytes > WORK_MD_MAX_BYTES) {
+  fail(
+    `WORK.md is ${workBytes} bytes, over the ${WORK_MD_MAX_BYTES}-byte budget.\n` +
+      `      Summarize done slices in one line with their decision link.`,
   );
 }
 
@@ -154,5 +165,6 @@ if (problems.length) {
 console.log(
   `Docs OK — AGENTS.md ${agentLines}/${AGENTS_MD_MAX_LINES} lines, ` +
     `WORK.md ${workLines.length}/${WORK_MD_MAX_LINES} lines, ` +
+    `${workBytes}/${WORK_MD_MAX_BYTES} bytes, ` +
     `${indexCount} index entries covering ${total} decisions.`,
 );
