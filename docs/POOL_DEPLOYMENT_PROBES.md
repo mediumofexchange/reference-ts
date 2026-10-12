@@ -1064,6 +1064,70 @@ kept reads as a version change does:
   preparation.
 - *Limits:* stand-in proofs, a fixture venue, one host and one run; building the history took 97.6 s.
 
+## The trail's succinct relation (slice 27)
+
+Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/5da12d9/scripts/pool/trail-probe);
+[decision](../decisions/2026-10.md#2026-10-12--a-succinct-trail-relation-costs-one-4-vcpu-prover-1216-hours-a-day-at-the-design-point-over-half-of-it-sha-256-slice-27-next-9)).
+The question: a phone reads a backing's kind-4 trail, 15.6 GB at the [design point](PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets)
+(about 14 MB a day), because pool-v3 §14 verifies by complete replay. A succinct relation would prove the replay
+instead, leaf by leaf, each leaf verifying its predecessor. Can one prover carry the design point's statements in the
+declared proof system (pool-v3 §4)? This probe measures the parts that grow with the trail, under v3's own bytes and
+hashes; the rest of the state machine's checks are field arithmetic of no measured weight.
+
+| Measured (one 4-vCPU Xeon at 2.10 GHz, 15 GB) | Gates |
+|---|---|
+| Recursive verification of a genuine v3 proof (conformance build; inner keys derived from the shipped programs, with the manifest's vk identities) | 704,135 the first in a circuit, 766,520 each further one; issue, demand and settle within 200 of spend. A spend proved and verified inside a circuit; a tampered one makes the outer proof fail |
+| §7's `proofHash`: SHA-256 over the proof's 458 fields as 14,656 bytes (230 compressions) | 1,128,057, equal to the host's digest; a wrong digest is refused |
+| A SHA-256 compression (Barretenberg's black box), bytes packed into words | 3,974 + 185 |
+| A Poseidon2 permutation | 73 |
+| Ed25519 (RFC 8032, cofactored; [noir-ed25519](https://github.com/willemolding/noir-ed25519) at f9e0b44, unaudited), standalone with its tables | 219,706 over 86 bytes (withdrawal), 220,164 and 220,432 over 126 and 147 (settlement's acceptance and release), 276,307 over 410 (issue's statement); `@noble/curves` signatures accepted, a flipped message byte refused |
+| The spent set's hashes per insertion (the reference's `RadixSpentSet`) | 13.2, 17.8, 21.3 and 22.3 at 10⁴, 10⁵, 10⁶ and 2·10⁶ nullifiers |
+
+**A spend's leaf is about 3.5 million gates, over half of them SHA-256.** Under v3's bytes a leaf verifies the spend's
+proof (0.77 M), hashes the proof for its evidence digest (1.13 M), the statement, delivery digest, evidence and history
+links (about 24 compressions, 0.10 M, estimated from their frame lengths), walks the spent set for both nullifiers,
+proving each absent and inserting it (4H − 4 compressions each, 0.71 M at 2·10⁶ nullifiers), appends four
+commitments to the note tree and finds two anchors among past roots (320 Poseidon2, 0.02 M), and verifies the previous
+leaf (0.77 M). A leaf of the measured parts (3,324,772 gates in 2^22 rows) proved in 47.3 and 62.4 s, keys computed in
+each run: 14.2–18.8 µs a gate.
+
+**A day at the design point takes one prover 12–16 hours.** 900 spends a day take 12.4–16.4 hours of one 4-vCPU prover,
+which keeps up 1.5–1.9 times; a peak day of 10⁴ takes 138–182 hours, about a week's catch-up for one machine or six to eight
+machines for the day, through a tree of proofs (estimates from the measured leaf). Issue adds about 0.28 M gates for its
+backer's signature, a settlement 0.44 M for two, a withdrawal 0.22 M without a proof to verify; they are a minority of
+statements. With [slice 22](VENUE_ALTERNATIVES.md#the-attribution-scans-cost-slice-22)'s 13.9 hours a day of
+exhaustion (shared by every scope on the venue), a scope's phone path costs about two such provers at the mean.
+
+**SHA-256 is the lever.** v3 digests a proof and walks its spent set with SHA-256, which a BN254 circuit pays about 62
+gates a byte for; the proof itself is cheaper to verify than to hash. A leaf with a Poseidon2 proof digest (153
+permutations) and an indexed spent tree of depth 32 (96 permutations a nullifier), the other digests kept, measured
+1,609,950 gates in 2^21 rows and proved in 22.2–22.5 s: 5.6 hours a day, 62 for a peak day. That changes bytes and
+digests v3 fixed (§7, pool-spent C1.2.8–9), so it is a pool-v4 candidate, beside the venue-bound commitment context of
+Next 4 (bh).
+
+**A phone's reads fall about thirtyfold.** With both relations a day costs 0.16 MB of headers, two 14.7 KB proofs a
+period and each output's commitment and capsule (0.44 MB at 900 spends), about 0.6 MB, against 18–20 MB today (the trail
+and Ergo's sections). The outputs stay: a phone trial-decrypts capsules to find its notes and follows commitments to
+keep its own paths, so a seed restore still reads about 484 MB of them at the design point.
+
+**What the cost does not show.** The relation must give exactly the reader's verdict over the whole state machine:
+kinds 1–7, demands, locks, deadlines, silence and lapse, recovery, succession, scopes, imports and fault evidence
+(`state.ts`, `recovery.ts` and their callers). One pinned circuit then becomes every phone's verifier where §12.1 lets
+each reader select its own, so a divergence or an under-constrained check forges state for every phone at once. Its
+size is engineering and review, not prover time.
+- *Fixed circuits and variable work:* a radix path's length varies (up to 256 branches for hostile keys, about 21 on average
+  among 2·10⁶ random ones), so a leaf needs a hashing budget shared across its statements, not a worst case each.
+  Grinding nullifiers into one prefix costs the griefer a statement fee each and the prover compressions; liveness,
+  not soundness.
+- *Ed25519 in the circuit* follows its own encoding rules; the relation must refuse exactly what `verifySignatureStrict`
+  refuses (canonical encodings, the small-order keys), which the probed library was not checked against.
+- *Binding to the venue:* the leaf must read the records the exhaustion relation attributed; the probe took the proof
+  and statement as witnesses.
+
+**Limits.** One host and two runs per leaf; prove times include key computation; stand-in contents for the spent
+paths and Poseidon2 work (only the recursion and the proof digest run over genuine data); a spend-only mix; frame
+lengths of the other digests estimated, not traced.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the
