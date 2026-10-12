@@ -325,7 +325,7 @@ until the journal is reopened.
   the publisher asks the same in its turn and before each transaction it
   sends (a supplier that works first, as the commands' spend budget reads
   the key's boxes, asks again immediately before its broadcast, and sends
-  nothing once that transaction's walk has ended), so no record signed at or
+  nothing once its submission's call has ended), so no record signed at or
   below the clock is included inside its lag. A
   failure of the view's own during a sync leaves it failed. A supplier
   that misses one section is not asked again in that sync, and the one that

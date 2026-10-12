@@ -418,8 +418,8 @@ export interface ErgoPublishingSupplier {
   /** Broadcast signed transaction bytes; resolves once the supplier accepted them. The publisher fences its owner
    * and asks the caller's readiness before the call, and passes `proceed`: a supplier that does work of its own
    * first (a read, a budget) calls it immediately before it broadcasts. It throws where nothing may be sent now,
-   * also once the walk that made the call has ended. */
-  submit(signed: Uint8Array, id: Uint8Array, proceed?: () => void): Promise<void>;
+   * also once this call has ended (timed out) or another walk of the send was refused. */
+  submit(signed: Uint8Array, id: Uint8Array, proceed: () => void): Promise<void>;
 }
 
 export interface ErgoPublisherOptions {
@@ -876,7 +876,7 @@ export class ErgoPublisher {
     // The publication's turn clears `#ready` when it ends; a supplier answering after that still asks this one.
     const ready = this.#ready;
     const proceed = (): void => {
-      if (ended) throw new VenueError("the publication's walk ended before this supplier sent it");
+      if (ended) throw new VenueError("this submission's call ended before the supplier sent it");
       try {
         if (walk.refusal !== undefined) throw walk.refusal.error;
         this.#guard(); ready?.();

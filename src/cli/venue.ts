@@ -250,15 +250,16 @@ export async function venueAudit(argv: readonly string[]): Promise<void> {
   } finally { view.close(); }
 }
 
-/** The directory's node endpoints as publishing suppliers, each submission first passing the spend budget, then the
- * publisher's `proceed` immediately before it is sent: the budget's read can outlast the walk (Next 4 (bi)). */
+/** The directory's node endpoints as publishing suppliers, each submission first passing the spend budget, which asks
+ * the publisher's `proceed` before it reserves, and `proceed` again immediately before it is sent: the budget's read
+ * can outlast the submission's call (Next 4 (bi)). */
 export function publishingSuppliers(directory: Pick<Directory, "config">, budget: Pick<SpendBudget, "tree" | "authorize">): ErgoPublishingSupplier[] {
   return directory.config.nodes.map((url, i) => {
     const node = ergoNodePublisher(url, { name: `node ${i + 1}`, timeoutMs: NODE_TIMEOUT_MS });
     return Object.freeze({ name: node.name, unspentBoxes: (tree: Uint8Array) => node.unspentBoxes(tree), hasBox: (id: Uint8Array) => node.hasBox(id),
       hasTransaction: (id: Uint8Array) => node.hasTransaction(id),
       submit: async (signed: Uint8Array, id: Uint8Array, proceed: () => void) => {
-        await budget.authorize(signed, id, await node.unspentBoxes(budget.tree));
+        await budget.authorize(signed, id, await node.unspentBoxes(budget.tree), proceed);
         proceed();
         return node.submit(signed, id, proceed);
       } });
@@ -323,7 +324,8 @@ export const fundingTree = (secret: Uint8Array): Uint8Array => payToPublicKeyTre
  * A funding directory's spend budget (`config.json`'s `spendBudgetNanoErg`, M10b item 6), as the live drills'
  * guard judges it: before each broadcast the signed transaction is replayed on an offline mempool funded with the
  * key's unspent boxes, and what it takes from the key (fees and record boxes' minimums) is reserved in `spend.db`
- * before it is sent, so a refused or uncertain broadcast keeps its reservation. A transaction past the budget is
+ * before it is sent, so a refused or uncertain broadcast keeps its reservation; `proceed` is asked before reserving, so
+ * a transaction the publisher no longer sends reserves nothing. A transaction past the budget is
  * refused (`BUDGET`); an exact resubmission of one already reserved passes. A `spend.db` restored from a copy misses
  * what was spent since it was made; the funding key's balance stays the hard cap (slice 13 M13e).
  */
@@ -345,17 +347,18 @@ export class SpendBudget {
   spent(): bigint { return (this.db.prepare("SELECT COALESCE(SUM(cost),0) AS n FROM spend").get()?.n as bigint) ?? 0n; }
   /** The refusal since the last call, if any, cleared. */
   take(): CommandError | undefined { const refused = this.refused; this.refused = undefined; return refused; }
-  async authorize(signed: Uint8Array, id: Uint8Array, boxes: readonly Uint8Array[]): Promise<void> {
-    try { await this.judge(signed, id, boxes); } catch (error) {
+  async authorize(signed: Uint8Array, id: Uint8Array, boxes: readonly Uint8Array[], proceed: () => void): Promise<void> {
+    try { await this.judge(signed, id, boxes, proceed); } catch (error) {
       if (error instanceof CommandError) this.refused = error;
       throw error;
     }
   }
-  private async judge(signed: Uint8Array, id: Uint8Array, boxes: readonly Uint8Array[]): Promise<void> {
+  private async judge(signed: Uint8Array, id: Uint8Array, boxes: readonly Uint8Array[], proceed: () => void): Promise<void> {
     const key = bytesToHex(id), digest = bytesToHex(sha256(signed));
     const prior = this.db.prepare("SELECT signed FROM spend WHERE id=?").get(key);
     if (prior !== undefined) {
       if (prior.signed !== digest) throw new CommandError("BUDGET", "a reserved transaction id names other bytes");
+      proceed();
       return;
     }
     const shadow = new MempoolNode("spend budget", verifyErgoProof), fee = hexToBytes(MINER_FEE_TREE_HEX);
@@ -370,6 +373,7 @@ export class SpendBudget {
     const cost = before - total(this.tree), paid = total(fee) - feeBefore;
     if (paid <= 0n || cost < paid) throw new CommandError("BUDGET", "the transaction's cost is not a publication's");
     if (this.spent() + cost > this.limit) throw new CommandError("BUDGET", `the transaction would pass the spend budget of ${this.limit} nanoErg`);
+    proceed();
     this.db.prepare("INSERT INTO spend VALUES(?,?,?)").run(key, digest, cost);
   }
   close(): void { this.db.close(); }
