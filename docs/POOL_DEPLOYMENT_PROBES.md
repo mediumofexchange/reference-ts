@@ -1067,7 +1067,7 @@ kept reads as a version change does:
 ## The trail's succinct relation (slice 27)
 
 Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/1c85142/scripts/pool/trail-probe);
-[decision](../decisions/2026-10.md#2026-10-12--a-succinct-trail-relation-takes-one-4-vcpu-prover-1319-hours-a-day-at-the-design-point-over-half-of-it-sha-256-slice-27-next-9)).
+[decision](../decisions/2026-10.md#2026-10-12--a-succinct-trail-relation-takes-one-4-vcpu-prover-1419-hours-a-day-at-the-design-point-over-half-of-it-sha-256-slice-27-next-9)).
 The question: a phone reads a backing's kind-4 trail, 15.6 GB at the [design point](PRODUCTION_REQUIREMENTS.md#target-scale-and-budgets)
 (about 14 MB a day), because pool-v3 §14 verifies by complete replay. A succinct relation would prove the replay
 instead, leaf by leaf, each leaf verifying its predecessor. Can one prover carry the design point's statements in the
@@ -1095,11 +1095,12 @@ previous leaf (0.77 M). A fixed circuit pays its path budget, not the mean: the 
 2·10⁶ random nullifiers was 25, and a budget of depth 32 costs 1.10 M for the spent set, 3.94 M a leaf. The measured
 leaf (178 compressions, 256 Poseidon2) is slightly smaller than the modelled one (194, 320); time is scaled per gate.
 
-**A day at the design point takes one prover 13–19 hours, if each leaf stays within 2^22 rows.** 900 spends a day take
-12.6–17.3 hours at the mean path and 14.0–19.2 at a depth-32 budget: one 4-vCPU prover keeps up 1.25–1.9 times. A
+**A day at the design point takes one prover 14–19 hours, if each leaf stays within 2^22 rows.** 900 spends a day take
+14.0–19.2 hours at the depth-32 budget a fixed leaf pays (12.6–17.3 at the mean path): one 4-vCPU prover keeps up
+1.25–1.7 times. A
 peak day of 10⁴ takes 156–213 hours; one machine clears that backlog with the spare hours of ordinary days in about
-13–39 days, or a tree of proofs (each statement a leaf without the accumulator and a merge node of 1.47 M gates,
-about 22 s) on 8–10 machines takes it in the day. Proving time roughly doubles to triples with each doubling of rows
+13–39 days, or a tree of proofs takes it in the day on 10–12 machines (each statement a leaf without the accumulator,
+still in 2^22 rows and so about as slow, and a merge node of 1.47 M gates, about 22 s). Proving time roughly doubles to triples with each doubling of rows
 (22 s at 2^21, 47–65 s at 2^22), so a leaf past 2^22 would leave one prover behind: a settlement's two Ed25519
 signatures (0.44 M) take a depth-32 leaf to 4.38 M gates. Each kind's leaf (issue +0.28 M, settlement +0.44 M,
 withdrawal +0.22 M and no proof) is therefore its own circuit, which the accumulator accepts by key, or a budget is
