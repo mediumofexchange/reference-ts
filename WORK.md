@@ -84,7 +84,6 @@ Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators
   outside the standing authorization. The [security argument](docs/SECURITY_ARGUMENT.md) is its target and the [review brief](docs/REVIEW_BRIEF.md) its brief; rolling AI reviews continue meanwhile (Next 6).
 - Non-blocking, maintainer (2026-10-08): Bitcoin probe 3's decisive part publishes 136 B and 15.5 KB records on mainnet against
   fee (Next 12), which spends real funds outside the standing authorization. Held: the venue comparison (Next 12) comes first.
-- Non-blocking, maintainer (2026-10-12, cleanup): `scripts/check-docs.mjs` now caps WORK.md at 20 KiB beside its 100 lines (it had reached 26 KB in 98 lines of up to 1,355 characters; this cleanup brought it under). Proposal for AGENTS.md's Handoff section: "Keep AGENTS.md at most 200 lines and WORK.md at most 100 lines and 20 KiB; summarize done slices in one line with their decision link."
 - Deletion list (2026-10-09): none open.
 
 Roughly **72% done / 28% remaining** (range 62–80%), reassessed 2026-10-09 (direction check; unchanged after (bb)'s fix, which found (bg) beside it): the restart replay was a gate defect at scale and the
