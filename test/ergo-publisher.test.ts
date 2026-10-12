@@ -795,6 +795,32 @@ describe("replacement, settlement and supplier cost", () => {
     expect(n.submitted).toHaveLength(0);
   });
 
+  it("lets a supplier that works before its broadcast ask the fence and readiness again, and refuses it once its walk ended (Next 4 (bi))", async () => {
+    // Ready in the turn and at the publisher's own check, not by the time the supplier's work (a budget's read) is done.
+    const n = funded([10_000_000n]);
+    let ready = true;
+    const reading: ErgoPublishingSupplier = { name: "reading", unspentBoxes: t => n.unspentBoxes(t), hasBox: id => n.hasBox(id),
+      hasTransaction: id => n.hasTransaction(id), submit: async (signed, id, proceed) => { ready = false; await n.unspentBoxes(TREE); proceed?.(); return n.submit(signed, id); } };
+    const check = (): void => { if (!ready) throw new VenueError("the chain is short"); };
+    await expect(publisher([reading]).publish(request(), check)).rejects.toThrow(new VenueError("the chain is short"));
+    expect(n.submitted).toHaveLength(0);
+
+    // The supplier's work outlasts its walk's deadline: the publication's turn ends, and what it sends afterwards is refused.
+    let release!: () => void, late: unknown;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const slow: ErgoPublishingSupplier = { ...reading, submit: async (signed, id, proceed) => {
+      await held;
+      try { proceed?.(); } catch (error) { late = error; throw error; }
+      return n.submit(signed, id);
+    } };
+    const p = new ErgoPublisher({ secretKey: SECRET, suppliers: [slow], timeoutMs: 100 });
+    await expect(p.publish(request(), () => {})).rejects.toThrow(/kept and sent again/);
+    release();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(late).toEqual(new VenueError("the publication's walk ended before this supplier sent it"));
+    expect(n.submitted).toHaveLength(0);
+  });
+
   it("builds no replacement while no supplier answers whether a transaction the record had before is held", async () => {
     const n = funded([10_000_000n]);
     n.refuse = () => true;

@@ -415,8 +415,11 @@ export interface ErgoPublishingSupplier {
   hasBox(boxId: Uint8Array): Promise<boolean>;
   /** Whether the supplier holds a transaction with this id, in its mempool or its blocks. */
   hasTransaction(id: Uint8Array): Promise<boolean>;
-  /** Broadcast signed transaction bytes; resolves once the supplier accepted them. */
-  submit(signed: Uint8Array, id: Uint8Array): Promise<void>;
+  /** Broadcast signed transaction bytes; resolves once the supplier accepted them. The publisher fences its owner
+   * and asks the caller's readiness before the call, and passes `proceed`: a supplier that does work of its own
+   * first (a read, a budget) calls it immediately before it broadcasts. It throws where nothing may be sent now,
+   * also once the walk that made the call has ended. */
+  submit(signed: Uint8Array, id: Uint8Array, proceed?: () => void): Promise<void>;
 }
 
 export interface ErgoPublisherOptions {
@@ -866,16 +869,26 @@ export class ErgoPublisher {
   }
 
   /** Whether `supplier` took the publication, by `until`; the owner is fenced and the caller's readiness checked
-   * immediately before it is sent, and nothing is sent once another walk of the send was refused. */
+   * immediately before it is sent, also by a supplier that works before it broadcasts (`proceed`), and nothing is
+   * sent once another walk of the send was refused or once this call has ended, timed out or not (Next 4 (bi)). */
   async #submit(supplier: ErgoPublishingSupplier, pending: Pending, walk: Walk, until?: number): Promise<boolean> {
-    let refusal: unknown;
-    const answer = await this.#call(() => {
+    let refusal: unknown, ended = false;
+    // The publication's turn clears `#ready` when it ends; a supplier answering after that still asks this one.
+    const ready = this.#ready;
+    const proceed = (): void => {
+      if (ended) throw new VenueError("the publication's walk ended before this supplier sent it");
       try {
         if (walk.refusal !== undefined) throw walk.refusal.error;
-        this.#guard(); this.#ready?.();
-      } catch (error) { refusal = error; walk.refusal ??= { error }; throw error; }
-      return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id));
-    }, until);
+        this.#guard(); ready?.();
+      } catch (error) { refusal ??= error; walk.refusal ??= { error }; throw error; }
+    };
+    let answer;
+    try {
+      answer = await this.#call(() => {
+        proceed();
+        return supplier.submit(copyBytes(pending.publication.signed), copyBytes(pending.publication.id), proceed);
+      }, until);
+    } finally { ended = true; }
     if (refusal !== undefined) throw refusal;
     this.#guard();
     return answer.ok;

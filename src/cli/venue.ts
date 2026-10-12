@@ -250,13 +250,18 @@ export async function venueAudit(argv: readonly string[]): Promise<void> {
   } finally { view.close(); }
 }
 
-/** The directory's node endpoints as publishing suppliers, each submission first passing the spend budget. */
-export function publishingSuppliers(directory: Directory, budget: SpendBudget): ErgoPublishingSupplier[] {
+/** The directory's node endpoints as publishing suppliers, each submission first passing the spend budget, then the
+ * publisher's `proceed` immediately before it is sent: the budget's read can outlast the walk (Next 4 (bi)). */
+export function publishingSuppliers(directory: Pick<Directory, "config">, budget: Pick<SpendBudget, "tree" | "authorize">): ErgoPublishingSupplier[] {
   return directory.config.nodes.map((url, i) => {
     const node = ergoNodePublisher(url, { name: `node ${i + 1}`, timeoutMs: NODE_TIMEOUT_MS });
     return Object.freeze({ name: node.name, unspentBoxes: (tree: Uint8Array) => node.unspentBoxes(tree), hasBox: (id: Uint8Array) => node.hasBox(id),
       hasTransaction: (id: Uint8Array) => node.hasTransaction(id),
-      submit: async (signed: Uint8Array, id: Uint8Array) => { await budget.authorize(signed, id, await node.unspentBoxes(budget.tree)); return node.submit(signed, id); } });
+      submit: async (signed: Uint8Array, id: Uint8Array, proceed: () => void) => {
+        await budget.authorize(signed, id, await node.unspentBoxes(budget.tree));
+        proceed();
+        return node.submit(signed, id, proceed);
+      } });
   });
 }
 

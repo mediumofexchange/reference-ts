@@ -25,7 +25,7 @@ import { keptFileDigest, ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
 import { closeListener, listenLoopback, SERVE_FLAGS, serveFlags } from '../src/cli/serve.js';
 import { V3StoreError } from '../src/pool/v3/store.js';
-import { parseVenue, publisherStore, venueText } from '../src/cli/venue.js';
+import { parseVenue, publisherStore, publishingSuppliers, venueText } from '../src/cli/venue.js';
 import { ERGO_SYNTHETIC_REFERENCE, ownErgoProfile } from '../src/ergo-profile.js';
 import { SYNTHETIC_SCRIPTS } from '../src/ergo-synthetic.js';
 
@@ -166,6 +166,26 @@ describe('moe wallet and relay files', () => {
       expect(c.persistence.load()).toBe('first');
       c.close();
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('sends a funding directory\'s transaction only where the publisher\'s proceed passes after the budget\'s read (Next 4 (bi))', async () => {
+    const posted = [];
+    const server = createServer((request, response) => {
+      request.resume();
+      request.on('end', () => {
+        if (request.url.startsWith('/transactions/bytes')) { posted.push(request.url); response.end(JSON.stringify('11'.repeat(32))); return; }
+        response.end('[]'); // the funding key's unspent boxes: none listed
+      });
+    });
+    try {
+      const port = await listenLoopback(server, 0), read = [];
+      const budget = { tree: new Uint8Array(36), authorize: async (signed, id, boxes) => { read.push(boxes.length); } };
+      const [supplier] = publishingSuppliers({ config: { nodes: [`http://127.0.0.1:${port}`] } }, budget);
+      const signed = new Uint8Array([1]), id = new Uint8Array(32).fill(0x11);
+      await expect(supplier.submit(signed, id, () => { throw new CommandError('ENDED', 'the walk ended'); })).rejects.toThrow('the walk ended');
+      expect([read, posted]).toEqual([[0], []]);
+      await supplier.submit(signed, id, () => {});
+      expect([read, posted]).toEqual([[0, 0], ['/transactions/bytes']]);
+    } finally { await closeListener(server); }
   });
   it('reads a publication file of exactly its fields, at kind 4 only', () => {
     const file = { schema: 'moe-publication-1', venue: '01'.repeat(32), backing: '02'.repeat(32), kind: '4', subject: '02'.repeat(32), record: 'abcd' };
