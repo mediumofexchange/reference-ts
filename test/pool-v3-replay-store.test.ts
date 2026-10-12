@@ -210,8 +210,8 @@ describe("replay storage", () => {
       first.append(ns, append([next()], []));
       first.keepPoint();
       expect(existsSync(digest)).toBe(true);
-      // A second store would take the first's rows: it is refused, at its opening (its check cannot move the log in
-      // while the first holds the write lock) or at its walk.
+      // A second store would take the first's rows: it is refused at its walk (a store of this process shares the file
+      // as the first judged it).
       expect(() => {
         const second = new ReplayStore(path, { digest });
         try { second.openWalk(context); } finally { second.close(); }
@@ -363,6 +363,36 @@ describe("replay storage", () => {
       store = new ReplayStore(path, { digest });
       expect(store.hasNamespace(ns)).toBe(true);
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("shares a kept file between two stores of one process: each digest names both stores' commits, and a later opening leaves the first's log (review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-shared-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    const stores: ReplayStore[] = [];
+    const opened = () => { const store = new ReplayStore(path, { digest }); stores.push(store); return store; };
+    const walked = (store: ReplayStore, segment: number, records: number) => {
+      const { walk } = store.openWalk(context), ns = store.open(fieldToBytes(BigInt(segment)), new Uint8Array(32).fill(2), undefined, genesis);
+      for (let i = 0; i < records; i++) store.append(ns, append([next(), next()], [next()]));
+      store.closeWalk(walk);
+      return ns;
+    };
+    try {
+      const first = opened(), kept = [walked(first, 1, 20)];
+      // The second grows the file past the pages the first had hashed; the first's next keep point hashes them too.
+      const second = opened();
+      kept.push(walked(second, 2, 200), walked(first, 3, 20));
+      expect(vouched()).toBe(true);
+      // A commit of the first's that no digest names yet (written outside a walk) stays in its log: a third opening
+      // neither drops that log nor discards the file under it.
+      kept.push(first.open(fieldToBytes(4n), new Uint8Array(32).fill(2), undefined, genesis));
+      const third = opened();
+      for (const ns of kept) expect(third.hasNamespace(ns)).toBe(true);
+      first.closeWalk(first.openWalk(context).walk);
+      for (const store of stores.splice(0)) store.close();
+      expect(vouched()).toBe(true);
+      const reopened = opened();
+      for (const ns of kept) expect(reopened.hasNamespace(ns)).toBe(true);
+    } finally { for (const store of stores) store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("keeps one object per venue position: a position answered for a second backing leaves the read unresolved (§13.1)", () => {

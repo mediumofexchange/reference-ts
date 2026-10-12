@@ -585,9 +585,10 @@ export class V3OperatorJournal {
     catch (error) {
       // Memory follows the rows only after they commit, so a refusal leaves it as it was; an unexpected failure drops it.
       if (!(error instanceof V3StoreError || error instanceof EncodingError)) this.engine = undefined;
-      // A replaced owner reads nothing more: its kept reads go to the new owner, whose first read waits (BUSY) while this
-      // handle holds the file: in this process until the failed read ends here; in another, until that process's next
-      // operation or close.
+      // A replaced owner reads nothing more: its kept reads go to the new owner. In another process, the new owner's
+      // first read waits (BUSY) while this handle holds the file, until this process's next operation or close. In this
+      // process the two stores share the file's lock and page hashes, and the new owner's read waits only while a walk of
+      // this handle's is open, until the failed read ends here.
       if (error instanceof V3StoreError && error.code === "FENCED") { this.reading?.close(); this.reading = undefined; }
       // The journal's own replay rows are its state, not a cache to discard: damage to them is named.
       if (error instanceof KeptStateMismatch) throw new V3StoreError("STORAGE", `the journal's replay rows are damaged: ${error.message}`);
