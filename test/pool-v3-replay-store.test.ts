@@ -365,7 +365,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("shares a kept file between two stores of one process: each digest names both stores' commits, and a later opening leaves the first's log (review)", () => {
+  it("shares a kept file between two stores of one process: each digest names both stores' commits, and a later opening leaves the first's log (review)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-shared-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
     const stores: ReplayStore[] = [];
@@ -382,12 +382,16 @@ describe("replay storage", () => {
       const second = opened();
       kept.push(walked(second, 2, 200), walked(first, 3, 20));
       expect(vouched()).toBe(true);
-      // A commit of the first's that no digest names yet (written outside a walk) stays in its log: a third opening
-      // neither drops that log nor discards the file under it.
+      // The second reading keeps a commit of the first's from moving in; the first records its digest (Next 4 (bm)), and
+      // the log stays beside the file: a third opening neither drops that log nor discards the file under it.
+      let resume!: () => void;
+      const gate = new Promise<void>(done => { resume = done; });
+      const reading = second.replay(async () => { second.tip(kept[0]!); await gate; });
       kept.push(first.open(fieldToBytes(4n), new Uint8Array(32).fill(2), undefined, genesis));
+      expect(statSync(`${path}-wal`).size).toBeGreaterThan(0);
       const third = opened();
       for (const ns of kept) expect(third.hasNamespace(ns)).toBe(true);
-      first.closeWalk(first.openWalk(context).walk);
+      resume(); await reading;
       for (const store of stores.splice(0)) store.close();
       expect(vouched()).toBe(true);
       const reopened = opened();
@@ -420,6 +424,62 @@ describe("replay storage", () => {
       store = crashed(store);
       expect(store.hasNamespace(segments[1]!)).toBe(false);
       expect(store.keptAnswer(1, new Uint8Array(32).fill(5))).toBeUndefined();
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("keeps a commit made outside a walk through the last close and a crash: each records its digest (Next 4 (bm), (bo))", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-outside-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), subject = new Uint8Array(32).fill(5), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    let store = new ReplayStore(path, { digest });
+    try {
+      const { walk } = store.openWalk(context), walked = store.open(fieldToBytes(1n), new Uint8Array(32).fill(2), undefined, genesis);
+      for (let i = 0; i < 20; i++) store.append(walked, append([next()], [next()]));
+      store.closeWalk(walk);
+      // Outside a walk: a namespace, a record and a kept answer, each its own commit.
+      const outside = store.open(fieldToBytes(2n), new Uint8Array(32).fill(2), undefined, genesis);
+      store.append(outside, append([next()], [next()]));
+      store.keepAnswer(1, subject, () => ({ through: 9n, value: 3n }));
+      // The last close moves the log into the file: the digest already names it, so the next opening keeps the file.
+      store.close();
+      expect(vouched()).toBe(true);
+      store = new ReplayStore(path, { digest });
+      expect([store.hasNamespace(walked), store.hasNamespace(outside), store.tip(outside).position]).toEqual([true, true, 1n]);
+      expect(store.keptAnswer(1, subject)).toEqual({ through: 9n, value: 3n });
+      // A crash right after such a commit and its digest reopens it as well.
+      store.append(outside, append([next()], [next()]));
+      const lying = [path, `${path}-wal`, digest].map(file => [file, existsSync(file) ? readFileSync(file) : undefined] as const);
+      // A replacement of the digest stopped before its rename leaves its partial file, removed at the next opening.
+      const partial = `${digest}.4242.0a0b0c0d.partial`;
+      writeFileSync(partial, "torn");
+      store.close();
+      for (const [file, bytes] of lying) if (bytes === undefined) rmSync(file, { force: true }); else writeFileSync(file, bytes);
+      rmSync(`${path}-shm`, { force: true });
+      store = new ReplayStore(path, { digest });
+      expect(store.tip(outside).position).toBe(2n);
+      expect(existsSync(partial)).toBe(false);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("records at the close a digest a commit could not record, so the last close never moves an unvouched log in (Next 4 (bm), review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-keep-retry-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    let store = new ReplayStore(path, { digest });
+    try {
+      const { walk } = store.openWalk(new Uint8Array(32).fill(7)), walked = store.open(fieldToBytes(1n), new Uint8Array(32).fill(2), undefined, genesis);
+      for (let i = 0; i < 10; i++) store.append(walked, append([next()], [next()]));
+      store.closeWalk(walk);
+      const recorded = readFileSync(digest);
+      // The digest cannot be replaced for a moment (here a directory in its place: EISDIR, on Windows EPERM): the commit
+      // stands, unnamed.
+      rmSync(digest); mkdirSync(digest);
+      expect(() => store.open(fieldToBytes(2n), new Uint8Array(32).fill(2), undefined, genesis)).toThrow(expect.objectContaining({ syscall: "rename" }));
+      rmSync(digest, { recursive: true }); writeFileSync(digest, recorded);
+      // The failure has passed by the close, which records the digest before SQLite moves the log in.
+      store.close();
+      expect(readFileSync(digest, "utf8")).toBe(keptFileDigest(path));
+      store = new ReplayStore(path, { digest });
+      expect(store.namespaces(new Uint8Array(32).fill(2)).length).toBe(2);
+      // Outside a walk, a kept store's walk and answer rows are written only inside one or a kept answer.
+      expect(() => store.putHeld(new Uint8Array(32), [])).toThrow("only inside a walk or a kept answer");
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 

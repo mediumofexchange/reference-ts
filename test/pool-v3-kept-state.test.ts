@@ -314,11 +314,13 @@ describe("pool-v3 §14 kept classes across reads", () => {
   it("commits a keep point between checkpoints inside a long read", async () => {
     const f = fixture(), kept = files();
     await f.first();
-    const store = opened(kept.path, { ...kept, every: 1 });
+    const store = opened(kept.path, { ...kept, every: 1 }), created = readFileSync(kept.digest, "utf8");
     const seen: boolean[] = [];
     const verifier = { ...counting(), verify() {
-      // By the second checkpoint's records, the first checkpoint's keep point has recorded the file's digest.
-      seen.push(existsSync(kept.digest) && readFileSync(kept.digest, "utf8") === keptFileDigest(kept.path)!);
+      // By the second checkpoint's records, the first checkpoint's keep point has recorded the file's digest, past the
+      // one its creation recorded over the empty layout.
+      const recorded = readFileSync(kept.digest, "utf8");
+      seen.push(recorded !== created && recorded === keptFileDigest(kept.path)!);
       return true;
     } };
     await f.read(verifier, store);
@@ -334,10 +336,11 @@ describe("pool-v3 §14 kept classes across reads", () => {
     const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
     try {
       const vouchedDuring = async (step: number): Promise<boolean[]> => {
-        const kept = files(), store = opened(kept.path, kept), seen: boolean[] = [];
+        const kept = files(), store = opened(kept.path, kept), seen: boolean[] = [], created = readFileSync(kept.digest, "utf8");
         // Each proof takes `step` milliseconds of the read.
         const verifier = { ...counting(), verify() {
-          seen.push(existsSync(kept.digest) && readFileSync(kept.digest, "utf8") === keptFileDigest(kept.path)!);
+          const recorded = readFileSync(kept.digest, "utf8");
+          seen.push(recorded !== created && recorded === keptFileDigest(kept.path)!);
           clock += step; return true;
         } };
         await f.read(verifier, store);

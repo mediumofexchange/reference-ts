@@ -918,6 +918,16 @@ describe("the v3 operator journal", () => {
     // not this one's.
     const reads = readsOf(file);
     expect(removeKeptFile(reads, `${reads}.sha256`)).toBe(true);
+    // An owner that serves holds its version's reads from its start, though none were kept (Next 4 (bn)): another
+    // process's preparation of this version is refused BUSY, not the owner's admissions while it reads.
+    owner = open(); owner.openReads();
+    expect(existsSync(reads)).toBe(true); expect(removeKeptFile(reads, `${reads}.sha256`)).toBe(false);
+    const preparing = await import("node:child_process").then(({ spawnSync }) => spawnSync(process.execPath, ["--no-warnings", "-e",
+      `const { DatabaseSync } = require("node:sqlite"); try { const l = new DatabaseSync(process.argv[1], { timeout: 0 }); l.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE"); process.stdout.write("taken"); } catch { process.stdout.write("refused"); }`,
+      `${reads}.lock`], { encoding: "utf8" }));
+    expect(preparing.stdout).toBe("refused");
+    // The preparation below runs in this process, beside the owner, as in a test only: its stores share the owner's lock.
+    owner.close(); expect(removeKeptFile(reads, `${reads}.sha256`)).toBe(true);
     owner = open(); venue.advance(venue.witnessedIndex() + lag);
     await owner.status();
     const beside = open(true), before = verified;
