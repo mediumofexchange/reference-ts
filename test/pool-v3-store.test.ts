@@ -914,7 +914,7 @@ describe("the v3 operator journal", () => {
     const held = write("journal.db.reads-00000000000000aa", true), prepared = write("journal.db.reads-fedcba9876543210", false);
     const { DatabaseSync } = await import("node:sqlite");
     const lock = new DatabaseSync(`${held}.lock`, { timeout: 0 }); lock.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE");
-    onTestFinished(() => lock.close());
+    onTestFinished(() => { if (lock.isOpen) lock.close(); });
     // Unrelated files beside the journal stay.
     writeFileSync(join(directory, "journal.db.readsx"), ""); writeFileSync(join(directory, "other.db.reads-0123456789abcdef"), "");
     // Restarted, however often: the later version's prepared file stays.
@@ -935,6 +935,8 @@ describe("the v3 operator journal", () => {
     expect(() => second.openReads()).toThrow(expect.objectContaining({ code: "BUSY" }));
     expect(existsSync(`${reads}.served`)).toBe(true);
     await elsewhere.release();
+    // Closed before the directory is removed (Windows refuses to remove a file held open).
+    lock.close();
   });
 
   it("holds no transaction on its database while it reads its own history", async () => {

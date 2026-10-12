@@ -80,7 +80,9 @@ function evidenceFile() {
 describe("v3 evidence store", () => {
   it("reads a host's evidence beside its owner, writing it nothing but the lineage row it is given to add (Next 4 (bg))", () => {
     const { path, count } = evidenceFile(), host = new DatabaseSync(path, { readBigInts: true });
-    onTestFinished(() => host.close());
+    // Closed before the directory is removed (Windows refuses to remove a file held open).
+    const connections: DatabaseSync[] = [host];
+    onTestFinished(() => { for (const db of connections) if (db.isOpen) db.close(); });
     host.exec("PRAGMA journal_mode=WAL");
     const owner = new EvidenceStore(host);
     // The owner's read in flight: its batch row and its lineage row 1.
@@ -88,7 +90,7 @@ describe("v3 evidence store", () => {
     expect([count("batch"), count("evidence_lineage")]).toEqual([1, 1]);
     // Read-only beside it: its per-read rows are its connection's own, and the owner's are neither seen nor deleted.
     const beside = new DatabaseSync(path, { readBigInts: true, timeout: 5000, readOnly: true });
-    onTestFinished(() => beside.close());
+    connections.push(beside);
     const reader = new EvidenceStore(beside, { beside: true }), read = reader.retained();
     expect([count("batch"), count("evidence_lineage")]).toEqual([1, 1]);
     // A batch beside stands at the owner's last row.
@@ -104,6 +106,7 @@ describe("v3 evidence store", () => {
     // Only a host's database is read beside its owner, and only one holding evidence.
     expect(() => new EvidenceStore(path, { beside: true })).toThrow(TypeError);
     expect(() => new EvidenceStore(new DatabaseSync(":memory:", { readBigInts: true }), { beside: true })).toThrow(TypeError);
+    for (const db of connections) db.close();
   });
 
   it("keeps a party's own evidence in a host's transaction and serves it as supplied evidence is served", () => {

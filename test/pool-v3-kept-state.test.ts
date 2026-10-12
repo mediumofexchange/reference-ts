@@ -720,12 +720,12 @@ describe("pool-v3 §14 kept classes across reads", () => {
     expect(() => new ReplayStore(kept.path, kept)).toThrow(FileInUse);
     expect(removeKeptFile(kept.path, kept.digest)).toBe(false);
     await elsewhere.release();
-    // Stores of one process share the lock until the last closes; removal leaves a file one of them holds.
-    const first = opened(kept.path, kept), second = opened(kept.path, kept);
+    // A store here holds it; removal leaves a file this process holds. (Stores of one process share the lock: the
+    // wallet's fencing tests open a second handle while a replaced one stays open.)
+    const first = opened(kept.path, kept);
     expect(existsSync(`${kept.path}.lock`)).toBe(true);
-    first.close();
     expect(removeKeptFile(kept.path, kept.digest)).toBe(false);
-    second.close();
+    first.close();
     // A file no handle holds is removed with its digest and the caller's files; its lock stays, so no two handles hold
     // locks of their own on one path.
     writeFileSync(`${kept.path}.served`, "");
