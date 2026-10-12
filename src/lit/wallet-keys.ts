@@ -28,8 +28,10 @@ function withSecret<T>(value: Uint8Array, what: string, use: (own: Uint8Array) =
 function root(seed: Uint8Array, domain: Uint8Array, info: Uint8Array): Uint8Array {
   return withSecret(seed, "seed", own => new Uint8Array(hkdfSync("sha256", own, field32(domain, "domain"), info, 32)));
 }
+/** The digest copied out, and its buffer zeroed: a derived secret leaves no second copy behind. */
 function hmac(key: Uint8Array, message: Uint8Array): Uint8Array {
-  return new Uint8Array(createHmac("sha256", key).update(message).digest());
+  const digest = createHmac("sha256", key).update(message).digest();
+  try { return new Uint8Array(digest); } finally { digest.fill(0); }
 }
 /** HMAC under a root derived for this one secret, the root zeroed after use. */
 function derived(seed: Uint8Array, domain: Uint8Array, info: Uint8Array, message: Uint8Array): Uint8Array {

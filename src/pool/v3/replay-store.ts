@@ -593,7 +593,8 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
     if (error instanceof FileInUse) throw error;
     if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
     // Nor is a failure of the system the file lies on (no descriptor left, an I/O or permission error): the file may
-    // be sound, and discarding it would replay the whole history once the failure passes.
+    // be sound, and discarding it would replay the whole history once the failure passes. One that persists (a failing
+    // disk) stays visible at each opening; removing the file by hand replays the history, as a discard would.
     if (systemFailure(error)) throw error;
     return undefined;
   }
@@ -850,9 +851,10 @@ export class ReplayStore {
       if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
     });
   }
-  /** Deletions that stand only if `body` returns. Outside a transaction, a kept file commits them as a keep point does,
+  /** Deletions that commit only if `body` returns. Outside a transaction, a kept file commits them as a keep point does,
    * with their digest: a log no digest vouches for is dropped on opening, which would restore what a discard had just
-   * rejected (§14). A file another store is writing refuses them as in use. */
+   * rejected (§14). A file another store is writing refuses them as in use, before they commit or, where its log keeps
+   * the file from moving in, after: they then stand, vouched, and a retry finds them done. */
   #forget(body: () => void): void {
     const own = !this.#db.isTransaction;
     try { this.#atomic(body); } catch (error) {
