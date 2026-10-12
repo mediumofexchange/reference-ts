@@ -1,0 +1,34 @@
+{
+ "measured": "2026-10-12T08:30:41.356Z",
+ "node": "5.0.21-0-1a417f44-20240401-1043-SNAPSHOT",
+ "window": {
+  "heights": [
+   1889966,
+   1892865
+  ],
+  "blocks": 2900,
+  "days": 4.036,
+  "from": "2026-10-08T07:34:06.660Z",
+  "to": "2026-10-12T08:25:29.767Z"
+ },
+ "perDay": {
+  "blocks": 718.6,
+  "headers": 158710,
+  "transactions": 5961561,
+  "adProofs": 31441320
+ },
+ "nipopow": {
+  "m": 6,
+  "k": 10,
+  "prefixHeaders": 139,
+  "suffixHeaders": 10,
+  "headerBytes": 54962,
+  "interlinkBytes": 139776,
+  "tipHeight": 1892867,
+  "totalBytes": 194738
+ },
+ "utxoProof": {
+  "boxes1": 900,
+  "boxes4": 3772
+ }
+}

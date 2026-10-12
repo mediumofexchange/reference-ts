@@ -1,0 +1,118 @@
+{
+ "measured": "2026-10-12T08:31:40.541Z",
+ "tip": 14881790,
+ "chain": "celestia",
+ "version": {
+  "block": "11",
+  "app": "9"
+ },
+ "blockSeconds": 2.868,
+ "blocksPerDay": 30127,
+ "validators": 95,
+ "commitSignaturesMedian": 95,
+ "unbondingSeconds": 1213200,
+ "rawHeaderBytes": 404,
+ "squareWidth": {
+  "min": 4,
+  "median": 8,
+  "p90": 32,
+  "max": 32
+ },
+ "txBytesPerDay": 2828250466,
+ "perBlockAbsenceBytes": {
+  "median": [
+   1104,
+   1804
+  ],
+  "p90": [
+   1348,
+   2292
+  ]
+ },
+ "perDayAbsenceBytes": [
+  33260456,
+  54349513
+ ],
+ "stockLightNodeHeaderBytesPerDay": 642734213,
+ "retention": {
+  "https://rpc.celestia.pops.one": 1,
+  "https://celestia-rpc.publicnode.com": 14878803
+ },
+ "blobFees": [
+  {
+   "blobBytes": 13,
+   "gas": 59396,
+   "utia": 238
+  },
+  {
+   "blobBytes": 658,
+   "gas": 83892,
+   "utia": 336
+  },
+  {
+   "blobBytes": 13,
+   "gas": 59432,
+   "utia": 238
+  },
+  {
+   "blobBytes": 18555,
+   "gas": 245036,
+   "utia": 981
+  },
+  {
+   "blobBytes": 23007,
+   "gas": 271181,
+   "utia": 1085
+  },
+  {
+   "blobBytes": 1024,
+   "gas": 68351,
+   "utia": 274
+  },
+  {
+   "blobBytes": 13,
+   "gas": 59396,
+   "utia": 238
+  },
+  {
+   "blobBytes": 11510,
+   "gas": 163035,
+   "utia": 653
+  },
+  {
+   "blobBytes": 13,
+   "gas": 59432,
+   "utia": 238
+  },
+  {
+   "blobBytes": 1024,
+   "gas": 68351,
+   "utia": 274
+  },
+  {
+   "blobBytes": 13,
+   "gas": 59396,
+   "utia": 238
+  },
+  {
+   "blobBytes": 11194,
+   "gas": 174004,
+   "utia": 697
+  },
+  {
+   "blobBytes": 13,
+   "gas": 59432,
+   "utia": 238
+  },
+  {
+   "blobBytes": 12630,
+   "gas": 176552,
+   "utia": 707
+  },
+  {
+   "blobBytes": 22740,
+   "gas": 362760,
+   "utia": 1452
+  }
+ ]
+}
