@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-12` [Compare venues on what a phone pays to prove absence for one subject, and probe an Ergo state-root log next (slice 20)](decisions/2026-10.md#2026-10-12--compare-venues-on-what-a-phone-pays-to-prove-absence-for-one-subject-and-probe-an-ergo-state-root-log-next-slice-20)
 - `2026-10-12` [Take over only from evidence the journal keeps, leave a witnessed pending opening, and refuse the journal's own damage by name (audit of the journal)](decisions/2026-10.md#2026-10-12--take-over-only-from-evidence-the-journal-keeps-leave-a-witnessed-pending-opening-and-refuse-the-journals-own-damage-by-name-audit-of-the-journal)
 - `2026-10-12` [Hold the practical-holder test inside the protocol's own rules, and run it in the direction checks (direction)](decisions/2026-10.md#2026-10-12--hold-the-practical-holder-test-inside-the-protocols-own-rules-and-run-it-in-the-direction-checks-direction)
 - `2026-10-12` [Give an onion exchange time for Tor's circuit, and name a proxy's refusal of a tunnel (Next 4 (bj))](decisions/2026-10.md#2026-10-12--give-an-onion-exchange-time-for-tors-circuit-and-name-a-proxys-refusal-of-a-tunnel-next-4-bj)

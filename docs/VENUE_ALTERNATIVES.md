@@ -133,7 +133,80 @@ Measured 2026-10-08 over probe 2's week (heights 969,497–970,504), GET only ([
 
 **Spec and code if it passes:** a new normative `venue-bitcoin.md` (context such as `moe/venue/bitcoin/v1`, anchor, depth, exact-scriptPubKey or OP_RETURN-prefix locations, transaction grammar with segwit, section/root rule, retarget and timewarp header rules, ordinal, fork rule), mirroring venue-ergo §§1–10. Code: `bitcoin-headers.ts`, a framer, a `BitcoinVenue` implementing `RecordVenue`, and reference contexts (regtest or synthetic) in the v3 guard. **Construction changes: none for the venue itself**, which agrees with 2026-08-27. Two venues do raise the priority of the venue-moving record and of accepting that sets will split.
 
-**Do not pursue now:** Cardano (PoS headers are not verifiable alone; tight transaction size), Kaspa (pruning, cheap attack), BCH (cheap attack), Monero and Zcash as venues. Litecoin is the fallback if Bitcoin's data policy fails probe 1. An Ergo-only alternative for the phone gap: a range source proportional to a subject's records, built on Ergo's **state root**. It would use a script-guarded box chain, with unspentness proven against a header, but it needs scripts and a new venue identity (WORK Next 9; not evaluated here).
+**Do not pursue now:** Cardano (PoS headers are not verifiable alone; tight transaction size), Kaspa (pruning, cheap attack), BCH (cheap attack), Monero and Zcash as venues. Litecoin is the fallback if Bitcoin's data policy fails probe 1. An Ergo-only alternative for the phone gap: a range source proportional to a subject's records, built on Ergo's **state root**. It would use a script-guarded box chain, with unspentness proven against a header, but it needs scripts and a new venue identity (WORK Next 9; weighed in [slice 20](#absence-for-one-subject-slice-20)).
+
+### Absence for one subject (slice 20)
+
+Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/dd827ef/scripts/venue/absence-probes); [decision](../decisions/2026-10.md#2026-10-12--compare-venues-on-what-a-phone-pays-to-prove-absence-for-one-subject-and-probe-an-ergo-state-root-log-next-slice-20)). The question ([direction 2026-10-12](../decisions/2026-10.md#2026-10-12--judge-each-slice-against-a-practical-medium-of-exchange-for-ordinary-holders-and-reopen-the-second-venue-direction), item 3): what does a phone pay to prove §13.2 absence for its own subjects, an operator key (kind 1), a backing name (kinds 2 and 4) and an obligor key (kind 3)? §13.3 reads replacements and revocations from index zero, so the first sync grows with the deployment's age and the steady state with each day.
+
+**Exhaustion follows the venue's carriage, not the subject's records.** §13.2 proves absence by reading every object the venue holds in the range. On a chain whose blocks commit nothing by subject, that means every transaction section. Only two venue properties make the cost follow the subject:
+- *A namespace commitment in each block*, such as a namespaced Merkle tree over the block's data. The reader then needs one proof per block per subject, so the cost follows the number of blocks.
+- *A per-subject log in the venue's state that consensus enforces.* The reader then needs one proof at the range's end, so the cost follows the subject's records, plus a header chain that a suffix proof can shorten.
+
+| One subject's reads | Ergo, exhaustion (today) | Ergo, state-root log (design, not built) | Celestia, namespace proofs | Bitcoin, exhaustion |
+|---|---|---|---|---|
+| Bytes a day | 6.0 MB of transaction sections and 0.16 MB of headers (measured over 4 days; P4 found 4.1 MB in 2026-09) | 0.16 MB of headers, or one suffix proof per read; a few KB of lookup proofs per read; the subject's own records | 33–54 MB for a purpose-built client (estimate below); about 640 MB of extended headers for a stock light node (estimate) | 118 MB (OP_RETURN) or 236 MB (witness) and 11.5 KB of headers ([probe 2](#results-of-probes-1-and-2-slice-16)) |
+| Per year of the deployment's age | 2.2 GB | Not by age: a 195 KB suffix proof, the proofs and the records | 12–20 GB, from archival suppliers | 43–86 GB |
+| What the reader checks itself | Every header's work and every section against its root | About 150 headers' work and the lookup proofs. It trusts that the most-work chain applied the guard script | Signatures of two thirds of 95 validators, then hash links and data roots back from there | Every header's work and every block's Merkle root |
+| Finality | Depth over proof of work | The same | Instant BFT, with weak subjectivity: a 7-day trusting period ([CIP-36](https://cips.celestia.org/cip-036.html)) and 14.04 days of unbonding (measured). A phone away for longer must take a checkpoint from someone | Depth over proof of work |
+| Data from index zero | Full nodes keep every block by default | The log's head is current state, and records come from any supplier, checked against it | Minimum pruning is 7 days and 1 hour ([CIP-34](https://cips.celestia.org/cip-034.html)). Of two public RPCs, one held 2.5 hours and one held everything from height 1 | Full nodes keep every block |
+| A 136 B record, calm | About 0.0012 ERG ($0.0004; estimate: the 0.0011 ERG fee plus the box's minimum value) | More: one log input and output and a tree proof (estimate) | 238–260 utia for small blobs ($0.00015) | About 260 vB, so 260 sats ($0.22) at 1 sat/vB |
+| A 15.5 KB release, calm | 0.0068 ERG ($0.002), of which 0.0057 ERG is box value that any spender recovers ([measured](POOL_DEPLOYMENT_PROBES.md#venue-publication-and-reassembly-on-a-node)) | The same plus the log append | About 900 utia ($0.0005; an 18.6 KB blob paid 981) | About 15,600 sats ($13) |
+| Congested | Not observed (judgment: blocks run far below their limit) | Contention on the subject's log (below) | Not measured | At 265 sat/vB (July 2025): $57 and $3,500 |
+
+Prices are CoinGecko's on 2026-10-12: BTC $83,505, ERG $0.329, TIA $0.596. mempool.space recommended 1–2 sat/vB. Celestia blob transactions paid 0.004 utia per gas.
+
+**Celestia is no phone venue.**
+- *Per-block cost:* its blocks come every 2.87 s, 30,127 a day. One namespace's absence in a block costs a 404-byte header plus 0.7–1.9 KB of proof. That is estimated from the namespaced tree's layout at the measured square widths (median 8, p90 32): the row path with its neighbouring leaf, the row root and its path to the data root, and twice that when the namespace falls between two rows. The total is 5–9 times Ergo's exhaustion.
+- *Trust:* finality is a validator vote with a 7-day trusting period. Independent verification from the anchor fails for any holder offline longer than that.
+- *Retention:* data is kept for a week, so reads from index zero depend on archival suppliers.
+- *Cost:* its fees are the lowest measured.
+- *Other chains:* other data-availability chains share the per-block shape (judgment; not measured).
+
+**Bitcoin is no phone venue under any design available today.**
+- Its blocks commit nothing by subject.
+- Compact block filters (BIP158) are not committed by consensus, so using them would rest on a supplier's word.
+- Utreexo commits outputs by outpoint, not by subject (judgment).
+
+It keeps the strongest order for desktop and backer readers.
+
+**Splitting ordering records from bulk publications helps no reader.** Exhaustion follows the ordering venue's whole carriage, so moving kind 4 elsewhere leaves that cost unchanged. It would also split one backing across two venue clocks, which a scope forbids (invariant 24). It lowers only a publisher's cost on an expensive venue.
+
+**An Ergo state-root log is the one candidate whose cost follows the subject.** It is a sketch, not built.
+- *The log:* a guard script keeps one log head per subject: `h_n = H(h_{n−1} || index || ordinal || H(record))`, with index = `HEIGHT`. Only a transaction that carries the record at its location can append to it.
+- *The registry:* an `AvlTree` in one box, with each subject inserted once. It proves which box holds a subject's log, or that the subject has none.
+- *What a phone checks:*
+  1. a NiPoPoW suffix proof: measured at 195 KB from genesis to the tip, 149 headers with m = 6 and k = 10. Interlinks are 72% of it;
+  2. a UTXO lookup proof against the state root of a header at the finality depth: measured at 900 B for one box and 3.8 KB for four;
+  3. the registry lookup;
+  4. the subject's records, from any supplier, checked against the head.
+
+It has three costs:
+- **A trust change, which needs C0a.** §13.2 refuses "a latest-value answer". The phone would accept the log head because the most-work chain applied the script, without reading the blocks.
+  - A majority miner can already reorder or drop records past the depth, which is a venue failure for every reader.
+  - With the log, a majority miner could also leave a record out of the log in an invalid block. Full readers reject that block, but a phone follows it.
+  - Full readers keep exhaustion. Ergo's AD proofs, 31 MB a day (measured), let anyone check a block's state change without the UTXO set, and so show such a fault.
+- **Contention.** Only one transaction can spend a UTXO box. Open publication lets anyone append to any subject's log, so a stranger can race each honest append. Each attempt costs one fee, about 0.0011 ERG; at one per block (719 a day) that is about $0.26 a day. The race could delay a demand past its C3.3 window.
+  - Whether appends chained within one block, or fee priority, defeat the race decides the design.
+  - Several lanes per subject raise the attacker's cost linearly.
+- **A new venue identity.** Attribution would be by log rather than by location. Scripts would enter the record path (venue-ergo uses none), and the publisher's transaction would grow.
+
+**The venue is half of a phone's cost.** A backing's kind-4 publications are its pool's trail, 15.6 GB at the design point. The log makes the venue part proportional, but reading the trail still needs the succinct relation (WORK Next 9).
+
+**Recommendation (judgment).**
+- *Release venue:* Ergo stays the release's venue.
+- *Next probe:* the Ergo state-root log on testnet. It measures the guard script and registry, their proof sizes, an append's cost, and the race: a stranger contesting a publisher's appends, both chained within a block and by fee, against the C3.3 window.
+- *If the race cannot delay an append beyond a block or two at a cost proportionate to the attacker's,* take the log through C0a as a successor Ergo profile (a new venue identity), paired with the succinct relation.
+- *If it can,* a phone's absence stays at Ergo's exhaustion: about 2 GB a year from the anchor, workable in steady state on Wi-Fi but heavy for a first sync.
+- *Not pursued as venues:* Celestia and other namespaced data-availability chains.
+- *Bitcoin:* its mainnet publication (real funds; Open questions) stays held. A Bitcoin-venue backing cannot reach phone holders, so it serves only desktop-held backings that want its security budget. That case is weighed after the probe decides the phone path.
+
+**Limits.**
+- *Windows and snapshots:* four days of Ergo, one day of Celestia, and one snapshot of fees and prices.
+- *Celestia estimates:* proof sizes come from the tree layout, not from fetched proofs. The stock light node figure assumes about 110 B per commit signature and 80 B per validator entry.
+- *NiPoPoW size:* the proof's size counts the binary fields of the node's JSON, not a wire encoding.
+- *UTXO proofs:* they came from one public node (v5.0.21).
+- *Not measured:* the log's costs are estimates, and Ergo congestion was not observed.
 
 ## 5. Backing assets (terms, not backings)
 
