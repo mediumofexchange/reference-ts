@@ -312,19 +312,22 @@ describe("lit packages through the one reader (M14d)", () => {
     g.successor(4n, g0); g.checkpoint(4n, 7n);
     expect((await later(g, g1, nfOf(gA!))).at(-1)).toEqual(["4", "excluded", "IMPORT"]);
 
-    // (c) C2b.4.1: a twin history of the same segment without A's spend and with F, committed past the silence
-    // boundary of the checkpoint that spent A, lapses; that checkpoint stays canonical.
-    const h = litScope({ silence: { noCommitmentDuration: 5n } });
-    h.checkpoint(1n, 1n);
-    const ha = h.issue(10n, ALICE), hb = h.issue(7n, ALICE); await h.admit(ha); await h.admit(hb);
-    h.checkpoint(2n, 2n);
-    const [hA] = h.outputsOf(ha), [hB] = h.outputsOf(hb);
-    const hF = h.spend([hA!, hB!], [h.to(6n, BOB), h.to(11n, ALICE)], [ALICE, ALICE]);
-    await h.admit(h.spend([hA!], [h.to(10n, ALICE)], [ALICE]));
-    const h1 = h.checkpoint(3n, 4n);
-    h.use(h.open(1n)); await h.admit(ha); await h.admit(hb); await h.admit(hF);
-    h.checkpoint(4n, 20n);
-    expect((await later(h, h1, nfOf(hA!), hF)).at(-1)).toEqual(["4", "lapsed", undefined]);
+    // (c) a twin history of the same segment without A's spend and with F: committed past the silence boundary of the
+    // checkpoint that spent A it lapses (C2b.4.1); inside it, or with no silence clause, it is excluded (C2.10.4).
+    for (const [clauses, index, verdict] of [[{ silence: { noCommitmentDuration: 5n } }, 20n, ["4", "lapsed", undefined]],
+      [{ silence: { noCommitmentDuration: 5n } }, 6n, ["4", "excluded", "CONTINUITY"]], [{}, 20n, ["4", "excluded", "CONTINUITY"]]] as const) {
+      const h = litScope(clauses);
+      h.checkpoint(1n, 1n);
+      const ha = h.issue(10n, ALICE), hb = h.issue(7n, ALICE); await h.admit(ha); await h.admit(hb);
+      h.checkpoint(2n, 2n);
+      const [hA] = h.outputsOf(ha), [hB] = h.outputsOf(hb);
+      const hF = h.spend([hA!, hB!], [h.to(6n, BOB), h.to(11n, ALICE)], [ALICE, ALICE]);
+      await h.admit(h.spend([hA!], [h.to(10n, ALICE)], [ALICE]));
+      const h1 = h.checkpoint(3n, 4n);
+      h.use(h.open(1n)); await h.admit(ha); await h.admit(hb); await h.admit(hF);
+      h.checkpoint(4n, index);
+      expect((await later(h, h1, nfOf(hA!), hF)).at(-1)).toEqual(verdict);
+    }
   });
 
   it("reads a lit receipt final where a valid checkpoint includes it, with no scope root (§5)", async () => {

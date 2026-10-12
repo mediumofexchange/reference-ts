@@ -2358,13 +2358,14 @@ export class V3Wallet {
       const holdings = this.holdingsOf(notes, force, at);
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
       const { meets, spare } = this.failedPaymentsOf(backing, theirs, canonical, force!, available);
-      // A retry spends a free note of a failed payment it need not meet where a selection allows, and otherwise meets the rest.
-      let selected: KeyedNote[];
-      try { selected = selectMeeting(available, total, [...meets, ...spare], LIT_FUNDS); } catch (error) {
-        if (spare.length === 0 || !(error instanceof V3WalletError)) throw error;
-        selected = selectMeeting(available, total, meets, LIT_FUNDS);
+      // A retry also meets each failed payment it need not meet, in turn, where a selection still covers it (Next 4 (bq)).
+      const met = [...meets];
+      for (const set of spare) {
+        try { selectMeeting(available, total, [...met, set], LIT_FUNDS); met.push(set); } catch (error) {
+          if (!(error instanceof V3WalletError)) throw error;
+        }
       }
-      const sum = selected.reduce((n, note) => n + note.opening.value, 0n);
+      const selected = selectMeeting(available, total, met, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
       return this.keyedSave(name, intent, view, header.operator, selected, () => [{ backing, value, owner: payee.owner },
         ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }]),
         ...(sum > total ? [{ backing, value: sum - total, owner: this.keys!.key(backing, this.allocate(backing)) }] : [])], theirs);
@@ -2378,7 +2379,8 @@ export class V3Wallet {
    * none; one whose outputs are all there is final, and the request paid. Never admitted rests on A9: a canonical
    * nullifier stays in every later canonical history (an older segment's continuation, a stale import and a lapsed twin
    * are refused, test/lit-reader.test.ts Next 4 (bq)), but a venue reorganization past the depth can remove it. Such a
-   * payment with a note still available is returned in `spare`, met where a selection allows (Next 4 (bq)). */
+   * payment with a note still available is returned in `spare`, each met where a selection still covers the order beside
+   * those met before it (Next 4 (bq)). */
   private failedPaymentsOf(backing: Uint8Array, theirs: readonly string[], canonical: CanonicalCheckpoint, force: ForceState,
     available: readonly KeyedNote[]): { meets: Set<bigint>[]; spare: Set<bigint>[] } {
     const failed = new Map<string, Uint8Array>(), owners = new Set(theirs);
