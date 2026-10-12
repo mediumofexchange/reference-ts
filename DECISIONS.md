@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-12` [The attribution scan costs about 180 gates a byte, a third of its budget, so the succinct route holds and attributes by subject (slice 22)](decisions/2026-10.md#2026-10-12--the-attribution-scan-costs-about-180-gates-a-byte-a-third-of-its-budget-so-the-succinct-route-holds-and-attributes-by-subject-slice-22)
 - `2026-10-12` [Keep Ergo's headers with the phone and prove its sections: a day's hashing costs a 4-vCPU prover about 10 hours (slice 21)](decisions/2026-10.md#2026-10-12--keep-ergos-headers-with-the-phone-and-prove-its-sections-a-days-hashing-costs-a-4-vcpu-prover-about-10-hours-slice-21)
 - `2026-10-12` [Compare venues on what a phone pays to prove absence for one subject, and probe a succinct proof of exhaustion next (slice 20)](decisions/2026-10.md#2026-10-12--compare-venues-on-what-a-phone-pays-to-prove-absence-for-one-subject-and-probe-a-succinct-proof-of-exhaustion-next-slice-20)
 - `2026-10-12` [Take over only from evidence the journal keeps, leave a witnessed pending opening, and refuse the journal's own damage by name (audit of the journal)](decisions/2026-10.md#2026-10-12--take-over-only-from-evidence-the-journal-keeps-leave-a-witnessed-pending-opening-and-refuse-the-journals-own-damage-by-name-audit-of-the-journal)
