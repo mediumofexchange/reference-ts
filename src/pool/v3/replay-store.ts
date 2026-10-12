@@ -492,15 +492,24 @@ function removeFiles(files: readonly string[]): void {
     throw error;
   }
 }
-/** A kept file's lock, held while a store of it is open. */
-interface KeptLock { release(): void }
-/** This process's locks on kept files, by lock path, with how many of its stores hold each. */
-const keptLocks = new Map<string, { readonly lock: DatabaseSync; count: number }>();
+/** A kept file's lock, held while a store of it is open, with what its stores in this process share. */
+interface KeptLock {
+  release(): void;
+  /** Whether no other store of this process held the file when this one took the lock: only then is it judged. */
+  readonly first: boolean;
+  /** The file's page hashes as of its last recorded digest, shared by every store of it in this process. */
+  pages: PageDigest | undefined;
+}
+/** This process's locks on kept files, by lock path, with how many of its stores hold each and their page hashes. */
+const keptLocks = new Map<string, { readonly lock: DatabaseSync; count: number; pages: PageDigest | undefined }>();
 /** The exclusive lock a process holds beside a kept file (`<file>.lock`, as the directory's `lock.db`), from before
  * its first store judges the file until its last closes; the operating system releases it if the process dies. Another
  * process's store is refused rather than opening the file: its opening would move or drop a log this one still writes,
  * and two writers would record digests over each other's pages (a same-version `prepare` beside `serve`, Next 4 (bg)).
- * Stores of one process share it: a replaced handle there is fenced by its owner's rows, as before. */
+ * Stores of one process share it: a replaced handle there is fenced by its owner's rows, as before. They share the
+ * file's page hashes too, so each keep point's digest names every store's commits, and only the first store's opening
+ * judges the file (`keptFileHolds`): a later one's would drop or move a log the first still writes, or discard the
+ * file under it. */
 function lockKept(path: string): KeptLock {
   const key = resolve(`${path}.lock`);
   let entry = keptLocks.get(key);
@@ -511,17 +520,22 @@ function lockKept(path: string): KeptLock {
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
       throw error;
     }
-    entry = { lock, count: 0 };
+    entry = { lock, count: 0, pages: undefined };
     keptLocks.set(key, entry);
   }
-  const held = entry;
+  const held = entry, first = held.count === 0;
   held.count++;
   let released = false;
-  return { release() {
-    if (released) return;
-    released = true;
-    if (--held.count === 0) { held.lock.close(); keptLocks.delete(key); }
-  } };
+  return {
+    first,
+    get pages() { return held.pages; },
+    set pages(pages) { held.pages = pages; },
+    release() {
+      if (released) return;
+      released = true;
+      if (--held.count === 0) { held.lock.close(); keptLocks.delete(key); }
+    },
+  };
 }
 /** Remove the files of a kept file no store holds: its log, the file and its digest, and `also` (a marker of the
  * caller's). One a store holds, in this process or another, is left as it is (false). Its lock file stays: removed, a
@@ -578,15 +592,29 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
     // Another store holding the file is the caller's error, never damage to discard.
     if (error instanceof FileInUse) throw error;
     if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+    // Nor is a failure of the system the file lies on (no descriptor left, an I/O or permission error): the file may
+    // be sound, and discarding it would replay the whole history once the failure passes.
+    if (systemFailure(error)) throw error;
     return undefined;
   }
+}
+/** SQLite's primary result codes for a failure of the system rather than of the file: SQLITE_PERM, SQLITE_NOMEM,
+ * SQLITE_IOERR, SQLITE_FULL, SQLITE_CANTOPEN. */
+const SQLITE_SYSTEM = new Set([3, 7, 10, 13, 14]);
+/** An operating system's error (one that names its system call), other than a file not there, or SQLite's report of one. */
+function systemFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { errno, syscall, code, errcode } = error as NodeJS.ErrnoException & { errcode?: unknown };
+  if (typeof errno === "number" && typeof syscall === "string") return code !== "ENOENT";
+  return code === "ERR_SQLITE_ERROR" && typeof errcode === "number" && SQLITE_SYSTEM.has(errcode & 0xff);
 }
 
 export class ReplayStore {
   readonly #db: DatabaseSync;
   readonly #q: Record<string, StatementSync>;
   readonly #kept: (KeptFile & { readonly path: string }) | undefined;
-  /** A kept file's lock, held while the store is open (`lockKept`). */
+  /** A kept file's lock, held while the store is open (`lockKept`), with the file's page hashes as of its last
+   * recorded digest. */
   readonly #lock: KeptLock | undefined;
   readonly #hosted: boolean;
   #savepoints = 0;
@@ -597,8 +625,6 @@ export class ReplayStore {
   /** The connection's count of changed rows when the file's digest was last recorded: a read that changed nothing
    * leaves the digest as it is. */
   #digestedAt: bigint | undefined;
-  /** A kept file's page hashes as of its last recorded digest. */
-  #pages: PageDigest | undefined;
   /** A resumed kept walk's mark for this read, moved at its close where the walk changed a row. */
   #keptMark: { readonly walk: number; readonly selected: Uint8Array; readonly mark: Uint8Array; readonly changes: bigint } | undefined;
   /** A keep point found another store holding or changing the file: the walk stops and closes without writing. */
@@ -633,11 +659,14 @@ export class ReplayStore {
         if (kept.every !== undefined && (!Number.isSafeInteger(kept.every) || kept.every < 1)) throw new TypeError("invalid keep interval");
         this.#kept = { ...kept, path };
         this.#lock = lockKept(path);
-        try {
-          held = keptFileHolds(path, kept.digest);
-          // The log goes before the file: a log left beside a new file would be read into it.
-          if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
-        } catch (error) { this.#lock.release(); throw error; }
+        // A file another store of this process holds was judged when that store opened it, and is shared as it stands.
+        if (this.#lock.first) {
+          try {
+            held = keptFileHolds(path, kept.digest);
+            // The log goes before the file: a log left beside a new file would be read into it.
+            if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
+          } catch (error) { this.#lock.release(); throw error; }
+        }
       }
       const reopened = kept !== undefined && existsSync(path);
       try { this.#db = new DatabaseSync(path, { readBigInts: true }); } catch (error) { this.#lock?.release(); throw error; }
@@ -653,7 +682,9 @@ export class ReplayStore {
         this.#db.exec("PRAGMA synchronous=FULL; PRAGMA temp_store=FILE;");
         if (kept !== undefined) this.#db.exec("PRAGMA wal_autocheckpoint=0");
         if (!reopened) this.#db.exec(`${SCHEMA}; PRAGMA user_version = ${SCHEMA_VERSION};`);
-        if (kept !== undefined) this.#pages = held ?? new PageDigest(Number((this.#db.prepare("PRAGMA page_size").get() as { page_size: bigint }).page_size));
+        if (this.#lock !== undefined && this.#lock.first) {
+          this.#lock.pages = held ?? new PageDigest(Number((this.#db.prepare("PRAGMA page_size").get() as { page_size: bigint }).page_size));
+        }
       } catch (error) { if (this.#db.isOpen) this.#db.close(); this.#lock?.release(); throw error; }
     }
     // C2.10.6's union is a working set of one connection: it never changes the file, so a kept file's digest stands.
@@ -744,13 +775,14 @@ export class ReplayStore {
    * leaves the file the old digest names and a log the next open drops, one after it a log recovery moves in
    * (`keptFileHolds`); either way only this keep point's work can be lost (Next 4 (bb)). */
   #recordDigest(): void {
-    const changes = this.#changes(), path = this.#kept!.path;
+    const changes = this.#changes(), path = this.#kept!.path, pages = this.#lock!.pages!;
     if (changes !== this.#digestedAt) {
       // The log holds what changed since the file was last moved in: every committed page image, since a log that was
       // not moved in at an earlier keep point (another connection kept it) is still there, its images already counted.
-      const log = committedLog(`${path}-wal`, this.#pages!.pageSize);
-      if (log !== undefined) this.#pages!.apply(log);
-      replaceFile(this.#kept!.digest, vouched(path, this.#pages!));
+      // Another store of this process commits into the same log and hashes into the same pages.
+      const log = committedLog(`${path}-wal`, pages.pageSize);
+      if (log !== undefined) pages.apply(log);
+      replaceFile(this.#kept!.digest, vouched(path, pages));
       // A log another connection keeps from being moved in leaves the file in use; the digest already names its state.
       const checkpoint = this.#db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: bigint; log: bigint; checkpointed: bigint };
       if (checkpoint.busy !== 0n || checkpoint.log !== checkpoint.checkpointed) throw new FileInUse("kept replay file");
@@ -812,11 +844,22 @@ export class ReplayStore {
   discardKept(): void {
     if (this.#db.isTransaction || this.#replaying) throw new Error("a walk is open on this store");
     this.#generation++;
-    this.#atomic(() => {
+    this.#forget(() => {
       for (const table of KEPT_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
       this.#db.prepare("DELETE FROM kept_context").run();
       if (this.#kept !== undefined) for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table}`).run();
     });
+  }
+  /** Deletions that stand only if `body` returns. Outside a transaction, a kept file commits them as a keep point does,
+   * with their digest: a log no digest vouches for is dropped on opening, which would restore what a discard had just
+   * rejected (§14). A file another store is writing refuses them as in use. */
+  #forget(body: () => void): void {
+    const own = !this.#db.isTransaction;
+    try { this.#atomic(body); } catch (error) {
+      if (this.#kept !== undefined && error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      throw error;
+    }
+    if (own && this.#kept !== undefined) this.#recordDigest();
   }
   /** The kept note frontier of `ns` (leaf count and completed left subtrees), for §14's snapshot check. */
   frontier(ns: number): { readonly leaves: bigint; readonly ommers: readonly (bigint | undefined)[] } {
@@ -957,7 +1000,7 @@ export class ReplayStore {
     const dead = (this.#db.prepare("SELECT ns FROM namespace").all() as { ns: bigint }[]).map(r => Number(r.ns)).filter(ns => !live.has(ns));
     if (dead.length === 0) return;
     this.#generation++;
-    this.#atomic(() => {
+    this.#forget(() => {
       for (const table of NAMESPACE_TABLES) {
         const drop = this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`);
         for (const ns of dead) drop.run(ns);
@@ -1029,7 +1072,7 @@ export class ReplayStore {
     const read = (sql: string): boolean => this.#db.prepare(sql).get(ns) !== undefined;
     if (read("SELECT 1 FROM import WHERE source = ? LIMIT 1") || read("SELECT 1 FROM base_import WHERE ns = ? LIMIT 1") ||
         read("SELECT 1 FROM verdict WHERE ns = ? LIMIT 1")) throw new Error("the namespace is still read");
-    this.#atomic(() => { for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`).run(ns); });
+    this.#forget(() => { for (const table of NAMESPACE_TABLES) this.#db.prepare(`DELETE FROM ${table} WHERE ns = ?`).run(ns); });
   }
 
   // --- Reads at (ns, p) -------------------------------------------------------------------

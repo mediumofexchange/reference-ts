@@ -780,7 +780,10 @@ export class V3Wallet {
           // §14: a kept mark its output does not recover, found as a note is completed to spend (`inputOf`), is kept
           // state to discard; the read replays once and `use` runs again on what that replay finds.
           if (!(error instanceof KeptStateMismatch) || again) throw error;
-          this.kept().discardKept();
+          try { this.kept().discardKept(); } catch (failure) {
+            if (failure instanceof FileInUse) throw new V3WalletError("STORAGE", "another handle holds this wallet's kept replay file");
+            throw failure;
+          }
         }
       }
     });
