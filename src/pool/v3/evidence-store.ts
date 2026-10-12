@@ -209,7 +209,7 @@ const READ_SQL = {
   head: "SELECT header FROM segment_head WHERE segment = ?",
   headTerm: "SELECT terms, signature FROM segment_terms WHERE segment = ? AND i = ?",
   step: "SELECT prev, position, size FROM chain WHERE evidence = ? AND segment = ?",
-  entry: "SELECT prev, position, bytes FROM chain WHERE evidence = ? AND segment = ?",
+  entry: "SELECT prev, position, size, bytes FROM chain WHERE evidence = ? AND segment = ?",
   // A forward step: the kept values of a segment at one position; two say a fork.
   at: "SELECT evidence FROM chain WHERE segment = ? AND position = ? LIMIT 2",
 } as const;
@@ -908,6 +908,8 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
       if (position === 0n) return same(evidence, seed) ? 0n : undefined;
       const held = q.step!.get(evidence, segment) as { position: bigint; size: bigint } | undefined;
       if (held === undefined || BigInt(held.position) !== position) return undefined;
+      // The size it gives is stated before a served trail's records: the position's own row is checked first.
+      if (chainStep(construction, q, segment, evidence, position) === undefined) return undefined;
       // The only value kept at the position is the cut's own, since every value of the cut is kept: no walk.
       if ((q.at!.all(segment, position) as unknown[]).length === 1) return BigInt(held.size);
       let value = top!;
@@ -1067,12 +1069,16 @@ export async function wholePackage(own: Uint8Array, parts: Iterable<EvidencePart
   return encodeEvidencePackage([...items.values()].sort((a, b) => a.kind - b.kind || compareBytes(a.hash, b.hash)));
 }
 
-/** The record kept under `value` at position `p` of `segment`, and the value before it, where its chain step holds. */
+/** The record kept under `value` at position `p` of `segment`, and the value before it, where its chain step holds:
+ * the record's evidence step, and its row's frame bytes continuing the row before it, which a served trail states
+ * before its records (§10), so a damaged size is absent as a damaged link is. */
 function chainStep(construction: Construction, q: Record<string, StatementSync>, segment: Uint8Array, value: Uint8Array, p: bigint):
   { record: Uint8Array; prev: Uint8Array } | undefined {
-  const row = q.entry!.get(value, segment) as { prev: unknown; position: bigint; bytes: unknown } | undefined;
+  const row = q.entry!.get(value, segment) as { prev: unknown; position: bigint; size: bigint; bytes: unknown } | undefined;
   if (row === undefined || BigInt(row.position) !== p) return undefined;
   const record = bytes(row.bytes), prev = bytes(row.prev);
+  const before = p === 1n ? 0n : (q.step!.get(prev, segment) as { size: bigint } | undefined)?.size;
+  if (before === undefined || BigInt(row.size) !== BigInt(before) + 4n + BigInt(record.length)) return undefined;
   let next: Uint8Array | undefined;
   try { next = construction.nextEvidence(prev, construction.reader.digests(record), p); } catch (error) { if (!(error instanceof EncodingError)) throw error; }
   return next !== undefined && same(next, value) ? { record, prev } : undefined;

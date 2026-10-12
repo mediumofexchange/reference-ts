@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
@@ -711,6 +711,8 @@ describe("the v3 operator journal", () => {
       "UPDATE spent SET hash = zeroblob(32)",
       "DELETE FROM object WHERE kind = 3",
       "DELETE FROM chain WHERE position = 2",
+      // A record's frame size, which a served trail states before its records.
+      "UPDATE chain SET size = size + 1 WHERE position = 1",
       "UPDATE journal_signed SET commitment = zeroblob(136) WHERE sequence = 2",
       "UPDATE journal_state SET ns = ns + 1",
       "DELETE FROM journal_state",
@@ -747,12 +749,22 @@ describe("the v3 operator journal", () => {
       "UPDATE journal_signed SET published = 0 WHERE sequence = 1",
       "DELETE FROM anchor WHERE position = 1",
       "DELETE FROM output WHERE position = 1",
-    ]) {
-      const j = await tampered(tamper);
-      const error = await j.audit().then(() => undefined, (e: unknown) => e);
-      expect(error, tamper).toBeInstanceOf(V3StoreError);
-    }
+    ]) expect(await refusal((await tampered(tamper)).audit()), tamper).toEqual(["STORAGE", undefined]);
     await (await tampered("UPDATE identity SET observed = observed")).audit();
+    // A record admitted after the last commitment, below the tip, which reopening does not read: the next commitment, which
+    // would serve it, refuses and signs nothing, and the audit names it.
+    {
+      const { file, venue: v, j } = await opened();
+      await j.submit(issue()); await j.commit("c2"); await j.publish(); await j.submit(payment()); await j.submit(burning()); j.close();
+      const db = new DatabaseSync(file);
+      expect(Number(db.prepare("UPDATE chain SET bytes = zeroblob(length(bytes)) WHERE position = 2").run().changes)).toBe(1); db.close();
+      const reopened = journal(file, v);
+      expect((await reopened.status()).signed?.admitted).toBe(2n);
+      v.advance(v.witnessedIndex() + lag);
+      expect(await refusal(reopened.commit("c3"))).toEqual(["STORAGE", undefined]);
+      expect((await reopened.status()).signed?.sequence).toBe(2n);
+      expect(await refusal(reopened.audit())).toEqual(["STORAGE", undefined]);
+    }
   });
 
   it("refuses a damaged older signed row as storage where a window shows its commitment, never as another signer's", async () => {
@@ -778,6 +790,35 @@ describe("the v3 operator journal", () => {
     await expect(restored.status()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is damaged" });
     const after = new DatabaseSync(copied.file);
     try { expect(after.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 0 }); } finally { after.close(); }
+    // A row lost below the latest, met first by a serve, which reads windows before any reopening check: damage too. Kept
+    // as a conflict, it would end service for good once the row is repaired.
+    const lost = await opened();
+    await lost.j.submit(issue()); await lost.j.commit("c2"); await lost.j.publish(); await lost.j.status(); lost.j.close();
+    const gone = new DatabaseSync(lost.file);
+    gone.exec("DELETE FROM journal_signed WHERE sequence = 1; DELETE FROM answer_held; DELETE FROM answer WHERE kind = 1;");
+    gone.close();
+    await expect(journal(lost.file, lost.venue).package()).rejects.toMatchObject({ code: "STORAGE", message: "a signed row is missing" });
+    const kept = new DatabaseSync(lost.file);
+    try { expect(kept.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 0 }); } finally { kept.close(); }
+  });
+
+  it("refuses a file with another name, over which its owner fence does not hold, and names a commitment past the row space as a conflict", async () => {
+    const { file, venue, j } = await opened();
+    j.close();
+    // SQLite keeps the write-ahead log and lock index per name: two names would be two owners of one file.
+    const other = join(dirname(file), "linked.db");
+    linkSync(file, other);
+    for (const path of [file, other]) expect(await refusal((async () => journal(path, venue))())).toEqual(["STORAGE", undefined]);
+    expect(() => new V3OperatorJournal(file, { operator, venue, reference, verifier, beside: true })).toThrow(expect.objectContaining({ code: "STORAGE" }));
+    rmSync(other);
+    const reopened = journal(file, venue);
+    // Another signer's commitment of this key at a sequence no row can hold is a conflict, kept as any other.
+    venue.witness(1, operator, venue.witnessedIndex(), encodeCommitment(signCommitment(operatorSecret, 1n << 63n, b(9))));
+    venue.advance(venue.witnessedIndex() + lag);
+    expect(await refusal(reopened.status().then(() => reopened.commit("c2")))).toEqual(["CONFLICT", undefined]);
+    reopened.close();
+    const { DatabaseSync } = await import("node:sqlite"), db = new DatabaseSync(file);
+    try { expect(db.prepare("SELECT count(*) AS n FROM journal_conflict").get()).toEqual({ n: 1 }); } finally { db.close(); }
   });
 
   it("verifies each record of its own history once across its reads", async () => {
