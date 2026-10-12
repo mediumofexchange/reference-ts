@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-12` [Ask the fence and readiness again immediately before a supplier's own broadcast, and reserve the spend budget only then (Next 4 (bi))](decisions/2026-10.md#2026-10-12--ask-the-fence-and-readiness-again-immediately-before-a-suppliers-own-broadcast-and-reserve-the-spend-budget-only-then-next-4-bi)
 - `2026-10-12` [The attribution scan costs about 180 gates a byte, under a third of its budget, so the succinct route has not failed and attributes by subject (slice 22)](decisions/2026-10.md#2026-10-12--the-attribution-scan-costs-about-180-gates-a-byte-under-a-third-of-its-budget-so-the-succinct-route-has-not-failed-and-attributes-by-subject-slice-22)
 - `2026-10-12` [Keep Ergo's headers with the phone and prove its sections: a day's hashing costs a 4-vCPU prover about 10 hours (slice 21)](decisions/2026-10.md#2026-10-12--keep-ergos-headers-with-the-phone-and-prove-its-sections-a-days-hashing-costs-a-4-vcpu-prover-about-10-hours-slice-21)
 - `2026-10-12` [Compare venues on what a phone pays to prove absence for one subject, and probe a succinct proof of exhaustion next (slice 20)](decisions/2026-10.md#2026-10-12--compare-venues-on-what-a-phone-pays-to-prove-absence-for-one-subject-and-probe-a-succinct-proof-of-exhaustion-next-slice-20)
