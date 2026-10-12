@@ -1049,6 +1049,21 @@ A probe ran that run's driver (`scratch/dp6`, Windows) on a traced build, on the
 - *Limits:* stand-in proofs, synthetic blocks, one host, one run per point; the trace's own logging adds to each read.
   The first admission still reads what the previous process admitted since its last kept read (slice 15's limit above).
 
+### A new version's kept reads, prepared beside the operator (Next 4 (bg))
+
+A new version of `moe` names another kept context, so its first read replays the operator's whole history
+([decision](../decisions/2026-10.md#2026-10-12--prepare-a-new-versions-kept-reads-beside-the-serving-operator-and-hold-one-handle-per-kept-file-next-4-bg)).
+A probe (a disposable test over the journal library, removed after it ran) built 3,000 statements, 42 a checkpoint,
+with stand-in proofs and a silence clause, on an Intel Xeon at 2.10 GHz (4 cores, cloud container), then removed the
+kept reads as a version change does:
+- **Unprepared,** the first admission verified 3,001 proofs and took 17.7 s: the history and its own.
+- **Prepared** beside the owner first (18.3 s, 3,000 proofs), the first admission verified 2 proofs and took 0.07 s: the
+  record committed after the index the preparation read at, and its own.
+- *Scale:* the unprepared admission is linear in the history, about 5.9 ms a statement on this host (the (bb) probe's
+  laptop, another host and a traced build, took about 43 ms); the prepared one is linear in what was admitted since the
+  preparation.
+- *Limits:* stand-in proofs, a fixture venue, one host and one run; building the history took 97.6 s.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the
