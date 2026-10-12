@@ -142,7 +142,7 @@ Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumof
 **Exhaustion follows the venue's carriage, not the subject's records.** §13.2 proves absence by reading every object the venue holds in the range. On a chain whose blocks commit nothing by subject, that means every transaction section. Three routes make a phone's cost follow its subjects instead:
 - *A namespace commitment in each block*, such as a namespaced Merkle tree over the block's data. The phone needs one proof per block per subject, so its cost follows the number of blocks.
 - *A per-subject log in the venue's state that consensus enforces.* The phone needs one proof at the range's end, so its cost follows the subject's records. The header chain can be shortened by a suffix proof.
-- *A succinct proof of the exhaustion itself.* The proof shows that the scan over the range's sections matches the headers' roots and found exactly these objects. The phone checks headers, or a proof of them, and one proof. The trust stays exhaustion's and the venue is unchanged. The prover's cost is unmeasured.
+- *A succinct proof of the exhaustion itself.* The proof shows that the scan over the range's sections matches the headers' roots and found exactly these objects. The phone checks headers, or a proof of them, and one proof. The trust stays exhaustion's and the venue is unchanged. The prover's cost, measured in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21), is about 7 hours of a 4-vCPU machine a day.
 
 | One subject's reads | Ergo, exhaustion (today) | Ergo, state-root log (design, not built) | Celestia, namespace proofs | Bitcoin, exhaustion |
 |---|---|---|---|---|
@@ -208,7 +208,7 @@ It has these costs:
 - *Trust:* the phone still chooses the most-work chain among the suppliers' proofs.
   - *The proof system:* the phone also relies on the proof system's soundness and its setup. These are a primitive E already declares.
   - *The difficulty rule:* exhaustion's trust holds only if the circuit checks the difficulty rule from the anchor, as venue-ergo §3 does. Otherwise the proof inherits the suffix proof's honest-prover assumption. The probe's scope includes that check.
-- *Cost:* Ergo hashes with Blake2b-256 over 64-bit words, which is costly in a BN254 circuit. Proving about 6 MB of sections and 719 headers' Autolykos checks a day is unmeasured.
+- *Cost:* Ergo hashes with Blake2b-256 over 64-bit words, which is costly in a BN254 circuit. Measured in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21): a day's sections take a 4-vCPU prover about 7 hours; its headers' Autolykos checks would take 195, so the phone checks them itself.
 - *Specification:* it too needs §13.2 to admit a verified proof in place of retained evidence, a pool-v4 question.
 - *Fit:* it shares machinery with the succinct relation that a phone already needs for the kind-4 trail.
 
@@ -216,8 +216,8 @@ It has these costs:
 
 **Recommendation (judgment).**
 - *Release venue:* Ergo stays the release's venue.
-- *Next probe:* the succinct proof of exhaustion. It is the cheapest decisive probe and can run in the cloud. It measures the declared proof system's proving cost for Blake2b-256 per byte and for an Autolykos header check, scaled to a day of Ergo sections, against what a volunteer or operator prover could carry.
-- *The state-root log is the fallback,* if that cost fails. Its testnet probe must pass three gates:
+- *Next probe:* the succinct proof of exhaustion. It is the cheapest decisive probe and can run in the cloud. It measures the declared proof system's proving cost for Blake2b-256 per byte and for an Autolykos header check, scaled to a day of Ergo sections, against what a volunteer or operator prover could carry. Done in [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21): it passes.
+- *The state-root log is the fallback,* if that cost fails (it did not, [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21)). Its testnet probe must pass three gates:
   1. the attacker's cost per block of delay, against a demand's C3.3 window and a key thief's gain;
   2. rent reserves;
   3. no single miner holds a majority of recent blocks when the log is adopted, re-measured then. Today this gate fails: one address mined 51% of recent blocks.
@@ -230,7 +230,43 @@ It has these costs:
 - *Celestia estimates:* proof sizes come from the tree layout, not from fetched proofs. The stock light node figure assumes about 110 B per commit signature and 80 B per validator entry.
 - *NiPoPoW size:* the probe counted the node's JSON fields, so the wire size is estimated.
 - *Ergo's 6.0 MB:* it includes input proofs that venue-ergo §4 does not need, so the true minimum is lower.
-- *Not measured or not re-verified:* the log's costs and the succinct prover's cost are not measured, Ergo's rent and mempool-replacement rules are not re-verified, and Ergo congestion was not observed.
+- *Not measured or not re-verified:* the log's costs and the succinct prover's cost are not measured (the prover's since measured, [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21)), Ergo's rent and mempool-replacement rules are not re-verified, and Ergo congestion was not observed.
+
+### The succinct proof of exhaustion's prover cost (slice 21)
+
+Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/9c7fc6f/scripts/venue/succinct-probe); [decision](../decisions/2026-10.md#2026-10-12--prove-ergos-sections-not-its-headers-a-day-of-exhaustion-costs-a-4-vcpu-prover-about-7-hours-slice-21)). The question: can a prover carry §13.2's exhaustion over a day of Ergo in the declared proof system (pool-v3 §4: UltraHonk over BN254, Barretenberg 5.2.0, Noir 1.0.0-beta.26), so that a phone checks a proof instead of reading every section?
+
+**The headers stay with the phone.** One Autolykos v2 check is 2,152 Blake2b-256 compressions: 33 of its hashes each cover the 8,192-byte constant `M` (65 compressions apiece). A day's headers need 1.55 million compressions, 29 times the 53,391 that a day's sections need. A reader checks them natively in 11.2 ms a header: 8 s per day of chain, or 49 minutes per year of a deployment's age, on one core of the probe host in JavaScript. Today's reader already makes this check, and the headers are the 0.16 MB a day that every route in the [slice 20 table](#absence-for-one-subject-slice-20) keeps. So the proof covers only the sections against their headers' transactions roots and the scan over them. The phone still checks every header's work and the difficulty rule from the anchor, as venue-ergo §3 requires, so exhaustion's trust holds without proving the headers.
+
+| Measured (one 4-vCPU Xeon at 2.10 GHz, 15 GB) | Value |
+|---|---|
+| Blake2b-256 in Noir over 64-bit words, per 128-byte compression | 32,941 gates (257 a byte); every digest matched `@noble/hashes` |
+| Barretenberg's Blake2s black box, for comparison | 50 gates a byte |
+| UltraHonk proving with a precomputed key, 4 threads | 2^20 rows 13.2 s; 2^21 rows 24.3 s; 2^22 rows 46.6 s at 3.8 GB peak: 11.1 µs per row, linear |
+| One recursive verification of a `noir-recursive` proof | 0.77 million gates (two in one circuit: 1.47 million, proved in 28.4 s); a tampered inner proof fails |
+| A day of Ergo mainnet (1,440 blocks to height 1,892,905) | 721 blocks, 4,832 transactions, 3.81 MB unsigned (4.34 MB signed); 32,659 compressions for transaction ids, 19,290 for the transactions-root trees over ids and witness ids, 1,442 for header ids |
+| A proof | 14,656 bytes; native verification 16 ms |
+
+**A day costs a 4-vCPU prover about 7 hours.** A chain of proofs, each of 2^22 rows verifying its predecessor, leaves room for 103 compressions apiece. A day's sections then take 519 proofs and 6.7 hours, so one such machine keeps up with Ergo 3.6 times over. Proving the headers too would take 15,069 proofs and 195 hours a day, about eight such machines, for a check the phone makes in seconds. Two figures bound the estimate:
+- *Room to improve:* Barretenberg's own Blake2s gadget costs a fifth of the Noir Blake2b's gates per byte. A Blake2b gadget of the same efficiency, which neither Noir nor Barretenberg offers today, would bring a day to about 1.3 hours (estimate).
+- *Margin:* the attribution scan, which parses every transaction's outputs and was not measured, doubles the cost only if it needs 461 gates per unsigned byte. Parsing in a circuit normally costs tens of gates a byte (judgment).
+
+**A phone's reads become headers and one proof.** A day costs 0.16 MB of headers, a 14.7 KB proof for each period and a lookup for each subject in the map the proof commits to (estimate: under 1 KB). Today it costs 6.0 MB of sections, about 30 MB as node JSON. A year of age costs 58 MB of headers and the period proofs, against 2.2 GB today; folding past periods into one proof leaves the headers. That matches the state-root log's phone cost without its trust change, contention, rent or new attribution rule.
+
+**Trust and roles.**
+- *Who proves:* anyone with the blocks, such as an operator, whose reader already reads them. Proofs carry no authority.
+- *Withholding:* a prover that withholds only delays a phone, which can fall back to reading the sections itself, as today.
+- *Forging:* forging absence needs a false proof, so it relies on the proof system's soundness and its Ignition setup. E already declares both for every statement.
+
+**Not measured here; the next steps.**
+- *The exhaustion relation itself:* venue-ergo's attribution of outputs to a kind and subject over the unsigned bytes, the map by kind and subject with its lookups, the link from each header id to its child, and the folding of periods.
+- *The specification:* §13.2 asks the verifier to establish the answer "from retained venue evidence" so that "absence is proven by exhaustion rather than reported". A proof of the same attribution rule over the same chain changes no verdict. Whether a pinned relation's proof meets that contract as a later venue-ergo version, or needs pool-v4, is the C0a slice's question.
+
+**Limits.**
+- *Host:* one host and one run of each size; timings compare only on this host.
+- *Gadget:* the Noir Blake2b is straightforward, not tuned.
+- *Not measured:* the attribution scan, the map and the period fold.
+- *Window:* two days of Ergo. The cost grows with Ergo's use, linearly in unsigned bytes and transactions.
 
 ## 5. Backing assets (terms, not backings)
 
