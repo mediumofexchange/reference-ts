@@ -11,7 +11,7 @@ import { encodeReceipt, receiptBytes, snapshotBytes, snapshotDigest, type Snapsh
 import { LIT } from "../src/lit/construction.js";
 import { litConfigHash, litConfigurationBytes } from "../src/lit/configuration.js";
 import { encodeFaultEvidence } from "../src/lit/fault-evidence.js";
-import { noteCommitment, type Opening, type Output } from "../src/lit/notes.js";
+import { noteCommitment, noteNullifier, type Opening, type Output } from "../src/lit/notes.js";
 import {
   acceptanceBytes, acceptanceId, derivedOutputs, encodePublication, encodeRecord, encodeSettlementAuthorization, evidencePair, releaseBytes,
   statementBytes, statementHash, type LitRecord, type Statement,
@@ -68,6 +68,7 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
     return { header, id, records: [] as Uint8Array[], state: openSegmentState(operatorStore, id, b(90), imported, LIT) };
   };
   let current = open(1n);
+  type Segment = typeof current;
   const items: EvidenceItem[] = [];
   const add = (kind: number, payload: Uint8Array): void => {
     if (!items.some(item => item.kind === kind && compareBytes(item.payload, payload) === 0)) items.push({ kind, payload });
@@ -153,12 +154,16 @@ function litScope(clauses: Pick<LitRootTerms, "silence" | "nonService"> = {}) {
   const publish = (index: bigint, kind: 1 | 3 | 5, bytes: Uint8Array): void =>
     venue.witness(4, backing, index, encodePublication({ domain: DOMAIN, backing, kind, record: LIT.decode(bytes) }));
   const successor = (sequence: bigint, predecessor: Commitment): void => { current = open(sequence, predecessor, current.state); };
+  /** Commit to another segment's history from here on: an older one continued, or a twin `open` made. */
+  const use = (segment: Segment): void => { current = segment; };
+  /** The backing's frontier at the venue's last index, as a wallet reads it. */
+  const frontier = () => readFrontier<LitRecord>(pack(), signed, venue.witnessedIndex(), { construction: LIT, reference, venue });
   /** The current trail as a reader's evidence store serves it, cut at its last record. */
   const trailOf = () => new EvidenceStore(":memory:", { construction: LIT })
     .importTrails([encodeLitTrail({ header: litSegmentBytes(current.header), terms: [signed], records: current.records })])
     .trail(current.id, evidenceOf(current.records))!;
   return { trailOf, venue, backing, signed, items, checkpoint, admit, commitRaw, outputsOf, issue, spend, demand, settle, request, to, read, receipt, fault,
-    snapshotNow, publish, successor, pack, current: () => current };
+    snapshotNow, publish, successor, pack, current: () => current, open, use, frontier };
 }
 
 /** A kept replay file, its digest and an evidence file in a fresh directory. */
@@ -269,6 +274,57 @@ describe("lit packages through the one reader (M14d)", () => {
     expect(read.state.issued).toBe(10n); expect(read.state.position).toBe(1n);
     expect(read.carrying.map(item => [item.sequence, item.class])).toEqual([["1", "valid"], ["2", "valid"], ["3", "valid"], ["4", "valid"]]);
     expect(read.state.importedEventCount()).toBe(1n);
+  });
+
+  // Next 4 (bq): a wallet's retry of a failed payment F needs no note of F once one of F's nullifiers is canonical
+  // (wallet-store.ts `failedPaymentsOf`). That holds while a nullifier a read finds canonical stays in every later
+  // canonical history: F's record is bound to its segment, and each way that segment could admit F later is refused.
+  it("keeps a canonical nullifier canonical against an older segment's continuation, a stale import and a lapsed twin (Next 4 (bq))", async () => {
+    const nfOf = (note: Opening): bigint => key(noteNullifier(noteCommitment(DOMAIN, note)));
+    const later = async (f: ReturnType<typeof litScope>, canonical: Commitment, nf: bigint, F?: Uint8Array) => {
+      const read = await f.frontier();
+      expect(read.canonical!.commitment.sequence).toBe(canonical.sequence);
+      expect(read.canonical!.state.hasNullifier(nf)).toBe(true);
+      if (F !== undefined) expect(LIT.view(LIT.decode(F), () => undefined).outputs.some(cm => read.canonical!.state.hasOutput(cm))).toBe(false);
+      return read.carrying.map(item => [item.sequence, item.class, item.check]);
+    };
+    // (a) C2.10.4: the operator, in its term, opens S2 on C0 and spends A there (C1); continuing S1 with F, which spends
+    // A and B on S1's state, is excluded: returning to an older segment cannot abandon a valid newer one.
+    const f = litScope();
+    f.checkpoint(1n, 1n);
+    const a = f.issue(10n, ALICE), b2 = f.issue(7n, ALICE); await f.admit(a); await f.admit(b2);
+    const c0 = f.checkpoint(2n, 3n), s1 = f.current(), [noteA] = f.outputsOf(a), [noteB] = f.outputsOf(b2);
+    const F = f.spend([noteA!, noteB!], [f.to(6n, BOB), f.to(11n, ALICE)], [ALICE, ALICE]);
+    f.successor(3n, c0); f.checkpoint(3n, 5n);
+    await f.admit(f.spend([noteA!], [f.to(10n, ALICE)], [ALICE]));
+    const c1 = f.checkpoint(4n, 7n);
+    expect((await later(f, c1, nfOf(noteA!))).at(-1)).toEqual(["4", "valid", undefined]);
+    f.use(s1); await f.admit(F); f.checkpoint(5n, 9n);
+    expect((await later(f, c1, nfOf(noteA!), F)).at(-1)).toEqual(["5", "excluded", "CONTINUITY"]);
+
+    // (b) C2.10.4: a newer segment whose opening names C0, before the checkpoint that spent A, is excluded by its opening.
+    const g = litScope();
+    g.checkpoint(1n, 1n);
+    const ga = g.issue(10n, ALICE); await g.admit(ga);
+    const g0 = g.checkpoint(2n, 3n), [gA] = g.outputsOf(ga);
+    await g.admit(g.spend([gA!], [g.to(10n, ALICE)], [ALICE]));
+    const g1 = g.checkpoint(3n, 5n);
+    g.successor(4n, g0); g.checkpoint(4n, 7n);
+    expect((await later(g, g1, nfOf(gA!))).at(-1)).toEqual(["4", "excluded", "IMPORT"]);
+
+    // (c) C2b.4.1: a twin history of the same segment without A's spend and with F, committed past the silence
+    // boundary of the checkpoint that spent A, lapses; that checkpoint stays canonical.
+    const h = litScope({ silence: { noCommitmentDuration: 5n } });
+    h.checkpoint(1n, 1n);
+    const ha = h.issue(10n, ALICE), hb = h.issue(7n, ALICE); await h.admit(ha); await h.admit(hb);
+    h.checkpoint(2n, 2n);
+    const [hA] = h.outputsOf(ha), [hB] = h.outputsOf(hb);
+    const hF = h.spend([hA!, hB!], [h.to(6n, BOB), h.to(11n, ALICE)], [ALICE, ALICE]);
+    await h.admit(h.spend([hA!], [h.to(10n, ALICE)], [ALICE]));
+    const h1 = h.checkpoint(3n, 4n);
+    h.use(h.open(1n)); await h.admit(ha); await h.admit(hb); await h.admit(hF);
+    h.checkpoint(4n, 20n);
+    expect((await later(h, h1, nfOf(hA!), hF)).at(-1)).toEqual(["4", "lapsed", undefined]);
   });
 
   it("reads a lit receipt final where a valid checkpoint includes it, with no scope root (§5)", async () => {

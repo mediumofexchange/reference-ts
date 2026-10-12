@@ -2357,8 +2357,14 @@ export class V3Wallet {
         "CONFLICT", "a statement of this seed that this wallet did not save already paid the request: ask the payee before paying it again");
       const holdings = this.holdingsOf(notes, force, at);
       const available = (notes as KeyedNote[]).filter((_, i) => holdings[i]!.status === "available");
-      const meets = this.failedPaymentsOf(backing, theirs, canonical, force!, available);
-      const selected = selectMeeting(available, total, meets, LIT_FUNDS), sum = selected.reduce((n, note) => n + note.opening.value, 0n);
+      const { meets, spare } = this.failedPaymentsOf(backing, theirs, canonical, force!, available);
+      // A retry spends a free note of a failed payment it need not meet where a selection allows, and otherwise meets the rest.
+      let selected: KeyedNote[];
+      try { selected = selectMeeting(available, total, [...meets, ...spare], LIT_FUNDS); } catch (error) {
+        if (spare.length === 0 || !(error instanceof V3WalletError)) throw error;
+        selected = selectMeeting(available, total, meets, LIT_FUNDS);
+      }
+      const sum = selected.reduce((n, note) => n + note.opening.value, 0n);
       return this.keyedSave(name, intent, view, header.operator, selected, () => [{ backing, value, owner: payee.owner },
         ...(fee === undefined ? [] : [{ backing, value: fee.value, owner: fee.request.owner }]),
         ...(sum > total ? [{ backing, value: sum - total, owner: this.keys!.key(backing, this.allocate(backing)) }] : [])], theirs);
@@ -2369,25 +2375,31 @@ export class V3Wallet {
    * retry's output to the key differs from the failed one's, and the payee credits one output a request (§8): the retry
    * spends a note of each such payment, so at most one of them is ever admitted. A failed payment one of whose inputs is
    * spent in canonical history is never admitted (its outputs enter with its nullifiers, and it is not final), and needs
-   * none; one whose outputs are all there is final, and the request paid. */
+   * none; one whose outputs are all there is final, and the request paid. Never admitted rests on A9: a canonical
+   * nullifier stays in every later canonical history (an older segment's continuation, a stale import and a lapsed twin
+   * are refused, test/lit-reader.test.ts Next 4 (bq)), but a venue reorganization past the depth can remove it. Such a
+   * payment with a note still available is returned in `spare`, met where a selection allows (Next 4 (bq)). */
   private failedPaymentsOf(backing: Uint8Array, theirs: readonly string[], canonical: CanonicalCheckpoint, force: ForceState,
-    available: readonly KeyedNote[]): Set<bigint>[] {
+    available: readonly KeyedNote[]): { meets: Set<bigint>[]; spare: Set<bigint>[] } {
     const failed = new Map<string, Uint8Array>(), owners = new Set(theirs);
     for (const row of this.db.prepare(`SELECT r.alias, r.record, o.owner FROM saved_outputs o JOIN saved_records r ON r.alias=o.alias
       WHERE r.kind='2' AND r.status='failed' AND r.backing=?`).all(backing)) {
       if (owners.has(row.owner as string)) failed.set(row.alias as string, row.record as Uint8Array);
     }
-    const meets: Set<bigint>[] = [];
+    const meets: Set<bigint>[] = [], spare: Set<bigint>[] = [];
     for (const [name, record] of failed) {
       requireThat(this.paid(name, record, canonical, force) !== "final", "CONFLICT", "request is already paid");
       const nfs = this.db.prepare("SELECT nf FROM saved_inputs WHERE alias=?").all(name).map(row => BigInt(row.nf as string));
-      if (nfs.some(nf => canonical.state.hasNullifier(nf))) continue;
       const set = new Set(nfs);
+      if (nfs.some(nf => canonical.state.hasNullifier(nf))) {
+        if (available.some(note => set.has(note.nf))) spare.push(set);
+        continue;
+      }
       requireThat(available.some(note => set.has(note.nf)), "CONFLICT",
         `the failed payment ${name} to this request can still be admitted and no note it spends is available: sync until it is decided`);
       meets.push(set);
     }
-    return meets;
+    return { meets, spare };
   }
   /** Sign a lit spend of `selected` into the outputs `outputs` builds and save it under `name` with its reservations, in
    * the read's turn with no await: `outputs` runs inside the saving transaction, so a change index it allocates is saved
