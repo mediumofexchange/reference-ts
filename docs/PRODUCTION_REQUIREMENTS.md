@@ -207,9 +207,10 @@ and [header](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) measurements:
 A phone wallet is outside the release target, as a scope choice. It
 verifies independently only through a reader its holder runs. Its own first
 sync would read about 20 GB under complete replay. A succinct history
-relation would still leave about 4.4 GB of venue ranges and restoring scans,
-and phone rates are unmeasured. A succinct proof of exhaustion or an Ergo state-root log, neither
-yet probed, would make the venue ranges follow the holder's own subjects
+relation, within one prover's day at the design point's mean
+([slice 27](POOL_DEPLOYMENT_PROBES.md#the-trails-succinct-relation-slice-27)), would still leave about 4.4 GB of venue ranges and restoring scans,
+and phone rates are unmeasured. A succinct proof of exhaustion (its hashing and scan
+[probed](VENUE_ALTERNATIVES.md#the-attribution-scans-cost-slice-22)) or an Ergo state-root log would make the venue ranges follow the holder's own subjects
 ([comparison](VENUE_ALTERNATIVES.md#absence-for-one-subject-slice-20)). A browser wallet is outside it too, as a
 scope choice (2026-10-09): the package targets Node, its host hash is
 Node-only, and a browser holder would face the phone's sync costs.
