@@ -83,7 +83,7 @@ export async function succinctPackage(bytes: Uint8Array, verify: (kind: number, 
 }
 
 /** A read's outcome in comparable form: its refusal, or its verdicts with each forced record named by its statement. */
-async function outcome(read: Promise<unknown>): Promise<string> {
+export async function outcome(read: Promise<unknown>): Promise<string> {
   let result: Record<string, unknown>;
   try { result = await read as Record<string, unknown>; } catch (error) {
     if (error instanceof ReplayRefusal) return JSON.stringify({ refused: "replay", check: error.check });

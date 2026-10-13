@@ -3,7 +3,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { timingSafeEqual } from "node:crypto";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
+import type { TrailForm } from "./evidence-store.js";
 import { V3OperatorJournal, V3StoreError, type ServedEvidence } from "./store.js";
+import { PROOF_FREE_FORM, type RecordAt } from "./succinct.js";
 import { MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES,
   parseV3ServiceCommand, replyFromReceipt, replyFromCommitment, servedFrames, servedTooSlow } from "./service-wire.js";
 
@@ -73,8 +75,15 @@ export function waitingTurns(turns: Turns, bound: number, busy: () => Error, gon
 }
 
 /** What serves evidence by the one wire: an operator's journal, or a replica's kept evidence (M12b). `after` is a
- * sequence of the operator's; a source that holds no selection for the backing refuses as the journal does. */
-export interface V3EvidenceSource { serve(backing: Uint8Array, after: bigint): Promise<ServedEvidence> }
+ * sequence of the operator's; a source that holds no selection for the backing refuses as the journal does. `form`
+ * asks for its trails in another form (succinct-read §3.3's proof-free form). Beside them a source answers a succinct
+ * reader's fetches (§§3.2, 3.5): a kept record's proof by its hash and place, and a kept check proof by its set and
+ * digest; each answer authenticates itself to the reader. */
+export interface V3EvidenceSource {
+  serve(backing: Uint8Array, after: bigint, form?: TrailForm): Promise<ServedEvidence>;
+  proof(proofHash: Uint8Array, at: RecordAt): Uint8Array | undefined;
+  cover(set: Uint8Array, digest: Uint8Array): Uint8Array | undefined;
+}
 
 /** Every loopback peer: behind an onion service, the Tor daemon. */
 const LOOPBACK: readonly string[] = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
@@ -115,7 +124,8 @@ function listener(handle: (request: IncomingMessage, response: ServerResponse, s
  * `after` is the sequence the reader's evidence was served through, and only what came after it is served. */
 function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { count: number }, request: IncomingMessage, response: ServerResponse,
   send: Send, timer: NodeJS.Timeout): Promise<void> | undefined {
-  const asked = request.method === "GET" ? /^\/evidence\?backing=([0-9a-f]{64})&after=(0|[1-9][0-9]{0,19})$/.exec(request.url ?? "") : null;
+  const asked = request.method === "GET" ?
+    /^\/evidence\?backing=([0-9a-f]{64})&after=(0|[1-9][0-9]{0,19})(&form=proof-free)?$/.exec(request.url ?? "") : null;
   if (asked === null) return undefined;
   return (async () => {
     const after = BigInt(asked[2]!);
@@ -124,7 +134,7 @@ function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { coun
     if (streams.count >= MAX_EVIDENCE_STREAMS) { request.resume(); send(409, { code: "BUSY" }); return; }
     streams.count++;
     try {
-      const served = await source.serve(hexToBytes(asked[1]!), after);
+      const served = await source.serve(hexToBytes(asked[1]!), after, asked[3] === undefined ? undefined : PROOF_FREE_FORM);
       request.resume();
       if (response.destroyed) return;
       response.setHeader("content-type", "application/octet-stream"); response.writeHead(200);
@@ -154,6 +164,26 @@ function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { coun
   })();
 }
 
+/** A succinct reader's fetches (succinct-read §§3.2, 3.5): `GET /proofs/<hash>?segment=<hex>&position=<n>` answers the
+ * proof field of a record kept at that place whose SHA-256 is `hash`, and `GET /covers/<set>/<digest>` a check proof
+ * kept for that digest under that set, as bytes, or `NOT_FOUND`. False where the request is another. */
+function checkRoute(source: V3EvidenceSource, request: IncomingMessage, response: ServerResponse, send: Send): boolean {
+  if (request.method !== "GET") return false;
+  const url = request.url ?? "";
+  const proof = /^\/proofs\/([0-9a-f]{64})\?segment=([0-9a-f]{64})&position=([1-9][0-9]{0,18})$/.exec(url);
+  const cover = /^\/covers\/([0-9a-f]{64})\/([0-9a-f]{64})$/.exec(url);
+  if (proof === null && cover === null) return false;
+  request.resume();
+  const answer = proof !== null ?
+    source.proof(hexToBytes(proof[1]!), { segment: hexToBytes(proof[2]!), position: BigInt(proof[3]!) }) :
+    source.cover(hexToBytes(cover![1]!), hexToBytes(cover![2]!));
+  if (answer === undefined) { send(404, { code: "NOT_FOUND" }); return true; }
+  if (!response.destroyed && !response.writableEnded) {
+    response.setHeader("content-type", "application/octet-stream"); response.writeHead(200); response.end(answer);
+  }
+  return true;
+}
+
 /** Bind to 127.0.0.1. The server also refuses non-loopback connections. Behind an onion service every peer is the
  * loopback Tor daemon, so that listener takes no admin credential and has its own sixteen connections.
  * Credentials permit operations; protocol proofs/signatures remain authoritative.
@@ -174,6 +204,7 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
   const server: Server = listener(async (request, response, send, timer) => {
     const admin = adminToken !== undefined && bearer(request, adminToken);
     if (!admin && !bearer(request, walletToken)) { request.resume(); send(401, { code: "UNAUTHORIZED" }); return; }
+    if (checkRoute(journal, request, response, send)) return;
     const streamed = evidenceRoute(server, journal, streams, request, response, send, timer);
     if (streamed !== undefined) { await streamed; return; }
     if (request.method === "POST" && request.url === "/commands") {
@@ -207,6 +238,7 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
 export function createV3EvidenceService(source: V3EvidenceSource): Server {
   const streams = { count: 0 };
   const server: Server = listener(async (request, response, send, timer) => {
+    if (checkRoute(source, request, response, send)) return;
     const streamed = evidenceRoute(server, source, streams, request, response, send, timer);
     if (streamed !== undefined) { await streamed; return; }
     request.resume(); send(404, { code: "NOT_FOUND" });

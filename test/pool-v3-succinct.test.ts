@@ -23,7 +23,7 @@ import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { applyRecord, openSegmentState } from "../src/pool/v3/state.js";
 import {
-  COVER_PROOF_BYTES, leafDigest, nodeDigest, PROOF_FREE_TRAILS, succinctPoolV3, T_CHECK_LEAF, T_CHECK_NODE, testCheckSet, type CheckSupply,
+  COVER_PROOF_BYTES, coverTrail, leafDigest, nodeDigest, PROOF_FREE_TRAILS, succinctPoolV3, T_CHECK_LEAF, T_CHECK_NODE, testCheckSet, testProver, type CheckSupply,
 } from "../src/pool/v3/succinct.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
 import { encodeTrail } from "../src/pool/v3/trail.js";
@@ -337,6 +337,24 @@ describe("succinct reading against the complete read (succinct-read §§2–3)",
     expect(await f.complete(c)).toEqual({ check: "PROOF" });
     expect(await f.succinct(c, supply)).toEqual({ check: "PROOF" });
     expect([...seen.values()].every(n => n === 1)).toBe(true);
+  });
+});
+
+describe("succinct reading: a prover's walk over a trail (succinct-read §§3.2, 3.5; slice 37)", () => {
+  it("covers each aligned span once, none holding a record whose proof fails, and proves nothing again on a second walk", async () => {
+    const f = oneBacking();
+    // Six proved records; the third's proof fails the native check, and the fourth has no cover's length.
+    const records = [1, 1, 7, 1, 1, 1].map((first, i) => f.issueRecord(BigInt(i + 1), BigInt(200 + i), i === 3 ? proofOf(first, 64) : proofOf(first)));
+    const digests = records.map(r => leafDigest(proofFreeOf(r)));
+    const kept = new Map<bigint, Uint8Array>(), prover = testProver(SET, verifier);
+    const walk = () => coverTrail(prover, records.map(encodeRecord), digest => kept.get(digest), cover => {
+      expect(SET.verify(cover.kind, cover.digest, cover.proof)).toBe(true); kept.set(cover.digest, cover.proof);
+    });
+    expect(await walk()).toEqual({ proved: 6, made: 6 });
+    // Leaves 0, 1, 4, 5 and the nodes over (0, 1) and (4, 5): (2, 3) and every span above them hold a record without one.
+    expect(new Set(kept.keys())).toEqual(new Set([digests[0], digests[1], digests[4], digests[5],
+      nodeDigest(digests[0]!, digests[1]!), nodeDigest(digests[4]!, digests[5]!)]));
+    expect(await walk()).toEqual({ proved: 6, made: 0 });
   });
 });
 

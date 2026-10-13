@@ -18,14 +18,9 @@ import { CHECK_SET_PARAMETERS } from "../parameters.js";
 import { ParameterError, PROOF_OPTIONS, startedPoints, type KeyedVerifier, type VerifierOptions } from "../proof-verifier.js";
 import { LEAF_KINDS, openTrailCheckSet, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCheckSet, type TrailCircuit } from "./check-set.js";
 import type { Record } from "./records.js";
-import { COVER_PROOF_BYTES, nodeDigest, statementLeafDigest } from "./succinct.js";
+import { COVER_PROOF_BYTES, nodeDigest, statementLeafDigest, type Cover, type SpanProver } from "./succinct.js";
 
-/** A check proof and the span it covers: a leaf's kind, or undefined for a node, and the span's digest (§3.2). */
-export interface Cover {
-  readonly kind: number | undefined;
-  readonly digest: bigint;
-  readonly proof: Uint8Array;
-}
+export type { Cover };
 
 /** A proof the aggregator made that does not carry the inputs a reader derives, or does not verify under the pinned key. */
 export class AggregatorError extends Error {
@@ -34,7 +29,7 @@ export class AggregatorError extends Error {
   }
 }
 
-export interface TrailProver {
+export interface TrailProver extends SpanProver {
   /** The set the covers verify under, on verifier instances of its own. */
   readonly set: TrailCheckSet;
   /** A cover of one proved record (a span of one), or undefined where its proof fails the native check. */

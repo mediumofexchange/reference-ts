@@ -19,13 +19,14 @@ import { poseidon2Hash } from "../poseidon2.js";
 import { POOL_V3, v3View, type Construction, type PublicationView, type ReaderFrames, type RequestView, type ServedTrailOf, type TrailChecks } from "./construction.js";
 import {
   decodeProofFree, decodePublication, decodeRecord, encodeProofFree, proofFreeDigests, proofFreeOf, proofLengthHolds, statementHash,
-  type ProofFreeRecord,
+  type ProofFreeRecord, type Record,
 } from "./records.js";
 import { recoveryEffect } from "./recovery.js";
 import { requireReplay, UnestablishedTrail } from "./refusals.js";
 import type { Adopted, ProofCheck } from "./state.js";
 import { MAX_ROOT_TERMS_BYTES } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, trailCodec, type ServedTrail } from "./trail.js";
+import type { TrailForm } from "./evidence-store.js";
 
 /** The revision of succinct-read.md these rules implement; it names kept state with the set identity (§2 rule 8). */
 export const SUCCINCT_SPECIFICATION = "succinct-read cb84f04";
@@ -50,7 +51,7 @@ export const PROOF_FREE_TRAILS = trailCodec({ context: SUCCINCT_TRAIL_CONTEXT, h
  * decode under §5: it has no proof-free form. */
 export function proofFreeTrail(trail: ServedTrail): ServedTrail {
   return { header: copyBytes(trail.header), terms: trail.terms.map(t => ({ terms: copyBytes(t.terms), signature: copyBytes(t.signature) })),
-    records: trail.records.map(bytes => encodeProofFree(proofFreeOf(decodeRecord(bytes)))) };
+    records: trail.records.map(PROOF_FREE_FORM.record) };
 }
 
 /** §3.2: a proved record's leaf digest, over its kind, public inputs and `proofHash`. */
@@ -83,10 +84,96 @@ export interface CheckSet {
 /** Where a succinct reader obtains check proofs and proof bytes: any party, untrusted (§2 rule 6). Each answer is
  * checked by the reader; undefined where the supplier has none. */
 export interface CheckSupply {
-  /** A check proof whose digest is `digest` (§3.2). */
-  cover(digest: bigint): Promise<Uint8Array | undefined> | Uint8Array | undefined;
-  /** The bytes whose SHA-256 is `proofHash` (§3.5). */
-  proof(proofHash: Uint8Array): Promise<Uint8Array | undefined> | Uint8Array | undefined;
+  /** A check proof whose digest is `digest` (§3.2). `accept` is the reader's own check of a candidate, which a supply of
+   * several sources may use to pass over a wrong one; the reader checks whatever it returns. */
+  cover(digest: bigint, accept?: (proof: Uint8Array) => Promise<boolean>): Promise<Uint8Array | undefined> | Uint8Array | undefined;
+  /** The bytes whose SHA-256 is `proofHash` (§3.5). `at` names the trail record that carries it, which a supplier may
+   * look it up by; it authenticates nothing (§4.7), and a publication's proof is never fetched. */
+  proof(proofHash: Uint8Array, at?: RecordAt): Promise<Uint8Array | undefined> | Uint8Array | undefined;
+}
+/** A trail record's place: its segment and its position, from 1. */
+export interface RecordAt { readonly segment: Uint8Array; readonly position: bigint }
+
+/** The proof-free form a supplier serves its complete trails in (§3.3), record by record. A kept record decodes, so it
+ * has its form. */
+export const PROOF_FREE_FORM: TrailForm = Object.freeze({
+  trailHead: PROOF_FREE_TRAILS.trailHead,
+  record: (bytes: Uint8Array) => encodeProofFree(proofFreeOf(decodeRecord(bytes))),
+  // About a second of a busy laptop's work and 2 MB a part: far inside both sides' stream bounds.
+  piece: 2048,
+});
+
+/** A supplier's answer to a reader's fetch (§3.5): the proof field of a record among `records` (those kept at the asked
+ * place, one per fork) whose SHA-256 is `proofHash`, or undefined. */
+export function proofAmong(records: Iterable<Uint8Array>, proofHash: Uint8Array): Uint8Array | undefined {
+  for (const bytes of records) {
+    let proof: Uint8Array;
+    try { proof = decodeRecord(bytes).proof; } catch (error) { if (error instanceof EncodingError) continue; throw error; }
+    if (proof.length > 0 && same(sha256(proof), proofHash)) return proof;
+  }
+  return undefined;
+}
+
+/** A check proof and the span it covers: a leaf's kind, or undefined for a node, and the span's digest (§3.2). */
+export interface Cover {
+  readonly kind: number | undefined;
+  readonly digest: bigint;
+  readonly proof: Uint8Array;
+}
+/** What proves covers (§§2 rule 6, 3.5): the aggregator (aggregator.ts), or a test set's maker (`testProver`). `leaf` checks
+ * the statement proof natively first and gives no cover where it fails. */
+export interface SpanProver {
+  leaf(record: Record): Promise<Cover | undefined>;
+  node(left: Cover, right: Cover): Promise<Cover>;
+}
+
+/**
+ * Covers of every aligned span (§3.2) of a trail's proved records, from its complete records in position order
+ * (`records`; records of other kinds are passed over), numbered from 0: each leaf whose proof verifies and each node over
+ * two covered spans of equal height, given to `keep` as made. A cover `held` gives for a span's digest is used as
+ * made, not proved again, so walking a trail again proves only its new spans. Memory holds one cover per height.
+ */
+export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
+  held: (digest: bigint) => Uint8Array | undefined, keep: (cover: Cover) => void): Promise<{ readonly proved: number; readonly made: number }> {
+  // pending[h]: the cover of the left span of height h whose right sibling comes next, or undefined where it has none.
+  const pending: (Cover | undefined)[] = [];
+  let n = 0, made = 0;
+  const kept = (cover: Cover): Cover => { keep(cover); made++; return cover; };
+  for await (const bytes of records) {
+    const record = decodeRecord(bytes);
+    if (!PROVED.has(record.kind)) continue;
+    let cover: Cover | undefined;
+    if (record.proof.length === COVER_PROOF_BYTES) {
+      const digest = statementLeafDigest(record.kind, record.publicInputs, sha256(record.proof)), proof = held(digest);
+      if (proof !== undefined) cover = { kind: record.kind, digest, proof };
+    }
+    if (cover === undefined) { const made = await prover.leaf(record); if (made !== undefined) cover = kept(made); }
+    for (let h = 0, index = n; ; h++, index = Math.floor(index / 2)) {
+      if (index % 2 === 0) { pending[h] = cover; break; }
+      const left = pending[h];
+      pending[h] = undefined;
+      if (left === undefined || cover === undefined) { cover = undefined; continue; }
+      const digest = nodeDigest(left.digest, cover.digest), proof = held(digest);
+      cover = proof !== undefined ? { kind: undefined, digest, proof } : kept(await prover.node(left, cover));
+    }
+    n++;
+  }
+  return { proved: n, made };
+}
+
+/** A test set's prover (§1): a leaf over a proof `statements` accepts, and every node, made by the set's `cover`. */
+export function testProver(set: ReturnType<typeof testCheckSet>, statements: ProofCheck): SpanProver {
+  return {
+    async leaf(record) {
+      if (record.proof.length !== COVER_PROOF_BYTES || await statements.verify(record.kind, [...record.publicInputs], record.proof) !== true) return undefined;
+      const digest = statementLeafDigest(record.kind, record.publicInputs, sha256(record.proof));
+      return { kind: record.kind, digest, proof: set.cover(record.kind, digest) };
+    },
+    async node(left, right) {
+      const digest = nodeDigest(left.digest, right.digest);
+      return { kind: undefined, digest, proof: set.cover(undefined, digest) };
+    },
+  };
 }
 
 /** A test set (§1): its check proof for a span is SHA-256 over a fixed context, the circuit and the digest. Anyone makes
@@ -116,6 +203,9 @@ interface Established {
   readonly held: Map<number, Uint8Array>;
   readonly hashes: Uint8Array;
   readonly kinds: Uint8Array;
+  /** Each proved record's place, which a fetch names. */
+  readonly segment: Uint8Array;
+  readonly positions: BigUint64Array;
   cursor: number;
 }
 const ESTABLISHED = new WeakMap<ProofCheck, Established>();
@@ -141,20 +231,20 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
   };
   /** The bytes whose SHA-256 is `proofHash` from the supply, or undefined. A supplier's answer past §5's bound is
    * stopped unhashed and its wrong bytes are no bytes: either is a withheld supply. */
-  const fetchProof = async (proofHash: Uint8Array): Promise<Uint8Array | undefined> => {
-    const answer: unknown = await supply.proof(copyBytes(proofHash));
+  const fetchProof = async (proofHash: Uint8Array, at?: RecordAt): Promise<Uint8Array | undefined> => {
+    const answer: unknown = await supply.proof(copyBytes(proofHash), at === undefined ? undefined : { segment: copyBytes(at.segment), position: at.position });
     if (!(answer instanceof Uint8Array) || answer.length > MAX_PROOF) return undefined;
     const bytes = copyBytes(answer);
     return same(sha256(bytes), proofHash) ? bytes : undefined;
   };
   /** A proof the reader verifies natively when replay reaches its check: held, else fetched; withheld leaves the read unresolved. */
-  const proofOf = async (record: ProofFreeRecord, held?: Uint8Array): Promise<Uint8Array> => {
-    const bytes = held ?? await fetchProof(record.proofHash);
+  const proofOf = async (record: ProofFreeRecord, held?: Uint8Array, at?: RecordAt): Promise<Uint8Array> => {
+    const bytes = held ?? await fetchProof(record.proofHash, at);
     if (bytes === undefined || !proofLengthHolds(record.kind, bytes.length)) throw new UnestablishedTrail();
     return bytes;
   };
-  const native = async (verifier: ProofCheck, record: ProofFreeRecord, held?: Uint8Array): Promise<boolean> =>
-    await verifier.verify(record.kind, [...record.publicInputs], await proofOf(record, held)) === true;
+  const native = async (verifier: ProofCheck, record: ProofFreeRecord, held?: Uint8Array, at?: RecordAt): Promise<boolean> =>
+    await verifier.verify(record.kind, [...record.publicInputs], await proofOf(record, held, at)) === true;
 
   /** §3.4 step 4: the replay's statement check, from the trail's establishment where the verifier carries one, else
    * natively (a publication's force, §3.6). */
@@ -168,14 +258,15 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
     if (i === count) throw new Error("a record its trail's establishment did not reach");
     established.cursor = i + 1;
     if (established.covered[i] === 1) return;
-    requireReplay(await native(verifier, record, established.held.get(i)), "PROOF");
+    requireReplay(await native(verifier, record, established.held.get(i), { segment: established.segment, position: established.positions[i]! }), "PROOF");
   };
 
   const trailChecks: TrailChecks = {
     async establish(trail, from, proved, block, verifier) {
       const records = trail.records(from);
       // Pass 1 (§3.4 steps 1–2): each proved record's digest, kind and proofHash; kind-7 proofs to fetch for their length.
-      const digests: Uint8Array[] = [], hashes: Uint8Array[] = [], kinds: number[] = [], adopted: boolean[] = [], requests: Uint8Array[] = [];
+      const digests: Uint8Array[] = [], hashes: Uint8Array[] = [], kinds: number[] = [], adopted: boolean[] = [], positions: bigint[] = [];
+      const requests: { readonly proofHash: Uint8Array; readonly at: RecordAt }[] = [];
       let position = from;
       for (const bytes of records) {
         const at = block[Number(position)];
@@ -183,9 +274,10 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
         const record = decodeProofFree(bytes);
         // A record whose proofHash is the adopted publication's has the length of the proof the reader holds (§3.5).
         const held = at !== undefined && same(record.proofHash, decodeProofFree(at.bytes).proofHash);
-        if (record.kind === 7) { if (!held) requests.push(record.proofHash); continue; }
+        if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position } }); continue; }
         if (!PROVED.has(record.kind)) continue;
         digests.push(fieldToBytes(leafDigest(record))); hashes.push(record.proofHash); kinds.push(record.kind); adopted.push(held);
+        positions.push(position);
       }
       const m = kinds.length, start = Number(proved);
       if (!Number.isSafeInteger(start + m)) throw new RangeError("a trail past the safe integer range");
@@ -202,8 +294,17 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
         return value;
       };
       const cover = async (s: number, first: number, memo: Map<string, bigint>): Promise<void> => {
-        const digest = spanDigest(s, first, memo), answer: unknown = await supply.cover(digest);
-        if (answer instanceof Uint8Array && await set.verify(s === 0 ? kinds[first - start] : undefined, digest, copyBytes(answer)) === true) {
+        const digest = spanDigest(s, first, memo), kind = s === 0 ? kinds[first - start] : undefined;
+        // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
+        let accepted: Uint8Array | undefined;
+        const accept = async (proof: Uint8Array): Promise<boolean> => {
+          const own = proof instanceof Uint8Array ? copyBytes(proof) : undefined;
+          if (own === undefined || await set.verify(kind, digest, own) !== true) return false;
+          accepted = own;
+          return true;
+        };
+        const answer: unknown = await supply.cover(digest, accept);
+        if (answer instanceof Uint8Array && ((accepted !== undefined && same(answer, accepted)) || await set.verify(kind, digest, copyBytes(answer)) === true)) {
           covered.fill(1, first - start, first - start + 2 ** s);
           return;
         }
@@ -222,12 +323,12 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       let room = HELD_BYTES;
       for (let i = 0; i < m; i++) {
         if (covered[i] === 1 || adopted[i] === true) continue;
-        const bytes = await fetchProof(hashes[i]!);
+        const bytes = await fetchProof(hashes[i]!, { segment: trail.segment, position: positions[i]! });
         if (bytes === undefined || !proofLengthHolds(kinds[i] as 1, bytes.length)) throw new UnestablishedTrail();
         if (bytes.length <= room) { held.set(i, bytes); room -= bytes.length; }
       }
-      for (const proofHash of requests) {
-        const bytes = await fetchProof(proofHash);
+      for (const { proofHash, at } of requests) {
+        const bytes = await fetchProof(proofHash, at);
         if (bytes === undefined || !proofLengthHolds(7, bytes.length)) throw new UnestablishedTrail();
       }
       const flat = (parts: readonly Uint8Array[]): Uint8Array => {
@@ -236,7 +337,8 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
         return out;
       };
       const replayCheck: ProofCheck = { verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) };
-      ESTABLISHED.set(replayCheck, { digests: flat(digests), hashes: flat(hashes), kinds: Uint8Array.from(kinds), covered, held, cursor: 0 });
+      ESTABLISHED.set(replayCheck, { digests: flat(digests), hashes: flat(hashes), kinds: Uint8Array.from(kinds), covered, held,
+        segment: copyBytes(trail.segment), positions: BigUint64Array.from(positions), cursor: 0 });
       // Records before a resumed tip were established when the namespace holding them replayed them, under these rules.
       servedTrails.add(servedKey(trail));
       return replayCheck;

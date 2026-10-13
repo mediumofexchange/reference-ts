@@ -203,6 +203,12 @@ const SERVED_SCHEMA = `CREATE TABLE IF NOT EXISTS served_object (operator BLOB, 
   CREATE INDEX IF NOT EXISTS served_top_sequence ON served_top(operator, segment, sequence, position);
   CREATE TABLE IF NOT EXISTS served_selection (backing BLOB PRIMARY KEY, package BLOB NOT NULL) WITHOUT ROWID;
   CREATE TABLE IF NOT EXISTS served_operator (operator BLOB PRIMARY KEY, sequence INTEGER NOT NULL) WITHOUT ROWID;`;
+/** Check proofs a prover kept for a supplier to serve (succinct-read §3.2), by the set they verify under and the
+ * span's digest, beside layout 4's tables in a party's own file. A reader verifies each under its own pinned keys. */
+const COVER_SCHEMA = `CREATE TABLE IF NOT EXISTS check_cover (set_identity BLOB, digest BLOB, proof BLOB NOT NULL,
+  PRIMARY KEY(set_identity, digest)) WITHOUT ROWID;`;
+/** Forks one fetch's answer reads at a position: a supplier's answer, not a read's evidence. */
+const FORKS_READ = 16;
 /** What a read of kept evidence asks, on the party's connection or a replica's serving one. */
 const READ_SQL = {
   object: "SELECT payload FROM object WHERE kind = ? AND hash = ?",
@@ -307,10 +313,12 @@ export class EvidenceStore {
         // A party's file reads one construction's evidence: one of another's is refused, never read by the wrong frames.
         if (source !== ":memory:") {
           this.#db.exec(CONSTRUCTION_SCHEMA);
-          this.#db.prepare("INSERT OR IGNORE INTO evidence_construction VALUES (1, ?)").run(this.construction.namespace.name);
+          this.#db.prepare("INSERT OR IGNORE INTO evidence_construction VALUES (1, ?)").run(evidenceName(this.construction));
           const kept = (this.#db.prepare("SELECT name FROM evidence_construction WHERE id = 1").get() as { name: string }).name;
-          if (kept !== this.construction.namespace.name) throw new TypeError("the evidence file holds another construction's evidence");
+          if (kept !== evidenceName(this.construction)) throw new TypeError("the evidence file holds another construction's evidence");
         }
+        // A party's own file (or private store) keeps check proofs beside layout 4's tables; a host's database keeps none.
+        this.#db.exec(COVER_SCHEMA);
       } catch (error) {
         this.#db.close();
         if (busy(error)) throw new FileInUse("evidence file");
@@ -351,6 +359,11 @@ export class EvidenceStore {
       record: `INSERT INTO chain VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(evidence) DO UPDATE SET segment = excluded.segment, prev = excluded.prev,
         position = excluded.position, size = excluded.size, bytes = excluded.bytes WHERE segment != excluded.segment OR prev != excluded.prev
         OR position != excluded.position OR size != excluded.size OR bytes != excluded.bytes`,
+      recordsAt: `SELECT bytes FROM chain WHERE segment = ? AND position = ? LIMIT ${FORKS_READ}`,
+      ...(this.#hosted ? {} : {
+        keepCover: "INSERT INTO check_cover VALUES (?, ?, ?) ON CONFLICT(set_identity, digest) DO UPDATE SET proof = excluded.proof WHERE proof != excluded.proof",
+        cover: "SELECT proof FROM check_cover WHERE set_identity = ? AND digest = ?",
+      }),
       supplied: "SELECT sequence FROM supplier WHERE source = ?",
       supply: "INSERT INTO supplier VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET sequence = excluded.sequence",
       ...(this.#indexed ? {
@@ -412,7 +425,8 @@ export class EvidenceStore {
    * Read on a connection of its own in one read transaction, opened when the first part is asked for and closed when
    * the parts end or are abandoned, so a take on the party's connection neither shows through nor waits (`shared`).
    */
-  static async *served(path: string, construction: Construction, operator: Uint8Array, through: bigint, after: bigint): AsyncIterable<EvidencePart> {
+  static async *served(path: string, construction: Construction, operator: Uint8Array, through: bigint, after: bigint, form?: TrailForm):
+    AsyncIterable<EvidencePart> {
     if (typeof through !== "bigint" || typeof after !== "bigint" || through < 1n || through >= 1n << 63n || after < 0n || after >= 1n << 64n ||
         !(operator instanceof Uint8Array) || operator.length !== 32) {
       throw new TypeError("invalid served sequence");
@@ -450,13 +464,44 @@ export class EvidenceStore {
         (segment, value) => evidence.trail(segment, value), segment => {
           const held = from === 0n ? undefined : below.get(by, segment, from) as { evidence: Uint8Array; position: bigint } | undefined;
           return held === undefined ? undefined : { segment, position: held.position, evidence: bytes(held.evidence) };
-        }, construction);
+        }, construction, form);
       db.exec("COMMIT");
     } finally { db.close(); }
   }
 
   /** The retained evidence alone, as a read uses it, with no package of its own. */
   retained(): EvidenceBatch { return this.#batch(); }
+
+  // --- What a supplier answers a succinct reader's fetches from (succinct-read §§3.2, 3.5): unchecked here, since
+  // each answer authenticates itself to its asker, who hashes or verifies it.
+
+  /** A replica's indexed trail tops, each segment's furthest first; none in a file that is not indexed. */
+  keptTops(): TrailTip[] {
+    if (!this.#indexed) return [];
+    return (this.#db.prepare("SELECT DISTINCT segment, evidence, position FROM served_top ORDER BY segment, position DESC").all() as
+      { segment: Uint8Array; evidence: Uint8Array; position: bigint }[]).map(row => ({ segment: bytes(row.segment), position: BigInt(row.position),
+      evidence: bytes(row.evidence) }));
+  }
+  /** The kept records of `segment` at `position`, at most one per fork read. */
+  recordsAt(segment: Uint8Array, position: bigint): Uint8Array[] {
+    if (!(segment instanceof Uint8Array) || segment.length !== 32 || typeof position !== "bigint" || position < 1n || position >= 1n << 63n) return [];
+    return (this.#q.recordsAt!.all(segment, position) as { bytes: Uint8Array }[]).map(row => bytes(row.bytes));
+  }
+  /** Keep `proof`, a check proof a prover made of the span whose digest is `digest` under the set whose identity is
+   * `set`. A party's own file keeps them; a host's database keeps none. */
+  keepCover(set: Uint8Array, digest: Uint8Array, proof: Uint8Array): void {
+    if (this.#q.keepCover === undefined) throw new TypeError("a host's database keeps no check proofs");
+    if (![set, digest].every(value => value instanceof Uint8Array && value.length === 32) || !(proof instanceof Uint8Array)) {
+      throw new TypeError("a check proof is kept by a 32-byte set identity and digest");
+    }
+    this.#q.keepCover.run(copyBytes(set), copyBytes(digest), copyBytes(proof));
+  }
+  /** The check proof kept for `digest` under set `set`, if any. */
+  cover(set: Uint8Array, digest: Uint8Array): Uint8Array | undefined {
+    if (this.#q.cover === undefined || ![set, digest].every(value => value instanceof Uint8Array && value.length === 32)) return undefined;
+    const row = this.#q.cover.get(set, digest) as { proof: Uint8Array } | undefined;
+    return row === undefined ? undefined : bytes(row.proof);
+  }
 
   // --- A party's own evidence (an operator's journal): kept as supplied evidence is, and read the same way.
   // Each is one statement or a few, so inside the host's open transaction it commits with the host's command.
@@ -1004,17 +1049,68 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
 export async function trailPart(trail: StoredTrail, after?: TrailTip, construction: Construction = POOL_V3 as Construction): Promise<EvidencePart | undefined> {
   const held = after === undefined ? 0n : await trail.reaches(after.position, after.evidence);
   if (held === undefined) return undefined;
-  const count = construction.reader.header.decodeSegmentHeader(trail.header).entries.length;
-  const head = construction.reader.trail.trailHead(trail.header, Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }), trail.length);
+  const head = construction.reader.trail.trailHead(trail.header, headTerms(trail, construction), trail.length);
   const chunks = async function* (): AsyncIterable<Uint8Array> {
     yield head;
-    for await (const record of trail.stream(after?.position ?? 0n)) {
-      const framed = new Uint8Array(4 + record.length);
-      new DataView(framed.buffer).setUint32(0, record.length, false); framed.set(record, 4);
-      yield framed;
-    }
+    for await (const record of trail.stream(after?.position ?? 0n)) yield framed(record);
   };
   return { trail: { after, size: BigInt(head.length) + trail.bytes - held, chunks: chunks() } };
+}
+/** A trail's scoped terms fields as its head states them; one the evidence does not hold is served empty. */
+const headTerms = (trail: StoredTrail, construction: Construction): SignedTermsField[] =>
+  Array.from({ length: construction.reader.header.decodeSegmentHeader(trail.header).entries.length },
+    (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) });
+/** A record behind its u32 length, as a trail's frame carries it. */
+function framed(record: Uint8Array): Uint8Array {
+  const out = new Uint8Array(4 + record.length);
+  new DataView(out.buffer).setUint32(0, record.length, false); out.set(record, 4);
+  return out;
+}
+
+/**
+ * A kept trail in another form (`form`), after `after` where its chain passes through it, else whole: consecutive parts
+ * of at most `form.piece` records, each with a head stating the length it reaches and based on the tip the part before
+ * reached, as incremental retrieval serves a trail after a reader's base. A part states its size before its records and
+ * the kept rows hold no size in another form, so each part is built in memory and sized from its own bytes: a long
+ * trail's first bytes go out after one part's work, never after a pass over the whole trail, and a stream whose peer
+ * left stops within one part. A kept record decodes (`chainStep`), so each has its form.
+ */
+export async function* formParts(trail: StoredTrail, after: TrailTip | undefined, construction: Construction, form: TrailForm): AsyncIterable<EvidencePart> {
+  let base = after !== undefined && await trail.reaches(after.position, after.evidence) !== undefined ? after : undefined;
+  const terms = headTerms(trail, construction);
+  let records: Uint8Array[] = [], bytes = 0, position = base?.position ?? 0n, sent = false;
+  // Each part's tip is the chain value carried forward over the records sent, which the stream has checked one by one
+  // against the kept values: no walk back from the trail's top per part.
+  let evidence = base?.evidence ?? construction.genesisEvidence(trail.segment);
+  const part = (): EvidencePart => {
+    const head = form.trailHead(trail.header, terms, position);
+    const out: EvidencePart = { trail: { after: base, size: BigInt(head.length + bytes), chunks: [head, ...records] } };
+    base = { segment: trail.segment, position, evidence }; records = []; bytes = 0; sent = true;
+    return out;
+  };
+  for await (const record of trail.stream(position)) {
+    const own = framed(form.record(record));
+    position++;
+    evidence = construction.nextEvidence(evidence, construction.reader.digests(record), position);
+    records.push(own); bytes += own.length;
+    if (records.length >= form.piece) yield part();
+  }
+  if (records.length > 0 || !sent) yield part();
+}
+
+/** A form a supplier serves its kept trails in besides their own: a frame's head under that form's context and each
+ * record's bytes in it, such as succinct-read §3.3's proof-free form (`PROOF_FREE_FORM`). The records' evidence chain
+ * values are the kept ones, so a part's base and every position mean the same in either form. */
+export interface TrailForm {
+  trailHead(header: Uint8Array, terms: readonly SignedTermsField[], events: bigint): Uint8Array;
+  record(bytes: Uint8Array): Uint8Array;
+  /** The records one served part holds at most (`formParts`). */
+  readonly piece: number;
+}
+/** The name a party's evidence file records for `construction`: its namespace's, marked where its trails' records are
+ * proof-free (succinct-read §3.3), so a file of one form is never read by the other's frames. */
+export function evidenceName(construction: Construction): string {
+  return construction.trailChecks === undefined ? construction.namespace.name : `${construction.namespace.name} proof-free`;
 }
 
 /** The trails a serve owes for its tops (§14), for a journal and a replica alike: `tops` grouped by segment, furthest
@@ -1022,7 +1118,7 @@ export async function trailPart(trail: StoredTrail, after?: TrailTip, constructi
  * already served for its segment or the base reaches it. Every top is served, not the furthest of a segment alone, so
  * snapshots on two forks each come with a trail. A top whose trail is not held at its position is storage damage. */
 export async function* topTrails(tops: Iterable<TrailTip>, trailOf: (segment: Uint8Array, evidence: Uint8Array) => StoredTrail | undefined,
-  baseOf: (segment: Uint8Array) => TrailTip | undefined, construction: Construction): AsyncIterable<EvidencePart> {
+  baseOf: (segment: Uint8Array) => TrailTip | undefined, construction: Construction, form?: TrailForm): AsyncIterable<EvidencePart> {
   const reached = async (trails: readonly StoredTrail[], position: bigint, value: Uint8Array): Promise<boolean> => {
     for (const held of trails) if (held.length >= position && await held.reaches(position, value) !== undefined) return true;
     return false;
@@ -1039,6 +1135,7 @@ export async function* topTrails(tops: Iterable<TrailTip>, trailOf: (segment: Ui
     // A reader served through the base holds a top its base's trail passes through.
     if (await reached([...served, ...(baseTrail === undefined ? [] : [baseTrail])], trail.length, top.evidence)) continue;
     served.push(trail);
+    if (form !== undefined) { yield* formParts(trail, base, construction, form); continue; }
     const part = (base === undefined ? undefined : await trailPart(trail, base, construction)) ?? await trailPart(trail, undefined, construction);
     if (part !== undefined) yield part;
   }

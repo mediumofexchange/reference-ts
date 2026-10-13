@@ -116,8 +116,9 @@ trail reading (§§2–3, a reader's option) is `src/pool/v3/succinct.ts`, a con
 trails through. Its check set is §3.2's six circuits in production form (`src/pool/v3/check-set.ts`, sources in
 `scripts/pool/v3/trail-circuits/`), labelled a test set since none is adopted (§6), whose covers any party proves with
 `src/pool/v3/aggregator.ts` ([slice 36](../decisions/2026-10.md#2026-10-13--prove-the-trail-check-sets-six-circuits-on-the-pinned-webassembly-backend-verify-covers-under-pinned-keys-and-take-native-proving-as-the-aggregators-lever-slice-36-next-12)); `check:pool:v3-check-set` proves every circuit
-with hostile covers ([report](pool-v3-check-set-verification.json)) and the recovery check reads a real trail with real
-covers. `npm test` reads the
+with hostile covers ([report](pool-v3-check-set-verification.json)). The service and a replica serve a succinct reader
+proof-free trails, proofs by place and covers by digest (`serviceSupply`, `V3Replica.prove`; [slice 37](../decisions/2026-10.md#2026-10-14--serve-succinct-readers-over-the-one-wire-proof-free-trails-proofs-by-place-and-covers-by-set-and-digest-from-the-operator-and-a-replica-slice-37-next-12)),
+and the recovery check reads a real trail with real covers through a replica over that wire. `npm test` reads the
 scope-reader, recovery, succession and store suites' packages both completely and succinctly and requires one outcome
 (`test/succinct-differential.ts`).
 

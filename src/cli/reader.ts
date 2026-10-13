@@ -24,7 +24,7 @@ import type { FaultResult } from "../pool/v3/fault-observer.js";
 import { readFrontier } from "../pool/v3/package-reader.js";
 import { FileInUse, ReplayStore } from "../pool/v3/replay-store.js";
 import type { FrontierResult } from "../pool/v3/scope-reader.js";
-import { V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
+import { unanswered, V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, initialized, integer, requireNew, UsageError, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, READ_FLAGS,
@@ -241,10 +241,7 @@ export function sourcesOf(directory: Directory, kept: KeptTerms, view: View,
   return sources;
 }
 
-/** Whether a service call failed because the service did not answer (nothing listening, a dropped connection). */
-export const unanswered = (error: unknown): boolean =>
-  (error instanceof TypeError && (error.message === "fetch failed" || error.message === "terminated")) ||
-  (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
+export { unanswered };
 
 /** Whether a read failed for evidence its store does not hold. */
 const unresolvedEvidence = (error: unknown): boolean => error instanceof EvidenceRefusal && error.status === "unresolved-evidence";
