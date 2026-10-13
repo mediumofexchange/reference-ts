@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-13` [Aggregating the trail's statement proofs keeps up with the design point's mean on one 4-vCPU prover and agrees with the host on every hostile proof (slice 33, Next 12)](decisions/2026-10.md#2026-10-13--aggregating-the-trails-statement-proofs-keeps-up-with-the-design-points-mean-on-one-4-vcpu-prover-and-agrees-with-the-host-on-every-hostile-proof-slice-33-next-12)
 - `2026-10-13` [The complete exhaustion leaf keeps up with an ordinary Ergo day on one 4-vCPU prover, about three times over (slice 32, Next 12)](decisions/2026-10.md#2026-10-13--the-complete-exhaustion-leaf-keeps-up-with-an-ordinary-ergo-day-on-one-4-vcpu-prover-about-three-times-over-slice-32-next-12)
 - `2026-10-13` [Keep the release target, take the phone path now, and prove the trail's proofs rather than its state machine (direction)](decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction)
 - `2026-10-13` [Keep the faults a takeover read and serve them in each read's own package (Next 4 (bk))](decisions/2026-10.md#2026-10-13--keep-the-faults-a-takeover-read-and-serve-them-in-each-reads-own-package-next-4-bk)
