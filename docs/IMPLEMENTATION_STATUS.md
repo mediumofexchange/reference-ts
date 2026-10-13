@@ -113,7 +113,11 @@ two-in, four-out spend. `npm test` checks the successor's
 
 [Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)'s
 trail reading (§§2–3, a reader's option) is `src/pool/v3/succinct.ts`, a construction the one walk reads proof-free
-trails through; it runs over a test check set only, since no circuit set is adopted (§6). `npm test` reads the
+trails through. Its check set is §3.2's six circuits in production form (`src/pool/v3/check-set.ts`, sources in
+`scripts/pool/v3/trail-circuits/`), labelled a test set since none is adopted (§6), whose covers any party proves with
+`src/pool/v3/aggregator.ts` ([slice 36](../decisions/2026-10.md#2026-10-13--prove-the-trail-check-sets-six-circuits-on-the-pinned-webassembly-backend-verify-covers-under-pinned-keys-and-take-native-proving-as-the-aggregators-lever-slice-36-next-12)); `check:pool:v3-check-set` proves every circuit
+with hostile covers ([report](pool-v3-check-set-verification.json)) and the recovery check reads a real trail with real
+covers. `npm test` reads the
 scope-reader, recovery, succession and store suites' packages both completely and succinctly and requires one outcome
 (`test/succinct-differential.ts`).
 

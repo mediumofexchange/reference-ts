@@ -55,8 +55,13 @@ export function proofFreeTrail(trail: ServedTrail): ServedTrail {
 
 /** §3.2: a proved record's leaf digest, over its kind, public inputs and `proofHash`. */
 export function leafDigest(record: ProofFreeRecord): bigint {
-  const [hi, lo] = limbsOf(record.proofHash);
-  return poseidon2Hash([T_CHECK_LEAF, BigInt(record.kind), ...record.publicInputs, hi, lo]);
+  return statementLeafDigest(record.kind, record.publicInputs, record.proofHash);
+}
+/** §3.2's leaf digest of a proof of kind `kind` with public inputs `inputs` and `proofHash` (an aggregator's view, before
+ * any record holds the proof). */
+export function statementLeafDigest(kind: number, inputs: readonly bigint[], proofHash: Uint8Array): bigint {
+  const [hi, lo] = limbsOf(proofHash);
+  return poseidon2Hash([T_CHECK_LEAF, BigInt(kind), ...inputs, hi, lo]);
 }
 /** §3.2: two spans' digest, left then right. */
 export function nodeDigest(left: bigint, right: bigint): bigint {

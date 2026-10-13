@@ -29,7 +29,7 @@ transparent profile) run through the same commands, and a
 [release record](docs/RELEASE.md) rebuilds the package tarball reproducibly.
 Qualified deployment storage,
 statements spending several backings and a phone-first wallet remain open; the phone's
-reading is specified as a reader's option ([succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)); its trail reading runs in the library over a test check set only, since no circuit set is adopted. The API and
+reading is specified as a reader's option ([succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)); its trail reading runs in the library with real check proofs of a test-labelled circuit set, since none is adopted. The API and
 wire format are experimental, the package is not published to npm, and no
 completed security audit or live deployment is claimed. The earlier pool-v2
 runtime is retired and remains in Git history.

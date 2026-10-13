@@ -10,7 +10,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BN254_PARAMETERS } from "./parameters.js";
+import { BN254_PARAMETERS, CHECK_SET_PARAMETERS } from "./parameters.js";
 
 const hosts = ["https://crs.aztec-cdn.foundation", "https://crs.aztec-labs.com"];
 // The last source: the transcript itself, where the CDN hosts are unreachable. Its points start after a 28-byte
@@ -87,7 +87,8 @@ export async function ensureParameter(directory: string, parameter: ParameterFil
       const last = first === undefined ? undefined : first + parameter.bytes - 1;
       response = await fetchImpl(url, {
         headers: first === undefined ? {} : { Range: `bytes=${first}-${last}` },
-        signal: AbortSignal.timeout(60_000), cache: "no-store",
+        // A minute, and a further second a megabyte: the check set's 128 MiB at about 1 MB/s.
+        signal: AbortSignal.timeout(60_000 + Math.ceil(parameter.bytes / 1_000)), cache: "no-store",
       });
       if (response.status !== (first === undefined ? 200 : 206)) throw new Error(`HTTP ${response.status}`);
       if (first !== undefined) {
@@ -133,6 +134,9 @@ export async function copyParameters(from: string, directory: string): Promise<v
   for (const parameter of PARAMETER_FILES) {
     const bytes = await leading(join(from, parameter.name), parameter.bytes);
     if (bytes === undefined || !matches(bytes, parameter)) throw new Error(`No verified ${parameter.name} in ${from}`);
+    // A longer copy already there whose leading bytes match (the check set's points) is kept, not truncated.
+    const held = await leading(join(directory, parameter.name), parameter.bytes);
+    if (held !== undefined && matches(held, parameter)) continue;
     await place(directory, join(directory, parameter.name), bytes);
   }
 }
@@ -150,3 +154,19 @@ export async function readParameters(directory: string) {
   return { g1, g2, source };
 }
 
+
+/** The check set's G1 points (succinct-read §6): a longer prefix of the same file, so one cached copy serves both. */
+export const CHECK_SET_G1_FILE: ParameterFile = Object.freeze({ ...PARAMETER_FILES[0]!, bytes: CHECK_SET_PARAMETERS.points * 64,
+  sha256: CHECK_SET_PARAMETERS.g1 });
+
+/** Cache the check set's parameters in `directory`: its G1 prefix and `[x]_2`, fetching what is missing. */
+export async function prepareCheckSetParameters(directory: string, options: FetchOptions = {}): Promise<void> {
+  for (const parameter of [CHECK_SET_G1_FILE, PARAMETER_FILES[1]!]) await ensureParameter(directory, parameter, options);
+}
+
+/** The check set's parameter bytes as `startCheckSetBackend` takes them, unjudged here. */
+export async function readCheckSetParameters(directory: string) {
+  const [g1, g2] = await Promise.all([CHECK_SET_G1_FILE, PARAMETER_FILES[1]!].map(p => leading(join(directory, p.name), p.bytes)));
+  if (g1 === undefined || g2 === undefined) throw new Error(`No check-set parameters in ${directory}`);
+  return { g1, g2 };
+}

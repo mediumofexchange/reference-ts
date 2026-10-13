@@ -19,6 +19,7 @@ import { authorizeAcceptance, authorizeIssue, authorizeSettlement, demandTask, i
 import { encodePublication, encodeRecord, statementHash } from "../../../dist/pool/v3/records.js";
 import { v3Codec as codec } from "./codec.mjs";
 import { drillMode, drillWorker, openDrill } from "./drill.mjs";
+import { readWithCovers } from "./succinct-covers.mjs";
 
 const b = n => new Uint8Array(32).fill(n);
 const hex = bytes => Buffer.from(bytes).toString("hex"), digest = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -77,6 +78,17 @@ async function acceptance(mode) {
       await checkpoint("service-settled");
       const input = await served(), answer = summary(await read(input)); assert.equal(answer.supply, "20");
       assert.deepEqual(drill.fresh(input), answer);
+      if (mode === "local") {
+        // succinct-read §3.4 with real check proofs: the two issues under one node cover and the settlement under a
+        // leaf cover; the two demands are checked natively from their fetched proofs.
+        const succinct = await readWithCovers(input, [{ first: 0, count: 2 }, { first: 4, count: 1 }], { verifier: drill.verifier, venue, reference });
+        assert.equal(succinct.proved, 5);
+        assert.deepEqual(summary(succinct.result), answer);
+        // The node and the settlement leaf replace their records' native checks: only the demands' proofs are fetched.
+        assert.deepEqual([succinct.used.answered, succinct.used.verified, succinct.used.fetched], [2, 2, 2], JSON.stringify(succinct.used));
+        assert.deepEqual(succinct.fetchedRecords, [2, 3]);
+        drill.succinct = succinct.used;
+      }
     });
     const canonicalIndex = venue.witnessedIndex();
     const publication = (kind, record) => encodePublication({ domain, backing, kind, record });
@@ -133,7 +145,7 @@ async function acceptance(mode) {
     drill.report({
       limits: ["the adopted configuration on reference venues only", "single backing", "no live broadcasts", "no persistence or adoption claim"],
       checks: drill.checks, proofs: drill.proofs, transactions: drill.transactions, ...(funding === undefined ? {} : { funding }),
-      maxPackageBytes: Math.max(...drill.packages), final });
+      maxPackageBytes: Math.max(...drill.packages), final, ...(drill.succinct === undefined ? {} : { succinctWithCovers: drill.succinct }) });
     completed = true;
   } finally {
     journal?.close();

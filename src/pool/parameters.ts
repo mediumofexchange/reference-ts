@@ -16,3 +16,15 @@ export const BN254_PARAMETERS = Object.freeze({
   g1: "50d2f4e9567be2b8e382cedfd078b96a3428a94597b7e88c4116e105d578ce77",
   g2: "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f",
 });
+
+/**
+ * The leading 2^21 points of the same transcript, in the same layout: what
+ * proving the trail check set's circuits reads (succinct-read §6), the largest
+ * of them under 2^21 rows. `BN254_PARAMETERS.g1` is its prefix, and `[x]_2` is
+ * the same. Only a party proving check proofs, or deriving their keys, loads
+ * it; verifying one reads `[1]_1` and `[x]_2` as any verification does.
+ */
+export const CHECK_SET_PARAMETERS = Object.freeze({
+  points: 2097152,
+  g1: "2bb84462a0bdad2f6e6dd6182c7779c30aac703115e28f32ca2cc3b57c140622",
+});
