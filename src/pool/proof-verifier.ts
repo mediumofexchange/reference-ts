@@ -22,7 +22,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
-import { BN254_PARAMETERS } from "./parameters.js";
+import { BN254_PARAMETERS, CHECK_SET_PARAMETERS } from "./parameters.js";
 import { copyArray, copyBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { fieldToHex, isField } from "./field.js";
 
@@ -57,9 +57,13 @@ export interface CircuitTable {
   readonly maxProofBytes: number;
 }
 
-export interface ProofVerifier {
+export interface ProofVerifier extends KeyedVerifier {
   /** Each circuit's identity, by artifact name, derived here from the bytecode the caller supplied. */
   readonly identities: Readonly<Record<string, CircuitIdentity>>;
+}
+
+/** A verifier over keys it holds, by kind. */
+export interface KeyedVerifier {
   /** False for a kind outside the table, a wrong count of canonical fields, malformed proof bytes or a proof that fails. */
   verify(kind: number, publicInputs: readonly bigint[], proof: Uint8Array): Promise<boolean>;
   /** How many verifications run at once, each on an instance of its own, off the caller's thread. */
@@ -148,11 +152,25 @@ async function load(points: Uint8Array, count: number, g2: Uint8Array, threads: 
  * backend's own API is outside what this check can stop.
  */
 export async function startBackend(parameters: ProvingParameters, options: BackendOptions = {}): Promise<Barretenberg> {
+  return start(parameters, BN254_PARAMETERS, options);
+}
+
+/**
+ * Start an instance from the leading `CHECK_SET_PARAMETERS.points` points
+ * instead, for a party that proves the trail check set's circuits or derives
+ * their keys (succinct-read §6); `[x]_2` is the same. Refused as
+ * `startBackend` refuses.
+ */
+export async function startCheckSetBackend(parameters: ProvingParameters, options: BackendOptions = {}): Promise<Barretenberg> {
+  return start(parameters, CHECK_SET_PARAMETERS, options);
+}
+
+async function start(parameters: ProvingParameters, size: { readonly points: number; readonly g1: string }, options: BackendOptions): Promise<Barretenberg> {
   pinnedBackend();
   if (parameters === null || typeof parameters !== "object") throw new ParameterError("G2", "the BN254 G2 parameters are not bytes");
   const g2 = checked(parameters.g2, "G2", G2_BYTES, BN254_PARAMETERS.g2);
-  const g1 = checked(parameters.g1, "G1", BN254_PARAMETERS.points * POINT_BYTES, BN254_PARAMETERS.g1);
-  const api = await load(g1, BN254_PARAMETERS.points, g2, options.threads);
+  const g1 = checked(parameters.g1, "G1", size.points * POINT_BYTES, size.g1);
+  const api = await load(g1, size.points, g2, options.threads);
   STARTED.set(api, Object.freeze({ generator: copyBytes(g1.subarray(0, POINT_BYTES)), g2 }));
   return api;
 }
@@ -234,11 +252,7 @@ export async function proofVerifier(
   options: VerifierOptions = {},
 ): Promise<ProofVerifier> {
   const owned = ownTable(table);
-  // Each replacement runs as the options are given now, not as the caller later changes them.
-  const { threads, instances = 1 } = options;
-  if (!Number.isSafeInteger(instances) || instances < 1 || instances > MAX_INSTANCES) {
-    throw new RangeError(`a verifier runs 1 to ${MAX_INSTANCES} instances`);
-  }
+  instanceCount(options);
   const texts = owned.circuits.map(({ name }) => {
     // A circuit's bytecode identity hashes the bytes the artifact's field
     // decodes to. The key is derived by the backend from its own decoding of
@@ -251,8 +265,7 @@ export async function proofVerifier(
     if (bytecode.toString("base64") !== text) throw new EncodingError(`${name} bytecode is not canonical base64`);
     return { text, bytecode };
   });
-  const loaded = STARTED.get(api);
-  if (loaded === undefined) throw new ParameterError("UNCHECKED", "the backend instance was not started from checked parameters");
+  const loaded = startedFrom(api);
   const keys = new Map<number, { readonly vk: Uint8Array; readonly publicInputs: number }>();
   const identities: Record<string, CircuitIdentity> = {};
   for (const [i, { kind, name, publicInputs }] of owned.circuits.entries()) {
@@ -261,6 +274,56 @@ export async function proofVerifier(
     keys.set(kind, Object.freeze({ vk, publicInputs }));
     identities[name] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk), kind });
   }
+  return Object.freeze({ ...lanesOver(loaded, keys, owned.maxProofBytes, options), identities: Object.freeze(identities) });
+}
+
+/** A key a verifier holds: the backend's key bytes for one kind and its public-input count. */
+export interface PinnedKey {
+  readonly kind: number;
+  readonly vk: Uint8Array;
+  readonly publicInputs: number;
+}
+
+/**
+ * A verifier over keys the caller pins rather than derives, such as a check set's (succinct-read §2 rule 2): it
+ * reads `[1]_1` and `[x]_2` from the caller's started instance and nothing else, so it needs no more points than any
+ * verification, and it verifies on instances of its own exactly as `proofVerifier` does.
+ */
+export function keyedVerifier(api: Barretenberg, pinned: readonly PinnedKey[], maxProofBytes: number, options: VerifierOptions = {}): KeyedVerifier {
+  const loaded = startedFrom(api);
+  instanceCount(options);
+  if (!Number.isSafeInteger(maxProofBytes) || maxProofBytes <= 0 || maxProofBytes % 32 !== 0) throw new EncodingError("invalid proof bound");
+  const keys = new Map<number, { readonly vk: Uint8Array; readonly publicInputs: number }>();
+  for (const key of pinned) {
+    const { kind, vk, publicInputs } = key ?? {};
+    if (!Number.isSafeInteger(kind) || kind < 0 || keys.has(kind) || !(vk instanceof Uint8Array) || vk.length === 0 ||
+        !Number.isSafeInteger(publicInputs) || publicInputs < 0) throw new EncodingError("invalid pinned key");
+    keys.set(kind, Object.freeze({ vk: copyBytes(vk), publicInputs }));
+  }
+  if (keys.size === 0) throw new EncodingError("invalid pinned key");
+  return Object.freeze(lanesOver(loaded, keys, maxProofBytes, options));
+}
+
+function startedFrom(api: Barretenberg): { readonly generator: Uint8Array; readonly g2: Uint8Array } {
+  const loaded = STARTED.get(api);
+  if (loaded === undefined) throw new ParameterError("UNCHECKED", "the backend instance was not started from checked parameters");
+  return loaded;
+}
+
+function instanceCount(options: VerifierOptions): number {
+  const { instances = 1 } = options;
+  if (!Number.isSafeInteger(instances) || instances < 1 || instances > MAX_INSTANCES) {
+    throw new RangeError(`a verifier runs 1 to ${MAX_INSTANCES} instances`);
+  }
+  return instances;
+}
+
+/** The verification lanes over `keys`, each on an instance of its own holding the loaded `[1]_1` and `[x]_2`. */
+function lanesOver(loaded: { readonly generator: Uint8Array; readonly g2: Uint8Array },
+  keys: ReadonlyMap<number, { readonly vk: Uint8Array; readonly publicInputs: number }>, maxProofBytes: number,
+  options: VerifierOptions): KeyedVerifier {
+  // Each replacement runs as the options are given now, not as the caller later changes them.
+  const { threads } = options, instances = instanceCount(options);
   // Each lane's own instance, undefined before its first verification and after each throw, its queue, how many
   // wait on it, and whether its close has run.
   interface Lane {
@@ -289,10 +352,9 @@ export async function proofVerifier(
       if (error instanceof EncodingError) return undefined;
       throw error;
     }
-    return own.length > 0 && own.length <= owned.maxProofBytes && own.length % 32 === 0 ? own : undefined;
+    return own.length > 0 && own.length <= maxProofBytes && own.length % 32 === 0 ? own : undefined;
   };
   return {
-    identities: Object.freeze(identities),
     async verify(kind, publicInputs, proof) {
       // A destroyed instance never settles a call, so a closed verifier refuses instead.
       if (closed) throw new Error("the proof verifier is closed");

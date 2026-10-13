@@ -46,7 +46,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/pool/v3/programs.json','dist/pool/v3/programs.json')\"",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"for (const f of ['programs.json','check-set.json','check-set-programs.json']) require('node:fs').copyFileSync('src/pool/v3/'+f,'dist/pool/v3/'+f)\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -60,6 +60,7 @@
     "check:pool:v3-recovery": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/recovery-store-check.mjs",
     "check:pool:v3-history": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/history-store-check.mjs",
     "check:pool:v3-store": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/store-check.mjs",
+    "check:pool:v3-check-set": "npm run build && node scripts/pool/v3/check-set-check.mjs",
     "check:pool:v3-commands": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/command-drill.mjs",
     "check:pool:local-replay": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/local-check.mjs",
     "check:pool:ergo-replay": "npm run build && node scripts/pool/prepare-crs.mjs && node scripts/pool/v3/local-check.mjs --ergo",

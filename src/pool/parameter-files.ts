@@ -10,7 +10,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BN254_PARAMETERS } from "./parameters.js";
+import { BN254_PARAMETERS, CHECK_SET_PARAMETERS } from "./parameters.js";
 
 const hosts = ["https://crs.aztec-cdn.foundation", "https://crs.aztec-labs.com"];
 // The last source: the transcript itself, where the CDN hosts are unreachable. Its points start after a 28-byte
@@ -150,3 +150,19 @@ export async function readParameters(directory: string) {
   return { g1, g2, source };
 }
 
+
+/** The check set's G1 points (succinct-read §6): a longer prefix of the same file, so one cached copy serves both. */
+export const CHECK_SET_G1_FILE: ParameterFile = Object.freeze({ ...PARAMETER_FILES[0]!, bytes: CHECK_SET_PARAMETERS.points * 64,
+  sha256: CHECK_SET_PARAMETERS.g1 });
+
+/** Cache the check set's parameters in `directory`: its G1 prefix and `[x]_2`, fetching what is missing. */
+export async function prepareCheckSetParameters(directory: string, options: FetchOptions = {}): Promise<void> {
+  for (const parameter of [CHECK_SET_G1_FILE, PARAMETER_FILES[1]!]) await ensureParameter(directory, parameter, options);
+}
+
+/** The check set's parameter bytes as `startCheckSetBackend` takes them, unjudged here. */
+export async function readCheckSetParameters(directory: string) {
+  const [g1, g2] = await Promise.all([CHECK_SET_G1_FILE, PARAMETER_FILES[1]!].map(p => leading(join(directory, p.name), p.bytes)));
+  if (g1 === undefined || g2 === undefined) throw new Error(`No check-set parameters in ${directory}`);
+  return { g1, g2 };
+}
