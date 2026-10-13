@@ -1,6 +1,6 @@
 # Venue recheck probe (Next 12)
 
-Disposable, read-only tooling for the [venue recheck](../../../docs/VENUE_ALTERNATIVES.md#the-venue-recheck); it retires
+Disposable, read-only tooling for the [venue recheck](../../../docs/VENUE_ALTERNATIVES.md#the-venue-recheck-slice-29); it retires
 once the results are recorded there. Builds go to `scratch/recheck-probe/`, fetched blocks to `scratch/recheck/`.
 
 - `block.mjs`: slice 16's own Bitcoin parser and verifier, now counting the SHA-256 compressions of txids, wtxids
