@@ -209,8 +209,8 @@ verifies independently only through a reader its holder runs. Its own first
 sync would read about 20 GB under complete replay. A succinct history
 relation, within one prover's day at the design point's mean
 ([slice 27](POOL_DEPLOYMENT_PROBES.md#the-trails-succinct-relation-slice-27)), would still leave about 4.4 GB of venue ranges and restoring scans,
-and phone rates are unmeasured. A succinct proof of exhaustion (its hashing and scan
-[probed](VENUE_ALTERNATIVES.md#the-attribution-scans-cost-slice-22)) or an Ergo state-root log would make the venue ranges follow the holder's own subjects
+and phone rates are unmeasured. A succinct proof of exhaustion ([probed complete](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32):
+one 4-vCPU prover keeps up with an ordinary Ergo day about three times over) would make the venue ranges follow the holder's own subjects
 ([comparison](VENUE_ALTERNATIVES.md#absence-for-one-subject-slice-20)). The phone holder path is the next target
 after the release ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction)):
 the reader's own replay over proof-free statement bytes, an aggregation proof of the trail's statement proofs in place
