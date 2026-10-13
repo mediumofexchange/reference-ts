@@ -1146,7 +1146,7 @@ cost estimated; no leaf past 2^22 proved.
 
 ## The trail's proof aggregation (slice 33)
 
-Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/d5362c7/scripts/pool/aggregation-probe);
+Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/4cd16ee/scripts/pool/aggregation-probe);
 [decision](../decisions/2026-10.md#2026-10-13--aggregating-the-trails-statement-proofs-keeps-up-with-the-design-points-mean-on-one-4-vcpu-prover-and-agrees-with-the-host-on-every-hostile-proof-slice-33-next-12)).
 The question ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction),
 Next 12 step 2): instead of [a relation over the whole verdict](#the-trails-succinct-relation-slice-27), a phone runs
@@ -1255,8 +1255,8 @@ and 14.7 GB. The unaggregated tail, venue publications and a small scope's daily
 and complete replay remains the fallback when no aggregator serves.
 
 **Limits.** One host and one run of each case; the tree has two levels over four kinds (settle and request leaves
-proved alone); bb's in-circuit range and on-curve constraints not read from source; the in-circuit verifier's agreement with the host is shown on these 18 cases, not proved; phone rates
-are a desktop proxy; the replay's venue answers are in-memory fixtures; no aggregator, frame or reader integration
+proved alone); bb's in-circuit range and on-curve constraints not read from source; the in-circuit verifier's
+agreement with the host is shown on these 14 proofs on pinned leaves, not proved; phone rates are a desktop proxy; the replay's venue answers are in-memory fixtures; no aggregator, frame or reader integration
 exists (step 4).
 
 ## Invalid-checkpoint evidence
