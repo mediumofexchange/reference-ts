@@ -78,7 +78,7 @@ import { ownVerifier, readFrontier, readPackage } from "./package-reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
-import { FileInUse, KeptStateMismatch, removeKeptFile, ReplayStore } from "./replay-store.js";
+import { busy, FileInUse, KeptStateMismatch, removeKeptFile, ReplayStore } from "./replay-store.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
 import type { RootTerms } from "./terms.js";
@@ -406,7 +406,7 @@ export class V3OperatorJournal {
       // Its owner fence holds only over one name of the file.
       requireThat(!otherNames(path), "STORAGE", "the journal's file has another name (a hard link), which SQLite reads as another database");
       try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+        if (busy(error)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
         throw error;
       }
       this.db.exec(`CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id=1),
@@ -577,7 +577,7 @@ export class V3OperatorJournal {
     requireThat(!this.beside, "STORAGE", "a handle beside the owner signs and keeps nothing");
     try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
       // Another handle holds the database past the busy timeout: nothing was read or written here.
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+      if (busy(error)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
       throw error;
     }
     try {
@@ -688,7 +688,7 @@ export class V3OperatorJournal {
       const writer = new DatabaseSync(this.path, { timeout: 5000, readBigInts: true });
       let lineage: ReturnType<typeof addLineage>;
       try { lineage = addLineage(writer); } catch (error) {
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+        if (busy(error)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
         throw error;
       } finally { writer.close(); }
       try { this.reads().remark(lineage.identity, lineage.mark); } catch (error) {

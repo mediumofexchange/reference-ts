@@ -41,7 +41,7 @@ import type { SegmentEntry } from "./headers.js";
 import { decodeEvidenceDirectory, PackageLimitError, type PackageSink,
   type PayloadSink } from "./package.js";
 import { EvidenceRefusal } from "./refusals.js";
-import { FileInUse } from "./replay-store.js";
+import { busy, FileInUse } from "./replay-store.js";
 import type { TrailSink } from "./trail.js";
 
 /** What one served package part holds before it is sent: a bound on the memory serving takes, not on what is served. */
@@ -313,7 +313,7 @@ export class EvidenceStore {
         }
       } catch (error) {
         this.#db.close();
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("evidence file");
+        if (busy(error)) throw new FileInUse("evidence file");
         throw error;
       }
     }

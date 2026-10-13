@@ -448,15 +448,19 @@ describe("replay storage", () => {
       // A crash right after such a commit and its digest reopens it as well.
       store.append(outside, append([next()], [next()]));
       const lying = [path, `${path}-wal`, digest].map(file => [file, existsSync(file) ? readFileSync(file) : undefined] as const);
-      // A replacement of the digest stopped before its rename leaves its partial file, removed at the next opening.
-      const partial = `${digest}.4242.0a0b0c0d.partial`;
+      // A replacement of the digest stopped before its rename leaves its partial file: never read, overwritten by the next.
+      const partial = `${digest}.partial`;
       writeFileSync(partial, "torn");
       store.close();
       for (const [file, bytes] of lying) if (bytes === undefined) rmSync(file, { force: true }); else writeFileSync(file, bytes);
       rmSync(`${path}-shm`, { force: true });
+      writeFileSync(partial, "torn");
       store = new ReplayStore(path, { digest });
       expect(store.tip(outside).position).toBe(2n);
+      store.append(outside, append([next()], [next()]));
       expect(existsSync(partial)).toBe(false);
+      store.close();
+      expect(vouched()).toBe(true);
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
@@ -472,6 +476,7 @@ describe("replay storage", () => {
       // stands, unnamed.
       rmSync(digest); mkdirSync(digest);
       expect(() => store.open(fieldToBytes(2n), new Uint8Array(32).fill(2), undefined, genesis)).toThrow(expect.objectContaining({ syscall: "rename" }));
+      expect(existsSync(`${digest}.partial`)).toBe(false);
       rmSync(digest, { recursive: true }); writeFileSync(digest, recorded);
       // The failure has passed by the close, which records the digest before SQLite moves the log in.
       store.close();

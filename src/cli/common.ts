@@ -15,6 +15,7 @@ import { DatabaseSync } from "node:sqlite";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import type { Construction } from "../pool/v3/construction.js";
 import type { Commitment } from "../venue-records.js";
+import { busy } from "../pool/v3/replay-store.js";
 import { declared, isConstructionName, type ConstructionName } from "./construction.js";
 
 export const ROLES = Object.freeze(["wallet", "operator", "reader", "relay"] as const);
@@ -184,7 +185,7 @@ function requirePrivate(path: string): void {
 function lockHeld(path: string): boolean {
   const db = new DatabaseSync(join(path, "lock.db"), { timeout: 0 });
   try { db.exec("BEGIN EXCLUSIVE; ROLLBACK"); return false; } catch (error) {
-    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) return true;
+    if (busy(error)) return true;
     throw error;
   } finally { db.close(); }
 }
@@ -196,7 +197,7 @@ function lock(path: string): void {
     db.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE");
   } catch (error) {
     db.close();
-    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) {
+    if (busy(error)) {
       throw new CommandError("BUSY", "another moe command holds this directory");
     }
     throw error;

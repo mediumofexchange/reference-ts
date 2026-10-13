@@ -22,10 +22,10 @@
 //   runs there: the journal's reads use a store of their own, and what a new
 //   segment imports from a read is copied in (`copyFrontier`).
 import { sha256 } from "@noble/hashes/sha2.js";
-import { createHash, hash, randomBytes } from "node:crypto";
-import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { createHash, hash } from "node:crypto";
+import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { basename, dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileIdentity } from "../../file-identity.js";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
@@ -309,6 +309,9 @@ export class FileInUse extends Error {
   readonly file: string;
   constructor(file: string) { super(`the ${file} is in use`); this.name = "FileInUse"; this.file = file; }
 }
+/** Whether SQLite refused because another connection holds the database's lock: every store maps this alone to its
+ * in-use refusal (`FileInUse`, `BUSY`), never to damage it would discard. */
+export const busy = (error: unknown): boolean => error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message);
 const mapJson = (map: ReadonlyMap<string, bigint>): string => JSON.stringify([...map].map(([k, v]) => [k, v.toString()]));
 const jsonMap = (text: unknown): Map<string, bigint> => new Map((JSON.parse(text as string) as [string, string][]).map(([k, v]) => [k, BigInt(v)]));
 
@@ -479,23 +482,19 @@ export function keptFileDigest(path: string): string | undefined {
  * storage only the reader writes; a directory copied whole carries both files, and the copy's other identity leaves
  * its kept state discarded and replayed. */
 const vouched = (path: string, pages: PageDigest): string => `${pages.root()}\n${fileIdentity(path)}`;
-/** Replace a small file durably: a crash leaves the old contents or the new, never a torn one. */
+/** Replace a small file durably through one partial file beside it (`<path>.partial`): a crash leaves the old contents
+ * or the new, never a torn one. Only the holder of the kept file's lock writes it (`lockKept`), one replacement at a
+ * time, so one name serves: a partial a crash left is never read and the next replacement overwrites it (Next 4 (bo)). */
 function replaceFile(path: string, text: string): void {
-  const partial = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.partial`, fd = openSync(partial, "w");
-  try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
-  renameSync(partial, path);
-}
-/** The partial files `replaceFile` leaves beside `path` where it stopped before its rename (a crash): only a store that
- * holds the kept file's lock and none of whose stores is open removes them, since no other writes one then. */
-function partialDigests(path: string): string[] {
-  const directory = dirname(path), name = basename(path);
-  let entries: string[];
-  try { entries = readdirSync(directory); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+  const partial = `${path}.partial`;
+  try {
+    const fd = openSync(partial, "w");
+    try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
+    renameSync(partial, path);
+  } catch (error) {
+    try { rmSync(partial, { force: true }); } catch { /* never read; the next replacement overwrites it */ }
     throw error;
   }
-  return entries.filter(entry => entry.startsWith(`${name}.`) && /^\.\d+\.[0-9a-f]{8}\.partial$/.test(entry.slice(name.length)))
-    .map(entry => join(directory, entry));
 }
 /** Remove a kept file's files, in order. One another store still holds cannot be removed (Windows): the caller's error. */
 function removeFiles(files: readonly string[]): void {
@@ -531,7 +530,7 @@ function lockKept(path: string): KeptLock {
     const lock = new DatabaseSync(key, { timeout: 0 });
     try { lock.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE"); } catch (error) {
       lock.close();
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
     entry = { lock, count: 0, pages: undefined, unvouched: false };
@@ -565,7 +564,7 @@ export function removeKeptFile(path: string, digest: string, also: readonly stri
   }
   try {
     removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, digest, ...also]);
-    for (const partial of partialDigests(digest)) { try { rmSync(partial, { force: true }); } catch { /* never read; a later removal takes it */ } }
+    try { rmSync(`${digest}.partial`, { force: true }); } catch { /* never read; a later removal takes it */ }
   } catch (error) {
     if (error instanceof FileInUse) return false;
     throw error;
@@ -610,7 +609,7 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.
     if (error instanceof FileInUse) throw error;
-    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+    if (busy(error)) throw new FileInUse("kept replay file");
     // Nor is a failure of the system the file lies on (no descriptor left, an I/O or permission error): the file may
     // be sound, and discarding it would replay the whole history once the failure passes. One that persists (a failing
     // disk) stays visible at each opening; removing the file by hand replays the history, as a discard would.
@@ -682,9 +681,6 @@ export class ReplayStore {
         // A file another store of this process holds was judged when that store opened it, and is shared as it stands.
         if (this.#lock.first) {
           try {
-            // A replacement of the digest stopped before its rename left its partial file (Next 4 (bo)): no store writes one now.
-            // Best effort: one that cannot be removed now (a scanner holding it) is never read, and goes at a later opening.
-            for (const partial of partialDigests(kept.digest)) { try { rmSync(partial, { force: true }); } catch { /* left */ } }
             held = keptFileHolds(path, kept.digest);
             // The log goes before the file: a log left beside a new file would be read into it.
             if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
@@ -859,7 +855,7 @@ export class ReplayStore {
       throw error;
     } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-        if (!(error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message))) throw error;
+        if (!busy(error)) throw error;
         // Writes still in flight go into a transaction closeWalk rolls back, never into the file.
         this.#lost = true; this.#db.exec("BEGIN");
       }
@@ -894,7 +890,7 @@ export class ReplayStore {
    * had just rejected (§14). A file another store is writing refuses them as in use before they commit. */
   #forget(body: () => void): void {
     try { this.#atomic(body); } catch (error) {
-      if (this.#kept !== undefined && error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (this.#kept !== undefined && busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
   }
@@ -1390,7 +1386,7 @@ export class ReplayStore {
     this.#lost = false; this.#keptMark = undefined; this.#keptAt = performance.now();
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
     try {
@@ -1469,7 +1465,7 @@ export class ReplayStore {
   remark(evidence: Uint8Array, mark: Uint8Array): void {
     if (this.#db.isTransaction) throw new Error("a walk or transaction is open on this store");
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
     try { this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE substr(evidence, 1, ?) = ?").run(mark, evidence.length, evidence); this.#db.exec("COMMIT"); } catch (error) {
