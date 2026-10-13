@@ -69,6 +69,12 @@ describe('moe command arguments', () => {
       expect(() => requireWritable(join(dir, 'frame', 'handoff'))).toThrow(expect.objectContaining({ code: 'STORAGE' }));
       requireWritable(join(dir, 'handoff'));
       expect(readdirSync(dir)).toEqual(['frame']);
+      // A rerun's output past the default bound is still the same bytes; a longer file holds other bytes.
+      const large = new Uint8Array(17 * 1024 * 1024).fill(3), out = join(dir, 'handoff.out');
+      writeSame(out, large); writeSame(out, large);
+      expect(() => writeSame(out, large.subarray(1))).toThrow(expect.objectContaining({ code: 'EXISTS' }));
+      // The bound is judged on the bytes read, not the size a file states: a device states none.
+      if (process.platform !== 'win32') expect(() => readRequired('/dev/zero', 'zero', 1024)).toThrow(expect.objectContaining({ code: 'INVALID' }));
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
   it('names an init that did not finish INCOMPLETE, and anything else at its path EXISTS (audit 32)', () => {
@@ -76,6 +82,11 @@ describe('moe command arguments', () => {
     try {
       requireNew(join(dir, 'fresh'));
       mkdirSync(join(dir, 'begun')); writeFileSync(join(dir, 'begun', 'lock.db'), '');
+      expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'INCOMPLETE' }));
+      // An init still running holds the lock: removing its directory would pull it from under that process.
+      const running = new DatabaseSync(join(dir, 'begun', 'lock.db'), { timeout: 0 });
+      running.exec('PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE');
+      try { expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'BUSY' })); } finally { running.close(); }
       expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'INCOMPLETE' }));
       writeFileSync(join(dir, 'begun', 'config.json'), '{}');
       expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'EXISTS' }));

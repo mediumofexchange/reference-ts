@@ -9,7 +9,7 @@
 // dies, and refuses `BUSY` before opening anything else. On Windows modes are
 // not enforced and nothing checks ACLs (a stated limit).
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
@@ -180,6 +180,15 @@ function requirePrivate(path: string): void {
   }
 }
 
+/** Whether another process holds the directory's lock now: it is taken and given back at once where it is free. */
+function lockHeld(path: string): boolean {
+  const db = new DatabaseSync(join(path, "lock.db"), { timeout: 0 });
+  try { db.exec("BEGIN EXCLUSIVE; ROLLBACK"); return false; } catch (error) {
+    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) return true;
+    throw error;
+  } finally { db.close(); }
+}
+
 /** The exclusive lock on `lock.db`, held until the process exits. */
 function lock(path: string): void {
   const db = new DatabaseSync(join(path, "lock.db"), { timeout: 0 });
@@ -219,16 +228,18 @@ export function openDirectory(dir: string, role: Role | "any", options: { readon
   return directory(path, config);
 }
 
-/** Refuse an existing `--dir` an init would create: `INCOMPLETE` where it is an init that did not finish (its lock taken,
- * its config.json, written last, absent), whose keys and seed no command has shown or used, so removing it and running
- * init again loses nothing; `EXISTS` for anything else there. */
+/** Refuse an existing `--dir` an init would create: `INCOMPLETE` where it is an init that did not finish (its lock taken
+ * and given back, its config.json, written last, absent), whose keys and seed no command has shown or used, so removing
+ * it and running init again loses nothing; `BUSY` where that init still runs; `EXISTS` for anything else there. */
 export function requireNew(dir: string): void {
   const path = absolute(dir);
+  const exists = new CommandError("EXISTS", `${path} already exists; init creates a new directory`);
   if (!existsSync(path)) return;
-  if (existsSync(join(path, "lock.db")) && !existsSync(join(path, CONFIG))) {
-    throw new CommandError("INCOMPLETE", `${path} holds an init that did not finish (no config.json): remove it and run the command again`);
-  }
-  throw new CommandError("EXISTS", `${path} already exists; init creates a new directory`);
+  if (existsSync(join(path, CONFIG)) || !existsSync(join(path, "lock.db"))) throw exists;
+  // Without config.json, a lock still held is an init still running; one given back may have just written it.
+  if (lockHeld(path)) throw new CommandError("BUSY", "another moe command holds this directory: an init still running");
+  if (existsSync(join(path, CONFIG))) throw exists;
+  throw new CommandError("INCOMPLETE", `${path} holds an init that did not finish (no config.json): remove it and run the command again`);
 }
 
 /** Create a new directory for `role` (owner-only), take its lock and run `fill`; the configuration is written last. */
@@ -305,9 +316,12 @@ export function requireWritable(path: string): void {
 
 /** Write a new file, or accept one already holding exactly `data` (a rerun's output); other bytes there conflict. */
 export function writeSame(path: string, data: string | Uint8Array): void {
-  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data, held = readOptional(path);
+  // Read only as far as `data` reaches: a longer file holds other bytes, whatever its length.
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data, held = readUpTo(path, bytes.length);
   if (held === undefined) { writeExclusive(path, bytes); return; }
-  if (held.length !== bytes.length || held.some((byte, i) => byte !== bytes[i])) throw new CommandError("EXISTS", `${path} already exists and holds other bytes`);
+  if (held.more || held.bytes.length !== bytes.length || held.bytes.some((byte, i) => byte !== bytes[i])) {
+    throw new CommandError("EXISTS", `${path} already exists and holds other bytes`);
+  }
 }
 
 /** Replace a file atomically (a synced temporary file renamed over it). */
@@ -334,15 +348,28 @@ function unreadable(path: string, error: unknown): unknown {
 
 /** A file's bytes, or undefined where it does not exist; one past `limit` bytes is refused before it is read. */
 export function readOptional(path: string, limit = READ_LIMIT): Uint8Array | undefined {
+  const read = readUpTo(path, limit);
+  if (read?.more === true) throw new CommandError("INVALID", `${path} holds more than the ${limit} bytes it may`);
+  return read?.bytes;
+}
+/** A file's first `limit` bytes and whether more follow, or undefined where it does not exist. Never more than `limit` + 1
+ * bytes are read, whatever the file states of its size (a FIFO or a device states none, a file can grow meanwhile). */
+function readUpTo(path: string, limit: number): { readonly bytes: Uint8Array; readonly more: boolean } | undefined {
   let fd: number;
   try { fd = openSync(path, "r"); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw unreadable(path, error);
   }
   try {
-    if (fstatSync(fd).size > limit) throw new CommandError("INVALID", `${path} holds more than the ${limit} bytes it may`);
-    return new Uint8Array(readFileSync(fd));
-  } catch (error) { throw error instanceof CommandError ? error : unreadable(path, error); } finally { closeSync(fd); }
+    // The stated size only sizes the first allocation.
+    const stated = fstatSync(fd).size;
+    let buffer = Buffer.alloc(Math.min(limit + 1, stated > 0 ? stated + 1 : 65536)), total = 0;
+    for (let n = 1; n > 0 && total <= limit; total += n) {
+      if (total === buffer.length) { const grown = Buffer.alloc(Math.min(limit + 1, 2 * buffer.length)); buffer.copy(grown, 0, 0, total); buffer = grown; }
+      n = readSync(fd, buffer, total, buffer.length - total, null);
+    }
+    return { bytes: new Uint8Array(buffer.buffer, buffer.byteOffset, Math.min(total, limit)), more: total > limit };
+  } catch (error) { throw unreadable(path, error); } finally { closeSync(fd); }
 }
 /** A file's bytes; a missing one is the command's refusal. */
 export function readRequired(path: string, what: string, limit = READ_LIMIT): Uint8Array {
@@ -361,15 +388,12 @@ export function readJson(path: string, what: string): unknown {
 /** A 32-byte secret kept in a file of its own, written exclusively by `init`: a copy the caller wipes, and the buffer
  * it was read into (which can share a pooled allocation) wiped here, so wiping the copy leaves no other. */
 export function readSecret(path: string, what: string): Uint8Array {
-  let fd: number, read: Buffer | undefined;
-  try { fd = openSync(path, "r"); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CommandError("ABSENT", `no ${what} at ${path}`);
-    throw unreadable(path, error);
-  }
+  const read = readUpTo(path, 32);
   try {
-    if (fstatSync(fd).size !== 32 || (read = readFileSync(fd)).length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
-    return Uint8Array.from(read);
-  } catch (error) { throw error instanceof CommandError ? error : unreadable(path, error); } finally { read?.fill(0); closeSync(fd); }
+    if (read === undefined) throw new CommandError("ABSENT", `no ${what} at ${path}`);
+    if (read.more || read.bytes.length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
+    return Uint8Array.from(read.bytes);
+  } finally { read?.bytes.fill(0); }
 }
 
 /** 32 fresh random bytes for a key or token, in an array of their own (never a pooled allocation a wipe would miss). */
