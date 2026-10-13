@@ -27,21 +27,28 @@ import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, READ_FLAGS,
+import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, initialized, integer, UsageError, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, READ_FLAGS,
   readJson, readOptional, readRequired, required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { directoryVerifier } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { closeListener, isListenerUrl, listenerFile, listenLoopback, SERVE_FLAGS, serveFlags, untilStopped } from "./serve.js";
-import { keepContext, openView, parseVenue, requireVenue, venueText, type View } from "./venue.js";
+import { keepContext, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
 /** `init` shared by every role: parameters (copied from `--parameters` or fetched) where the directory verifies proofs,
  * then the venue when given. A role that serves one construction (`construction`) takes `--construction <name>`,
  * pool-v3's by default, and keeps it in config.json (M14g4); proving parameters are kept only for one with proofs. A
- * role that verifies nothing (`verifies: false`, the relay) keeps none and takes no `--parameters`. */
+ * role that verifies nothing (`verifies: false`, the relay) keeps none and takes no `--parameters`.
+ *
+ * A rerun over a directory whose init finished is the exact retry after a lost reply (Next 4 (br)): where the directory
+ * is this role's and holds the configuration and venue this init would write, it prints what the init printed, with
+ * `replay: true`, from what the directory keeps (`replay`, which refuses `EXISTS` where the role's own arguments
+ * differ; a role that shows nothing has none); anything else there is `EXISTS`. A venue made after an init without
+ * `--venue` (`venue create`) is the directory's own, so that init still replays. */
 export async function initRole(argv: readonly string[], role: Role, options: { readonly venue: "required" | "optional" | ((args: Arguments) => "required" | "optional");
-  readonly budget?: boolean; readonly construction?: boolean; readonly verifies?: false; readonly flags?: FlagSpec;
-  readonly fill?: (directory: Directory, args: Arguments) => Promise<object> }): Promise<void> {
+  readonly budget?: boolean; readonly construction?: boolean; readonly verifies?: false; readonly flags?: FlagSpec } & ({ readonly fill?: undefined } | {
+  readonly fill: (directory: Directory, args: Arguments) => Promise<object>;
+  readonly replay: (directory: Directory, args: Arguments) => Promise<object> | object })): Promise<void> {
   const args = parseArguments(argv, { dir: "value", node: "values", ...(options.verifies === false ? {} : { parameters: "value" }), venue: "value",
     ...(options.budget ? { budget: "value" } : {}), ...(options.construction ? { construction: "value" } : {}), ...options.flags }, 0);
   // Refused before the directory exists, as a bad venue file is.
@@ -56,6 +63,20 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
   const budget = options.budget ? integer(required(args, "budget"), "--budget", 0n, (1n << 63n) - 1n) : undefined;
   // The venue file is read before the directory exists, so a bad one leaves nothing behind.
   const venue = venueFile === undefined ? undefined : parseVenue(readJson(venueFile, "the venue file"));
+  const out = (path: string, shown: object) =>
+    ({ status: "created", role, directory: path, ...construction, ...(venue === undefined ? {} : { venue: venue.id }), ...shown });
+  if (initialized(required(args, "dir"))) {
+    const directory = openDirectory(required(args, "dir"), role), own = ownVenue(directory), config = directory.config;
+    const differs = [
+      ...(config.nodes.length === nodes.length && config.nodes.every((node, i) => node === nodes[i]) ? [] : ["--node"]),
+      ...(config.spendBudgetNanoErg === budget?.toString() ? [] : ["--budget"]),
+      ...(!options.construction || nameOf(directory.construction) === named ? [] : ["--construction"]),
+      ...(venue === undefined || (own !== undefined && venueText(own.profile, own.anchorHeight) === venueText(venue.profile, venue.anchorHeight)) ? [] : ["--venue"]),
+    ];
+    if (differs.length > 0) throw new CommandError("EXISTS", `${directory.path} was made by another init (${differs.join(", ")}); init creates a new directory`);
+    print({ ...out(directory.path, options.fill === undefined ? {} : await options.replay(directory, args)), replay: true });
+    return;
+  }
   let shown: object = {};
   const directory = await initDirectory(required(args, "dir"), { role, nodes, ...(budget === undefined ? {} : { spendBudgetNanoErg: budget.toString() }),
     ...construction }, async opened => {
@@ -75,7 +96,7 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
     }
     shown = await options.fill?.(opened, args) ?? {};
   });
-  print({ status: "created", role, directory: directory.path, ...construction, ...(venue === undefined ? {} : { venue: venue.id }), ...shown });
+  print(out(directory.path, shown));
 }
 
 /** The construction `--construction` names at init (pool-v3's by default), refusing an unknown name and `--parameters`
@@ -150,19 +171,23 @@ function replicaUrls(directory: Directory, operator: Uint8Array): string[] {
 }
 
 /** `replica add <backing> <url>`: keep a replica of the operator the terms name, after those added before. Replicas are
- * read where the operator's service refuses or does not answer. Adding a URL kept already changes nothing. */
+ * read where the operator's service refuses or does not answer. `replica remove <backing> <url>`: read that replica no
+ * more (Next 4 (bs)). URLs are one where their clients' are (`new URL(url).href`), and adding a URL kept already, or
+ * removing one not kept, changes nothing, so each is its own exact retry. */
 export function replicaCommand(argv: readonly string[], role: Role): void {
   const [verb, ...rest] = argv;
-  if (verb !== "add") throw new UsageError("replica add");
+  if (verb !== "add" && verb !== "remove") throw new UsageError("replica add|remove");
   const args = parseArguments(rest, { dir: "value" }, 2);
   const directory = openDirectory(required(args, "dir"), role), venue = requireVenue(directory);
   const kept = keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue), url = parseReplicaUrl(args.positional[1]!);
-  const urls = replicaUrls(directory, kept.terms.operator);
-  if (!urls.includes(url)) {
+  const urls = replicaUrls(directory, kept.terms.operator), file = directory.file(`replicas/${hex(kept.terms.operator)}.json`);
+  const others = urls.filter(held => new URL(held).href !== new URL(url).href);
+  const replicas = verb === "add" && others.length === urls.length ? [...urls, url] : verb === "add" ? urls : others;
+  if (replicas.length !== urls.length) {
     mkdirSync(directory.file("replicas"), { recursive: true, mode: 0o700 });
-    writeReplace(directory.file(`replicas/${hex(kept.terms.operator)}.json`), `${JSON.stringify({ urls: [...urls, url] }, null, 2)}\n`);
+    writeReplace(file, `${JSON.stringify({ urls: replicas }, null, 2)}\n`);
   }
-  print({ status: "kept", operator: kept.terms.operator, replicas: [...new Set([...urls, url])] });
+  print({ status: verb === "add" ? "kept" : "removed", operator: kept.terms.operator, replicas });
 }
 
 /** A replica passed over, and why. */

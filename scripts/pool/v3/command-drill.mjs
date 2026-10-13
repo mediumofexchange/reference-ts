@@ -582,8 +582,8 @@ try {
     assert.deepEqual(await ok(wallet("handoff", HD, "--key", key, "--out", out)), frozen, "a rerun reuses the key and prints the same handoff");
     await refused(wallet("sync", HD, backing2), "FENCED");
     const restoreArgs = ["wallet", "restore", "--dir", H3, "--venue", join(OP, "venue.json"), ...common, "--key", key, "--backup", out, "--digest", frozen.digest];
-    await ok(restoreArgs);
-    assert.deepEqual((await ok(restoreArgs)).status, "restored");
+    const restored = await ok(restoreArgs);
+    assert.deepEqual(await ok(restoreArgs), { ...restored, replay: true });
     await refused([...restoreArgs.slice(0, -1), "0".repeat(64)], "EXISTS");
     // The handoff carries the wallet database; the public terms and service file are kept again.
     await ok(wallet("terms add", H3, backing2, "--terms", join(BK, "terms", backing2), "--signature", join(BK, "terms", `${backing2}.sig`), ...SYN));
@@ -739,7 +739,9 @@ try {
     await refused(["operator", "serve", "--dir", RD, "--interval", "2"], "ROLE");
     const partial = join(scratch, "partial"); mkdirSync(partial, { mode: 0o700 });
     await refused(["reader", "supply", "--dir", partial, backing], "INCOMPLETE");
-    await refused(["reader", "init", "--dir", RD, "--venue", join(OP, "venue.json"), ...common], "EXISTS");
+    // Its init rerun replays; another configuration there is refused (Next 4 (br)).
+    assert.equal((await ok(["reader", "init", "--dir", RD, "--venue", join(OP, "venue.json"), ...common])).replay, true);
+    await refused(["reader", "init", "--dir", RD, "--venue", join(OP, "venue.json"), "--node", `${NODE_URL}/other`, "--parameters", PARAMETER_DIRECTORY], "EXISTS");
     const usage = await moe(["reader", "supply", ...reader]);
     assert(usage.status === 2 && usage.stderr.includes("expected 1 argument, got 0"), usage.stderr);
   });

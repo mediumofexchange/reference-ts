@@ -97,6 +97,9 @@ async function init(argv: readonly string[]): Promise<void> {
     const shown = { operator: ed25519.getPublicKey(secret), fundingTree: fundingTree(funding) };
     secret.fill(0); funding.fill(0);
     return shown;
+  }, replay: directory => {
+    const secret = readSecret(directory.file("operator.key"), "operator.key"), funding = readSecret(directory.file("funding.key"), "funding.key");
+    try { return { operator: ed25519.getPublicKey(secret), fundingTree: fundingTree(funding) }; } finally { secret.fill(0); funding.fill(0); }
   } });
 }
 
