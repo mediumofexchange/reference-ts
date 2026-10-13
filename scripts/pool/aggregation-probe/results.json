@@ -1,0 +1,185 @@
+{
+ "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 vCPU",
+ "leaf": {
+  "gates": {
+   "issue": 1832538,
+   "spend": 1832858,
+   "burn": 1832858,
+   "demand": 1832865,
+   "settle": 1832945,
+   "request": 1832291
+  },
+  "rows": 2097152,
+  "proveS": {
+   "n": 10,
+   "median": 33.92,
+   "min": 32.43,
+   "max": 34.94
+  }
+ },
+ "perStatementS": 59.52,
+ "mean": {
+  "statements": 900,
+  "hours": 14.88,
+  "keepsUp": 1.61,
+  "machinesForTheDay": 1
+ },
+ "peak": {
+  "statements": 10000,
+  "hours": 165.33,
+  "keepsUp": 0.15,
+  "machinesForTheDay": 7,
+  "spineMinutes": 6.54
+ },
+ "hostile": {
+  "genuine-spend": {
+   "leaf": "spend",
+   "host": true,
+   "leafAccepts": true,
+   "agree": true
+  },
+  "genuine-burn": {
+   "leaf": "burn",
+   "host": true,
+   "leafAccepts": true,
+   "agree": true
+  },
+  "public-input-changed": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "scalar-changed": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "pairing-part-only: KZG W replaced by the generator": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "pairing-point object set to (G, 2G)": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "pairing-point object: P0 = G, P1 at infinity": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "scalar word + p (same value mod p)": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "commitment limb split non-canonically (same point)": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "commitment off the curve (x low limb + 1)": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "commitment at infinity (KZG W all zero)": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "spend proof presented as a burn (keys swapped)": {
+   "leaf": "burn",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "burn proof presented as a spend (keys swapped)": {
+   "leaf": "spend",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  },
+  "arbitrary key: burn proof under burn key, leaf taking its key as a witness": {
+   "leaf": "spend (free)",
+   "host": false,
+   "leafAccepts": true
+  },
+  "changed key hash: spend key with burn key hash (key pinned, hash a witness)": {
+   "leaf": "spend (kh)",
+   "host": true,
+   "leafAccepts": false
+  },
+  "key and hash disagree: burn key with spend key hash, burn proof": {
+   "leaf": "spend (free)",
+   "host": false,
+   "leafAccepts": false
+  },
+  "key and hash disagree: spend key with burn key hash, spend proof": {
+   "leaf": "spend (free)",
+   "host": true,
+   "leafAccepts": false
+  },
+  "demand proof with a demand public input changed": {
+   "leaf": "demand",
+   "host": false,
+   "leafAccepts": false,
+   "agree": true
+  }
+ },
+ "pinnedLeavesAgreeOnEveryCase": true,
+ "node": {
+  "gates": 1469816,
+  "rows": 2097152,
+  "proveS": {
+   "n": 4,
+   "median": 25.6,
+   "min": 24.81,
+   "max": 29.43
+  },
+  "digestsEqualHost": true,
+  "phoneChecks": {
+   "rootKeyIsPinned": true,
+   "rootDigest": "0x1c615713b49644a0c9a3ff952a5a2ab075bb9476bb29102112f8ea3c6bbd7305"
+  },
+  "hostile": {
+   "child under a key outside the set (leaf taking its key as a witness)": false,
+   "child key hash of the pinned spend leaf over the free leaf key and proof": false,
+   "child under the pinned key, its node key input another value (leaves.mjs proof, key_node 5)": false,
+   "node key input not the node key, children under it (level-1 node proofs)": false,
+   "child digest substituted": false,
+   "child proof of one leaf with the other leaf public inputs": false
+  }
+ },
+ "phoneProxy": {
+  "note": "this host, bb.js as WASM and JavaScript single-threaded unless named: a proxy to scale, not phone rates",
+  "rootVerifyMs": 22.716,
+  "verifierStartMs": 210.351,
+  "proveSpendS": {
+   "threads1": 3.88,
+   "threads4": 1.56,
+   "peakRssMB": 482
+  },
+  "digestsMsPerStatement": 0.484,
+  "replayMsPerStatement": 5.398,
+  "headerMs": 10.994,
+  "capsuleMs": 0.061,
+  "meanDayS": 13.43,
+  "nativeProofsOfAMeanDayS": 20.44,
+  "restoreAt1e6": {
+   "replayH": 1.5,
+   "capsulesMin": 4.07,
+   "nativeProofsH": 6.31
+  }
+ }
+}

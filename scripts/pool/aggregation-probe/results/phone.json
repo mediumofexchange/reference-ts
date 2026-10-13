@@ -1,0 +1,680 @@
+{
+ "small": {
+  "digests": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:00:41.583Z",
+   "size": "small",
+   "singleThreaded": true,
+   "ok": true,
+   "statements": 100,
+   "leafPerStatementMs": 0.429,
+   "nodes": 99,
+   "nodePerDigestMs": 0.049,
+   "totalPerStatementMs": 0.477,
+   "totalMs": 47.72,
+   "perKind": {
+    "issue": {
+     "publicInputs": 11,
+     "permutations": 7,
+     "perLeafMs": 0.573
+    },
+    "spend": {
+     "publicInputs": 15,
+     "permutations": 9,
+     "perLeafMs": 0.639
+    },
+    "burn": {
+     "publicInputs": 15,
+     "permutations": 9,
+     "perLeafMs": 0.533
+    },
+    "demand": {
+     "publicInputs": 16,
+     "permutations": 9,
+     "perLeafMs": 0.575
+    },
+    "settle": {
+     "publicInputs": 17,
+     "permutations": 10,
+     "perLeafMs": 0.686
+    },
+    "request": {
+     "publicInputs": 7,
+     "permutations": 5,
+     "perLeafMs": 0.348
+    }
+   },
+   "root": "0x28ab0013f9b657149944d6a445e884c781f1155d12956fa6521046a7ca97d087",
+   "note": "lib.mjs leafDigest (kind, public inputs, proofHash halves through Poseidon2 permutations) and nodeDigest (one permutation), over the six relations' genuine public inputs in turn; proofHash (SHA-256 of the proof) is supplied, not timed. Poseidon2 is the reference's host hash, bb.js BarretenbergSync as single-threaded WASM.",
+   "peakRssMB": 118,
+   "wallMs": 411
+  },
+  "capsules": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:00:42.063Z",
+   "size": "small",
+   "singleThreaded": true,
+   "ok": true,
+   "trials": 1000,
+   "distinctForeignCapsules": 1000,
+   "ownCapsules": 10,
+   "matches": 10,
+   "foreign": {
+    "perCapsuleMs": 0.048,
+    "capsulesPerSecond": 20780
+   },
+   "mixedOnePercentOwn": {
+    "perCapsuleMs": 0.054,
+    "capsulesPerSecond": 18597
+   },
+   "ownMatchPerCapsuleMs": 0.772,
+   "senderPrepareExactOutputMs": 0.819,
+   "extrapolation": {
+    "label": "EXTRAPOLATION, not a measurement: foreign per-capsule time × count, single-threaded, excluding fetching the capsules",
+    "capsules": 4000000,
+    "seconds": 192,
+    "minutes": 3.2
+   },
+   "note": "createCapsuleScanner(seed, domain).tryRecover(cm, capsule): master keys derived once, then per capsule the recovery-key decryption attempt; a foreign capsule fails authentication, an own one is decrypted and its commitment recomputed. Foreign capsules are genuine (prepareExactOutput under 2,000 other seeds), cycled to the trial count.",
+   "peakRssMB": 117,
+   "wallMs": 1259
+  },
+  "headers": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:00:43.386Z",
+   "size": "small",
+   "singleThreaded": true,
+   "ok": true,
+   "realPow": {
+    "v2, version 4, heights 1,872,384-1,873,409": {
+     "headers": 10,
+     "heights": [
+      1872384,
+      1872512,
+      1872640,
+      1872768,
+      1872896,
+      1873024,
+      1873152,
+      1873280,
+      1873408,
+      1873409
+     ],
+     "perHeaderMs": 13.359,
+     "headersPerSecond": 75
+    },
+    "v2, version 2, heights 417,792-417,793": {
+     "headers": 2,
+     "heights": [
+      417792,
+      417793
+     ],
+     "perHeaderMs": 8.547,
+     "headersPerSecond": 117
+    },
+    "v1, version 1, heights 1-417,791": {
+     "headers": 7,
+     "heights": [
+      1,
+      2,
+      3,
+      100000,
+      100001,
+      417790,
+      417791
+     ],
+     "perHeaderMs": 15.688,
+     "headersPerSecond": 64
+    }
+   },
+   "eip37RecalculationMs": 0.02,
+   "syntheticMiningMs": 732.003,
+   "store": {
+    "headers": 20,
+    "epochBoundariesCrossed": 0,
+    "perHeaderMs": 9.856,
+    "headersPerSecond": 101,
+    "miningTriesPerHeader": 3.5
+   },
+   "extrapolation": {
+    "label": "EXTRAPOLATION, not a measurement: per-header times above multiplied by header counts, single-threaded, excluding download, storage and the anchor context",
+    "mainnetHeightUsed": 1890000,
+    "fromGenesis": {
+     "headers": 1890000,
+     "v1Headers": 417791,
+     "v1PerHeaderMs": 15.688,
+     "v2Headers": 1472209,
+     "v2PerHeaderMs": 13.359,
+     "seconds": 26222,
+     "hours": 7.28,
+     "limit": "the reference store admits mainnet anchors only from EIP-37 activation (844,673); below it the difficulty rule is not implemented, so these heights are costed by proof of work alone"
+    },
+    "fromEip37Anchor": {
+     "anchorHeight": 844673,
+     "headers": 1045327,
+     "perHeaderMs": 13.359,
+     "seconds": 13965,
+     "hours": 3.88
+    }
+   },
+   "note": "No contiguous real mainnet chain is kept in the repository: test/fixtures holds 10 real EIP-37 boundary headers (ergo-mainnet-recalculation.json) and 9 early headers (ergo-mainnet-v1-headers.json), timed for parse + id + proof of work; the store's full check is timed over a synthetic difficulty-4 chain. v2 extrapolation uses the larger of the store and real-header per-header times.",
+   "peakRssMB": 86,
+   "wallMs": 1940
+  },
+  "replay": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:00:50.584Z",
+   "size": "small",
+   "singleThreaded": true,
+   "ok": true,
+   "spends": 20,
+   "statements": 21,
+   "buildMs": 564.343,
+   "holderSidePrepareMs": 159.665,
+   "packageBytes": 328246,
+   "verifierCallsPerRead": 21,
+   "read": {
+    "n": 2,
+    "medianMs": 154.918,
+    "minMs": 148.874,
+    "maxMs": 160.961
+   },
+   "perStatementMs": 7.377,
+   "note": "readPackage (src/pool/v3/package-reader.ts) over the operator journal's served package: decode, evidence store (in memory), terms and checkpoint signatures, the fixture venue's records, each statement's state transition (spent set, note tree appends in host Poseidon2, delivery) and receipts. Proof verification is excluded: stand-in proofs of the configuration's length, judged by a stub (first byte = kind). Venue reads are in-memory fixture answers, no network. Per statement = read / (1 issue + N spends).",
+   "peakRssMB": 142,
+   "wallMs": 1663
+  },
+  "verify-root": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:03:29.991Z",
+   "size": "small",
+   "runs": {
+    "threads4": {
+     "ok": true,
+     "threads": 4,
+     "backend": "WasmWorker",
+     "startBackendMs": 856.087,
+     "openV3VerifierMs": 2375.596,
+     "reference": {
+      "firstVerifyMs": 390.927,
+      "firstVerdict": true,
+      "verify": {
+       "n": 3,
+       "medianMs": 33.949,
+       "minMs": 29.571,
+       "maxMs": 36.272
+      },
+      "tamperedVerdict": false
+     },
+     "keyBytes": 3680,
+     "pinned": {
+      "instanceStartMs": 296.601,
+      "firstVerifyMs": 44.661,
+      "verify": {
+       "n": 3,
+       "medianMs": 32.972,
+       "minMs": 28.501,
+       "maxMs": 52.31
+      }
+     },
+     "proofBytes": 14656,
+     "publicInputs": 15,
+     "note": "The proof is a genuine pool-v3 spend (scripts/pool/aggregation-probe/proofs/spend.proof). An aggregation root is an UltraHonk noir-recursive proof of the same 458 fields (14,656 bytes) verified the same way with 2 public inputs, so its verification costs the same. startBackend/openV3Verifier load 2^15 points and derive six keys, which a verify-only phone with pinned keys skips: its cost is pinned.instanceStartMs + one verification.",
+     "peakRssMB": 397,
+     "wallMs": 5049
+    },
+    "threads1": {
+     "ok": true,
+     "threads": 1,
+     "backend": "WasmWorker",
+     "startBackendMs": 691.78,
+     "openV3VerifierMs": 3263.442,
+     "reference": {
+      "firstVerifyMs": 378.505,
+      "firstVerdict": true,
+      "verify": {
+       "n": 3,
+       "medianMs": 25.883,
+       "minMs": 24.515,
+       "maxMs": 38.062
+      },
+      "tamperedVerdict": false
+     },
+     "keyBytes": 3680,
+     "pinned": {
+      "instanceStartMs": 317.383,
+      "firstVerifyMs": 27.888,
+      "verify": {
+       "n": 3,
+       "medianMs": 31.245,
+       "minMs": 25.67,
+       "maxMs": 37.145
+      }
+     },
+     "proofBytes": 14656,
+     "publicInputs": 15,
+     "note": "The proof is a genuine pool-v3 spend (scripts/pool/aggregation-probe/proofs/spend.proof). An aggregation root is an UltraHonk noir-recursive proof of the same 458 fields (14,656 bytes) verified the same way with 2 public inputs, so its verification costs the same. startBackend/openV3Verifier load 2^15 points and derive six keys, which a verify-only phone with pinned keys skips: its cost is pinned.instanceStartMs + one verification.",
+     "peakRssMB": 281,
+     "wallMs": 5742,
+     "measuredAt": "2026-10-13T11:03:35.734Z"
+    }
+   }
+  },
+  "prove-spend": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:03:29.991Z",
+   "size": "small",
+   "runs": {
+    "threads4": {
+     "ok": true,
+     "threads": 4,
+     "backend": "WasmWorker",
+     "proofs": 1,
+     "startBackendMs": 430.136,
+     "openV3ProverMs": 2670.633,
+     "proofBytes": 14656,
+     "prove": {
+      "n": 1,
+      "medianMs": 3670.469,
+      "minMs": 3670.469,
+      "maxMs": 3670.469
+     },
+     "witnessExecute": {
+      "n": 1,
+      "medianMs": 296.715,
+      "minMs": 296.715,
+      "maxMs": 296.715
+     },
+     "verify": {
+      "n": 1,
+      "medianMs": 32.401,
+      "minMs": 32.401,
+      "maxMs": 32.401
+     },
+     "generateProofEstimateMs": 3341.353,
+     "peakRssMB": 465,
+     "note": "prove = V3Prover.prove (noir_js witness execution, UltraHonk generateProof under noir-recursive, the prover's own verification); witnessExecute and verify are timed separately on the same task so generateProofEstimateMs = prove − both (medians). The first proof includes the instance's first-proof setup. peakRssMB is this process's maximum resident set, WASM workers included, after startBackend loaded 2^15 G1 points.",
+     "wallMs": 7632
+    },
+    "threads1": {
+     "ok": true,
+     "threads": 1,
+     "backend": "WasmWorker",
+     "proofs": 1,
+     "startBackendMs": 315.61,
+     "openV3ProverMs": 3128.978,
+     "proofBytes": 14656,
+     "prove": {
+      "n": 1,
+      "medianMs": 4756.752,
+      "minMs": 4756.752,
+      "maxMs": 4756.752
+     },
+     "witnessExecute": {
+      "n": 1,
+      "medianMs": 203.835,
+      "minMs": 203.835,
+      "maxMs": 203.835
+     },
+     "verify": {
+      "n": 1,
+      "medianMs": 37.629,
+      "minMs": 37.629,
+      "maxMs": 37.629
+     },
+     "generateProofEstimateMs": 4515.289,
+     "peakRssMB": 372,
+     "note": "prove = V3Prover.prove (noir_js witness execution, UltraHonk generateProof under noir-recursive, the prover's own verification); witnessExecute and verify are timed separately on the same task so generateProofEstimateMs = prove − both (medians). The first proof includes the instance's first-proof setup. peakRssMB is this process's maximum resident set, WASM workers included, after startBackend loaded 2^15 G1 points.",
+     "wallMs": 8988,
+     "measuredAt": "2026-10-13T11:03:44.724Z"
+    }
+   }
+  }
+ },
+ "full": {
+  "verify-root": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:17:40.667Z",
+   "size": "full",
+   "runs": {
+    "threads1": {
+     "ok": true,
+     "threads": 1,
+     "backend": "WasmWorker",
+     "startBackendMs": 303.965,
+     "openV3VerifierMs": 3125.857,
+     "reference": {
+      "firstVerifyMs": 283.388,
+      "firstVerdict": true,
+      "verify": {
+       "n": 20,
+       "medianMs": 26.053,
+       "minMs": 23.289,
+       "maxMs": 35.696
+      },
+      "tamperedVerdict": false
+     },
+     "keyBytes": 3680,
+     "pinned": {
+      "instanceStartMs": 210.351,
+      "firstVerifyMs": 22.16,
+      "verify": {
+       "n": 20,
+       "medianMs": 22.716,
+       "minMs": 21.188,
+       "maxMs": 29.029
+      }
+     },
+     "proofBytes": 14656,
+     "publicInputs": 15,
+     "note": "The proof is a genuine pool-v3 spend (scripts/pool/aggregation-probe/proofs/spend.proof). An aggregation root is an UltraHonk noir-recursive proof of the same 458 fields (14,656 bytes) verified the same way with 2 public inputs, so its verification costs the same. startBackend/openV3Verifier load 2^15 points and derive six keys, which a verify-only phone with pinned keys skips: its cost is pinned.instanceStartMs + one verification.",
+     "peakRssMB": 348,
+     "wallMs": 6026,
+     "measuredAt": "2026-10-13T11:17:46.693Z"
+    },
+    "threads4": {
+     "ok": true,
+     "threads": 4,
+     "backend": "WasmWorker",
+     "startBackendMs": 372.205,
+     "openV3VerifierMs": 1532.169,
+     "reference": {
+      "firstVerifyMs": 300.089,
+      "firstVerdict": true,
+      "verify": {
+       "n": 20,
+       "medianMs": 27.399,
+       "minMs": 21.771,
+       "maxMs": 46.673
+      },
+      "tamperedVerdict": false
+     },
+     "keyBytes": 3680,
+     "pinned": {
+      "instanceStartMs": 275.103,
+      "firstVerifyMs": 22.996,
+      "verify": {
+       "n": 20,
+       "medianMs": 27.553,
+       "minMs": 19.695,
+       "maxMs": 32.737
+      }
+     },
+     "proofBytes": 14656,
+     "publicInputs": 15,
+     "note": "The proof is a genuine pool-v3 spend (scripts/pool/aggregation-probe/proofs/spend.proof). An aggregation root is an UltraHonk noir-recursive proof of the same 458 fields (14,656 bytes) verified the same way with 2 public inputs, so its verification costs the same. startBackend/openV3Verifier load 2^15 points and derive six keys, which a verify-only phone with pinned keys skips: its cost is pinned.instanceStartMs + one verification.",
+     "peakRssMB": 436,
+     "wallMs": 4212,
+     "measuredAt": "2026-10-13T11:17:50.905Z"
+    }
+   }
+  },
+  "prove-spend": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:17:40.667Z",
+   "size": "full",
+   "runs": {
+    "threads1": {
+     "ok": true,
+     "threads": 1,
+     "backend": "WasmWorker",
+     "proofs": 3,
+     "startBackendMs": 263.878,
+     "openV3ProverMs": 2762.835,
+     "proofBytes": 14656,
+     "prove": {
+      "n": 3,
+      "medianMs": 3879.849,
+      "minMs": 3754.54,
+      "maxMs": 3904.373
+     },
+     "witnessExecute": {
+      "n": 3,
+      "medianMs": 38.964,
+      "minMs": 29.538,
+      "maxMs": 92.339
+     },
+     "verify": {
+      "n": 3,
+      "medianMs": 29.711,
+      "minMs": 25.828,
+      "maxMs": 32.686
+     },
+     "generateProofEstimateMs": 3811.174,
+     "peakRssMB": 482,
+     "note": "prove = V3Prover.prove (noir_js witness execution, UltraHonk generateProof under noir-recursive, the prover's own verification); witnessExecute and verify are timed separately on the same task so generateProofEstimateMs = prove − both (medians). The first proof includes the instance's first-proof setup. peakRssMB is this process's maximum resident set, WASM workers included, after startBackend loaded 2^15 G1 points.",
+     "wallMs": 15310,
+     "measuredAt": "2026-10-13T11:18:06.218Z"
+    },
+    "threads4": {
+     "ok": true,
+     "threads": 4,
+     "backend": "WasmWorker",
+     "proofs": 3,
+     "startBackendMs": 346.204,
+     "openV3ProverMs": 1441.89,
+     "proofBytes": 14656,
+     "prove": {
+      "n": 3,
+      "medianMs": 1555.592,
+      "minMs": 1381.805,
+      "maxMs": 2153.733
+     },
+     "witnessExecute": {
+      "n": 3,
+      "medianMs": 29.165,
+      "minMs": 28.718,
+      "maxMs": 134.765
+     },
+     "verify": {
+      "n": 3,
+      "medianMs": 27.595,
+      "minMs": 25.682,
+      "maxMs": 30.527
+     },
+     "generateProofEstimateMs": 1498.833,
+     "peakRssMB": 472,
+     "note": "prove = V3Prover.prove (noir_js witness execution, UltraHonk generateProof under noir-recursive, the prover's own verification); witnessExecute and verify are timed separately on the same task so generateProofEstimateMs = prove − both (medians). The first proof includes the instance's first-proof setup. peakRssMB is this process's maximum resident set, WASM workers included, after startBackend loaded 2^15 G1 points.",
+     "wallMs": 7631,
+     "measuredAt": "2026-10-13T11:18:13.849Z"
+    }
+   }
+  },
+  "digests": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:18:23.407Z",
+   "size": "full",
+   "singleThreaded": true,
+   "ok": true,
+   "statements": 10000,
+   "leafPerStatementMs": 0.432,
+   "nodes": 9999,
+   "nodePerDigestMs": 0.053,
+   "totalPerStatementMs": 0.484,
+   "totalMs": 4843.22,
+   "perKind": {
+    "issue": {
+     "publicInputs": 11,
+     "permutations": 7,
+     "perLeafMs": 0.458
+    },
+    "spend": {
+     "publicInputs": 15,
+     "permutations": 9,
+     "perLeafMs": 0.521
+    },
+    "burn": {
+     "publicInputs": 15,
+     "permutations": 9,
+     "perLeafMs": 0.428
+    },
+    "demand": {
+     "publicInputs": 16,
+     "permutations": 9,
+     "perLeafMs": 0.428
+    },
+    "settle": {
+     "publicInputs": 17,
+     "permutations": 10,
+     "perLeafMs": 0.508
+    },
+    "request": {
+     "publicInputs": 7,
+     "permutations": 5,
+     "perLeafMs": 0.262
+    }
+   },
+   "root": "0x1673273a0ba2ab1dda08c3663eec8f025811261ae81700647abfb19b6d50315",
+   "note": "lib.mjs leafDigest (kind, public inputs, proofHash halves through Poseidon2 permutations) and nodeDigest (one permutation), over the six relations' genuine public inputs in turn; proofHash (SHA-256 of the proof) is supplied, not timed. Poseidon2 is the reference's host hash, bb.js BarretenbergSync as single-threaded WASM.",
+   "peakRssMB": 135,
+   "wallMs": 9557
+  },
+  "headers": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:19:19.446Z",
+   "size": "full",
+   "singleThreaded": true,
+   "ok": true,
+   "realPow": {
+    "v2, version 4, heights 1,872,384-1,873,409": {
+     "headers": 10,
+     "heights": [
+      1872384,
+      1872512,
+      1872640,
+      1872768,
+      1872896,
+      1873024,
+      1873152,
+      1873280,
+      1873408,
+      1873409
+     ],
+     "perHeaderMs": 9.126,
+     "headersPerSecond": 110
+    },
+    "v2, version 2, heights 417,792-417,793": {
+     "headers": 2,
+     "heights": [
+      417792,
+      417793
+     ],
+     "perHeaderMs": 8.233,
+     "headersPerSecond": 121
+    },
+    "v1, version 1, heights 1-417,791": {
+     "headers": 7,
+     "heights": [
+      1,
+      2,
+      3,
+      100000,
+      100001,
+      417790,
+      417791
+     ],
+     "perHeaderMs": 12.769,
+     "headersPerSecond": 78
+    }
+   },
+   "eip37RecalculationMs": 0.019,
+   "syntheticMiningMs": 38632.578,
+   "store": {
+    "headers": 1000,
+    "epochBoundariesCrossed": 7,
+    "perHeaderMs": 10.994,
+    "headersPerSecond": 91,
+    "miningTriesPerHeader": 4.1
+   },
+   "extrapolation": {
+    "label": "EXTRAPOLATION, not a measurement: per-header times above multiplied by header counts, single-threaded, excluding download, storage and the anchor context",
+    "mainnetHeightUsed": 1890000,
+    "fromGenesis": {
+     "headers": 1890000,
+     "v1Headers": 417791,
+     "v1PerHeaderMs": 12.769,
+     "v2Headers": 1472209,
+     "v2PerHeaderMs": 10.994,
+     "seconds": 21521,
+     "hours": 5.98,
+     "limit": "the reference store admits mainnet anchors only from EIP-37 activation (844,673); below it the difficulty rule is not implemented, so these heights are costed by proof of work alone"
+    },
+    "fromEip37Anchor": {
+     "anchorHeight": 844673,
+     "headers": 1045327,
+     "perHeaderMs": 10.994,
+     "seconds": 11493,
+     "hours": 3.19
+    }
+   },
+   "note": "No contiguous real mainnet chain is kept in the repository: test/fixtures holds 10 real EIP-37 boundary headers (ergo-mainnet-recalculation.json) and 9 early headers (ergo-mainnet-v1-headers.json), timed for parse + id + proof of work; the store's full check is timed over a synthetic difficulty-4 chain. v2 extrapolation uses the larger of the store and real-header per-header times.",
+   "peakRssMB": 110,
+   "wallMs": 56038
+  },
+  "capsules": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:19:35.925Z",
+   "size": "full",
+   "singleThreaded": true,
+   "ok": true,
+   "trials": 100000,
+   "distinctForeignCapsules": 2000,
+   "ownCapsules": 1000,
+   "matches": 1000,
+   "foreign": {
+    "perCapsuleMs": 0.061,
+    "capsulesPerSecond": 16506
+   },
+   "mixedOnePercentOwn": {
+    "perCapsuleMs": 0.067,
+    "capsulesPerSecond": 14819
+   },
+   "ownMatchPerCapsuleMs": 0.752,
+   "senderPrepareExactOutputMs": 0.918,
+   "extrapolation": {
+    "label": "EXTRAPOLATION, not a measurement: foreign per-capsule time × count, single-threaded, excluding fetching the capsules",
+    "capsules": 4000000,
+    "seconds": 242,
+    "minutes": 4
+   },
+   "note": "createCapsuleScanner(seed, domain).tryRecover(cm, capsule): master keys derived once, then per capsule the recovery-key decryption attempt; a foreign capsule fails authentication, an own one is decrypted and its commitment recomputed. Foreign capsules are genuine (prepareExactOutput under 2,000 other seeds), cycled to the trial count.",
+   "peakRssMB": 142,
+   "wallMs": 16478
+  },
+  "replay": {
+   "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical CPUs, 16 GiB, Node v24.21.0, linux",
+   "bbjs": "5.2.0",
+   "measuredAt": "2026-10-13T11:20:14.131Z",
+   "size": "full",
+   "singleThreaded": true,
+   "ok": true,
+   "spends": 1000,
+   "statements": 1001,
+   "buildMs": 20719.639,
+   "holderSidePrepareMs": 7042.975,
+   "packageBytes": 15582926,
+   "verifierCallsPerRead": 1001,
+   "read": {
+    "n": 3,
+    "medianMs": 5403.502,
+    "minMs": 5229.456,
+    "maxMs": 5763.755
+   },
+   "perStatementMs": 5.398,
+   "note": "readPackage (src/pool/v3/package-reader.ts) over the operator journal's served package: decode, evidence store (in memory), terms and checkpoint signatures, the fixture venue's records, each statement's state transition (spent set, note tree appends in host Poseidon2, delivery) and receipts. Proof verification is excluded: stand-in proofs of the configuration's length, judged by a stub (first byte = kind). Venue reads are in-memory fixture answers, no network. Per statement = read / (1 issue + N spends).",
+   "peakRssMB": 349,
+   "wallMs": 38204
+  }
+ }
+}
