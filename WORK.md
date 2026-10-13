@@ -84,7 +84,7 @@ Order ([direction 2026-10-09](decisions/2026-10.md#2026-10-09--fix-the-operators
   outside the standing authorization. The [security argument](docs/SECURITY_ARGUMENT.md) is its target and the [review brief](docs/REVIEW_BRIEF.md) its brief; rolling AI reviews continue meanwhile (Next 6).
 - Non-blocking, maintainer (2026-10-08): Bitcoin probe 3's decisive part publishes 136 B and 15.5 KB records on mainnet against
   fee (Next 12), which spends real funds outside the standing authorization. Held: the venue comparison (Next 12) comes first.
-- Non-blocking, maintainer (2026-10-12): report privately to Ergo's developers a security finding from a source reading of its NiPoPoW verifier (`3a6b00d`), which affects nodes that bootstrap by NiPoPoW; the details are in run 20261012-2325-moe-next-prompt's session report and notification, not in public files. Ask too whether light clients could compare suffix proofs by work. The protocol does not depend on either (Next 12, slice 28).
+- Non-blocking, maintainer (2026-10-12): report privately to Ergo's developers a security finding from a source reading of its NiPoPoW verifier (`3a6b00d`), which affects nodes that bootstrap by NiPoPoW; the details are in run 20261012-2325-moe-next-prompt's session report and notification, not in public files. Its stated-difficulty part is public since an earlier PR #188 commit. The protocol does not depend on either (Next 12, slice 28).
 - Deletion list (2026-10-09): none open.
 
 Roughly **72% done / 28% remaining** (range 62–80%), reassessed 2026-10-09 (direction check; unchanged after (bb)'s fix, which found (bg) beside it): the restart replay was a gate defect at scale and the

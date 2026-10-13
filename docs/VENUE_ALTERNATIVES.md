@@ -338,7 +338,7 @@ Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumof
 | BSV | 21M cap | 0.82% | Fork of BCH (2018) | None | Rules set by one association: partial |
 | ZEC | 21M cap | 3.9% | 20% founders' reward to 2020 | **20% of the subsidy**: 8% to grants and 12% to a coinholder-voted fund to height 4,406,400, about late 2028 (NU6.1) | Fails: a standing treasury |
 | Dash | Decreasing subsidy | 2.7% | Instamine of about 10% (2014) | **20% treasury** by masternode vote; masternodes 60% | Fails |
-| Firo | 21.4M, then 1 a block | 4.4% | 8% founders' allocation | **25%** to development and community funds; masternodes 70%, miners 5% | Fails |
+| Firo | 21.4M, then 1 a block | 3.4% | 8% founders' allocation | **25%** to development and community funds; masternodes 70%, miners 5% | Fails |
 | DCR | 21M cap | 3.0% | 8% premine | **10% treasury**; ticket holders 89% | Fails |
 | XEC | 21T (BCH ×10⁶) | 0.82% | Fork of BCH (2020) | **32% to the one implementation's developer**, 10% to stakers | Fails |
 | Zano | Uncapped, 1 a block | 3.4% | 3.69M premine (about 21% of the initial supply) | None beyond the premine | Fails: a premine of a fifth (a few percent, as DGB's and ERG's, is partial) |
