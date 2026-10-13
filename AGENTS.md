@@ -193,7 +193,7 @@ restore them. Ergo nodes (own and archive) run only while a task uses them: star
 sync, stop after. Stay read-only when unexplained commits/file changes or a confirmed active session
 show concurrent editing of this checkout; an idle or unrelated agent process alone does not.
 
-WORK.md alone holds the coarse product-effort estimate (method in production requirements).
+WORK.md alone holds the coarse product-effort estimate: one number for the complete project, no range (method in production requirements).
 Reassess from gathered evidence after meaningful product progress or a major blocker, without extra
 research; credit reusable progress, never commit/test counts or cleanup; report it when changed.
 Final reports state behavior, verification/review, delivery, remaining limits and a stay/switch

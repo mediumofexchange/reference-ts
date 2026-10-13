@@ -20,12 +20,14 @@ recovery, which remain separate gates.
 
 ## Progress estimate
 
-The target is the smallest supported profile below as a usable end-to-end
-product: a holder can install a wallet, receive, verify, pay and redeem; an
-operator can run it durably; independent readers can verify supply and execute
-the declared failure paths with the original operator offline. One supported
-witness must actually accept publications. A mock, ideal model or offline
-transaction size does not establish these outcomes. Release gates still apply.
+The estimate covers the complete project, as one number. Its release target is
+the smallest supported profile below as a usable end-to-end product: a holder
+can install a wallet, receive, verify, pay and redeem; an operator can run it
+durably; independent readers can verify supply and execute the declared failure
+paths with the original operator offline. One supported witness must actually
+accept publications. A mock, ideal model or offline transaction size does not
+establish these outcomes. Release gates still apply. The complete project adds
+the work WORK.md's Next plans beyond the release, such as the phone holder path.
 
 The current estimate lives only in [WORK.md](../WORK.md#open-questions); this
 section defines how it is made. It is a judgment of engineering effort toward
@@ -45,8 +47,9 @@ one unresolved dependency can prevent every usable product path.
 After meaningful product progress or a consequential new blocker, make a brief
 qualitative reassessment from evidence already gathered for that work. Do not
 run extra research, tests, inventories or delegation solely to update a number
-unless explicitly asked for a progress audit. Use coarse rounded values (about
-five or ten percentage points) with a broad uncertainty range. Credit reusable
+unless explicitly asked for a progress audit. State one coarse rounded number
+(about five percentage points) for the complete project, with no range and no
+separate figure per target. Credit reusable
 implementation and resolved uncertainty even while their release gates remain
 open; a gate is not an all-or-nothing unit of engineering effort. Avoid counting
 models and their later implementation twice. Allow for integration/redesign and
