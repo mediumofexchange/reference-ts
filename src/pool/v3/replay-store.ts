@@ -364,26 +364,46 @@ const fillingNodes = (leaves: bigint, ommers: readonly (bigint | undefined)[]): 
 
 /** Page hashes per group: a keep point rehashes the groups its changed pages fall in, not the whole list. */
 const GROUP = 256;
+/** The byte SQLite's file locks begin at (its PENDING_BYTE), 2^30. The page holding it, the lock-byte page, is never
+ * written: no log carries it and its bytes are whatever the file holds there, which Windows refuses to read while a
+ * connection locks them. */
+const LOCK_BYTE = 2 ** 30;
+/** The lock-byte page's hash on every side: a constant, never its bytes. */
+const LOCK_PAGE_HASH = createHash("sha256").update("v3-kept-lock-byte-page").digest();
 /** A kept file's digest (pool-v3 §14's one SHA256 over the whole kept state): SHA256 over the page size, the page
- * count and each group's SHA256 of its pages' SHA256s, a short last page hashed as it lies. Opening hashes every page
- * of the closed file; a keep point hashes only the page images its write-ahead log committed (storage decision
- * M11b12), so recording the digest costs what the read changed, not the file's length. */
-class PageDigest {
+ * count and each group's SHA256 of its pages' SHA256s, a short last page hashed as it lies, and the lock-byte page as
+ * a constant. Opening hashes every page of the closed file; a keep point hashes only the page images its write-ahead
+ * log committed (storage decision M11b12), so recording the digest costs what the read changed, not the file's length.
+ * `lockByte` is SQLite's 2^30, smaller only in tests. */
+export class PageDigest {
   readonly pageSize: number;
+  /** The lock-byte page's number, from 1: 2^30 / page size + 1, the first page of its group for every page size SQLite allows. */
+  readonly lockPage: number;
   #pages = Buffer.alloc(0);
   #groups = Buffer.alloc(0);
   #length = 0;
-  constructor(pageSize: number) { this.pageSize = pageSize; }
-  /** Every page of the closed file at `path`, read in pieces so memory stays flat. */
-  static of(path: string, pageSize: number): PageDigest {
-    const digest = new PageDigest(pageSize), size = pageSize, fd = openSync(path, "r");
+  constructor(pageSize: number, lockByte = LOCK_BYTE) { this.pageSize = pageSize; this.lockPage = Math.floor(lockByte / pageSize) + 1; }
+  /** Every page of the closed file at `path` but the lock-byte page, read in pieces so memory stays flat. */
+  static of(path: string, pageSize: number, lockByte = LOCK_BYTE): PageDigest {
+    const digest = new PageDigest(pageSize, lockByte), size = pageSize, fd = openSync(path, "r"), lock = digest.lockPage;
     try {
       const length = fstatSync(fd).size, count = Math.ceil(length / size), page = Buffer.alloc(size * GROUP), groups = new Set<number>();
       digest.#reserve(count);
       for (let from = 0; from < count; from += GROUP) {
-        const n = Math.min(GROUP, count - from), read = readSync(fd, page, 0, Math.min(n * size, length - from * size), from * size);
+        const n = Math.min(GROUP, count - from), end = Math.min(n * size, length - from * size);
+        // The group's bytes on either side of the lock-byte page, never its own.
+        const at = lock - 1 - from, ranges = at >= 0 && at < n ? [[0, at * size], [(at + 1) * size, end]] : [[0, end]];
+        // A short read hashes what was read, as a file changed under its lock reads: its digest is not the kept one.
+        let read = end;
+        for (const [start, stop] of ranges as [number, number][]) {
+          if (stop <= start) continue;
+          const got = readSync(fd, page, start, stop - start, from * size + start);
+          if (got < stop - start) { read = start + got; break; }
+        }
         for (let i = 0; i < n; i++) {
-          hash("sha256", page.subarray(i * size, Math.min((i + 1) * size, read)), "buffer").copy(digest.#pages, 32 * (from + i));
+          // A file ending on it, which SQLite never writes, matches no recorded digest: `apply` refuses its page count.
+          if (from + i + 1 === lock) { LOCK_PAGE_HASH.copy(digest.#pages, 32 * (from + i)); continue; }
+          hash("sha256", page.subarray(i * size, Math.max(i * size, Math.min((i + 1) * size, read))), "buffer").copy(digest.#pages, 32 * (from + i));
         }
         groups.add(from / GROUP);
       }
@@ -393,13 +413,16 @@ class PageDigest {
   }
   /** The state a log's commit leaves: its page images over the pages known, at the page count it commits. */
   apply(log: CommittedLog): void {
-    const count = log.count, known = this.#length;
-    // SQLite writes every page a commit adds to the log, so a page past the known length that the log lacks is no state.
-    // Checked before any hash changes, so a refused log leaves the digest as it was.
-    for (let p = known; p < count; p++) if (!log.pages.has(p + 1)) throw new Error("the write-ahead log lacks a page its commit adds");
+    const count = log.count, known = this.#length, lock = this.lockPage;
+    // SQLite writes every page a commit adds to the log but the lock-byte page, so another added page the log lacks is no
+    // state. Checked before any hash changes, so a refused log leaves the digest as it was.
+    if (count === lock) throw new Error("the write-ahead log commits a file ending on SQLite's lock-byte page");
+    for (let p = known; p < count; p++) if (p + 1 !== lock && !log.pages.has(p + 1)) throw new Error("the write-ahead log lacks a page its commit adds");
     this.#reserve(count);
-    for (const [n, image] of log.pages) if (n >= 1 && n <= count) image.copy(this.#pages, 32 * (n - 1));
-    this.#regroup(count, new Set([...log.pages.keys()].filter(n => n >= 1 && n <= count).map(n => Math.floor((n - 1) / GROUP))));
+    const changed = new Set<number>();
+    for (const [n, image] of log.pages) if (n >= 1 && n <= count && n !== lock) { image.copy(this.#pages, 32 * (n - 1)); changed.add(Math.floor((n - 1) / GROUP)); }
+    if (known < lock && lock <= count) { LOCK_PAGE_HASH.copy(this.#pages, 32 * (lock - 1)); changed.add(Math.floor((lock - 1) / GROUP)); }
+    this.#regroup(count, changed);
   }
   /** Room for `count` page hashes, grown by doubling, so a keep point copies no hash list that has room for its new pages. */
   #reserve(count: number): void {
@@ -427,11 +450,11 @@ class PageDigest {
 }
 /** What a write-ahead log commits: each page's last committed image, by its SHA256, and the page count after the
  * last commit. */
-interface CommittedLog { readonly pages: ReadonlyMap<number, Buffer>; readonly count: number }
+export interface CommittedLog { readonly pages: ReadonlyMap<number, Buffer>; readonly count: number }
 /** The committed frames of a write-ahead log, as SQLite's recovery reads them (its file format, §4): frames that carry
  * the header's salts and continue its checksum chain, through the last commit frame among them; later frames (a
  * transaction not committed, a torn write) are not state. Undefined where the log commits nothing at `pageSize`. */
-function committedLog(wal: string, pageSize: number): CommittedLog | undefined {
+export function committedLog(wal: string, pageSize: number): CommittedLog | undefined {
   if (!existsSync(wal)) return undefined;
   const fd = openSync(wal, "r");
   try {
