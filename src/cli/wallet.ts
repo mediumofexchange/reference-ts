@@ -48,7 +48,7 @@ import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, initi
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryBackend, directoryVerifier, verifierCount } from "./backend.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
-import { initConstruction, initRole, presentationOf, readRepaired, repairRecord, replicaCommand, serviceClient, serviceCommand, syncSources, termsCommand, unanswered,
+import { initConstruction, initRole, presentationOf, readSources, repairRecord, replicaCommand, serviceClient, serviceCommand, sourcesOf, termsCommand, unanswered,
   type Skipped } from "./reader.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
@@ -182,7 +182,7 @@ interface Evidence { readonly bytes: Uint8Array; readonly source: "saved" | "fil
 
 /** Run the read `use` over its evidence: `--package <file>`, or its sources synced into the wallet's evidence file (the
  * operator's service, then, where it does not answer, each replica added: M12b), repaired where a source withheld
- * (`readRepaired`: a read unresolved over a source's answer syncs it again from nothing, then passes to the next);
+ * (`readSources`: a read unresolved over a source's answer syncs it again from nothing, then passes to the next);
  * where none answers, the package its last sync kept. A `saved` payment or act needs none: its rerun is the library's
  * exact retry, as is a read run again after a repair. Outputs name the source as `evidence` (`served`, `replica` with
  * its URL, `kept`, `file` or `saved`) and the sources passed over. */
@@ -192,8 +192,9 @@ async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms,
   if (file !== undefined) return use({ bytes: readRequired(file, "package file", PACKAGE_FILE_LIMIT), source: "file" });
   const last = opened.directory.file(`packages/${hex(kept.backing)}`);
   const passed = (skipped: readonly Skipped[]) => skipped.length > 0 ? { skipped } : {};
-  return readRepaired(options => syncSources(opened.directory, kept, opened.view,
-    client => opened.wallet.supply(store => client.sync(kept.backing, store, { full: options.full(client.baseUrl) })), options.except), async synced => {
+  const sources = sourcesOf(opened.directory, kept, opened.view,
+    (client, full) => opened.wallet.supply(store => client.sync(kept.backing, store, { full })));
+  return readSources(sources, async synced => {
     if ("served" in synced) {
       // Kept only once a read over it resolved, so a source's refused answer never becomes the fallback (audit 32).
       const bytes = synced.served.package;

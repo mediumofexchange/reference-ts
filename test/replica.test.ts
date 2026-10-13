@@ -14,8 +14,8 @@ import { EncodingError } from "../src/bytes.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { V3ServiceClient, V3ServiceClientError } from "../src/pool/v3/service-client.js";
-import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
-import type { RepairRecord, Skipped, Synced } from "../src/cli/reader.js";
+import type { V3OperatorJournal as Journal, ServedPackage } from "../src/pool/v3/store.js";
+import type { RepairRecord, Skipped, Source, Synced } from "../src/cli/reader.js";
 import type { V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 
@@ -36,14 +36,14 @@ describe("a replica of a lit operator's evidence", () => {
   let V3Replica: typeof import("../src/pool/v3/replica.js").V3Replica;
   let passedOver: typeof import("../src/cli/reader.js").passedOver;
   let ownSources: typeof import("../src/cli/reader.js").ownSources;
-  let readRepaired: typeof import("../src/cli/reader.js").readRepaired;
+  let readSources: typeof import("../src/cli/reader.js").readSources;
   const closing: { close(): void }[] = [], servers: Server[] = [], directories: string[] = [], scratch = resolve("scratch");
   beforeAll(async () => {
     ({ V3OperatorJournal } = await import("../src/pool/v3/store.js"));
     ({ V3Wallet } = await import("../src/pool/v3/wallet-store.js"));
     service = await import("../src/pool/v3/service-http.js");
     ({ V3Replica } = await import("../src/pool/v3/replica.js"));
-    ({ passedOver, readRepaired, ownSources } = await import("../src/cli/reader.js"));
+    ({ passedOver, readSources, ownSources } = await import("../src/cli/reader.js"));
   });
   afterEach(async () => {
     await Promise.all(servers.splice(0).map(server => new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); })));
@@ -251,7 +251,7 @@ describe("a replica of a lit operator's evidence", () => {
 
   it("never asks itself: its listener by the URL a client keeps, and its onion name at any port a replica list names", () => {
     const onion = `${"m".repeat(55)}d.onion`, other = `${"n".repeat(55)}d.onion`;
-    // At port 80 a client keeps the URL without it, as `syncSources` compares.
+    // At port 80 a client keeps the URL without it, as `sourcesOf` compares.
     expect(ownSources("http://127.0.0.1:80/", undefined, [`http://${onion}/`])).toEqual(["http://127.0.0.1/"]);
     expect(ownSources("http://127.0.0.1:8080/", onion, [`http://${onion}:8080/`, `http://${other}/`, "http://127.0.0.1:9/", `http://${onion}/`]))
       .toEqual(["http://127.0.0.1:8080/", `http://${onion}/`, `http://${onion}:8080/`]);
@@ -276,23 +276,23 @@ describe("a replica of a lit operator's evidence", () => {
     const asked: string[] = [];
     const sources = [{ url: "operator", client: f.operator, withholds: Infinity }, { url: f.url, client: f.client, withholds: 0 }];
     type Supplied = Synced | { readonly skipped: readonly Skipped[] };
-    const supply = (withheld: Map<string, number>) => async (options: { readonly full: (url: string) => boolean; readonly except: readonly string[] }): Promise<Supplied> => {
-      const source = sources.find(s => !options.except.includes(s.url));
-      if (source === undefined) return { skipped: [] };
-      const full = options.full(source.url);
-      asked.push(`${source.url}${full ? " full" : ""}`);
-      const served = await payer.supply(store => source.client.sync(f.backing, store, { full }));
-      const left = withheld.get(source.url) ?? source.withholds;
-      if (left > 0) { withhold(); withheld.set(source.url, left - 1); }
-      return { served, origin: source.url === "operator" ? "served" : "replica", url: source.url, skipped: [] };
-    };
+    const supply = (withheld: Map<string, number>): Source[] => sources.map(source => ({
+      url: source.url, origin: source.url === "operator" ? "served" : "replica",
+      async sync(full: boolean) {
+        asked.push(`${source.url}${full ? " full" : ""}`);
+        const served = await payer.supply(store => source.client.sync(f.backing, store, { full }));
+        const left = withheld.get(source.url) ?? source.withholds;
+        if (left > 0) { withhold(); withheld.set(source.url, left - 1); }
+        return served;
+      },
+    }));
     const read = (synced: Supplied) => {
       if (!("served" in synced)) throw new Error("no source");
       return payer.sync(synced.served.package, f.signed).then(view => ({ view, skipped: synced.skipped, url: synced.url }));
     };
     // Without the repair the read stays unresolved over the withheld field, whatever later syncs from that source send.
-    const plain = await supply(new Map())({ full: () => false, except: [] });
-    await expect(read(plain)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    const plain = await supply(new Map())[0]!.sync(false);
+    await expect(read({ served: plain, origin: "served", url: "operator", skipped: [] })).rejects.toMatchObject({ status: "unresolved-evidence" });
     // The record of sources whose answer from nothing stayed unresolved, at the selection they served (in a directory,
     // unresolved.json).
     const recorded = new Map<string, bigint>();
@@ -300,7 +300,7 @@ describe("a replica of a lit operator's evidence", () => {
     // The operator withholds on every answer: synced again from nothing, still unresolved, it is passed over as
     // UNRESOLVED, and the replica, asked from nothing, resolves the read.
     asked.length = 0;
-    const repaired = await readRepaired(supply(new Map()), read, record);
+    const repaired = await readSources(supply(new Map()), read, record);
     expect(asked).toEqual(["operator", "operator full", `${f.url} full`]);
     expect(repaired.url).toBe(f.url);
     expect(repaired.skipped).toEqual([{ url: "operator", code: "UNRESOLVED" }]);
@@ -310,28 +310,28 @@ describe("a replica of a lit operator's evidence", () => {
     // A source that lost the field once is repaired by its own answer from nothing.
     withhold(); sources[0]!.withholds = 0; asked.length = 0;
     recorded.clear();
-    const once = await readRepaired(supply(new Map([["operator", 1]])), read, record);
+    const once = await readSources(supply(new Map([["operator", 1]])), read, record);
     expect(asked).toEqual(["operator", "operator full"]);
     expect([once.url, once.skipped]).toEqual(["operator", []]);
     // No source left: the refusal names the sources passed over, and each one's selection is recorded. The next read
     // asks each only after its mark while it serves that selection: no answer from nothing again.
     sources[0]!.withholds = Infinity; sources[1]!.withholds = Infinity; asked.length = 0;
-    await expect(readRepaired(supply(new Map()), read, record)).rejects.toMatchObject({ status: "unresolved-evidence",
+    await expect(readSources(supply(new Map()), read, record)).rejects.toMatchObject({ status: "unresolved-evidence",
       message: `unresolved-evidence: no source resolved the read (operator UNRESOLVED, ${f.url} UNRESOLVED); removing the directory's unresolved.json asks every source from nothing again` });
     expect(asked).toEqual(["operator", "operator full", `${f.url} full`]);
     expect([...recorded]).toEqual([["operator", selection], [f.url, selection]]);
     asked.length = 0;
-    await expect(readRepaired(supply(new Map()), read, record)).rejects.toMatchObject({ status: "unresolved-evidence" });
+    await expect(readSources(supply(new Map()), read, record)).rejects.toMatchObject({ status: "unresolved-evidence" });
     expect(asked).toEqual(["operator", f.url]);
     // A source whose selection moved is asked from nothing once more, and a read that resolves clears its record.
     sources[0]!.withholds = 0; await f.commit("c2"); asked.length = 0;
-    expect((await readRepaired(supply(new Map()), read, record)).url).toBe("operator");
+    expect((await readSources(supply(new Map()), read, record)).url).toBe("operator");
     expect(asked).toEqual(["operator", "operator full"]);
     expect([...recorded]).toEqual([[f.url, selection]]);
     // Any other refusal over a source's answer passes it over at once, unrecorded, and stands only where no source
     // resolves (audit 32): a lapsed or refused read over the operator's answer resolves from the replica.
     asked.length = 0;
-    await expect(readRepaired(supply(new Map()), async () => { throw new EvidenceRefusal("unsupported-scope"); }, record))
+    await expect(readSources(supply(new Map()), async () => { throw new EvidenceRefusal("unsupported-scope"); }, record))
       .rejects.toMatchObject({ status: "unsupported-scope",
         message: `unsupported-scope: no source resolved the read (operator UNRESOLVED, ${f.url} UNRESOLVED)` });
     expect(asked).toEqual(["operator", f.url]);
@@ -341,11 +341,39 @@ describe("a replica of a lit operator's evidence", () => {
       if ("served" in synced && synced.url === "operator") throw new ReplayRefusal("CONFIGURATION");
       return read(synced);
     };
-    const past = await readRepaired(supply(new Map()), refusing, record);
+    const past = await readSources(supply(new Map()), refusing, record);
     // The replica, asked after its mark, is repaired from nothing as before.
     expect([past.url, past.skipped, asked]).toEqual([f.url, [{ url: "operator", code: "REFUSED" }], ["operator", f.url, `${f.url} full`]]);
     asked.length = 0;
-    await expect(readRepaired(supply(new Map()), async () => { throw new ReplayRefusal("CONFIGURATION"); }, record))
+    await expect(readSources(supply(new Map()), async () => { throw new ReplayRefusal("CONFIGURATION"); }, record))
       .rejects.toMatchObject({ check: "CONFIGURATION", message: `CONFIGURATION: no source resolved the read (operator REFUSED, ${f.url} REFUSED)` });
+  });
+
+  it("asks each source once in order, and lets the operator's refusal stand only where no source answered", async () => {
+    const asked: string[] = [], record: RepairRecord = { unresolvedAt: () => undefined, record: () => {} };
+    const answered = (full: boolean) => ({ selection: { sequence: 1n }, full }) as unknown as ServedPackage;
+    const source = (url: string, origin: "served" | "replica", answer: (full: boolean) => ServedPackage): Source =>
+      ({ url, origin, async sync(full) { asked.push(`${url}${full ? " full" : ""}`); return answer(full); } });
+    const silent = (url: string, origin: "served" | "replica") => source(url, origin, () => { throw new TypeError("fetch failed"); });
+    const stale = new V3ServiceClientError(409, "STALE", "service request failed");
+    const refusing = source("operator", "served", () => { throw stale; });
+    // Resolves only over an answer from nothing.
+    const repairs = async (synced: Synced | { readonly skipped: readonly Skipped[] }) => {
+      if ("served" in synced && !(synced.served as unknown as { full: boolean }).full) throw new EvidenceRefusal("unresolved-evidence");
+      return synced;
+    };
+    // An operator that did not answer is not asked again while a replica is repaired.
+    const repaired = await readSources([silent("operator", "served"), source("r1", "replica", answered)], repairs, record);
+    expect(asked).toEqual(["operator", "r1", "r1 full"]);
+    expect(repaired.skipped).toEqual([{ url: "operator", code: "UNAVAILABLE" }]);
+    // A read's refusal over a replica's answer stands over the operator's refusal, naming both.
+    asked.length = 0;
+    await expect(readSources([refusing, source("r1", "replica", answered)], async () => { throw new ReplayRefusal("CONFIGURATION"); }, record))
+      .rejects.toMatchObject({ check: "CONFIGURATION", message: "CONFIGURATION: no source resolved the read (operator STALE, r1 REFUSED)" });
+    expect(asked).toEqual(["operator", "r1"]);
+    // With no answer at all the operator's refusal stands as it was; with no refusal either, the read has none.
+    await expect(readSources([refusing, silent("r1", "replica")], repairs, record)).rejects.toBe(stale);
+    expect(await readSources([silent("operator", "served"), silent("r1", "replica")], repairs, record))
+      .toEqual({ skipped: [{ url: "operator", code: "UNAVAILABLE" }, { url: "r1", code: "UNAVAILABLE" }] });
   });
 });
