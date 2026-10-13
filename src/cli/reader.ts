@@ -231,9 +231,12 @@ export function sourcesOf(directory: Directory, kept: KeptTerms, view: View,
     const client = serviceClient(directory, kept, view);
     if (!except.includes(client.baseUrl)) sources.push({ url: client.baseUrl, origin: "served", sync: full => sync(client, full) });
   }
-  for (const url of added.filter(url => !except.includes(url))) {
-    const client = new V3ServiceClient(url, undefined, identity);
-    sources.push({ url, origin: "replica", sync: full => sync(client, full) });
+  // A URL listed twice (the operator's own, or one href spelled twice) is one source. A replica's client is made when
+  // it is asked: an onion replica's needs the holder's proxy, which stops only a read that reaches it.
+  for (const url of new Set(added)) {
+    if (except.includes(url) || sources.some(source => source.url === url)) continue;
+    let client: V3ServiceClient | undefined;
+    sources.push({ url, origin: "replica", sync: full => sync(client ??= new V3ServiceClient(url, undefined, identity), full) });
   }
   return sources;
 }

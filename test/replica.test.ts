@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -37,13 +38,14 @@ describe("a replica of a lit operator's evidence", () => {
   let passedOver: typeof import("../src/cli/reader.js").passedOver;
   let ownSources: typeof import("../src/cli/reader.js").ownSources;
   let readSources: typeof import("../src/cli/reader.js").readSources;
+  let sourcesOf: typeof import("../src/cli/reader.js").sourcesOf;
   const closing: { close(): void }[] = [], servers: Server[] = [], directories: string[] = [], scratch = resolve("scratch");
   beforeAll(async () => {
     ({ V3OperatorJournal } = await import("../src/pool/v3/store.js"));
     ({ V3Wallet } = await import("../src/pool/v3/wallet-store.js"));
     service = await import("../src/pool/v3/service-http.js");
     ({ V3Replica } = await import("../src/pool/v3/replica.js"));
-    ({ passedOver, readSources, ownSources } = await import("../src/cli/reader.js"));
+    ({ passedOver, readSources, sourcesOf, ownSources } = await import("../src/cli/reader.js"));
   });
   afterEach(async () => {
     await Promise.all(servers.splice(0).map(server => new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); })));
@@ -375,5 +377,28 @@ describe("a replica of a lit operator's evidence", () => {
     await expect(readSources([refusing, silent("r1", "replica")], repairs, record)).rejects.toBe(stale);
     expect(await readSources([silent("operator", "served"), silent("r1", "replica")], repairs, record))
       .toEqual({ skipped: [{ url: "operator", code: "UNAVAILABLE" }, { url: "r1", code: "UNAVAILABLE" }] });
+  });
+
+  it("makes a replica's client only once a read reaches it, and asks a URL listed twice once (review)", async () => {
+    const base = mkdtempSync(join(tmpdir(), "moe-sources-"));
+    try {
+      const operator = new Uint8Array(32).fill(3), local = "http://127.0.0.1:1/", onion = `http://${"m".repeat(55)}d.onion/`;
+      mkdirSync(join(base, "services")); mkdirSync(join(base, "replicas"));
+      writeFileSync(join(base, "services", `${bytesToHex(operator)}.json`), JSON.stringify({ url: local, walletToken: "ab".repeat(32) }));
+      writeFileSync(join(base, "replicas", `${bytesToHex(operator)}.json`), JSON.stringify({ urls: [onion, local, onion] }));
+      const directory = { file: (name: string) => join(base, name), construction: LIT } as unknown as Parameters<typeof sourcesOf>[0];
+      const kept = { terms: { operator } } as unknown as Parameters<typeof sourcesOf>[1];
+      const view = { file: { reference } } as unknown as Parameters<typeof sourcesOf>[2];
+      const served = { selection: { sequence: 1n } } as unknown as ServedPackage, record: RepairRecord = { unresolvedAt: () => undefined, record: () => {} };
+      // No proxy is configured in this process, so an onion client cannot be made; a read the operator resolves never needs one.
+      const sources = sourcesOf(directory, kept, view, async () => served);
+      expect(sources.map(source => [source.url, source.origin])).toEqual([[local, "served"], [onion, "replica"]]);
+      expect((await readSources(sources, async synced => synced, record) as Synced).url).toBe(local);
+      // A read that passes the operator over reaches the onion replica, and the holder's missing proxy stops it.
+      await expect(readSources(sources, async synced => {
+        if ("served" in synced) throw new ReplayRefusal("CONFIGURATION");
+        return synced;
+      }, record)).rejects.toMatchObject({ code: "PROXY", status: 0 });
+    } finally { rmSync(base, { recursive: true, force: true }); }
   });
 });

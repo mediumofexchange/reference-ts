@@ -22,10 +22,10 @@
 //   runs there: the journal's reads use a store of their own, and what a new
 //   segment imports from a read is copied in (`copyFrontier`).
 import { sha256 } from "@noble/hashes/sha2.js";
-import { createHash, hash } from "node:crypto";
-import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { createHash, hash, randomBytes } from "node:crypto";
+import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileIdentity } from "../../file-identity.js";
 import { V3_SPENT_EMPTY_CONTEXT, V3_SPENT_LEAF_CONTEXT as LEAF, V3_SPENT_NODE_CONTEXT as NODE } from "../../contexts.js";
 import { bytesToField, fieldToBytes } from "../field.js";
@@ -482,19 +482,23 @@ export function keptFileDigest(path: string): string | undefined {
  * storage only the reader writes; a directory copied whole carries both files, and the copy's other identity leaves
  * its kept state discarded and replayed. */
 const vouched = (path: string, pages: PageDigest): string => `${pages.root()}\n${fileIdentity(path)}`;
-/** Replace a small file durably through one partial file beside it (`<path>.partial`): a crash leaves the old contents
- * or the new, never a torn one. Only the holder of the kept file's lock writes it (`lockKept`), one replacement at a
- * time, so one name serves: a partial a crash left is never read and the next replacement overwrites it (Next 4 (bo)). */
+/** Replace a small file durably: a crash leaves the old contents or the new, never a torn one. */
 function replaceFile(path: string, text: string): void {
-  const partial = `${path}.partial`;
-  try {
-    const fd = openSync(partial, "w");
-    try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
-    renameSync(partial, path);
-  } catch (error) {
-    try { rmSync(partial, { force: true }); } catch { /* never read; the next replacement overwrites it */ }
+  const partial = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.partial`, fd = openSync(partial, "w");
+  try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
+  renameSync(partial, path);
+}
+/** The partial files `replaceFile` leaves beside `path` where it stopped before its rename (a crash): only a store that
+ * holds the kept file's lock and none of whose stores is open removes them, since no other writes one then. */
+function partialDigests(path: string): string[] {
+  const directory = dirname(path), name = basename(path);
+  let entries: string[];
+  try { entries = readdirSync(directory); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
+  return entries.filter(entry => entry.startsWith(`${name}.`) && /^\.\d+\.[0-9a-f]{8}\.partial$/.test(entry.slice(name.length)))
+    .map(entry => join(directory, entry));
 }
 /** Remove a kept file's files, in order. One another store still holds cannot be removed (Windows): the caller's error. */
 function removeFiles(files: readonly string[]): void {
@@ -564,7 +568,7 @@ export function removeKeptFile(path: string, digest: string, also: readonly stri
   }
   try {
     removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, digest, ...also]);
-    try { rmSync(`${digest}.partial`, { force: true }); } catch { /* never read; a later removal takes it */ }
+    for (const partial of partialDigests(digest)) { try { rmSync(partial, { force: true }); } catch { /* never read; a later removal takes it */ } }
   } catch (error) {
     if (error instanceof FileInUse) return false;
     throw error;
@@ -681,6 +685,9 @@ export class ReplayStore {
         // A file another store of this process holds was judged when that store opened it, and is shared as it stands.
         if (this.#lock.first) {
           try {
+            // A replacement of the digest stopped before its rename left its partial file (Next 4 (bo)): no store writes one now.
+            // Best effort: one that cannot be removed now (a scanner holding it) is never read, and goes at a later opening.
+            for (const partial of partialDigests(kept.digest)) { try { rmSync(partial, { force: true }); } catch { /* left */ } }
             held = keptFileHolds(path, kept.digest);
             // The log goes before the file: a log left beside a new file would be read into it.
             if (held === undefined) removeFiles([`${path}-wal`, `${path}-shm`, `${path}-journal`, path, kept.digest]);
