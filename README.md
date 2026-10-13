@@ -28,7 +28,8 @@ synthetic chain and live on the Ergo testnet. Lit notes (`moe/lit/v1`, the
 transparent profile) run through the same commands, and a
 [release record](docs/RELEASE.md) rebuilds the package tarball reproducibly.
 Qualified deployment storage,
-statements spending several backings and a phone-first wallet remain open. The API and
+statements spending several backings and a phone-first wallet remain open; the phone's
+reading is specified as a reader's option ([succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/8aa2f03/succinct-read.md)), not yet built. The API and
 wire format are experimental, the package is not published to npm, and no
 completed security audit or live deployment is claimed. The earlier pool-v2
 runtime is retired and remains in Git history.
