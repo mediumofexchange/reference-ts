@@ -23,7 +23,7 @@ const reports = named.length > 0 ? named : readdirSync("docs").filter((name) => 
 // or deleted, so its report no longer describes the tree. Other names are
 // relative to a directory the report does not state (a bare file name,
 // `vendor/…` beside circuits) and are skipped.
-const sourceRoots = ["src/", "test/", "model/", "scripts/", "dist/"];
+const sourceRoots = ["src/", "test/", "model/", "scripts/", "experiments/", "dist/"];
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const lf = (bytes) => Buffer.from(bytes.toString("utf8").replace(/\r\n/g, "\n"), "utf8");
 
