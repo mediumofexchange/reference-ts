@@ -174,6 +174,61 @@ export function decodeRecord(bytes: Uint8Array): Record {
   return result;
 }
 
+/** A record's proof-free form (succinct-read §3.3): the record with its proof field, length and bytes, replaced by the
+ * field's `proofHash`. A reader's option only; no construction reads it. */
+export interface ProofFreeRecord extends Statement {
+  /** SHA-256 of the proof, or 32 zero bytes exactly where the proof is empty (kind 5). */
+  readonly proofHash: Uint8Array;
+  readonly authorization: Uint8Array;
+  readonly capsules: readonly Uint8Array[];
+}
+/** §3.3: its statement, authorization and capsules satisfy §5, with the delivery association, and its `proofHash` is
+ * the zero sentinel exactly for kind 5. The proof's length is not in the form. */
+function requireProofFree(s: ProofFreeRecord): void {
+  requireStatement(s);
+  requireBytes(s.proofHash, 32);
+  if ((s.kind === 5) !== s.proofHash.every(byte => byte === 0)) throw new EncodingError("wrong proof digest sentinel");
+  requireBytes(s.authorization, AUTH_LENGTHS[s.kind]);
+  if (!Array.isArray(s.capsules) || s.capsules.length !== CAPSULE_COUNTS[s.kind]) throw new EncodingError("wrong capsule count");
+  if (s.capsules.length) {
+    const p = s.publicInputs;
+    const outputs = s.kind === 1 ? [p[8]!] : s.kind === 2 ? p.slice(9, 13) : [p[12]!];
+    same(pair(p, p.length - 2), deliveryHash(s.domain, outputs, s.capsules));
+  }
+}
+/** `freeRecordBytes` of §3.3. */
+export function encodeProofFree(s: ProofFreeRecord): Uint8Array {
+  requireProofFree(s);
+  const w = new ByteWriter();
+  w.context(statementBytes(s)); fixed(w, s.proofHash); w.lengthPrefixed(s.authorization);
+  w.u32(s.capsules.length);
+  for (const capsule of s.capsules) fixed(w, capsule, 89);
+  return w.finish();
+}
+/** Strict inverse of encodeProofFree; returned arrays never alias input bytes. */
+export function decodeProofFree(bytes: Uint8Array): ProofFreeRecord {
+  const r = new ByteReader(bytes), { domain, kind, publicInputs } = readStatement(r);
+  const proofHash = r.raw(32), authorization = r.lengthPrefixed(AUTH_LENGTHS[kind]);
+  const capsuleCount = r.u32();
+  if (capsuleCount !== CAPSULE_COUNTS[kind]) throw new EncodingError("wrong capsule count");
+  const capsules = Array.from({ length: capsuleCount }, () => r.raw(89));
+  r.expectEnd();
+  const result = Object.freeze({ domain, kind, publicInputs: Object.freeze(publicInputs), proofHash, authorization, capsules: Object.freeze(capsules) });
+  requireProofFree(result);
+  return result;
+}
+/** A decoded record's proof-free form. */
+export function proofFreeOf(s: Record): ProofFreeRecord {
+  requireRecord(s);
+  return Object.freeze({ domain: s.domain, kind: s.kind, publicInputs: s.publicInputs, proofHash: s.proof.length ? sha256(s.proof) : new Uint8Array(32),
+    authorization: s.authorization, capsules: s.capsules });
+}
+/** Whether a proof field of `kind` meets §5's length rule: empty exactly for kind 5, otherwise a positive multiple of
+ * 32 bytes at most 131,072. */
+export function proofLengthHolds(kind: Kind, length: number): boolean {
+  return kind === 5 ? length === 0 : length > 0 && length <= MAX_PROOF && length % 32 === 0;
+}
+
 export interface EvidenceDigests {
   readonly statementHash: Uint8Array;
   readonly proofHash: Uint8Array;
@@ -195,6 +250,12 @@ export function hashEvidenceFields(statement: Uint8Array, proof: Uint8Array, aut
 export function evidenceHashes(s: Record): EvidenceDigests {
   requireRecord(s);
   return hashEvidenceFields(statementHash(s), s.proof, s.authorization);
+}
+/** succinct-read §3.3: the triple read from a proof-free form, `proofHash` as carried. */
+export function proofFreeDigests(s: ProofFreeRecord): EvidenceDigests {
+  requireProofFree(s);
+  return Object.freeze({ statementHash: statementHash(s), proofHash: Uint8Array.from(s.proofHash),
+    signatureHash: s.authorization.length ? sha256(s.authorization) : new Uint8Array(32) });
 }
 
 export function acceptanceBytes(a: Acceptance): Uint8Array {
@@ -226,11 +287,12 @@ export function encodeSettlementAuthorization(deadline: bigint, acceptanceSignat
 
 /** Reconstruct exact signing messages; the caller must verify both signatures
  * and resolve the demand/terms/state/time. This function grants no authority. */
-export function settlementAuthorization(s: Record): {
+export function settlementAuthorization(s: Statement & { readonly authorization: Uint8Array }): {
   acceptance: SignedAcceptance; acceptanceMessage: Uint8Array; releaseMessage: Uint8Array; releaseSignature: Uint8Array;
 } {
-  requireRecord(s);
+  requireStatement(s);
   if (s.kind !== 6) throw new EncodingError("not a settlement");
+  requireBytes(s.authorization, AUTH_LENGTHS[6]);
   const r = new ByteReader(s.authorization);
   const deadline = r.u64(), signature = r.raw(64), releaseSignature = r.raw(64); r.expectEnd();
   const acceptance: SignedAcceptance = { domain: Uint8Array.from(s.domain), demand: pair(s.publicInputs, 15),

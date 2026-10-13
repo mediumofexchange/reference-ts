@@ -6,7 +6,7 @@ import { bytesToHex as hex } from "@noble/hashes/utils.js";
 import { compareBytes } from "../../bytes.js";
 import { identifierOf } from "../field.js";
 import { poseidon2Hash } from "../poseidon2.js";
-import { statementHash, type Record } from "./records.js";
+import { statementHash, type Statement } from "./records.js";
 import type { StatementView } from "./construction.js";
 import type { Demand } from "./replay-store.js";
 
@@ -40,7 +40,7 @@ export function locked(view: Pick<RecoveryView, "demandsWithTag">, tag: bigint, 
   return view.demandsWithTag(tag).some(([id, demand]) => id !== except && demand.deadline >= at);
 }
 
-export function effectOf(record: Record): Effect {
+export function effectOf(record: Statement): Effect {
   const p = record.publicInputs;
   switch (record.kind) {
     case 1: return { nfs: [], outputs: [p[8]!], roots: [] };
@@ -97,7 +97,7 @@ export function checkRecovery(view: StatementView, state: RecoveryView, { check,
 }
 
 /** The demand a kind-4 record stands up, or the one a kind-5/6 record ends. Replay and force share these effects. */
-export function recoveryEffect(record: Record): RecoveryEffect {
+export function recoveryEffect(record: Statement): RecoveryEffect {
   const p = record.publicInputs;
   if (record.kind === 4) {
     return { demand: { id: hex(statementHash(record)), value: { backing: identifierOf(p[5]!, p[6]!), quantity: p[7]!, tags: p.slice(10, 12),

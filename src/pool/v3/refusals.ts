@@ -34,6 +34,13 @@ export class EvidenceRefusal extends Error {
   }
 }
 
+/** A succinct read's trail whose proof bytes it could not obtain, or whose proof field does not decode (succinct-read
+ * §3.4 step 3): as the complete read's undecodable or missing trail, it is not served, so the read is unresolved unless
+ * §9.1 classifies the checkpoint. */
+export class UnestablishedTrail extends EvidenceRefusal {
+  constructor() { super("unresolved-evidence"); }
+}
+
 export function requireReplay(condition: boolean, check: string): asserts condition {
   if (!condition) throw new ReplayRefusal(check);
 }

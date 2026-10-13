@@ -10,7 +10,7 @@ import { decodeReceipt, decodeSnapshot, snapshotBytes, snapshotDigest } from "..
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { decodeSegmentHeader, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
-import { readPackage } from "../src/pool/v3/package-reader.js";
+import { readBoth } from "./succinct-differential.js";
 import { decodeEvidencePackage, encodeEvidenceDirectory, encodeEvidencePackage } from "../src/pool/v3/package.js";
 import { encodePublication, encodeRecord, type Record } from "../src/pool/v3/records.js";
 import type { ServedPackage, V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
@@ -76,7 +76,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     const spend = (ctx: SegmentContext, offset = 60) => encodeRecord(record(spendTask(ctx, inputs,
       [10n, 0n, 0n, 0n].map((value, i) => prepareExactOutput(b(22), domain, b(offset + i), backing, value)))));
     const read = async (served: ServedPackage) => {
-      const result = await readPackage(served.package,
+      const result = await readBoth(served.package,
         { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue, reference });
       if (result.state === undefined) throw new Error("unexpected receipt verdict");
       return result;
@@ -259,7 +259,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     const later = await f.a.serve(undefined, 2n);
     expect((await shape((await f.a.serve(undefined, 2n)).parts)).sort()).toEqual(["A3:whole:1", "B1:whole:1", "package:34"]);
     expect(await evidence.take(later.parts)).toBe(true);
-    const result = await readPackage(later.package, { ...later.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" },
+    const result = await readBoth(later.package, { ...later.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue: f.venue, reference, evidence });
     expect([result.state?.issued, result.state?.hasNullifier(f.input.note.nf)]).toEqual([20n, true]);
     // A reader kept through the opening holds what it took: only the new checkpoint and the records after the opening.
@@ -477,7 +477,7 @@ describe.skipIf(!supported)("v3 succession from public evidence", () => {
     await f.a.commit("resumed"); await f.a.publish();
     const served = await f.a.package(), items = decodeEvidencePackage(served.package);
     expect((await f.read(served)).state.issued).toBe(10n);
-    const verdict = async (receipt: Uint8Array) => (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+    const verdict = async (receipt: Uint8Array) => (await readBoth(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
       { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
     expect(await verdict(tail)).toMatchObject({ status: "lapsed" });
     const again = await f.a.submit(f.issue(await f.openingContext(f.a), 75));

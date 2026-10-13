@@ -28,7 +28,8 @@ import {
 import { effectOf, recoveryEffect, tagOf } from "./recovery.js";
 import { requireReplay } from "./refusals.js";
 import { POOL_V3_NAMESPACE, type Demand, type NamespaceConstruction } from "./replay-store.js";
-import type { ProofCheck, ReceiptEvent, ScanOutput, StateHandle, StateView, WitnessPredicate } from "./state.js";
+import type { StoredTrail } from "./evidence-store.js";
+import type { Adopted, ProofCheck, ReceiptEvent, ScanOutput, StateHandle, StateView, WitnessPredicate } from "./state.js";
 import { V3_TERMS, type RootTerms, type TermsCodec } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, V3_TRAILS, type TrailCodec } from "./trail.js";
 
@@ -102,7 +103,25 @@ export interface Construction<R = unknown> {
   /** What the one wallet (wallet-store.ts) reads and builds for a construction whose notes are held by owner keys
    * (lit-v1 §8, slice 14 M14g); pool-v3's wallet path is the wallet's own, so it names none. */
   readonly wallet?: KeyedWalletFrames | undefined;
+  /** For records that carry no proof bytes (a succinct read, succinct.ts): what replay needs established first. Absent where
+   * the trail's records are complete, whose authentication established it. */
+  readonly trailChecks?: TrailChecks | undefined;
 }
+
+/** A succinct read's establishment (succinct-read §3.4 steps 2–3): before a trail's replay, and before a non-extension is
+ * decided, the proof length of every record of `trail` after `from` (`proved` records with a proof check before it), as the complete
+ * read's authentication establishes them, and each proof's check, from a cover or natively. A record whose bytes equal
+ * the adopted publication at its position (`block`, proof-free forms) has its length from the bytes the reader holds.
+ * Throws `UnestablishedTrail` where a proof is withheld or does not decode; returns the verifier the replay's statement
+ * checks ask. */
+export interface TrailChecks {
+  establish(trail: ServedTrailOf, from: bigint, proved: bigint, block: readonly Adopted[], verifier: ProofCheck): Promise<ProofCheck>;
+  /** The whole served trail's lengths, as the complete read's authentication has them before any refusal it grounds on
+   * the trail's being served (a non-extension, an opening's records, a header-only refusal); once per trail. */
+  served(trail: ServedTrailOf, block: readonly Adopted[], verifier: ProofCheck): Promise<void>;
+}
+/** What establishment reads of a served trail. */
+export type ServedTrailOf = Pick<StoredTrail, "segment" | "length" | "evidence" | "records">;
 
 /** A note's public opening where openings are public (lit-v1 §2). */
 export interface KeyedOpening {
@@ -355,16 +374,17 @@ export interface ReaderFrames {
   fault(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarget;
 }
 
-function v3View(record: Record): StatementView {
+/** A record as pool-v3's view reads it: its statement, authorization and capsules. The proof is read only by the statement
+ * check, which the caller gives: the complete read's verification of the record's proof, or a succinct read's (succinct.ts). */
+export type V3Body = Statement & { readonly authorization: Uint8Array; readonly capsules: readonly Uint8Array[] };
+export function v3View(record: V3Body, digests: EvidenceDigests, check: (verifier: ProofCheck) => Promise<void>): StatementView {
   const p = record.publicInputs, kind = record.kind, { nfs, outputs, roots } = effectOf(record), { demand, ended } = recoveryEffect(record);
   return {
     kind, identity: statementHash(record), domain: record.domain, segment: identifierOf(p[2]!, p[3]!), scope: p[4],
-    digests: evidenceHashes(record), backings: kind === 2 || kind === 5 ? [] : [identifierOf(p[5]!, p[6]!)], ended, needsDemand: kind === 5,
+    digests, backings: kind === 2 || kind === 5 ? [] : [identifierOf(p[5]!, p[6]!)], ended, needsDemand: kind === 5,
     quantity: kind === 1 || kind === 3 || kind === 6 ? p[7] : undefined, nfs, tags: nfs.map(tagOf), outputs,
     capsules: outputs.map((_, i) => (kind === 6 ? undefined : record.capsules[i])), roots, inputs: [], demand,
-    check: async (verifier: ProofCheck): Promise<void> => {
-      if (kind !== 5) requireReplay(await verifier.verify(kind, [...p], new Uint8Array(record.proof)) === true, "PROOF");
-    },
+    check: async (verifier: ProofCheck): Promise<void> => { if (kind !== 5) await check(verifier); },
     issuerSigned: issuer => kind === 1 && verifySignatureStrict(record.authorization, statementBytes(record), issuer),
     withdrawalSigned: presenter => kind === 5 && verifySignatureStrict(record.authorization, withdrawalBytes(record), presenter),
     settlement: () => {
@@ -463,7 +483,8 @@ export const POOL_V3: Construction<Record> = Object.freeze({
   namespace: POOL_V3_NAMESPACE,
   decode: decodeRecord,
   kind: (record: Record) => record.kind,
-  view: (record: Record) => v3View(record),
+  view: (record: Record) => v3View(record, evidenceHashes(record), async verifier =>
+    requireReplay(await verifier.verify(record.kind, [...record.publicInputs], new Uint8Array(record.proof)) === true, "PROOF")),
   genesisHistory: genesisHistoryHash,
   genesisEvidence: genesisEvidenceHash,
   nextHistory: nextHistoryHash,

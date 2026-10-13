@@ -774,6 +774,7 @@ export class ReplayStore {
       events: `SELECT x.*, n.segment FROM event x JOIN namespace n ON n.ns = x.ns WHERE ${v} ORDER BY x.ns, x.position`,
       eventCount: `SELECT count(*) AS c FROM event x WHERE ${v}`,
       ownEvents: "SELECT position, idx FROM event WHERE ns = ? AND position <= ? ORDER BY position",
+      provedCount: "SELECT count(*) AS c FROM event WHERE ns = ? AND position <= ? AND kind IN (1, 2, 3, 4, 6)",
       insertEvent: "INSERT INTO event VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       insertKey: "INSERT INTO event_key VALUES (?, ?, ?)",
       insertNullifier: "INSERT INTO nullifier VALUES (?, ?, ?, ?)",
@@ -1264,6 +1265,9 @@ export class ReplayStore {
     for (const row of this.#q.events!.iterate({ ns, p })) yield this.#event(row as Record<string, unknown>);
   }
   eventCount(ns: number, p: bigint): bigint { return BigInt((this.#q.eventCount!.get({ ns, p }) as { c: bigint }).c); }
+  /** How many of this segment's own records through position `p` carry a proof check (kinds 1–4 and 6), the proved records
+   * a succinct read numbers its spans by (succinct-read §3.2). */
+  provedCount(ns: number, p: bigint): bigint { return BigInt((this.#q.provedCount!.get(ns, p) as { c: bigint }).c); }
   /** The index each of this segment's own records was judged at, by position from 1. */
   judgedIndices(ns: number, p: bigint): (bigint | undefined)[] {
     return this.#q.ownEvents!.all(ns, p).map(row => ((row as { idx: string | null }).idx === null ? undefined : BigInt((row as { idx: string }).idx)));

@@ -12,7 +12,7 @@ import { decodeSegmentHeader, segmentIdentity } from "../src/pool/v3/headers.js"
 import { ScopeTree } from "../src/pool/scope.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
-import { readPackage } from "../src/pool/v3/package-reader.js";
+import { readBoth } from "./succinct-differential.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
 import { describeState } from "./pool-v3-state-description.js";
 import { decodeEvidencePackage, encodeEvidencePackage } from "../src/pool/v3/package.js";
@@ -77,7 +77,7 @@ describe("v3 recovery journal and independent package reader", () => {
     await j.commit("issued"); await j.publish();
     const held = await j.package();
     const read = async (served: ServedPackage = held) => {
-      const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+      const result = await readBoth(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
         { verifier, venue, reference });
       if (result.state === undefined) throw new Error("unexpected receipt verdict");
       return result;
@@ -162,7 +162,7 @@ describe("v3 recovery journal and independent package reader", () => {
   /** The receipt verdict a reader draws from what `j` serves, judging at the venue's index. */
   async function verdict(f: Awaited<ReturnType<typeof fixture>>, j: Journal, receipt: Uint8Array) {
     const served = await j.package(), items = decodeEvidencePackage(served.package);
-    return (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+    return (await readBoth(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
       { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
   }
   /** A venue view that takes no publication: the lost instance's commitments go unwitnessed. */
@@ -463,7 +463,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const f = await fixture(), selection = { ...f.held.selection, root: new Uint8Array(32), judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" as const };
     const close = vi.spyOn(EvidenceStore.prototype, "close").mockImplementation(() => { throw new Error("disk I/O error"); });
     let error: unknown;
-    try { error = await readPackage(f.held.package, selection, { verifier, venue: f.venue, reference }).then(() => undefined, (e: unknown) => e); }
+    try { error = await readBoth(f.held.package, selection, { verifier, venue: f.venue, reference }).then(() => undefined, (e: unknown) => e); }
     finally { close.mockRestore(); }
     expect(error).toMatchObject({ status: "selection-mismatch", cause: { message: "disk I/O error" } });
   });
@@ -500,7 +500,7 @@ describe("v3 recovery journal and independent package reader", () => {
     // A reader finalizes the adopted receipt once the segment commits it; the tail's lapsed at the silence boundary.
     await f.j.commit("adopted"); await f.j.publish();
     const served = await f.j.package(), items = decodeEvidencePackage(served.package);
-    const verdict = async (receipt: Uint8Array) => (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+    const verdict = async (receipt: Uint8Array) => (await readBoth(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
       { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
     expect(await verdict(adopted!)).toMatchObject({ status: "final" });
     expect(await verdict(encodeReceipt(tail))).toMatchObject({ status: "lapsed" });
@@ -510,7 +510,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const f = await fixture(), receipt = await f.j.submit(encodeRecord(f.demand(1n)));
     const verdict = async () => {
       const served = await f.j.package(), items = decodeEvidencePackage(served.package);
-      return (await readPackage(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
+      return (await readBoth(encodeEvidencePackage([...items, { kind: 10, payload: receipt }]),
         { ...served.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier, venue: f.venue, reference })).receipt;
     };
     expect(await verdict()).toMatchObject({ status: "pending", includedAt: [], contradictedAt: [] });
@@ -531,7 +531,7 @@ describe("v3 recovery journal and independent package reader", () => {
     const evidence = new EvidenceStore(join(directory, "evidence.sqlite"));
     try {
       const identified = { verify: verifier.verify, identities: configuration.circuits };
-      const read = (packageBytes: Uint8Array, kept: { store?: ReplayStore; evidence?: EvidenceStore } = {}) => readPackage(packageBytes,
+      const read = (packageBytes: Uint8Array, kept: { store?: ReplayStore; evidence?: EvidenceStore } = {}) => readBoth(packageBytes,
         { ...f.held.selection, judgingIndex: f.venue.witnessedIndex(), mode: "current-fixture" }, { verifier: identified, venue: f.venue, reference, ...kept });
       const comparable = async (result: ReturnType<typeof read>) => {
         const r = await result;
@@ -563,7 +563,7 @@ describe("v3 recovery journal and independent package reader", () => {
     f.venue.witness(4, f.backing, 3n, f.publication(5, refresh));
     expect((await f.read()).ranges.nonService?.count).toBe("1");
     const unavailable = { id: f.venue.id, lag: () => lag, witnessedIndex: () => 5n, range: () => undefined };
-    await expect(readPackage(f.held.package, { ...f.held.selection, judgingIndex: 5n, mode: "current-fixture" },
+    await expect(readBoth(f.held.package, { ...f.held.selection, judgingIndex: 5n, mode: "current-fixture" },
       { verifier, venue: unavailable, reference })).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 });
