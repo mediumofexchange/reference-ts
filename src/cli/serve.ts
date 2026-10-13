@@ -58,14 +58,18 @@ export function tokenFile(directory: Directory, name: string, fresh?: () => Uint
   return text;
 }
 
-/** A loopback listener's URL, or a v3 onion service's, which a holder reaches only through its own loopback proxy. */
-export const LISTENER_URL =/^http:\/\/(127\.0\.0\.1:[0-9]{1,5}|[a-z2-7]{55}d\.onion(:[0-9]{1,5})?)\/$/;
+/** Whether `value` is a loopback listener's URL, or a v3 onion service's, which a holder reaches only through its own
+ * loopback proxy: a port it names is one a connection can reach (1–65535), so the URL a client keeps parses. */
+export function isListenerUrl(value: string): boolean {
+  const match = /^http:\/\/(?:127\.0\.0\.1:([0-9]{1,5})|[a-z2-7]{55}d\.onion(?::([0-9]{1,5}))?)\/$/.exec(value), port = match?.[1] ?? match?.[2];
+  return match !== null && (port === undefined || (Number(port) >= 1 && Number(port) <= 65535));
+}
 /** A file handed to holders (an operator's service file, a relay file): `{ url, <key> }`, the listener's URL and its one
  * credential, never per holder. */
 export function listenerFile(value: unknown, key: "walletToken" | "token", what: string): { readonly url: string; readonly token: string } {
   const v = value as Record<string, unknown>;
   if (value === null || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join() !== ["url", key].sort().join() ||
-      typeof v.url !== "string" || !LISTENER_URL.test(v.url) || typeof v[key] !== "string" || !/^[0-9a-f]{64}$/.test(v[key] as string)) {
+      typeof v.url !== "string" || !isListenerUrl(v.url) || typeof v[key] !== "string" || !/^[0-9a-f]{64}$/.test(v[key] as string)) {
     throw new CommandError("INVALID", `the ${what} file is not { url, ${key} } with a loopback or v3 onion URL`);
   }
   return { url: v.url, token: v[key] as string };

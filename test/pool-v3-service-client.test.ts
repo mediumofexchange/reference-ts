@@ -9,7 +9,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { limbsOf } from "../src/pool/field.js";
 import { LOCAL_REFERENCE, localVenueIdentity } from "../src/record-venue.js";
 import { encodeReceipt, receiptBytes, type Receipt, type ReceiptFields } from "../src/pool/v3/commitments.js";
-import { adoptedDomain } from "../src/pool/v3/configuration.js";
+import { adoptedConfigurationBytes, adoptedDomain } from "../src/pool/v3/configuration.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage } from "../src/pool/v3/package.js";
@@ -34,10 +34,12 @@ const receipt = (fields: Partial<ReceiptFields> = {}, signingKey = secret) => {
 };
 /** A directory naming no snapshot, so a store that holds it holds all the selection needs; its hash is the root. */
 const directory = encodeEvidenceDirectory([]), root = sha256(directory);
-/** A selection whose own package carries the commitment it names (sequence 1 unless `selected`), and no further parts. */
+/** A selection whose own package carries the configuration and the commitment it names (sequence 1 unless `selected`), and no
+ * further parts. */
 const served = (signer = secret, sequence = 1n, selected = 1n, named = root): ServedEvidence => ({ selection: { domain, operator,
   venue: localVenueIdentity(reference.label, reference.lag), backing, sequence: selected, root: named },
-  package: encodeEvidencePackage([{ kind: 2, payload: encodeCommitment(signCommitment(signer, sequence, named)) }]), parts: [] });
+  package: encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 2, payload: encodeCommitment(signCommitment(signer, sequence, named)) }]),
+  parts: [] });
 const servers: Server[] = [];
 async function endpoint(handler: RequestListener): Promise<string> {
   const server = createServer(handler); servers.push(server);
@@ -128,8 +130,17 @@ describe("bounded v3 local service client", () => {
     // The read's own package must carry the named commitment, signed by the expected operator: a sequence
     // recorded as served is one that operator signed.
     for (const wrong of [served(b(25)), served(secret, 2n), { ...good, selection: { ...good.selection, root: b(27) } },
-      { ...good, package: encodeEvidencePackage([]) }]) {
+      { ...good, package: encodeEvidencePackage([{ kind: 1, payload: adoptedConfigurationBytes() }]) }]) {
       await expect(new V3ServiceClient(await serving(wrong), TOKEN, expected()).package(backing)).rejects.toThrow("wrong commitment authority");
+    }
+    // Its one configuration is the construction's: another, none or two is the source's malformed answer, which a read
+    // passes over, rather than a refusal of the read itself that no other source could repair (audit 32).
+    const commitment = { kind: 2, payload: encodeCommitment(signCommitment(secret, 1n, root)) }, flipped = adoptedConfigurationBytes();
+    flipped[flipped.length - 1]! ^= 1;
+    for (const items of [[{ kind: 1, payload: flipped }, commitment], [commitment], [{ kind: 1, payload: adoptedConfigurationBytes() }, { kind: 1, payload: flipped }, commitment]]) {
+      const own = encodeEvidencePackage(items.sort((x, y) => x.kind - y.kind || Buffer.compare(sha256(x.payload), sha256(y.payload))));
+      await expect(new V3ServiceClient(await serving({ ...good, package: own }), TOKEN, expected()).package(backing))
+        .rejects.toThrow("the read's own package names another configuration");
     }
     // A response past the caller's budget is refused as it arrives.
     await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing, 100n)).rejects.toThrow("served evidence exceeds the reader's budget");

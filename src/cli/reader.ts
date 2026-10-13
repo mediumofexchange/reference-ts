@@ -15,7 +15,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { readPresentation, type Presentation } from "../pool/v3/dishonour.js";
 import { EvidenceStore } from "../pool/v3/evidence-store.js";
 import { PackageLimitError } from "../pool/v3/package.js";
-import { EvidenceRefusal } from "../pool/v3/refusals.js";
+import { EvidenceRefusal, ReplayRefusal } from "../pool/v3/refusals.js";
 import { V3Replica } from "../pool/v3/replica.js";
 import { createV3EvidenceService } from "../pool/v3/service-http.js";
 import type { ServedPackage } from "../pool/v3/store.js";
@@ -27,12 +27,12 @@ import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print, READ_FLAGS,
+import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, READ_FLAGS,
   readJson, readOptional, readRequired, required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { directoryVerifier } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
 import { authenticate, explain, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
-import { closeListener, LISTENER_URL, listenerFile, listenLoopback, SERVE_FLAGS, serveFlags, untilStopped } from "./serve.js";
+import { closeListener, isListenerUrl, listenerFile, listenLoopback, SERVE_FLAGS, serveFlags, untilStopped } from "./serve.js";
 import { keepContext, openView, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 
 /** `init` shared by every role: parameters (copied from `--parameters` or fetched) where the directory verifies proofs,
@@ -132,19 +132,21 @@ export function serviceClient(directory: Directory, kept: KeptTerms, view: View)
 
 /** A replica's URL: the loopback or v3 onion forms a service file takes, with no credential (M12b). */
 function parseReplicaUrl(value: string): string {
-  if (!LISTENER_URL.test(value)) throw new CommandError("INVALID", "a replica URL is http://127.0.0.1:<port>/ or a v3 onion's http://<host>/");
+  if (!isListenerUrl(value)) throw new CommandError("INVALID", "a replica URL is http://127.0.0.1:<port>/ or a v3 onion's http://<host>/");
   return value;
 }
 /** The replica URLs kept for an operator, in the order added. */
 function replicaUrls(directory: Directory, operator: Uint8Array): string[] {
-  const held = readOptional(directory.file(`replicas/${hex(operator)}.json`));
+  const file = directory.file(`replicas/${hex(operator)}.json`), held = readOptional(file);
   if (held === undefined) return [];
   let value: { urls?: unknown };
   try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(held)) as { urls?: unknown }; } catch {
     throw new CommandError("INVALID", "the replicas file is not { urls }");
   }
-  if (value === null || typeof value !== "object" || !Array.isArray(value.urls) || !value.urls.every(url => typeof url === "string")) throw new CommandError("INVALID", "the replicas file is not { urls }");
-  return value.urls.map(url => parseReplicaUrl(url as string));
+  // Each is judged as `replica add` judges it; one that is not (kept by an earlier release) is named with its file.
+  if (value === null || typeof value !== "object" || !Array.isArray(value.urls) ||
+      !value.urls.every(url => typeof url === "string" && isListenerUrl(url))) throw new CommandError("INVALID", `${file} is not { urls } of replica URLs: correct or remove it`);
+  return value.urls as string[];
 }
 
 /** `replica add <backing> <url>`: keep a replica of the operator the terms name, after those added before. Replicas are
@@ -273,22 +275,27 @@ export function repairRecord(directory: Directory, backing: Uint8Array): RepairR
  * (every source withholding, or the holder's own venue view or storage failing, which reads the same) costs one answer
  * from nothing per source and rising selection, not one per command or round. A read that no source can resolve refuses
  * with the sources passed over named, and with the remedy where a recorded selection never moves (a quiet or closed
- * backing) or the holder's own file was damaged since: removing the record. `supply` syncs from the sources not in `except`, from nothing where `full` says so;
- * `use` receives what it supplied, with every source passed over named in `skipped`.
+ * backing) or the holder's own file was damaged since: removing the record. Any other refusal of the read over a
+ * source's answer (a `ReplayRefusal`, or an `EvidenceRefusal` such as a lapsed selection) passes that source over at
+ * once, as `REFUSED` or `UNRESOLVED`: a resolved read is verified, so a source can withhold but never forge, and its
+ * refusal stands only where no other source resolves (audit 32). `supply` syncs from the sources not in `except`, from
+ * nothing where `full` says so; `use` receives what it supplied, with every source passed over named in `skipped`.
  */
 export async function readRepaired<T>(
   supply: (options: { readonly full: (url: string) => boolean; readonly except: readonly string[] }) => Promise<Synced | { readonly skipped: readonly Skipped[] }>,
   use: (synced: Synced | { readonly skipped: readonly Skipped[] }) => Promise<T>, record: RepairRecord): Promise<T> {
-  const except: string[] = [], unresolved: Skipped[] = [], fromNothing = new Set<string>();
-  let repairing = false, refusal: EvidenceRefusal | undefined;
+  const except: string[] = [], passed: Skipped[] = [], fromNothing = new Set<string>();
+  let repairing = false, refusal: EvidenceRefusal | ReplayRefusal | undefined;
   // Once a read is unresolved, a source not yet asked from nothing at a recorded selection is asked from nothing.
   const full = (url: string) => fromNothing.has(url) || repairing && record.unresolvedAt(url) === undefined;
   for (;;) {
-    const supplied = await supply({ full, except }), synced = { ...supplied, skipped: [...unresolved, ...supplied.skipped] };
+    const supplied = await supply({ full, except }), synced = { ...supplied, skipped: [...passed, ...supplied.skipped] };
     if (refusal !== undefined && !("served" in synced)) {
-      const final = Object.assign(new EvidenceRefusal(refusal.status), refusal.clock === undefined ? {} : { clock: refusal.clock });
-      final.message = `${refusal.status}: no source resolved the read (${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ")}); ` +
-        "removing the directory's unresolved.json asks every source from nothing again";
+      const final = refusal instanceof ReplayRefusal ? new ReplayRefusal(refusal.check)
+        : Object.assign(new EvidenceRefusal(refusal.status), refusal.clock === undefined ? {} : { clock: refusal.clock });
+      final.message = `${refusal instanceof ReplayRefusal ? refusal.check : refusal.status}: no source resolved the read (` +
+        `${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ")})` +
+        (unresolvedEvidence(refusal) ? "; removing the directory's unresolved.json asks every source from nothing again" : "");
       throw final;
     }
     let wasFull = false;
@@ -298,13 +305,15 @@ export async function readRepaired<T>(
       if ("served" in synced) record.record(synced.url, undefined);
       return result;
     } catch (error) {
-      if (!("served" in synced) || !unresolvedEvidence(error)) throw error;
-      refusal = error as EvidenceRefusal; repairing = true;
+      if (!("served" in synced) || !(error instanceof EvidenceRefusal || error instanceof ReplayRefusal)) throw error;
+      refusal = error;
       const sequence = synced.served.selection.sequence, url = synced.url;
+      if (!unresolvedEvidence(error)) { except.push(url); passed.push({ url, code: error instanceof ReplayRefusal ? "REFUSED" : "UNRESOLVED" }); continue; }
+      repairing = true;
       const at = record.unresolvedAt(url);
       if (!wasFull && (at === undefined || sequence > at)) { record.record(url, undefined); fromNothing.add(url); continue; }
       if (wasFull && (at === undefined || sequence > at)) record.record(url, sequence);
-      except.push(url); unresolved.push({ url, code: "UNRESOLVED" });
+      except.push(url); passed.push({ url, code: "UNRESOLVED" });
     }
   }
 }
@@ -371,7 +380,7 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
         use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled }, origin);
       };
       const file = flag(args, "package");
-      if (file !== undefined) await readOver(readRequired(file, "package file"), { evidence: "file" });
+      if (file !== undefined) await readOver(readRequired(file, "package file", PACKAGE_FILE_LIMIT), { evidence: "file" });
       else await served(directory, kept, view, evidence, supplied => readOver(supplied.served.package, originOf(supplied)));
     } finally { store?.close(); evidence?.close(); await verifier?.close(); }
   } finally { view.close(); }

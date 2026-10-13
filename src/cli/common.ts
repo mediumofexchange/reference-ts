@@ -9,7 +9,7 @@
 // dies, and refuses `BUSY` before opening anything else. On Windows modes are
 // not enforced and nothing checks ACLs (a stated limit).
 import { randomUUID } from "node:crypto";
-import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
@@ -76,7 +76,7 @@ export function parseArguments(argv: readonly string[], spec: FlagSpec, position
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (!arg.startsWith("--")) { positional.push(arg); continue; }
-    const name = arg.slice(2), kind = spec[name];
+    const name = arg.slice(2), kind = Object.hasOwn(spec, name) ? spec[name] : undefined;
     if (kind === undefined) throw new UsageError(`unknown option --${name}`);
     const seen = flags.get(name) ?? [];
     if (kind !== "values" && seen.length > 0) throw new UsageError(`--${name} is given twice`);
@@ -219,12 +219,24 @@ export function openDirectory(dir: string, role: Role | "any", options: { readon
   return directory(path, config);
 }
 
+/** Refuse an existing `--dir` an init would create: `INCOMPLETE` where it is an init that did not finish (its lock taken,
+ * its config.json, written last, absent), whose keys and seed no command has shown or used, so removing it and running
+ * init again loses nothing; `EXISTS` for anything else there. */
+export function requireNew(dir: string): void {
+  const path = absolute(dir);
+  if (!existsSync(path)) return;
+  if (existsSync(join(path, "lock.db")) && !existsSync(join(path, CONFIG))) {
+    throw new CommandError("INCOMPLETE", `${path} holds an init that did not finish (no config.json): remove it and run the command again`);
+  }
+  throw new CommandError("EXISTS", `${path} already exists; init creates a new directory`);
+}
+
 /** Create a new directory for `role` (owner-only), take its lock and run `fill`; the configuration is written last. */
 export async function initDirectory(dir: string, config: Config, fill: (directory: Directory) => Promise<void>): Promise<Directory> {
   const path = absolute(dir);
   prepare(path);
   try { mkdirSync(path, { mode: 0o700 }); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists; init creates a new directory`);
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") requireNew(path);
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CommandError("ABSENT", `the parent of ${path} does not exist`);
     throw error;
   }
@@ -278,6 +290,19 @@ export function writeExclusive(path: string, data: string | Uint8Array): void {
   syncParent(path);
 }
 
+/** Refuse by name (`STORAGE`) a place where `writeExclusive` could not put `path`: an empty probe is written, linked
+ * beside it and removed. For a step that cannot be undone once its output is only in memory (a handoff's freeze). */
+export function requireWritable(path: string): void {
+  const probe = `${path}.${randomUUID()}.probe`;
+  try { writeExclusive(probe, new Uint8Array(0)); } catch (error) {
+    if (error instanceof CommandError) throw error;
+    throw new CommandError("STORAGE", `${path} cannot be written there (${(error as NodeJS.ErrnoException).code ?? (error as Error).message})`);
+  } finally {
+    // Where nothing could be placed, nothing is there to remove (a path through a file answers ENOTDIR, not ENOENT).
+    try { rmSync(probe, { force: true }); } catch { /* none placed */ }
+  }
+}
+
 /** Write a new file, or accept one already holding exactly `data` (a rerun's output); other bytes there conflict. */
 export function writeSame(path: string, data: string | Uint8Array): void {
   const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data, held = readOptional(path);
@@ -292,16 +317,36 @@ export function writeReplace(path: string, data: string | Uint8Array): void {
   syncParent(path);
 }
 
-/** A file's bytes, or undefined where it does not exist. */
-export function readOptional(path: string): Uint8Array | undefined {
-  try { return new Uint8Array(readFileSync(path)); } catch (error) {
+/** The most bytes a file read whole holds, unless its reader names another bound: every handed frame, terms, venue,
+ * service, relay or publication file and every small file a directory keeps lies far below it. */
+export const READ_LIMIT = 16 * 1024 * 1024;
+/** A package file's bound: the most bytes the runtime reads whole. */
+export const PACKAGE_FILE_LIMIT = 2 ** 31 - 1;
+
+/** A file the command cannot read, named: a directory, a path through a file, or one it has no access to. */
+function unreadable(path: string, error: unknown): unknown {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EISDIR") return new CommandError("INVALID", `${path} is a directory, not a file`);
+  if (code === "ENOTDIR") return new CommandError("INVALID", `${path} lies under a file, not a directory`);
+  if (code === "EACCES" || code === "EPERM") return new CommandError("STORAGE", `${path} cannot be read: no access`);
+  return error;
+}
+
+/** A file's bytes, or undefined where it does not exist; one past `limit` bytes is refused before it is read. */
+export function readOptional(path: string, limit = READ_LIMIT): Uint8Array | undefined {
+  let fd: number;
+  try { fd = openSync(path, "r"); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
+    throw unreadable(path, error);
   }
+  try {
+    if (fstatSync(fd).size > limit) throw new CommandError("INVALID", `${path} holds more than the ${limit} bytes it may`);
+    return new Uint8Array(readFileSync(fd));
+  } catch (error) { throw error instanceof CommandError ? error : unreadable(path, error); } finally { closeSync(fd); }
 }
 /** A file's bytes; a missing one is the command's refusal. */
-export function readRequired(path: string, what: string): Uint8Array {
-  const bytes = readOptional(path);
+export function readRequired(path: string, what: string, limit = READ_LIMIT): Uint8Array {
+  const bytes = readOptional(path, limit);
   if (bytes === undefined) throw new CommandError("ABSENT", `no ${what} at ${path}`);
   return bytes;
 }
@@ -316,15 +361,15 @@ export function readJson(path: string, what: string): unknown {
 /** A 32-byte secret kept in a file of its own, written exclusively by `init`: a copy the caller wipes, and the buffer
  * it was read into (which can share a pooled allocation) wiped here, so wiping the copy leaves no other. */
 export function readSecret(path: string, what: string): Uint8Array {
-  let read: Buffer;
-  try { read = readFileSync(path); } catch (error) {
+  let fd: number, read: Buffer | undefined;
+  try { fd = openSync(path, "r"); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CommandError("ABSENT", `no ${what} at ${path}`);
-    throw error;
+    throw unreadable(path, error);
   }
   try {
-    if (read.length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
+    if (fstatSync(fd).size !== 32 || (read = readFileSync(fd)).length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
     return Uint8Array.from(read);
-  } finally { read.fill(0); }
+  } catch (error) { throw error instanceof CommandError ? error : unreadable(path, error); } finally { read?.fill(0); closeSync(fd); }
 }
 
 /** 32 fresh random bytes for a key or token, in an array of their own (never a pooled allocation a wipe would miss). */

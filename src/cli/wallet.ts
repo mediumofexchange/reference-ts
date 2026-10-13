@@ -35,7 +35,7 @@ import { adoptedDomain } from "../pool/v3/configuration.js";
 import type { Construction, KeyedAcceptance, KeyedRequest } from "../pool/v3/construction.js";
 import { decodePublication, encodePublication, type SignedAcceptance } from "../pool/v3/records.js";
 import { encodeRootTerms } from "../pool/v3/terms.js";
-import { openWalletBackup, walletBackupDigest } from "../pool/v3/wallet-backup.js";
+import { MAX_WALLET_BACKUP_BYTES, openWalletBackup, walletBackupDigest } from "../pool/v3/wallet-backup.js";
 import { authenticatePaymentRequest, encodePaymentRequest, paymentRequestDigest, type PaymentRequest } from "../pool/v3/wallet-request.js";
 import { V3Wallet, type Act, type BackerSigner, type LocalProver, type Payment, type WalletReceipt, type WalletView } from "../pool/v3/wallet-store.js";
 import { litConfigHash } from "../lit/configuration.js";
@@ -43,7 +43,7 @@ import { decodePublication as decodeLitPublication } from "../lit/records.js";
 import { encodeLitTerms } from "../lit/terms.js";
 import { authenticateLitPaymentRequest, encodeLitPaymentRequest, litPaymentRequestDigest } from "../lit/wallet.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, commitmentOut, flag, fresh, has, hex, hex32, integer, openDirectory, parseArguments, print, readJson, READ_FLAGS, readOptional, readRequired, readSecret, required,
+import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, integer, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, readJson, READ_FLAGS, readOptional, readRequired, readSecret, required, requireNew, requireWritable,
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryBackend, directoryVerifier, verifierCount } from "./backend.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
@@ -188,16 +188,21 @@ interface Evidence { readonly bytes: Uint8Array; readonly source: "saved" | "fil
 async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms, saved: boolean, use: (source: Evidence) => Promise<T>): Promise<T> {
   if (saved) return use({ bytes: new Uint8Array(), source: "saved" });
   const file = flag(args, "package");
-  if (file !== undefined) return use({ bytes: readRequired(file, "package file"), source: "file" });
+  if (file !== undefined) return use({ bytes: readRequired(file, "package file", PACKAGE_FILE_LIMIT), source: "file" });
   const last = opened.directory.file(`packages/${hex(kept.backing)}`);
   const passed = (skipped: readonly Skipped[]) => skipped.length > 0 ? { skipped } : {};
   return readRepaired(options => syncSources(opened.directory, kept, opened.view,
     client => opened.wallet.supply(store => client.sync(kept.backing, store, { full: options.full(client.baseUrl) })), options.except), async synced => {
     if ("served" in synced) {
+      // Kept only once a read over it resolved, so a source's refused answer never becomes the fallback (audit 32).
       const bytes = synced.served.package;
-      mkdirSync(opened.directory.file("packages"), { recursive: true, mode: 0o700 });
-      writeReplace(last, bytes);
-      return use({ bytes, source: synced.origin, from: { ...(synced.origin === "replica" ? { replica: synced.url } : {}), ...passed(synced.skipped) } });
+      const result = await use({ bytes, source: synced.origin, from: { ...(synced.origin === "replica" ? { replica: synced.url } : {}), ...passed(synced.skipped) } });
+      // Best effort, as the command has answered: a package not kept leaves the last one kept as the fallback.
+      try {
+        mkdirSync(opened.directory.file("packages"), { recursive: true, mode: 0o700 });
+        writeReplace(last, bytes);
+      } catch (error) { event({ event: "kept-package", code: "STORAGE", message: (error as Error).message }); }
+      return result;
     }
     const bytes = readOptional(last);
     if (bytes === undefined) throw new CommandError("UNAVAILABLE", "no source answered and no earlier sync kept a package");
@@ -426,24 +431,26 @@ function restoreBacker(directory: Directory, args: Arguments): object {
   try { writeExclusive(directory.file("backer.key"), secret); return { backer: ed25519.getPublicKey(secret) }; } finally { secret.fill(0); }
 }
 
+/** What a lit wallet restored from its seed or a copy must do about its owner-key window (lit-v1 §8). */
+const windowNote = (sync: "first" | "next", instance: string): string =>
+  `its ${sync} sync of each backing exposes every owner key through h + 256 (lit-v1 §8), and each later sync raises that until ` +
+  "the wallet names a key: move-window before new requests, and before a payment or burn with change. A move from a checkpoint " +
+  `the first sync had counts and fills the window again: wait for one more checkpoint. Make it from a venue view caught up with ${instance}, ` +
+  "or pay its fee to a request taken since: a fee-less move from an older view may repeat that instance's own";
+
 /** `restore-seed`: a new directory whose wallet holds only the seed read from stdin (C4.6). */
 async function restoreSeed(argv: readonly string[]): Promise<void> {
   // The arguments are checked before stdin is read, so a usage error does not wait on input.
   const checked = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", verifiers: "value", "backer-key": "value",
     construction: "value" }, 0);
   required(checked, "dir"); required(checked, "venue"); initConstruction(checked);
-  if (existsSync(resolve(required(checked, "dir")))) throw new CommandError("EXISTS", "restore-seed creates a new directory");
+  requireNew(required(checked, "dir"));
   const secret = await seedFromStdin();
   try {
     await initRole(argv, "wallet", { venue: "required", construction: true, flags: { verifiers: "value", "backer-key": "value" }, fill: async (directory, args) => {
       await withView(directory, args, (view, verifier) =>
         V3Wallet.restoreSeed(directory.file(WALLET_DB), walletOptions(directory, view, verifier), secret).close());
-      return { restored: "seed", ...restoreBacker(directory, args), ...(keyed(directory) ? { notes: [
-        "its first sync of each backing exposes every owner key through h + 256 (lit-v1 §8), and each later sync raises that until " +
-          "the wallet names a key: move-window before new requests, and before a payment or burn with change. A move from a checkpoint " +
-          "the first sync had counts and fills the window again: wait for one more checkpoint. Make it from a venue view caught up " +
-          "with the seed's last instance's, or pay its fee to a request taken since: a fee-less move from an older view may repeat that instance's own",
-      ] } : {}) };
+      return { restored: "seed", ...restoreBacker(directory, args), ...(keyed(directory) ? { notes: [windowNote("first", "the seed's last instance's")] } : {}) };
     } });
   } finally { secret.fill(0); }
 }
@@ -466,8 +473,9 @@ async function handoff(argv: readonly string[]): Promise<void> {
     try {
       // The freeze cannot be undone: an output path that cannot take the handoff is refused before it.
       if (!wallet.custody().frozen) {
-        if (readOptional(outPath!) !== undefined) throw new CommandError("EXISTS", `${outPath} already exists; the handoff is written to a new file`);
+        if (existsSync(outPath!)) throw new CommandError("EXISTS", `${outPath} already exists; the handoff is written to a new file`);
         if (!existsSync(dirname(outPath!))) throw new CommandError("ABSENT", `the parent of ${outPath} does not exist`);
+        requireWritable(outPath!);
       }
       const bytes = wallet.exportBackup(key);
       writeSame(outPath!, bytes);
@@ -491,11 +499,7 @@ async function restoreCopy(argv: readonly string[]): Promise<void> {
       "never run the instance this copy was made from again: two copies of one wallet act unaware of each other; a later read " +
         "that shows another instance of the seed acting stops every acting command (FORKED) until restore --copy is run again",
       "its lost instance may have credited a request it made: fulfill refuses those listed (RESTORED) unless your records outside the wallet show it did not (--uncredited)",
-      ...(keyed(directory) ? ["its next sync of each backing exposes every owner key through h + 256 (lit-v1 §8), and each later sync " +
-        "raises that until " +
-          "the wallet names a key: move-window before new requests, and before a payment or burn with change. A move from a checkpoint " +
-          "the first sync had counts and fills the window again: wait for one more checkpoint. Make it from a venue view caught up " +
-          "with its lost instance's, or pay its fee to a request taken since: a fee-less move from an older view may repeat that instance's own",
+      ...(keyed(directory) ? [windowNote("next", "its lost instance's"),
         "pay refuses a request a statement of this seed already paid; one its lost instance still had in flight is not known: " +
         "if it lands later, the next read stops the wallet (FORKED), so before paying an unpaid request again, ask the payee"] : []),
     ] });
@@ -518,7 +522,7 @@ async function restore(argv: readonly string[]): Promise<void> {
     });
     return;
   }
-  const bytes = readRequired(required(probe, "backup"), "the handoff"), key = readSecret(required(probe, "key"), "the handoff key");
+  const bytes = readRequired(required(probe, "backup"), "the handoff", MAX_WALLET_BACKUP_BYTES), key = readSecret(required(probe, "key"), "the handoff key");
   try {
     // The handoff is opened before the directory exists: one of the other construction, or under wrong credentials,
     // leaves nothing behind (the library would refuse either as INVALID only after init).
@@ -799,6 +803,7 @@ async function publishAcceptance(argv: readonly string[]): Promise<void> {
   const out = required(args, "out");
   await withWallet(directory, args, {}, async opened => {
     const publication = await captured(publisher => opened.wallet.publishAcceptance(alias, publisher));
+    if (compareBytes(publication.subject, kept.backing) !== 0) throw new CommandError("BACKING", "the acceptance is of another backing than the one named");
     print({ status: "written", ...publicationFile(directory, kept, out, publication), notes: [RELAY_NOTE] });
   });
 }

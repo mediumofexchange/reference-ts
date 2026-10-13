@@ -283,8 +283,14 @@ export class V3ServiceClient {
         }
         // The read's own package is the configuration and the commitment alone: whatever else a source put in it would be
         // read once and never kept, so a replica serving it on would leave its own readers short (M12b).
+        // Its one configuration is the construction's: another (or two) would refuse the read itself, which no other source
+        // could then repair, so it is the source's malformed answer here, passed over like any other (audit 32).
         const own = this.#construction.reader.package.decodeEvidencePackage(served.package);
         if (!own.every(item => item.kind === 1 || item.kind === 2)) throw new EncodingError("the read's own package carries more than its configuration and commitment");
+        const configurations = own.filter(item => item.kind === 1);
+        if (configurations.length !== 1 || !this.#construction.reader.verifyConfiguration(configurations[0]!.payload)) {
+          throw new EncodingError("the read's own package names another configuration");
+        }
         const signed = own.filter(item => item.kind === 2).map(item => decodeCommitment(item.payload));
         if (signed.length !== 1 || !verifyCommitment(signed[0]!) || !same(signed[0]!.operator, s.operator) || signed[0]!.sequence !== s.sequence ||
             !same(signed[0]!.root, s.root) || s.sequence >= 1n << 63n) throw new EncodingError("wrong commitment authority");

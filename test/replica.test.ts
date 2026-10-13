@@ -12,7 +12,7 @@ import { encodeLitTerms, litTermsName, litTermsSignatureMessage, type LitRootTer
 import { decodeLitPackage, decodeLitSegmentHeader, decodeLitTrail, encodeLitTrail, litSegmentIdentity } from "../src/lit/transport.js";
 import { EncodingError } from "../src/bytes.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
-import { EvidenceRefusal } from "../src/pool/v3/refusals.js";
+import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { V3ServiceClient, V3ServiceClientError } from "../src/pool/v3/service-client.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import type { RepairRecord, Skipped, Synced } from "../src/cli/reader.js";
@@ -328,9 +328,24 @@ describe("a replica of a lit operator's evidence", () => {
     expect((await readRepaired(supply(new Map()), read, record)).url).toBe("operator");
     expect(asked).toEqual(["operator", "operator full"]);
     expect([...recorded]).toEqual([[f.url, selection]]);
+    // Any other refusal over a source's answer passes it over at once, unrecorded, and stands only where no source
+    // resolves (audit 32): a lapsed or refused read over the operator's answer resolves from the replica.
     asked.length = 0;
     await expect(readRepaired(supply(new Map()), async () => { throw new EvidenceRefusal("unsupported-scope"); }, record))
-      .rejects.toMatchObject({ status: "unsupported-scope" });
-    expect(asked).toEqual(["operator"]);
+      .rejects.toMatchObject({ status: "unsupported-scope",
+        message: `unsupported-scope: no source resolved the read (operator UNRESOLVED, ${f.url} UNRESOLVED)` });
+    expect(asked).toEqual(["operator", f.url]);
+    expect([...recorded]).toEqual([[f.url, selection]]);
+    sources[1]!.withholds = 0; recorded.clear(); asked.length = 0;
+    const refusing = async (synced: Supplied) => {
+      if ("served" in synced && synced.url === "operator") throw new ReplayRefusal("CONFIGURATION");
+      return read(synced);
+    };
+    const past = await readRepaired(supply(new Map()), refusing, record);
+    // The replica, asked after its mark, is repaired from nothing as before.
+    expect([past.url, past.skipped, asked]).toEqual([f.url, [{ url: "operator", code: "REFUSED" }], ["operator", f.url, `${f.url} full`]]);
+    asked.length = 0;
+    await expect(readRepaired(supply(new Map()), async () => { throw new ReplayRefusal("CONFIGURATION"); }, record))
+      .rejects.toMatchObject({ check: "CONFIGURATION", message: `CONFIGURATION: no source resolved the read (operator REFUSED, ${f.url} REFUSED)` });
   });
 });
