@@ -691,8 +691,14 @@ export interface FaultObserver {
     scope: { readonly header: SegmentHeader; readonly terms: readonly SignedTerms[] }): Promise<void>;
   intrinsicFailure(held: { readonly commitment: Commitment; readonly index: bigint },
     scope: { readonly header: SegmentHeader; readonly terms: readonly SignedTerms[] }, blockLength: bigint): string | undefined;
+  /** Records that the checkpoint was excluded by its intrinsic failure, its trail not held (§9.1). */
+  excluded?(held: { readonly commitment: Commitment; readonly index: bigint },
+    scope: { readonly header: SegmentHeader; readonly terms: readonly SignedTerms[] }, blockLength: bigint): void;
   /** Whether any fault evidence was supplied, so that inspecting a checkpoint can report anything. */
   holdsEvidence?(): boolean;
+  /** One digest of the fault evidence supplied (each item that decodes, by its hash, in order): a kept walk's classes
+   * stand for a later read that presents the same faults (§14 kept walk). */
+  evidenceIdentity?(): Uint8Array;
 }
 /** A carrying checkpoint's verdict as the reader reports it. */
 export interface CarryingVerdict {

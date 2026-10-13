@@ -3,6 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compareBytes, EncodingError } from "../src/bytes.js";
@@ -18,9 +19,10 @@ import { decodeFaultEvidence, encodeFaultEvidence } from "../src/pool/v3/fault-e
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import type { CanonicalCheckpoint } from "../src/pool/v3/scope-reader.js";
 import { readFrontier, readPackage, refusalFacts } from "../src/pool/v3/package-reader.js";
-import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
+import { decodeEvidencePackage as decodePackage, encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
+import type { ServedPackage } from "../src/pool/v3/store.js";
 import { applyRecord, openSegmentState, type DeclaredVerifier, type ProofCheck, type SegmentState } from "../src/pool/v3/state.js";
 import { describeState } from "./pool-v3-state-description.js";
 import { encodeRootTerms, rootTermsName, rootTermsSignatureMessage } from "../src/pool/v3/terms.js";
@@ -339,8 +341,9 @@ describe("single-backing compact fault packages", () => {
       const fresh = await f.readCompact(), comparable = (read: typeof fresh) => ({ canonical: canonicalEvidence(read.canonical), carrying: read.carrying,
         force: read.force, clock: read.clock, faults: read.faultEvidence });
       expect(comparable(await f.readCompact(f.compactItems, [f.fault], identified, { store, evidence }))).toEqual(comparable(fresh));
-      // Again from what is kept and retained, the fault supplied again: faults are one read's own items.
-      expect(comparable(await f.readCompact([], [f.fault], identified, { store, evidence }))).toEqual(comparable(fresh));
+      // Again from what is kept and retained, the fault supplied again: faults are one read's own items. The same fault set
+      // resumes the kept walk, which classifies nothing again, so it reports no facts of what it classified before.
+      expect(comparable(await f.readCompact([], [f.fault], identified, { store, evidence }))).toEqual({ ...comparable(fresh), faults: undefined });
       await expect(f.readCompact([], [], identified, { store, evidence })).rejects.toMatchObject({ status: "unresolved-evidence" });
       await expect(f.readCompact(f.compactItems, [])).rejects.toMatchObject({ status: "unresolved-evidence" });
     } finally { store.close(); evidence.close(); rmSync(dir, { recursive: true, force: true }); }
@@ -431,22 +434,97 @@ describe("single-backing compact fault packages", () => {
       .toEqual({ ...expected, canonical: canonicalEvidence(expected.canonical) });
   });
 
-  it("lets a successor journal take over past a compact exclusion only from evidence it keeps and serves (C2.7.4)", async () => {
+  it("resumes a kept walk for a read presenting the same faults, begins again for another set, and names the faults that excluded (§14, §9.1)", async () => {
+    const f = await compactFixture(), dir = mkdtempSync(join(tmpdir(), "moe-compact-kept-"));
+    const store = new ReplayStore(join(dir, "replay.sqlite"), { digest: join(dir, "replay.sha256") }), evidence = new EvidenceStore(join(dir, "evidence.sqlite"));
+    const counting = () => { const v = { checks: 0, identities: configuration.circuits, verify(_k: number, _i: bigint[], proof: Uint8Array) { v.checks++; return compareBytes(proof, b(99)) !== 0; } }; return v; };
+    const junk = encodeFaultEvidence({ ...decodeFaultEvidence(f.fault, 1024n), previous: b(77) }, 1024n);
+    try {
+      const read = async (faults: Uint8Array[]) => {
+        const v = counting(), r = await f.readCompact(f.compactItems, faults, v as DeclaredVerifier, { store, evidence });
+        return { checks: v.checks, carrying: r.carrying, excludedBy: r.excludedBy };
+      };
+      const first = await read([f.fault]);
+      expect(first.carrying.find(item => item.sequence === "3")).toMatchObject({ class: "excluded", check: "PROOF" });
+      expect(first.excludedBy).toEqual([hex(sha256(f.fault))]);
+      expect(first.checks).toBeGreaterThan(0);
+      // The same fault set over the same retained evidence: what was classified stands, and no proof is checked again.
+      const again = await read([f.fault]);
+      expect([again.checks, again.carrying]).toEqual([0, first.carrying]);
+      // A kept walk that excluded a checkpoint by its fault never stands in for that checkpoint's own trail when a read
+      // selects it: it is judged again, and refuses as a fresh read does.
+      const hostile = pack([...f.compactItems, { kind: 7, payload: f.fault }, { kind: 1, payload: configurationBytes(configuration) },
+        { kind: 2, payload: encodeCommitment(f.hostile) }]);
+      await expect(readPackage(hostile, f.f.selection(f.hostile), { ...f.f.options, verifier: counting() as DeclaredVerifier, store, evidence }))
+        .rejects.toMatchObject({ status: "unresolved-evidence" });
+      // Another set (a junk fault beside it) begins again and classifies as a fresh read does.
+      const other = await read([f.fault, junk]);
+      expect([other.checks > 0, other.carrying, other.excludedBy]).toEqual([true, first.carrying, first.excludedBy]);
+    } finally { store.close(); evidence.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("keeps no fault a takeover did not need: one beside the trail it held (Next 4 (bk))", async () => {
     const f = await compactFixture(); f.f.replace();
-    const { V3OperatorJournal } = await import("../src/pool/v3/store.js"), dir = mkdtempSync(join(tmpdir(), "moe-compact-takeover-"));
+    const { V3OperatorJournal } = await import("../src/pool/v3/store.js"), dir = mkdtempSync(join(tmpdir(), "moe-full-takeover-"));
     const j = new V3OperatorJournal(join(dir, "journal.db"), { secret: nextSecret, venue: f.f.venue, reference, verifier: f.verifier });
     try {
-      // A fault is one read's own item, which the journal neither keeps nor serves: the takeover refuses before it signs,
-      // rather than publishing an opening that neither it nor a reader of it could read again.
-      await expect(j.takeover("compact", f.f.signed, pack([...f.compactItems, { kind: 7, payload: f.fault }]))).rejects.toMatchObject({ code: "UNAVAILABLE" });
-      expect((await j.status()).signed).toBeUndefined();
-      // The whole trail is evidence it keeps: it takes over, adopts, and a fresh reader reads what it serves alone.
-      expect((await j.takeover("complete", f.f.signed, pack(f.f.items))).sequence).toBe(1n);
-      await j.publish(); f.f.venue.advance(f.f.venue.witnessedIndex() + lag + 1n);
-      expect(await j.adopt()).toEqual([]);
-      const served = await j.package();
-      expect((await readPackage(served.package, { ...served.selection, judgingIndex: f.f.venue.witnessedIndex(), mode: "current-fixture" },
-        { ...f.f.options, verifier: f.verifier })).state).toBeDefined();
+      expect((await j.takeover("full", f.f.signed, pack([...f.f.items, { kind: 7, payload: f.fault }]))).sequence).toBe(1n);
+      await j.publish();
+      expect(decodePackage((await j.package()).package).filter(item => item.kind === 7)).toEqual([]);
     } finally { j.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("lets a successor journal take over past a compact exclusion, keeping the faults its read authenticated and serving them in each read's own package (C2.7.4, Next 4 (bk))", async () => {
+    const f = await compactFixture(); f.f.replace();
+    const { V3OperatorJournal } = await import("../src/pool/v3/store.js"), { V3Replica } = await import("../src/pool/v3/replica.js");
+    const dir = mkdtempSync(join(tmpdir(), "moe-compact-takeover-"));
+    const j = new V3OperatorJournal(join(dir, "journal.db"), { secret: nextSecret, venue: f.f.venue, reference, verifier: f.verifier });
+    const stores: EvidenceStore[] = [];
+    try {
+      // A fault that authenticates against no checkpoint the read walks is a supplier's junk: never kept.
+      const value = decodeFaultEvidence(f.fault, 1024n), junk = encodeFaultEvidence({ ...value, previous: b(77) }, 1024n);
+      const faultsOf = (bytes: Uint8Array) => decodePackage(bytes).filter(item => item.kind === 7).map(item => hex(item.payload));
+      // A read takes at most 32 faults: past that the takeover refuses before it signs, as for any evidence past its budget.
+      const excess = Array.from({ length: 32 }, (_, i) => ({ kind: 7, payload: encodeFaultEvidence({ ...value, previous: b(100 + i) }, 1024n) }));
+      await expect(j.takeover("excess", f.f.signed, pack([...f.compactItems, { kind: 7, payload: f.fault }, ...excess])))
+        .rejects.toMatchObject({ code: "REFUSED", check: "RESOURCE" });
+      expect((await j.status()).signed).toBeUndefined();
+      // The trail of the excluded checkpoint is withheld: the fault alone passes it, and the opening is signed.
+      expect((await j.takeover("compact", f.f.signed, pack([...f.compactItems, { kind: 7, payload: f.fault }, { kind: 7, payload: junk }]))).sequence).toBe(1n);
+      await j.publish(); f.f.venue.advance(f.f.venue.witnessedIndex() + lag + 1n);
+      // Its own reads take the fault from their own package: it adopts, admits and audits.
+      expect(await j.adopt()).toEqual([]);
+      await j.audit();
+      const read = async (own: Uint8Array, selection: ServedPackage["selection"], evidence?: EvidenceStore) =>
+        readPackage(own, { ...selection, judgingIndex: f.f.venue.witnessedIndex(), mode: "current-fixture" },
+          { ...f.f.options, verifier: f.verifier, ...(evidence === undefined ? {} : { evidence }) });
+      // A fresh reader of what it serves resolves from that alone: the whole package, and its parts kept in a store.
+      const whole = await j.package();
+      expect(faultsOf(whole.package)).toEqual([hex(f.fault)]);
+      expect((await read(whole.package, whole.selection)).state).toBeDefined();
+      const served = await j.serve(), kept = new EvidenceStore(); stores.push(kept);
+      expect(faultsOf(served.package)).toEqual([hex(f.fault)]);
+      expect(await kept.take(served.parts)).toBe(true);
+      expect((await read(served.package, served.selection, kept)).state).toBeDefined();
+      // A replica keeps the read's own package with its selection and serves it on: its reader resolves too.
+      const path = join(dir, "replica.db"), shared = new EvidenceStore(path, { shared: true }); stores.push(shared);
+      const replicated = await j.serve();
+      expect(await shared.take(replicated.parts, replicated.selection.operator)).toBe(true);
+      const replica = new V3Replica(path, shared, f.f.venue.id);
+      expect(replica.keep({ selection: replicated.selection, package: replicated.package })).toBe(true);
+      const onward = await replica.serve(replicated.selection.backing, 0n), reader = new EvidenceStore(); stores.push(reader);
+      expect(faultsOf(onward.package)).toEqual([hex(f.fault)]);
+      expect(await reader.take(onward.parts)).toBe(true);
+      expect((await read(onward.package, onward.selection, reader)).state).toBeDefined();
+      // Without the fault, the same parts leave a read unresolved: the fault is what passes the withheld trail.
+      const bare = encodeEvidencePackage(decodePackage(onward.package).filter(item => item.kind !== 7));
+      await expect(read(bare, onward.selection, reader)).rejects.toMatchObject({ status: "unresolved-evidence" });
+      // A kept fault that storage damaged is refused by name, never served short.
+      j.close();
+      const db = new DatabaseSync(join(dir, "journal.db"));
+      db.prepare("UPDATE journal_fault SET payload = ?").run(junk); db.close();
+      const again = new V3OperatorJournal(join(dir, "journal.db"), { secret: nextSecret, venue: f.f.venue, reference, verifier: f.verifier });
+      try { await expect(again.package()).rejects.toMatchObject({ code: "STORAGE", message: "a kept fault is damaged" }); } finally { again.close(); }
+    } finally { for (const store of stores) store.close(); j.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 });

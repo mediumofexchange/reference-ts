@@ -142,6 +142,23 @@ describe("bounded v3 local service client", () => {
       await expect(new V3ServiceClient(await serving({ ...good, package: own }), TOKEN, expected()).package(backing))
         .rejects.toThrow("the read's own package names another configuration");
     }
+    // It may carry the §9 faults one read takes (32 items, 1 MiB; §9.1, Next 4 (bk)), kept with the selection and served
+    // on; another kind, or faults past that budget, is the source's malformed answer.
+    const configured = { kind: 1, payload: adoptedConfigurationBytes() }, ordered = (items: { kind: number; payload: Uint8Array }[]) =>
+      encodeEvidencePackage(items.sort((x, y) => x.kind - y.kind || Buffer.compare(sha256(x.payload), sha256(y.payload))));
+    const faults = (count: number, size = 1) => Array.from({ length: count }, (_, i) => ({ kind: 7, payload: new Uint8Array(size).fill(i) }));
+    const carrying = ordered([configured, commitment, ...faults(32)]);
+    expect(await new V3ServiceClient(await serving({ ...good, package: carrying }), TOKEN, expected()).package(backing))
+      .toEqual({ selection: good.selection, package: carrying });
+    const largest = ordered([configured, commitment, ...faults(1, 1_048_576)]);
+    expect((await new V3ServiceClient(await serving({ ...good, package: largest }), TOKEN, expected()).package(backing)).package).toEqual(largest);
+    for (const [items, refusal] of [[[configured, commitment, { kind: 4, payload: b(31) }], "carries more than its configuration, commitment and faults"],
+      [[configured, commitment, { kind: 10, payload: b(31) }], "carries more than its configuration, commitment and faults"],
+      [[configured, commitment, ...faults(33)], "carries more faults than a read takes"],
+      [[configured, commitment, ...faults(2, 524_289)], "carries more faults than a read takes"]] as const) {
+      await expect(new V3ServiceClient(await serving({ ...good, package: ordered([...items]) }), TOKEN, expected()).package(backing))
+        .rejects.toThrow(`the read's own package ${refusal}`);
+    }
     // A response past the caller's budget is refused as it arrives.
     await expect(new V3ServiceClient(url, TOKEN, expected()).package(backing, 100n)).rejects.toThrow("served evidence exceeds the reader's budget");
     // A JSON body where a stream is expected is no served evidence.

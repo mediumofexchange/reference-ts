@@ -105,7 +105,8 @@ describe("v3 service wire framing", () => {
   it("refuses to frame a wrong selection, an oversized part or a trail that is not its stated size", async () => {
     await expect(framed({ ...served(), selection: { ...served().selection, sequence: 0n } })).rejects.toThrow("invalid service sequence");
     await expect(framed({ ...served(), selection: { ...served().selection, root: b(1).subarray(1) } })).rejects.toThrow("expected a 32-byte service identity");
-    await expect(framed({ ...served(), package: new Uint8Array(65_537) })).rejects.toThrow("served package too large");
+    // A read's own package is its configuration and commitment (64 KiB) and the faults one read takes (Next 4 (bk)).
+    await expect(framed({ ...served(), package: new Uint8Array(65_536 + 1_048_576 + 9 * 32 + 1) })).rejects.toThrow("served package too large");
     await expect(framed(served([{ package: new Uint8Array(MAX_V3_SERVED_PART_BYTES + 1) }]))).rejects.toThrow("served package part too large");
     for (const size of [2n, 4n]) {
       await expect(framed(served([{ trail: { size, chunks: [Uint8Array.of(1, 2, 3)] } }]))).rejects.toThrow("a served trail is not its stated size");

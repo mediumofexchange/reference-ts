@@ -365,7 +365,7 @@ export class EvidenceStore {
 
   /**
    * A replica's served read for `backing` (M12b): from now on it serves the selection of `operator` at `sequence`, whose
-   * own package (configuration and commitment) is `ownPackage`. Where `sequence` is above every selection of that
+   * own package (configuration, commitment and any faults) is `ownPackage`. Where `sequence` is above every selection of that
    * operator served before, every object and trail top of its evidence kept since is indexed under it in the same
    * transaction, so a reader served through an earlier selection of this replica is served all of them after it; at the
    * highest one served already, the backing's selection moves and what is pending waits for a higher one; below it,

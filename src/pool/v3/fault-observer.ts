@@ -2,7 +2,7 @@
 // the read's construction (construction.ts `fault`): pool-v3's proofs and signature facts, lit-v1 §6's arithmetic
 // and signatures.
 import { sha256 as hash } from "@noble/hashes/sha2.js";
-import { bytesToHex as hex } from "@noble/hashes/utils.js";
+import { bytesToHex as hex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { arrayLength, byteLength, compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { POOL_V3, type Construction, type FaultObservation, type FaultTarget } from "./construction.js";
 import { FaultEvidenceLimitError } from "./fault-evidence.js";
@@ -13,6 +13,8 @@ import type { RootTerms } from "./terms.js";
 
 export type { FaultObservation } from "./construction.js";
 export const FAULT_LIMITS = Object.freeze({ maxBytes: 1_048_576n, maxItems: 32n, maxSuffixEntries: 1024n });
+/** The local tag of a read's fault set as a kept walk names it (§14; no protocol bytes). */
+const FAULT_SET = utf8ToBytes("moe/reader/v3/kept-faults");
 export type FaultFact = FaultObservation & {
   readonly operator: string;
   readonly sequence: string;
@@ -30,7 +32,8 @@ export type FaultFact = FaultObservation & {
   readonly proofHash?: string;
   readonly signatureHash: string;
 };
-export interface FaultResult { readonly faultEvidence?: readonly FaultFact[] }
+/** `excludedBy`: the hash of each fault item that excluded a checkpoint whose trail the read did not hold (§9.1). */
+export interface FaultResult { readonly faultEvidence?: readonly FaultFact[]; readonly excludedBy?: readonly string[] }
 export interface ReportingFaultObserver extends FaultObserver { result(): FaultResult }
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
@@ -67,7 +70,15 @@ export function faultObserver(payloads: readonly Uint8Array[] = [],
   const verify = verifier.verify.bind(verifier), bound: ProofCheck = { verify };
   const evidence: { id: string; value: FaultTarget }[] = [];
   const facts = new Map<string, FaultFact>(), demands = new Map<string, unknown>();
-  const intrinsic = new Map<string, { position: bigint; check: FaultObservation["check"] }[]>();
+  const intrinsic = new Map<string, { position: bigint; check: FaultObservation["check"]; id: string }[]>(), excludedBy = new Set<string>();
+  // The fact an intrinsic verdict rests on: after the adopted block, PROOF first (§9.1 item 4).
+  const eligibleFact = (held: Parameters<FaultObserver["inspect"]>[0], scope: Parameters<FaultObserver["inspect"]>[2], blockLength: bigint) => {
+    if (typeof blockLength !== "bigint") throw new Error("adopted block length required");
+    if (held.commitment.sequence <= scope.header.sequence) return undefined;
+    const eligible = (intrinsic.get(`${heldKey(held)}:${hex(hash(header.segmentBytes(scope.header)))}`) ?? [])
+      .filter(fact => fact.position > blockLength);
+    return eligible.find(fact => fact.check === "PROOF") ?? eligible[0];
+  };
   for (const payload of boundFaultInputs(payloads)) {
     try {
       const value = frames.fault(payload, FAULT_LIMITS.maxSuffixEntries);
@@ -82,24 +93,24 @@ export function faultObserver(payloads: readonly Uint8Array[] = [],
     // Canonical package order must not change the fact list. Observations of
     // one record keep their order. Returned facts do not alias retained state.
     holdsEvidence: () => evidence.length > 0,
+    evidenceIdentity: () => hash(concatBytes(FAULT_SET, ...evidence.map(item => hexToBytes(item.id)).sort(compareBytes))),
     result() {
-      if (facts.size === 0) return {};
+      const used = excludedBy.size === 0 ? {} : { excludedBy: [...excludedBy].sort() };
+      if (facts.size === 0) return used;
       const order = <T extends bigint | string>(a: T, b: T): number => (a < b ? -1 : a > b ? 1 : 0);
       const ordered = [...facts.values()].map((fact, i) => ({ fact, i })).sort((a, b) =>
         order(BigInt(a.fact.index), BigInt(b.fact.index)) || order(BigInt(a.fact.sequence), BigInt(b.fact.sequence)) ||
         order(BigInt(a.fact.position), BigInt(b.fact.position)) || order(a.fact.evidence, b.fact.evidence) || a.i - b.i);
-      return { faultEvidence: ordered.map(item => ({ ...item.fact })) };
+      return { faultEvidence: ordered.map(item => ({ ...item.fact })), ...used };
     },
     // Callers first resolve the valid opening, last-valid state, original
     // record prefix and complete adoption scope, including sibling clocks.
     // §9.1 item 4 permits only a position after the required adopted block,
     // whose length the caller derived from complete publication evidence.
-    intrinsicFailure(held, scope, blockLength) {
-      if (typeof blockLength !== "bigint") throw new Error("adopted block length required");
-      if (held.commitment.sequence <= scope.header.sequence) return undefined;
-      const eligible = (intrinsic.get(`${heldKey(held)}:${hex(hash(header.segmentBytes(scope.header)))}`) ?? [])
-        .filter(fact => fact.position > blockLength);
-      return (eligible.find(fact => fact.check === "PROOF") ?? eligible[0])?.check;
+    intrinsicFailure(held, scope, blockLength) { return eligibleFact(held, scope, blockLength)?.check; },
+    excluded(held, scope, blockLength) {
+      const fact = eligibleFact(held, scope, blockLength);
+      if (fact !== undefined) excludedBy.add(fact.id);
     },
     async inspect(held, directory, scope) {
       if (evidence.length === 0) return;
@@ -125,8 +136,8 @@ export function faultObserver(payloads: readonly Uint8Array[] = [],
           // position, retaining all distinct positions for the adopted-block eligibility test.
           const key = `${heldKey(held)}:${hex(e.snapshot.segment)}`, positions = intrinsic.get(key) ?? [];
           const prior = positions.find(fact => fact.position === e.position);
-          if (prior === undefined) positions.push({ position: e.position, check: observation.check });
-          else if (observation.check === "PROOF") prior.check = "PROOF";
+          if (prior === undefined) positions.push({ position: e.position, check: observation.check, id });
+          else if (observation.check === "PROOF") { prior.check = "PROOF"; prior.id = id; }
           intrinsic.set(key, positions);
         }
         const key = `${hex(c.operator)}:${c.sequence}:${hex(c.root)}:${id}`, digests = e.digests;

@@ -8,6 +8,7 @@ import { EncodingError } from "../../bytes.js";
 import { decodeCommitment, encodeCommitment, type Commitment } from "../../venue-records.js";
 import { POOL_V3, type Construction } from "./construction.js";
 import type { EvidencePart, TrailTip } from "./evidence-store.js";
+import { FAULT_LIMITS } from "./fault-observer.js";
 import type { ServedEvidence, ServedPackage } from "./store.js";
 
 export const V3_SERVICE_PROFILE = "pool-store/v3";
@@ -101,8 +102,9 @@ export function replyFromCommitment(kind: "committed" | "published", commitment:
 // The first package holds the read's own items; each part is an EvidencePart. Integers are big-endian. The
 // frame carries existing v3 bytes and adds none: a receiver's evidence store authenticates what it keeps.
 const SERVED = utf8ToBytes("pool-store/v3/served");
-/** The read's own package: a configuration and one commitment. */
-const MAX_OWN_PACKAGE_BYTES = 65_536;
+/** The read's own package: a configuration and one commitment (64 KiB), and the §9 faults one read takes, each a §12 item
+ * (Next 4 (bk)). */
+const MAX_OWN_PACKAGE_BYTES = 65_536 + Number(FAULT_LIMITS.maxBytes + 9n * FAULT_LIMITS.maxItems);
 /** One package part: a supplier sends objects in parts of about 1 MiB, and one object is at most 1 MiB. */
 export const MAX_V3_SERVED_PART_BYTES = 4_194_304;
 /** Whether a served stream's peer is too slow: the time one side spent waiting on the other passed fifteen seconds and a

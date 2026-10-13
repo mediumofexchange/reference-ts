@@ -516,4 +516,29 @@ describe("replay storage", () => {
       expect(store.nextPublication(backingB, undefined, 5n)?.ordinal).toBe(3n);
     } finally { store.close(); }
   });
+
+  it("marks a kept walk read from retained evidence whatever fault set named it beside that evidence (Next 4 (bg), (bk) review)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-remark-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const store = new ReplayStore(path, { digest }), context = new Uint8Array(32).fill(7), identity = new Uint8Array(16).fill(3);
+    const old = new Uint8Array(32).fill(1), later = new Uint8Array(32).fill(2), set = new Uint8Array(32).fill(9);
+    const key = (evidence: Uint8Array, marks: Uint8Array[]) => ({ selected: new Uint8Array(32).fill(5), evidence, mark: marks[0]!,
+      holds: (mark: Uint8Array) => marks.some(m => Buffer.compare(m, mark) === 0), through: 10n });
+    try {
+      // A walk named by the evidence and a fault set's digest, kept at an old mark.
+      const named = Buffer.concat([identity, set]);
+      store.closeWalk(store.openWalk(context, key(named, [old])).walk);
+      store.remark(identity, later);
+      // Evidence restored to before the later mark (it holds only the old one) no longer resumes it; evidence that holds the later mark does.
+      const restored = store.openWalk(context, key(named, [old]));
+      expect(restored.resumed).toBe(false); store.closeWalk(restored.walk);
+      store.closeWalk(store.openWalk(context, key(named, [old])).walk);
+      store.remark(identity, later);
+      const current = store.openWalk(context, key(named, [later]));
+      expect(current.resumed).toBe(true); store.closeWalk(current.walk);
+      // Another evidence's walk is not marked.
+      store.remark(new Uint8Array(16).fill(4), old);
+      const still = store.openWalk(context, key(named, [later]));
+      expect(still.resumed).toBe(true); store.closeWalk(still.walk);
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
 });

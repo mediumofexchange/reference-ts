@@ -12,7 +12,7 @@
 // predecessors are then rows already written, so nothing recurses through
 // history and nothing grows in memory with the number of checkpoints.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex as hex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { linkInForce, RangeLimitError, type HeldCommitment, type RangeEntry } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
@@ -532,16 +532,26 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     throw new TypeError("a kept store needs a witness predicate that declares its identity");
   }
   // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
-  // A read from the party's retained evidence, with no fault items or receipt of its own, resumes the selected
-  // backing's kept walk (§14 kept walk): what it classified stands, and this read classifies what is new.
-  // A read past the venue's witnessed index is refused when its view is read; it does not raise the kept index.
+  // A read from the party's retained evidence, with no receipt of its own, resumes the selected backing's kept walk
+  // (§14 kept walk): what it classified stands, and this read classifies what is new. A class rests on the fault items
+  // a read presents too (§9.1), so a read with faults names its kept walk by its retained evidence and that fault set:
+  // another set begins again, and an observer that cannot name its set keeps no walk. A resumed read reports fault facts
+  // only for what it classifies. A read past the venue's witnessed index is refused when its view is read; it does not
+  // raise the kept index.
   const witnessed = ((): bigint | undefined => { try { const now: unknown = record.witnessedIndex(); return typeof now === "bigint" ? now : undefined; } catch { return undefined; } })();
-  const retained = evidence.retained, keptWalk = retained !== undefined && context.receiptBytes === undefined &&
-    faults.holdsEvidence?.() !== true && witnessed !== undefined && selection.judgingIndex <= witnessed ? { selected: selection.backing, evidence: retained.identity, mark: retained.mark,
+  // The name is the retained evidence's identity followed by the fault set's digest, so a preparation that marks the
+  // walks read from that evidence finds them whatever faults they presented (`ReplayStore.remark`).
+  const faultSet = faults.holdsEvidence?.() === true ? faults.evidenceIdentity?.() ?? null : undefined, retained = evidence.retained;
+  const keptEvidence = retained === undefined || faultSet === null ? undefined :
+    faultSet === undefined ? retained.identity : concatBytes(retained.identity, faultSet);
+  const keptWalk = retained !== undefined && keptEvidence !== undefined && context.receiptBytes === undefined &&
+    witnessed !== undefined && selection.judgingIndex <= witnessed ? { selected: selection.backing, evidence: keptEvidence, mark: retained.mark,
       holds: (mark: Uint8Array) => retained.holds(mark), through: selection.judgingIndex } : undefined;
   const { trails } = evidence, { walk, resumed } = store.openWalk(keptContext({ construction, domain: selection.domain, venue: selection.venue,
     verifier: { verify: context.verifier.verify, identities }, witness: context.witness }), keptWalk);
   const views = new Map<string, Promise<RecordView>>(), running = new Map<string, Promise<ScopeVerdict>>();
+  const chosen = "operator" in selection ? selection as ReaderSelection : undefined;
+  const isSelected = (c: Commitment): boolean => chosen !== undefined && same(c.operator, chosen.operator) && c.sequence === chosen.sequence && same(c.root, chosen.root);
   const cursors = new Map<string, { term: number; after: bigint | undefined; busy: boolean }>();
   // Whether any classification began, and the bound a refused read's fault pass starts below.
   let began = false, below: HeldCommitment | undefined;
@@ -724,7 +734,9 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   };
   const classify = (held: HeldCommitment, backing: Uint8Array): Promise<ScopeVerdict> => {
     const id = keyOf(held.commitment), key = rowKey(held.commitment), classified = store.verdict(walk, key);
-    if (classified !== undefined) return Promise.resolve(load(classified, backing));
+    // The read's own selection is judged again where a kept walk excluded it: a §9.1 fault may have excluded it for an
+    // earlier read of another selection, but never stands in for the selected checkpoint's own trail.
+    if (classified !== undefined && !(classified.class === "excluded" && isSelected(held.commitment))) return Promise.resolve(load(classified, backing));
     if (running.has(id)) return running.get(id)!;
     let kept: WalkVerdict | undefined;
     try { kept = store.keptVerdict(key); } catch (error) {
@@ -904,11 +916,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       });
       // §9.1: the opening's record-derived block bounds compact exclusion to later positions. The selected checkpoint's own
       // envelope stays complete: a compact fault never stands in for its trail, which a lapse alone does not need.
-      const chosen = "operator" in selection ? selection as ReaderSelection : undefined;
-      const selected = chosen !== undefined && same(c.operator, chosen.operator) && c.sequence === chosen.sequence && same(c.root, chosen.root);
-      const intrinsic = !opening && !selected && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
+      const intrinsic = !opening && !isSelected(c) && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
       const classification = scope.classificationEvidence(intrinsic);
-      if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
+      if (classification.intrinsic !== undefined) {
+        faults.excluded?.(held, scope, BigInt(block.length));
+        return { ...base, class: "excluded", check: classification.intrinsic };
+      }
       // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot.
       const s = kept?.state;
       if (kept !== undefined) {

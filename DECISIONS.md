@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-13` [Keep the faults a takeover read and serve them in each read's own package (Next 4 (bk))](decisions/2026-10.md#2026-10-13--keep-the-faults-a-takeover-read-and-serve-them-in-each-reads-own-package-next-4-bk)
 - `2026-10-13` [Replay an init or a restore whose reply was lost from the directory it finished, and remove a replica by command (Next 4 (br), (bs))](decisions/2026-10.md#2026-10-13--replay-an-init-or-a-restore-whose-reply-was-lost-from-the-directory-it-finished-and-remove-a-replica-by-command-next-4-br-bs)
 - `2026-10-13` [Keep Ergo for the release: a phone reaches Bitcoin only through about ten provers, Dogecoin is the next venue probe, and a venue move is a planned move for pool-v4 (slice 29, Next 12)](decisions/2026-10.md#2026-10-13--keep-ergo-for-the-release-a-phone-reaches-bitcoin-only-through-about-ten-provers-dogecoin-is-the-next-venue-probe-and-a-venue-move-is-a-planned-move-for-pool-v4-slice-29-next-12)
 - `2026-10-13` [Pass a read over to the next source on any refusal of its answer, and name the commands' file, URL and budget refusals (audit 32)](decisions/2026-10.md#2026-10-13--pass-a-read-over-to-the-next-source-on-any-refusal-of-its-answer-and-name-the-commands-file-url-and-budget-refusals-audit-32)
