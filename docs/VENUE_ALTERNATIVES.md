@@ -316,6 +316,93 @@ Measured 2026-10-12, read-only ([tooling and result](https://github.com/mediumof
 - *Tests:* agreement with the reference's own framer, not with the node; mutations are random, and the review added 86 targeted hostile cases (78 also through the circuit, packed several to a buffer). The gate counts include a test-only validity sum of a few gates a byte.
 - *Window:* one day of Ergo for the size and the shaped-output count.
 
+### The complete exhaustion leaf (slice 32)
+
+Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/03b0963/scripts/venue/exhaustion-probe); [decision](../decisions/2026-10.md#2026-10-13--the-complete-exhaustion-leaf-keeps-up-with-an-ordinary-ergo-day-on-one-4-vcpu-prover-about-three-times-over-slice-32-next-12)). The question ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction), Next 12 step 1): [slice 22](#the-attribution-scans-cost-slice-22)'s scan with the bindings it left open (transaction boundaries bound to the hashing, entries bound to their transactions, state carried across leaves, challenges), the map by subject and the period fold, against one 4-vCPU prover's day. It is falsified if it cannot keep up with an ordinary Ergo day, or if the complete leaf exceeds 2^22 rows.
+
+**It keeps up with an ordinary day about three times over.** Slice 22's day takes one 4-vCPU prover 7.0 hours with every binding, the map and the fold, against 14.9 hours there for the hashing and scan alone. The latest day, with 2.4 times the unsigned bytes, takes 14.1 hours.
+
+| Measured (one 4-vCPU Xeon at 2.10 GHz, 15 GB, idle) | Value |
+|---|---|
+| Blake2b-256 compression, hinted additions and rotations | 9,861 gates, against slice 21's 32,941; digests equal `@noble/hashes`' at 10 and 20 compressions, an all-`0xff` message among them |
+| T-leaf: 172 transaction slots (22 KB) and 688 list slots | 4,166,156 gates in 2^22 rows; 23,799 a slot with its four list slots, 33,920 fixed; proved in 71.4–72.0 s, 6.3 GB peak |
+| M-leaf: 378 tree and header compressions | 4,190,073 gates; 11,037 a slot; 75.0 s, 6.4 GB |
+| U-leaf: 790 subject-map updates | 4,162,214 gates; 5,253 a slot; 75.5 s, 5.4 GB |
+| Node: two children verified and joined | 1,469,892 gates in 2^21 rows; 24.8 s, 2.0 GB |
+| First and next fold | 711,228 and 1,477,559 gates |
+| Proof | 14,656 bytes, as every UltraHonk proof of the declared system |
+
+**Three leaf kinds share one state.**
+- *T-leaves* hash and scan transaction bytes, one compression and 128 scan steps a slot, and list the entries their scan emits: at most four a slot, since an output with the shape spans at least 42 bytes.
+- *M-leaves* hash each block's transactions-root tree and its header, one compression a slot.
+- *U-leaves* apply the entries to the subject map, one update a slot.
+- One state hash at each end of a leaf covers all three streams: 90 field elements under Poseidon2 (73 gates a permutation). Leaves of any kind therefore follow one another in one sequence, and each kind fills its own rows whatever a day's mix: slice 22's day needs 1.7 transaction compressions for each tree or header one, the latest day 3.7.
+
+**The bindings.**
+- *Transaction boundaries:* each transaction starts a fresh compression, and its last slot is zero past its length, which enters Blake2b's counter. The ids the T-leaves compute are therefore those of the bytes they scanned, divided where they scanned them. Each id joins a chain with its labels, the block's height and its position in the block.
+- *Ids to headers:* M-leaves push the same ids under the same labels into a stack machine. It hashes tree leaves and nodes under venue-ergo §4's prefixes, and at each header's first chunk it requires a single stack entry equal to the bytes at offsets 65–97 (the transactions root) and the bytes at 1–33 equal to the previous header's id.
+  - The machine needs no rule for the tree's shape. Without a Blake2b collision, any tree whose root equals the header's is the real one, leaf for leaf and in order, because a leaf, a single-child node and a node hash messages of different lengths or prefixes.
+  - A leaf pushed below the tree leaves two entries at the header and is refused.
+  - A period ends only where both chains are equal, so the T-leaves scanned exactly each block's transactions, in order, under the labels its tree gives them.
+- *Entries:* the scan emits (subject, height, position, output) for every output with §6's shape that it reaches.
+  - A T-leaf lists its entries in order of position and checks the list against what it scanned as multisets. The two challenges are derived in the circuit from the leaf's own two state hashes, which bind every byte it hashed (through the ids and the Blake2b chaining value), its scan registers and its list.
+  - Challenges from the period's header ids, as slice 22 planned, would make every leaf wait for its period's end. A leaf's own ends serve as soon as its bytes do.
+  - The list joins a chain of entries, and U-leaves take the same chain in order. A period ends only where the two entry chains are equal.
+- *No validity test:* slice 22 counted an entry only for a transaction inside §5's grammar. Here every shaped output the machine reaches is an entry, and its error checks are gone.
+  - A grammatical transaction parses the same without them, so absence stays proven.
+  - An entry from an ungrammatical transaction costs a phone one fetch, as one at another tree already does. The model found 50 such entries among 757 over 30 synthetic periods, and none on either mainnet day.
+  - The scan, mask and padding now cost about 105 gates a byte beside the hashing, against slice 22's 181.5 for the scan alone.
+
+**The map by subject.** The map is a sparse Merkle tree of depth 32 under Poseidon2, keyed by a subject's last four bytes. Each key holds a count and a chain of its entries in chain order.
+- *A phone's read:* a phone following a subject keeps its key's count and chain at the last root it verified. At a later root it reads one path of 32 siblings (1 KB). An unchanged count proves absence over the whole interval. Otherwise it reads the new entries and recomputes the chain from the one it kept. Then it fetches each named transaction with a path to its header's transactions root and applies §5 and §6 itself.
+- *Collisions:* two subjects sharing a key, by chance or by choice, only add entries the phone passes over. Anyone can already add those by writing the subject into an output's R4.
+- *A seed restore* reads each key's whole chain from the map's start, which must not be later than the anchors it serves.
+- *Privacy:* a path names the key it reads. Fetching a period's whole map stays the lever.
+
+**The fold.**
+- *Nodes:* a node verifies two children, each under a key from a fixed set. The set is the three leaf keys and the node key, which every proof carries as a public input and every parent compares; the phone pins the root's key. The node joins the children where the left's end state is the right's start.
+- *A period's fold* verifies its tree's root and reads the two states it covers. It requires a canonical start (no transaction or header open, an empty stack and empty chains) and an end at a block boundary where both pairs of chains are equal. It exposes the end header's id and height and the map root.
+- *The next fold* also verifies the previous one, requires this period to start where that one ended, and extends a chain of (end id, height, root) records, so a phone can take any past period's root from a list it authenticates.
+- *The phone* verifies the latest fold natively, about 16 ms for a proof of this system, and matches its end id with a header it checked itself (venue-ergo §3).
+
+**A day of Ergo mainnet.**
+
+| | Slice 22's day (to height 1,892,959) | The latest day (to 1,893,553) |
+|---|---|---|
+| Unsigned bytes and transactions a day | 4.08 MB, 4,898 | 9.89 MB, 5,048 (237 transactions over 10 KB, 5.9 MB) |
+| Transaction and tree-or-header compressions | 34,793 and 20,996 | 80,148 and 21,591 |
+| Leaves (T, M, U) and nodes | 203, 56, 0; 258 | 466, 58, 0; 523 |
+| Prover hours: leaves and nodes | 5.2 + 1.8 = 7.0 | 10.5 + 3.6 = 14.1 |
+| One 4-vCPU prover keeps up | 3.4 times | 1.7 times |
+
+Folds add one 1.5 M-gate proof a period. The two windows overlap by 126 blocks.
+
+**Spam now costs less prover time per byte.**
+- *Plain bytes:* each extra unsigned MB a day costs 1.22 prover hours, against slice 22's 2.48. One machine absorbs about 14 MB more on an ordinary day: about 0.16 ERG a day in 98,304-byte transactions at 1.1 mERG each (estimate; Ergo's fee policy not re-verified).
+- *Small transactions:* 100-byte transactions cost 4.49 hours a MB, a transaction compression and about four tree ones each. That is 10,000 transactions and about 11 ERG a MB.
+- *Shaped outputs at one per 42 bytes:* 2.06 hours a MB, 24,000 entries in 30 U-leaves. With one map update per entry inside the T-leaf (16 a leaf), as first built, such spam cut each T-leaf to about five slots: about thirty times the plain cost per byte. The separate kind bounds it.
+- A tree of proofs lets several machines share a day; spam threatens liveness, not soundness.
+
+**Hostile cases and agreement.**
+- *Model:* over 30 synthetic periods (both root rules; record, plain and mutated transactions), every shaped output of every grammatical transaction, 707 by the reference's `frameTransaction` and §6's shape, is an entry.
+- *Circuits:* all 864 leaves of those periods (489 T, 177 M, 198 U) execute, as do 302 over 40 mainnet blocks to height 1,893,548 (329 transactions, 1.09 MB). Both pass the period's top check and end at their last header.
+- *Leaf witnesses, 20 refused:* an emitted entry left out of a list or one added; a listed subject, position or order changed; a nonzero byte past a transaction or a tree leaf; a transaction started inside another or ended or shortened early; a wrong map sibling, prior count, prior chain or key; a header's root or parent bytes altered; a pushed id other than the bytes hashed; a tree leaf under the node prefix; a merge over other bytes than the stack holds; a leaf below a block's tree.
+- *Streams, 9 refused by the top check:* a transaction omitted, added, swapped, split at a slot boundary, a block boundary moved, a block left out of the trees, and map entries reordered, left out or applied twice. The honest streams pass.
+- *Nodes, 6 refused:* a child proof altered, the T-leaf's key used for an M-leaf's proof, an M-leaf's key claimed under the T-leaf's hash, a changed child public input (each proves but does not verify), and a key outside the set or children that do not join (refused at execution).
+- *End to end:* two consecutive synthetic periods (29 leaves of all three kinds, 26 entries) are proved, joined and folded; the final fold verifies, ends at the last header and carries the map's root. Six hostile folds are refused: another end height or root, the other period's tree, a previous fold ending elsewhere, a first map not empty, and a lone first leaf whose streams end apart.
+
+**Not measured here; the next steps.**
+- *The aggregation probe* (step 2), which reuses the node and the fold for the trail's statement proofs.
+- *The C0a* (step 3), which owns the version question for §13.2 that slices 20 and 21 left.
+- *A phone's side:* a path, a fold's verification and the transaction fetches, natively on a phone (step 5).
+- *Levers not taken:* nodes over four children (about a third less node time), a leaf that also verifies its predecessor, and the period's length, which sets how much of the tip a phone reads natively.
+
+**Limits.**
+- *Host:* one host; leaf proofs are one or two runs each. Their 17–18 µs a gate is near slice 21's 16.8.
+- *Window:* two days of Ergo, whose use sets the cost; mainnet carried no shaped output on either, so U-leaves are costed, not observed. The U-leaf was timed with 230 of its 790 slots used, which a fixed circuit proves alike.
+- *Tests:* agreement with the reference's framer, not with the node; mutations are random. The scan's hints are those slice 22's review read, less its error checks, and no hostile hint is injected.
+- *Review:* one pinned circuit set becomes every phone's verifier, so the relation needs the external review a parser and circuit get.
+
 ### The venue recheck (slice 29)
 
 Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/bcd39d2/scripts/venue/recheck-probe); [decision](../decisions/2026-10.md#2026-10-13--keep-ergo-for-the-release-a-phone-reaches-bitcoin-only-through-about-ten-provers-dogecoin-is-the-next-venue-probe-and-a-venue-move-is-a-planned-move-for-pool-v4-slice-29-next-12)). Three questions, scoped 2026-10-12: does a chain not yet weighed beat Ergo for the release, or Bitcoin as the second venue, by §2 and by what a phone pays ([slice 20](#absence-for-one-subject-slice-20)); what does a phone pay to reach Bitcoin through [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21)'s succinct route; and can Ergo alone carry the release, with which hedges?
