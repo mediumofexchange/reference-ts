@@ -63,7 +63,7 @@ assert.equal(Object.keys(gates).length, 6);
 check("the six sources and the shipped keys and programs are what check-set.mjs generates; every identity is the one check-set.ts pins");
 
 const threads = availableParallelism();
-const api = await startCheckSetBackend(await readCheckSetParameters(PARAMETER_DIRECTORY), { threads });
+const parameters = await readCheckSetParameters(PARAMETER_DIRECTORY), api = await startCheckSetBackend(parameters, { threads });
 let statements, prover;
 try {
   statements = await openV3Verifier(api);
@@ -113,9 +113,9 @@ try {
   // §2 rules 1-2: the node-key input is free in every circuit; a tree proved under another value verifies under the
   // pinned node key with that value as its input, and only the reader's comparison refuses it.
   const forged = keys.node.keyHash + 1n, programs = trailPrograms();
-  const proveRaw = async (name, inputs) => {
+  const proveRaw = async (name, inputs, on = api) => {
     const { witness } = await new Noir(programs[name]).execute(inputs);
-    return new UltraHonkBackend(programs[name].bytecode, api).generateProof(witness, PROOF_OPTIONS);
+    return new UltraHonkBackend(programs[name].bytecode, on).generateProof(witness, PROOF_OPTIONS);
   };
   const fields = bytes => Array.from({ length: bytes.length / 32 }, (_, i) => `0x${Buffer.from(bytes.subarray(32 * i, 32 * i + 32)).toString("hex")}`);
   const forgedLeaf = await timed("leaf-spend under a forged node-key input", () => proveRaw("leaf-spend",
@@ -140,10 +140,16 @@ try {
   assert.equal(await statements.verify(3, records.burn.publicInputs, tampered), false);
   assert.equal(await prover.leaf({ ...records.burn, proof: tampered }), undefined);
   // A proof the backend refuses to make, or one it makes that the check set refuses: the outcome, by its first line.
-  const attempt = run => run().then(proof => ({ proof }), error => ({ error: String(error?.message ?? error).split("\n")[0] }));
+  // Each attempt proves on an instance of its own: a refusal inside the backend can leave its WebAssembly instance
+  // unusable (a later call traps), and the next attempt would then fail for that, not for its witness.
+  const attempt = async (name, inputs) => {
+    const fresh = await startCheckSetBackend(parameters, { threads });
+    try { return { proof: await proveRaw(name, inputs, fresh) }; } catch (error) { return { error: String(error?.message ?? error).split("\n")[0] }; }
+    finally { await fresh.destroy().catch(() => {}); }
+  };
   const outcome = (made, refusedText) => made.proof !== undefined ? refusedText : `is not proved (${made.error})`;
-  const forced = await timed("leaf-burn forced over a failing proof", () => attempt(() => proveRaw("leaf-burn",
-    { proof: fields(tampered), inputs: records.burn.publicInputs.map(fieldToHex), node_key_hash: fieldToHex(keys.node.keyHash) })));
+  const forced = await timed("leaf-burn forced over a failing proof", () => attempt("leaf-burn",
+    { proof: fields(tampered), inputs: records.burn.publicInputs.map(fieldToHex), node_key_hash: fieldToHex(keys.node.keyHash) }));
   const forcedDigest = statementLeafDigest(3, records.burn.publicInputs, sha256(tampered));
   if (forced.proof !== undefined) {
     assert.deepEqual(forced.proof.publicInputs.map(BigInt), [keys.node.keyHash, forcedDigest]);
@@ -154,9 +160,9 @@ try {
   // The node admits a child by its key hash; the backend binds the key it verifies under to that hash (its recursive
   // verifier asserts the key's hash equal to the given one). A child under another key presented with an admitted hash,
   // and a child cover with a flipped byte, give no node cover.
-  const nodeOver = (children, label) => timed(label, () => attempt(() => proveRaw("node", {
+  const nodeOver = (children, label) => timed(label, () => attempt("node", {
     keys: children.map(c => fields(c.vk)), proofs: children.map(c => fields(c.proof)), key_hashes: children.map(c => fieldToHex(c.keyHash)),
-    digests: children.map(c => fieldToHex(c.digest)), node_key_hash: fieldToHex(keys.node.keyHash) })));
+    digests: children.map(c => fieldToHex(c.digest)), node_key_hash: fieldToHex(keys.node.keyHash) }));
   const spendChild = { vk: keys["leaf-spend"].vk, keyHash: keys["leaf-spend"].keyHash, proof: leaves.spend.proof, digest: leaves.spend.digest };
   // A burn cover that verifies under the burn key it is given, presented with the spend leaf's (admitted) hash: were the
   // given hash not bound to the key, this node would be proved and verify.
