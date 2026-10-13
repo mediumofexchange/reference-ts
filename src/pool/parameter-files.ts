@@ -87,7 +87,8 @@ export async function ensureParameter(directory: string, parameter: ParameterFil
       const last = first === undefined ? undefined : first + parameter.bytes - 1;
       response = await fetchImpl(url, {
         headers: first === undefined ? {} : { Range: `bytes=${first}-${last}` },
-        signal: AbortSignal.timeout(60_000), cache: "no-store",
+        // A minute, and a further second a megabyte: the check set's 128 MiB at about 1 MB/s.
+        signal: AbortSignal.timeout(60_000 + Math.ceil(parameter.bytes / 1_000)), cache: "no-store",
       });
       if (response.status !== (first === undefined ? 200 : 206)) throw new Error(`HTTP ${response.status}`);
       if (first !== undefined) {
@@ -133,6 +134,9 @@ export async function copyParameters(from: string, directory: string): Promise<v
   for (const parameter of PARAMETER_FILES) {
     const bytes = await leading(join(from, parameter.name), parameter.bytes);
     if (bytes === undefined || !matches(bytes, parameter)) throw new Error(`No verified ${parameter.name} in ${from}`);
+    // A longer copy already there whose leading bytes match (the check set's points) is kept, not truncated.
+    const held = await leading(join(directory, parameter.name), parameter.bytes);
+    if (held !== undefined && matches(held, parameter)) continue;
     await place(directory, join(directory, parameter.name), bytes);
   }
 }

@@ -4,6 +4,7 @@
 // not proved here leave their records to the native check, so one read exercises both. The check set's parameters
 // (the leading 2^21 points) are prepared in the checks' parameter directory.
 import { createHash } from "node:crypto";
+import { availableParallelism } from "node:os";
 import { prepareCheckSetParameters, readCheckSetParameters } from "../../../dist/pool/parameter-files.js";
 import { startCheckSetBackend } from "../../../dist/pool/proof-verifier.js";
 import { coverKey, openTrailProver } from "../../../dist/pool/v3/aggregator.js";
@@ -20,7 +21,8 @@ const PROVED = new Set([1, 2, 3, 4, 6]);
 /**
  * Read `input` succinctly: the longest trail's proved records get covers over each `{ first, count }` span range
  * (proved-record numbers), checked natively first by `verifier`; every other proof is fetched by hash. Returns the
- * read's result and what the read used: covers answered, covers that verified, and proofs fetched.
+ * read's result, what the read used (covers answered, covers that verified, proofs fetched) and which proved records
+ * it fetched a proof of.
  */
 export async function readWithCovers(input, ranges, { verifier, venue, reference }) {
   const proofs = new Map(), items = [];
@@ -39,7 +41,7 @@ export async function readWithCovers(input, ranges, { verifier, venue, reference
   const proved = longest.records.map(bytes => decodeRecord(bytes)).filter(record => PROVED.has(record.kind));
 
   await prepareCheckSetParameters(PARAMETER_DIRECTORY);
-  const api = await startCheckSetBackend(await readCheckSetParameters(PARAMETER_DIRECTORY));
+  const api = await startCheckSetBackend(await readCheckSetParameters(PARAMETER_DIRECTORY), { threads: availableParallelism() });
   let prover;
   try {
     prover = await openTrailProver(api, verifier);
@@ -49,16 +51,18 @@ export async function readWithCovers(input, ranges, { verifier, venue, reference
       for (const [key, cover] of await prover.covers(proved.slice(first, first + count), first)) covers.set(key, cover.proof);
       proving.push({ first, count, seconds: Number(((performance.now() - started) / 1000).toFixed(1)) });
     }
-    const used = { answered: 0, verified: 0, fetched: 0, proving };
+    const used = { answered: 0, verified: 0, fetched: 0, proving }, fetched = new Set();
     const set = { identity: prover.set.identity, test: prover.set.test,
       verify: async (kind, digest, proof) => { const ok = await prover.set.verify(kind, digest, proof); if (ok) used.verified++; return ok; } };
     const supply = {
       cover: digest => { const proof = covers.get(coverKey(digest)); if (proof !== undefined) used.answered++; return proof; },
-      proof: hash => { const proof = proofs.get(Buffer.from(hash).toString("hex")); if (proof !== undefined) used.fetched++; return proof; },
+      proof: hash => { const proof = proofs.get(Buffer.from(hash).toString("hex")); if (proof !== undefined) { used.fetched++; fetched.add(Buffer.from(hash).toString("hex")); } return proof; },
     };
     const result = await readPackage(encodeEvidencePackage(items), input.selection,
       { verifier, venue, reference, construction: succinctPoolV3({ set, supply }) });
-    return { result, used, proved: proved.length };
+    // Which proved records the read fetched a proof of, by proved-record number.
+    const fetchedRecords = proved.flatMap((record, i) => fetched.has(sha(record.proof)) ? [i] : []);
+    return { result, used, proved: proved.length, fetchedRecords };
   } finally {
     await prover?.close();
     await api.destroy();

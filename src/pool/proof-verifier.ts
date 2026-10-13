@@ -103,7 +103,7 @@ export interface BackendOptions {
 
 // Every instance `startBackend` loaded, with what the verifier's own instances
 // load: `[1]_1` and `[x]_2`. Verification given a key reads nothing else (§4).
-const STARTED = new WeakMap<Barretenberg, { readonly generator: Uint8Array; readonly g2: Uint8Array }>();
+const STARTED = new WeakMap<Barretenberg, { readonly generator: Uint8Array; readonly g2: Uint8Array; readonly points: number }>();
 
 /** An owned copy of one input, judged by its own length and hash. */
 function checked(value: unknown, code: "G1" | "G2", length: number, expected: string): Uint8Array {
@@ -171,7 +171,7 @@ async function start(parameters: ProvingParameters, size: { readonly points: num
   const g2 = checked(parameters.g2, "G2", G2_BYTES, BN254_PARAMETERS.g2);
   const g1 = checked(parameters.g1, "G1", size.points * POINT_BYTES, size.g1);
   const api = await load(g1, size.points, g2, options.threads);
-  STARTED.set(api, Object.freeze({ generator: copyBytes(g1.subarray(0, POINT_BYTES)), g2 }));
+  STARTED.set(api, Object.freeze({ generator: copyBytes(g1.subarray(0, POINT_BYTES)), g2, points: size.points }));
   return api;
 }
 
@@ -252,7 +252,8 @@ export async function proofVerifier(
   options: VerifierOptions = {},
 ): Promise<ProofVerifier> {
   const owned = ownTable(table);
-  instanceCount(options);
+  // Each replacement instance runs as the options are given now, not as the caller later changes them.
+  const { threads } = options, instances = instanceCount(options);
   const texts = owned.circuits.map(({ name }) => {
     // A circuit's bytecode identity hashes the bytes the artifact's field
     // decodes to. The key is derived by the backend from its own decoding of
@@ -274,7 +275,7 @@ export async function proofVerifier(
     keys.set(kind, Object.freeze({ vk, publicInputs }));
     identities[name] = Object.freeze({ bytecode: sha256(bytecode), vk: sha256(vk), kind });
   }
-  return Object.freeze({ ...lanesOver(loaded, keys, owned.maxProofBytes, options), identities: Object.freeze(identities) });
+  return Object.freeze({ ...lanesOver(loaded, keys, owned.maxProofBytes, threads, instances), identities: Object.freeze(identities) });
 }
 
 /** A key a verifier holds: the backend's key bytes for one kind and its public-input count. */
@@ -290,8 +291,7 @@ export interface PinnedKey {
  * verification, and it verifies on instances of its own exactly as `proofVerifier` does.
  */
 export function keyedVerifier(api: Barretenberg, pinned: readonly PinnedKey[], maxProofBytes: number, options: VerifierOptions = {}): KeyedVerifier {
-  const loaded = startedFrom(api);
-  instanceCount(options);
+  const loaded = startedFrom(api), { threads } = options, instances = instanceCount(options);
   if (!Number.isSafeInteger(maxProofBytes) || maxProofBytes <= 0 || maxProofBytes % 32 !== 0) throw new EncodingError("invalid proof bound");
   const keys = new Map<number, { readonly vk: Uint8Array; readonly publicInputs: number }>();
   for (const key of pinned) {
@@ -301,7 +301,12 @@ export function keyedVerifier(api: Barretenberg, pinned: readonly PinnedKey[], m
     keys.set(kind, Object.freeze({ vk: copyBytes(vk), publicInputs }));
   }
   if (keys.size === 0) throw new EncodingError("invalid pinned key");
-  return Object.freeze(lanesOver(loaded, keys, maxProofBytes, options));
+  return Object.freeze(lanesOver(loaded, keys, maxProofBytes, threads, instances));
+}
+
+/** How many G1 points a started instance holds, or undefined for one `startBackend` or `startCheckSetBackend` did not start. */
+export function startedPoints(api: Barretenberg): number | undefined {
+  return STARTED.get(api)?.points;
 }
 
 function startedFrom(api: Barretenberg): { readonly generator: Uint8Array; readonly g2: Uint8Array } {
@@ -321,9 +326,7 @@ function instanceCount(options: VerifierOptions): number {
 /** The verification lanes over `keys`, each on an instance of its own holding the loaded `[1]_1` and `[x]_2`. */
 function lanesOver(loaded: { readonly generator: Uint8Array; readonly g2: Uint8Array },
   keys: ReadonlyMap<number, { readonly vk: Uint8Array; readonly publicInputs: number }>, maxProofBytes: number,
-  options: VerifierOptions): KeyedVerifier {
-  // Each replacement runs as the options are given now, not as the caller later changes them.
-  const { threads } = options, instances = instanceCount(options);
+  threads: number | undefined, instances: number): KeyedVerifier {
   // Each lane's own instance, undefined before its first verification and after each throw, its queue, how many
   // wait on it, and whether its close has run.
   interface Lane {

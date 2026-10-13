@@ -84,7 +84,9 @@ async function acceptance(mode) {
         const succinct = await readWithCovers(input, [{ first: 0, count: 2 }, { first: 4, count: 1 }], { verifier: drill.verifier, venue, reference });
         assert.equal(succinct.proved, 5);
         assert.deepEqual(summary(succinct.result), answer);
-        assert(succinct.used.verified >= 2 && succinct.used.fetched >= 2, JSON.stringify(succinct.used));
+        // The node and the settlement leaf replace their records' native checks: only the demands' proofs are fetched.
+        assert.deepEqual([succinct.used.answered, succinct.used.verified, succinct.used.fetched], [2, 2, 2], JSON.stringify(succinct.used));
+        assert.deepEqual(succinct.fetchedRecords, [2, 3]);
         drill.succinct = succinct.used;
       }
     });

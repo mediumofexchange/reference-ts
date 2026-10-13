@@ -1,8 +1,12 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import type { Barretenberg } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit } from "@noir-lang/noir_js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { FIELD_MODULUS, fieldToHex } from "../src/pool/field.js";
+import { openTrailProver } from "../src/pool/v3/aggregator.js";
 import { adoptedDomain } from "../src/pool/v3/configuration.js";
 import {
   CHECK_SET_MANIFEST, checkSetIdentity, LEAF_KINDS, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCircuit,
@@ -49,6 +53,30 @@ describe("the trail check set (succinct-read §3.2)", () => {
     await expect(noir("leaf-spend").execute({ proof, inputs: [...g.publicInputs], node_key_hash: NODE_KEY_HASH })).rejects
       .toThrow(/`proof\[100\]` is invalid:\nValue 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001 exceeds field modulus/);
   }, 120_000);
+
+  it("the aggregator refuses an instance not started with the check set's points", async () => {
+    await expect(openTrailProver({} as Barretenberg, { verify: async () => true, parallel: 1, close: async () => {} })).rejects
+      .toMatchObject({ name: "ParameterError", code: "UNCHECKED", message: "the aggregator proves on an instance startCheckSetBackend started" });
+  });
+
+  it("trail.nr's word constraints take exactly an element's canonical big-endian words", () => {
+    const words = (n: bigint) => Array.from({ length: 8 }, (_, j) => String((n >> BigInt(32 * (7 - j))) & 0xffffffffn));
+    const p = FIELD_MODULUS, x = 0x1234_5678_9abc_def0_0fed_cba9_8765_4321n;
+    const cases = [
+      { x: "5", words: words(5n) }, { x: String(p - 1n), words: words(p - 1n) }, { x: String(x), words: words(x) },
+      // The modulus's top word with lower words below the modulus's: still below p.
+      { x: String(p - (1n << 32n)), words: words(p - (1n << 32n)) },
+      // An alias above p (x + p, x + 2p), p itself as zero, and another value.
+      { x: String(x), words: words(x + p) }, { x: String(x), words: words(x + 2n * p) }, { x: "0", words: words(p) }, { x: "5", words: words(6n) },
+    ];
+    const child = spawnSync(process.execPath, [fileURLToPath(new URL("./check-set-words.child.mjs", import.meta.url)), JSON.stringify(cases)],
+      { encoding: "utf8", timeout: 120_000 });
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout.slice(child.stdout.indexOf("[")))).toEqual([
+      "accepted", "accepted", "accepted", "accepted",
+      "Cannot satisfy constraint", "Cannot satisfy constraint", "Cannot satisfy constraint", "Cannot satisfy constraint",
+    ]);
+  }, 150_000);
 
   it("the node outputs the host's node digest and admits children only by a leaf's or its own key hash", async () => {
     const dummy = Array<string>(458).fill("0x01"), key = fields(keys["leaf-issue"].vk);

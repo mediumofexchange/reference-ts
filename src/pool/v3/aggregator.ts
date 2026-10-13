@@ -14,7 +14,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { copyBytes, EncodingError } from "../../bytes.js";
 import { fieldToBytes, fieldToHex } from "../field.js";
-import { PROOF_OPTIONS, type KeyedVerifier, type VerifierOptions } from "../proof-verifier.js";
+import { CHECK_SET_PARAMETERS } from "../parameters.js";
+import { ParameterError, PROOF_OPTIONS, startedPoints, type KeyedVerifier, type VerifierOptions } from "../proof-verifier.js";
 import { LEAF_KINDS, openTrailCheckSet, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCheckSet, type TrailCircuit } from "./check-set.js";
 import type { Record } from "./records.js";
 import { COVER_PROOF_BYTES, nodeDigest, statementLeafDigest } from "./succinct.js";
@@ -59,6 +60,8 @@ export const coverKey = (digest: bigint): string => bytesToHex(fieldToBytes(dige
  * (pool-v3's verifier, routing each kind to its own key) before their leaves.
  */
 export async function openTrailProver(api: Barretenberg, statements: KeyedVerifier, options: VerifierOptions = {}): Promise<TrailProver> {
+  // Proving a 2^21-row circuit needs the check set's points; refused here rather than deep inside the backend.
+  if (startedPoints(api) !== CHECK_SET_PARAMETERS.points) throw new ParameterError("UNCHECKED", "the aggregator proves on an instance startCheckSetBackend started");
   const programs = trailPrograms(), keys = trailKeys(), set = openTrailCheckSet(api, options);
   const circuits = new Map<TrailCircuit, { readonly noir: Noir; readonly backend: UltraHonkBackend }>();
   for (const name of TRAIL_CIRCUITS) {

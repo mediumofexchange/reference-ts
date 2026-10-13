@@ -5,7 +5,8 @@
 // the five leaves and a two-level tree; each cover carries the host's digest and verifies under the pinned key the
 // rule names. Hostile covers cover nothing: another kind's leaf key or the node key, a node cover as a leaf, a wrong
 // digest, other lengths and a flipped byte, a tree whose node-key input is not the pinned key's hash (the forged-tree
-// rule, §2 rules 1-2), a statement proof that fails natively (no leaf), and a leaf forced over it. Times and the
+// rule, §2 rules 1-2), a statement proof that fails natively (no leaf), a leaf forced over it, and nodes over a child
+// under another key than its admitted hash or over a child cover with a flipped byte. Times and the
 // process's peak memory are recorded per proof.
 //
 // Usage: node scripts/pool/v3/check-set-check.mjs (after npm run build); writes docs/pool-v3-check-set-verification.json.
@@ -138,15 +139,31 @@ try {
   const tampered = Uint8Array.from(records.burn.proof); tampered[14656 - 1] ^= 1;
   assert.equal(await statements.verify(3, records.burn.publicInputs, tampered), false);
   assert.equal(await prover.leaf({ ...records.burn, proof: tampered }), undefined);
-  const forced = await timed("leaf-burn forced over a failing proof", () => proveRaw("leaf-burn",
-    { proof: fields(tampered), inputs: records.burn.publicInputs.map(fieldToHex), node_key_hash: fieldToHex(keys.node.keyHash) })
-    .then(proof => ({ proof }), error => ({ error: String(error?.message ?? error) })));
+  // A proof the backend refuses to make, or one it makes that the check set refuses: the outcome, by its first line.
+  const attempt = run => run().then(proof => ({ proof }), error => ({ error: String(error?.message ?? error).split("\n")[0] }));
+  const outcome = (made, refusedText) => made.proof !== undefined ? refusedText : `is not proved (${made.error})`;
+  const forced = await timed("leaf-burn forced over a failing proof", () => attempt(() => proveRaw("leaf-burn",
+    { proof: fields(tampered), inputs: records.burn.publicInputs.map(fieldToHex), node_key_hash: fieldToHex(keys.node.keyHash) })));
   const forcedDigest = statementLeafDigest(3, records.burn.publicInputs, sha256(tampered));
   if (forced.proof !== undefined) {
     assert.deepEqual(forced.proof.publicInputs.map(BigInt), [keys.node.keyHash, forcedDigest]);
     await refused(3, forcedDigest, forced.proof.proof, "a leaf forced over a failing statement proof");
   }
-  check(`a statement proof that fails natively gets no leaf, and a leaf forced over it ${forced.proof !== undefined ? "is proved but fails verification" : `is not proved (${forced.error})`}`);
+  check(`a statement proof that fails natively gets no leaf, and a leaf forced over it ${outcome(forced, "is proved but fails verification")}`);
+
+  // The node admits a child by its key hash; the backend binds the key it verifies under to that hash (its recursive
+  // verifier asserts the key's hash equal to the given one). A child under another key presented with an admitted hash,
+  // and a child cover with a flipped byte, give no node cover.
+  const nodeOver = (children, label) => timed(label, () => attempt(() => proveRaw("node", {
+    keys: children.map(c => fields(c.vk)), proofs: children.map(c => fields(c.proof)), key_hashes: children.map(c => fieldToHex(c.keyHash)),
+    digests: children.map(c => fieldToHex(c.digest)), node_key_hash: fieldToHex(keys.node.keyHash) })));
+  const spendChild = { vk: keys["leaf-spend"].vk, keyHash: keys["leaf-spend"].keyHash, proof: leaves.spend.proof, digest: leaves.spend.digest };
+  const misKeyed = await nodeOver([{ ...spendChild, vk: keys["leaf-burn"].vk }, spendChild], "node over a child under another key than its hash's");
+  const flippedChild = Uint8Array.from(leaves.spend.proof); flippedChild[5000] ^= 1;
+  const misProved = await nodeOver([{ ...spendChild, proof: flippedChild }, spendChild], "node over a child cover with a flipped byte");
+  const twin = nodeDigest(leaves.spend.digest, leaves.spend.digest);
+  for (const made of [misKeyed, misProved]) if (made.proof !== undefined) await refused(undefined, twin, made.proof.proof, "a node over a hostile child");
+  check(`a node over a child under another key than its admitted hash ${outcome(misKeyed, "is proved but fails verification")}, and over a child cover with a flipped byte ${outcome(misProved, "is proved but fails verification")}`);
 
   const result = {
     specification: { pool: V3_SPECIFICATION, succinct: SUCCINCT_SPECIFICATION }, sources: digests,
@@ -155,8 +172,8 @@ try {
     setIdentity: Buffer.from(set.identity).toString("hex"), circuits: Object.fromEntries(Object.entries(gates).map(([name, g]) =>
       [name, { ...g, ...CHECK_SET_MANIFEST.circuits[name] }])),
     proofs, checks,
-    limits: ["one genuine proof per kind, not a served trail read succinctly (the reader's agreement is the differential harness's over a test set)",
-      "one run on one runner", "bb's in-circuit limb and curve constraints are not read from source here (adoption evidence, §6)"],
+    limits: ["one genuine proof per kind here; a served trail read with real covers is the recovery check's",
+      "one run on one runner", "bb's in-circuit limb and curve constraints and key-hash binding are read from source by review, not proved (adoption evidence, §6)"],
   };
   writeFileSync(report, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`check-set: ${checks.length} checks passed; wrote ${report}`);

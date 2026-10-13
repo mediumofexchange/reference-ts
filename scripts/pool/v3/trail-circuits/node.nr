@@ -3,7 +3,9 @@
 // whose hash is one of the five trail leaves' (constants here) or the node's own, the public input nodeKeyHash, and
 // outputs nodeDigest = H(T_CHECK_NODE, left, right) of the children's digests. Each child's public inputs are
 // (nodeKeyHash, its digest), so every proof under a node carries the same nodeKeyHash, which the reader compares with
-// the pinned node key's hash (§2 rules 1-2). The backend binds each child's key to the key hash it is verified under.
+// the pinned node key's hash (§2 rules 1-2). The backend binds each child's key to the key hash it is verified under:
+// bb 5.2.0's recursive verifier asserts the key's hash equal to it (ultra_honk/oink_verifier.cpp,
+// receive_vk_hash_and_public_inputs).
 mod poseidon2;
 mod trail;
 // The vendored sponge calls crate::poseidon2_permutation.
