@@ -617,9 +617,10 @@ handed file past its bound, a directory or one without access is a named refusal
 `restore-seed` is retried by its own command line: rerun over a directory it finished, it prints what it printed, with
 `replay: true`, where the directory is that role's and holds the nodes, budget, construction and venue the command names
 (a venue made after an init without `--venue` is the directory's own), and the same K, and for `restore` the handoff's
-digest as its provenance, for `restore-seed` the seed on stdin; anything else there refuses `EXISTS`, naming what
-differs. An `init` and a `restore-seed` of a wallet's own seed into its directory are not told apart: both hold that
-seed's wallet ([decision](../decisions/2026-10.md#2026-10-13--replay-an-init-or-a-restore-whose-reply-was-lost-from-the-directory-it-finished-and-remove-a-replica-by-command-next-4-br-bs)).
+digest as its provenance, for `restore-seed` the seed on stdin (read only once the directory is judged) and its
+`seed.restored` mark; another configuration there refuses `EXISTS`, naming what differs, another role's directory
+`ROLE`, and a copy whose restoration is not recorded `COPIED`. A replay names the venue only where the command does
+([decision](../decisions/2026-10.md#2026-10-13--replay-an-init-or-a-restore-whose-reply-was-lost-from-the-directory-it-finished-and-remove-a-replica-by-command-next-4-br-bs)).
 One that did not finish refuses `INCOMPLETE` on rerun (`BUSY` while it still runs; remove its directory and run it
 again: nothing it made was shown or used).
 

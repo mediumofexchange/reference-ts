@@ -469,7 +469,7 @@ try {
     assert.equal(existsSync(join(HD, "unresolved.json")), false);
   });
 
-  let replica;
+  let replica, restoring;
   await check("with the operator stopped past silence, a demand and its release are handed to a third party's relay and read final by force, " +
       "the holder syncing from a replica and a reader reading from it alone; the operator returns and adopts", async () => {
     // A replica of the backing, behind its own onion name, syncing from the operator's holders' listener.
@@ -604,7 +604,7 @@ try {
     // Under the other construction the handoff does not open: refused by name before any directory is made.
     await refused(["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, "--key", key, "--backup", out, "--digest", frozen.digest], "CONSTRUCTION");
     assert(!existsSync(H3), "a refused restore leaves no directory");
-    const restoring = ["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT, "--key", key, "--backup", out, "--digest", frozen.digest];
+    restoring = ["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT, "--key", key, "--backup", out, "--digest", frozen.digest];
     const restored = await ok(restoring);
     // A restore whose reply was lost is rerun: confirmed by its provenance, it prints what it printed (Next 4 (br)).
     assert.deepEqual(await ok(restoring), { ...restored, replay: true });
@@ -619,6 +619,9 @@ try {
     assert.deepEqual(await ok(seeding, { input: `${seed}\n` }), { ...seeded, replay: true });
     assert.match((await refused(seeding, "EXISTS", { input: `${"0".repeat(63)}1\n` })).message, /not restored from this seed/);
     await refused(["wallet", "restore-seed", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT], "EXISTS", { input: `${seed}\n` });
+    // An init's rerun over it is refused, and another role's directory is judged before stdin is read.
+    assert.match((await refused(wallet("init", H2, "--venue", venueFile, ...nodeArgs, ...LIT), "EXISTS")).message, /restored from a seed/);
+    await refused(["wallet", "restore-seed", "--dir", RD, "--venue", venueFile, ...nodeArgs, ...LIT], "ROLE", { input: "not a seed\n" });
     // Its first sync exposes through h + 256 and later ones raise that until it names a key (lit-v1 §8, Next 4 (bc)).
     assert.match(seeded.notes?.[0] ?? "", /each later sync raises that until the wallet names a key/);
     await ok(wallet("terms add", H2, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN));
@@ -675,6 +678,8 @@ try {
       renameSync(directory, `${directory}-lost`); cpSync(from, directory, { recursive: true }); chmodSync(directory, 0o700);
     }
     await refused(wallet("request", H3, "order-B", backing, "1"), "COPIED");
+    // No command made the copy here: its restore's rerun replays nothing until the restoration is recorded (Next 4 (br)).
+    await refused(restoring, "COPIED");
     const restored = await ok(["wallet", "restore", "--copy", "--dir", H3]);
     assert.deepEqual([restored.status, restored.copied, restored.requests], ["restored", true, ["invoice-3"]]);
     assert.match(restored.notes.join(" "), /move-window before new requests/);

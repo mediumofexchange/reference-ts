@@ -27,7 +27,7 @@ import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, initialized, integer, UsageError, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, READ_FLAGS,
+import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, initialized, integer, requireNew, UsageError, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, READ_FLAGS,
   readJson, readOptional, readRequired, required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { directoryVerifier } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
@@ -43,10 +43,12 @@ import { keepContext, openView, ownVenue, parseVenue, requireVenue, venueText, t
  * A rerun over a directory whose init finished is the exact retry after a lost reply (Next 4 (br)): where the directory
  * is this role's and holds the configuration and venue this init would write, it prints what the init printed, with
  * `replay: true`, from what the directory keeps (`replay`, which refuses `EXISTS` where the role's own arguments
- * differ; a role that shows nothing has none); anything else there is `EXISTS`. A venue made after an init without
- * `--venue` (`venue create`) is the directory's own, so that init still replays. */
+ * differ; a role that shows nothing has none); another configuration there is `EXISTS`, another role's `ROLE`. A venue made after an init without
+ * `--venue` (`venue create`) is the directory's own, so that init still replays. `ready` reads input (`restore-seed`'s
+ * stdin) only once the directory is judged: new, or a finished init these arguments replay. */
 export async function initRole(argv: readonly string[], role: Role, options: { readonly venue: "required" | "optional" | ((args: Arguments) => "required" | "optional");
-  readonly budget?: boolean; readonly construction?: boolean; readonly verifies?: false; readonly flags?: FlagSpec } & ({ readonly fill?: undefined } | {
+  readonly budget?: boolean; readonly construction?: boolean; readonly verifies?: false; readonly flags?: FlagSpec;
+  readonly ready?: () => Promise<void> } & ({ readonly fill?: undefined } | {
   readonly fill: (directory: Directory, args: Arguments) => Promise<object>;
   readonly replay: (directory: Directory, args: Arguments) => Promise<object> | object })): Promise<void> {
   const args = parseArguments(argv, { dir: "value", node: "values", ...(options.verifies === false ? {} : { parameters: "value" }), venue: "value",
@@ -74,9 +76,12 @@ export async function initRole(argv: readonly string[], role: Role, options: { r
       ...(venue === undefined || (own !== undefined && venueText(own.profile, own.anchorHeight) === venueText(venue.profile, venue.anchorHeight)) ? [] : ["--venue"]),
     ];
     if (differs.length > 0) throw new CommandError("EXISTS", `${directory.path} was made by another init (${differs.join(", ")}); init creates a new directory`);
+    await options.ready?.();
     print({ ...out(directory.path, options.fill === undefined ? {} : await options.replay(directory, args)), replay: true });
     return;
   }
+  requireNew(required(args, "dir"));
+  await options.ready?.();
   let shown: object = {};
   const directory = await initDirectory(required(args, "dir"), { role, nodes, ...(budget === undefined ? {} : { spendBudgetNanoErg: budget.toString() }),
     ...construction }, async opened => {

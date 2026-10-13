@@ -44,7 +44,7 @@ import { decodePublication as decodeLitPublication } from "../lit/records.js";
 import { encodeLitTerms } from "../lit/terms.js";
 import { authenticateLitPaymentRequest, encodeLitPaymentRequest, litPaymentRequestDigest } from "../lit/wallet.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, initialized, integer, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, readJson, READ_FLAGS, readOptional, readRequired, readSecret, required, requireNew, requireWritable,
+import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, initialized, integer, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, readJson, READ_FLAGS, readOptional, readRequired, readSecret, required, requireWritable,
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
 import { directoryBackend, directoryVerifier, verifierCount } from "./backend.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
@@ -114,7 +114,7 @@ interface Opened {
   close(): Promise<void>;
 }
 
-const WALLET_DB = "wallet.db", PENDING = "wallet.pending";
+const WALLET_DB = "wallet.db", PENDING = "wallet.pending", SEEDED = "seed.restored";
 
 /** The wallet's options over a view: the directory's construction, and a verifier where it carries proofs. */
 const walletOptions = (directory: Directory, view: View, verifier: ProofVerifier | undefined) =>
@@ -318,10 +318,11 @@ async function init(argv: readonly string[]): Promise<void> {
       return shown;
     }, replay: async (directory, args) => {
       if (has(args, "backer") !== existsSync(directory.file("backer.key"))) throw new CommandError("EXISTS", `${directory.path} was made by another init (--backer); init creates a new directory`);
+      if (existsSync(directory.file(SEEDED))) throw new CommandError("EXISTS", `${directory.path} was restored from a seed (restore-seed), not made by init`);
       // The database init made, or a backer's venue create since (unless that still owes it), is there and no restore's.
       if (ownVenue(directory) !== undefined && !existsSync(directory.file(PENDING))) {
         if (!existsSync(directory.file(WALLET_DB))) throw lost();
-        await withWallet(directory, args, {}, async ({ wallet }) => {
+        await ownWallet(directory, args, wallet => {
           if (wallet.custody().restoredFrom !== undefined) throw new CommandError("EXISTS", `${directory.path} holds a wallet restored from a handoff`);
         });
       }
@@ -330,6 +331,15 @@ async function init(argv: readonly string[]): Promise<void> {
 }
 
 const lost = () => new CommandError("ABSENT", "the venue exists but the wallet database is lost: restore it (restore, restore-seed) into a new directory");
+
+/** `judge` over the directory's wallet in a replay: a copy whose restoration is not recorded was made by no command
+ * here, so it replays none (`COPIED`, as it acts on nothing until `restore --copy`). */
+async function ownWallet(directory: Directory, args: Arguments, judge: (wallet: V3Wallet) => void): Promise<void> {
+  await withWallet(directory, args, {}, async ({ wallet }) => {
+    if (wallet.isCopy()) throw new CommandError("COPIED", `${directory.path} holds a copy of a wallet: no command here made it (restore --copy records it as this seed's only instance)`);
+    judge(wallet);
+  });
+}
 
 /** A replayed init's `backer`: K's public key where the directory holds K. */
 function keptBacker(directory: Directory): { readonly backer?: Uint8Array } {
@@ -456,11 +466,14 @@ function replayedBacker(directory: Directory, args: Arguments): object {
   const file = flag(args, "backer-key"), conflict = new CommandError("EXISTS", `${directory.path} was restored with another --backer-key`);
   if (file === undefined) { if (existsSync(directory.file("backer.key"))) throw conflict; return {}; }
   if (!existsSync(directory.file("backer.key"))) throw conflict;
-  const named = readSecret(file, "the backer key file"), held = backerKey(directory);
+  const named = readSecret(file, "the backer key file");
   try {
-    if (!sameSecret(named, held)) throw conflict;
-    return { backer: ed25519.getPublicKey(held) };
-  } finally { named.fill(0); held.fill(0); }
+    const held = backerKey(directory);
+    try {
+      if (!sameSecret(named, held)) throw conflict;
+      return { backer: ed25519.getPublicKey(held) };
+    } finally { held.fill(0); }
+  } finally { named.fill(0); }
 }
 
 /** What a lit wallet restored from its seed or a copy must do about its owner-key window (lit-v1 §8). */
@@ -476,26 +489,29 @@ async function restoreSeed(argv: readonly string[]): Promise<void> {
   const checked = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", verifiers: "value", "backer-key": "value",
     construction: "value" }, 0);
   required(checked, "dir"); required(checked, "venue"); initConstruction(checked);
-  // A finished restore is replayed for the same seed (Next 4 (br)); anything else there refuses before stdin is read.
-  if (!initialized(required(checked, "dir"))) requireNew(required(checked, "dir"));
-  const secret = await seedFromStdin();
+  // stdin is read once the directory is judged (`ready`): new, or a finished restore these arguments replay (Next 4 (br)).
+  let secret: Uint8Array = new Uint8Array();
   const notes = (directory: Directory) => keyed(directory) ? { notes: [windowNote("first", "the seed's last instance's")] } : {};
   try {
-    await initRole(argv, "wallet", { venue: "required", construction: true, flags: { verifiers: "value", "backer-key": "value" }, fill: async (directory, args) => {
-      await withView(directory, args, (view, verifier) =>
-        V3Wallet.restoreSeed(directory.file(WALLET_DB), walletOptions(directory, view, verifier), secret).close());
-      return { restored: "seed", ...restoreBacker(directory, args), ...notes(directory) };
-    }, replay: async (directory, args) => {
-      await withWallet(directory, args, {}, async ({ wallet }) => {
-        const held = wallet.recoverySeed();
-        try {
-          if (wallet.custody().restoredFrom !== undefined || !sameSecret(held, secret)) {
-            throw new CommandError("EXISTS", `${directory.path} holds a wallet not restored from this seed`);
-          }
-        } finally { held.fill(0); }
-      });
-      return { restored: "seed", ...replayedBacker(directory, args), ...notes(directory) };
-    } });
+    await initRole(argv, "wallet", { venue: "required", construction: true, flags: { verifiers: "value", "backer-key": "value" },
+      ready: async () => { secret = await seedFromStdin(); }, fill: async (directory, args) => {
+        await withView(directory, args, (view, verifier) =>
+          V3Wallet.restoreSeed(directory.file(WALLET_DB), walletOptions(directory, view, verifier), secret).close());
+        // Which command made the directory: an init's rerun refuses it, and this one's replays only over it.
+        writeExclusive(directory.file(SEEDED), "restored from a seed (restore-seed)\n");
+        return { restored: "seed", ...restoreBacker(directory, args), ...notes(directory) };
+      }, replay: async (directory, args) => {
+        if (!existsSync(directory.file(SEEDED))) throw new CommandError("EXISTS", `${directory.path} was not restored from a seed`);
+        await ownWallet(directory, args, wallet => {
+          const held = wallet.recoverySeed();
+          try {
+            if (wallet.custody().restoredFrom !== undefined || !sameSecret(held, secret)) {
+              throw new CommandError("EXISTS", `${directory.path} holds a wallet not restored from this seed`);
+            }
+          } finally { held.fill(0); }
+        });
+        return { restored: "seed", ...replayedBacker(directory, args), ...notes(directory) };
+      } });
   } finally { secret.fill(0); }
 }
 
@@ -580,7 +596,7 @@ async function restore(argv: readonly string[]): Promise<void> {
         V3Wallet.restoreBackup(directory.file(WALLET_DB), walletOptions(directory, view, verifier), bytes, key, digest).close());
       return { restored: "handoff", digest, ...restoreBacker(directory, args) };
     }, replay: async (directory, args) => {
-      await withWallet(directory, args, {}, async ({ wallet }) => {
+      await ownWallet(directory, args, wallet => {
         if (wallet.custody().restoredFrom !== digest) throw new CommandError("EXISTS", `${directory.path} holds a wallet not restored from this handoff`);
       });
       return { restored: "handoff", digest, ...replayedBacker(directory, args) };
