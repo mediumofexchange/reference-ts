@@ -247,7 +247,7 @@ describe("succinct transport (slice 37)", () => {
     await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
     await f.mirror();
     const { PROOF_FREE_FORM } = await import("../src/pool/v3/succinct.js"), one = { ...PROOF_FREE_FORM, piece: 1 };
-    // The replica's stream with one record a part: three parts, sized as sent, each after the tip the one before reached.
+    // The replica's stream with one record a part: two parts, sized as sent, the second after the tip the first reached.
     const parts: { after?: bigint; size: bigint; bytes: number }[] = [];
     for await (const part of (await f.replica.serve(backing, 0n, one)).parts as AsyncIterable<EvidencePart>) {
       if ("package" in part) continue;
@@ -269,6 +269,32 @@ describe("succinct transport (slice 37)", () => {
     const served = await client.sync(backing, evidence);
     const read = await outcome(readFrontier(served.package, signed, f.venue.witnessedIndex(), { construction: succinct, verifier, venue: f.venue, reference, evidence }));
     expect(read).toBe((await f.read(POOL_V3 as Construction, f.operatorClient, "complete")).result);
+  });
+
+  it("carries each part's tip forward over the records it sent: the kept chain values, one chain step a record at any part size (review B1)", async () => {
+    const f = await fixture();
+    await f.j.submit(f.issue()); await f.checkpoint("c2");
+    await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2));
+    await f.j.submit(f.issue(output(41, 5n), 3)); await f.j.submit(f.issue(output(46, 4n), 4)); await f.checkpoint("c3");
+    await f.mirror();
+    const { PROOF_FREE_FORM } = await import("../src/pool/v3/succinct.js"), { formParts } = await import("../src/pool/v3/evidence-store.js");
+    const [top] = f.replicaStore.keptTops(), kept = f.replicaStore.retained();
+    try {
+      const trail = kept.trail(top!.segment, top!.evidence)!;
+      expect(trail.length).toBe(4n);
+      for (const piece of [1, 3, 2048]) {
+        let steps = 0;
+        const counting = { ...POOL_V3, reader: { ...POOL_V3.reader, digests: (bytes: Uint8Array) => { steps++; return POOL_V3.reader.digests(bytes); } } } as Construction;
+        const tips: bigint[] = [];
+        for await (const part of formParts(trail, undefined, counting, { ...PROOF_FREE_FORM, piece })) {
+          if ("package" in part) continue;
+          const after = part.trail.after;
+          if (after !== undefined) { tips.push(after.position); expect(after.evidence).toEqual(trail.evidence(after.position)); }
+        }
+        expect(steps).toBe(4);
+        expect(tips).toEqual(piece === 1 ? [1n, 2n, 3n] : piece === 3 ? [3n] : []);
+      }
+    } finally { kept.release(); }
   });
 
   it("takes a cover from an honest source behind a wrong one, asks a silent source once, and stops at the holder's own proxy refusal", async () => {

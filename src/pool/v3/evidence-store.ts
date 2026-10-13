@@ -1079,16 +1079,20 @@ export async function* formParts(trail: StoredTrail, after: TrailTip | undefined
   let base = after !== undefined && await trail.reaches(after.position, after.evidence) !== undefined ? after : undefined;
   const terms = headTerms(trail, construction);
   let records: Uint8Array[] = [], bytes = 0, position = base?.position ?? 0n, sent = false;
+  // Each part's tip is the chain value carried forward over the records sent, which the stream has checked one by one
+  // against the kept values: no walk back from the trail's top per part.
+  let evidence = base?.evidence ?? construction.genesisEvidence(trail.segment);
   const part = (): EvidencePart => {
-    const head = form.trailHead(trail.header, terms, position), evidence = trail.evidence(position);
-    if (evidence === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    const head = form.trailHead(trail.header, terms, position);
     const out: EvidencePart = { trail: { after: base, size: BigInt(head.length + bytes), chunks: [head, ...records] } };
     base = { segment: trail.segment, position, evidence }; records = []; bytes = 0; sent = true;
     return out;
   };
   for await (const record of trail.stream(position)) {
     const own = framed(form.record(record));
-    records.push(own); bytes += own.length; position++;
+    position++;
+    evidence = construction.nextEvidence(evidence, construction.reader.digests(record), position);
+    records.push(own); bytes += own.length;
     if (records.length >= form.piece) yield part();
   }
   if (records.length > 0 || !sent) yield part();
