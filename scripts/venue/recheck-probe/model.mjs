@@ -8,7 +8,6 @@ import { readFileSync } from 'node:fs';
 const dir = process.argv[2];
 const btc = JSON.parse(readFileSync(`${dir}/btc-result.json`, 'utf8'));
 const c = JSON.parse(readFileSync(`${dir}/cands-result.json`, 'utf8'));
-const doge = JSON.parse(readFileSync(`${dir}/doge-aux-result.json`, 'utf8'));
 const perGate = btc.perGateUs / 1e6, SCAN = 181.5, ROWS = 2 ** 22, REC = btc.recursionGates;
 const overhead = 1 + REC / (ROWS - REC - 25_700); // each leaf also verifies its predecessor
 const hours = (gates) => +((gates * overhead * perGate) / 3600).toFixed(1);
@@ -29,7 +28,7 @@ const rows = {
   BTC: { headersPerDay: 80 * 144, exhaustion: btc.day.bytesStripped, prover: { hash: btc.opReturn.hashHours, withScan: btc.opReturn.withScanHours }, attackHour: c.crypto51.BTC.hourCost, measured: 'prover hashing measured' },
   ERG: { headersPerDay: 160_000, exhaustion: 3.96e6, prover: { hash: 9.9, withScan: 14.6 }, attackHour: c.crypto51.ERG.hourCost, measured: 'slices 20–22' },
   LTC: { headersPerDay: c.LTC.headerBytes, exhaustion: c.LTC.bytesStripped, prover: sha(c.LTC.bytesStripped, c.LTC.txs), attackHour: c.crypto51.LTC.hourCost, pools: c.LTC.pools.forMajority },
-  DOGE: { headersPerDay: doge.medianHeaderBytesPerDay, exhaustion: c.DOGE.bytesFull, prover: sha(c.DOGE.bytesFull, c.DOGE.txs), attackHour: `$${Math.round(ltcHour * dogeShare).toLocaleString('en')} (merged; ${(100 * dogeShare).toFixed(0)}% of Litecoin's hashrate)` },
+  DOGE: { headersPerDay: c.DOGE.headerBytes, exhaustion: c.DOGE.bytesTransactions, prover: sha(c.DOGE.bytesTransactions, c.DOGE.txs), attackHour: `$${Math.round(ltcHour * dogeShare).toLocaleString('en')} (merged; ${(100 * dogeShare).toFixed(0)}% of Litecoin's hashrate)` },
   CKB: { headersPerDay: c.CKB.headerBytes, exhaustion: c.CKB.bytesFull, prover: b2b(c.CKB.bytesFull, c.CKB.txs, c.CKB.blocks), attackHour: c.crypto51.CKB.hourCost, pools: c.CKB.pools.forMajority },
   ETC: { headersPerDay: c.ETC.smallestBlock * c.ETC.blocks, exhaustion: c.ETC.bytesFull, prover: 'Keccak-256 and RLP: not modelled', attackHour: c.crypto51.ETC.hourCost, pools: c.ETC.pools.forMajority },
   ALPH: { headersPerDay: c.ALPH.headerBytesUpper, exhaustion: c.ALPH.bytesFull, prover: 'not modelled (fails on headers)', attackHour: 'not listed' },

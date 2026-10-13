@@ -36,10 +36,18 @@ function price(label, packed, words, scanBytes) {
 const opReturn = price('records in OP_RETURN (txids over stripped bytes)', firstHash, day.txs + day.merkleCompressions + day.headerCompressions, day.bytesStripped);
 // Every wtxid compression is priced packed: its second hash reads words, so this slightly overstates (under 0.5%).
 const witness = price('records in the witness (txids and wtxids)', firstHash + day.wtxidCompressions, day.txs + day.merkleCompressions + day.witnessMerkleCompressions + day.headerCompressions, day.bytesFull);
+// The ceiling: blocks of minimal 60-byte transactions filling the 1 MB the weight limit leaves without witness. Each
+// transaction is two packed compressions and its second hash; each Merkle node three.
+const MIN_TX = 60, perBlock = Math.floor((1e6 - 80 - 3) / MIN_TX);
+let ceilNodes = 0;
+for (let k = perBlock; k > 1; k = Math.ceil(k / 2)) ceilNodes += Math.ceil(k / 2);
+const ceiling = price('a day of blocks full of minimal transactions (estimate)', 144 * 2 * perBlock, 144 * (perBlock + 3 * ceilNodes + 3), 144 * 1e6);
 const perDay = (x) => +(x / n * 144).toFixed(1);
 console.log(JSON.stringify({
   day, gatesPerPackedCompression: PER_PACKED, recursionGates: RECURSION, leaf: LEAF, proveS: secs.map(Number), perGateUs: +(perGateS * 1e6).toFixed(2),
   opReturn: { ...opReturn, hashHoursPer144: perDay(opReturn.hashHours), withScanHoursPer144: perDay(opReturn.withScanHours) },
+  ceiling: { ...ceiling, txsPerBlock: perBlock },
+  // Upper bounds: a witness relation needs the wtxid tree and only the coinbase's txid path, not every txid.
   witness: { ...witness, hashHoursPer144: perDay(witness.hashHours), withScanHoursPer144: perDay(witness.withScanHours) },
   ergoDay: { hashHours: 9.9, withScanHours: '13.9–14.6', source: 'slices 21–22' },
 }, null, 1));

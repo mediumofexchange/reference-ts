@@ -12,6 +12,8 @@ async function get(url, { body, raw } = {}) {
       const r = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : { headers: url.includes('nervos') ? { accept: 'application/vnd.api+json', 'content-type': 'application/vnd.api+json' } : {} });
       if (r.ok) {
         const text = await r.text();
+        // Blockchair answers a rate limit with 200 and null data: wait and ask again.
+        if (!raw && url.includes('blockchair') && JSON.parse(text).data === null && attempt < 8) { await new Promise((res) => setTimeout(res, 30000 * (attempt + 1))); continue; }
         hashes.push(createHash('sha256').update(text).digest('hex'));
         return raw ? text : JSON.parse(text);
       }
@@ -55,23 +57,42 @@ const result = { fixedAt: new Date().toISOString() };
     bytesFull: perDay(576, span, size), bytesStripped: perDay(576, span, (weight - size) / 3), headerBytes: perDay(576, span, 80 * 576), pools: shares(day.map((b) => b.extras?.pool?.name ?? 'unknown')) };
 }
 
-// Dogecoin: the latest 1,440 blocks (Blockchair), and one raw block to size the AuxPoW a header carries.
+// Dogecoin: the latest 1,440 blocks (Blockchair), and 8 raw blocks to size the AuxPoW a header carries.
 {
-  const blocks = [];
-  for (let o = 0; o < 1440; o += 100) { blocks.push(...(await get(`https://api.blockchair.com/dogecoin/blocks?limit=100&offset=${o}`)).data); await new Promise((r) => setTimeout(r, 2500)); }
+  const pause = () => new Promise((r) => setTimeout(r, 4000));
+  const byId = new Map();
+  for (let o = 0; o < 1500; o += 100) { for (const b of (await get(`https://api.blockchair.com/dogecoin/blocks?limit=100&offset=${o}`)).data) byId.set(b.id, b); await pause(); }
+  // A block found while paging shifts the pages: keep each height once, the latest 1,440 (1,439 intervals).
+  const blocks = [...byId.values()].sort((a, b) => b.id - a.id).slice(0, 1440);
   const t = (b) => Date.parse(`${b.time.replace(' ', 'T')}Z`) / 1000;
   const span = t(blocks[0]) - t(blocks[1439]);
-  const raw = await get(`https://api.blockchair.com/dogecoin/raw/block/${blocks[5].hash}`);
-  const hex = Buffer.from(Object.values(raw.data)[0].raw_block, 'hex');
+  const newer = blocks.slice(0, 1439); // the blocks the span covers
   // AuxPoW after the 80-byte header: the parent's coinbase transaction, its hash, two Merkle branches, the parent header.
-  let at = 80;
-  const varint = () => { const f = hex[at++]; if (f < 0xfd) return f; if (f === 0xfd) { at += 2; return hex.readUInt16LE(at - 2); } at += 4; return hex.readUInt32LE(at - 4); };
-  at += 4; const nIn = varint(); for (let i = 0; i < nIn; i++) { at += 36; at += varint(); at += 4; }
-  const nOut = varint(); for (let i = 0; i < nOut; i++) { at += 8; at += varint(); } at += 4;
-  at += 32; at += 32 * varint() + 4; at += 32 * varint() + 4; at += 80;
-  result.DOGE = { heights: [blocks[1439].id, blocks[0].id], spanH: +(span / 3600).toFixed(2), txs: perDay(1440, span, blocks.reduce((s, b) => s + b.transaction_count, 0)),
-    bytesFull: perDay(1440, span, blocks.reduce((s, b) => s + b.size, 0)), auxpowHeaderBytes: at, headerBytes: perDay(1440, span, at * 1440),
-    pools: shares(blocks.map((b) => b.guessed_miner || 'unknown')) };
+  const aux = [];
+  for (let k = 0; k < 8; k++) {
+    let rawHex = null;
+    for (let attempt = 0; !rawHex && attempt < 4; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 30000));
+      rawHex = Object.values((await get(`https://api.blockchair.com/dogecoin/raw/block/${blocks[k * 150].hash}`)).data ?? {})[0]?.raw_block ?? null;
+      await pause();
+    }
+    if (!rawHex) continue; // not served: fewer samples
+    const hex = Buffer.from(rawHex, 'hex');
+    let at = 80;
+    const varint = () => { const f = hex[at++]; if (f < 0xfd) return f; if (f === 0xfd) { at += 2; return hex.readUInt16LE(at - 2); } at += 4; return hex.readUInt32LE(at - 4); };
+    const skip = (n) => { at += n; }; // the length is read before the offset moves
+    skip(4); const nIn = varint(); for (let i = 0; i < nIn; i++) { skip(36); skip(varint()); skip(4); }
+    const nOut = varint(); for (let i = 0; i < nOut; i++) { skip(8); skip(varint()); } skip(4);
+    skip(32); skip(32 * varint() + 4); skip(32 * varint() + 4); skip(80);
+    aux.push(at);
+  }
+  const auxMedian = [...aux].sort((a, b) => a - b)[Math.floor(aux.length / 2)];
+  const bytes = newer.reduce((s, b) => s + b.size, 0);
+  result.DOGE = { heights: [blocks[1439].id, blocks[0].id], spanH: +(span / 3600).toFixed(2), txs: perDay(1439, span, newer.reduce((s, b) => s + b.transaction_count, 0)),
+    bytesFull: perDay(1439, span, bytes), headerWithAuxpowBytes: aux, headerBytes: perDay(1439, span, auxMedian * 1439),
+    // Exhaustion reads the transactions: the block bytes less each header at the sampled median.
+    bytesTransactions: perDay(1439, span, bytes - auxMedian * 1439),
+    pools: shares(newer.map((b) => b.guessed_miner || 'unknown')) };
 }
 
 // Nervos CKB: a day's count and transactions from the explorer, block bytes from 288 blocks spread over the day

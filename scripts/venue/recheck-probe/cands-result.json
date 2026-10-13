@@ -1,5 +1,5 @@
 {
- "fixedAt": "2026-10-13T03:12:23.960Z",
+ "fixedAt": "2026-10-13T03:39:28.303Z",
  "crypto51": {
   "BTC": {
    "algorithm": "SHA-256",
@@ -238,32 +238,32 @@
  },
  "LTC": {
   "heights": [
-   3193535,
-   3194110
+   3193545,
+   3194120
   ],
-  "spanH": 24.23,
-  "txs": 154246,
-  "bytesFull": 69650640,
-  "bytesStripped": 38994896,
-  "headerBytes": 45640,
+  "spanH": 24.37,
+  "txs": 153754,
+  "bytesFull": 69345758,
+  "bytesStripped": 38764680,
+  "headerBytes": 45380,
   "pools": {
    "blocks": 576,
    "top": [
     [
      "F2Pool",
-     38
+     38.2
     ],
     [
      "ViaBTC",
-     22
+     22.7
     ],
     [
      "AntPool",
-     19.6
+     19.4
     ],
     [
      "Hash700",
-     5.2
+     4.7
     ]
    ],
    "forMajority": 2
@@ -271,16 +271,24 @@
  },
  "DOGE": {
   "heights": [
-   6411490,
-   6412928
+   6411517,
+   6412956
   ],
-  "spanH": 25.19,
-  "txs": 19061,
-  "bytesFull": 9839230,
-  "auxpowHeaderBytes": 15540,
-  "headerBytes": 21320461,
+  "spanH": 25.2,
+  "txs": 18488,
+  "bytesFull": 9711347,
+  "headerWithAuxpowBytes": [
+   817,
+   818,
+   861,
+   816,
+   882,
+   818
+  ],
+  "headerBytes": 1121173,
+  "bytesTransactions": 8590174,
   "pools": {
-   "blocks": 1500,
+   "blocks": 1439,
    "top": [
     [
      "Unknown",
@@ -291,30 +299,30 @@
   }
  },
  "CKB": {
-  "averageBlockS": 8.99,
-  "blocks": 9609,
-  "txs": 15892,
+  "averageBlockS": 8.96,
+  "blocks": 9643,
+  "txs": 15911,
   "headerBytesEach": 208,
-  "bytesFull": 14025670,
-  "headerBytes": 1998672,
+  "bytesFull": 14320893,
+  "headerBytes": 2005744,
   "pools": {
    "blocks": 2000,
    "top": [
     [
      "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq0tpsqq08mkay9ewrfrdwlcghv62qw704s93hhsj",
-     58.7
+     59.5
     ],
     [
      "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqvgqh40v2g5ps3rann79tvw9gq6ewrft7gp909qk",
-     21.3
+     20.5
     ],
     [
      "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq22xdj8q4jdql98qkdhnqzgrsk4nqyavdcratvu9",
-     9.1
+     9.3
     ],
     [
      "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq0259kv0x5jez6h0l5qr52k64weapapgyscsnmhn",
-     8.4
+     8.3
     ]
    ],
    "forMajority": 1
@@ -322,29 +330,29 @@
  },
  "ALPH": {
   "chains": 16,
-  "blocks": 164359,
-  "txs": 169782,
-  "bytesFull": 72784740,
+  "blocks": 157067,
+  "txs": 165862,
+  "bytesFull": 84441575,
   "smallestBlock": 400,
-  "headerBytesUpper": 65743600
+  "headerBytesUpper": 62826800
  },
  "ETC": {
   "heights": [
-   25519022,
-   25525371
+   25519122,
+   25525471
   ],
-  "spanH": 24.02,
+  "spanH": 24.05,
   "blocks": 6350,
-  "txs": 9808,
-  "bytesFull": 4845474,
+  "txs": 10445,
+  "bytesFull": 4915143,
   "smallestBlock": 528,
-  "gasUsedShare": 0.44,
+  "gasUsedShare": 0.47,
   "pools": {
    "blocks": 6350,
    "top": [
     [
      "0x406177B983C28eb720827985eF5953e8430d4E95",
-     67.7
+     67.9
     ],
     [
      "0x5253b33c1313a4449Bc5304A9C55b4CC2Bdf2872",
@@ -352,15 +360,15 @@
     ],
     [
      "0x3eD06473CB75744B4196aF5E0B631F1A58bF6eD8",
-     11.5
+     11.4
     ],
     [
      "0xfaD4A236C87880035497043F24eA58D73C3e50dE",
-     3.8
+     3.7
     ]
    ],
    "forMajority": 1
   }
  },
- "responsesSha256": "42cae26d2d015ed4393a1c1950e8a62f70d4f3f200d213e068f5c389977e8750"
+ "responsesSha256": "6269ba0a77a45b2abee02a90b90babac503251c74dcf7534027054b94ae21e5c"
 }

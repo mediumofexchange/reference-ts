@@ -30,44 +30,44 @@
    "measured": "slices 20–22"
   },
   "LTC": {
-   "headersPerDay": 45640,
-   "exhaustion": 38994896,
+   "headersPerDay": 45380,
+   "exhaustion": 38764680,
    "prover": {
-    "hash": 31.3,
-    "withScan": 73.5
+    "hash": 31.2,
+    "withScan": 73.1
    },
    "attackHour": "$62,850",
    "pools": 2
   },
   "DOGE": {
-   "headersPerDay": 1180800,
-   "exhaustion": 9839230,
+   "headersPerDay": 1121173,
+   "exhaustion": 8590174,
    "prover": {
-    "hash": 5.8,
-    "withScan": 16.4
+    "hash": 5.3,
+    "withScan": 14.6
    },
    "attackHour": "$39,865 (merged; 63% of Litecoin's hashrate)"
   },
   "CKB": {
-   "headersPerDay": 1998672,
-   "exhaustion": 14025670,
+   "headersPerDay": 2005744,
+   "exhaustion": 14320893,
    "prover": {
-    "hash": 40.5,
-    "withScan": 55.6
+    "hash": 41,
+    "withScan": 56.4
    },
    "attackHour": "$273",
    "pools": 1
   },
   "ETC": {
    "headersPerDay": 3352800,
-   "exhaustion": 4845474,
+   "exhaustion": 4915143,
    "prover": "Keccak-256 and RLP: not modelled",
    "attackHour": "$2,604",
    "pools": 1
   },
   "ALPH": {
-   "headersPerDay": 65743600,
-   "exhaustion": 72784740,
+   "headersPerDay": 62826800,
+   "exhaustion": 84441575,
    "prover": "not modelled (fails on headers)",
    "attackHour": "not listed"
   }

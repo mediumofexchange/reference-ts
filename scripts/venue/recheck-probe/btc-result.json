@@ -34,6 +34,16 @@
   "hashHoursPer144": 116.8,
   "withScanHoursPer144": 240.4
  },
+ "ceiling": {
+  "label": "a day of blocks full of minimal transactions (estimate)",
+  "packed": 4799520,
+  "words": 9603792,
+  "hashGates": 58121873568,
+  "hashHours": 346,
+  "withScanHours": 501.7,
+  "leavesWithScan": 24319,
+  "txsPerBlock": 16665
+ },
  "witness": {
   "label": "records in the witness (txids and wtxids)",
   "packed": 6390702,
