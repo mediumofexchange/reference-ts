@@ -1,14 +1,17 @@
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
+import { fieldToBytes } from "../field.js";
 import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { decodeCommitment, verifyCommitment, type Commitment } from "../../venue-records.js";
 import { POOL_V3, type Construction, type OperatorReceipt } from "./construction.js";
-import { EVIDENCE_QUOTA, wholePackage, type EvidenceStore } from "./evidence-store.js";
+import { EVIDENCE_QUOTA, evidenceName, wholePackage, type EvidenceStore } from "./evidence-store.js";
 import { FAULT_LIMITS } from "./fault-observer.js";
 import { referenceVenue, type VenueReference } from "./guard.js";
 import { PackageLimitError } from "./package.js";
 import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, servedTooSlow, V3_SERVICE_PROFILE,
   MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES, type V3ServiceCommand } from "./service-wire.js";
 import type { ServedPackage } from "./store.js";
+import type { CheckSupply, RecordAt } from "./succinct.js";
 
 const same = (a: Uint8Array, b: Uint8Array) => compareBytes(a, b) === 0;
 function identifier(bytes: Uint8Array): Uint8Array {
@@ -40,6 +43,22 @@ async function json(response: Response, maximum: number): Promise<unknown> {
   try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))) as unknown; }
   catch { throw new EncodingError("invalid service JSON or UTF-8"); }
 }
+/** A whole binary body of at most `maximum` bytes, or undefined past it: a longer answer is stopped unread. */
+async function body(response: Response, maximum: number): Promise<Uint8Array | undefined> {
+  const chunks: Uint8Array[] = []; let size = 0;
+  for await (const chunk of chunksOf(response)) {
+    size += chunk.length; if (size > maximum) return undefined;
+    chunks.push(chunk);
+  }
+  return new Uint8Array(Buffer.concat(chunks));
+}
+/** Whether a service call failed because the service did not answer (nothing listening, a dropped connection). */
+export const unanswered = (error: unknown): boolean =>
+  (error instanceof TypeError && (error.message === "fetch failed" || error.message === "terminated")) ||
+  (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
+/** A succinct reader's fetches answer at most pool-v3 §5's bound on a proof field. */
+const MAX_FETCHED_PROOF = 131_072;
+
 /** A v3 onion service's host: 56 base32 characters, the last its version byte's (3). Tor checks the checksum. */
 export const ONION_HOST = /^[a-z2-7]{55}d\.onion$/;
 /** A listener's base URL as a client takes it: `http:` at 127.0.0.1 or a v3 onion host, nothing past the root `/`. */
@@ -263,7 +282,9 @@ export class V3ServiceClient {
   private async served<T>(backing: Uint8Array, after: bigint, maxBytes: bigint,
     take: Parameters<typeof readServed<T>>[1]): Promise<{ readonly served: ServedPackage; readonly taken: T }> {
     if (typeof maxBytes !== "bigint" || maxBytes < 0n) throw new TypeError("invalid evidence budget");
-    return this.exchange(`/evidence?backing=${hex(backing)}&after=${after}`, this.#walletToken, undefined, "application/octet-stream", (response, progress) => {
+    // A construction whose trails are proof-free (a succinct read) asks for them in that form (succinct-read §3.3).
+    const form = this.#construction.trailChecks === undefined ? "" : "&form=proof-free";
+    return this.exchange(`/evidence?backing=${hex(backing)}&after=${after}${form}`, this.#walletToken, undefined, "application/octet-stream", (response, progress) => {
       // Each chunk restarts the bound on a stall; the time spent waiting for chunks bounds a drip, as the server bounds
       // its peers. A source slower than that did not answer.
       const bounded = async function* (): AsyncIterable<Uint8Array> {
@@ -325,7 +346,7 @@ export class V3ServiceClient {
    * one response (by default the store's file quota).
    */
   async sync(backing: Uint8Array, evidence: EvidenceStore, options: { readonly full?: boolean; readonly maxBytes?: bigint } = {}): Promise<ServedPackage> {
-    if (evidence.construction.namespace.name !== this.#construction.namespace.name) throw new TypeError("an evidence store of another construction");
+    if (evidenceName(evidence.construction) !== evidenceName(this.#construction)) throw new TypeError("an evidence store of another construction");
     const ownBacking = identifier(backing), operator = concatBytes(this.#domain, this.#venue, this.#operator);
     const source = this.#walletToken === undefined ? concatBytes(operator, new TextEncoder().encode(this.#baseUrl)) : operator;
     const receive = (after: bigint) => this.served(ownBacking, after, options.maxBytes ?? EVIDENCE_QUOTA.file,
@@ -339,6 +360,26 @@ export class V3ServiceClient {
     return result.served;
   }
 
+  /** A succinct reader's fetch of a record's proof by its hash and place (succinct-read §3.5): the source's bytes, which
+   * the reader hashes, or undefined where it has none or answers past pool-v3 §5's bound. */
+  async proof(proofHash: Uint8Array, at: RecordAt): Promise<Uint8Array | undefined> {
+    const hash = identifier(proofHash), segment = identifier(at.segment);
+    if (typeof at.position !== "bigint" || at.position < 1n || at.position >= 1n << 63n) throw new TypeError("a record's position is a positive u63");
+    return this.fetched(`/proofs/${hex(hash)}?segment=${hex(segment)}&position=${at.position}`);
+  }
+  /** A check proof the source keeps for `digest` under set `set` (succinct-read §3.2), which the reader verifies under
+   * its own pinned keys, or undefined. */
+  async cover(set: Uint8Array, digest: bigint): Promise<Uint8Array | undefined> {
+    return this.fetched(`/covers/${hex(identifier(set))}/${hex(fieldToBytes(digest))}`);
+  }
+  private fetched(path: string): Promise<Uint8Array | undefined> {
+    return this.exchange(path, this.#walletToken, undefined, "application/octet-stream", response => body(response, MAX_FETCHED_PROOF))
+      .catch((error: unknown) => {
+        if (error instanceof V3ServiceClientError && error.code === "NOT_FOUND") return undefined;
+        throw error;
+      });
+  }
+
   /** `sync` from nothing into one §12 package held in memory, for a caller that reads a whole package. The
    * response is bounded by `maxBytes` (by default an in-memory store's quota), so it does not serve a long history;
    * assembling it holds about three times what was received at its peak (`wholePackage`). */
@@ -346,4 +387,31 @@ export class V3ServiceClient {
     const result = await this.served(identifier(backing), 0n, maxBytes, (served, parts) => wholePackage(served.package, parts, this.#construction));
     return { selection: result.served.selection, package: result.taken };
   }
+}
+
+/**
+ * A succinct reader's supply over `sources` (succinct-read §2 rule 6): each fetch asks them in turn until one answers,
+ * covers under the set whose identity is `set`. A source that does not answer, refuses or answers malformed is passed
+ * over, and so is a proof whose bytes do not hash to the asked `proofHash`. A cover is taken from the first source that
+ * has one, which the reader verifies: a wrong one costs the reader that span's split (§3.4), never a verdict.
+ */
+export function serviceSupply(set: Uint8Array, sources: readonly V3ServiceClient[]): CheckSupply {
+  const own = identifier(set), list = [...sources];
+  const ask = async (fetch: (source: V3ServiceClient) => Promise<Uint8Array | undefined>, holds: (answer: Uint8Array) => boolean) => {
+    for (const source of list) {
+      try {
+        const answer = await fetch(source);
+        if (answer !== undefined && holds(answer)) return answer;
+      } catch (error) {
+        if (!unanswered(error) && !(error instanceof V3ServiceClientError) && !(error instanceof EncodingError)) throw error;
+      }
+    }
+    return undefined;
+  };
+  return Object.freeze({
+    cover: (digest: bigint) => ask(source => source.cover(own, digest), () => true),
+    // A proof is fetched by its place; a publication's is never fetched (§3.6).
+    proof: (proofHash: Uint8Array, at?: RecordAt) => at === undefined ? undefined :
+      ask(source => source.proof(proofHash, at), answer => same(sha256(answer), proofHash)),
+  });
 }

@@ -68,7 +68,7 @@ import { decodeCommitment, encodeCommitment, signCommitment, verifyCommitment, t
 import { scopeSchedule } from "../schedule.js";
 import type { Snapshot } from "./commitments.js";
 import { POOL_V3, type Construction, type ReaderFrames } from "./construction.js";
-import { addLineage, EvidenceStore, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailTip } from "./evidence-store.js";
+import { addLineage, EvidenceStore, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailForm, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
@@ -81,6 +81,7 @@ import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, 
 import { busy, FileInUse, KeptStateMismatch, removeKeptFile, ReplayStore } from "./replay-store.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
+import { proofAmong, type RecordAt } from "./succinct.js";
 import type { RootTerms } from "./terms.js";
 
 /** The database's layout and the meaning of its rows. `/10`: a taken directory or snapshot is named only where kept, so
@@ -1618,7 +1619,7 @@ export class V3OperatorJournal {
    * journal's checkpoints through `after` name, where the trail passes through it, else whole; a trail already served
    * that far is left out. Memory holds one package part or one record at a time. Served rows are never changed, so no command waits for a reader.
    */
-  private async *parts(selected: Signed, after: bigint): AsyncIterable<EvidencePart> {
+  private async *parts(selected: Signed, after: bigint, form?: TrailForm): AsyncIterable<EvidencePart> {
     try {
       const through = selected.commitment.sequence, from = after < through ? after : through;
       // Each segment's tops that no other of them reaches: one in the common case, one per fork where snapshots of a taken
@@ -1687,7 +1688,7 @@ export class V3OperatorJournal {
       const order = [...tops.values()].flatMap(frontier => frontier.map(top => top.tip).sort((a, b) =>
         a.position > b.position ? -1 : a.position < b.position ? 1 : compareBytes(a.evidence, b.evidence)));
       yield* topTrails(order, (segment, value) => this.retained.trail(segment, value),
-        segment => from === 0n ? undefined : this.ownTop(segment, from), this.construction);
+        segment => from === 0n ? undefined : this.ownTop(segment, from), this.construction, form);
     } catch (error) {
       if (error instanceof EvidenceRefusal || error instanceof EncodingError) throw new V3StoreError("STORAGE", "the journal's own evidence does not read back");
       throw error;
@@ -1710,7 +1711,7 @@ export class V3OperatorJournal {
    * commitments are kept through, keeping them through the clock as a command's view would (with any conflict
    * their windows show); otherwise it checks the fence and identity and reads.
    */
-  async serve(backing?: Uint8Array, after = 0n): Promise<ServedEvidence> {
+  async serve(backing?: Uint8Array, after = 0n, form?: TrailForm): Promise<ServedEvidence> {
     const named = backing === undefined ? undefined : copyBytes(backing);
     requireThat(typeof after === "bigint" && after >= 0n && after < U64, "REFUSED", "the served sequence is not a u64", "SEQUENCE");
     requireThat(!this.closed, "STORAGE", "store is closed");
@@ -1746,7 +1747,7 @@ export class V3OperatorJournal {
     const own = this.ownPackage(signed.commitment);
     return { selection: { domain: copyBytes(this.domain), venue: copyBytes(this.venueId), backing: copyBytes(name),
       operator: copyBytes(this.operator), sequence: signed.commitment.sequence, root: copyBytes(signed.commitment.root) },
-      package: own, parts: this.parts(signed, after) };
+      package: own, parts: this.parts(signed, after, form) };
   }
   /** The venue as a serve reads it: the clock, and this key's latest commitment held by it. The held commitments
    * are kept through the clock first where they are behind it, in a transaction of their own under the fence;
@@ -1775,6 +1776,15 @@ export class V3OperatorJournal {
     requireThat(found === undefined ? reply === undefined : reply === bytesToHex(bytes(found.commitment)), "STORAGE",
       "the signed commitments disagree with the command log");
   }
+
+  /** A succinct reader's fetch (succinct-read §3.5): the proof of a record this journal keeps at `at` whose SHA-256 is
+   * `proofHash`, read without a turn as serving is; the reader hashes it. */
+  proof(proofHash: Uint8Array, at: RecordAt): Uint8Array | undefined {
+    if (this.closed) return undefined;
+    return proofAmong(this.evidence.recordsAt(at.segment, at.position), proofHash);
+  }
+  /** A journal keeps no check proofs: a prover keeps them in a file of its own (a replica's). */
+  cover(_set: Uint8Array, _digest: Uint8Array): Uint8Array | undefined { return undefined; }
 
   /** `serve` from nothing as one §12 package held in memory, for a caller that reads a whole package. */
   async package(backing?: Uint8Array): Promise<ServedPackage> {
