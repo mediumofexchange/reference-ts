@@ -589,7 +589,7 @@ create a wallet database, so a lost one never comes back as a fresh seed. The di
 | `presentation <backing> <demand>` | C3.8's reading from public evidence |
 | `publish <alias> <backing> --out f` | a demand, withdrawal or release as a publication file for a relay (below); refused unless the read shows the gap open |
 | backer: `issue`, `accept <alias> <backing> <demand> --deadline n --out f`, `burn`, `publish-acceptance` | `accept` writes the acceptance as its canonical publication bytes, which the holder's `settle --acceptance` reads |
-| `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files new, outside the directory and on a file system with hard links; `o` is checked new before the wallet freezes); a new directory from the handoff, a rerun confirmed by its provenance. `--backer-key` copies K into a restored directory |
+| `seed --show`, `restore-seed`, `handoff --key k --out o`, `restore --key k --backup o --digest d` | the seed (the only secret printed); a new directory from the seed on stdin; the freezing export (its key written first and reused on rerun, both files new, outside the directory and on a file system with hard links; `o` is checked new before the wallet freezes); a new directory from the handoff; a rerun of either restore prints what it printed (below). `--backer-key` copies K into a restored directory |
 | `restore --copy` | records that this directory was restored from a copy or a backup, or is now the seed's only instance ([above](#restoring-a-copy-of-the-directory)) |
 
 Each command that reads syncs the directory's Ergo view first, in bounded passes until it is caught up, with a
@@ -613,9 +613,16 @@ channel, thin-interval and publication-funding explanations; each demand and `fr
 publication file what its relay's funding links.
 Output, refusals and exit codes follow the M10b decision (one JSON object on stdout; refusals exit 1, usage 2,
 unexpected failures 3 with their stack). Evidence past a reader's budget refuses `UNRESOLVED` (`resource-refusal`); a
-handed file past its bound, a directory or one without access is a named refusal; an `init` or `restore-seed` that did
-not finish refuses `INCOMPLETE` on rerun (`BUSY` while it still runs; remove its directory and run it again: nothing it
-made was shown or used).
+handed file past its bound, a directory or one without access is a named refusal. Every role's `init`, `restore` and
+`restore-seed` is retried by its own command line: rerun over a directory it finished, it prints what it printed, with
+`replay: true`, where the directory is that role's and holds the nodes, budget, construction and venue the command names
+(a venue made after an init without `--venue` is the directory's own), and the same K, and for `restore` the handoff's
+digest as its provenance, for `restore-seed` the seed on stdin (read only once the directory is judged) and its
+`seed.restored` mark; another configuration there refuses `EXISTS`, naming what differs, another role's directory
+`ROLE`, and a copy whose restoration is not recorded `COPIED`. A replay names the venue only where the command does
+([decision](../decisions/2026-10.md#2026-10-13--replay-an-init-or-a-restore-whose-reply-was-lost-from-the-directory-it-finished-and-remove-a-replica-by-command-next-4-br-bs)).
+One that did not finish refuses `INCOMPLETE` on rerun (`BUSY` while it still runs; remove its directory and run it
+again: nothing it made was shown or used).
 
 A directory serves one construction, declared at `init --construction` and kept in config.json: `moe/pool/v3` by
 default (and for any directory made before the flag), or `moe/lit/v1`, the adopted lit notes
@@ -681,8 +688,9 @@ round's refusal is a `refused` event on stderr. It holds the directory's lock wh
 added with it stopped. A holder or reader keeps replicas with `replica add <backing> <url>` (a loopback or v3 onion URL, no
 token; added again, nothing changes) and reads them in the order added when the operator's service does not answer,
 refuses, sends evidence that does not frame or whose read refuses, or when it keeps none (where no replica answers, the
-operator's refusal stands): a reader of replicas alone needs no `service add`. No command removes a replica: edit
-`replicas/<operator>.json`. A replica that does not answer, refuses or sends
+operator's refusal stands): a reader of replicas alone needs no `service add`. `replica remove <backing> <url>` reads
+that replica of the terms' operator no more (a URL is the one its client reads, so `http://<host>:80/` names `http://<host>/`;
+removed again, nothing changes). A replica that does not answer, refuses or sends
 evidence that does not frame or assemble is passed over; the holder's own proxy missing still refuses as `PROXY`.
 Evidence is public, so a replica sees only which backing a connection syncs and when, as the operator does; it sees no
 submission. A replica the holder lists that withholds while the operator is down leaves reads unresolved until the

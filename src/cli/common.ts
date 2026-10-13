@@ -228,6 +228,10 @@ export function openDirectory(dir: string, role: Role | "any", options: { readon
   return directory(path, config);
 }
 
+/** Whether `dir` holds a directory whose init finished: its config.json, written last, is there. A rerun of that init
+ * replays it (Next 4 (br)). */
+export const initialized = (dir: string): boolean => existsSync(join(absolute(dir), CONFIG));
+
 /** Refuse an existing `--dir` an init would create: `INCOMPLETE` where it is an init that did not finish (its lock taken
  * and given back, its config.json, written last, absent), whose keys and seed no command has shown or used, so removing
  * it and running init again loses nothing; `BUSY` where that init still runs; `EXISTS` for anything else there. */

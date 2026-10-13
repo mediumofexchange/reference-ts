@@ -27,7 +27,7 @@ import { createRelayService, waitingTurns, type RelayRefusal } from "../pool/v3/
 import { sendToRelay, V3ServiceClientError } from "../pool/v3/service-client.js";
 import type { ErgoPublisher } from "../ergo-publisher.js";
 import { VenueError } from "../venue-error.js";
-import { CommandError, event, flag, fresh, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, required, UsageError,
+import { CommandError, event, flag, fresh, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Directory } from "./common.js";
 import { constructions } from "./construction.js";
 import { initRole, unanswered } from "./reader.js";
@@ -41,6 +41,9 @@ async function init(argv: readonly string[]): Promise<void> {
     const shown = { fundingTree: fundingTree(funding) };
     funding.fill(0);
     return shown;
+  }, replay: directory => {
+    const funding = readSecret(directory.file("funding.key"), "funding.key");
+    try { return { fundingTree: fundingTree(funding) }; } finally { funding.fill(0); }
   } });
 }
 

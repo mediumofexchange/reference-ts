@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-13` [Replay an init or a restore whose reply was lost from the directory it finished, and remove a replica by command (Next 4 (br), (bs))](decisions/2026-10.md#2026-10-13--replay-an-init-or-a-restore-whose-reply-was-lost-from-the-directory-it-finished-and-remove-a-replica-by-command-next-4-br-bs)
 - `2026-10-13` [Keep Ergo for the release: a phone reaches Bitcoin only through about ten provers, Dogecoin is the next venue probe, and a venue move is a planned move for pool-v4 (slice 29, Next 12)](decisions/2026-10.md#2026-10-13--keep-ergo-for-the-release-a-phone-reaches-bitcoin-only-through-about-ten-provers-dogecoin-is-the-next-venue-probe-and-a-venue-move-is-a-planned-move-for-pool-v4-slice-29-next-12)
 - `2026-10-13` [Pass a read over to the next source on any refusal of its answer, and name the commands' file, URL and budget refusals (audit 32)](decisions/2026-10.md#2026-10-13--pass-a-read-over-to-the-next-source-on-any-refusal-of-its-answer-and-name-the-commands-file-url-and-budget-refusals-audit-32)
 - `2026-10-12` [Promise BTC first, then XMR, then LTC as chain-asset terms, and take a hashlocked release to C0a for their cross-chain legs (slice 28, Next 12)](decisions/2026-10.md#2026-10-12--promise-btc-first-then-xmr-then-ltc-as-chain-asset-terms-and-take-a-hashlocked-release-to-c0a-for-their-cross-chain-legs-slice-28-next-12)

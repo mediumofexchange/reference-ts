@@ -18,7 +18,9 @@
 // replica alone, past a replica that is down. The holder hands its gap demand and release to a third party's relay
 // (M12c), `relay serve` behind an onion name of its own, with `relay send` through the proxy: the holder funds nothing;
 // a send without the proxy, with a wrong credential or for another venue is refused. A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
-// is final, after which it requests again. Hostile cases: pool-v3 terms into a lit directory (CONSTRUCTION), a lit
+// is final, after which it requests again. Every init, `restore` and `restore-seed` rerun over its finished directory
+// prints what it printed (`replay`), and refuses EXISTS for another configuration, backer key or seed; `replica remove`
+// drops a replica (Next 4 (br), (bs)). Hostile cases: pool-v3 terms into a lit directory (CONSTRUCTION), a lit
 // directory given --parameters or terms given --challenge (usage), freshen (CONSTRUCTION), a pool-v3 request frame to
 // a lit payer (REQUEST), a relay file for another venue (VENUE), a package past the reader's item budget (UNRESOLVED).
 //
@@ -256,9 +258,18 @@ try {
     operatorKey = init.operator;
     await fund(init.fundingTree, FUND);
     const venue = (await ok(["operator", "venue", "create", "--dir", OP, ...SYN, "--depth", DEPTH])).venue;
+    // An init whose reply was lost is rerun: the same command line prints what it printed, from the directory, also
+    // once a venue was made after it (Next 4 (br)); another configuration, or another role's init, is refused there.
+    assert.deepEqual(await ok(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET, ...LIT]), { ...init, replay: true });
+    assert.match((await refused(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", "1", ...LIT], "EXISTS")).message, /another init \(--budget\)/);
+    await refused(["operator", "init", "--dir", OP, ...nodeArgs, "--budget", BUDGET], "EXISTS");
+    await refused(["reader", "init", "--dir", OP, "--venue", venueFile, ...nodeArgs, ...LIT], "ROLE");
     await advance(Number(DEPTH) + 1);
     const backer = await ok(wallet("init", BK, "--backer", "--venue", venueFile, ...nodeArgs, ...LIT));
     assert.match(backer.backer, /^[0-9a-f]{64}$/);
+    assert.deepEqual(await ok(wallet("init", BK, "--backer", "--venue", venueFile, ...nodeArgs, ...LIT)), { ...backer, replay: true });
+    assert.match((await refused(wallet("init", BK, "--venue", venueFile, ...nodeArgs, ...LIT), "EXISTS")).message, /another init \(--backer\)/);
+    assert.match((await refused(wallet("init", BK, "--backer", "--venue", venueFile, "--node", `${node.url}/other`, ...LIT), "EXISTS")).message, /--node/);
     await usage(wallet("terms create", BK, "--operator", operatorKey, "--thing", "drill units", "--per-unit", "1", "--interval", "80",
       "--silence", String(SILENCE), "--challenge", "5"), "--challenge is not taken");
     const created = await ok(wallet("terms create", BK, "--operator", operatorKey, "--thing", "drill units", "--per-unit", "1", "--interval", "80",
@@ -280,11 +291,13 @@ try {
     writeFileSync(poolTerms, pool); writeFileSync(poolSignature, ed25519.sign(rootTermsSignatureMessage(pool), new Uint8Array(32).fill(41)));
     const refusal = await refused(wallet("terms add", HD, hex(rootTermsName(pool)), "--terms", poolTerms, "--signature", poolSignature, ...SYN), "CONSTRUCTION");
     assert.match(refusal.message, /moe\/pool\/v3.*moe\/lit\/v1/);
-    await ok(["reader", "init", "--dir", RD, "--venue", venueFile, ...nodeArgs, ...LIT]);
+    const reader = await ok(["reader", "init", "--dir", RD, "--venue", venueFile, ...nodeArgs, ...LIT]);
+    assert.deepEqual(await ok(["reader", "init", "--dir", RD, "--venue", venueFile, ...nodeArgs, ...LIT]), { ...reader, replay: true });
     await ok(["reader", "terms", "add", "--dir", RD, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN]);
     // A relay verifies nothing: it keeps no parameters and serves either construction.
     await usage(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET, "--parameters", scratch], "unknown option --parameters");
     const relay = await ok(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET]);
+    assert.deepEqual(await ok(["relay", "init", "--dir", RL, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET]), { ...relay, replay: true });
     await fund(relay.fundingTree, FUND);
     // A third party's relay, which serves holders (M12c).
     await fund((await ok(["relay", "init", "--dir", RT, "--venue", venueFile, ...nodeArgs, "--budget", BUDGET])).fundingTree, FUND);
@@ -456,7 +469,7 @@ try {
     assert.equal(existsSync(join(HD, "unresolved.json")), false);
   });
 
-  let replica;
+  let replica, restoring;
   await check("with the operator stopped past silence, a demand and its release are handed to a third party's relay and read final by force, " +
       "the holder syncing from a replica and a reader reading from it alone; the operator returns and adopts", async () => {
     // A replica of the backing, behind its own onion name, syncing from the operator's holders' listener.
@@ -469,7 +482,15 @@ try {
     // A reader with replicas only, the first of them down: it keeps no service of the operator's.
     for (const url of [`http://${DOWN}/`, `http://${REPLICA}/`, `http://${REPLICA}/`]) await ok(["reader", "replica", "add", "--dir", RF, backing, url]);
     assert.deepEqual(JSON.parse(readFileSync(join(RF, "replicas", `${operatorKey}.json`), "utf8")).urls, [`http://${DOWN}/`, `http://${REPLICA}/`]);
+    // A replica no longer wanted is removed, named as its client names it (Next 4 (bs)); a rerun changes nothing.
+    await ok(wallet("replica add", HD, backing, `http://${DOWN}/`));
     await ok(wallet("replica add", HD, backing, `http://${REPLICA}/`));
+    for (let rerun = 0; rerun < 2; rerun++) {
+      const removed = await ok(wallet("replica remove", HD, backing, `http://${DOWN}:80/`));
+      assert.deepEqual([removed.status, removed.replicas], ["removed", [`http://${REPLICA}/`]]);
+    }
+    assert.deepEqual(JSON.parse(readFileSync(join(HD, "replicas", `${operatorKey}.json`), "utf8")).urls, [`http://${REPLICA}/`]);
+    await usage(wallet("replica drop", HD, backing, `http://${DOWN}/`), "replica add|remove");
     replica = replicaServe(RP);
     for (const directory of [HD, BK, SH]) await ok(wallet("sync", directory, backing));
     // The whole package as any transport could carry it, for the reader once the operator is stopped.
@@ -583,13 +604,24 @@ try {
     // Under the other construction the handoff does not open: refused by name before any directory is made.
     await refused(["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, "--key", key, "--backup", out, "--digest", frozen.digest], "CONSTRUCTION");
     assert(!existsSync(H3), "a refused restore leaves no directory");
-    await ok(["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT, "--key", key, "--backup", out, "--digest", frozen.digest]);
+    restoring = ["wallet", "restore", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT, "--key", key, "--backup", out, "--digest", frozen.digest];
+    const restored = await ok(restoring);
+    // A restore whose reply was lost is rerun: confirmed by its provenance, it prints what it printed (Next 4 (br)).
+    assert.deepEqual(await ok(restoring), { ...restored, replay: true });
     await ok(wallet("terms add", H3, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN));
     await ok(wallet("service add", H3, backing, join(OP, "holders.json")));
     assert.deepEqual(holdings(await ok(wallet("sync", H3, backing))), before);
     assert.deepEqual((await ok(wallet("fulfillment", H3, "invoice"))).value, "3", "the handoff carries the fulfillments");
     // A second copy of the seed, for the drill only (one active copy is the holder's precondition).
-    const seeded = await ok(["wallet", "restore-seed", "--dir", H2, "--venue", venueFile, ...nodeArgs, ...LIT], { input: `${seed}\n` });
+    const seeding = ["wallet", "restore-seed", "--dir", H2, "--venue", venueFile, ...nodeArgs, ...LIT];
+    const seeded = await ok(seeding, { input: `${seed}\n` });
+    // Rerun with the same seed it is the exact retry (Next 4 (br)); with another, or over the handoff's wallet, refused.
+    assert.deepEqual(await ok(seeding, { input: `${seed}\n` }), { ...seeded, replay: true });
+    assert.match((await refused(seeding, "EXISTS", { input: `${"0".repeat(63)}1\n` })).message, /not restored from this seed/);
+    await refused(["wallet", "restore-seed", "--dir", H3, "--venue", venueFile, ...nodeArgs, ...LIT], "EXISTS", { input: `${seed}\n` });
+    // An init's rerun over it is refused, and another role's directory is judged before stdin is read.
+    assert.match((await refused(wallet("init", H2, "--venue", venueFile, ...nodeArgs, ...LIT), "EXISTS")).message, /restored from a seed/);
+    await refused(["wallet", "restore-seed", "--dir", RD, "--venue", venueFile, ...nodeArgs, ...LIT], "ROLE", { input: "not a seed\n" });
     // Its first sync exposes through h + 256 and later ones raise that until it names a key (lit-v1 §8, Next 4 (bc)).
     assert.match(seeded.notes?.[0] ?? "", /each later sync raises that until the wallet names a key/);
     await ok(wallet("terms add", H2, backing, "--terms", termsFile, "--signature", signatureFile, ...SYN));
@@ -646,6 +678,8 @@ try {
       renameSync(directory, `${directory}-lost`); cpSync(from, directory, { recursive: true }); chmodSync(directory, 0o700);
     }
     await refused(wallet("request", H3, "order-B", backing, "1"), "COPIED");
+    // No command made the copy here: its restore's rerun replays nothing until the restoration is recorded (Next 4 (br)).
+    await refused(restoring, "COPIED");
     const restored = await ok(["wallet", "restore", "--copy", "--dir", H3]);
     assert.deepEqual([restored.status, restored.copied, restored.requests], ["restored", true, ["invoice-3"]]);
     assert.match(restored.notes.join(" "), /move-window before new requests/);
