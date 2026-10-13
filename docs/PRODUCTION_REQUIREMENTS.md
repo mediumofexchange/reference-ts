@@ -206,16 +206,11 @@ and [header](POOL_DEPLOYMENT_PROBES.md#reader-verified-headers) measurements:
 
 A phone wallet is outside the release target, as a scope choice. It
 verifies independently only through a reader its holder runs. Its own first
-sync would read about 20 GB under complete replay. A succinct history
-relation, within one prover's day at the design point's mean
-([slice 27](POOL_DEPLOYMENT_PROBES.md#the-trails-succinct-relation-slice-27)), would still leave about 4.4 GB of venue ranges and restoring scans,
-and phone rates are unmeasured. A succinct proof of exhaustion ([probed complete](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32):
-one 4-vCPU prover keeps up with an ordinary Ergo day about three times over) would make the venue ranges follow the holder's own subjects
-([comparison](VENUE_ALTERNATIVES.md#absence-for-one-subject-slice-20)). The phone holder path is the next target
-after the release ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction)):
-the reader's own replay over proof-free statement bytes, an aggregation proof of the trail's statement proofs in place
-of a relation over the whole verdict, and that succinct proof of exhaustion; whether it reaches v3 backings is a C0a
-question. A browser wallet is outside the release target too, as a
+sync would read about 20 GB under complete replay. The phone holder path is the next target
+after the release ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction)),
+specified as a reader's option, [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/8aa2f03/succinct-read.md);
+its provers' costs are in the [aggregation](POOL_DEPLOYMENT_PROBES.md#the-trails-proof-aggregation-slice-33) and
+[exhaustion](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32) probes, and phone rates are unmeasured. A browser wallet is outside the release target too, as a
 scope choice (2026-10-09): the package targets Node, its host hash is
 Node-only, and a browser holder would face the phone's sync costs.
 

@@ -398,10 +398,9 @@ and 31.
 
 **What does not stay in its compartment.** These failures reach past one backing:
 - **The proof system and its parameters** (A1–A3): every backing of the construction.
-- **The venue** (A9): every backing that declares it. On Ergo, one address mined 51% of a measured day's blocks, so a
-  majority miner can reorganize past depth 10 ([venue research](VENUE_ALTERNATIVES.md)). The research bounds Ergo to
-  development, testnet and small-value pilots until a second venue profile or a venue-moving record exists (Next 9,
-  12). The release itself runs on reference venues only ([where it runs](#where-it-runs-today)).
+- **The venue** (A9): every backing that declares it. On Ergo one miner key holds a measured majority, which
+  can reorganize past any depth, so the [venue recheck](VENUE_ALTERNATIVES.md#the-venue-recheck-slice-29) keeps an
+  Ergo backing at pilot value while that holds (WORK.md Next 12). The release itself runs on reference venues only ([where it runs](#where-it-runs-today)).
   A backing leaves a failed venue only by successor and swap (venue-ergo §9).
 - **A shared operator**: every backing in its scope goes illiquid together. Substitutability is not diversity (§C4
   "Sequencer concentration").

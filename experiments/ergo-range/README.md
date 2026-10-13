@@ -20,20 +20,10 @@ describes it.
 
 ## Supplying the reader
 
-The profile's reader takes each transaction as its unsigned bytes
-and witness id and frames the outputs itself. `src/ergo-supplier.ts` is the supplier:
-it copies the unsigned bytes from the node's JSON statement of a transaction
-(`/blocks/{id}/transactions`), hex fields and integers as they stand, and
-hashes the stated proofs for the witness id; it parses no constant and runs
-no decoder. Its small strict parser keeps object keys in text order (a
-spending-proof extension's key order is part of the bytes, and a parsed
-JavaScript object would sort it) and integers exact. A copy that does not
-hash to the stated id is unsupplied, never misread
-([decision](../../decisions/2026-09.md#2026-09-24--supply-ergo-unsigned-bytes-by-copying-the-nodes-json)).
-`test/ergo-supplier.test.ts` supplies every fixture
-transaction, reproduces the four fixture roots from the copies and checks
-each refusal; it also copies every fixture header, of versions 1 to 4, to its
-id, and drives `ergoNodeSupplier` over HTTP responses.
+`src/ergo-supplier.ts` copies each transaction's unsigned bytes from the node's
+JSON, as the Ergo venue guide's [costs and limits](../../docs/ERGO_VENUE_PROFILE.md#costs-and-limits)
+describe; `test/ergo-supplier.test.ts` supplies these fixtures
+([evidence](../../docs/ERGO_VENUE_PROFILE.md#evidence)).
 
 ## Own nodes
 
@@ -74,22 +64,7 @@ the mempool the synthetic node serves.
 
 ## Retired tooling
 
-Retired probes are kept in Git history, each with its scripts, reports and
-this guide's sections: the 2026-09-10 to 2026-09-12 contained-node and
-decoder-cost evaluations, superseded by [Own nodes](#own-nodes), at
-[`c85af7b`](https://github.com/mediumofexchange/reference-ts/tree/c85af7b/experiments/ergo-range);
-the decoder tooling and the hostile probe's decoder side (2026-09-24) at
-[`0453955`](https://github.com/mediumofexchange/reference-ts/tree/0453955/experiments/ergo-range),
-reports at [`1915d5d`](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/docs);
-the range-profile check, Fleet experiment, P4 chain cost, P2 publication, A10
-latency and own-node header check (2026-09-25,
-[decision](../../decisions/2026-09.md#2026-09-25--retire-probes-whose-questions-are-answered)) at
-[`1b4857a`](https://github.com/mediumofexchange/reference-ts/tree/1b4857a/experiments/ergo-range);
-the mainnet and reference-testnet header checks and the mainnet runtime-venue
-probe (2026-10-04; `test/ergo-headers.test.ts` and the live testnet drill
-cover them) at
-[`1915d5d`](https://github.com/mediumofexchange/reference-ts/tree/1915d5d/experiments/ergo-range);
-and the framer's hostile-input node equivalence (2026-10-09; its
-[result](../../docs/POOL_DEPLOYMENT_PROBES.md#hostile-input-node-equivalence)
-is recorded) at
-[`563a477`](https://github.com/mediumofexchange/reference-ts/tree/563a477/experiments/ergo-range).
+Retired probes are kept in Git history; each one's permalink and result are
+in its section of the [deployment probes](../../docs/POOL_DEPLOYMENT_PROBES.md)
+or the [Ergo venue guide](../../docs/ERGO_VENUE_PROFILE.md). This guide's last
+full list of them: [at 05337cf](https://github.com/mediumofexchange/reference-ts/blob/05337cf/experiments/ergo-range/README.md#retired-tooling).
