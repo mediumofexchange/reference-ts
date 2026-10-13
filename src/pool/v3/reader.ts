@@ -327,17 +327,25 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
   // §7.1, §14 non-extension without replay: a continuation's authenticated trail extends the last valid
   // prefix exactly where its chain value at the prefix's length is the prefix's evidence hash. Otherwise it
   // is excluded on that ground, and none of its records is replayed.
+  // A construction without proof bytes (succinct.ts) establishes every record's proof length first, as the complete
+  // read's authentication has, before a non-extension is decided (succinct-read §3.4 step 3).
+  const checks = construction.trailChecks;
   if (lastValid !== undefined) {
     const at = trail.length < lastValid.position ? undefined : trail.evidence(lastValid.position);
-    requireReplay(at !== undefined && same(at, lastValid.evidenceHash), "CONTINUITY");
+    const extending = at !== undefined && same(at, lastValid.evidenceHash);
+    if (!extending && checks !== undefined) await checks.establish(trail.records(0n), 0n, 0n, isOpening ? [] : block, verifier);
+    requireReplay(extending, "CONTINUITY");
   }
   const identity = replayIdentity(context, snapshot, { imported, block, openingIndex, revokedAt, revocations });
   const result = await store.replay(async () => {
     const resumed = isOpening ? undefined : resumable(store, identity, snapshot.segment, trail, lastValid, construction);
     const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported, construction);
+    // The records replay reaches, past a resumed tip whose records were established when they were replayed.
+    const checked = checks === undefined ? verifier : await checks.establish(trail.records(state.position), state.position,
+      store.provedCount(state.ns, state.position), isOpening ? [] : block, verifier);
     if (!isOpening) requireReplay(trail.length >= BigInt(block.length), "ADOPTION");
     // Records are read from the reader's own storage one at a time, their proofs started ahead where the verifier runs off this thread.
-    const ahead = verifyAhead(verifier, trail.records(state.position), state.position, block);
+    const ahead = verifyAhead(checked, trail.records(state.position), state.position, block);
     const replay: SegmentReplay = { domain: selection.domain, backing: selection.backing, segment: snapshot.segment, scope, terms, scopedTerms,
       verifier: ahead.verifier, index, revokedAt, revocations, lastValid, block, witness };
     for (const bytes of ahead.records) await applyRecord(state, bytes, replay);

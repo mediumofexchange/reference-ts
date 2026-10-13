@@ -83,6 +83,10 @@
 //   moe/lit/v1/trail           a served trail (§6)
 //   moe/lit/v1/package         an evidence package (§6)
 //
+// Succinct reading (succinct-read, a reader's option) adds one frame:
+//
+//   moe/succinct/v1/trail      a proof-free trail (§3.3)
+//
 // Two binary magics open hashed preimages too, and are held to the same rule:
 // "MOEB" a backing's terms (its name is their hash) and "MOED" a directory
 // (its root). The retired transparent path's tags above stay declared, so no
@@ -147,6 +151,7 @@ export const LIT_SEGMENT_CONTEXT = tag("moe/lit/v1/segment");
 export const LIT_FAULT_EVIDENCE_CONTEXT = tag("moe/lit/v1/fault-evidence");
 export const LIT_TRAIL_CONTEXT = tag("moe/lit/v1/trail");
 export const LIT_PACKAGE_CONTEXT = tag("moe/lit/v1/package");
+export const SUCCINCT_TRAIL_CONTEXT = tag("moe/succinct/v1/trail");
 export const TERMS_MAGIC = tag("MOEB");
 export const DIRECTORY_MAGIC = tag("MOED");
 
@@ -218,6 +223,7 @@ const ALL_CONTEXTS = [
   LIT_FAULT_EVIDENCE_CONTEXT,
   LIT_TRAIL_CONTEXT,
   LIT_PACKAGE_CONTEXT,
+  SUCCINCT_TRAIL_CONTEXT,
   TERMS_MAGIC,
   DIRECTORY_MAGIC,
 ];

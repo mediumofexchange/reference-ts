@@ -11,6 +11,7 @@ import { decodeSnapshot, encodeReceipt, receiptBytes, snapshotBytes } from "../s
 import { configurationBytes, configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v3/headers.js";
 import { readPackage } from "../src/pool/v3/package-reader.js";
+import { readBoth } from "./succinct-differential.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import { decodeRecord, deliveryHash, encodeRecord, evidenceHashes, statementBytes, type Record } from "../src/pool/v3/records.js";
 import { mergeFinalizedPrefixes } from "../src/pool/v3/scope-reader.js";
@@ -100,7 +101,7 @@ async function twoBackings(silence?: bigint, witnessed = 10n, link?: Uint8Array,
   }
   const selection = (backing: Uint8Array, commitment: Commitment) => ({ mode: "current-fixture" as const, domain, venue: venue.id,
     backing, operator, sequence: commitment.sequence, root: commitment.root, judgingIndex: venue.witnessedIndex() });
-  const read = (backing: Uint8Array, commitment: Commitment, extra: readonly EvidenceItem[] = [], carrying?: boolean) => readPackage(pack([...items, ...extra,
+  const read = (backing: Uint8Array, commitment: Commitment, extra: readonly EvidenceItem[] = [], carrying?: boolean) => readBoth(pack([...items, ...extra,
     { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(commitment) }]),
   selection(backing, commitment), { verifier, reference, venue, ...(carrying === undefined ? {} : { carrying }) });
   /** The operator's receipt for the current segment's latest record, given after sequence `after`. */

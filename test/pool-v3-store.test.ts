@@ -13,7 +13,7 @@ import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { decodeReceipt, decodeSnapshot, verifyReceipt } from "../src/pool/v3/commitments.js";
 import { configurationHash, RELATIONS, adoptedConfiguration } from "../src/pool/v3/configuration.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
-import { readPackage } from "../src/pool/v3/package-reader.js";
+import { readBoth } from "./succinct-differential.js";
 import { removeKeptFile, ReplayStore } from "../src/pool/v3/replay-store.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
 import { ReferenceVenueError, referenceVenue, requireReferenceVenue, type VenueReference } from "../src/pool/v3/guard.js";
@@ -499,7 +499,7 @@ describe("the v3 operator journal", () => {
     await j.commit("c2"); await j.publish();
     const served = await j.package();
     expect(served.package.length).toBeGreaterThan(1_048_576);
-    const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+    const result = await readBoth(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue, reference });
     expect(result.state?.position).toBe(12n);
     expect(result.state?.issued).toBe(12n);
@@ -516,7 +516,7 @@ describe("the v3 operator journal", () => {
     await j.publish();
     const served = await j.package();
     expect(served.selection.sequence).toBe(41n);
-    const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+    const result = await readBoth(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue, reference });
     expect(result.carrying?.length).toBe(41);
     expect(result.state?.position).toBe(1n);
@@ -564,7 +564,7 @@ describe("the v3 operator journal", () => {
     // The audit reads the venue again from its first index, in windows of its own, and finds the same answers.
     await j.audit();
     expect(answered.some(request => request.kind === 1 && request.fromIndex === 0n)).toBe(true);
-    const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+    const result = await readBoth(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue, reference });
     expect([result.carrying?.length, result.state?.issued]).toEqual([6, 5n]);
   });
@@ -645,7 +645,7 @@ describe("the v3 operator journal", () => {
     venue.advance(at + lag);
     const served = await j.package();
     expect(served.selection.sequence).toBe(1n);
-    const result = await readPackage(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
+    const result = await readBoth(served.package, { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue, reference });
     expect(result.state?.position).toBe(0n);
     // A late inclusion is held, and served again (inclusion is bounded above by nothing, C2.3.5).
@@ -1159,7 +1159,7 @@ describe("the v3 operator journal", () => {
   it("serves a reader's later sync only what is new, over HTTP, and its reads equal a read of the whole package", async () => {
     const { j, venue } = await opened(), { client, requests } = await service(j);
     const evidence = new EvidenceStore(), source = concatBytes(domain, venueId, operator), records = [issue(), payment(), burning()];
-    const read = async (served: ServedPackage, kept?: EvidenceStore) => (await readPackage(served.package,
+    const read = async (served: ServedPackage, kept?: EvidenceStore) => (await readBoth(served.package,
       { ...served.selection, judgingIndex: venue.witnessedIndex(), mode: "current-fixture" },
       { verifier, venue, reference, ...(kept === undefined ? {} : { evidence: kept }) })).state!;
     const framed = (record: Uint8Array): number => 4 + record.length;

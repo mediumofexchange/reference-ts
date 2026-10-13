@@ -29,7 +29,7 @@ import { keptContext, keptStateHolds, lastValidOf, readRecordView, replayTrail, 
   type ReaderSelection, type RecordView, type ReplayContext, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
 import type { Record } from "./records.js";
-import { EvidenceRefusal, ReplayRefusal, requireReplay, type ClockRecord } from "./refusals.js";
+import { EvidenceRefusal, ReplayRefusal, requireReplay, UnestablishedTrail, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import { KeptStateMismatch, type ImportEntry, type ReplayStore, type WalkBase, type WalkForce, type WalkVerdict } from "./replay-store.js";
 import { applyForceEffects, applyForceRecord, openForceState, type MergedImport } from "./state.js";
@@ -936,9 +936,18 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         return verdict;
       }
       const revocations = new Map([...scopeViews].map(([name, view]) => [name, view.revokedAt]));
-      const state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
+      let state: ReplayResult;
+      try {
+        state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
         snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
           block: opening ? [] : block, openingIndex, scopedSnapshots });
+      } catch (error) {
+        // A succinct read's trail whose proofs it could not establish is not served, as the complete read's undecodable
+        // trail (succinct-read §3.4 step 3), so §9.1 stands in where it would.
+        if (!(error instanceof UnestablishedTrail) || intrinsic === undefined) throw error;
+        faults.excluded?.(held, scope, BigInt(block.length));
+        return { ...base, class: "excluded", check: intrinsic };
+      }
       return { ...base, snapshot, state, scopedTerms, openingIndex, class: "valid" };
     } catch (error) {
       if (!(error instanceof ReplayRefusal)) throw error;
