@@ -70,7 +70,7 @@ Order ([direction 2026-10-13](decisions/2026-10.md#2026-10-13--keep-the-release-
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
   2026-10-06: run them (`experiments/ergo-range/nodes.mjs start|stop`) only while work uses them, allowing catch-up sync.
 - Keep `scratch/ergo-testnet/wallet.json` (backed up), public `pool-v3-testnet-reader/`, `pool-v3-recovery-testnet-reader/` and `pool-v3-scope-testnet-reader/`
-  bundles (their readers retired; re-read with the scripts at `09534a8`), `tor/` (Tor 0.4.9.13 Expert Bundle, signature-checked, for live Tor runs), `private-payment-crs/` (G1/G2 cache) and `claude-programs/` (the drafts, until submitted) under scratch. The PC's Node is 24.21.0 (installed 2026-10-06).
+  bundles (their readers retired; re-read with the scripts at `09534a8`), `tor/` (Tor 0.4.9.13 Expert Bundle, signature-checked, for live Tor runs) and `private-payment-crs/` (G1/G2 cache) under scratch. The PC's Node is 24.21.0 (installed 2026-10-06).
 - Until slice 18 is recorded: `scratch/dp6/` (driver, hooks, `restart-probe.log`, the first run's `driver-1st-run.log`, the live `run/`, about 70 GB at 10⁶) and the worktree `scratch/wt/dp6` at `bc43e79`, which the live run reads (no checkout or rebuild there). Live detached job: `keep.mjs` → `driver.mjs` → node, `serve` (Goal). Retain the stopped contained-sync node's 20 GiB `scratch/node-source-sync/f2dc2b779ba7441eba7528b01928476d/control.vhd`, `node-startup/`, `sync-preparation/`;
   allocate no other. Archive node `C:\Users\Bob\ergo-node` (outside): synced, stopped, unused. Preserve legacy Temp/moeclean. Node management is authorized.
 - Qualified custody, theft/power-loss/backup drills and continuous recovery need separate provisioning authority. Mainnet stays disabled.
@@ -80,7 +80,6 @@ Order ([direction 2026-10-13](decisions/2026-10.md#2026-10-13--keep-the-release-
 - Non-blocking, maintainer (2026-10-08): the external security review, release assurance's one remaining item; commissioning it lies
   outside the standing authorization. The [security argument](docs/SECURITY_ARGUMENT.md) is its target and the [review brief](docs/REVIEW_BRIEF.md) its brief; rolling AI reviews continue meanwhile (Next 6).
 - Non-blocking, Ergo (2026-10-13): changes that would help, which the protocol never depends on: decentralized mining and a NiPoPoW comparison by work ([slice 29](docs/VENUE_ALTERNATIVES.md#the-venue-recheck-slice-29)).
-- Non-blocking, maintainer (2026-10-13): apply to Anthropic's Claude for Open Source and Claude for Startups programs for more capacity; a refusal changes nothing. Drafted 2026-10-14 (`scratch/claude-programs/drafts.md`, sent to the maintainer; Startups only if it takes a non-commercial project); the maintainer submits from their own accounts.
 - Deletion list (2026-10-09): none open.
 
 About **55%** of the complete project (one number, method in production requirements), reassessed 2026-10-14 after slice 37: the release target is far along; slice 18 at 10⁶, the external review and its findings, qualified storage and custody, mainnet, and the phone holder path's wallet option, exhaustion half, adoption and phone build remain.
