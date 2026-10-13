@@ -111,6 +111,12 @@ two-in, four-out spend. `npm test` checks the successor's
 [canonical compressed spent root](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
 (`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys.
 
+[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)'s
+trail reading (§§2–3, a reader's option) is `src/pool/v3/succinct.ts`, a construction the one walk reads proof-free
+trails through; it runs over a test check set only, since no circuit set is adopted (§6). `npm test` reads the
+scope-reader, recovery, succession and store suites' packages both completely and succinctly and requires one outcome
+(`test/succinct-differential.ts`).
+
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
 is implemented in `src/ergo-profile.ts` (attribution, reassembly, ordinals, the
