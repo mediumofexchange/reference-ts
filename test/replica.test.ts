@@ -379,7 +379,8 @@ describe("a replica of a lit operator's evidence", () => {
       .toEqual({ skipped: [{ url: "operator", code: "UNAVAILABLE" }, { url: "r1", code: "UNAVAILABLE" }] });
   });
 
-  it("makes a replica's client only once a read reaches it, and asks a URL listed twice once (review)", async () => {
+  // Under Node's environment proxy an onion client can be made, so the holder's missing proxy cannot be shown.
+  it.skipIf(process.env.NODE_USE_ENV_PROXY !== undefined)("makes a replica's client only once a read reaches it, and asks a URL listed twice once (review)", async () => {
     const base = mkdtempSync(join(tmpdir(), "moe-sources-"));
     try {
       const operator = new Uint8Array(32).fill(3), local = "http://127.0.0.1:1/", onion = `http://${"m".repeat(55)}d.onion/`;
