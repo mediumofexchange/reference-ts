@@ -1,0 +1,53 @@
+{
+ "day": {
+  "blocks": 144,
+  "spanDays": 0.974,
+  "txs": 688039,
+  "bytesStripped": 114360628,
+  "bytesFull": 232013012,
+  "txidCompressions": 2773591,
+  "merkleCompressions": 2066277,
+  "headerCompressions": 432,
+  "wtxidCompressions": 4305150,
+  "witnessMerkleCompressions": 2066709,
+  "opReturnOver83": 574
+ },
+ "gatesPerPackedCompression": 4158,
+ "recursionGates": 703904,
+ "leaf": {
+  "K": 830,
+  "gates": 4155044
+ },
+ "proveS": [
+  74.02,
+  75
+ ],
+ "perGateUs": 17.81,
+ "opReturn": {
+  "label": "records in OP_RETURN (txids over stripped bytes)",
+  "packed": 2085552,
+  "words": 2754748,
+  "hashGates": 19619093768,
+  "hashHours": 116.8,
+  "withScanHours": 240.4,
+  "leavesWithScan": 11654,
+  "hashHoursPer144": 116.8,
+  "withScanHoursPer144": 240.4
+ },
+ "witness": {
+  "label": "records in the witness (txids and wtxids)",
+  "packed": 6390702,
+  "words": 4821457,
+  "hashGates": 45733009034,
+  "hashHours": 272.3,
+  "withScanHours": 523,
+  "leavesWithScan": 25354,
+  "hashHoursPer144": 272.3,
+  "withScanHoursPer144": 523
+ },
+ "ergoDay": {
+  "hashHours": 9.9,
+  "withScanHours": "13.9–14.6",
+  "source": "slices 21–22"
+ }
+}

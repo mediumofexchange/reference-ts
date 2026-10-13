@@ -1,0 +1,346 @@
+{
+ "measuredDogeAuxpowBytes": 15540,
+ "rows": [
+  {
+   "height": 3193535,
+   "pool": "F2Pool",
+   "txs": 255,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 740
+  },
+  {
+   "height": 3193547,
+   "pool": "ViaBTC",
+   "txs": 5,
+   "coinbaseBytes": 267,
+   "auxpowEstimate": 579
+  },
+  {
+   "height": 3193559,
+   "pool": "Unknown",
+   "txs": 428,
+   "coinbaseBytes": 237,
+   "auxpowEstimate": 741
+  },
+  {
+   "height": 3193571,
+   "pool": "EMCDPool",
+   "txs": 9,
+   "coinbaseBytes": 241,
+   "auxpowEstimate": 585
+  },
+  {
+   "height": 3193583,
+   "pool": "Litecoinpool.org",
+   "txs": 80,
+   "coinbaseBytes": 238,
+   "auxpowEstimate": 678
+  },
+  {
+   "height": 3193596,
+   "pool": "ViaBTC",
+   "txs": 96,
+   "coinbaseBytes": 266,
+   "auxpowEstimate": 706
+  },
+  {
+   "height": 3193608,
+   "pool": "F2Pool",
+   "txs": 47,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 676
+  },
+  {
+   "height": 3193620,
+   "pool": "F2Pool",
+   "txs": 154,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 740
+  },
+  {
+   "height": 3193632,
+   "pool": "F2Pool",
+   "txs": 487,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3193645,
+   "pool": "Kupool",
+   "txs": 93,
+   "coinbaseBytes": 248,
+   "auxpowEstimate": 688
+  },
+  {
+   "height": 3193657,
+   "pool": "F2Pool",
+   "txs": 415,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3193669,
+   "pool": "AntPool",
+   "txs": 80,
+   "coinbaseBytes": 279,
+   "auxpowEstimate": 719
+  },
+  {
+   "height": 3193681,
+   "pool": "ViaBTC",
+   "txs": 187,
+   "coinbaseBytes": 247,
+   "auxpowEstimate": 719
+  },
+  {
+   "height": 3193694,
+   "pool": "AntPool",
+   "txs": 36,
+   "coinbaseBytes": 279,
+   "auxpowEstimate": 687
+  },
+  {
+   "height": 3193706,
+   "pool": "F2Pool",
+   "txs": 14,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 612
+  },
+  {
+   "height": 3193718,
+   "pool": "AntPool",
+   "txs": 212,
+   "coinbaseBytes": 283,
+   "auxpowEstimate": 755
+  },
+  {
+   "height": 3193730,
+   "pool": "Mining Dutch",
+   "txs": 632,
+   "coinbaseBytes": 253,
+   "auxpowEstimate": 789
+  },
+  {
+   "height": 3193742,
+   "pool": "Hash700",
+   "txs": 17,
+   "coinbaseBytes": 248,
+   "auxpowEstimate": 624
+  },
+  {
+   "height": 3193755,
+   "pool": "Hash700",
+   "txs": 202,
+   "coinbaseBytes": 248,
+   "auxpowEstimate": 720
+  },
+  {
+   "height": 3193767,
+   "pool": "F2Pool",
+   "txs": 137,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 740
+  },
+  {
+   "height": 3193779,
+   "pool": "F2Pool",
+   "txs": 261,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3193791,
+   "pool": "F2Pool",
+   "txs": 204,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 740
+  },
+  {
+   "height": 3193804,
+   "pool": "AntPool",
+   "txs": 934,
+   "coinbaseBytes": 278,
+   "auxpowEstimate": 814
+  },
+  {
+   "height": 3193816,
+   "pool": "AntPool",
+   "txs": 83,
+   "coinbaseBytes": 279,
+   "auxpowEstimate": 719
+  },
+  {
+   "height": 3193828,
+   "pool": "ViaBTC",
+   "txs": 508,
+   "coinbaseBytes": 263,
+   "auxpowEstimate": 767
+  },
+  {
+   "height": 3193840,
+   "pool": "F2Pool",
+   "txs": 74,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 708
+  },
+  {
+   "height": 3193853,
+   "pool": "AntPool",
+   "txs": 252,
+   "coinbaseBytes": 279,
+   "auxpowEstimate": 751
+  },
+  {
+   "height": 3193865,
+   "pool": "F2Pool",
+   "txs": 138,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 740
+  },
+  {
+   "height": 3193877,
+   "pool": "F2Pool",
+   "txs": 574,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 804
+  },
+  {
+   "height": 3193889,
+   "pool": "F2Pool",
+   "txs": 106,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 708
+  },
+  {
+   "height": 3193902,
+   "pool": "F2Pool",
+   "txs": 315,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3193914,
+   "pool": "Hash700",
+   "txs": 452,
+   "coinbaseBytes": 248,
+   "auxpowEstimate": 752
+  },
+  {
+   "height": 3193926,
+   "pool": "F2Pool",
+   "txs": 324,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3193938,
+   "pool": "ViaBTC",
+   "txs": 235,
+   "coinbaseBytes": 264,
+   "auxpowEstimate": 736
+  },
+  {
+   "height": 3193950,
+   "pool": "F2Pool",
+   "txs": 459,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3193963,
+   "pool": "AntPool",
+   "txs": 49,
+   "coinbaseBytes": 283,
+   "auxpowEstimate": 691
+  },
+  {
+   "height": 3193975,
+   "pool": "F2Pool",
+   "txs": 373,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3193987,
+   "pool": "AntPool",
+   "txs": 526,
+   "coinbaseBytes": 279,
+   "auxpowEstimate": 815
+  },
+  {
+   "height": 3193999,
+   "pool": "ViaBTC",
+   "txs": 12,
+   "coinbaseBytes": 265,
+   "auxpowEstimate": 609
+  },
+  {
+   "height": 3194012,
+   "pool": "AntPool",
+   "txs": 197,
+   "coinbaseBytes": 283,
+   "auxpowEstimate": 755
+  },
+  {
+   "height": 3194024,
+   "pool": "F2Pool",
+   "txs": 162,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 740
+  },
+  {
+   "height": 3194036,
+   "pool": "F2Pool",
+   "txs": 435,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3194048,
+   "pool": "F2Pool",
+   "txs": 375,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 772
+  },
+  {
+   "height": 3194061,
+   "pool": "AntPool",
+   "txs": 336,
+   "coinbaseBytes": 279,
+   "auxpowEstimate": 783
+  },
+  {
+   "height": 3194073,
+   "pool": "ViaBTC",
+   "txs": 17,
+   "coinbaseBytes": 266,
+   "auxpowEstimate": 642
+  },
+  {
+   "height": 3194085,
+   "pool": "AntPool",
+   "txs": 138,
+   "coinbaseBytes": 283,
+   "auxpowEstimate": 755
+  },
+  {
+   "height": 3194097,
+   "pool": "F2Pool",
+   "txs": 66,
+   "coinbaseBytes": 268,
+   "auxpowEstimate": 708
+  },
+  {
+   "height": 3194110,
+   "pool": "AntPool",
+   "txs": 373,
+   "coinbaseBytes": 284,
+   "auxpowEstimate": 788
+  }
+ ],
+ "medianAuxpow": 740,
+ "minAuxpow": 579,
+ "maxAuxpow": 815,
+ "medianHeaderBytesPerDay": 1180800,
+ "responsesSha256": "3476b022f26b89f4a4196ea8f22c9133d0a37aabe4eaf9c89a9a0b9ff37797d0"
+}

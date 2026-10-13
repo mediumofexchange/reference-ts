@@ -1,0 +1,366 @@
+{
+ "fixedAt": "2026-10-13T03:12:23.960Z",
+ "crypto51": {
+  "BTC": {
+   "algorithm": "SHA-256",
+   "hashrate": "987,887 PH/s",
+   "hourCost": "$2,605,511",
+   "rentable": "0%"
+  },
+  "ZEC": {
+   "algorithm": "Equihash",
+   "hashrate": "30 GH/s",
+   "hourCost": "$81,470",
+   "rentable": "1%"
+  },
+  "BCH": {
+   "algorithm": "SHA-256",
+   "hashrate": "3,284 PH/s",
+   "hourCost": "$8,662",
+   "rentable": "0%"
+  },
+  "LTC": {
+   "algorithm": "Scrypt",
+   "hashrate": "3 PH/s",
+   "hourCost": "$62,850",
+   "rentable": "8%"
+  },
+  "ETC": {
+   "algorithm": "Etchash",
+   "hashrate": "169 TH/s",
+   "hourCost": "$2,604",
+   "rentable": "0%"
+  },
+  "KAS": {
+   "algorithm": "kHeavyHash",
+   "hashrate": "341 PH/s",
+   "hourCost": "$4,108",
+   "rentable": "10%"
+  },
+  "DASH": {
+   "algorithm": "X11",
+   "hashrate": "3 PH/s",
+   "hourCost": "$341",
+   "rentable": "1%"
+  },
+  "CFX": {
+   "algorithm": "Octopus",
+   "hashrate": "463 GH/s",
+   "hourCost": "$156",
+   "rentable": "31%"
+  },
+  "XEC": {
+   "algorithm": "SHA-256",
+   "hashrate": "35 PH/s",
+   "hourCost": "$93",
+   "rentable": "3%"
+  },
+  "CKB": {
+   "algorithm": "Eaglesong",
+   "hashrate": "99 PH/s",
+   "hourCost": "$273",
+   "rentable": "2%"
+  },
+  "ARRR": {
+   "algorithm": "Equihash",
+   "hashrate": "3 MH/s",
+   "hourCost": "$8",
+   "rentable": "12,504%"
+  },
+  "FB": {
+   "algorithm": "SHA-256",
+   "hashrate": "120 PH/s",
+   "hourCost": "$316",
+   "rentable": "1%"
+  },
+  "ETHW": {
+   "algorithm": "Ethash",
+   "hashrate": "2 TH/s",
+   "hourCost": "$188",
+   "rentable": "2%"
+  },
+  "RVN": {
+   "algorithm": "KawPow",
+   "hashrate": "639 GH/s",
+   "hourCost": "$221",
+   "rentable": "18%"
+  },
+  "ERG": {
+   "algorithm": "Autolykos",
+   "hashrate": "511 GH/s",
+   "hourCost": "$30",
+   "rentable": "15%"
+  },
+  "VRSC": {
+   "algorithm": "VerusHash",
+   "hashrate": "662 GH/s",
+   "hourCost": "$0",
+   "rentable": "0%"
+  },
+  "QUAI": {
+   "algorithm": "SHA-256",
+   "hashrate": "149 PH/s",
+   "hourCost": "$394",
+   "rentable": "1%"
+  },
+  "PEP": {
+   "algorithm": "Scrypt",
+   "hashrate": "2 PH/s",
+   "hourCost": "$46,123",
+   "rentable": "11%"
+  },
+  "NEXA": {
+   "algorithm": "NexaPow",
+   "hashrate": "3 TH/s",
+   "hourCost": "$97",
+   "rentable": "1%"
+  },
+  "IRON": {
+   "algorithm": "FishHash",
+   "hashrate": "229 GH/s",
+   "hourCost": "$53",
+   "rentable": "17%"
+  },
+  "OCTA": {
+   "algorithm": "Ethash",
+   "hashrate": "1 TH/s",
+   "hourCost": "$105",
+   "rentable": "4%"
+  },
+  "DINGO": {
+   "algorithm": "Scrypt",
+   "hashrate": "2 PH/s",
+   "hourCost": "$39,596",
+   "rentable": "13%"
+  },
+  "NEOX": {
+   "algorithm": "KawPow",
+   "hashrate": "6 GH/s",
+   "hourCost": "$2",
+   "rentable": "1,890%"
+  },
+  "LKY": {
+   "algorithm": "Scrypt",
+   "hashrate": "1 PH/s",
+   "hourCost": "$31,728",
+   "rentable": "17%"
+  },
+  "XNA": {
+   "algorithm": "KawPow",
+   "hashrate": "21 GH/s",
+   "hourCost": "$7",
+   "rentable": "559%"
+  },
+  "BTCZ": {
+   "algorithm": "Zhash",
+   "hashrate": "10 KH/s",
+   "hourCost": "$0",
+   "rentable": "65%"
+  },
+  "BC2": {
+   "algorithm": "SHA-256",
+   "hashrate": "9 PH/s",
+   "hourCost": "$25",
+   "rentable": "13%"
+  },
+  "MEWC": {
+   "algorithm": "Scrypt",
+   "hashrate": "18 TH/s",
+   "hourCost": "$444",
+   "rentable": "1,184%"
+  },
+  "GLINK": {
+   "algorithm": "Zhash",
+   "hashrate": "2 KH/s",
+   "hourCost": "$0",
+   "rentable": "376%"
+  },
+  "KRGN": {
+   "algorithm": "X11",
+   "hashrate": "2 TH/s",
+   "hourCost": "$0",
+   "rentable": "1,582%"
+  },
+  "SOH": {
+   "algorithm": "Scrypt",
+   "hashrate": "49 GH/s",
+   "hourCost": "$1",
+   "rentable": "431,219%"
+  },
+  "GAEL": {
+   "algorithm": "KawPow",
+   "hashrate": "11 GH/s",
+   "hourCost": "$4",
+   "rentable": "1,047%"
+  },
+  "BEL": {
+   "algorithm": "Scrypt",
+   "hashrate": "3 PH/s",
+   "hourCost": "$73,102",
+   "rentable": "7%"
+  },
+  "BTG": {
+   "algorithm": "Zhash",
+   "hashrate": "53 KH/s",
+   "hourCost": "$2",
+   "rentable": "12%"
+  },
+  "HAL": {
+   "algorithm": "NeoScrypt",
+   "hashrate": "11 MH/s",
+   "hourCost": "$0",
+   "rentable": "1,964%"
+  },
+  "MOON": {
+   "algorithm": "Scrypt",
+   "hashrate": "3 GH/s",
+   "hourCost": "$0",
+   "rentable": "7,503,851%"
+  },
+  "PXC": {
+   "algorithm": "NeoScrypt",
+   "hashrate": "616 MH/s",
+   "hourCost": "$2",
+   "rentable": "36%"
+  },
+  "QKC": {
+   "algorithm": "Ethash",
+   "hashrate": "20 GH/s",
+   "hourCost": "$2",
+   "rentable": "230%"
+  },
+  "ZOC": {
+   "algorithm": "NeoScrypt",
+   "hashrate": "47 KH/s",
+   "hourCost": "$0",
+   "rentable": "472,195%"
+  }
+ },
+ "LTC": {
+  "heights": [
+   3193535,
+   3194110
+  ],
+  "spanH": 24.23,
+  "txs": 154246,
+  "bytesFull": 69650640,
+  "bytesStripped": 38994896,
+  "headerBytes": 45640,
+  "pools": {
+   "blocks": 576,
+   "top": [
+    [
+     "F2Pool",
+     38
+    ],
+    [
+     "ViaBTC",
+     22
+    ],
+    [
+     "AntPool",
+     19.6
+    ],
+    [
+     "Hash700",
+     5.2
+    ]
+   ],
+   "forMajority": 2
+  }
+ },
+ "DOGE": {
+  "heights": [
+   6411490,
+   6412928
+  ],
+  "spanH": 25.19,
+  "txs": 19061,
+  "bytesFull": 9839230,
+  "auxpowHeaderBytes": 15540,
+  "headerBytes": 21320461,
+  "pools": {
+   "blocks": 1500,
+   "top": [
+    [
+     "Unknown",
+     100
+    ]
+   ],
+   "forMajority": 1
+  }
+ },
+ "CKB": {
+  "averageBlockS": 8.99,
+  "blocks": 9609,
+  "txs": 15892,
+  "headerBytesEach": 208,
+  "bytesFull": 14025670,
+  "headerBytes": 1998672,
+  "pools": {
+   "blocks": 2000,
+   "top": [
+    [
+     "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq0tpsqq08mkay9ewrfrdwlcghv62qw704s93hhsj",
+     58.7
+    ],
+    [
+     "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqvgqh40v2g5ps3rann79tvw9gq6ewrft7gp909qk",
+     21.3
+    ],
+    [
+     "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq22xdj8q4jdql98qkdhnqzgrsk4nqyavdcratvu9",
+     9.1
+    ],
+    [
+     "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq0259kv0x5jez6h0l5qr52k64weapapgyscsnmhn",
+     8.4
+    ]
+   ],
+   "forMajority": 1
+  }
+ },
+ "ALPH": {
+  "chains": 16,
+  "blocks": 164359,
+  "txs": 169782,
+  "bytesFull": 72784740,
+  "smallestBlock": 400,
+  "headerBytesUpper": 65743600
+ },
+ "ETC": {
+  "heights": [
+   25519022,
+   25525371
+  ],
+  "spanH": 24.02,
+  "blocks": 6350,
+  "txs": 9808,
+  "bytesFull": 4845474,
+  "smallestBlock": 528,
+  "gasUsedShare": 0.44,
+  "pools": {
+   "blocks": 6350,
+   "top": [
+    [
+     "0x406177B983C28eb720827985eF5953e8430d4E95",
+     67.7
+    ],
+    [
+     "0x5253b33c1313a4449Bc5304A9C55b4CC2Bdf2872",
+     14
+    ],
+    [
+     "0x3eD06473CB75744B4196aF5E0B631F1A58bF6eD8",
+     11.5
+    ],
+    [
+     "0xfaD4A236C87880035497043F24eA58D73C3e50dE",
+     3.8
+    ]
+   ],
+   "forMajority": 1
+  }
+ },
+ "responsesSha256": "42cae26d2d015ed4393a1c1950e8a62f70d4f3f200d213e068f5c389977e8750"
+}

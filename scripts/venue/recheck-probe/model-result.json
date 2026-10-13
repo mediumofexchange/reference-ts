@@ -1,0 +1,75 @@
+{
+ "model": {
+  "shaByte": 64.96875,
+  "shaTx": 17716,
+  "b2bByte": 257.3515625,
+  "b2bTx": 161060,
+  "scanPerByte": 181.5,
+  "overhead": 1.203,
+  "perGateUs": 17.81
+ },
+ "rows": {
+  "BTC": {
+   "headersPerDay": 11520,
+   "exhaustion": 114360628,
+   "prover": {
+    "hash": 116.8,
+    "withScan": 240.4
+   },
+   "attackHour": "$2,605,511",
+   "measured": "prover hashing measured"
+  },
+  "ERG": {
+   "headersPerDay": 160000,
+   "exhaustion": 3960000,
+   "prover": {
+    "hash": 9.9,
+    "withScan": 14.6
+   },
+   "attackHour": "$30",
+   "measured": "slices 20–22"
+  },
+  "LTC": {
+   "headersPerDay": 45640,
+   "exhaustion": 38994896,
+   "prover": {
+    "hash": 31.3,
+    "withScan": 73.5
+   },
+   "attackHour": "$62,850",
+   "pools": 2
+  },
+  "DOGE": {
+   "headersPerDay": 1180800,
+   "exhaustion": 9839230,
+   "prover": {
+    "hash": 5.8,
+    "withScan": 16.4
+   },
+   "attackHour": "$39,865 (merged; 63% of Litecoin's hashrate)"
+  },
+  "CKB": {
+   "headersPerDay": 1998672,
+   "exhaustion": 14025670,
+   "prover": {
+    "hash": 40.5,
+    "withScan": 55.6
+   },
+   "attackHour": "$273",
+   "pools": 1
+  },
+  "ETC": {
+   "headersPerDay": 3352800,
+   "exhaustion": 4845474,
+   "prover": "Keccak-256 and RLP: not modelled",
+   "attackHour": "$2,604",
+   "pools": 1
+  },
+  "ALPH": {
+   "headersPerDay": 65743600,
+   "exhaustion": 72784740,
+   "prover": "not modelled (fails on headers)",
+   "attackHour": "not listed"
+  }
+ }
+}
