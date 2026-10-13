@@ -290,7 +290,7 @@ export interface ServedPackage {
   readonly package: Uint8Array;
 }
 /** Served evidence by parts (§14 incremental retrieval). `package` holds only the read's own items, the
- * configuration and the selected commitment. `parts` hold every other object a reader of the selection needs
+ * configuration, the selected commitment and any §9 faults the journal's takeovers kept. `parts` hold every other object a reader of the selection needs
  * that was not served through the sequence the reader named, and are read from rows as they are consumed. */
 export interface ServedEvidence extends ServedPackage {
   readonly parts: Iterable<EvidencePart> | AsyncIterable<EvidencePart>;
@@ -940,7 +940,8 @@ export class V3OperatorJournal {
     if (target.taken.length > 0) {
       // Only what the journal keeps and serves from now on is read from the supplied package: directories, snapshots
       // and trails, which join its evidence, and §9 faults (kind 7). A fault is one read's own item (§9.1), so those
-      // this read authenticates are kept apart and carried in each later read's own package (`ownPackage`), beside the
+      // that exclude a checkpoint whose trail this read lacks are kept apart and carried in each later read's own
+      // package (`ownPackage`), beside the
       // ones earlier takeovers kept: the read takes them all, so what the journal keeps stays within one read's fault
       // budget, and an opening it signs is one it and its readers can read again (C2.7.4, Next 4 (bk)).
       try {
@@ -965,7 +966,7 @@ export class V3OperatorJournal {
     for (const entry of target.taken) {
       let source: FrontierResult & FaultResult;
       try { source = await this.whileReading(() => readFrontier(reading, entry.signed, at, this.readerOptions(undefined, supplied))); } catch (error) { return unestablished(error); }
-      for (const fact of source.faultEvidence ?? []) used.add(fact.evidence);
+      for (const id of source.excludedBy ?? []) used.add(id);
       const current = source.ranges.chain.at(-1)!;
       requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
       requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
@@ -984,7 +985,8 @@ export class V3OperatorJournal {
       return canonical === undefined ? entry : { ...entry, opening: { operator: copyBytes(canonical.commitment.operator),
         sequence: canonical.commitment.sequence, root: copyBytes(canonical.commitment.root) } };
     }) };
-    // A fault no read authenticated against a checkpoint it walked is kept nowhere: a supplier's junk costs later readers nothing.
+    // Only a fault that excluded a checkpoint whose trail the read did not hold is kept: junk, a fault beside a held trail
+    // and one that excludes nothing cost later readers nothing.
     const faults = offered.filter(payload => used.has(bytesToHex(sha256(payload))));
     return { opened: openedOf(this.frames, header, target.opened.entries), imported, taken, faults, evidence: target.taken.length > 0 ? evidence : undefined };
     } finally { supplied.close(); }
@@ -1230,8 +1232,8 @@ export class V3OperatorJournal {
   /** Read all dependencies from the evidence the journal serves, including
    * later lapsed/excluded signed checkpoints. Trying an older selection never
    * omits those checkpoints. The read selects `backing` (by default the
-   * scope's first) in any scope; its package is only the configuration and the
-   * selected commitment, since every other object is retained. */
+   * scope's first) in any scope; its package is only the configuration, the
+   * selected commitment and kept faults, since every other object is retained. */
   private async currentRead(engine: Engine, at: bigint, backing = engine.opened?.entries[0]!.backing, audit?: ReplayStore): Promise<StateRead> {
     requireThat(engine.opened !== undefined && backing !== undefined, "STALE", "there is no segment to read");
     let carried = false;

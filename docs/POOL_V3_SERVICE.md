@@ -180,10 +180,10 @@ One witnessed but not adopted before its own silence boundary, or before another
 scoped backing's term ends, is left by a return from it or by a `rescope` that
 keeps its live backings; the new segment's block reaches back through both gaps.
 A takeover past a checkpoint that only a §9 fault excludes, its trail withheld
-(pool-v3 §9.1), keeps the faults its read authenticated against a checkpoint it
-walked, and carries them in the own package of every later read of its selections:
-its own reads and `audit`, and every reader and replica it serves. A supplied
-fault that authenticates against nothing is not kept. What a journal keeps stays within one
+(pool-v3 §9.1), keeps the faults that excluded a checkpoint whose trail its read
+lacked, and carries them in the own package of every later read of its selections:
+its own reads and `audit`, and every reader and replica it serves. Any other
+supplied fault is not kept. What a journal keeps stays within one
 read's fault budget, its earlier takeovers' faults included: past it a takeover refuses
 `REFUSED` (`RESOURCE`) before it signs
 ([decision](../decisions/2026-10.md#2026-10-13--keep-the-faults-a-takeover-read-and-serve-them-in-each-reads-own-package-next-4-bk)).

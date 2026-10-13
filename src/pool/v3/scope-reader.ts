@@ -12,7 +12,7 @@
 // predecessors are then rows already written, so nothing recurses through
 // history and nothing grows in memory with the number of checkpoints.
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex as hex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
 import { linkInForce, RangeLimitError, type HeldCommitment, type RangeEntry } from "../../record-range.js";
 import type { RecordVenue } from "../../record-venue.js";
@@ -532,12 +532,18 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     throw new TypeError("a kept store needs a witness predicate that declares its identity");
   }
   // The venue's identity fixes its lag (§13), so the configuration, venue, verifier and witness predicate name the kept context.
-  // A read from the party's retained evidence, with no fault items or receipt of its own, resumes the selected
-  // backing's kept walk (§14 kept walk): what it classified stands, and this read classifies what is new.
-  // A read past the venue's witnessed index is refused when its view is read; it does not raise the kept index.
+  // A read from the party's retained evidence, with no receipt of its own, resumes the selected backing's kept walk
+  // (§14 kept walk): what it classified stands, and this read classifies what is new. A class rests on the fault items
+  // a read presents too (§9.1), so a read with faults names its kept walk by its retained evidence and that fault set:
+  // another set begins again, and an observer that cannot name its set keeps no walk. A resumed read reports fault facts
+  // only for what it classifies. A read past the venue's witnessed index is refused when its view is read; it does not
+  // raise the kept index.
   const witnessed = ((): bigint | undefined => { try { const now: unknown = record.witnessedIndex(); return typeof now === "bigint" ? now : undefined; } catch { return undefined; } })();
-  const retained = evidence.retained, keptWalk = retained !== undefined && context.receiptBytes === undefined &&
-    faults.holdsEvidence?.() !== true && witnessed !== undefined && selection.judgingIndex <= witnessed ? { selected: selection.backing, evidence: retained.identity, mark: retained.mark,
+  const faultSet = faults.holdsEvidence?.() === true ? faults.evidenceIdentity?.() ?? null : undefined, retained = evidence.retained;
+  const keptEvidence = retained === undefined || faultSet === null ? undefined :
+    faultSet === undefined ? retained.identity : sha256(concatBytes(retained.identity, faultSet));
+  const keptWalk = retained !== undefined && keptEvidence !== undefined && context.receiptBytes === undefined &&
+    witnessed !== undefined && selection.judgingIndex <= witnessed ? { selected: selection.backing, evidence: keptEvidence, mark: retained.mark,
       holds: (mark: Uint8Array) => retained.holds(mark), through: selection.judgingIndex } : undefined;
   const { trails } = evidence, { walk, resumed } = store.openWalk(keptContext({ construction, domain: selection.domain, venue: selection.venue,
     verifier: { verify: context.verifier.verify, identities }, witness: context.witness }), keptWalk);
@@ -908,7 +914,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       const selected = chosen !== undefined && same(c.operator, chosen.operator) && c.sequence === chosen.sequence && same(c.root, chosen.root);
       const intrinsic = !opening && !selected && openingValid && lastValid !== undefined ? faults.intrinsicFailure(held, scope, BigInt(block.length)) : undefined;
       const classification = scope.classificationEvidence(intrinsic);
-      if (classification.intrinsic !== undefined) return { ...base, class: "excluded", check: classification.intrinsic };
+      if (classification.intrinsic !== undefined) {
+        faults.excluded?.(held, scope, BigInt(block.length));
+        return { ...base, class: "excluded", check: classification.intrinsic };
+      }
       // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot.
       const s = kept?.state;
       if (kept !== undefined) {

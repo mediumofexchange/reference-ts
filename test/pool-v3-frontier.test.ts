@@ -341,8 +341,9 @@ describe("single-backing compact fault packages", () => {
       const fresh = await f.readCompact(), comparable = (read: typeof fresh) => ({ canonical: canonicalEvidence(read.canonical), carrying: read.carrying,
         force: read.force, clock: read.clock, faults: read.faultEvidence });
       expect(comparable(await f.readCompact(f.compactItems, [f.fault], identified, { store, evidence }))).toEqual(comparable(fresh));
-      // Again from what is kept and retained, the fault supplied again: faults are one read's own items.
-      expect(comparable(await f.readCompact([], [f.fault], identified, { store, evidence }))).toEqual(comparable(fresh));
+      // Again from what is kept and retained, the fault supplied again: faults are one read's own items. The same fault set
+      // resumes the kept walk, which classifies nothing again, so it reports no facts of what it classified before.
+      expect(comparable(await f.readCompact([], [f.fault], identified, { store, evidence }))).toEqual({ ...comparable(fresh), faults: undefined });
       await expect(f.readCompact([], [], identified, { store, evidence })).rejects.toMatchObject({ status: "unresolved-evidence" });
       await expect(f.readCompact(f.compactItems, [])).rejects.toMatchObject({ status: "unresolved-evidence" });
     } finally { store.close(); evidence.close(); rmSync(dir, { recursive: true, force: true }); }
@@ -431,6 +432,40 @@ describe("single-backing compact fault packages", () => {
     const actual = await pending;
     expect({ ...actual, canonical: canonicalEvidence(actual.canonical) })
       .toEqual({ ...expected, canonical: canonicalEvidence(expected.canonical) });
+  });
+
+  it("resumes a kept walk for a read presenting the same faults, begins again for another set, and names the faults that excluded (§14, §9.1)", async () => {
+    const f = await compactFixture(), dir = mkdtempSync(join(tmpdir(), "moe-compact-kept-"));
+    const store = new ReplayStore(join(dir, "replay.sqlite"), { digest: join(dir, "replay.sha256") }), evidence = new EvidenceStore(join(dir, "evidence.sqlite"));
+    const counting = () => { const v = { checks: 0, identities: configuration.circuits, verify(_k: number, _i: bigint[], proof: Uint8Array) { v.checks++; return compareBytes(proof, b(99)) !== 0; } }; return v; };
+    const junk = encodeFaultEvidence({ ...decodeFaultEvidence(f.fault, 1024n), previous: b(77) }, 1024n);
+    try {
+      const read = async (faults: Uint8Array[]) => {
+        const v = counting(), r = await f.readCompact(f.compactItems, faults, v as DeclaredVerifier, { store, evidence });
+        return { checks: v.checks, carrying: r.carrying, excludedBy: r.excludedBy };
+      };
+      const first = await read([f.fault]);
+      expect(first.carrying.find(item => item.sequence === "3")).toMatchObject({ class: "excluded", check: "PROOF" });
+      expect(first.excludedBy).toEqual([hex(sha256(f.fault))]);
+      expect(first.checks).toBeGreaterThan(0);
+      // The same fault set over the same retained evidence: what was classified stands, and no proof is checked again.
+      const again = await read([f.fault]);
+      expect([again.checks, again.carrying]).toEqual([0, first.carrying]);
+      // Another set (a junk fault beside it) begins again and classifies as a fresh read does.
+      const other = await read([f.fault, junk]);
+      expect([other.checks > 0, other.carrying, other.excludedBy]).toEqual([true, first.carrying, first.excludedBy]);
+    } finally { store.close(); evidence.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("keeps no fault a takeover did not need: one beside the trail it held (Next 4 (bk))", async () => {
+    const f = await compactFixture(); f.f.replace();
+    const { V3OperatorJournal } = await import("../src/pool/v3/store.js"), dir = mkdtempSync(join(tmpdir(), "moe-full-takeover-"));
+    const j = new V3OperatorJournal(join(dir, "journal.db"), { secret: nextSecret, venue: f.f.venue, reference, verifier: f.verifier });
+    try {
+      expect((await j.takeover("full", f.f.signed, pack([...f.f.items, { kind: 7, payload: f.fault }]))).sequence).toBe(1n);
+      await j.publish();
+      expect(decodePackage((await j.package()).package).filter(item => item.kind === 7)).toEqual([]);
+    } finally { j.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("lets a successor journal take over past a compact exclusion, keeping the faults its read authenticated and serving them in each read's own package (C2.7.4, Next 4 (bk))", async () => {

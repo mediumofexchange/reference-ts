@@ -1,6 +1,6 @@
 // A replica (slice 12 M12b): a reader's kept, verified evidence served through the one wire. It signs nothing and admits
 // nothing. For each backing it serves the latest selection its own read found canonical, with that read's own package
-// (the configuration and the operator-signed commitment), and what its evidence file indexed after the sequence a reader
+// (the configuration, the operator-signed commitment and any faults), and what its evidence file indexed after the sequence a reader
 // names (`EvidenceStore.served`): a reader served through one of its selections is served everything kept since. The
 // selections are kept in that file. A reader authenticates everything it keeps and judges at its own index, as with any
 // source (pool-v3 §14).

@@ -318,7 +318,7 @@ export class V3ServiceClient {
    * nothing, and a source whose answer from nothing still leaves them out is refused as one that does not assemble, its
    * mark unmoved; `full` asks for that outright, which also replaces retained evidence that storage damaged. A source
    * whose selection is below the mark sends nothing new, and the mark stays. Returns the selection and the read's own
-   * package (the configuration and the selected commitment) to read with that store.
+   * package (the configuration, the selected commitment and any faults) to read with that store.
    *
    * Evidence transport only. Metadata never selects the reader's authority, judging index, finality,
    * current balance or spendability; what is kept is authenticated when a read uses it. `maxBytes` bounds
