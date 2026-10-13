@@ -65,7 +65,8 @@ const SOURCES = sourceClosure(["scripts/pool/v3/command-drill.mjs", "scripts/poo
   "package.json", "package-lock.json"]);
 const HASHES = sourceHashes(SOURCES);
 const obligorSecret = new Uint8Array(32).fill(41), obligor = ed25519.getPublicKey(obligorSecret);
-// Live, a silence of 30 blocks (about 23 minutes at 45 s) leaves serve's keep-alive commitments slack for slow blocks.
+// Live, a silence of 30 blocks (about 23 minutes at 45 s, 2.5 hours at the 5 minutes the testnet ran on 2026-10-13) leaves
+// serve's keep-alive commitments slack for slow blocks.
 const SILENCE = LIVE ? 30n : 16n, DEPTH = "2";
 // The synthetic chain's switch; live, the same switch is the hostile one.
 const SYN = LIVE ? [] : ["--synthetic"], WRONG = LIVE ? ["--synthetic"] : [];
@@ -121,10 +122,11 @@ async function liveHeight() {
     catch (error) { assert(tries < 10, `testnet /info: ${error.message}`); await pause(10_000); }
   }
 }
-/** The chain moves `count` blocks: mined on the synthetic node, waited for live (ten minutes a block at most). */
+/** The chain moves `count` blocks: mined on the synthetic node, waited for live (an hour a block at most: testnet blocks
+ * have averaged 45 s and 5 minutes, and at 5 minutes one block in seven takes over ten). */
 async function advance(count) {
   if (!LIVE) return call("/synthetic/mine", { count });
-  const target = (await liveHeight()) + BigInt(count), deadline = Date.now() + 600_000 * Math.max(1, count);
+  const target = (await liveHeight()) + BigInt(count), deadline = Date.now() + 3_600_000 * Math.max(1, count);
   while (await liveHeight() < target) { assert(Date.now() < deadline, "the testnet did not advance in time"); await pause(10_000); }
 }
 /** One round of waiting for something serve or the relay publishes: past the depth on the synthetic chain, one block
@@ -165,7 +167,7 @@ async function sweep() {
     if (sent === 0) break;
     assert(round < 4, "funding keys still hold value after four sweep rounds");
     for (const entry of out) for (const swept of entry.sweeps) {
-      const deadline = Date.now() + 30 * 60_000;
+      const deadline = Date.now() + 180 * 60_000; // the lag's blocks, an hour each at most, as `advance` allows
       while (await testnet.testnetConfirmations(swept.id) < lag) { assert(Date.now() < deadline, `sweep ${swept.id} unconfirmed`); await pause(15_000); }
     }
   }
