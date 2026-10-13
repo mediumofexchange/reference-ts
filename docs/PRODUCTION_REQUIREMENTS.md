@@ -213,8 +213,9 @@ and phone rates are unmeasured. A succinct proof of exhaustion (its hashing and 
 [probed](VENUE_ALTERNATIVES.md#the-attribution-scans-cost-slice-22)) or an Ergo state-root log would make the venue ranges follow the holder's own subjects
 ([comparison](VENUE_ALTERNATIVES.md#absence-for-one-subject-slice-20)). The phone holder path is the next target
 after the release ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction)):
-the reader's own replay over proof-free statement bytes, an aggregation proof of the statement proofs in place of a
-relation over the whole verdict, and that succinct proof of exhaustion. A browser wallet is outside the release target too, as a
+the reader's own replay over proof-free statement bytes, an aggregation proof of the trail's statement proofs in place
+of a relation over the whole verdict, and that succinct proof of exhaustion; whether it reaches v3 backings is a C0a
+question. A browser wallet is outside the release target too, as a
 scope choice (2026-10-09): the package targets Node, its host hash is
 Node-only, and a browser holder would face the phone's sync costs.
 
