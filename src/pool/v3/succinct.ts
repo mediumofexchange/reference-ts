@@ -116,9 +116,8 @@ interface Established {
 const ESTABLISHED = new WeakMap<ProofCheck, Established>();
 
 /** A pool-v3 reader's construction over proof-free trails, under check set `set` with proofs and check proofs from
- * `supply`. It holds the proofs of every publication its reads decode (§3.6), by hash, for as long as it lives, as the
- * reads hold those publications' bytes: a reader keeping an evidence store across reads passes the same construction
- * (package-reader.ts), and its held proofs grow with the publications those reads take from the venue. */
+ * `supply`. A reader keeping an evidence store across reads passes the same construction (package-reader.ts); it holds
+ * only which trails it established, not proof bytes. */
 export function succinctPoolV3(options: { readonly set: CheckSet; readonly supply: CheckSupply }): Construction<ProofFreeRecord> {
   const { set, supply } = options;
   if (!(set.identity instanceof Uint8Array) || set.identity.length !== 32 || typeof set.verify !== "function" ||
@@ -126,14 +125,18 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
     throw new TypeError("a succinct read needs a check set and a supply");
   }
   const identity = copyBytes(set.identity), test = set.test === true;
-  /** Publications' proofs by their hash (§3.6), so a publication's native check reads the bytes the reader holds. */
-  const publications = new Map<string, Uint8Array>();
-  const hold = (proof: Uint8Array): void => { publications.set(hex(sha256(proof)), copyBytes(proof)); };
-  /** The bytes whose SHA-256 is `proofHash`: a held publication's, else the supply's, or undefined. A supplier's answer
-   * past §5's bound is stopped unhashed and its wrong bytes are no bytes: either is a withheld supply. */
+  /** A publication's proof, carried from its full bytes to the proof-free form the reader reads it as (§3.6), and to the
+   * record decoded from that form: held while either is, as the complete read holds the publication itself, so a
+   * publication's native check reads the bytes the reader holds and nothing outlives its read. */
+  const carried = new WeakMap<object, Uint8Array>();
+  const decode = (bytes: Uint8Array): ProofFreeRecord => {
+    const record = decodeProofFree(bytes), proof = carried.get(bytes);
+    if (proof !== undefined) carried.set(record, proof);
+    return record;
+  };
+  /** The bytes whose SHA-256 is `proofHash` from the supply, or undefined. A supplier's answer past §5's bound is
+   * stopped unhashed and its wrong bytes are no bytes: either is a withheld supply. */
   const fetchProof = async (proofHash: Uint8Array): Promise<Uint8Array | undefined> => {
-    const own = publications.get(hex(proofHash));
-    if (own !== undefined) return own;
     const answer: unknown = await supply.proof(copyBytes(proofHash));
     if (!(answer instanceof Uint8Array) || answer.length > MAX_PROOF) return undefined;
     const bytes = copyBytes(answer);
@@ -152,7 +155,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
    * natively (a publication's force, §3.6). */
   const check = async (record: ProofFreeRecord, verifier: ProofCheck): Promise<void> => {
     const established = ESTABLISHED.get(verifier);
-    if (established === undefined) { requireReplay(await native(verifier, record), "PROOF"); return; }
+    if (established === undefined) { requireReplay(await native(verifier, record, carried.get(record)), "PROOF"); return; }
     // Replay asks in position order, so the record is the next proved record with its digest.
     const digest = fieldToBytes(leafDigest(record)), count = established.kinds.length;
     let i = established.cursor;
@@ -229,7 +232,8 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       };
       const replayCheck: ProofCheck = { verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) };
       ESTABLISHED.set(replayCheck, { digests: flat(digests), hashes: flat(hashes), kinds: Uint8Array.from(kinds), covered, held, cursor: 0 });
-      if (from === 0n) servedTrails.add(servedKey(trail));
+      // Records before a resumed tip were established when the namespace holding them replayed them, under these rules.
+      servedTrails.add(servedKey(trail));
       return replayCheck;
     },
     async served(trail, block, verifier) {
@@ -251,21 +255,22 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
     publication: (bytes: Uint8Array): PublicationView => {
       const p = decodePublication(bytes);
       if (p.kind === 2) return { domain: p.domain, backing: p.backing, kind: p.kind, record: undefined };
-      hold(p.record.proof);
-      return { domain: p.domain, backing: p.backing, kind: p.kind, record: encodeProofFree(proofFreeOf(p.record)) };
+      const form = encodeProofFree(proofFreeOf(p.record));
+      carried.set(form, copyBytes(p.record.proof));
+      return { domain: p.domain, backing: p.backing, kind: p.kind, record: form };
     },
     request: (bytes: Uint8Array): RequestView => {
-      const record = decodeProofFree(bytes);
+      const record = decode(bytes);
       if (record.kind !== 7) throw new EncodingError("not a request");
       const p = record.publicInputs, anchor = p[4]!;
       return { identity: hex(statementHash(record)), tag: p[5]!, reads: state => state.hasAnchor(anchor),
         // A withheld request proof leaves the count unresolved, never "does not hold" (§2 rule 3).
-        holds: verifier => native(verifier, record) };
+        holds: verifier => native(verifier, record, carried.get(record)) };
     },
   });
   return Object.freeze({
     ...POOL_V3,
-    decode: decodeProofFree,
+    decode,
     kind: (record: ProofFreeRecord) => record.kind,
     view: (record: ProofFreeRecord) => v3View(record, proofFreeDigests(record), verifier => check(record, verifier)),
     settledDemand: (bytes: Uint8Array) => recoveryEffect(decodeProofFree(bytes)).ended!,

@@ -322,6 +322,22 @@ describe("succinct reading against the complete read (succinct-read §§2–3)",
     // Records 0–2 as spans (1, 0) and (0, 2); records 3 and 4, after the kept three, as (0, 3) and (0, 4).
     expect(supply.asked).toEqual({ covers: 4, proofs: 0 });
   });
+  it("fetches nothing again when a resumed replay refuses: its kept prefix and its own records were established (review)", async () => {
+    const f = oneBacking();
+    f.checkpoint(1n, 1n);
+    for (let i = 0; i < 4; i++) { const proof = proofOf(1); proof[1] = i + 1; if (i === 3) f.checkpoint(2n, 3n); await f.issue(BigInt(i + 1), BigInt(100 + i), proof); }
+    // A record with a failing proof the operator never judged, after the resumed tip.
+    const bad = f.issueRecord(5n, 104n, proofOf(7));
+    f.commitRaw(encodeRecord(bad), encodeProofFree(proofFreeOf(bad)), evidenceHashes(bad));
+    const c = f.checkpoint(3n, 5n), base = supplyOf(c.trail.records), seen = new Map<string, number>();
+    // Each proof is given once: a second ask would be withheld.
+    const supply: CheckSupply = { cover: base.cover, proof: hash => {
+      const key = hex(hash), n = (seen.get(key) ?? 0) + 1; seen.set(key, n); return n > 1 ? undefined : base.proof(hash);
+    } };
+    expect(await f.complete(c)).toEqual({ check: "PROOF" });
+    expect(await f.succinct(c, supply)).toEqual({ check: "PROOF" });
+    expect([...seen.values()].every(n => n === 1)).toBe(true);
+  });
 });
 
 describe("succinct reading: publications (succinct-read §3.6)", () => {

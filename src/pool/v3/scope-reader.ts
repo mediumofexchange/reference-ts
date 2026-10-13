@@ -896,7 +896,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         openingValid = (await classify(openingHeld, openingEntry.name)).class === "valid";
         const parents = await parentsOf(), established = baseOf(segment);
         requireReplay(established !== undefined && established.openingIndex === openingHeld.index, "OPENING");
-        segmentBase = established;
+        segmentBase = established; adoptedBlock = established.block;
         // Returning to an older segment cannot abandon a valid newer one: the last valid checkpoint
         // before this one is in this segment for every scoped backing, or else each backing's
         // predecessor that the opening imported.
