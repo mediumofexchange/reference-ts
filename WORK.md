@@ -84,5 +84,4 @@ Order ([direction 2026-10-13](decisions/2026-10.md#2026-10-13--keep-the-release-
 - Non-blocking, maintainer (2026-10-13): apply to Anthropic's Claude for Open Source and Claude for Startups programs for more capacity; a refusal changes nothing. A run drafts each text from README and the site (a non-commercial open protocol, never called a company); the maintainer submits from their own accounts.
 - Deletion list (2026-10-09): none open.
 
-Roughly **75% done / 25% remaining** (range 65–82%) of the release target, reassessed 2026-10-13 (direction check): the security argument, the review brief and the restart, upgrade and takeover fixes were counted
-remaining. Slice 18 at 10⁶, the external review and its findings, qualified storage and custody, and mainnet remain. With the phone holder path (Next 12) in the target, about **57%** (47–66%; slice 36 built the trail circuits).
+About **55%** of the complete project (one number, method in production requirements), reassessed 2026-10-14 from the 2026-10-13 direction check and slice 36: the release target is far along; slice 18 at 10⁶, the external review and its findings, qualified storage and custody, mainnet, and the phone holder path's transport, wallet option, exhaustion half, adoption and phone build remain.
