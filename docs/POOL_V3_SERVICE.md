@@ -26,7 +26,9 @@ bounds who uses the operator's connections, not who reads published evidence, wh
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "submit", record }` | `kind: "accepted"`, exact signed receipt |
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "commit", id }` | `kind: "committed"`, signed commitment |
 | `POST /commands` | `{ version: 1, profile: "pool-store/v3", kind: "publish" }` | `kind: "published"`, signed commitment |
-| `GET /evidence` | `?backing=` with 64 lowercase hex digits naming a backing the served commitment carries, then `&after=` with the decimal sequence the reader's evidence was served through (0 for none) | a byte stream: selection metadata naming that backing, the read's own package, then the evidence parts served after that sequence |
+| `GET /evidence` | `?backing=` with 64 lowercase hex digits naming a backing the served commitment carries, then `&after=` with the decimal sequence the reader's evidence was served through (0 for none), then optionally `&form=proof-free` | a byte stream: selection metadata naming that backing, the read's own package, then the evidence parts served after that sequence; with `form=proof-free`, each trail in [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)'s proof-free frame (§3.3) |
+| `GET /proofs/<hash>` | 64 lowercase hex digits of a `proofHash`, then `?segment=` (64 hex digits) and `&position=` (a record's position, from 1) | the proof field of a record kept at that place whose SHA-256 is `hash`, as bytes, or `NOT_FOUND` |
+| `GET /covers/<set>/<digest>` | a check set's identity and a span's digest, 64 lowercase hex digits each | a check proof kept for that digest under that set, as bytes, or `NOT_FOUND`; a journal keeps none, a replica keeps what its prover made |
 
 Every successful command reply also carries version 1 and the same profile. Byte fields
 are lowercase hex. Commit identifiers match `[A-Za-z0-9._:-]{1,128}`. Records,
@@ -34,6 +36,9 @@ receipts and packages keep the canonical bytes of the journal's construction:
 pool-v3's, or lit-v1's for a lit scope. One profile serves both, since each of
 them names its configuration domain
 ([M14g3](../decisions/2026-10.md#2026-10-07--serve-a-lit-journal-through-the-one-service-wire-and-client-the-construction-an-option-slice-14-m14g3)).
+The three reads serve a succinct reader (slice 37): every answer authenticates itself to it, a proof by its hash and a
+cover by its verification under the reader's pinned keys, so the place and set only say where to look. A replica's
+listener answers them with no credential, as it serves evidence.
 Kind-7 requests are not segment admissions. Unexpected fields, malformed UTF-8,
 compressed bodies and oversized envelopes refuse. The transport signs no JSON
 and adds no protocol bytes.
