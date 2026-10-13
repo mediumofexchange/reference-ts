@@ -84,8 +84,9 @@ export interface CheckSet {
 /** Where a succinct reader obtains check proofs and proof bytes: any party, untrusted (§2 rule 6). Each answer is
  * checked by the reader; undefined where the supplier has none. */
 export interface CheckSupply {
-  /** A check proof whose digest is `digest` (§3.2). */
-  cover(digest: bigint): Promise<Uint8Array | undefined> | Uint8Array | undefined;
+  /** A check proof whose digest is `digest` (§3.2). `accept` is the reader's own check of a candidate, which a supply of
+   * several sources may use to pass over a wrong one; the reader checks whatever it returns. */
+  cover(digest: bigint, accept?: (proof: Uint8Array) => Promise<boolean>): Promise<Uint8Array | undefined> | Uint8Array | undefined;
   /** The bytes whose SHA-256 is `proofHash` (§3.5). `at` names the trail record that carries it, which a supplier may
    * look it up by; it authenticates nothing (§4.7), and a publication's proof is never fetched. */
   proof(proofHash: Uint8Array, at?: RecordAt): Promise<Uint8Array | undefined> | Uint8Array | undefined;
@@ -98,6 +99,8 @@ export interface RecordAt { readonly segment: Uint8Array; readonly position: big
 export const PROOF_FREE_FORM: TrailForm = Object.freeze({
   trailHead: PROOF_FREE_TRAILS.trailHead,
   record: (bytes: Uint8Array) => encodeProofFree(proofFreeOf(decodeRecord(bytes))),
+  // About a second of a busy laptop's work and 2 MB a part: far inside both sides' stream bounds.
+  piece: 2048,
 });
 
 /** A supplier's answer to a reader's fetch (§3.5): the proof field of a record among `records` (those kept at the asked
@@ -291,8 +294,17 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
         return value;
       };
       const cover = async (s: number, first: number, memo: Map<string, bigint>): Promise<void> => {
-        const digest = spanDigest(s, first, memo), answer: unknown = await supply.cover(digest);
-        if (answer instanceof Uint8Array && await set.verify(s === 0 ? kinds[first - start] : undefined, digest, copyBytes(answer)) === true) {
+        const digest = spanDigest(s, first, memo), kind = s === 0 ? kinds[first - start] : undefined;
+        // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
+        let accepted: Uint8Array | undefined;
+        const accept = async (proof: Uint8Array): Promise<boolean> => {
+          const own = proof instanceof Uint8Array ? copyBytes(proof) : undefined;
+          if (own === undefined || await set.verify(kind, digest, own) !== true) return false;
+          accepted = own;
+          return true;
+        };
+        const answer: unknown = await supply.cover(digest, accept);
+        if (answer instanceof Uint8Array && ((accepted !== undefined && same(answer, accepted)) || await set.verify(kind, digest, copyBytes(answer)) === true)) {
           covered.fill(1, first - start, first - start + 2 ** s);
           return;
         }

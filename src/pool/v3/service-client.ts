@@ -391,25 +391,31 @@ export class V3ServiceClient {
 
 /**
  * A succinct reader's supply over `sources` (succinct-read §2 rule 6): each fetch asks them in turn until one answers,
- * covers under the set whose identity is `set`. A source that does not answer, refuses or answers malformed is passed
- * over, and so is a proof whose bytes do not hash to the asked `proofHash`. A cover is taken from the first source that
- * has one, which the reader verifies: a wrong one costs the reader that span's split (§3.4), never a verdict.
+ * covers under the set whose identity is `set`. A source that refuses or answers malformed is passed over, and so is a
+ * proof whose bytes do not hash to the asked `proofHash` and a cover the reader's own check (`accept`) refuses, so an
+ * honest source behind a wrong one is still asked. A source that does not answer is not asked again by this supply
+ * (a reader makes one per read), so a dead or dripping source costs one wait. The holder's own proxy refusing the route
+ * is the holder's to fix, not a source's answer: it ends the read, as it ends a sync.
  */
 export function serviceSupply(set: Uint8Array, sources: readonly V3ServiceClient[]): CheckSupply {
-  const own = identifier(set), list = [...sources];
-  const ask = async (fetch: (source: V3ServiceClient) => Promise<Uint8Array | undefined>, holds: (answer: Uint8Array) => boolean) => {
+  const own = identifier(set), list = [...sources], silent = new Set<V3ServiceClient>();
+  const ask = async (fetch: (source: V3ServiceClient) => Promise<Uint8Array | undefined>, holds: (answer: Uint8Array) => Promise<boolean> | boolean) => {
     for (const source of list) {
+      if (silent.has(source)) continue;
       try {
         const answer = await fetch(source);
-        if (answer !== undefined && holds(answer)) return answer;
+        if (answer !== undefined && await holds(answer)) return answer;
       } catch (error) {
-        if (!unanswered(error) && !(error instanceof V3ServiceClientError) && !(error instanceof EncodingError)) throw error;
+        if (unanswered(error)) { silent.add(source); continue; }
+        if (error instanceof V3ServiceClientError && !(error.code === "PROXY" && error.status === 0)) continue;
+        if (error instanceof EncodingError) continue;
+        throw error;
       }
     }
     return undefined;
   };
   return Object.freeze({
-    cover: (digest: bigint) => ask(source => source.cover(own, digest), () => true),
+    cover: (digest: bigint, accept?: (proof: Uint8Array) => Promise<boolean>) => ask(source => source.cover(own, digest), accept ?? (() => true)),
     // A proof is fetched by its place; a publication's is never fetched (§3.6).
     proof: (proofHash: Uint8Array, at?: RecordAt) => at === undefined ? undefined :
       ask(source => source.proof(proofHash, at), answer => same(sha256(answer), proofHash)),

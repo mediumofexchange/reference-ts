@@ -317,6 +317,8 @@ export class EvidenceStore {
           const kept = (this.#db.prepare("SELECT name FROM evidence_construction WHERE id = 1").get() as { name: string }).name;
           if (kept !== evidenceName(this.construction)) throw new TypeError("the evidence file holds another construction's evidence");
         }
+        // A party's own file (or private store) keeps check proofs beside layout 4's tables; a host's database keeps none.
+        this.#db.exec(COVER_SCHEMA);
       } catch (error) {
         this.#db.close();
         if (busy(error)) throw new FileInUse("evidence file");
@@ -340,7 +342,6 @@ export class EvidenceStore {
     const indexed = !this.#hosted && this.#db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'served_object'").get() !== undefined;
     if (!this.#hosted && !indexed && options.shared === true) this.#db.exec(`BEGIN; ${SERVED_SCHEMA}; DELETE FROM supplier; COMMIT;`);
     this.#indexed = indexed || (!this.#hosted && options.shared === true);
-    if (!this.#hosted) this.#db.exec(COVER_SCHEMA);
     this.#q = Object.fromEntries(Object.entries({
       batch: "INSERT INTO batch VALUES (NULL) RETURNING id",
       item: "INSERT INTO item VALUES (?, ?, ?, ?)",
@@ -1045,34 +1046,52 @@ export class EvidenceBatch implements WalkEvidence, TrailEvidence {
 /** A kept trail as a supplier streams it: §10's head, then each record after `after` behind its u32 length, read
  * and checked one at a time. Undefined where the trail's chain does not pass through `after`. A scoped terms
  * field the evidence does not hold is served empty: it names no backing, so it is no evidence (§12.1). */
-export async function trailPart(trail: StoredTrail, after?: TrailTip, construction: Construction = POOL_V3 as Construction, form?: TrailForm):
-  Promise<EvidencePart | undefined> {
+export async function trailPart(trail: StoredTrail, after?: TrailTip, construction: Construction = POOL_V3 as Construction): Promise<EvidencePart | undefined> {
   const held = after === undefined ? 0n : await trail.reaches(after.position, after.evidence);
   if (held === undefined) return undefined;
-  const count = construction.reader.header.decodeSegmentHeader(trail.header).entries.length;
-  const head = (form ?? construction.reader.trail).trailHead(trail.header,
-    Array.from({ length: count }, (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) }), trail.length);
-  const framed = (record: Uint8Array): Uint8Array => {
-    const out = new Uint8Array(4 + record.length);
-    new DataView(out.buffer).setUint32(0, record.length, false); out.set(record, 4);
-    return out;
-  };
-  if (form === undefined) {
-    const chunks = async function* (): AsyncIterable<Uint8Array> {
-      yield head;
-      for await (const record of trail.stream(after?.position ?? 0n)) yield framed(record);
-    };
-    return { trail: { after, size: BigInt(head.length) + trail.bytes - held, chunks: chunks() } };
-  }
-  // A part states its size before its records, and the kept rows hold no size in another form: one pass sizes the
-  // records in the form, a second sends them. A kept record decodes (`chainStep`), so each has its form.
-  let size = BigInt(head.length);
-  for await (const record of trail.stream(after?.position ?? 0n)) size += 4n + BigInt(form.record(record).length);
+  const head = construction.reader.trail.trailHead(trail.header, headTerms(trail, construction), trail.length);
   const chunks = async function* (): AsyncIterable<Uint8Array> {
     yield head;
-    for await (const record of trail.stream(after?.position ?? 0n)) yield framed(form.record(record));
+    for await (const record of trail.stream(after?.position ?? 0n)) yield framed(record);
   };
-  return { trail: { after, size, chunks: chunks() } };
+  return { trail: { after, size: BigInt(head.length) + trail.bytes - held, chunks: chunks() } };
+}
+/** A trail's scoped terms fields as its head states them; one the evidence does not hold is served empty. */
+const headTerms = (trail: StoredTrail, construction: Construction): SignedTermsField[] =>
+  Array.from({ length: construction.reader.header.decodeSegmentHeader(trail.header).entries.length },
+    (_, i) => trail.term(i) ?? { terms: new Uint8Array(), signature: new Uint8Array(64) });
+/** A record behind its u32 length, as a trail's frame carries it. */
+function framed(record: Uint8Array): Uint8Array {
+  const out = new Uint8Array(4 + record.length);
+  new DataView(out.buffer).setUint32(0, record.length, false); out.set(record, 4);
+  return out;
+}
+
+/**
+ * A kept trail in another form (`form`), after `after` where its chain passes through it, else whole: consecutive parts
+ * of at most `form.piece` records, each with a head stating the length it reaches and based on the tip the part before
+ * reached, as incremental retrieval serves a trail after a reader's base. A part states its size before its records and
+ * the kept rows hold no size in another form, so each part is built in memory and sized from its own bytes: a long
+ * trail's first bytes go out after one part's work, never after a pass over the whole trail, and a stream whose peer
+ * left stops within one part. A kept record decodes (`chainStep`), so each has its form.
+ */
+export async function* formParts(trail: StoredTrail, after: TrailTip | undefined, construction: Construction, form: TrailForm): AsyncIterable<EvidencePart> {
+  let base = after !== undefined && await trail.reaches(after.position, after.evidence) !== undefined ? after : undefined;
+  const terms = headTerms(trail, construction);
+  let records: Uint8Array[] = [], bytes = 0, position = base?.position ?? 0n, sent = false;
+  const part = (): EvidencePart => {
+    const head = form.trailHead(trail.header, terms, position), evidence = trail.evidence(position);
+    if (evidence === undefined) throw new EvidenceRefusal("unresolved-evidence");
+    const out: EvidencePart = { trail: { after: base, size: BigInt(head.length + bytes), chunks: [head, ...records] } };
+    base = { segment: trail.segment, position, evidence }; records = []; bytes = 0; sent = true;
+    return out;
+  };
+  for await (const record of trail.stream(position)) {
+    const own = framed(form.record(record));
+    records.push(own); bytes += own.length; position++;
+    if (records.length >= form.piece) yield part();
+  }
+  if (records.length > 0 || !sent) yield part();
 }
 
 /** A form a supplier serves its kept trails in besides their own: a frame's head under that form's context and each
@@ -1081,6 +1100,8 @@ export async function trailPart(trail: StoredTrail, after?: TrailTip, constructi
 export interface TrailForm {
   trailHead(header: Uint8Array, terms: readonly SignedTermsField[], events: bigint): Uint8Array;
   record(bytes: Uint8Array): Uint8Array;
+  /** The records one served part holds at most (`formParts`). */
+  readonly piece: number;
 }
 /** The name a party's evidence file records for `construction`: its namespace's, marked where its trails' records are
  * proof-free (succinct-read §3.3), so a file of one form is never read by the other's frames. */
@@ -1110,7 +1131,8 @@ export async function* topTrails(tops: Iterable<TrailTip>, trailOf: (segment: Ui
     // A reader served through the base holds a top its base's trail passes through.
     if (await reached([...served, ...(baseTrail === undefined ? [] : [baseTrail])], trail.length, top.evidence)) continue;
     served.push(trail);
-    const part = (base === undefined ? undefined : await trailPart(trail, base, construction, form)) ?? await trailPart(trail, undefined, construction, form);
+    if (form !== undefined) { yield* formParts(trail, base, construction, form); continue; }
+    const part = (base === undefined ? undefined : await trailPart(trail, base, construction)) ?? await trailPart(trail, undefined, construction);
     if (part !== undefined) yield part;
   }
 }

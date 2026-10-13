@@ -12,7 +12,7 @@ import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.
 import type { SegmentHeader } from "../src/pool/v3/headers.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { decodeProofFree, decodeRecord, encodeRecord, type Record } from "../src/pool/v3/records.js";
-import { serviceSupply, V3ServiceClient } from "../src/pool/v3/service-client.js";
+import { serviceSupply, V3ServiceClient, V3ServiceClientError } from "../src/pool/v3/service-client.js";
 import type { V3EvidenceSource } from "../src/pool/v3/service-http.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import { COVER_PROOF_BYTES, succinctPoolV3, testCheckSet, testProver, type CheckSupply, type RecordAt } from "../src/pool/v3/succinct.js";
@@ -113,7 +113,7 @@ describe("succinct transport (slice 37)", () => {
   const counting = (supply: CheckSupply) => {
     const asked = { covers: 0, answered: 0, proofs: 0, fetched: 0, places: [] as RecordAt[] };
     return { asked, supply: {
-      cover: async (digest: bigint) => { asked.covers++; const answer = await supply.cover(digest); if (answer !== undefined) asked.answered++; return answer; },
+      cover: async (digest: bigint, accept?: (proof: Uint8Array) => Promise<boolean>) => { asked.covers++; const answer = await supply.cover(digest, accept); if (answer !== undefined) asked.answered++; return answer; },
       proof: async (hash: Uint8Array, at?: RecordAt) => {
         asked.proofs++; if (at !== undefined) asked.places.push(at);
         const answer = await supply.proof(hash, at); if (answer !== undefined) asked.fetched++; return answer;
@@ -218,8 +218,9 @@ describe("succinct transport (slice 37)", () => {
     const succinct = succinctPoolV3({ set: SET, supply: counted.supply });
     const read = await f.read(succinct, new V3ServiceClient(hostileUrl, undefined, f.identity(succinct)), "hostile");
     expect(read.result).toBe(complete.result);
-    // Each wrong leaf cover leaves its record to the native check, whose proof the operator gave after the hostile junk.
-    expect(counted.asked).toMatchObject({ covers: 2, answered: 2, fetched: 2 });
+    // The reader's own check refuses each wrong cover inside the supply, so no cover is taken: each record is checked
+    // natively, its proof given by the operator after the hostile junk.
+    expect(counted.asked).toMatchObject({ covers: 2, answered: 0, fetched: 2 });
     expect(asked).toBe(2);
 
     // A source that changes one byte of a proof-free record: the evidence chain refuses the trail, so the sync does.
@@ -238,6 +239,66 @@ describe("succinct transport (slice 37)", () => {
     const forgingUrl = await listen(service.createV3EvidenceService(forging));
     const evidence = new EvidenceStore(join(directories.at(-1)!, "forged.db"), { construction: succinct }); closing.push(evidence);
     await expect(new V3ServiceClient(forgingUrl, undefined, f.identity(succinct)).sync(backing, evidence)).rejects.toThrow("does not assemble");
+  });
+
+  it("serves a long trail as parts of a bounded count, each based on the last, whole and after a reader's mark (review B1)", async () => {
+    const f = await fixture();
+    await f.j.submit(f.issue()); await f.checkpoint("c2");
+    await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
+    await f.mirror();
+    const { PROOF_FREE_FORM } = await import("../src/pool/v3/succinct.js"), one = { ...PROOF_FREE_FORM, piece: 1 };
+    // The replica's stream with one record a part: three parts, sized as sent, each after the tip the one before reached.
+    const parts: { after?: bigint; size: bigint; bytes: number }[] = [];
+    for await (const part of (await f.replica.serve(backing, 0n, one)).parts as AsyncIterable<EvidencePart>) {
+      if ("package" in part) continue;
+      let n = 0; for await (const chunk of part.trail.chunks) n += chunk.length;
+      parts.push({ ...(part.trail.after === undefined ? {} : { after: part.trail.after.position }), size: part.trail.size, bytes: n });
+    }
+    expect(parts.map(p => p.after)).toEqual([undefined, 1n]);
+    expect(parts.every(p => p.size === BigInt(p.bytes))).toBe(true);
+    // A reader served one record a part, from nothing and then after its mark, reads as the complete read does.
+    const piecewise: V3EvidenceSource = { serve: (b, after) => f.replica.serve(b, after, one), proof: (h, at) => f.replica.proof(h, at),
+      cover: (s, d) => f.replica.cover(s, d) };
+    const url = await listen(service.createV3EvidenceService(piecewise));
+    const succinct = succinctPoolV3({ set: SET, supply: serviceSupply(SET.identity, [new V3ServiceClient(url, undefined, f.identity())]) });
+    const client = new V3ServiceClient(url, undefined, f.identity(succinct));
+    const evidence = new EvidenceStore(join(directories.at(-1)!, "pieces.db"), { construction: succinct }); closing.push(evidence);
+    await client.sync(backing, evidence);
+    await f.j.submit(f.issue(output(41, 5n), 3)); await f.j.submit(f.issue(output(46, 4n), 4)); await f.checkpoint("c4");
+    await f.mirror();
+    const served = await client.sync(backing, evidence);
+    const read = await outcome(readFrontier(served.package, signed, f.venue.witnessedIndex(), { construction: succinct, verifier, venue: f.venue, reference, evidence }));
+    expect(read).toBe((await f.read(POOL_V3 as Construction, f.operatorClient, "complete")).result);
+  });
+
+  it("takes a cover from an honest source behind a wrong one, asks a silent source once, and stops at the holder's own proxy refusal", async () => {
+    const f = await fixture();
+    await f.j.submit(f.issue()); await f.checkpoint("c2");
+    await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
+    await f.mirror();
+    await f.replica.prove(testProver(SET, verifier), SET.identity);
+    const complete = await f.read(POOL_V3 as Construction, f.operatorClient, "complete");
+    const wrong: V3EvidenceSource = { serve: (b, after, form) => f.replica.serve(b, after, form), proof: () => undefined, cover: (_s, digest) => sha256(digest) };
+    const wrongUrl = await listen(service.createV3EvidenceService(wrong));
+    // A listener closed before it is asked: nothing answers there.
+    const closed = service.createV3EvidenceService(wrong), closedUrl = await listen(closed);
+    await new Promise<void>(done => { closed.close(() => done()); });
+    const silent = new V3ServiceClient(closedUrl, undefined, f.identity());
+    let silentAsks = 0;
+    const silentCover = silent.cover.bind(silent);
+    silent.cover = async (set, digest) => { silentAsks++; return silentCover(set, digest); };
+    const sources = [silent, new V3ServiceClient(wrongUrl, undefined, f.identity()), new V3ServiceClient(f.replicaUrl, undefined, f.identity())];
+    const counted = counting(serviceSupply(SET.identity, sources));
+    const succinct = succinctPoolV3({ set: SET, supply: counted.supply });
+    const read = await f.read(succinct, new V3ServiceClient(f.replicaUrl, undefined, f.identity(succinct)), "behind");
+    expect(read.result).toBe(complete.result);
+    // Both covers came from the replica behind the wrong source; no proof was fetched; the silent source was asked once.
+    expect(counted.asked).toMatchObject({ covers: 2, answered: 2, proofs: 0 });
+    expect(silentAsks).toBe(1);
+    // The holder's own proxy refusing the route ends the fetch, as it ends a sync.
+    const proxied = new V3ServiceClient(f.replicaUrl, undefined, f.identity());
+    proxied.cover = async () => { throw new V3ServiceClientError(0, "PROXY", "the proxy refused the tunnel (403)"); };
+    await expect(serviceSupply(SET.identity, [proxied, sources[2]!]).cover(1n)).rejects.toMatchObject({ code: "PROXY" });
   });
 
   it("keeps the two forms apart: a proof-free replica refuses the complete form, and a store of one form syncs from no client of the other", async () => {

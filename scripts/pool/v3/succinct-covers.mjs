@@ -79,7 +79,7 @@ export async function readWithCovers(journal, backing, selection, ranges, { veri
         verify: async (kind, digest, proof) => { const ok = await prover.set.verify(kind, digest, proof); if (ok) used.verified++; return ok; } };
       const wire = serviceSupply(set.identity, [new V3ServiceClient(replicaUrl, undefined, identity()), operatorClient]);
       const supply = {
-        cover: async digest => { const proof = await wire.cover(digest); if (proof !== undefined) used.answered++; return proof; },
+        cover: async (digest, accept) => { const proof = await wire.cover(digest, accept); if (proof !== undefined) used.answered++; return proof; },
         proof: async (hash, at) => {
           const proof = await wire.proof(hash, at);
           if (proof !== undefined) { used.fetched++; fetched.add(Buffer.from(hash).toString("hex")); }
