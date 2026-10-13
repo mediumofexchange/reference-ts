@@ -61,7 +61,9 @@ describe('moe command arguments', () => {
       expect(readRequired(join(dir, 'frame'), 'frame')).toHaveLength(8);
       expect(() => readRequired(join(dir, 'frame'), 'frame', 7)).toThrow(expect.objectContaining({ code: 'INVALID', message: expect.stringMatching(/more than the 7 bytes/) }));
       expect(() => readRequired(dir, 'frame')).toThrow(expect.objectContaining({ code: 'INVALID', message: expect.stringMatching(/is a directory/) }));
-      expect(() => readRequired(join(dir, 'frame', 'below'), 'frame')).toThrow(expect.objectContaining({ code: 'INVALID', message: expect.stringMatching(/lies under a file/) }));
+      // Windows answers a path through a file as absent (ENOENT), POSIX as ENOTDIR.
+      expect(() => readRequired(join(dir, 'frame', 'below'), 'frame')).toThrow(process.platform === 'win32' ? expect.objectContaining({ code: 'ABSENT' })
+        : expect.objectContaining({ code: 'INVALID', message: expect.stringMatching(/lies under a file/) }));
       expect(() => readRequired(join(dir, 'absent'), 'frame')).toThrow(expect.objectContaining({ code: 'ABSENT' }));
       expect(() => writeSame(dir, 'out')).toThrow(expect.objectContaining({ code: 'INVALID' }));
       expect(() => readSecret(dir, 'key')).toThrow(expect.objectContaining({ code: 'INVALID' }));
