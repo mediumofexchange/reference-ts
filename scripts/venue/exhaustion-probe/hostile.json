@@ -1,0 +1,142 @@
+[
+ {
+  "name": "an emitted entry left out of the list",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "an entry added to the list",
+  "refused": true,
+  "reason": "Circuit execution failed: call to assert_max_bit_size"
+ },
+ {
+  "name": "a listed entry's subject changed",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a listed entry's position changed",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "two listed entries out of order",
+  "refused": true,
+  "reason": "Circuit execution failed: call to assert_max_bit_size"
+ },
+ {
+  "name": "a nonzero byte past a transaction",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a transaction started inside another",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a transaction ended early (labels kept)",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a slot shortened inside a transaction",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a wrong map sibling",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a wrong prior count",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a wrong prior subject chain",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "an update at another key",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a header's transactions root altered",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a header's parent id altered",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a pushed id other than the bytes hashed",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a nonzero byte past a tree leaf",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a tree leaf hashed under the node prefix",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a merge over other bytes than the stack holds",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a header read over a stack of two (an extra leaf below the tree)",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "honest streams pass the top check (control)",
+  "refused": true
+ },
+ {
+  "name": "a transaction left out of the scan",
+  "refused": true
+ },
+ {
+  "name": "a transaction added to the scan",
+  "refused": true
+ },
+ {
+  "name": "two transactions swapped in the scan",
+  "refused": true
+ },
+ {
+  "name": "a transaction split at a slot boundary",
+  "refused": true
+ },
+ {
+  "name": "a block boundary moved in the scan",
+  "refused": true
+ },
+ {
+  "name": "a block left out of the trees and headers",
+  "refused": true
+ },
+ {
+  "name": "map entries applied out of order",
+  "refused": true
+ },
+ {
+  "name": "a map entry left unapplied",
+  "refused": true
+ },
+ {
+  "name": "a map entry applied twice",
+  "refused": true
+ }
+]

@@ -1,0 +1,112 @@
+{
+ "seed": 5,
+ "blocksPerPeriod": 3,
+ "gates": {
+  "T": 224312,
+  "M": 143462,
+  "U": 30861,
+  "node": 1469892,
+  "foldFirst": 711228,
+  "foldNext": 1477559
+ },
+ "proveS": {
+  "leafT": [
+   6.2,
+   6.8,
+   7.6,
+   9,
+   9.1,
+   6,
+   6.1,
+   6,
+   5.4,
+   4.9,
+   5,
+   5,
+   4.5,
+   4.8,
+   4.9
+  ],
+  "leafM": [
+   4.3,
+   4.2,
+   5.7,
+   5.8,
+   3.9,
+   3.3,
+   3.4
+  ],
+  "leafU": [
+   1.4,
+   1.8,
+   1.9,
+   1.4,
+   0.9,
+   1,
+   1
+  ],
+  "node": [
+   50.8,
+   50.3,
+   45.8,
+   51.1,
+   54.8,
+   53.6,
+   50.4,
+   45.8,
+   44.4,
+   45.8,
+   45.5,
+   27.7,
+   26.1,
+   27.1,
+   26.9,
+   26.3,
+   25.7,
+   26.4,
+   25.3,
+   26.1,
+   26.2,
+   26.2,
+   25.6,
+   25.3,
+   26.3,
+   25.9,
+   31.4
+  ],
+  "foldFirst": [
+   18.5
+  ],
+  "foldNext": [
+   38.9
+  ]
+ },
+ "verified": true,
+ "endOk": true,
+ "hostile": [
+  {
+   "name": "a fold claiming another end height",
+   "refused": true
+  },
+  {
+   "name": "a fold claiming another map root",
+   "refused": true
+  },
+  {
+   "name": "a fold over the other period's tree",
+   "refused": true
+  },
+  {
+   "name": "a next fold whose previous fold ends elsewhere",
+   "refused": true
+  },
+  {
+   "name": "a first fold whose map does not start empty",
+   "refused": true
+  },
+  {
+   "name": "a fold over a lone first leaf (its streams end apart)",
+   "refused": true
+  }
+ ]
+}

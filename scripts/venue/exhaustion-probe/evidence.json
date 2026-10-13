@@ -1,0 +1,20 @@
+{
+ "measured": "2026-10-13",
+ "blake2b": "b2test.mjs: the hinted compression's digests equal @noble/hashes' at 10 and 20 compressions (an all-0xff message, for every carry, and three random ones): 9,861 gates a compression against slice 21's 32,941",
+ "microbenchmarks": "Noir u64 per operation, differences of 200 more: wrapping add about 28 gates, rotation by shifts about 34, XOR about 6; a hinted add 6-9, a hinted rotation about 11",
+ "model": "test-synth.mjs 8 12 4 30: 30 synthetic periods (both root rules, record, plain and mutated transactions), 864 leaves (489 T, 177 M, 198 U); every shaped output of every grammatical transaction (707, by frameTransaction and section 6's shape) is an entry, with 50 more from ungrammatical ones; every period passes the top check and ends at its last header",
+ "circuits": {
+  "synthetic": "the same 864 leaves executed by their kind's circuit (CT 8, CM 12, EU 4): 0 failures",
+  "mainnet": "run-kinds.mjs over 40 mainnet blocks 1,893,509-1,893,548 (329 transactions, 1,087,849 unsigned bytes): 302 leaves (272 T of 32 slots, 30 M of 48) executed, 0 failures; the top check passes and the end is the last header. The full-size T- and M-leaves executed and proved on the first two leaves of the same window, and the U-leaf on 230 synthetic entries",
+  "days": "run-kinds.mjs / cost.mjs over 720 blocks to 1,892,959 (slice 22's day) and to 1,893,553: the streams split into full-size leaves at 99.6-99.9% (T) and 98.3-99.4% (M) fill, and both pass the top check"
+ },
+ "hostile": "hostile.json (test-hostile.mjs 8 12 4): 20 witnesses refused by the leaf circuits, 9 hostile streams refused by the top check, 1 honest control passing; node-hostile.json: 6 hostile children refused by the node; e2e-result.json: 6 hostile folds refused",
+ "endToEnd": "e2e-result.json (e2e.mjs 5 3): two consecutive synthetic periods of 3 blocks, 12 and 17 leaves of all three kinds with 26 entries, joined by nodes and folded; the final fold verifies, its end is the last header and its root is the map of 15 subjects",
+ "limits": [
+  "agreement with the reference's framer, not with the node; mutations are random",
+  "the scan's hints are the ones slice 22's review read, without its error checks; no hostile hint is injected (hints are inside the circuit)",
+  "the U-leaf proof was timed with 230 of its 790 slots used (a fixed circuit proves alike); the shaped-output count of a mainnet day is zero, so U-leaves are costed, not observed",
+  "a period's fold is costed at one fold-next proof, not timed at full size",
+  "one host; two days of Ergo, of which the later has 2.4 times the earlier's unsigned bytes"
+ ]
+}

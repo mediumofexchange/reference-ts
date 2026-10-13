@@ -1,0 +1,21 @@
+{
+ "host": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 vCPU, 15 GB (cloud container), idle; proofs with a precomputed key, noir-recursive target",
+ "toolchain": "Noir 1.0.0-beta.26 (noir_wasm; nargo for the full-size T- and M-leaves, same gate counts), Barretenberg 5.2.0",
+ "gates": {
+  "blake2bCompression": { "hinted": 9861, "slice21": 32941 },
+  "poseidon2Permutation": 73,
+  "tSlot": 23799, "tFixed": 33920, "listSlot": 113,
+  "mSlot": 11037, "mFixed": 10878,
+  "uSlot": 5253, "uFixed": 9849,
+  "node": 1469892, "foldFirst": 711228, "foldNext": 1477559
+ },
+ "leaf": {
+  "T": { "slots": 172, "listSlots": 688, "gates": 4166156 },
+  "M": { "slots": 378, "gates": 4190073 },
+  "U": { "slots": 790, "gates": 4162214 }
+ },
+ "prove": { "T": 71.7, "M": 75.0, "U": 75.5, "node": 24.8 },
+ "proveRuns": { "T": [71.96, 71.41], "M": [74.95], "U": [75.54], "node": [24.85] },
+ "peakMiB": { "T": 6284, "M": 6377, "U": 5366, "node": 1982 },
+ "proofBytes": 14656
+}
