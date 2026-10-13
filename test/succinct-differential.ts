@@ -10,13 +10,33 @@ import { compareBytes } from "../src/bytes.js";
 import { readPackage, type PackageSource, type ReadOptions } from "../src/pool/v3/package-reader.js";
 import { decodeEvidencePackage, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import type { ReaderSelection } from "../src/pool/v3/reader.js";
-import { decodeRecord, proofFreeOf, statementHash, type ProofFreeRecord } from "../src/pool/v3/records.js";
+import { decodeProofFree, decodeRecord, proofFreeOf, statementHash, type ProofFreeRecord } from "../src/pool/v3/records.js";
+import { V3_STATEMENT_CONTEXT } from "../src/contexts.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
-import { leafDigest, nodeDigest, PROOF_FREE_TRAILS, proofFreeTrail, succinctPoolV3, testCheckSet, type CheckSupply } from "../src/pool/v3/succinct.js";
+import { leafDigest, nodeDigest, PROOF_FREE_TRAILS, succinctPoolV3, testCheckSet, type CheckSupply } from "../src/pool/v3/succinct.js";
 import { decodeTrail } from "../src/pool/v3/trail.js";
 
 const SET = testCheckSet("differential");
 const PROVED = new Set([1, 2, 3, 4, 6]);
+const COUNTS = [0, 11, 15, 15, 16, 7, 17, 7];
+
+/** A complete record's proof-free form and its proof field, where its statement, authorization and capsules decode and only
+ * the proof field may break pool-v3 §5 (a record the complete read leaves inconclusive); undefined otherwise. */
+function splitRecord(bytes: Uint8Array): { form: Uint8Array; proof: Uint8Array } | undefined {
+  const kindAt = V3_STATEMENT_CONTEXT.length + 32, kind = bytes[kindAt];
+  if (kind === undefined || kind < 1 || kind > 7) return undefined;
+  const statementLength = kindAt + 1 + 4 + 32 * COUNTS[kind]!;
+  if (bytes.length < statementLength + 4) return undefined;
+  const length = new DataView(bytes.buffer, bytes.byteOffset).getUint32(statementLength);
+  const proof = bytes.slice(statementLength + 4, statementLength + 4 + length);
+  if (proof.length !== length) return undefined;
+  const form = new Uint8Array(bytes.length - 4 - length + 32);
+  form.set(bytes.subarray(0, statementLength));
+  form.set(length === 0 ? new Uint8Array(32) : sha256(proof), statementLength);
+  form.set(bytes.subarray(statementLength + 4 + length), statementLength + 32);
+  try { decodeProofFree(form); } catch { return undefined; }
+  return { form, proof };
+}
 
 /** The package with each trail proof-free, the proofs by hash, and covers for every aligned span of each trail's proved
  * records whose proofs `verify` accepts, as a prover that checks each statement proof first makes them (§3.5). */
@@ -27,13 +47,20 @@ export async function succinctPackage(bytes: Uint8Array, verify: (kind: number, 
     if (item.kind !== 6) { items.push(item); continue; }
     let trail;
     try { trail = decodeTrail(item.payload); } catch { items.push(item); continue; }
-    let free;
-    try { free = proofFreeTrail(trail); } catch { continue; } // An undecodable record has no proof-free form.
-    items.push({ kind: 6, payload: PROOF_FREE_TRAILS.encodeTrail(free) });
-    const proved: { digest: bigint; kind: number; ok: boolean }[] = [];
+    // A record whose only defect is its proof field keeps its proof-free form (§3.3), so the read finds the length
+    // itself (§3.4 step 3); the trail ends before a record with no proof-free form, as its served prefix does.
+    const forms: Uint8Array[] = [], complete: Uint8Array[] = [];
     for (const recordBytes of trail.records) {
-      const record = decodeRecord(recordBytes);
-      if (record.proof.length > 0) proofs.set(hex(sha256(record.proof)), record.proof);
+      const split = splitRecord(recordBytes);
+      if (split === undefined) break;
+      forms.push(split.form); complete.push(recordBytes);
+      if (split.proof.length > 0) proofs.set(hex(sha256(split.proof)), split.proof);
+    }
+    items.push({ kind: 6, payload: PROOF_FREE_TRAILS.encodeTrail({ ...trail, records: forms }) });
+    const proved: { digest: bigint; kind: number; ok: boolean }[] = [];
+    for (const recordBytes of complete) {
+      let record;
+      try { record = decodeRecord(recordBytes); } catch { break; } // Covers stop at the first record that does not decode.
       if (!PROVED.has(record.kind)) continue;
       const free = proofFreeOf(record);
       proved.push({ digest: leafDigest(free), kind: record.kind, ok: await verify(record.kind, [...record.publicInputs], record.proof) === true });

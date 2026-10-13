@@ -24,7 +24,7 @@ import type { AcceptanceView, Construction, ReleaseView } from "./construction.j
 import type { SegmentHeader } from "./headers.js";
 import type { VenueReference } from "./guard.js";
 import { countNonService, type NonServiceCount } from "./non-service.js";
-import type { WalkEvidence } from "./evidence-store.js";
+import type { StoredTrail, WalkEvidence } from "./evidence-store.js";
 import { keptContext, keptStateHolds, lastValidOf, readRecordView, replayTrail, ReplayResult, type CarryingVerdict, type FaultObserver,
   type ReaderSelection, type RecordView, type ReplayContext, type ValidCheckpoint } from "./reader.js";
 import { receiptWalk, type ReceiptVerdict, type ReceiptWalk } from "./receipt-state.js";
@@ -32,7 +32,7 @@ import type { Record } from "./records.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay, UnestablishedTrail, type ClockRecord } from "./refusals.js";
 import { authenticatedScope, checkpointScope } from "./scope-evidence.js";
 import { KeptStateMismatch, type ImportEntry, type ReplayStore, type WalkBase, type WalkForce, type WalkVerdict } from "./replay-store.js";
-import { applyForceEffects, applyForceRecord, openForceState, type MergedImport } from "./state.js";
+import { applyForceEffects, applyForceRecord, openForceState, type Adopted, type MergedImport } from "./state.js";
 import type { RootTerms } from "./terms.js";
 
 export interface ImportContext extends ReplayContext {
@@ -785,6 +785,14 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const base: Classified = { commitment: c, index: held.index, segment, header, snapshot: named };
     let mine: Snapshot | undefined;
     const ownSnapshot = (): Snapshot => mine ??= same(first.name, backing) ? named : snapshotFor(entry.digest);
+    // A succinct read's served trail counts as served once its records' lengths are established, as the complete read's
+    // trail is served only where every record decodes (succinct-read §3.4 step 3): before any refusal grounded on it.
+    let adoptedBlock: readonly Adopted[] = [];
+    const servedTrail = async (): Promise<StoredTrail> => {
+      const trail = scope.fullTrail();
+      await construction.trailChecks?.served(trail, adoptedBlock, context.verifier);
+      return trail;
+    };
     try {
       // A header of another configuration or venue names no chain on this record, so no lapse reads it.
       requireReplay(same(header.domain, selection.domain) && same(header.venue, selection.venue), "CONTEXT");
@@ -844,7 +852,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         else if (baseKey(stored) !== baseKey(computed)) throw new KeptStateMismatch("a kept segment base");
         // The segment stands from here even if this opening's own evidence fails below:
         // a later valid checkpoint of it finalizes (C2.10.12).
-        requireReplay(scope.fullTrail().length === 0n, "OPENING");
+        requireReplay((await servedTrail()).length === 0n, "OPENING");
         openingValid = true;
       } else {
         const firstView = scopeViews.values().next().value!;
@@ -902,6 +910,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       // The segment's fixed imported base and block (C2.10.12): with an empty block a
       // continuation's replay identity is the opening's, so it resumes in that namespace.
       const { imported, block, openingIndex } = segmentBase;
+      if (!opening) adoptedBlock = block;
       // One carried snapshot authenticates the full scope for lapse even
       // when this directory omits a sibling. Complete carriage and matching
       // sibling snapshots are finalization conditions, checked after lapse.
@@ -951,7 +960,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       return { ...base, snapshot, state, scopedTerms, openingIndex, class: "valid" };
     } catch (error) {
       if (!(error instanceof ReplayRefusal)) throw error;
-      scope.fullTrail(); // Header-only faults are not exclusion certificates.
+      await servedTrail(); // Header-only faults are not exclusion certificates.
       return { ...base, class: "excluded", check: error.check };
     }
   };

@@ -28,6 +28,7 @@ import {
 import { effectOf, recoveryEffect, tagOf } from "./recovery.js";
 import { requireReplay } from "./refusals.js";
 import { POOL_V3_NAMESPACE, type Demand, type NamespaceConstruction } from "./replay-store.js";
+import type { StoredTrail } from "./evidence-store.js";
 import type { Adopted, ProofCheck, ReceiptEvent, ScanOutput, StateHandle, StateView, WitnessPredicate } from "./state.js";
 import { V3_TERMS, type RootTerms, type TermsCodec } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, V3_TRAILS, type TrailCodec } from "./trail.js";
@@ -108,14 +109,19 @@ export interface Construction<R = unknown> {
 }
 
 /** A succinct read's establishment (succinct-read §3.4 steps 2–3): before a trail's replay, and before a non-extension is
- * decided, the proof length of every record after `from` (`proved` records with a proof check before it), as the complete
+ * decided, the proof length of every record of `trail` after `from` (`proved` records with a proof check before it), as the complete
  * read's authentication establishes them, and each proof's check, from a cover or natively. A record whose bytes equal
  * the adopted publication at its position (`block`, proof-free forms) has its length from the bytes the reader holds.
  * Throws `UnestablishedTrail` where a proof is withheld or does not decode; returns the verifier the replay's statement
  * checks ask. */
 export interface TrailChecks {
-  establish(records: Iterable<Uint8Array>, from: bigint, proved: bigint, block: readonly Adopted[], verifier: ProofCheck): Promise<ProofCheck>;
+  establish(trail: ServedTrailOf, from: bigint, proved: bigint, block: readonly Adopted[], verifier: ProofCheck): Promise<ProofCheck>;
+  /** The whole served trail's lengths, as the complete read's authentication has them before any refusal it grounds on
+   * the trail's being served (a non-extension, an opening's records, a header-only refusal); once per trail. */
+  served(trail: ServedTrailOf, block: readonly Adopted[], verifier: ProofCheck): Promise<void>;
 }
+/** What establishment reads of a served trail. */
+export type ServedTrailOf = Pick<StoredTrail, "segment" | "length" | "evidence" | "records">;
 
 /** A note's public opening where openings are public (lit-v1 §2). */
 export interface KeyedOpening {

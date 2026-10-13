@@ -16,7 +16,7 @@ import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { SUCCINCT_TRAIL_CONTEXT, V3_SEGMENT_CONTEXT } from "../../contexts.js";
 import { bytesToField, fieldToBytes, limbsOf } from "../field.js";
 import { poseidon2Hash } from "../poseidon2.js";
-import { POOL_V3, v3View, type Construction, type PublicationView, type ReaderFrames, type RequestView, type TrailChecks } from "./construction.js";
+import { POOL_V3, v3View, type Construction, type PublicationView, type ReaderFrames, type RequestView, type ServedTrailOf, type TrailChecks } from "./construction.js";
 import {
   decodeProofFree, decodePublication, decodeRecord, encodeProofFree, proofFreeDigests, proofFreeOf, proofLengthHolds, statementHash,
   type ProofFreeRecord,
@@ -37,8 +37,8 @@ export const COVER_PROOF_BYTES = 14656;
 const PROVED = new Set([1, 2, 3, 4, 6]);
 /** Fetched proof bytes a trail's establishment holds for its replay; past it, replay fetches a proof again. */
 const HELD_BYTES = 64 << 20;
-/** Publications' proofs a read holds for their native checks (§3.6), most recent first; past it, they are fetched. */
-const HELD_PUBLICATIONS = 256;
+/** Pool-v3 §5's bound on a proof field: a supplier's longer answer is stopped unhashed, a withheld supply (§3.4 step 3). */
+const MAX_PROOF = 131072;
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
@@ -115,16 +115,10 @@ interface Established {
 }
 const ESTABLISHED = new WeakMap<ProofCheck, Established>();
 
-/** The bytes whose SHA-256 is `proofHash` from the supply, or undefined: a supplier's wrong bytes are no bytes. */
-async function fetchProof(supply: CheckSupply, proofHash: Uint8Array): Promise<Uint8Array | undefined> {
-  const answer: unknown = await supply.proof(copyBytes(proofHash));
-  if (!(answer instanceof Uint8Array)) return undefined;
-  const bytes = copyBytes(answer);
-  return same(sha256(bytes), proofHash) ? bytes : undefined;
-}
-
 /** A pool-v3 reader's construction over proof-free trails, under check set `set` with proofs and check proofs from
- * `supply`. One per read: it holds the read's publication proofs. */
+ * `supply`. It holds the proofs of every publication its reads decode (§3.6), by hash, for as long as it lives, as the
+ * reads hold those publications' bytes: a reader keeping an evidence store across reads passes the same construction
+ * (package-reader.ts), and its held proofs grow with the publications those reads take from the venue. */
 export function succinctPoolV3(options: { readonly set: CheckSet; readonly supply: CheckSupply }): Construction<ProofFreeRecord> {
   const { set, supply } = options;
   if (!(set.identity instanceof Uint8Array) || set.identity.length !== 32 || typeof set.verify !== "function" ||
@@ -134,14 +128,20 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
   const identity = copyBytes(set.identity), test = set.test === true;
   /** Publications' proofs by their hash (§3.6), so a publication's native check reads the bytes the reader holds. */
   const publications = new Map<string, Uint8Array>();
-  const hold = (proof: Uint8Array): void => {
-    const key = hex(sha256(proof));
-    publications.delete(key); publications.set(key, copyBytes(proof));
-    if (publications.size > HELD_PUBLICATIONS) publications.delete(publications.keys().next().value!);
+  const hold = (proof: Uint8Array): void => { publications.set(hex(sha256(proof)), copyBytes(proof)); };
+  /** The bytes whose SHA-256 is `proofHash`: a held publication's, else the supply's, or undefined. A supplier's answer
+   * past §5's bound is stopped unhashed and its wrong bytes are no bytes: either is a withheld supply. */
+  const fetchProof = async (proofHash: Uint8Array): Promise<Uint8Array | undefined> => {
+    const own = publications.get(hex(proofHash));
+    if (own !== undefined) return own;
+    const answer: unknown = await supply.proof(copyBytes(proofHash));
+    if (!(answer instanceof Uint8Array) || answer.length > MAX_PROOF) return undefined;
+    const bytes = copyBytes(answer);
+    return same(sha256(bytes), proofHash) ? bytes : undefined;
   };
   /** A proof the reader verifies natively when replay reaches its check: held, else fetched; withheld leaves the read unresolved. */
   const proofOf = async (record: ProofFreeRecord, held?: Uint8Array): Promise<Uint8Array> => {
-    const bytes = held ?? publications.get(hex(record.proofHash)) ?? await fetchProof(supply, record.proofHash);
+    const bytes = held ?? await fetchProof(record.proofHash);
     if (bytes === undefined || !proofLengthHolds(record.kind, bytes.length)) throw new UnestablishedTrail();
     return bytes;
   };
@@ -164,7 +164,8 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
   };
 
   const trailChecks: TrailChecks = {
-    async establish(records, from, proved, block, verifier) {
+    async establish(trail, from, proved, block, verifier) {
+      const records = trail.records(from);
       // Pass 1 (§3.4 steps 1–2): each proved record's digest, kind and proofHash; kind-7 proofs to fetch for their length.
       const digests: Uint8Array[] = [], hashes: Uint8Array[] = [], kinds: number[] = [], adopted: boolean[] = [], requests: Uint8Array[] = [];
       let position = from;
@@ -213,12 +214,12 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       let room = HELD_BYTES;
       for (let i = 0; i < m; i++) {
         if (covered[i] === 1 || adopted[i] === true) continue;
-        const bytes = await fetchProof(supply, hashes[i]!);
+        const bytes = await fetchProof(hashes[i]!);
         if (bytes === undefined || !proofLengthHolds(kinds[i] as 1, bytes.length)) throw new UnestablishedTrail();
         if (bytes.length <= room) { held.set(i, bytes); room -= bytes.length; }
       }
       for (const proofHash of requests) {
-        const bytes = await fetchProof(supply, proofHash);
+        const bytes = await fetchProof(proofHash);
         if (bytes === undefined || !proofLengthHolds(7, bytes.length)) throw new UnestablishedTrail();
       }
       const flat = (parts: readonly Uint8Array[]): Uint8Array => {
@@ -228,9 +229,17 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       };
       const replayCheck: ProofCheck = { verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) };
       ESTABLISHED.set(replayCheck, { digests: flat(digests), hashes: flat(hashes), kinds: Uint8Array.from(kinds), covered, held, cursor: 0 });
+      if (from === 0n) servedTrails.add(servedKey(trail));
       return replayCheck;
     },
+    async served(trail, block, verifier) {
+      if (!servedTrails.has(servedKey(trail))) await trailChecks.establish(trail, 0n, 0n, block, verifier);
+    },
   };
+  /** Trails whose every length this construction has established, each by its segment and its chain value at its length,
+   * which fixes every record (pool-v3 §7.1). */
+  const servedTrails = new Set<string>();
+  const servedKey = (trail: ServedTrailOf): string => `${hex(trail.segment)}:${trail.length}:${hex(trail.evidence(trail.length) ?? new Uint8Array())}`;
 
   const v3Reader = POOL_V3.reader;
   const reader: ReaderFrames = Object.freeze({
@@ -250,7 +259,8 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       if (record.kind !== 7) throw new EncodingError("not a request");
       const p = record.publicInputs, anchor = p[4]!;
       return { identity: hex(statementHash(record)), tag: p[5]!, reads: state => state.hasAnchor(anchor),
-        holds: async verifier => { try { return await native(verifier, record); } catch (error) { if (error instanceof UnestablishedTrail) return false; throw error; } } };
+        // A withheld request proof leaves the count unresolved, never "does not hold" (§2 rule 3).
+        holds: verifier => native(verifier, record) };
     },
   });
   return Object.freeze({

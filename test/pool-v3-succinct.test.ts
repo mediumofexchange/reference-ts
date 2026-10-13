@@ -16,7 +16,7 @@ import { segmentBytes, segmentIdentity, type SegmentHeader } from "../src/pool/v
 import { readPackage } from "../src/pool/v3/package-reader.js";
 import { encodeEvidenceDirectory, encodeEvidencePackage, type EvidenceItem } from "../src/pool/v3/package.js";
 import {
-  decodeProofFree, decodeRecord, deliveryHash, encodeProofFree, encodeRecord, evidenceHashes, hashEvidenceFields, proofFreeDigests, proofFreeOf,
+  decodeProofFree, decodeRecord, deliveryHash, encodeProofFree, encodePublication, encodeRecord, evidenceHashes, hashEvidenceFields, proofFreeDigests, proofFreeOf,
   statementBytes, statementHash, type ProofFreeRecord, type Record,
 } from "../src/pool/v3/records.js";
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
@@ -49,7 +49,7 @@ function oneBacking() {
   const signed = { terms, signature: ed25519.sign(rootTermsSignatureMessage(terms), issuerSecret) };
   const header: SegmentHeader = { domain, venue: venue.id, operator, sequence: 1n, entries: [{ backing: name, link: name }] };
   const id = segmentIdentity(header), scope = new ScopeTree(header.entries).root();
-  const state = openSegmentState(operatorStore, id, b(90));
+  const state = openSegmentState(operatorStore, id, b(90), undefined);
   const permissive = { verify: () => true, identities: configuration.circuits };
   const records: Uint8Array[] = [], free: Uint8Array[] = [], digests: ReturnType<typeof evidenceHashes>[] = [];
   const items: EvidenceItem[] = [], trails: Uint8Array[] = [], freeTrails: Uint8Array[] = [];
@@ -93,7 +93,7 @@ function oneBacking() {
   const selection = (c: ReturnType<typeof checkpoint>) => ({ mode: "current-fixture" as const, domain, venue: venue.id, backing: name, operator,
     sequence: c.commitment.sequence, root: c.commitment.root, judgingIndex: venue.witnessedIndex() });
   /** Each read's outcome: a refusal by status or check, or the valid state's position and supply. */
-  const outcome = async (read: Promise<{ state?: { position: bigint; issued: bigint } }>) => {
+  const outcome = async (read: Promise<{ readonly state?: { readonly position: bigint; readonly issued: bigint } | undefined }>) => {
     try { const r = await read; return { valid: r.state?.position, issued: r.state?.issued }; } catch (error) {
       if (error instanceof ReplayRefusal) return { check: error.check };
       if (error instanceof EvidenceRefusal) return { status: error.status };
@@ -161,7 +161,7 @@ describe("succinct reading: the proof-free form and digests (succinct-read §§3
     // Kind 1 with the zero sentinel, a changed capsule (delivery association) and a trailing byte do not decode.
     const zero = { ...proofFreeOf(record), proofHash: new Uint8Array(32) };
     expect(() => encodeProofFree(zero)).toThrow("wrong proof digest sentinel");
-    const altered = Uint8Array.from(form); altered[form.length - 1] ^= 1;
+    const altered = Uint8Array.from(form); altered[form.length - 1] = altered[form.length - 1]! ^ 1;
     expect(() => decodeProofFree(altered)).toThrow();
     expect(() => decodeProofFree(Uint8Array.of(...form, 0))).toThrow();
   });
@@ -289,5 +289,53 @@ describe("succinct reading against the complete read (succinct-read §§2–3)",
     expect(await f.succinct(forked, supplyOf(records))).toEqual({ check: "CONTINUITY" });
     const otherProof = (proof: Uint8Array) => compareBytes(sha256(proof), sha256(other.proof)) === 0;
     expect(await f.succinct(forked, supplyOf(records, { withhold: otherProof }))).toEqual({ status: "unresolved-evidence" });
+  });
+
+  it("establishes a served trail before a header-only refusal: an opening's undecodable proof is unresolved, not OPENING (review)", async () => {
+    const f = oneBacking();
+    const record = f.issueRecord(6n, 102n, proofOf(1)), proof = proofOf(1, 33);
+    const w = new ByteWriter();
+    w.context(statementBytes(record)); w.lengthPrefixed(proof); w.lengthPrefixed(record.authorization);
+    w.u32(1); w.fixed(record.capsules[0]!, 89, "capsule");
+    f.commitRaw(w.finish(), encodeProofFree({ ...proofFreeOf(record), proofHash: sha256(proof) }),
+      hashEvidenceFields(statementHash(record), proof, record.authorization));
+    const c = f.checkpoint(1n, 1n), supply = supplyOf(c.trail.records, { cover: honest });
+    supply.add(proof);
+    expect(await f.complete(c)).toEqual({ status: "unresolved-evidence" });
+    expect(await f.succinct(c, supply)).toEqual({ status: "unresolved-evidence" });
+    // The same opening with a decodable proof is excluded by both.
+    const g = oneBacking(), good = g.issueRecord(6n, 102n, proofOf(1));
+    g.commitRaw(encodeRecord(good), encodeProofFree(proofFreeOf(good)), evidenceHashes(good));
+    const d = g.checkpoint(1n, 1n);
+    expect(await g.complete(d)).toEqual({ check: "OPENING" });
+    expect(await g.succinct(d, supplyOf(d.trail.records))).toEqual({ check: "OPENING" });
+  });
+
+  it("numbers a resumed checkpoint's proved records from the kept ones, asking only the canonical spans", async () => {
+    const f = oneBacking();
+    f.checkpoint(1n, 1n);
+    for (let i = 0; i < 3; i++) await f.issue(BigInt(i + 1), BigInt(100 + i));
+    f.checkpoint(2n, 3n);
+    for (let i = 3; i < 5; i++) await f.issue(BigInt(i + 1), BigInt(100 + i));
+    const c = f.checkpoint(3n, 5n), supply = supplyOf(c.trail.records, { cover: honest });
+    expect(await f.succinct(c, supply)).toEqual({ valid: 5n, issued: 15n });
+    // Records 0–2 as spans (1, 0) and (0, 2); records 3 and 4, after the kept three, as (0, 3) and (0, 4).
+    expect(supply.asked).toEqual({ covers: 4, proofs: 0 });
+  });
+});
+
+describe("succinct reading: publications (succinct-read §3.6)", () => {
+  it("holds every publication's proof for its native check, and leaves a withheld request proof unresolved, never false", async () => {
+    const segment = b(9);
+    const requestOf = (i: number): Record => ({ domain, kind: 7, publicInputs: [...limbsOf(domain), ...limbsOf(segment), 1n, BigInt(i + 2), 3n],
+      proof: (() => { const p = proofOf(7, 64); p[1] = i & 255; p[2] = i >> 8; return p; })(), authorization: new Uint8Array(), capsules: [] });
+    const publication = (r: Record) => encodePublication({ domain, backing: segment, kind: 5, record: r });
+    const construction = succinctPoolV3({ set: SET, supply: { cover: () => undefined, proof: () => undefined } });
+    const first = construction.reader.publication(publication(requestOf(0)));
+    for (let i = 1; i <= 300; i++) construction.reader.publication(publication(requestOf(i)));
+    expect(await construction.reader.request(first.record!).holds(verifier)).toBe(true);
+    // A request read only in its proof-free form, whose proof no supplier gives: unresolved.
+    const unseen = encodeProofFree(proofFreeOf(requestOf(400)));
+    await expect(construction.reader.request(unseen).holds(verifier)).rejects.toMatchObject({ status: "unresolved-evidence" });
   });
 });
