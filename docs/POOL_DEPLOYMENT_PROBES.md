@@ -1202,6 +1202,36 @@ proved alone); bb's in-circuit range and on-curve constraints not read from sour
 agreement with the host is shown on these 14 proofs on pinned leaves, not proved; phone rates are a desktop proxy; the replay's venue answers are in-memory fixtures; no aggregator, frame or reader integration
 exists (step 4).
 
+## The trail check set (slice 36)
+
+Measured 2026-10-13 in CI's real-proof group `check-set` ([report](pool-v3-check-set-verification.json), Ubuntu; the
+Windows run's in the same CI artifact; [decision](../decisions/2026-10.md#2026-10-13--prove-the-trail-check-sets-six-circuits-on-the-pinned-webassembly-backend-verify-covers-under-pinned-keys-and-take-native-proving-as-the-aggregators-lever-slice-36-next-12)).
+Succinct-read §3.2's six circuits in production form, proved on the pinned backend as the package runs it
+(WebAssembly, four threads, 4-vCPU runners with 16 GiB), over one genuine statement proof of each proved kind.
+
+| Circuit | Gates | Key derivation | Proof (Ubuntu, Xeon Platinum 8573C) | Proof (Windows, EPYC 9V45) | Process peak |
+|---|---:|---:|---:|---:|---:|
+| Each trail leaf (five) | 1,652,294–1,652,634 | 23–24 s | 84.5–87.0 s | 50.9–59.7 s | 3,383–4,030 MiB |
+| Trail node | 1,469,828 | 17.5 s | 70.1–70.3 s | 42.2–42.6 s | 2,435–3,431 MiB |
+
+*Against the aggregation probe* ([slice 33](#the-trails-proof-aggregation-slice-33), bb's native binary on a 4-vCPU
+Xeon at 2.10 GHz, leaves 32.4–34.9 s, node 24.8–29.4 s): WebAssembly proves 1.6 to 2.6 times slower, by runner. A
+statement costs a leaf and about one node, 94–155 s, so the design point's mean of 900 a day takes one 4-vCPU
+WebAssembly prover 23–39 hours, short of keeping up alone; the native binary, at the probe's rates, kept up 1.6 times.
+The word-wise `proofHash` cut each leaf from the probe's 1,832,727 gates (spend) to 1,652,618, and its bytecode from 2.7
+MB to 533 KB of base64.
+
+*In the recovery check* (one thread before the review, all four after), a real trail's covers for two issues (two
+leaves and a node) took 249.9 s and for its settlement (a leaf) 87.7 s, on the Ubuntu runner; the succinct read
+answered and verified exactly those two covers and fetched only the two demands' proofs.
+
+*Memory:* a hostile attempt proves on an instance of its own beside the main one, so its process peaks (4,182–6,008 MiB) count
+two instances; one instance proving a leaf peaks at 3,383–4,030 MiB of the whole process, under WebAssembly's 4 GiB per instance with the
+verifier lanes and Node beside it.
+
+**Limits.** One run on each system, runners differing 1.7 times; no native or phone measurement here; one genuine
+proof per kind.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the
