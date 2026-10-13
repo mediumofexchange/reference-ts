@@ -451,6 +451,12 @@ describe("single-backing compact fault packages", () => {
       // The same fault set over the same retained evidence: what was classified stands, and no proof is checked again.
       const again = await read([f.fault]);
       expect([again.checks, again.carrying]).toEqual([0, first.carrying]);
+      // A kept walk that excluded a checkpoint by its fault never stands in for that checkpoint's own trail when a read
+      // selects it: it is judged again, and refuses as a fresh read does.
+      const hostile = pack([...f.compactItems, { kind: 7, payload: f.fault }, { kind: 1, payload: configurationBytes(configuration) },
+        { kind: 2, payload: encodeCommitment(f.hostile) }]);
+      await expect(readPackage(hostile, f.f.selection(f.hostile), { ...f.f.options, verifier: counting() as DeclaredVerifier, store, evidence }))
+        .rejects.toMatchObject({ status: "unresolved-evidence" });
       // Another set (a junk fault beside it) begins again and classifies as a fresh read does.
       const other = await read([f.fault, junk]);
       expect([other.checks > 0, other.carrying, other.excludedBy]).toEqual([true, first.carrying, first.excludedBy]);

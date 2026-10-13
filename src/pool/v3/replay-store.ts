@@ -1463,8 +1463,8 @@ export class ReplayStore {
     }
     if (this.#kept !== undefined) this.#recordDigest();
   }
-  /** Mark every kept walk read from the retained evidence `evidence` with `mark`: a point its lineage reached after those
-   * walks had read (a preparation beside the evidence's owner, whose batches stand at the owner's last row, marks its walk
+  /** Mark every kept walk read from the retained evidence `evidence` with `mark`, whatever fault set named it beside that
+   * evidence (`scopeWalk`): a point its lineage reached after those walks had read (a preparation beside the evidence's owner, whose batches stand at the owner's last row, marks its walk
    * once it has read, Next 4 (bg)), so the evidence restored to before it no longer resumes them. Outside a walk. */
   remark(evidence: Uint8Array, mark: Uint8Array): void {
     if (this.#db.isTransaction) throw new Error("a walk or transaction is open on this store");
@@ -1472,7 +1472,7 @@ export class ReplayStore {
       if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
       throw error;
     }
-    try { this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE evidence = ?").run(mark, evidence); this.#db.exec("COMMIT"); } catch (error) {
+    try { this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE substr(evidence, 1, ?) = ?").run(mark, evidence.length, evidence); this.#db.exec("COMMIT"); } catch (error) {
       this.#rollback();
       throw error;
     }
