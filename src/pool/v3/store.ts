@@ -73,6 +73,7 @@ import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
 import { keptAnswers, keptContext, keptStateHolds, storedTipHolds, type KeptAnswers, type SignedTerms } from "./reader.js";
+import type { FaultResult } from "./fault-observer.js";
 import { ownVerifier, readFrontier, readPackage } from "./package-reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
@@ -83,8 +84,9 @@ import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, 
 import type { RootTerms } from "./terms.js";
 
 /** The database's layout and the meaning of its rows. `/10`: a taken directory or snapshot is named only where kept, so
- * an earlier journal, which may name one never kept, refuses to open (journal audit). */
-const PROFILE = "pool-store/v3/10";
+ * an earlier journal, which may name one never kept, refuses to open (journal audit). `/11`: the §9 faults a takeover
+ * read are kept and carried in each later read's own package (Next 4 (bk)). */
+const PROFILE = "pool-store/v3/11";
 /** Signed rows read at a time while serving. */
 const SERVE_PAGE = 256n;
 const U64 = 1n << 64n;
@@ -93,6 +95,9 @@ const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0
 const bytes = (value: unknown): Uint8Array => new Uint8Array(value as Uint8Array);
 const hexOf = (c: Commitment | undefined): string | null => (c === undefined ? null : bytesToHex(encodeCommitment(c)));
 const copyCommitment = (c: Commitment): Commitment => decodeCommitment(encodeCommitment(c));
+/** §9 faults as kind-7 package items in §12 order, by the hash of each payload. */
+const faultItems = (payloads: readonly Uint8Array[]): { kind: 7; payload: Uint8Array }[] =>
+  payloads.map(payload => ({ hash: sha256(payload), payload })).sort((a, b) => compareBytes(a.hash, b.hash)).map(({ payload }) => ({ kind: 7, payload }));
 /** The replay identity a segment's admission state is kept under: the journal's own, never a reader's. */
 const admissionIdentity = (segment: Uint8Array): Uint8Array => sha256(concatBytes(utf8ToBytes("v3-journal-admission"), segment));
 /** The identity an imported segment's copied prefix is kept under. */
@@ -417,6 +422,7 @@ export class V3OperatorJournal {
         CREATE TABLE IF NOT EXISTS journal_receipt (statement BLOB PRIMARY KEY, receipt BLOB NOT NULL) STRICT, WITHOUT ROWID;
         CREATE INDEX IF NOT EXISTS journal_signed_segment ON journal_signed(segment, sequence);
         CREATE TABLE IF NOT EXISTS journal_taken (sequence INTEGER NOT NULL, kind INTEGER NOT NULL, hash BLOB NOT NULL, PRIMARY KEY(sequence, kind, hash)) STRICT, WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS journal_fault (hash BLOB PRIMARY KEY, sequence INTEGER NOT NULL, payload BLOB NOT NULL) STRICT, WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS journal_conflict (id INTEGER PRIMARY KEY CHECK(id=1), idx TEXT NOT NULL, record BLOB NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS journal_file (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS journal_restored (id INTEGER PRIMARY KEY CHECK(id=1), idx TEXT NOT NULL,
@@ -916,9 +922,10 @@ export class V3OperatorJournal {
    * that signs the opening: a refused scope change keeps none of it. */
   private async planRescope(engine: Engine, spec: OwnRescope, at: bigint, target: ReturnType<V3OperatorJournal["rescopeTarget"]>):
     Promise<{ readonly opened: Opened; readonly imported: ImportSource | undefined; readonly evidence: Uint8Array | undefined;
-      readonly taken: readonly (readonly [number, Uint8Array])[] }> {
+      readonly taken: readonly (readonly [number, Uint8Array])[]; readonly faults: readonly Uint8Array[] }> {
     const openings = new Map<string, CanonicalCheckpoint | undefined>(), taken: [number, Uint8Array][] = [];
-    let evidence = spec.evidence;
+    let evidence = spec.evidence, reading = spec.evidence, offered: Uint8Array[] = [];
+    const used = new Set<string>();
     const supplied = new EvidenceStore(":memory:", { construction: this.construction });
     try {
     const unestablished = (error: unknown): never => {
@@ -932,13 +939,18 @@ export class V3OperatorJournal {
     };
     if (target.taken.length > 0) {
       // Only what the journal keeps and serves from now on is read from the supplied package: directories, snapshots
-      // and trails. A §9.1 fault is none of it (a read takes one from its own package alone), so a takeover whose
-      // opening needs one refuses here, before it signs an opening that neither it nor its readers could read again
-      // (C2.7.4, audit of the journal).
+      // and trails, which join its evidence, and §9 faults (kind 7). A fault is one read's own item (§9.1), so those
+      // this read authenticates are kept apart and carried in each later read's own package (`ownPackage`), beside the
+      // ones earlier takeovers kept: the read takes them all, so what the journal keeps stays within one read's fault
+      // budget, and an opening it signs is one it and its readers can read again (C2.7.4, Next 4 (bk)).
       try {
-        const provided = this.frames.package.decodeEvidencePackage(spec.evidence).filter(item => [3, 4, 6].includes(item.kind));
+        const decoded = this.frames.package.decodeEvidencePackage(spec.evidence);
+        const provided = decoded.filter(item => [3, 4, 6].includes(item.kind)), kept = this.keptFaults();
         for (const item of provided) taken.push([item.kind, sha256(item.payload)]);
         evidence = this.frames.package.encodeEvidencePackage(provided);
+        const keptIds = new Set(kept.map(payload => bytesToHex(sha256(payload))));
+        offered = decoded.filter(item => item.kind === 7 && !keptIds.has(bytesToHex(sha256(item.payload)))).map(item => item.payload);
+        reading = this.frames.package.encodeEvidencePackage([...provided, ...faultItems([...kept, ...offered])]);
       } catch (error) { unestablished(error); }
     }
     // A journal with history reads its own checkpoints beside the public evidence: a taken term may follow,
@@ -951,8 +963,9 @@ export class V3OperatorJournal {
       }
     }
     for (const entry of target.taken) {
-      let source: FrontierResult;
-      try { source = await this.whileReading(() => readFrontier(evidence, entry.signed, at, this.readerOptions(undefined, supplied))); } catch (error) { return unestablished(error); }
+      let source: FrontierResult & FaultResult;
+      try { source = await this.whileReading(() => readFrontier(reading, entry.signed, at, this.readerOptions(undefined, supplied))); } catch (error) { return unestablished(error); }
+      for (const fact of source.faultEvidence ?? []) used.add(fact.evidence);
       const current = source.ranges.chain.at(-1)!;
       requireThat(same(current.link, target.links.get(bytesToHex(entry.backing))!.link), "STALE", "the replacement chain changed during takeover");
       requireThat(source.canonical === undefined || source.canonical.index < current.from, "STALE", "the current successor term already has a carrying checkpoint");
@@ -971,8 +984,20 @@ export class V3OperatorJournal {
       return canonical === undefined ? entry : { ...entry, opening: { operator: copyBytes(canonical.commitment.operator),
         sequence: canonical.commitment.sequence, root: copyBytes(canonical.commitment.root) } };
     }) };
-    return { opened: openedOf(this.frames, header, target.opened.entries), imported, taken, evidence: target.taken.length > 0 ? evidence : undefined };
+    // A fault no read authenticated against a checkpoint it walked is kept nowhere: a supplier's junk costs later readers nothing.
+    const faults = offered.filter(payload => used.has(bytesToHex(sha256(payload))));
+    return { opened: openedOf(this.frames, header, target.opened.entries), imported, taken, faults, evidence: target.taken.length > 0 ? evidence : undefined };
     } finally { supplied.close(); }
+  }
+  /** The §9 faults earlier takeovers kept, each checked against the hash it is kept under. */
+  private keptFaults(through?: bigint): Uint8Array[] {
+    const rows = through === undefined ? this.db.prepare("SELECT hash, payload FROM journal_fault ORDER BY hash").all() :
+      this.db.prepare("SELECT hash, payload FROM journal_fault WHERE sequence<=? ORDER BY hash").all(through);
+    return rows.map(row => {
+      const payload = bytes(row.payload);
+      requireThat(same(sha256(payload), bytes(row.hash)), "STORAGE", "a kept fault is damaged");
+      return payload;
+    });
   }
   /** An opening's import: the one parent's state, or the parents' merged finalized prefixes (C2.10.6). */
   private openingImports(parents: readonly CanonicalCheckpoint[]): ImportSource | undefined {
@@ -1232,10 +1257,11 @@ export class V3OperatorJournal {
     throw new V3StoreError("UNAVAILABLE", "no canonical witnessed checkpoint is available", carried ? undefined : "UNCARRIED");
   }
 
-  /** A read's own §12 package: the configuration and the selected commitment, in the construction's frame. */
+  /** A read's own §12 package, in the construction's frame: the configuration, the selected commitment and the §9 faults
+   * the takeovers through it kept (§9.1: a read takes faults from its own package alone). */
   private ownPackage(commitment: Commitment): Uint8Array {
     return this.frames.package.encodeEvidencePackage([{ kind: 1, payload: this.construction.journal.configuration() },
-      { kind: 2, payload: encodeCommitment(commitment) }]);
+      { kind: 2, payload: encodeCommitment(commitment) }, ...faultItems(this.keptFaults(commitment.sequence))]);
   }
 
   private serviceClock(source: StateRead, now: bigint): void {
@@ -1451,6 +1477,9 @@ export class V3OperatorJournal {
         for (const [kind, hash] of plan.taken) {
           if (kind === 6 || this.retained.object(kind as 3 | 4, hash) !== undefined) taken.run(next.signed.commitment.sequence, kind, hash);
         }
+        // The faults its read authenticated travel in every read's own package from this opening on.
+        const fault = this.db.prepare("INSERT OR IGNORE INTO journal_fault VALUES(?,?,?)");
+        for (const payload of plan.faults) fault.run(sha256(payload), next.signed.commitment.sequence, copyBytes(payload));
         this.append(engine, commandId, request, { kind: "rescope", take: texts, keep: names, evidence: named, at: at.toString(), observed },
           bytesToHex(encodeCommitment(next.signed.commitment)));
         return next;

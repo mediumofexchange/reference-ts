@@ -73,7 +73,9 @@ the request names it. The journal then serves, from its rows:
 
 The client checks the pinned context and that the read's own package carries
 the named commitment under the expected operator's signature, so a sequence
-it records is one that operator signed. It keeps each part as it arrives.
+it records is one that operator signed. Beside the configuration and that
+commitment, the own package may carry only §9 faults, within one read's fault
+budget (32 items, 1 MiB); anything else is the source's malformed answer. It keeps each part as it arrives.
 A stated position authenticates nothing: the store looks it up in its own
 rows and continues its own evidence recurrence. Where the parts do not
 assemble over what the store holds, or leave out the selection's directory, a
@@ -84,7 +86,7 @@ out an earlier dependency (an opening's directory, what an opening took) still
 moves the mark, and only `full` repairs it (WORK.md Next 4 (au)). `{ full: true }` asks from nothing outright, which a reader uses
 when a read over its kept evidence is unresolved: a resupplied copy replaces
 an object that storage damaged. The result is the selection and the read's
-own package (the configuration and the selected commitment), to pass to
+own package (the configuration, the selected commitment and any faults), to pass to
 `readPackage` with that store.
 
 `package(backing)` collects the same stream, served from nothing, into one
@@ -111,7 +113,7 @@ request. See the [receiver obligations](POOL_V3_WALLET.md) and
 `NOT_FOUND`, a credential sent anyway is ignored, and the listener keeps the operator's bounds (loopback peers, sixteen
 connections, eight streams, the minimum rate). Its source is a `V3Replica` (`replica.ts`) over a reader's evidence
 file opened `shared` (WAL), which `moe reader serve` runs ([M12b](../decisions/2026-10.md#2026-10-07--serve-kept-verified-evidence-from-a-replica-with-no-credential-and-keep-the-operators-credential-service-wide-slice-12-m12b)). A replica signs and admits nothing. For each
-backing it serves the operator's selection that its own read found canonical, with that read's own package, and after a
+backing it serves the operator's selection that its own read found canonical, with that read's own package (faults included), and after a
 sequence it served before, what its file kept since: the file indexes what it takes per operator and assigns it to the
 next selection the replica serves above every earlier one, so no supplier's statement places anything, and every trail
 top no other served top reaches goes, so a longer fork never displaces the trail the read used. A reader's mark for a replica is that
@@ -177,6 +179,14 @@ A return or scope-change opening serves nothing until `adopt` takes its block.
 One witnessed but not adopted before its own silence boundary, or before another
 scoped backing's term ends, is left by a return from it or by a `rescope` that
 keeps its live backings; the new segment's block reaches back through both gaps.
+A takeover past a checkpoint that only a §9 fault excludes, its trail withheld
+(pool-v3 §9.1), keeps the faults its read authenticated against a checkpoint it
+walked, and carries them in the own package of every later read of its selections:
+its own reads and `audit`, and every reader and replica it serves. A supplied
+fault that authenticates against nothing is not kept. What a journal keeps stays within one
+read's fault budget, its earlier takeovers' faults included: past it a takeover refuses
+`REFUSED` (`RESOURCE`) before it signs
+([decision](../decisions/2026-10.md#2026-10-13--keep-the-faults-a-takeover-read-and-serve-them-in-each-reads-own-package-next-4-bk)).
 Operation failures expose bounded codes rather than internal error text.
 
 ## Upgrading the operator

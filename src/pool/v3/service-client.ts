@@ -3,6 +3,7 @@ import { compareBytes, copyUnshared, EncodingError } from "../../bytes.js";
 import { decodeCommitment, verifyCommitment, type Commitment } from "../../venue-records.js";
 import { POOL_V3, type Construction, type OperatorReceipt } from "./construction.js";
 import { EVIDENCE_QUOTA, wholePackage, type EvidenceStore } from "./evidence-store.js";
+import { FAULT_LIMITS } from "./fault-observer.js";
 import { referenceVenue, type VenueReference } from "./guard.js";
 import { PackageLimitError } from "./package.js";
 import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, servedTooSlow, V3_SERVICE_PROFILE,
@@ -281,12 +282,19 @@ export class V3ServiceClient {
         if (!same(s.domain, this.#domain) || !same(s.operator, this.#operator) || !same(s.venue, this.#venue) || !same(s.backing, backing)) {
           throw new EncodingError("wrong service package context");
         }
-        // The read's own package is the configuration and the commitment alone: whatever else a source put in it would be
-        // read once and never kept, so a replica serving it on would leave its own readers short (M12b).
+        // The read's own package is the configuration, the commitment and the §9 faults the read takes (§9.1: a read takes
+        // them from its own package alone), within one read's fault budget: whatever else a source put in it would be read
+        // once and never kept, so a replica serving it on would leave its own readers short (M12b, Next 4 (bk)).
         // Its one configuration is the construction's: another (or two) would refuse the read itself, which no other source
         // could then repair, so it is the source's malformed answer here, passed over like any other (audit 32).
         const own = this.#construction.reader.package.decodeEvidencePackage(served.package);
-        if (!own.every(item => item.kind === 1 || item.kind === 2)) throw new EncodingError("the read's own package carries more than its configuration and commitment");
+        if (!own.every(item => item.kind === 1 || item.kind === 2 || item.kind === 7)) {
+          throw new EncodingError("the read's own package carries more than its configuration, commitment and faults");
+        }
+        const faults = own.filter(item => item.kind === 7);
+        if (BigInt(faults.length) > FAULT_LIMITS.maxItems || faults.reduce((n, item) => n + BigInt(item.payload.length), 0n) > FAULT_LIMITS.maxBytes) {
+          throw new EncodingError("the read's own package carries more faults than a read takes");
+        }
         const configurations = own.filter(item => item.kind === 1);
         if (configurations.length !== 1 || !this.#construction.reader.verifyConfiguration(configurations[0]!.payload)) {
           throw new EncodingError("the read's own package names another configuration");
