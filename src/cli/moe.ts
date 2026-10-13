@@ -7,9 +7,7 @@
 // exits 2; anything else exits 3 with its stack alone, as unexpected failures
 // stay visible. Role modules load on demand, so a reader process loads no
 // prover.
-import { EncodingError } from "../bytes.js";
-import { VenueError } from "../venue-error.js";
-import { CommandError, print, Replayed, UsageError } from "./common.js";
+import { print, refusalOf, Replayed, UsageError } from "./common.js";
 
 const USAGE = `usage: moe <role> <command> --dir <directory> ...
 roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show, service add, request, pay, freshen,
@@ -24,30 +22,10 @@ serve --onion <v3 host> [--holder-port <p>] adds a holders' listener for a Tor o
 reaches an onion URL only with NODE_USE_ENV_PROXY=1 and HTTP_PROXY naming a loopback HTTP CONNECT proxy (Tor's HTTPTunnelPort).
 relay serve [--onion <v3 host>] serves a relay to holders and writes relay.json; relay send <file> --to <relay.json> hands it a file.`;
 
-/** The fields a refusal prints, or undefined for an unexpected failure. */
-async function refusal(error: unknown): Promise<{ code: string; check?: string; message: string } | undefined> {
-  if (!(error instanceof Error)) return undefined;
-  const [{ V3StoreError }, { V3ServiceClientError }, { ReferenceVenueError }, { ProgramError }, { ParameterError }, { EvidenceRefusal, ReplayRefusal },
-    { V3WalletError }] =
-    await Promise.all([import("../pool/v3/store.js"), import("../pool/v3/service-client.js"), import("../pool/v3/guard.js"),
-      import("../pool/v3/programs.js"), import("../pool/proof-verifier.js"), import("../pool/v3/refusals.js"), import("../pool/v3/wallet-store.js")]);
-  const coded = error as Error & { code?: string; check?: string };
-  if (error instanceof CommandError || error instanceof V3StoreError || error instanceof ProgramError || error instanceof ParameterError ||
-      error instanceof V3WalletError) {
-    return { code: coded.code!, ...(coded.check === undefined ? {} : { check: coded.check }), message: error.message };
-  }
-  if (error instanceof V3ServiceClientError) return { code: error.code, check: String(error.status), message: error.message };
-  if (error instanceof ReplayRefusal) return { code: "REFUSED", check: error.check, message: error.message };
-  if (error instanceof EvidenceRefusal) return { code: "UNRESOLVED", check: error.status, message: error.message };
-  if (error instanceof ReferenceVenueError) return { code: "REFERENCE", message: error.message };
-  if (error instanceof VenueError) return { code: "VENUE", message: error.message };
-  if (error instanceof EncodingError) return { code: "INVALID", message: error.message };
-  return undefined;
-}
-
 export async function main(argv: readonly string[]): Promise<number> {
-  // stdout carries the command's one JSON object: what a library logs (bb.js reports each proof it makes) goes to stderr.
-  console.log = console.info = (...parts: unknown[]) => console.error(...parts);
+  // stdout carries the command's one JSON object: what a library logs (bb.js reports each proof it makes, acvm_js's
+  // debug level writes through console.debug) goes to stderr.
+  console.log = console.info = console.debug = (...parts: unknown[]) => console.error(...parts);
   const [role, ...rest] = argv;
   try {
     if (role === "reader") await (await import("./reader.js")).reader(rest);
@@ -60,7 +38,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   } catch (error) {
     if (error instanceof UsageError) { process.stderr.write(`${error.message}\n`); return 2; }
     if (error instanceof Replayed) { print(error.value); return 4; }
-    const refused = await refusal(error).catch(() => undefined);
+    const refused = await refusalOf(error).catch(() => undefined);
     if (refused !== undefined) { process.stderr.write(`${JSON.stringify(refused)}\n`); return 1; }
     process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
     return 3;

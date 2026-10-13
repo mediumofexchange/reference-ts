@@ -21,43 +21,43 @@
       "name": "A issue x 10",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 1109
+      "elapsedMs": 773
     },
     {
       "name": "A issue y 20",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 858
+      "elapsedMs": 588
     },
     {
       "name": "B x spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2660
+      "elapsedMs": 1696
     },
     {
       "name": "A y spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2638
+      "elapsedMs": 1643
     },
     {
       "name": "A issue y 5 to the wallet before rejoin",
       "kind": 1,
       "bytes": 14656,
-      "elapsedMs": 850
+      "elapsedMs": 565
     },
     {
       "name": "A joined mixed spend",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2641
+      "elapsedMs": 1678
     },
     {
       "name": "wallet y spend in joined scope",
       "kind": 2,
       "bytes": 14656,
-      "elapsedMs": 2637
+      "elapsedMs": 1659
     }
   ],
   "transactions": [
@@ -110,8 +110,8 @@
       "issued": "10",
       "burned": "0",
       "position": "2",
-      "spentRoot": "a369b3ff03b02047b7b0a1a740af3a1cdb8f40e4dd8355a7ff59347b22516a0d",
-      "history": "537b068a1a623c4507debaddaa7bc0ee3a41894df8d9fee9fa4eb4fbb2dacfdb",
+      "spentRoot": "ba6b1ca462177ac45b9b8314c551bcbd0ce6b9ddb55eb2e87a0fc0efa89dee6f",
+      "history": "a091bb0a3b4f1cc4c8f507c1cc29160d68f68ac102c4a5ff3f7a901eab8aa96a",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -166,8 +166,8 @@
       "issued": "25",
       "burned": "0",
       "position": "2",
-      "spentRoot": "a369b3ff03b02047b7b0a1a740af3a1cdb8f40e4dd8355a7ff59347b22516a0d",
-      "history": "537b068a1a623c4507debaddaa7bc0ee3a41894df8d9fee9fa4eb4fbb2dacfdb",
+      "spentRoot": "ba6b1ca462177ac45b9b8314c551bcbd0ce6b9ddb55eb2e87a0fc0efa89dee6f",
+      "history": "a091bb0a3b4f1cc4c8f507c1cc29160d68f68ac102c4a5ff3f7a901eab8aa96a",
       "canonical": {
         "operator": "5c9c6df261c9cb840475776aaefcd944b405328fab28f9b3a95ef40490d3de84",
         "sequence": "8",
@@ -225,7 +225,7 @@
       ]
     }
   },
-  "elapsedMs": 33101,
+  "elapsedMs": 21366,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",

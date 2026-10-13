@@ -603,12 +603,19 @@ syncs that source again from nothing and reads again; where that read is still u
 as `UNRESOLVED` and the next is asked from nothing, so a source that sent its selection but withheld an earlier
 dependency cannot strand the wallet past its mark; each source is asked from nothing at most once per rising selection it serves,
 recorded per backing in `unresolved.json` (removing it asks every source from nothing again, the remedy the refusal names
-for a backing whose selection no longer moves or a file damaged since) ([decision](../decisions/2026-10.md#2026-10-07--repair-a-read-a-source-left-unresolved-from-nothing-then-from-the-next-source-slice-13-m13b-audit-30-au)). `reader supply`, `presentation` and a replica's rounds read the same way. Each read says where its evidence came from (`evidence`:
+for a backing whose selection no longer moves or a file damaged since) ([decision](../decisions/2026-10.md#2026-10-07--repair-a-read-a-source-left-unresolved-from-nothing-then-from-the-next-source-slice-13-m13b-audit-30-au)).
+Any other refusal of a read over a source's answer (a refused record, a lapsed selection) passes that source over at
+once (`REFUSED` or `UNRESOLVED`), since a source can withhold but never forge a read that resolves; the refusal stands
+only where no source resolves. The package a read falls back on is kept only once a read over it resolved
+([audit 32](../decisions/2026-10.md#2026-10-13--pass-a-read-over-to-the-next-source-on-any-refusal-of-its-answer-and-name-the-commands-file-url-and-budget-refusals-audit-32)). `reader supply`, `presentation` and a replica's rounds read the same way. Each read says where its evidence came from (`evidence`:
 `served`, `replica` with its URL, `kept`, `file` or `saved`) and names the sources it passed over (`skipped`). The first request or payment shows the request
 channel, thin-interval and publication-funding explanations; each demand and `freshen` says what its tags link, and each
 publication file what its relay's funding links.
 Output, refusals and exit codes follow the M10b decision (one JSON object on stdout; refusals exit 1, usage 2,
-unexpected failures 3 with their stack).
+unexpected failures 3 with their stack). Evidence past a reader's budget refuses `UNRESOLVED` (`resource-refusal`); a
+handed file past its bound, a directory or one without access is a named refusal; an `init` or `restore-seed` that did
+not finish refuses `INCOMPLETE` on rerun (`BUSY` while it still runs; remove its directory and run it again: nothing it
+made was shown or used).
 
 A directory serves one construction, declared at `init --construction` and kept in config.json: `moe/pool/v3` by
 default (and for any directory made before the flag), or `moe/lit/v1`, the adopted lit notes
@@ -673,8 +680,9 @@ once listening, one per backing whose served sequence moved or whose read was no
 round's refusal is a `refused` event on stderr. It holds the directory's lock while it runs, so terms and replicas are
 added with it stopped. A holder or reader keeps replicas with `replica add <backing> <url>` (a loopback or v3 onion URL, no
 token; added again, nothing changes) and reads them in the order added when the operator's service does not answer,
-refuses or sends evidence that does not frame, or when it keeps none (where no replica answers, the operator's refusal
-stands): a reader of replicas alone needs no `service add`. A replica that does not answer, refuses or sends
+refuses, sends evidence that does not frame or whose read refuses, or when it keeps none (where no replica answers, the
+operator's refusal stands): a reader of replicas alone needs no `service add`. No command removes a replica: edit
+`replicas/<operator>.json`. A replica that does not answer, refuses or sends
 evidence that does not frame or assemble is passed over; the holder's own proxy missing still refuses as `PROXY`.
 Evidence is public, so a replica sees only which backing a connection syncs and when, as the operator does; it sees no
 submission. A replica the holder lists that withholds while the operator is down leaves reads unresolved until the

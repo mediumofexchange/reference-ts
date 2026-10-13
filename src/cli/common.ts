@@ -9,11 +9,12 @@
 // dies, and refuses `BUSY` before opening anything else. On Windows modes are
 // not enforced and nothing checks ACLs (a stated limit).
 import { randomUUID } from "node:crypto";
-import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import type { Construction } from "../pool/v3/construction.js";
+import type { Commitment } from "../venue-records.js";
 import { declared, isConstructionName, type ConstructionName } from "./construction.js";
 
 export const ROLES = Object.freeze(["wallet", "operator", "reader", "relay"] as const);
@@ -26,6 +27,35 @@ export class UsageError extends Error {
 /** A refusal of the command itself (a directory, file or argument it will not act on): exit 1. */
 export class CommandError extends Error {
   constructor(readonly code: string, message: string, readonly check?: string) { super(message); this.name = "CommandError"; }
+}
+
+/**
+ * The fields a refusal prints (exit 1), or undefined for an unexpected failure (exit 3). Evidence past a reader's
+ * budget (a package, trail, range or fault-evidence limit) is the read's `resource-refusal`, as an `EvidenceRefusal`
+ * names it: a source's hostile size is a refusal by name, never a stack.
+ */
+export async function refusalOf(error: unknown): Promise<{ code: string; check?: string; message: string } | undefined> {
+  if (!(error instanceof Error)) return undefined;
+  const [{ V3StoreError }, { V3ServiceClientError }, { ReferenceVenueError }, { ProgramError }, { ParameterError }, { EvidenceRefusal, ReplayRefusal },
+    { V3WalletError }, { PackageLimitError }, { TrailLimitError }, { RangeLimitError }, { FaultEvidenceLimitError }, { VenueError }, { EncodingError }] =
+    await Promise.all([import("../pool/v3/store.js"), import("../pool/v3/service-client.js"), import("../pool/v3/guard.js"),
+      import("../pool/v3/programs.js"), import("../pool/proof-verifier.js"), import("../pool/v3/refusals.js"), import("../pool/v3/wallet-store.js"),
+      import("../pool/v3/package.js"), import("../pool/v3/trail.js"), import("../record-range.js"), import("../pool/evidence-chain.js"),
+      import("../venue-error.js"), import("../bytes.js")]);
+  const coded = error as Error & { code?: string; check?: string };
+  if (error instanceof CommandError || error instanceof V3StoreError || error instanceof ProgramError || error instanceof ParameterError ||
+      error instanceof V3WalletError) {
+    return { code: coded.code!, ...(coded.check === undefined ? {} : { check: coded.check }), message: error.message };
+  }
+  if (error instanceof V3ServiceClientError) return { code: error.code, check: String(error.status), message: error.message };
+  if (error instanceof ReplayRefusal) return { code: "REFUSED", check: error.check, message: error.message };
+  if (error instanceof EvidenceRefusal) return { code: "UNRESOLVED", check: error.status, message: error.message };
+  if (error instanceof PackageLimitError || error instanceof TrailLimitError || error instanceof RangeLimitError ||
+      error instanceof FaultEvidenceLimitError) return { code: "UNRESOLVED", check: "resource-refusal", message: error.message };
+  if (error instanceof ReferenceVenueError) return { code: "REFERENCE", message: error.message };
+  if (error instanceof VenueError) return { code: "VENUE", message: error.message };
+  if (error instanceof EncodingError) return { code: "INVALID", message: error.message };
+  return undefined;
 }
 
 /** A command that is never replayed, rerun: its saved result is printed and the process exits 4 (`fulfill`). */
@@ -46,7 +76,7 @@ export function parseArguments(argv: readonly string[], spec: FlagSpec, position
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (!arg.startsWith("--")) { positional.push(arg); continue; }
-    const name = arg.slice(2), kind = spec[name];
+    const name = arg.slice(2), kind = Object.hasOwn(spec, name) ? spec[name] : undefined;
     if (kind === undefined) throw new UsageError(`unknown option --${name}`);
     const seen = flags.get(name) ?? [];
     if (kind !== "values" && seen.length > 0) throw new UsageError(`--${name} is given twice`);
@@ -58,6 +88,8 @@ export function parseArguments(argv: readonly string[], spec: FlagSpec, position
   if (positional.length !== positionals) throw new UsageError(`expected ${positionals} argument${positionals === 1 ? "" : "s"}, got ${positional.length}`);
   return { positional, flags };
 }
+/** The flags every read takes: its directory, a package file in place of its sources, and its verifier's instances. */
+export const READ_FLAGS = { dir: "value", package: "value", verifiers: "value" } as const satisfies FlagSpec;
 export const flag = (args: Arguments, name: string): string | undefined => args.flags.get(name)?.[0];
 export const flags = (args: Arguments, name: string): readonly string[] => args.flags.get(name) ?? [];
 export const has = (args: Arguments, name: string): boolean => args.flags.has(name);
@@ -83,6 +115,8 @@ export const hex = (bytes: Uint8Array): string => bytesToHex(bytes);
 
 const json = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) => typeof v === "bigint" ? v.toString()
   : v instanceof Uint8Array ? bytesToHex(v) : v);
+/** A commitment as every output names it. */
+export const commitmentOut = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
 /** One JSON object on stdout: bytes as lowercase hex, integers as decimal strings. */
 export function print(value: unknown): void { process.stdout.write(`${json(value)}\n`); }
 /** One progress event on stderr, written as `print` writes. */
@@ -146,6 +180,15 @@ function requirePrivate(path: string): void {
   }
 }
 
+/** Whether another process holds the directory's lock now: it is taken and given back at once where it is free. */
+function lockHeld(path: string): boolean {
+  const db = new DatabaseSync(join(path, "lock.db"), { timeout: 0 });
+  try { db.exec("BEGIN EXCLUSIVE; ROLLBACK"); return false; } catch (error) {
+    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) return true;
+    throw error;
+  } finally { db.close(); }
+}
+
 /** The exclusive lock on `lock.db`, held until the process exits. */
 function lock(path: string): void {
   const db = new DatabaseSync(join(path, "lock.db"), { timeout: 0 });
@@ -185,12 +228,26 @@ export function openDirectory(dir: string, role: Role | "any", options: { readon
   return directory(path, config);
 }
 
+/** Refuse an existing `--dir` an init would create: `INCOMPLETE` where it is an init that did not finish (its lock taken
+ * and given back, its config.json, written last, absent), whose keys and seed no command has shown or used, so removing
+ * it and running init again loses nothing; `BUSY` where that init still runs; `EXISTS` for anything else there. */
+export function requireNew(dir: string): void {
+  const path = absolute(dir);
+  const exists = new CommandError("EXISTS", `${path} already exists; init creates a new directory`);
+  if (!existsSync(path)) return;
+  if (existsSync(join(path, CONFIG)) || !existsSync(join(path, "lock.db"))) throw exists;
+  // Without config.json, a lock still held is an init still running; one given back may have just written it.
+  if (lockHeld(path)) throw new CommandError("BUSY", "another moe command holds this directory: an init still running");
+  if (existsSync(join(path, CONFIG))) throw exists;
+  throw new CommandError("INCOMPLETE", `${path} holds an init that did not finish (no config.json): remove it and run the command again`);
+}
+
 /** Create a new directory for `role` (owner-only), take its lock and run `fill`; the configuration is written last. */
 export async function initDirectory(dir: string, config: Config, fill: (directory: Directory) => Promise<void>): Promise<Directory> {
   const path = absolute(dir);
   prepare(path);
   try { mkdirSync(path, { mode: 0o700 }); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new CommandError("EXISTS", `${path} already exists; init creates a new directory`);
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") requireNew(path);
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CommandError("ABSENT", `the parent of ${path} does not exist`);
     throw error;
   }
@@ -244,11 +301,27 @@ export function writeExclusive(path: string, data: string | Uint8Array): void {
   syncParent(path);
 }
 
+/** Refuse by name (`STORAGE`) a place where `writeExclusive` could not put `path`: an empty probe is written, linked
+ * beside it and removed. For a step that cannot be undone once its output is only in memory (a handoff's freeze). */
+export function requireWritable(path: string): void {
+  const probe = `${path}.${randomUUID()}.probe`;
+  try { writeExclusive(probe, new Uint8Array(0)); } catch (error) {
+    if (error instanceof CommandError) throw error;
+    throw new CommandError("STORAGE", `${path} cannot be written there (${(error as NodeJS.ErrnoException).code ?? (error as Error).message})`);
+  } finally {
+    // Where nothing could be placed, nothing is there to remove (a path through a file answers ENOTDIR, not ENOENT).
+    try { rmSync(probe, { force: true }); } catch { /* none placed */ }
+  }
+}
+
 /** Write a new file, or accept one already holding exactly `data` (a rerun's output); other bytes there conflict. */
 export function writeSame(path: string, data: string | Uint8Array): void {
-  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data, held = readOptional(path);
+  // Read only as far as `data` reaches: a longer file holds other bytes, whatever its length.
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data, held = readUpTo(path, bytes.length);
   if (held === undefined) { writeExclusive(path, bytes); return; }
-  if (held.length !== bytes.length || held.some((byte, i) => byte !== bytes[i])) throw new CommandError("EXISTS", `${path} already exists and holds other bytes`);
+  if (held.more || held.bytes.length !== bytes.length || held.bytes.some((byte, i) => byte !== bytes[i])) {
+    throw new CommandError("EXISTS", `${path} already exists and holds other bytes`);
+  }
 }
 
 /** Replace a file atomically (a synced temporary file renamed over it). */
@@ -258,16 +331,49 @@ export function writeReplace(path: string, data: string | Uint8Array): void {
   syncParent(path);
 }
 
-/** A file's bytes, or undefined where it does not exist. */
-export function readOptional(path: string): Uint8Array | undefined {
-  try { return new Uint8Array(readFileSync(path)); } catch (error) {
+/** The most bytes a file read whole holds, unless its reader names another bound: every handed frame, terms, venue,
+ * service, relay or publication file and every small file a directory keeps lies far below it. */
+export const READ_LIMIT = 16 * 1024 * 1024;
+/** A package file's bound: the most bytes the runtime reads whole. */
+export const PACKAGE_FILE_LIMIT = 2 ** 31 - 1;
+
+/** A file the command cannot read, named: a directory, a path through a file, or one it has no access to. */
+function unreadable(path: string, error: unknown): unknown {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EISDIR") return new CommandError("INVALID", `${path} is a directory, not a file`);
+  if (code === "ENOTDIR") return new CommandError("INVALID", `${path} lies under a file, not a directory`);
+  if (code === "EACCES" || code === "EPERM") return new CommandError("STORAGE", `${path} cannot be read: no access`);
+  return error;
+}
+
+/** A file's bytes, or undefined where it does not exist; one past `limit` bytes is refused before it is read. */
+export function readOptional(path: string, limit = READ_LIMIT): Uint8Array | undefined {
+  const read = readUpTo(path, limit);
+  if (read?.more === true) throw new CommandError("INVALID", `${path} holds more than the ${limit} bytes it may`);
+  return read?.bytes;
+}
+/** A file's first `limit` bytes and whether more follow, or undefined where it does not exist. Never more than `limit` + 1
+ * bytes are read, whatever the file states of its size (a FIFO or a device states none, a file can grow meanwhile). */
+function readUpTo(path: string, limit: number): { readonly bytes: Uint8Array; readonly more: boolean } | undefined {
+  let fd: number;
+  try { fd = openSync(path, "r"); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
+    throw unreadable(path, error);
   }
+  try {
+    // The stated size only sizes the first allocation.
+    const stated = fstatSync(fd).size;
+    let buffer = Buffer.alloc(Math.min(limit + 1, stated > 0 ? stated + 1 : 65536)), total = 0;
+    for (let n = 1; n > 0 && total <= limit; total += n) {
+      if (total === buffer.length) { const grown = Buffer.alloc(Math.min(limit + 1, 2 * buffer.length)); buffer.copy(grown, 0, 0, total); buffer = grown; }
+      n = readSync(fd, buffer, total, buffer.length - total, null);
+    }
+    return { bytes: new Uint8Array(buffer.buffer, buffer.byteOffset, Math.min(total, limit)), more: total > limit };
+  } catch (error) { throw unreadable(path, error); } finally { closeSync(fd); }
 }
 /** A file's bytes; a missing one is the command's refusal. */
-export function readRequired(path: string, what: string): Uint8Array {
-  const bytes = readOptional(path);
+export function readRequired(path: string, what: string, limit = READ_LIMIT): Uint8Array {
+  const bytes = readOptional(path, limit);
   if (bytes === undefined) throw new CommandError("ABSENT", `no ${what} at ${path}`);
   return bytes;
 }
@@ -279,9 +385,16 @@ export function readJson(path: string, what: string): unknown {
   }
 }
 
-/** A 32-byte secret kept in a file of its own, written exclusively by `init`. */
+/** A 32-byte secret kept in a file of its own, written exclusively by `init`: a copy the caller wipes, and the buffer
+ * it was read into (which can share a pooled allocation) wiped here, so wiping the copy leaves no other. */
 export function readSecret(path: string, what: string): Uint8Array {
-  const bytes = readRequired(path, what);
-  if (bytes.length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
-  return bytes;
+  const read = readUpTo(path, 32);
+  try {
+    if (read === undefined) throw new CommandError("ABSENT", `no ${what} at ${path}`);
+    if (read.more || read.bytes.length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
+    return Uint8Array.from(read.bytes);
+  } finally { read?.bytes.fill(0); }
 }
+
+/** 32 fresh random bytes for a key or token, in an array of their own (never a pooled allocation a wipe would miss). */
+export const fresh = (): Uint8Array => crypto.getRandomValues(new Uint8Array(32));

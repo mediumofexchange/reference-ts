@@ -5,7 +5,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { CommandError, integer, hex32, openDirectory, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
+import { CommandError, fresh, integer, hex32, openDirectory, parseArguments, readRequired, readSecret, refusalOf, requireNew, requireWritable, UsageError, writeExclusive, writeReplace,
+  writeSame } from '../src/cli/common.js';
+import { FaultEvidenceLimitError } from '../src/pool/evidence-chain.js';
+import { PackageLimitError } from '../src/pool/v3/package.js';
+import { EvidenceRefusal } from '../src/pool/v3/refusals.js';
+import { TrailLimitError } from '../src/pool/v3/trail.js';
+import { RangeLimitError } from '../src/record-range.js';
 import { authenticate, explain } from '../src/cli/terms.js';
 import { LIT } from '../src/lit/construction.js';
 import { litConfigHash } from '../src/lit/configuration.js';
@@ -23,7 +29,7 @@ import { parsePublicationFile, readPublication } from '../src/cli/relay.js';
 import { keptReplay, openEvidence } from '../src/cli/reader.js';
 import { keptFileDigest, ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
-import { closeListener, listenLoopback, SERVE_FLAGS, serveFlags } from '../src/cli/serve.js';
+import { closeListener, isListenerUrl, listenLoopback, SERVE_FLAGS, serveFlags } from '../src/cli/serve.js';
 import { V3StoreError } from '../src/pool/v3/store.js';
 import { parseVenue, publisherStore, publishingSuppliers, SpendBudget, venueText } from '../src/cli/venue.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
@@ -43,6 +49,57 @@ describe('moe command arguments', () => {
     expect(() => parseArguments(['--dir'], { dir: 'value' }, 0)).toThrow('needs a value');
     expect(() => parseArguments(['--dir', '--node'], { dir: 'value', node: 'values' }, 0)).toThrow('needs a value');
     expect(() => parseArguments(['a', 'b'], {}, 1)).toThrow('expected 1 argument');
+    // A name an object inherits is no flag (audit 32).
+    for (const inherited of ['constructor', '__proto__', 'toString']) {
+      expect(() => parseArguments([`--${inherited}`, 'x'], { dir: 'value' }, 0)).toThrow(`unknown option --${inherited}`);
+    }
+  });
+  it('reads a handed file within its bound, refusing a directory, a path through a file and one past the bound by name (audit 32)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'moe-read-'));
+    try {
+      writeFileSync(join(dir, 'frame'), new Uint8Array(8));
+      expect(readRequired(join(dir, 'frame'), 'frame')).toHaveLength(8);
+      expect(() => readRequired(join(dir, 'frame'), 'frame', 7)).toThrow(expect.objectContaining({ code: 'INVALID', message: expect.stringMatching(/more than the 7 bytes/) }));
+      expect(() => readRequired(dir, 'frame')).toThrow(expect.objectContaining({ code: 'INVALID', message: expect.stringMatching(/is a directory/) }));
+      // Windows answers a path through a file as absent (ENOENT), POSIX as ENOTDIR.
+      expect(() => readRequired(join(dir, 'frame', 'below'), 'frame')).toThrow(process.platform === 'win32' ? expect.objectContaining({ code: 'ABSENT' })
+        : expect.objectContaining({ code: 'INVALID', message: expect.stringMatching(/lies under a file/) }));
+      expect(() => readRequired(join(dir, 'absent'), 'frame')).toThrow(expect.objectContaining({ code: 'ABSENT' }));
+      expect(() => writeSame(dir, 'out')).toThrow(expect.objectContaining({ code: 'INVALID' }));
+      expect(() => readSecret(dir, 'key')).toThrow(expect.objectContaining({ code: 'INVALID' }));
+      // A place a whole-or-nothing write cannot use is refused by name, leaving nothing behind.
+      expect(() => requireWritable(join(dir, 'frame', 'handoff'))).toThrow(expect.objectContaining({ code: 'STORAGE' }));
+      requireWritable(join(dir, 'handoff'));
+      expect(readdirSync(dir)).toEqual(['frame']);
+      // A rerun's output past the default bound is still the same bytes; a longer file holds other bytes.
+      const large = new Uint8Array(17 * 1024 * 1024).fill(3), out = join(dir, 'handoff.out');
+      writeSame(out, large); writeSame(out, large);
+      expect(() => writeSame(out, large.subarray(1))).toThrow(expect.objectContaining({ code: 'EXISTS' }));
+      // The bound is judged on the bytes read, not the size a file states: a device states none.
+      if (process.platform !== 'win32') expect(() => readRequired('/dev/zero', 'zero', 1024)).toThrow(expect.objectContaining({ code: 'INVALID' }));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('names an init that did not finish INCOMPLETE, and anything else at its path EXISTS (audit 32)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'moe-new-'));
+    try {
+      requireNew(join(dir, 'fresh'));
+      mkdirSync(join(dir, 'begun')); writeFileSync(join(dir, 'begun', 'lock.db'), '');
+      expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'INCOMPLETE' }));
+      // An init still running holds the lock: removing its directory would pull it from under that process.
+      const running = new DatabaseSync(join(dir, 'begun', 'lock.db'), { timeout: 0 });
+      running.exec('PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE');
+      try { expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'BUSY' })); } finally { running.close(); }
+      expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'INCOMPLETE' }));
+      writeFileSync(join(dir, 'begun', 'config.json'), '{}');
+      expect(() => requireNew(join(dir, 'begun'))).toThrow(expect.objectContaining({ code: 'EXISTS' }));
+      expect(() => requireNew(dir)).toThrow(expect.objectContaining({ code: 'EXISTS' }));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('takes a listener URL whose port a connection can reach (audit 32)', () => {
+    const onion = `${'m'.repeat(55)}d.onion`;
+    for (const url of ['http://127.0.0.1:1/', 'http://127.0.0.1:65535/', `http://${onion}/`, `http://${onion}:8080/`]) expect(isListenerUrl(url)).toBe(true);
+    for (const url of ['http://127.0.0.1:0/', 'http://127.0.0.1:99999/', 'http://127.0.0.1:65536/', `http://${onion}:99999/`, 'http://127.0.0.1/',
+      'https://127.0.0.1:80/', `http://${'m'.repeat(56)}.onion/`]) expect(isListenerUrl(url)).toBe(false);
   });
   it('takes decimal integers in range and lowercase 32-byte hex only', () => {
     expect(integer('12', 'n')).toBe(12n);
@@ -50,6 +107,32 @@ describe('moe command arguments', () => {
     expect(() => integer('7', 'n', 1n, 6n)).toThrow('out of range');
     expect(hex32('ab'.repeat(32), 'h')).toHaveLength(32);
     for (const bad of ['AB'.repeat(32), 'ab'.repeat(31), 'ab'.repeat(33)]) expect(() => hex32(bad, 'h')).toThrow(UsageError);
+  });
+  it('names evidence past a reader\'s budget as the read\'s resource refusal, never an uncoded failure (audit 32)', async () => {
+    const resource = { code: 'UNRESOLVED', check: 'resource-refusal' };
+    for (const error of [new PackageLimitError('package item exceeds the reader\'s budget'), new TrailLimitError('trail exceeds reader byte budget'),
+      new RangeLimitError('range reader budget exceeded'), new FaultEvidenceLimitError('evidence exceeds reader budget')]) {
+      expect(await refusalOf(error)).toEqual({ ...resource, message: error.message });
+    }
+    expect(await refusalOf(new EvidenceRefusal('resource-refusal'))).toMatchObject(resource);
+    expect(await refusalOf(new CommandError('BUSY', 'held', 'LOCK'))).toEqual({ code: 'BUSY', check: 'LOCK', message: 'held' });
+    expect(await refusalOf(new RangeError('a programming failure'))).toBeUndefined();
+  });
+  it('reads a secret file of exactly 32 bytes as a copy, refusing another length or an absent file by name (audit 32)', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'moe-secret-')), path = join(directory, 'backer.key');
+    try {
+      expect(() => readSecret(path, 'backer.key')).toThrow(expect.objectContaining({ code: 'ABSENT' }));
+      writeExclusive(path, new Uint8Array(32).fill(7));
+      const secret = readSecret(path, 'backer.key');
+      expect([...secret]).toEqual(Array(32).fill(7));
+      secret.fill(0);
+      expect([...readSecret(path, 'backer.key')]).toEqual(Array(32).fill(7));
+      writeFileSync(join(directory, 'short.key'), new Uint8Array(31));
+      expect(() => readSecret(join(directory, 'short.key'), 'short.key')).toThrow(expect.objectContaining({ code: 'INVALID' }));
+      const made = [fresh(), fresh()];
+      expect(made.map(bytes => [bytes.length, bytes.byteOffset, bytes.buffer.byteLength])).toEqual([[32, 0, 32], [32, 0, 32]]);
+      expect(made[0]).not.toEqual(made[1]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
 
@@ -202,6 +285,7 @@ describe('moe wallet and relay files', () => {
       await new ErgoPublisher({ secretKey: secret, suppliers: [capture] })
         .publish({ location: SYNTHETIC_SCRIPTS[4], subject: new Uint8Array(32).fill(1), record: new Uint8Array(100).fill(2), height: SYNTHETIC_ANCHOR_HEIGHT });
       const budget = new SpendBudget({ config: { spendBudgetNanoErg: '1000000000' }, file: name => join(dir, name) }, tree);
+      let one;
       try {
         const ended = () => { throw new VenueError('this submission\'s call ended before the supplier sent it'); };
         await expect(budget.authorize(built.signed, built.id, [box], ended)).rejects.toThrow('call ended');
@@ -213,7 +297,15 @@ describe('moe wallet and relay files', () => {
         await expect(budget.authorize(built.signed, built.id, [box], ended)).rejects.toThrow('call ended');
         await budget.authorize(built.signed, built.id, [box], () => {});
         expect(budget.spent()).toBe(spent);
+        one = spent;
       } finally { budget.close(); }
+      // The publisher sends one transaction to every node at once: two judgements of it at once reserve it once, and
+      // both pass (audit 32).
+      const both = new SpendBudget({ config: { spendBudgetNanoErg: '1000000000' }, file: name => join(dir, 'both-' + name) }, tree);
+      try {
+        await Promise.all([both.authorize(built.signed, built.id, [box], () => {}), both.authorize(built.signed, built.id, [box], () => {})]);
+        expect([both.spent(), both.take()]).toEqual([one, undefined]);
+      } finally { both.close(); }
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
   it('reads a publication file of exactly its fields, at kind 4 only', () => {

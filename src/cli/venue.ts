@@ -9,7 +9,6 @@
 // time a view opens. Each directory reads through its own node endpoints
 // (`config.json`) with `ergoNodeSupplier`, publishes with `ergoNodePublisher`,
 // and keeps its own view in `venue.db` (`ErgoVenueJournal`).
-import { randomBytes } from "node:crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
@@ -27,8 +26,8 @@ import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
 import { VenueError } from "../venue-error.js";
-import { CommandError, event, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive, writeReplace,
-  type Directory } from "./common.js";
+import { CommandError, event, fresh, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive,
+  writeReplace, type Directory } from "./common.js";
 
 const KINDS: readonly RecordKind[] = [1, 2, 3, 4];
 const NODE_TIMEOUT_MS = 30_000;
@@ -170,11 +169,13 @@ export async function createVenue(directory: Directory, options: { readonly synt
   }
   if (anchor === undefined) throw new CommandError("UNAVAILABLE", "no node endpoint supplied the anchor header");
   // A fresh location key, reused if an interrupted run left one.
-  let key = readOptional(directory.file("location.key"));
-  if (key === undefined) { key = new Uint8Array(randomBytes(32)); writeExclusive(directory.file("location.key"), key); }
-  if (key.length !== 32) throw new CommandError("INVALID", "location.key is not 32 bytes");
-  const profile = ownErgoProfile({ reference: context, anchor, depth,
-    scripts: { 1: locationTree(key, 1), 2: locationTree(key, 2), 3: locationTree(key, 3), 4: locationTree(key, 4) } });
+  const kept = existsSync(directory.file("location.key")), key = kept ? readSecret(directory.file("location.key"), "location.key") : fresh();
+  let profile: ErgoProfile;
+  try {
+    if (!kept) writeExclusive(directory.file("location.key"), key);
+    profile = ownErgoProfile({ reference: context, anchor, depth,
+      scripts: { 1: locationTree(key, 1), 2: locationTree(key, 2), 3: locationTree(key, 3), 4: locationTree(key, 4) } });
+  } finally { key.fill(0); }
   const venue = parseVenue(JSON.parse(venueText(profile, anchorHeight)));
   await keepContext(directory, venue);
   writeExclusive(directory.file("venue.json"), venueText(profile, anchorHeight));
@@ -355,12 +356,15 @@ export class SpendBudget {
   }
   private async judge(signed: Uint8Array, id: Uint8Array, boxes: readonly Uint8Array[], proceed: () => void): Promise<void> {
     const key = bytesToHex(id), digest = bytesToHex(sha256(signed));
-    const prior = this.db.prepare("SELECT signed FROM spend WHERE id=?").get(key);
-    if (prior !== undefined) {
+    // An exact resubmission of a reserved transaction passes without a second reservation.
+    const reserved = (): boolean => {
+      const prior = this.db.prepare("SELECT signed FROM spend WHERE id=?").get(key);
+      if (prior === undefined) return false;
       if (prior.signed !== digest) throw new CommandError("BUDGET", "a reserved transaction id names other bytes");
       proceed();
-      return;
-    }
+      return true;
+    };
+    if (reserved()) return;
     const shadow = new MempoolNode("spend budget", verifyErgoProof), fee = hexToBytes(MINER_FEE_TREE_HEX);
     for (const box of boxes) if (readPlainBox(box, this.tree) !== undefined) shadow.fund(box);
     const total = (tree: Uint8Array) => [...shadow.boxes.values()].reduce((sum, box) => sum + (readPlainBox(box, tree)?.value ?? 0n), 0n);
@@ -370,6 +374,8 @@ export class SpendBudget {
       // behind its mempool, or another spender); nothing is reserved and the publication is tried again later.
       throw new CommandError("UNREPLAYED", "the transaction does not replay over the unspent boxes the node lists for the funding key");
     }
+    // The publisher sends one transaction to every node at once: another judgement of it may have reserved it meanwhile.
+    if (reserved()) return;
     const cost = before - total(this.tree), paid = total(fee) - feeBefore;
     if (paid <= 0n || cost < paid) throw new CommandError("BUDGET", "the transaction's cost is not a publication's");
     if (this.spent() + cost > this.limit) throw new CommandError("BUDGET", `the transaction would pass the spend budget of ${this.limit} nanoErg`);
@@ -379,7 +385,5 @@ export class SpendBudget {
   close(): void { this.db.close(); }
 }
 
-/** Fresh random bytes for a key or token file. */
-export const fresh = (): Uint8Array => new Uint8Array(randomBytes(32));
 /** A fresh secp256k1 funding secret. */
 export const freshFunding = (): Uint8Array => secp256k1.utils.randomPrivateKey();

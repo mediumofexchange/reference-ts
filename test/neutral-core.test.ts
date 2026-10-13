@@ -60,8 +60,8 @@ describe("the construction-neutral core", () => {
     expect(relativeImports("src/record-range.ts")).toEqual(["src/bytes.ts", "src/contexts.ts", "src/venue-records.ts"]);
     // A module outside both sets, one directory down: a type-only, a multi-line and a dynamic import, resolved from its own directory.
     const wallet = relativeImports("src/cli/wallet.ts");
-    expect(wallet).toEqual(expect.arrayContaining(["src/venue-records.ts", "src/cli/common.ts", "src/pool/v3/prover.ts", "src/pool/parameter-files.ts"]));
-    expect(wallet.filter(module => !NEUTRAL.includes(module) && !V3.includes(module))).toEqual(expect.arrayContaining(["src/cli/common.ts", "src/pool/parameter-files.ts"]));
+    expect(wallet).toEqual(expect.arrayContaining(["src/venue-records.ts", "src/cli/common.ts", "src/pool/v3/prover.ts", "src/cli/backend.ts"]));
+    expect(wallet.filter(module => !NEUTRAL.includes(module) && !V3.includes(module))).toEqual(expect.arrayContaining(["src/cli/common.ts", "src/cli/backend.ts"]));
   });
 });
 

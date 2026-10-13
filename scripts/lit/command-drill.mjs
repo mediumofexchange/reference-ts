@@ -20,7 +20,7 @@
 // a send without the proxy, with a wrong credential or for another venue is refused. A handoff and a seed restoration recover the holdings; the seed-restored wallet's window is full until `move-window`
 // is final, after which it requests again. Hostile cases: pool-v3 terms into a lit directory (CONSTRUCTION), a lit
 // directory given --parameters or terms given --challenge (usage), freshen (CONSTRUCTION), a pool-v3 request frame to
-// a lit payer (REQUEST), a relay file for another venue (VENUE).
+// a lit payer (REQUEST), a relay file for another venue (VENUE), a package past the reader's item budget (UNRESOLVED).
 //
 // Slice 13 M13c: each party is a machine of its own, running `moe` from its own install of the release (packed and
 // installed from its install lock, scripts/release.mjs) with its own working, home and temporary directories: the
@@ -44,6 +44,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { LIT_PACKAGE_CONTEXT } from "../../dist/contexts.js";
 import { prepareExactOutput } from "../../dist/pool/v3/capsules.js";
 import { adoptedDomain } from "../../dist/pool/v3/configuration.js";
 import { encodePaymentRequest, paymentRequestDigest } from "../../dist/pool/v3/wallet-request.js";
@@ -420,6 +421,11 @@ try {
       assert(round < 12, `the reader's supply did not reach the burn: ${JSON.stringify(read)}`);
     }
     assert.deepEqual([read.status, read.issued, read.burned, read.supply], ["final", "10", "3", "7"]);
+    // A package whose one item passes the reader's item budget is the read's resource refusal by name (audit 32).
+    const oversized = join(scratch, "oversized.package"), head = Buffer.alloc(13);
+    head.writeUInt32BE(1, 0); head.writeUInt8(3, 4); head.writeBigUInt64BE(1_048_577n, 5);
+    writeFileSync(oversized, Buffer.concat([LIT_PACKAGE_CONTEXT, head, Buffer.alloc(1_048_577)]));
+    assert.equal((await refused(["reader", "supply", "--dir", RD, backing, "--package", oversized], "UNRESOLVED")).check, "resource-refusal");
   });
 
   await check("a withdrawn demand's presented note pays as any other; lit has no freshen; a read the evidence file leaves unresolved syncs again from nothing", async () => {

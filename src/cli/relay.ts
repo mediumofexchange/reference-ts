@@ -27,12 +27,12 @@ import { createRelayService, waitingTurns, type RelayRefusal } from "../pool/v3/
 import { sendToRelay, V3ServiceClientError } from "../pool/v3/service-client.js";
 import type { ErgoPublisher } from "../ergo-publisher.js";
 import { VenueError } from "../venue-error.js";
-import { CommandError, event, flag, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, required, UsageError,
+import { CommandError, event, flag, fresh, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, required, UsageError,
   writeExclusive, writeReplace, type Directory } from "./common.js";
 import { constructions } from "./construction.js";
 import { initRole, unanswered } from "./reader.js";
 import { closeListener, listenerFile, listenLoopback, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
-import { fresh, freshFunding, fundingTree, openPublisher, openView, publisherStore, requireVenue, type SpendBudget, type View } from "./venue.js";
+import { freshFunding, fundingTree, openPublisher, openView, publisherStore, requireVenue, type SpendBudget, type View } from "./venue.js";
 
 async function init(argv: readonly string[]): Promise<void> {
   return initRole(argv, "relay", { venue: "required", budget: true, verifies: false, fill: async directory => {
