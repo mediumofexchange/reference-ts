@@ -12,6 +12,7 @@ import { readServed, V3_SERVICE_PROFILE } from "../src/pool/v3/service-wire.js";
 import type { Turns } from "../src/pool/v3/service-http.js";
 import { serialized } from "../src/cli/serve.js";
 import type { ServedEvidence, V3OperatorJournal } from "../src/pool/v3/store.js";
+import { PROOF_FREE_FORM, type RecordAt } from "../src/pool/v3/succinct.js";
 
 // Mock only the journal boundary. Process acceptance covers actual persistence.
 const TOKEN = "11".repeat(32), ADMIN = "22".repeat(32);
@@ -44,7 +45,9 @@ describe("v3 service HTTP trust boundary", () => {
       commit: vi.fn(async (_id: string) => commitment), publish: vi.fn(async () => commitment),
       serve: vi.fn(async (_backing: Uint8Array, _after: bigint): Promise<ServedEvidence> => ({
         selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12),
-        parts: [{ package: b(13) }, { trail: { size: 200_000n, chunks: [new Uint8Array(200_000).fill(7)] } }] })) };
+        parts: [{ package: b(13) }, { trail: { size: 200_000n, chunks: [new Uint8Array(200_000).fill(7)] } }] })),
+      proof: vi.fn((_hash: Uint8Array, _at: RecordAt): Uint8Array | undefined => undefined),
+      cover: vi.fn((_set: Uint8Array, _digest: Uint8Array): Uint8Array | undefined => undefined) };
     const server = createV3Service(journal as unknown as V3OperatorJournal, credentials, turns);
     servers.push(server);
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
@@ -104,7 +107,7 @@ describe("v3 service HTTP trust boundary", () => {
     });
     expect(read.served).toEqual({ selection: { domain, operator, venue: b(10), backing: b(11), root: b(9), sequence: 2n }, package: b(12) });
     expect(read.taken).toEqual([32, 200_000]);
-    expect(f.journal.serve).toHaveBeenCalledExactlyOnceWith(b(11), 18446744073709551615n);
+    expect(f.journal.serve).toHaveBeenCalledExactlyOnceWith(b(11), 18446744073709551615n, undefined);
     // Any other query is not a route; a sequence past u64 is invalid.
     for (const query of ["", "?backing=0B&after=0", `?backing=${"0b".repeat(31)}&after=0`, `?backing=${"0b".repeat(32)}`,
       `?backing=${"0b".repeat(32)}&after=01`, `?backing=${"0b".repeat(32)}&after=0&x=1`, `?after=0&backing=${"0b".repeat(32)}`]) {
@@ -141,6 +144,40 @@ describe("v3 service HTTP trust boundary", () => {
     for (const response of await Promise.all(held)) expect([response.status, await response.json()]).toEqual([503, { code: "UNAVAILABLE" }]);
     f.journal.serve.mockRejectedValueOnce(new V3StoreError("STALE", "nothing published"));
     expect((await evidence(`?backing=${"0b".repeat(32)}&after=0`)).status).toBe(409);
+  });
+
+  it("routes a succinct reader's fetches under the wallet credential: the proof-free form, a proof by its place, a cover by its set (slice 37)", async () => {
+    const f = await fixture();
+    const get = (path: string, token: string = TOKEN) =>
+      fetch(new URL(path, f.url), { headers: { authorization: `Bearer ${token}` } });
+    const free = await get(`/evidence?backing=${"0b".repeat(32)}&after=0&form=proof-free`);
+    expect(free.status).toBe(200); await free.arrayBuffer();
+    expect(f.journal.serve).toHaveBeenLastCalledWith(b(11), 0n, PROOF_FREE_FORM);
+    const proofPath = `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=3`, coverPath = `/covers/${"cc".repeat(32)}/${"dd".repeat(32)}`;
+    // Nothing kept: NOT_FOUND, as JSON.
+    for (const path of [proofPath, coverPath]) {
+      const missing = await get(path);
+      expect([missing.status, await missing.json()]).toEqual([404, { code: "NOT_FOUND" }]);
+    }
+    expect(f.journal.proof).toHaveBeenLastCalledWith(new Uint8Array(32).fill(0xaa), { segment: new Uint8Array(32).fill(0xbb), position: 3n });
+    expect(f.journal.cover).toHaveBeenLastCalledWith(new Uint8Array(32).fill(0xcc), new Uint8Array(32).fill(0xdd));
+    // Kept: the bytes themselves.
+    f.journal.proof.mockReturnValueOnce(b(5)); f.journal.cover.mockReturnValueOnce(b(6));
+    for (const [path, expected] of [[proofPath, b(5)], [coverPath, b(6)]] as const) {
+      const found = await get(path);
+      expect(found.status).toBe(200); expect(found.headers.get("content-type")).toBe("application/octet-stream");
+      expect(new Uint8Array(await found.arrayBuffer())).toEqual(expected);
+    }
+    // The operator's listener asks its credential first; any other shape is no route.
+    expect((await get(proofPath, "33".repeat(32))).status).toBe(401);
+    f.journal.proof.mockClear(); f.journal.cover.mockClear(); f.journal.serve.mockClear();
+    for (const path of [`/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=0`, `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}`,
+      `/proofs/${"AA".repeat(32)}?segment=${"bb".repeat(32)}&position=1`, `/covers/${"cc".repeat(32)}`, `/covers/${"cc".repeat(32)}/${"dd".repeat(31)}`,
+      `/evidence?backing=${"0b".repeat(32)}&after=0&form=complete`, `/evidence?backing=${"0b".repeat(32)}&after=0&form=proof-free&x=1`]) {
+      const refused = await get(path);
+      expect(refused.status, path).toBe(404); await refused.arrayBuffer();
+    }
+    expect(f.journal.proof).not.toHaveBeenCalled(); expect(f.journal.cover).not.toHaveBeenCalled(); expect(f.journal.serve).not.toHaveBeenCalled();
   });
 
   it("charges a stream's minimum rate to its peer, never to the source's own reads", async () => {
