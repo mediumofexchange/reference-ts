@@ -1144,6 +1144,112 @@ size is engineering and review, not prover time.
 and Poseidon2 work (only the recursion and the proof digest run over genuine data); a spend-only mix; the set checks'
 cost estimated; no leaf past 2^22 proved.
 
+## The trail's proof aggregation (slice 33)
+
+Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/f14ba9e/scripts/pool/aggregation-probe);
+[decision](../decisions/2026-10.md#2026-10-13--aggregating-the-trails-statement-proofs-keeps-up-with-the-design-points-mean-on-one-4-vcpu-prover-and-agrees-with-the-host-on-every-hostile-proof-slice-33-next-12)).
+The question ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction),
+Next 12 step 2): instead of [a relation over the whole verdict](#the-trails-succinct-relation-slice-27), a phone runs
+the reference's own reader over proof-free bytes, and a tree of proofs attests that each statement proof verified
+under its kind's key and what its §7 `proofHash` is. Does the tree keep up with the design point's mean on one 4-vCPU
+prover, does a leaf accept exactly what the host accepts, and does any verdict need a proof's bytes beyond a failed
+proof?
+
+**The circuits.** A leaf of kind k (one circuit per proved kind: issue, spend, burn, demand, settle, request) holds
+kind k's key as a constant, verifies one statement proof under it (`verify_proof_with_type`, noir-recursive),
+computes `proofHash` as SHA-256 over the proof's 458 big-endian fields, and outputs one digest: Poseidon2
+permutations chaining k, the public inputs and the hash's two halves. Its other public input is the node key, free in
+the leaf. A node verifies two children, each under one of the six leaf keys (constants) or the node key (its own
+public input, which each child must carry), and outputs one permutation of the two digests under a node tag. A phone
+recomputes every digest from the proof-free bytes and the supplied hashes, verifies one root proof under the pinned
+node key, and checks the root's node-key input against that key.
+
+| Measured (one 4-vCPU Xeon at 2.10 GHz, 15 GB; native bb 5.2.0) | |
+|---|---|
+| Leaf, each of the six kinds | 1,832,291–1,832,945 gates, 2^21 rows (12.6% headroom); 32.4–34.9 s, median 33.9 over 10 proofs; 2.5–2.6 GB peak; digests equal the host's |
+| Node | 1,469,816 gates, 2^21 rows; 24.8–29.4 s, median 25.6 over 4 proofs; 2.0 GB; a two-level tree over issue, spend, burn and demand leaves, every digest equal to the host's, the root verified and its node key the pinned one |
+| A statement (leaf + its share of nodes) | 59.5 s |
+| Hostile proofs (18 cases) | every pinned leaf's verdict equals the host's verifier's (`openV3Verifier`) |
+| Hostile children (6 cases) | all refused |
+
+**The tree keeps up with the mean 1.6 times.** 900 statements a day take one 4-vCPU prover 14.9 hours. A peak day of
+10⁴ takes 165 hours: seven machines in the day, with a spine of 14 node levels (about 6.5 minutes) after the last leaf.
+The direction's estimate from summed parts was 48 s a statement; the leaf runs 34 s rather than the 25–26 s scaled from
+its gate count (not isolated; leaf and node both fill 2^21 rows). The leaf's cost is the same for every kind; kind 5 has no proof and
+no leaf. With [slice 32](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32)'s exhaustion (7.0 hours on
+slice 22's day, 14.1 on the latest, shared by every scope on the venue), a scope's phone path takes about two 4-vCPU
+provers at the mean. Levers: SHA-256 is 1.13 M of the leaf's 1.83 M gates, so the pool-v4 Poseidon2 proof digest
+would bring a leaf near 0.7 M (estimate); two statements a leaf, or four children a node, trade rows for fewer proofs.
+
+**Hostile proofs, against the host.** Each case was presented to the host's verifier and to the leaf (execution, then
+proof, then verification of the leaf's proof):
+- *Agreed refusals:* a public input changed (spend; demand); a scalar changed; a pairing-only tamper (KZG's W replaced
+  by the generator, so only the final pairing fails); the proof's pairing-point object set to (G, 2G) and to (G, ∞);
+  spend and burn proofs swapped between their leaves (they share a public-input count). The leaf's proof fails
+  verification: the pairing points of a tampered inner proof propagate into the leaf's own and are checked with it.
+- *Refused before a leaf proof exists:* a scalar word plus p (`noir_js` refuses a value past the modulus; the host:
+  "Non-canonical proof element"); a commitment's limb split non-canonically for the same point, a commitment off the
+  curve and a commitment at infinity (bb's prover stops on its own assertion; the host refuses each by its named
+  malformed-proof message).
+- *Key cases:* a leaf taking its key as a witness, as slice 27's measured recursion did, accepts a burn proof as a
+  spend; the host refuses it. Keys are therefore constants of each leaf. bb's recursion binds a key hash to its key:
+  a pinned key with another kind's hash, and a key with another key's hash in either direction, give leaf proofs
+  that fail. That also holds up [slice 32](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32)'s node and
+  folds, which admit children by key hash.
+- *Operational:* the prover makes a leaf proof over an invalid inner proof, which then fails verification; an
+  aggregator verifies each proof natively before proving its leaf.
+- *Node:* a child under a key outside the set, a child under a pinned key carrying another node key, a node-key input
+  that is not the children's, a substituted child digest, a child's proof with another child's public inputs, and a
+  child presenting the pinned spend leaf's key hash over the witness-key leaf's key and proof are all refused. A
+  whole tree under a made-up node key verifies under that key; the phone's check of the root's node-key input against
+  its pinned key refuses it.
+
+**No verdict needs a proof's bytes beyond a failed proof.** An inventory of every read of a record's or publication's
+proof in `src/pool`, `src/pool/v3` and `src/lit` (lit records carry no proof): the bytes are verified, hashed into
+`proofHash`, length-checked, copied or compared as bytes; nothing reads a value out of them. The uses that decide a
+verdict:
+- *Verification* (admission, replay, force, §9 fault targets, a kind-7 request's count): the aggregation attests it.
+- *Adoption* (`state.ts`): the trail's record must equal the adopted publication's byte for byte, which the
+  proof-free bytes, the proof's length and its `proofHash` decide, barring a SHA-256 collision.
+- *A failed proof:* an exclusion (`PROOF` in replay, §9.1's intrinsic exclusion) needs the verifier's strict
+  rejection over the exact bytes, which an attestation that proofs verified cannot give. The phone fetches that
+  proof and establishes the failure itself; a statement without a leaf is never read as failed.
+- *Kind-7 variants* share one statement identity and differ only in their proofs; a phone needs one attestation or
+  one native verification per variant, keyed by `proofHash`.
+- *Venue publications* (demands, releases, requests) are judged at the venue, outside the evidence chain; a phone
+  verifies them natively (below).
+- *Lengths:* the trail store's digests decode records strictly (`evidence-store.ts`), so a record whose proof length
+  breaks §5 ends a kept trail's authentication, where §7.1 lets digests be computed over such fields (the fault path
+  hashes raw fields); the proof-free frame must carry exact lengths, and step 3's contract states which rule it follows.
+
+A proof-free record keeps everything but the proof and adds its 32-byte hash: by kind 607, 938, 671, 614, 358 (kind 5,
+unchanged), 782 and 326 bytes against 14,950–15,562 with the proof (kinds 1–7). 900 spends a day are 0.84 MB.
+
+**A phone-class proxy.** The reference's own code on this host, bb.js as WebAssembly (what a phone runs) and
+JavaScript single-threaded unless named; a desktop core is not a phone core, so these scale to a phone only by a
+device's measured factor (step 5):
+
+| Proxy | This host | A mean day (900 statements, 720 headers) |
+|---|---|---|
+| A root (or any 14,656-byte v3) proof verified, pinned key | 22.7 ms, after a 210 ms instance start | one a period |
+| Leaf and node digests recomputed | 0.48 ms a statement | 0.4 s |
+| Proof-free replay (`readPackage` over 1 issue and 1,000 spends, stand-in proofs judged by a stub) | 5.4 ms a statement | 4.9 s |
+| Ergo header check (the store's full child check over a synthetic chain; real headers 8–13 ms for proof of work) | 11.0 ms a header | 7.9 s |
+| A restore's capsule scan (foreign capsules) | 0.061 ms a capsule | 4·10⁶ capsules in about 4 minutes (extrapolated) |
+| A spend proved on the holder's device (`openV3Prover`) | 3.9 s on one thread, 1.6 s on four; 482 MB peak | per payment |
+
+The phone's daily work is seconds; a restore at 10⁶ statements replays about 1.5 hours (extrapolated) and checks
+headers from the backing's anchor (3.2 hours from EIP-37 activation, 6.0 from genesis, extrapolated from these
+per-header times). **What aggregation saves is bytes more than computation:** verifying a mean day's 900 proofs
+natively takes 20 s here, but downloads about 13 MB; a restore's 10⁶ proofs would take 6.3 hours and 14.7 GB. So the
+unaggregated tail, venue publications and a small scope's whole trail stay cheap to verify natively, and complete
+replay remains the fallback when no aggregator serves.
+
+**Limits.** One host and one run of each case; the tree has two levels over four kinds (settle and request leaves
+proved alone); the in-circuit verifier's agreement with the host is shown on these 18 cases, not proved; phone rates
+are a desktop proxy; the replay's venue answers are in-memory fixtures; no aggregator, frame or reader integration
+exists (step 4).
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the
