@@ -206,48 +206,39 @@ export const passedOver = (error: unknown): string | undefined =>
   error instanceof V3ServiceClientError ? (error.code === "PROXY" && error.status === 0 ? undefined : error.code) :
   error instanceof EncodingError ? "INVALID" : error instanceof EvidenceRefusal || error instanceof PackageLimitError ? "EVIDENCE" : undefined;
 
-/** A sync from a source: where it came from, and the replicas passed over before it. */
+/** A sync from a source: where it came from, and the sources passed over before it. */
 export interface Synced {
   readonly served: ServedPackage; readonly origin: "replica" | "served"; readonly url: string; readonly skipped: readonly Skipped[];
 }
 
+/** A source of a backing's evidence: its URL as its client keeps it (`new URL(url).href`, which outputs, `except` and
+ * the repair record name), and a sync into the party's evidence store, `full` from nothing. */
+export interface Source {
+  readonly url: string; readonly origin: "replica" | "served"; sync(full: boolean): Promise<ServedPackage>;
+}
+
 /**
- * Sync `kept`'s backing into the party's evidence store from its sources, in order (M12b): the operator's service
- * (`service add`), then, where it fails as `passedOver` names (it does not answer, refuses or sends evidence that does
- * not frame or assemble) or none is kept, each replica of the terms' operator as added, each passed over likewise; every
- * source passed over is reported. Where none answered, the operator's refusal stands, and an operator that did not
- * answer leaves `{ skipped }` (a wallet then reads its kept package). `except` are URLs never asked (a replica's
- * own). Each source keeps its own mark in the store (`V3ServiceClient.sync`), so one source's answer never tells
- * another what to leave out.
+ * `kept`'s sources, in the order asked (M12b): the operator's service (`service add`), then each replica of the terms'
+ * operator as added, none in `except` (a replica's own). A reader with replicas need not keep the operator's service.
+ * Each source keeps its own mark in the store (`V3ServiceClient.sync`), so one source's answer never tells another what
+ * to leave out.
  */
-export async function syncSources(directory: Directory, kept: KeptTerms, view: View,
-  sync: (client: V3ServiceClient) => Promise<ServedPackage>, except: readonly string[] = []): Promise<Synced | { readonly skipped: readonly Skipped[] }> {
-  const skipped: Skipped[] = [], identity = { operator: kept.terms.operator, reference: view.file.reference, construction: directory.construction };
-  let refusal: unknown;
-  // Each replica by the URL its client keeps (`new URL(url).href`), which outputs, `except` and the repair record name.
-  const added = replicaUrls(directory, kept.terms.operator).map(url => new URL(url).href), replicas = added.filter(url => !except.includes(url));
-  // A reader with replicas need not keep the operator's service (all of them passed over included).
+export function sourcesOf(directory: Directory, kept: KeptTerms, view: View,
+  sync: (client: V3ServiceClient, full: boolean) => Promise<ServedPackage>, except: readonly string[] = []): Source[] {
+  const identity = { operator: kept.terms.operator, reference: view.file.reference, construction: directory.construction };
+  const added = replicaUrls(directory, kept.terms.operator).map(url => new URL(url).href), sources: Source[] = [];
   if (added.length === 0 || readOptional(directory.file(`services/${hex(kept.terms.operator)}.json`)) !== undefined) {
     const client = serviceClient(directory, kept, view);
-    if (!except.includes(client.baseUrl)) {
-      try { return { served: await sync(client), origin: "served", url: client.baseUrl, skipped }; } catch (error) {
-        // A refusal passes the read to the replicas (replication is the remedy for withheld evidence), and stands if none answers.
-        const code = passedOver(error);
-        if (code === undefined || replicas.length === 0 && !unanswered(error)) throw error;
-        if (!unanswered(error)) refusal = error;
-        skipped.push({ url: client.baseUrl, code });
-      }
-    }
+    if (!except.includes(client.baseUrl)) sources.push({ url: client.baseUrl, origin: "served", sync: full => sync(client, full) });
   }
-  for (const url of replicas) {
-    try { return { served: await sync(new V3ServiceClient(url, undefined, identity)), origin: "replica", url, skipped }; } catch (error) {
-      const code = passedOver(error);
-      if (code === undefined) throw error;
-      skipped.push({ url, code });
-    }
+  // A URL listed twice (the operator's own, or one href spelled twice) is one source. A replica's client is made when
+  // it is asked: an onion replica's needs the holder's proxy, which stops only a read that reaches it.
+  for (const url of new Set(added)) {
+    if (except.includes(url) || sources.some(source => source.url === url)) continue;
+    let client: V3ServiceClient | undefined;
+    sources.push({ url, origin: "replica", sync: full => sync(client ??= new V3ServiceClient(url, undefined, identity), full) });
   }
-  if (refusal !== undefined) throw refusal;
-  return { skipped };
+  return sources;
 }
 
 /** Whether a service call failed because the service did not answer (nothing listening, a dropped connection). */
@@ -259,7 +250,7 @@ export const unanswered = (error: unknown): boolean =>
 const unresolvedEvidence = (error: unknown): boolean => error instanceof EvidenceRefusal && error.status === "unresolved-evidence";
 
 /** The sources whose answer from nothing a read found still unresolved, each at the selection sequence it served then,
- * for one backing: `readRepaired` asks such a source from nothing again only once its selection moves. */
+ * for one backing: `readSources` asks such a source from nothing again only once its selection moves. */
 export interface RepairRecord {
   unresolvedAt(url: string): bigint | undefined;
   record(url: string, sequence: bigint | undefined): void;
@@ -308,52 +299,67 @@ export function repairRecord(directory: Directory, backing: Uint8Array): RepairR
  * backing) or the holder's own file was damaged since: removing the record. Any other refusal of the read over a
  * source's answer (a `ReplayRefusal`, or an `EvidenceRefusal` such as a lapsed selection) passes that source over at
  * once, as `REFUSED` or `UNRESOLVED`: a resolved read is verified, so a source can withhold but never forge, and its
- * refusal stands only where no other source resolves (audit 32). `supply` syncs from the sources not in `except`, from
- * nothing where `full` says so; `use` receives what it supplied, with every source passed over named in `skipped`.
+ * refusal stands only where no other source resolves (audit 32).
+ *
+ * Each source is asked once, in order, and again from nothing only for that repair. A source that does not answer,
+ * refuses or sends evidence that does not frame, assemble or fit the budget is passed over as `passedOver` names; the
+ * holder's own proxy that is not there stops the read. Where no read resolves, the last read's refusal stands, with
+ * every source passed over named; else the operator's own refusal stands; else (no source answered) `use` receives
+ * `{ skipped }` (a wallet then reads its kept package). `use` otherwise receives the synced source, with every source
+ * passed over before it named in `skipped`.
  */
-export async function readRepaired<T>(
-  supply: (options: { readonly full: (url: string) => boolean; readonly except: readonly string[] }) => Promise<Synced | { readonly skipped: readonly Skipped[] }>,
+export async function readSources<T>(sources: readonly Source[],
   use: (synced: Synced | { readonly skipped: readonly Skipped[] }) => Promise<T>, record: RepairRecord): Promise<T> {
-  const except: string[] = [], passed: Skipped[] = [], fromNothing = new Set<string>();
-  let repairing = false, refusal: EvidenceRefusal | ReplayRefusal | undefined;
-  // Once a read is unresolved, a source not yet asked from nothing at a recorded selection is asked from nothing.
-  const full = (url: string) => fromNothing.has(url) || repairing && record.unresolvedAt(url) === undefined;
-  for (;;) {
-    const supplied = await supply({ full, except }), synced = { ...supplied, skipped: [...passed, ...supplied.skipped] };
-    if (refusal !== undefined && !("served" in synced)) {
-      const final = refusal instanceof ReplayRefusal ? new ReplayRefusal(refusal.check)
-        : Object.assign(new EvidenceRefusal(refusal.status), refusal.clock === undefined ? {} : { clock: refusal.clock });
-      final.message = `${refusal instanceof ReplayRefusal ? refusal.check : refusal.status}: no source resolved the read (` +
-        `${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ")})` +
-        (unresolvedEvidence(refusal) ? "; removing the directory's unresolved.json asks every source from nothing again" : "");
-      throw final;
-    }
-    let wasFull = false;
-    if ("served" in synced) wasFull = full(synced.url);
-    try {
-      const result = await use(synced);
-      if ("served" in synced) record.record(synced.url, undefined);
-      return result;
-    } catch (error) {
-      if (!("served" in synced) || !(error instanceof EvidenceRefusal || error instanceof ReplayRefusal)) throw error;
-      refusal = error;
-      const sequence = synced.served.selection.sequence, url = synced.url;
-      if (!unresolvedEvidence(error)) { except.push(url); passed.push({ url, code: error instanceof ReplayRefusal ? "REFUSED" : "UNRESOLVED" }); continue; }
-      repairing = true;
-      const at = record.unresolvedAt(url);
-      if (!wasFull && (at === undefined || sequence > at)) { record.record(url, undefined); fromNothing.add(url); continue; }
-      if (wasFull && (at === undefined || sequence > at)) record.record(url, sequence);
-      except.push(url); passed.push({ url, code: "UNRESOLVED" });
+  const skipped: Skipped[] = [];
+  let repairing = false, refused: unknown, unresolved: EvidenceRefusal | ReplayRefusal | undefined;
+  for (const { url, origin, sync } of sources) {
+    // Once a read is unresolved, a source with no recorded selection is asked from nothing at once.
+    let full = repairing && record.unresolvedAt(url) === undefined, served: ServedPackage;
+    for (;;) {
+      try { served = await sync(full); } catch (error) {
+        const code = passedOver(error);
+        if (code === undefined) throw error;
+        // The operator's refusal stands where no other source answers; a replica's, or a source not answering, never does.
+        if (origin === "served" && !unanswered(error)) refused = error;
+        skipped.push({ url, code });
+        break;
+      }
+      try {
+        const result = await use({ served, origin, url, skipped: [...skipped] });
+        record.record(url, undefined);
+        return result;
+      } catch (error) {
+        if (!(error instanceof EvidenceRefusal || error instanceof ReplayRefusal)) throw error;
+        unresolved = error;
+        if (unresolvedEvidence(error)) {
+          repairing = true;
+          const at = record.unresolvedAt(url), moved = at === undefined || served.selection.sequence > at;
+          if (!full && moved) { record.record(url, undefined); full = true; continue; }
+          if (full && moved) record.record(url, served.selection.sequence);
+        }
+        skipped.push({ url, code: error instanceof ReplayRefusal ? "REFUSED" : "UNRESOLVED" });
+        break;
+      }
     }
   }
+  if (unresolved !== undefined) {
+    const final = unresolved instanceof ReplayRefusal ? new ReplayRefusal(unresolved.check)
+      : Object.assign(new EvidenceRefusal(unresolved.status), unresolved.clock === undefined ? {} : { clock: unresolved.clock });
+    final.message = `${unresolved instanceof ReplayRefusal ? unresolved.check : unresolved.status}: no source resolved the read (` +
+      `${skipped.map(s => `${s.url} ${s.code}`).join(", ")})` +
+      (unresolvedEvidence(unresolved) ? "; removing the directory's unresolved.json asks every source from nothing again" : "");
+    throw final;
+  }
+  if (refused !== undefined) throw refused;
+  return use({ skipped });
 }
 
-/** Read over the package its sources supply into `evidence`, repaired as `readRepaired` says; none answering is
- * unavailable evidence. `except` are URLs never asked (a replica's own). */
+/** Read over the package `kept`'s sources supply into `evidence`, as `readSources` says; none answering is unavailable
+ * evidence. `except` are URLs never asked (a replica's own). */
 async function served<T>(directory: Directory, kept: KeptTerms, view: View, evidence: EvidenceStore, use: (synced: Synced) => Promise<T>,
   except: readonly string[] = []): Promise<T> {
-  return readRepaired(options => syncSources(directory, kept, view, client => client.sync(kept.backing, evidence, { full: options.full(client.baseUrl) }),
-    [...except, ...options.except]), async synced => {
+  const sources = sourcesOf(directory, kept, view, (client, full) => client.sync(kept.backing, evidence, { full }), except);
+  return readSources(sources, async synced => {
     if (!("served" in synced)) {
       throw new CommandError("UNAVAILABLE", `no source answered: ${synced.skipped.map(s => `${s.url} ${s.code}`).join(", ") || "none kept"}`);
     }
@@ -469,7 +475,7 @@ export function keptBackings(directory: Directory): Uint8Array[] {
   return names.filter(name => /^[0-9a-f]{64}$/.test(name)).sort().map(name => hex32(name, "a kept backing"));
 }
 
-/** The sources a replica never asks (`syncSources`' `except`): its loopback listener by the URL a client keeps (`new
+/** The sources a replica never asks (`sourcesOf`' `except`): its loopback listener by the URL a client keeps (`new
  * URL(url).href`, which drops a default port), and with `onion`, its onion name at any port a replica list names. */
 export function ownSources(local: string, onion: string | undefined, listed: readonly string[]): string[] {
   const own = onion === undefined ? [local] : [local, `http://${onion}/`, ...listed.filter(url => new URL(url).hostname === onion)];

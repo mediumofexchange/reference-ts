@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-13` [Read a backing's sources in one walk, and keep the publisher outbox and SQLite's busy refusal in one place each (simplify)](decisions/2026-10.md#2026-10-13--read-a-backings-sources-in-one-walk-and-keep-the-publisher-outbox-and-sqlites-busy-refusal-in-one-place-each-simplify)
 - `2026-10-13` [Specify the phone path as a reader's option: check proofs in place of a trail's proofs and a range's sections, never a verdict rule (slice 34, Next 12)](decisions/2026-10.md#2026-10-13--specify-the-phone-path-as-a-readers-option-check-proofs-in-place-of-a-trails-proofs-and-a-ranges-sections-never-a-verdict-rule-slice-34-next-12)
 - `2026-10-13` [Aggregating the trail's statement proofs keeps up with the design point's mean on one 4-vCPU prover and agrees with the host on every hostile proof (slice 33, Next 12)](decisions/2026-10.md#2026-10-13--aggregating-the-trails-statement-proofs-keeps-up-with-the-design-points-mean-on-one-4-vcpu-prover-and-agrees-with-the-host-on-every-hostile-proof-slice-33-next-12)
 - `2026-10-13` [The complete exhaustion leaf keeps up with an ordinary Ergo day on one 4-vCPU prover, about three times over (slice 32, Next 12)](decisions/2026-10.md#2026-10-13--the-complete-exhaustion-leaf-keeps-up-with-an-ordinary-ergo-day-on-one-4-vcpu-prover-about-three-times-over-slice-32-next-12)

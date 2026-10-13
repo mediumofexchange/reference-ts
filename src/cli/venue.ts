@@ -18,7 +18,7 @@ import { DEFAULT_ERGO_DEPTH, ErgoVenue, ergoAnchorContext, syncCaughtUp, type Er
 import { parseErgoHeader } from "../ergo-headers.js";
 import { ERGO_SYNTHETIC_REFERENCE, ERGO_TESTNET_REFERENCE, ergoProfileIdentity, MINER_FEE_TREE_HEX, ownErgoProfile, type ErgoProfile,
   type ErgoReferenceContext } from "../ergo-profile.js";
-import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, verifyErgoProof, type ErgoPublisherPersistence,
+import { ErgoPublisher, ergoNodePublisher, payToPublicKeyTree, readPlainBox, rowOutbox, verifyErgoProof, type ErgoPublisherPersistence,
   type ErgoPublishingSupplier } from "../ergo-publisher.js";
 import { ErgoVenueJournal } from "../ergo-store.js";
 import { ergoNodeSupplier, nodeText, parseNodeJson, type ErgoSupplier } from "../ergo-supplier.js";
@@ -277,45 +277,18 @@ export function openPublisher(directory: Directory, persistence?: ErgoPublisherP
   } finally { secretKey.fill(0); }
 }
 
-/**
- * A funding directory's publisher state outside a journal (`relay.db`): one revisioned snapshot under the
- * publisher's load, save and guard contract. A save or guard that finds another revision than the one this
- * adapter loaded or saved refuses (`FENCED`), so two publishers never both act on one outbox.
- */
+/** A funding directory's publisher outbox outside a journal (`relay.db`), as `rowOutbox` keeps it. */
 export function publisherStore(path: string): { readonly persistence: ErgoPublisherPersistence; close(): void } {
   const db = new DatabaseSync(path, { timeout: 5000, readBigInts: true });
   try {
     db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS ergo_publisher (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, snapshot TEXT NOT NULL) STRICT;`);
   } catch (error) { db.close(); throw error; }
-  let revision: bigint | undefined;
   const transaction = <T>(work: () => T): T => {
     db.exec("BEGIN IMMEDIATE");
     try { const result = work(); db.exec("COMMIT"); return result; } catch (error) { db.exec("ROLLBACK"); throw error; }
   };
-  const current = () => {
-    const found = db.prepare("SELECT revision,snapshot FROM ergo_publisher WHERE id=1").get();
-    if (revision !== undefined && ((found?.revision as bigint | undefined) ?? 0n) !== revision) throw new CommandError("FENCED", "another publisher changed this outbox");
-    return found;
-  };
-  return { close: () => db.close(), persistence: Object.freeze({
-    load: (): string | undefined => transaction(() => {
-      if (revision !== undefined) throw new CommandError("STORAGE", "the publisher store is already loaded");
-      const found = current();
-      revision = found === undefined ? 0n : found.revision as bigint;
-      return found?.snapshot as string | undefined;
-    }),
-    guard: (): void => transaction(() => { current(); }),
-    save: (snapshot: string): void => {
-      if (typeof snapshot !== "string" || revision === undefined) throw new CommandError("STORAGE", "the publisher store is not loaded");
-      const next = revision + 1n;
-      transaction(() => {
-        current();
-        db.prepare("INSERT INTO ergo_publisher VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot").run(next, snapshot);
-      });
-      revision = next;
-    },
-  }) };
+  return { close: () => db.close(), persistence: rowOutbox(db, transaction, (code, message) => { throw new CommandError(code, message); }) };
 }
 
 /** The funding tree of a 32-byte secp256k1 secret. */

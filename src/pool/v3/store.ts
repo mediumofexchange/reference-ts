@@ -59,7 +59,7 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { fieldToBytes, isField } from "../field.js";
 import { fileIdentity, otherNames } from "../../file-identity.js";
-import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
+import { rowOutbox, type ErgoPublisherPersistence } from "../../ergo-publisher.js";
 import { RangeLimitError, replacementChain, type ChainLink, type HeldCommitment, type RangeAnswer, type RangeEntry,
   type ReplacementChain } from "../../record-range.js";
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
@@ -78,7 +78,7 @@ import { ownVerifier, readFrontier, readPackage } from "./package-reader.js";
 import { EvidenceRefusal, ReplayRefusal } from "./refusals.js";
 import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, type ScopeForcedPublication,
   type ScopeResult } from "./scope-reader.js";
-import { FileInUse, KeptStateMismatch, removeKeptFile, ReplayStore } from "./replay-store.js";
+import { busy, FileInUse, KeptStateMismatch, removeKeptFile, ReplayStore } from "./replay-store.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
 import type { RootTerms } from "./terms.js";
@@ -406,7 +406,7 @@ export class V3OperatorJournal {
       // Its owner fence holds only over one name of the file.
       requireThat(!otherNames(path), "STORAGE", "the journal's file has another name (a hard link), which SQLite reads as another database");
       try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+        if (busy(error)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
         throw error;
       }
       this.db.exec(`CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id=1),
@@ -482,31 +482,7 @@ export class V3OperatorJournal {
    * not reenter run() or advance the protocol command log's revision. Each
    * adapter also fences stale publisher instances sharing the same owner. */
   publisherPersistence(): ErgoPublisherPersistence {
-    let revision: bigint | undefined;
-    const row = () => this.db.prepare("SELECT revision,snapshot FROM ergo_publisher WHERE id=1").get();
-    const current = () => {
-      const found = row();
-      requireThat(revision === undefined || (found?.revision ?? 0n) === revision, "FENCED", "another publisher changed this outbox");
-      return found;
-    };
-    return Object.freeze({
-      load: (): string | undefined => this.transaction(() => {
-        requireThat(revision === undefined, "STORAGE", "publisher persistence adapter is already loaded");
-        const found = current(); revision = found === undefined ? 0n : found.revision as bigint;
-        requireThat(found === undefined || (typeof found.revision === "bigint" && typeof found.snapshot === "string"), "STORAGE", "invalid publisher outbox");
-        return found?.snapshot as string | undefined;
-      }),
-      guard: (): void => this.transaction(() => { current(); }),
-      save: (snapshot: string): void => {
-        requireThat(typeof snapshot === "string" && revision !== undefined && revision < SQLITE_LIMIT, "STORAGE", "publisher outbox is not loaded or full");
-        const next = revision + 1n;
-        this.transaction(() => {
-          current();
-          this.db.prepare("INSERT INTO ergo_publisher VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot").run(next, snapshot);
-        });
-        revision = next;
-      },
-    });
+    return rowOutbox(this.db, work => this.transaction(work), (code, message) => { throw new V3StoreError(code, message); });
   }
 
   private metadata() { return this.db.prepare("SELECT * FROM identity WHERE id=1").get(); }
@@ -577,7 +553,7 @@ export class V3OperatorJournal {
     requireThat(!this.beside, "STORAGE", "a handle beside the owner signs and keeps nothing");
     try { this.db.exec("BEGIN IMMEDIATE"); } catch (error) {
       // Another handle holds the database past the busy timeout: nothing was read or written here.
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+      if (busy(error)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
       throw error;
     }
     try {
@@ -688,7 +664,7 @@ export class V3OperatorJournal {
       const writer = new DatabaseSync(this.path, { timeout: 5000, readBigInts: true });
       let lineage: ReturnType<typeof addLineage>;
       try { lineage = addLineage(writer); } catch (error) {
-        if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
+        if (busy(error)) throw new V3StoreError("BUSY", "the journal database is held by another handle");
         throw error;
       } finally { writer.close(); }
       try { this.reads().remark(lineage.identity, lineage.mark); } catch (error) {

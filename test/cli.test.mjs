@@ -244,8 +244,8 @@ describe('moe wallet and relay files', () => {
       expect(a.persistence.load()).toBeUndefined();
       expect(b.persistence.load()).toBeUndefined();
       a.persistence.save('first');
-      expect(() => b.persistence.save('second')).toThrow(/another publisher/);
-      expect(() => b.persistence.guard()).toThrow(/another publisher/);
+      expect(() => b.persistence.save('second')).toThrow(expect.objectContaining({ code: 'FENCED', message: 'another publisher changed this outbox' }));
+      expect(() => b.persistence.guard()).toThrow(expect.objectContaining({ code: 'FENCED' }));
       a.persistence.guard();
       a.close(); b.close();
       const c = publisherStore(join(dir, 'relay.db'));

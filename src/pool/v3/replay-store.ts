@@ -309,6 +309,9 @@ export class FileInUse extends Error {
   readonly file: string;
   constructor(file: string) { super(`the ${file} is in use`); this.name = "FileInUse"; this.file = file; }
 }
+/** Whether SQLite refused because another connection holds the database's lock: every store maps this alone to its
+ * in-use refusal (`FileInUse`, `BUSY`), never to damage it would discard. */
+export const busy = (error: unknown): boolean => error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message);
 const mapJson = (map: ReadonlyMap<string, bigint>): string => JSON.stringify([...map].map(([k, v]) => [k, v.toString()]));
 const jsonMap = (text: unknown): Map<string, bigint> => new Map((JSON.parse(text as string) as [string, string][]).map(([k, v]) => [k, BigInt(v)]));
 
@@ -531,7 +534,7 @@ function lockKept(path: string): KeptLock {
     const lock = new DatabaseSync(key, { timeout: 0 });
     try { lock.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE"); } catch (error) {
       lock.close();
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
     entry = { lock, count: 0, pages: undefined, unvouched: false };
@@ -610,7 +613,7 @@ function keptFileHolds(path: string, digest: string): PageDigest | undefined {
   } catch (error) {
     // Another store holding the file is the caller's error, never damage to discard.
     if (error instanceof FileInUse) throw error;
-    if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+    if (busy(error)) throw new FileInUse("kept replay file");
     // Nor is a failure of the system the file lies on (no descriptor left, an I/O or permission error): the file may
     // be sound, and discarding it would replay the whole history once the failure passes. One that persists (a failing
     // disk) stays visible at each opening; removing the file by hand replays the history, as a discard would.
@@ -859,7 +862,7 @@ export class ReplayStore {
       throw error;
     } finally {
       try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-        if (!(error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message))) throw error;
+        if (!busy(error)) throw error;
         // Writes still in flight go into a transaction closeWalk rolls back, never into the file.
         this.#lost = true; this.#db.exec("BEGIN");
       }
@@ -894,7 +897,7 @@ export class ReplayStore {
    * had just rejected (§14). A file another store is writing refuses them as in use before they commit. */
   #forget(body: () => void): void {
     try { this.#atomic(body); } catch (error) {
-      if (this.#kept !== undefined && error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (this.#kept !== undefined && busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
   }
@@ -1390,7 +1393,7 @@ export class ReplayStore {
     this.#lost = false; this.#keptMark = undefined; this.#keptAt = performance.now();
     // The write lock is taken with the transaction: a file another store is writing refuses here, with nothing open.
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
     try {
@@ -1469,7 +1472,7 @@ export class ReplayStore {
   remark(evidence: Uint8Array, mark: Uint8Array): void {
     if (this.#db.isTransaction) throw new Error("a walk or transaction is open on this store");
     try { this.#db.exec("BEGIN IMMEDIATE"); } catch (error) {
-      if (error instanceof Error && /database is locked|SQLITE_BUSY/i.test(error.message)) throw new FileInUse("kept replay file");
+      if (busy(error)) throw new FileInUse("kept replay file");
       throw error;
     }
     try { this.#db.prepare("UPDATE kept_walk SET mark = ? WHERE substr(evidence, 1, ?) = ?").run(mark, evidence.length, evidence); this.#db.exec("COMMIT"); } catch (error) {
