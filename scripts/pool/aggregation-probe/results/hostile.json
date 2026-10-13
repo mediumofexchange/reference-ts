@@ -11,7 +11,7 @@
   "proofBytes": 14656,
   "verified": true,
   "leafAccepts": true,
-  "failedAt": "verified"
+  "stage": "verified"
  },
  "genuine-burn": {
   "leaf": "burn",
@@ -25,7 +25,7 @@
   "proofBytes": 14656,
   "verified": true,
   "leafAccepts": true,
-  "failedAt": "verified"
+  "stage": "verified"
  },
  "public-input-changed": {
   "leaf": "spend",
@@ -39,7 +39,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "scalar-changed": {
   "leaf": "spend",
@@ -53,7 +53,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "pairing-part-only: KZG W replaced by the generator": {
   "leaf": "spend",
@@ -67,7 +67,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "pairing check"
+  "stage": "pairing check"
  },
  "pairing-point object set to (G, 2G)": {
   "leaf": "spend",
@@ -81,7 +81,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "pairing-point object: P0 = G, P1 at infinity": {
   "leaf": "spend",
@@ -95,7 +95,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "scalar word + p (same value mod p)": {
   "leaf": "spend",
@@ -155,7 +155,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "burn proof presented as a spend (keys swapped)": {
   "leaf": "spend",
@@ -169,7 +169,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "arbitrary key: burn proof under burn key, leaf taking its key as a witness": {
   "leaf": "spend (free)",
@@ -183,7 +183,7 @@
   "proofBytes": 14656,
   "verified": true,
   "leafAccepts": true,
-  "failedAt": "verified"
+  "stage": "verified"
  },
  "changed key hash: spend key with burn key hash (key pinned, hash a witness)": {
   "leaf": "spend (kh)",
@@ -197,7 +197,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "key and hash disagree: burn key with spend key hash, burn proof": {
   "leaf": "spend (free)",
@@ -211,7 +211,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "key and hash disagree: spend key with burn key hash, spend proof": {
   "leaf": "spend (free)",
@@ -225,7 +225,7 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  },
  "demand proof with a demand public input changed": {
   "leaf": "demand",
@@ -239,6 +239,6 @@
   "proofBytes": 14656,
   "verified": false,
   "leafAccepts": false,
-  "failedAt": "reduction step"
+  "stage": "reduction step"
  }
 }

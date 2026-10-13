@@ -3,7 +3,7 @@
 // the pinned node key, and only the phone's check of the root's node-key input refuses it; (2) propagation, a node
 // over the genuine issue leaf and a pinned spend leaf over the proof whose KZG W is the generator (only its final
 // pairing fails): the node proof fails at the pairing check. Also records the stage at which each hostile leaf proof's
-// verification failed (bb's verify.log). Writes results/tree-cases.json and adds `failedAt` to results/hostile.json.
+// verification failed (bb's verify.log). Writes results/tree-cases.json and adds `stage` to results/hostile.json.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { Noir } from '@noir-lang/noir_js';
@@ -35,10 +35,10 @@ const out = {}, pinnedNode = read('node', 'vk/vk_hash')[0], freeKh = read('leaf_
   const bad = child('leaf_spend', 'pairing-tamper-tree'), good = child('leaf_issue', 'tree');
   const r = await new Noir(program('node')).execute({ key_node: pinnedNode, vk: [good.vk, bad.vk], proof: [good.proof, bad.proof], pi: [good.pi, bad.pi], kh: [good.kh, bad.kh] });
   const node = prove(path.join(BUILD, 'node'), r.witness, 'pairing-tamper-tree');
-  out['node over a leaf of a pairing-only tamper'] = { leaf: { ...leaf, failedAt: stage('leaf_spend', 'pairing-tamper-tree') }, node: { ...node, failedAt: stage('node', 'pairing-tamper-tree') } };
+  out['node over a leaf of a pairing-only tamper'] = { leaf: { ...leaf, stage: stage('leaf_spend', 'pairing-tamper-tree') }, node: { ...node, stage: stage('node', 'pairing-tamper-tree') } };
 }
 const hostilePath = path.join(import.meta.dirname, 'results/hostile.json'), hostile = JSON.parse(readFileSync(hostilePath, 'utf8'));
-for (const [n, c] of cases().entries()) if (hostile[c.id]?.exit === 0) hostile[c.id].failedAt = stage(`leaf_${c.leaf}${c.variant ? '_' + c.variant : ''}`, 'case' + n);
+for (const [n, c] of cases().entries()) if (hostile[c.id]?.exit === 0) hostile[c.id].stage = stage(`leaf_${c.leaf}${c.variant ? '_' + c.variant : ''}`, 'case' + n);
 writeFileSync(hostilePath, JSON.stringify(hostile, null, 1) + '\n');
 writeFileSync(path.join(import.meta.dirname, 'results/tree-cases.json'), JSON.stringify(out, null, 1) + '\n');
 console.log(JSON.stringify(out, null, 1));

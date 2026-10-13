@@ -28,7 +28,7 @@
    "peakMiB": 2607,
    "proofBytes": 14656,
    "verified": false,
-   "failedAt": "pairing check"
+   "stage": "pairing check"
   },
   "node": {
    "exit": 0,
@@ -37,7 +37,7 @@
    "peakMiB": 2008,
    "proofBytes": 14656,
    "verified": false,
-   "failedAt": "pairing check"
+   "stage": "pairing check"
   }
  }
 }

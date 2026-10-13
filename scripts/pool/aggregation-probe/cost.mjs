@@ -10,7 +10,7 @@ const nodeS = Object.entries(node.cases).filter(([k, v]) => v.accepts || k === '
 const leaf = median(leafS), nd = median(nodeS), per = leaf + nd, r = x => Math.round(x * 100) / 100;
 // The design point (production requirements): 10^6 statements over three years, about 900 a day, peaks of 10^4.
 const day = n => ({ statements: n, hours: r(n * per / 3600), keepsUp: r(86400 / (n * per)), machinesForTheDay: Math.ceil(n * per / 86400) });
-const spine = n => r((Math.ceil(Math.log2(n)) * nd + leaf) / 60);
+const spine = n => r(Math.ceil(Math.log2(n)) * nd / 60);
 const p = phone;
 const out = {
   host: leaves.host,
@@ -19,13 +19,13 @@ const out = {
   mean: day(900), peak: { ...day(10000), spineMinutes: spine(10000) },
   // Pinned leaves must agree with the host on every case; a variant (key or key hash a witness) is a leaf not built,
   // run to show why the key is a constant and that bb binds a key hash to its key.
-  hostile: Object.fromEntries(Object.keys(host).map(k => [k, { leaf: hostile[k]?.leaf, host: host[k], leafAccepts: hostile[k]?.leafAccepts, failedAt: hostile[k]?.failedAt ?? (hostile[k]?.executes ? 'no leaf proof' : 'not executed'),
+  hostile: Object.fromEntries(Object.keys(host).map(k => [k, { leaf: hostile[k]?.leaf, host: host[k], leafAccepts: hostile[k]?.leafAccepts, stage: hostile[k]?.stage ?? (hostile[k]?.executes ? 'no leaf proof' : 'not executed'),
     ...(hostile[k]?.leaf.includes('(') ? {} : { agree: host[k] === hostile[k]?.leafAccepts }) }])),
   pinnedLeavesAgreeOnEveryCase: Object.keys(host).every(k => hostile[k].leaf.includes('(') || host[k] === hostile[k].leafAccepts),
   node: { gates: node.gates, rows: node.rows, proveS: { n: nodeS.length, median: r(nd), min: r(Math.min(...nodeS)), max: r(Math.max(...nodeS)) },
     digestsEqualHost: node.level1DigestsEqualHost && node.rootDigestEqualsHost, phoneChecks: node.phoneChecks,
     hostile: Object.fromEntries(Object.entries(node.cases).filter(([k]) => !k.startsWith('leaf ') && !k.startsWith('free') && !k.startsWith('level') && k !== 'key').map(([k, v]) => [k, v.accepts])) },
-  treeCases: Object.fromEntries(Object.entries(treeCases).map(([k, v]) => [k, k.startsWith('forged') ? { rootVerifiesUnderPinnedNodeKey: v.rootVerifiesUnderPinnedNodeKey, rootNodeKeyInputIsPinned: v.rootNodeKeyInputIsPinned, phoneAccepts: v.phoneAccepts } : { leafFailedAt: v.leaf.failedAt, nodeVerified: v.node.verified, nodeFailedAt: v.node.failedAt }])),
+  treeCases: Object.fromEntries(Object.entries(treeCases).map(([k, v]) => [k, k.startsWith('forged') ? { rootVerifiesUnderPinnedNodeKey: v.rootVerifiesUnderPinnedNodeKey, rootNodeKeyInputIsPinned: v.rootNodeKeyInputIsPinned, phoneAccepts: v.phoneAccepts } : { leafStage: v.leaf.stage, nodeVerified: v.node.verified, nodeStage: v.node.stage }])),
   phoneProxy: {
     note: 'this host, bb.js as WASM and JavaScript single-threaded unless named: a proxy to scale, not phone rates',
     rootVerifyMs: p['verify-root'].runs.threads1.pinned.verify.medianMs, verifierStartMs: p['verify-root'].runs.threads1.pinned.instanceStartMs,
