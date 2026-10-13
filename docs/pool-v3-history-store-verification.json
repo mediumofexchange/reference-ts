@@ -34,22 +34,22 @@
       "kind": 1,
       "count": 37,
       "bytes": 14656,
-      "totalMs": 37163,
-      "maxMs": 1314
+      "totalMs": 37179,
+      "maxMs": 1320
     },
     {
       "kind": 2,
       "count": 39,
       "bytes": 14656,
-      "totalMs": 119588,
-      "maxMs": 3087
+      "totalMs": 119635,
+      "maxMs": 3079
     },
     {
       "kind": 4,
       "count": 2,
       "bytes": 14656,
-      "totalMs": 5157,
-      "maxMs": 2580
+      "totalMs": 5166,
+      "maxMs": 2583
     },
     {
       "kind": 6,
@@ -63,54 +63,54 @@
     "payerFirstRead": {
       "statements": 37,
       "verified": 37,
-      "ms": 1050,
+      "ms": 1068,
       "fetchedBytes": 565631
     },
     "payerLaterReads": [
       {
         "verified": 12,
         "asked": 4,
-        "ms": 383,
+        "ms": 384,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 383,
+        "ms": 378,
         "fetchedBytes": 188545
       },
       {
         "verified": 12,
         "asked": 4,
-        "ms": 377,
+        "ms": 374,
         "fetchedBytes": 188545
       }
     ],
     "payerRestart": {
       "verified": 0,
       "asked": 0,
-      "ms": 43,
+      "ms": 39,
       "fetchedBytes": 809
     },
     "receiver": {
       "firstReadVerified": 73,
-      "firstReadMs": 1892,
+      "firstReadMs": 1882,
       "fulfilled": 36,
-      "fulfillMs": 789
+      "fulfillMs": 738
     },
     "payerAfterReturn": {
       "verified": 0,
       "asked": 4,
-      "ms": 82,
+      "ms": 76,
       "fetchedBytes": 48192
     },
     "restoredWallet": {
       "verified": 78,
-      "ms": 2139,
+      "ms": 2135,
       "fetchedBytes": 1205514
     },
     "journalAudit": {
-      "ms": 1628
+      "ms": 1641
     }
   },
   "readers": {
@@ -121,8 +121,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "ad751eee37a6e00c24bad28f13dfd720b2519cb4272cd0a0c8482a8c79fb4c12",
-        "history": "2571b30d5959fd1e18aa08541a78843e081cd2ec692c5ed5c4c2b738daf95eab",
+        "spentRoot": "e0898706c566621b4a6eb5dab6b8731850e953d95efb9b1b4c6da5b3e0245c9a",
+        "history": "639ef879a53f9b430335f44765de96d7936c41536c0f47dd6aeb2c1ac38090cf",
         "force": [],
         "clock": {
           "duration": "16",
@@ -135,9 +135,9 @@
       },
       "verified": 73,
       "instances": 2,
-      "readMs": 1570,
-      "maxRssBytes": 564076544,
-      "heapUsedBytes": 39661224,
+      "readMs": 1554,
+      "maxRssBytes": 561762304,
+      "heapUsedBytes": 37444360,
       "fetchedBytes": 1126772
     },
     "offline": {
@@ -147,8 +147,8 @@
         "sequence": "5",
         "canonicalIndex": "5",
         "segment": "cc98133d8e6ba17c761b56889803fdce980ffbb2921919934d0ef5afd8b3882b",
-        "spentRoot": "ad751eee37a6e00c24bad28f13dfd720b2519cb4272cd0a0c8482a8c79fb4c12",
-        "history": "2571b30d5959fd1e18aa08541a78843e081cd2ec692c5ed5c4c2b738daf95eab",
+        "spentRoot": "e0898706c566621b4a6eb5dab6b8731850e953d95efb9b1b4c6da5b3e0245c9a",
+        "history": "639ef879a53f9b430335f44765de96d7936c41536c0f47dd6aeb2c1ac38090cf",
         "force": [
           {
             "index": "23",
@@ -178,9 +178,9 @@
       },
       "verified": 3,
       "instances": 2,
-      "readMs": 352,
-      "maxRssBytes": 378392576,
-      "heapUsedBytes": 20139040,
+      "readMs": 346,
+      "maxRssBytes": 379748352,
+      "heapUsedBytes": 20602616,
       "fetchedBytes": 0
     },
     "kept": {
@@ -189,9 +189,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "538cdda063e443be25e3f67d4af31bd74a6ef523026616c15eb028be48474cad",
-        "spentRoot": "98d8de4b095a5d5fc9250e842463b899f9885fc72c3e8887027ba6638786baaa",
-        "history": "8d208c5aa9056d91b11c576339d3327f8b58b7a82aa9b59e0ada422e2cc807e3",
+        "segment": "a12a6d568dbbac0021c21f802845356fd2e02f55184e3fc3d0246caf8a088aad",
+        "spentRoot": "586b01da537581a868d8cbc5b93b849198a3c0fd090eb780d5d06620943f8801",
+        "history": "d31c30137e197b0cdf2cccb75554d21807dbe2876ebec9904be06776b4c2eb49",
         "force": [
           {
             "index": "23",
@@ -221,9 +221,9 @@
       },
       "verified": 2,
       "instances": 2,
-      "readMs": 334,
-      "maxRssBytes": 352067584,
-      "heapUsedBytes": 25685752,
+      "readMs": 343,
+      "maxRssBytes": 391139328,
+      "heapUsedBytes": 26141832,
       "fetchedBytes": 79579
     },
     "scratch": {
@@ -232,9 +232,9 @@
         "position": "6",
         "sequence": "8",
         "canonicalIndex": "29",
-        "segment": "538cdda063e443be25e3f67d4af31bd74a6ef523026616c15eb028be48474cad",
-        "spentRoot": "98d8de4b095a5d5fc9250e842463b899f9885fc72c3e8887027ba6638786baaa",
-        "history": "8d208c5aa9056d91b11c576339d3327f8b58b7a82aa9b59e0ada422e2cc807e3",
+        "segment": "a12a6d568dbbac0021c21f802845356fd2e02f55184e3fc3d0246caf8a088aad",
+        "spentRoot": "586b01da537581a868d8cbc5b93b849198a3c0fd090eb780d5d06620943f8801",
+        "history": "d31c30137e197b0cdf2cccb75554d21807dbe2876ebec9904be06776b4c2eb49",
         "force": [
           {
             "index": "23",
@@ -264,17 +264,17 @@
       },
       "verified": 78,
       "instances": 2,
-      "readMs": 1787,
-      "maxRssBytes": 597495808,
-      "heapUsedBytes": 29127168,
+      "readMs": 1743,
+      "maxRssBytes": 559988736,
+      "heapUsedBytes": 40632432,
       "fetchedBytes": 1205514
     }
   },
   "process": {
-    "maxRssBytes": 617775104,
-    "heapUsedBytes": 53564536
+    "maxRssBytes": 652075008,
+    "heapUsedBytes": 53701120
   },
-  "elapsedMs": 207253,
+  "elapsedMs": 207247,
   "sourceSha256Lf": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
     "dist/contexts.js": "7e1f202452c3b9ace6a2a8497aa49e126d9bfc6366d1cf09b49d05ecda55fbb3",
@@ -319,7 +319,7 @@
     "dist/pool/v3/replay-store.js": "2539d5327ccace91d282ed960969d33f40fe7a947f658ca581501d16be24f0d5",
     "dist/pool/v3/scope-evidence.js": "756dd7a2d4e4d3a7720178761382ca572b8450724ae31dfa51262b3e0befa26d",
     "dist/pool/v3/scope-reader.js": "42db24e1fc6387c5b6fa9fe51ea20e8d000ef87ba7a5a68ea0e5c71d286f1ffb",
-    "dist/pool/v3/service-client.js": "b22135a48d597715ff5114324272c1123b70b0c576fcf7c68aec18072a5d4c81",
+    "dist/pool/v3/service-client.js": "ef250a7eddd81833604a604484d7e102861ee91a985aa5b673ba06e9063ffca3",
     "dist/pool/v3/service-http.js": "8405ae45816aa925c20deab99f921f2da1141f1f3a104b4c05ab22ea3f8839b0",
     "dist/pool/v3/service-wire.js": "c0be6e4c68ec48fa722cae05b4cd2edab454bed14523d95a4d494a98fc3aed28",
     "dist/pool/v3/state.js": "62c8d90c0c42ada7e4cc67715d17f6f8de8e46fda9bd34ac88e083db6134dcbd",
@@ -395,7 +395,7 @@
     "src/pool/v3/replay-store.ts": "a18ad2d385c1bf8f3867f82c0ff6d1fb201f0af06ec02753e2b167d9124b0488",
     "src/pool/v3/scope-evidence.ts": "b37ae977f1f5c1c5d61ec5d444794c24397907115e6ae9a9f0309ceb4542a879",
     "src/pool/v3/scope-reader.ts": "59a4ec79cf20ba3514ee793200c53927c5e340a54719161a494573d0c90d2ca2",
-    "src/pool/v3/service-client.ts": "40e752f261a4f559184ace40be669b088de95f9ee0a3e5237a73c76d2f2a8992",
+    "src/pool/v3/service-client.ts": "704f152508965c75d4f635c0f31db8a49354735e141bb359b0a0ed38ebbb5e5a",
     "src/pool/v3/service-http.ts": "3abf0f747f1b68630d56c7f2716ebe71fd05e7f8a79c88f18f4dafafcaccbf34",
     "src/pool/v3/service-wire.ts": "5ddd4884383e58f3789e3d7bdbc6eb2a8754342036e84e1f643fc019b6ed99f6",
     "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
