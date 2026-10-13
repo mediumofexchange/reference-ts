@@ -1146,7 +1146,7 @@ cost estimated; no leaf past 2^22 proved.
 
 ## The trail's proof aggregation (slice 33)
 
-Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/f14ba9e/scripts/pool/aggregation-probe);
+Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/d5362c7/scripts/pool/aggregation-probe);
 [decision](../decisions/2026-10.md#2026-10-13--aggregating-the-trails-statement-proofs-keeps-up-with-the-design-points-mean-on-one-4-vcpu-prover-and-agrees-with-the-host-on-every-hostile-proof-slice-33-next-12)).
 The question ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction),
 Next 12 step 2): instead of [a relation over the whole verdict](#the-trails-succinct-relation-slice-27), a phone runs
@@ -1169,11 +1169,12 @@ node key, and checks the root's node-key input against that key.
 | Leaf, each of the six kinds | 1,832,291–1,832,945 gates, 2^21 rows (12.6% headroom); 32.4–34.9 s, median 33.9 over 10 proofs; 2.5–2.6 GB peak; digests equal the host's |
 | Node | 1,469,816 gates, 2^21 rows; 24.8–29.4 s, median 25.6 over 4 proofs; 2.0 GB; a two-level tree over issue, spend, burn and demand leaves, every digest equal to the host's, the root verified and its node key the pinned one |
 | A statement (leaf + its share of nodes) | 59.5 s |
-| Hostile proofs (18 cases) | every pinned leaf's verdict equals the host's verifier's (`openV3Verifier`) |
-| Hostile children (6 cases) | all refused |
+| Proofs presented to pinned leaves (14: 2 genuine, 12 hostile) | every verdict equals the host's verifier's (`openV3Verifier`); 8 hostile leaf proofs fail verification, 4 cases stop before a leaf proof exists |
+| Leaves with their key or key hash as a witness (4 cases, circuits not built) | why keys are constants; bb binds a key hash to its key |
+| Hostile children and trees (8 cases) | all refused, one only by the phone's check of the root's node-key input |
 
 **The tree keeps up with the mean 1.6 times.** 900 statements a day take one 4-vCPU prover 14.9 hours. A peak day of
-10⁴ takes 165 hours: seven machines in the day, with a spine of 14 node levels (about 6.5 minutes) after the last leaf.
+10⁴ takes 165 hours: seven machines in the day, with a spine of 14 node levels (about 6 minutes) after the last leaf.
 The direction's estimate from summed parts was 48 s a statement; the leaf runs 34 s rather than the 25–26 s scaled from
 its gate count (not isolated; leaf and node both fill 2^21 rows). The leaf's cost is the same for every kind; kind 5 has no proof and
 no leaf. With [slice 32](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32)'s exhaustion (7.0 hours on
@@ -1183,26 +1184,34 @@ would bring a leaf near 0.7 M (estimate); two statements a leaf, or four childre
 
 **Hostile proofs, against the host.** Each case was presented to the host's verifier and to the leaf (execution, then
 proof, then verification of the leaf's proof):
-- *Agreed refusals:* a public input changed (spend; demand); a scalar changed; a pairing-only tamper (KZG's W replaced
-  by the generator, so only the final pairing fails); the proof's pairing-point object set to (G, 2G) and to (G, ∞);
-  spend and burn proofs swapped between their leaves (they share a public-input count). The leaf's proof fails
-  verification: the pairing points of a tampered inner proof propagate into the leaf's own and are checked with it.
+- *Leaf proofs that fail* (bb names the stage): a public input changed (spend; demand), a scalar changed, the inner
+  proof's pairing-point object set to (G, 2G) and to (G, ∞) (public-input words, so the transcript changes), and spend
+  and burn proofs swapped between their leaves (they share a public-input count) fail at the reduction step, where the
+  in-circuit verifier's constraints break. A pairing-only tamper (KZG's W replaced by the generator, so only the final
+  pairing fails) fails at the pairing check: the inner proof's deferred pairing points enter the leaf's own and are
+  checked with it. A node over that leaf and a genuine one also fails at the pairing check, so the points propagate
+  up the tree.
 - *Refused before a leaf proof exists:* a scalar word plus p (`noir_js` refuses a value past the modulus; the host:
   "Non-canonical proof element"); a commitment's limb split non-canonically for the same point, a commitment off the
-  curve and a commitment at infinity (bb's prover stops on its own assertion; the host refuses each by its named
-  malformed-proof message).
+  curve and a commitment at infinity (bb's prover stops on its own native assertion; the host refuses each by its
+  named malformed-proof message). An honest prover's assertion is not a constraint: whether the in-circuit verifier's
+  limb-range and on-curve constraints refuse a proof built over such encodings with a consistent transcript is an
+  evidence gap, for step 4's adversarial review against the pinned bb source.
 - *Key cases:* a leaf taking its key as a witness, as slice 27's measured recursion did, accepts a burn proof as a
   spend; the host refuses it. Keys are therefore constants of each leaf. bb's recursion binds a key hash to its key:
   a pinned key with another kind's hash, and a key with another key's hash in either direction, give leaf proofs
   that fail. That also holds up [slice 32](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32)'s node and
-  folds, which admit children by key hash.
+  folds, which admit children by key hash. In review, the pinned leaf's key witnesses (Noir turns the constant
+  into witnesses) were patched to the burn key and hash over a burn proof: the leaf proof fails at the reduction step.
 - *Operational:* the prover makes a leaf proof over an invalid inner proof, which then fails verification; an
   aggregator verifies each proof natively before proving its leaf.
 - *Node:* a child under a key outside the set, a child under a pinned key carrying another node key, a node-key input
   that is not the children's, a substituted child digest, a child's proof with another child's public inputs, and a
-  child presenting the pinned spend leaf's key hash over the witness-key leaf's key and proof are all refused. A
-  whole tree under a made-up node key verifies under that key; the phone's check of the root's node-key input against
-  its pinned key refuses it.
+  child presenting the pinned spend leaf's key hash over the witness-key leaf's key and proof are all refused.
+- *A forged tree:* the genuine node circuit with its node-key input set to the witness-key leaf's key hash, over two
+  such leaves accepting a burn proof as a spend. Its root proves and **verifies under the pinned node key**; only the
+  phone's check that the root's node-key input equals the pinned key's hash refuses it. That check carries the tree's
+  soundness and is a named rule for step 3's contract.
 
 **No verdict needs a proof's bytes beyond a failed proof.** An inventory of every read of a record's or publication's
 proof in `src/pool`, `src/pool/v3` and `src/lit` (lit records carry no proof): the bytes are verified, hashed into
@@ -1231,7 +1240,7 @@ device's measured factor (step 5):
 
 | Proxy | This host | A mean day (900 statements, 720 headers) |
 |---|---|---|
-| A root (or any 14,656-byte v3) proof verified, pinned key | 22.7 ms, after a 210 ms instance start | one a period |
+| A 14,656-byte v3 proof verified, pinned key (a spend; the level-2 root, in review, 23.2 ms) | 22.7 ms, after a 210 ms instance start | one root a period |
 | Leaf and node digests recomputed | 0.48 ms a statement | 0.4 s |
 | Proof-free replay (`readPackage` over 1 issue and 1,000 spends, stand-in proofs judged by a stub) | 5.4 ms a statement | 4.9 s |
 | Ergo header check (the store's full child check over a synthetic chain; real headers 8–13 ms for proof of work) | 11.0 ms a header | 7.9 s |
@@ -1240,13 +1249,13 @@ device's measured factor (step 5):
 
 The phone's daily work is seconds; a restore at 10⁶ statements replays about 1.5 hours (extrapolated) and checks
 headers from the backing's anchor (3.2 hours from EIP-37 activation, 6.0 from genesis, extrapolated from these
-per-header times). **What aggregation saves is bytes more than computation:** verifying a mean day's 900 proofs
-natively takes 20 s here, but downloads about 13 MB; a restore's 10⁶ proofs would take 6.3 hours and 14.7 GB. So the
-unaggregated tail, venue publications and a small scope's whole trail stay cheap to verify natively, and complete
-replay remains the fallback when no aggregator serves.
+per-header times). **Aggregation saves a day's bytes and a restore's computation:** verifying a mean day's 900 proofs natively takes
+20 s here but downloads about 13 MB; a restore's 10⁶ proofs would take 6.3 hours (four times its proof-free replay)
+and 14.7 GB. The unaggregated tail, venue publications and a small scope's daily trail stay cheap to verify natively,
+and complete replay remains the fallback when no aggregator serves.
 
 **Limits.** One host and one run of each case; the tree has two levels over four kinds (settle and request leaves
-proved alone); the in-circuit verifier's agreement with the host is shown on these 18 cases, not proved; phone rates
+proved alone); bb's in-circuit range and on-curve constraints not read from source; the in-circuit verifier's agreement with the host is shown on these 18 cases, not proved; phone rates
 are a desktop proxy; the replay's venue answers are in-memory fixtures; no aggregator, frame or reader integration
 exists (step 4).
 
