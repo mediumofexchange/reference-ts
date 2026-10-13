@@ -284,6 +284,10 @@ fn main(
         spells(first, b, 1, m.prev);
         spells(first, b, 65, top);
         assert(first * (sp as Field - 1) == 0);
+        // Positions 0 and 1 are sentinels: a merge needs two live entries and a lift one, so no push is ever lost
+        // below the stack and the root depends on every id pushed.
+        assert(o_mrg * is_zero(sp as Field - 1) == 0);
+        assert(o_lift * is_zero(sp as Field) == 0);
         let chain_hdr = (o_hdr == 1) & m.in_hdr;
         let h_in = if chain_hdr { m.mh } else { blake2b::iv0() };
         let tt = if chain_hdr { m.hc } else { 0 };

@@ -81,8 +81,16 @@ const fb = foldInput(pb, f1, fa.acc, start);
 const f2 = await prove(cF2, kF2, fb.x, 'foldNext');
 let verified = true;
 try { execFileSync(bb, ['verify', '-p', path.join(f2.dir, 'proof'), '-k', path.join(kF2.vkDir, 'vk'), '-i', path.join(f2.dir, 'public_inputs'), '-t', 'noir-recursive'], { stdio: 'ignore' }); } catch { verified = false; }
-const endOk = BigInt(f2.pi[3]) === id2(wordsOf(Buffer.from(B.blocks.at(-1).id, 'hex')))[0] && BigInt(f2.pi[5]) === BigInt(B.blocks.at(-1).height);
-log('final fold verified', verified, 'end is the last header', endOk, 'root is the map', BigInt(f2.pi[6]) === map.root, 'subjects', map.leaves.size);
+// A phone's checks on the latest fold's public inputs: the pinned node and fold keys, the map's start (the genesis
+// header id and height it pinned), and the end id's two halves and height against a header it verified itself.
+const lastId = id2(wordsOf(Buffer.from(B.blocks.at(-1).id, 'hex'))), genesis = id2(wordsOf(Buffer.from(A.parent.id, 'hex')));
+const phone = {
+  keys: BigInt(f2.pi[8]) === BigInt(kN.kh) && BigInt(f2.pi[9]) === BigInt(kF2.kh),
+  start: BigInt(f2.pi[0]) === genesis[0] && BigInt(f2.pi[1]) === genesis[1] && BigInt(f2.pi[2]) === BigInt(A.parent.height),
+  end: BigInt(f2.pi[3]) === lastId[0] && BigInt(f2.pi[4]) === lastId[1] && BigInt(f2.pi[5]) === BigInt(B.blocks.at(-1).height),
+};
+const endOk = phone.keys && phone.start && phone.end;
+log('final fold verified', verified, 'phone checks', JSON.stringify(phone), 'root is the map', BigInt(f2.pi[6]) === map.root, 'subjects', map.leaves.size);
 // Hostile folds: each must be refused at execution.
 const hostile = [];
 async function refuse(name, c, x) { try { await new Noir(c.program).execute(x); hostile.push({ name, refused: false }); } catch { hostile.push({ name, refused: true }); } }
@@ -93,4 +101,4 @@ await refuse('a next fold whose previous fold ends elsewhere', cF2, { ...fb.x, p
 await refuse('a first fold whose map does not start empty', cF1, { ...fa.x, u0: { ...fa.x.u0, root: S(1n) } });
 await refuse('a fold over a lone first leaf (its streams end apart)', cF1, { ...fa.x, vk: pa.leaf0.vk, proof: pa.leaf0.proof, pi: pa.leaf0.pi, kh: pa.leaf0.kh, t1: tJ(pa.leaf0st.t), m1: mJson(pa.leaf0st.m), u1: uJ(pa.leaf0st.u), root: S(pa.leaf0st.u.root), end_lo: S(id2(pa.leaf0st.m.prev)[0]), end_hi: S(id2(pa.leaf0st.m.prev)[1]), end_height: S(pa.leaf0st.m.height), acc: S(record(0n, ...id2(pa.leaf0st.m.prev), pa.leaf0st.m.height, pa.leaf0st.u.root)) });
 log('hostile', JSON.stringify(hostile));
-writeFileSync(path.join(out, 'result.json'), JSON.stringify({ seed, blocksPerPeriod: per, gates: { T: cT.gates, M: cM.gates, U: cU.gates, node: cN.gates, foldFirst: cF1.gates, foldNext: cF2.gates }, proveS: times, verified, endOk, hostile }, null, 1));
+writeFileSync(path.join(out, 'result.json'), JSON.stringify({ seed, blocksPerPeriod: per, gates: { T: cT.gates, M: cM.gates, U: cU.gates, node: cN.gates, foldFirst: cF1.gates, foldNext: cF2.gates }, proveS: times, verified, phoneChecks: phone, hostile }, null, 1));

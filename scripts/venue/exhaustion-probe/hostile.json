@@ -100,6 +100,16 @@
   "reason": "Cannot satisfy constraint"
  },
  {
+  "name": "a made-up id merged into the sentinel below the stack",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
+  "name": "a lift over the empty stack",
+  "refused": true,
+  "reason": "Cannot satisfy constraint"
+ },
+ {
   "name": "honest streams pass the top check (control)",
   "refused": true
  },

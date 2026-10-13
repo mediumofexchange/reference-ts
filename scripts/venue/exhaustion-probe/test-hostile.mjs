@@ -64,6 +64,18 @@ const is = hb.mop.findIndex(o => o[0]);
   const leaf = runLeaf(st, [], [{ op: 'wid', v: Buffer.alloc(31, 9) }, ...M].slice(0, at + 3), new SubjectMap(), lp);
   await expectFail('a header read over a stack of two (an extra leaf below the tree)', 'M', inputs(st, leaf, lp));
 }
+// A made-up id pushed and merged into the stack's sentinel (sp 1), or a lift over the empty stack (sp 0): the id would
+// join the chain without entering the root and shift every real position label.
+{
+  const { M } = streams(data.blocks);
+  const lp = { CT: 0, CM: params.CM, E: 0 };
+  const X = Buffer.alloc(32, 7);
+  for (const [name, pre] of [['a made-up id merged into the sentinel below the stack', [{ op: 'id', v: X }, { op: 'mrg' }]], ['a lift over the empty stack', [{ op: 'lift' }]]]) {
+    const st = initialState(data.parent, new SubjectMap().root);
+    const leaf = runLeaf(st, [], [...pre, ...M].slice(0, params.CM), new SubjectMap(), lp);
+    await expectFail(name, 'M', inputs(st, leaf, lp));
+  }
+}
 // Hostile streams: every leaf a valid transition, the period's top check refuses.
 function streamCase(name, edit, editQueue, honest = false) {
   const s = streams(data.blocks);
@@ -92,4 +104,4 @@ streamCase('a map entry left unapplied', undefined, (q) => { q.splice(0, 1); });
 streamCase('a map entry applied twice', undefined, (q) => { q.push(q[0]); });
 const summary = { cases: results.length, asExpected: results.filter(r => r.refused).length, wrong: results.filter(r => !r.refused).map(r => r.name) };
 console.log(JSON.stringify(summary));
-writeFileSync(`hostile-${ct}-${cm}-${eu}.json`, JSON.stringify(results, null, 1));
+writeFileSync(new URL('./hostile.json', import.meta.url), JSON.stringify(results, null, 1));

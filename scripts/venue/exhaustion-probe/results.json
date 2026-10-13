@@ -11,7 +11,7 @@
    "tSlot": 23799,
    "tFixed": 33920,
    "listSlot": 113,
-   "mSlot": 11037,
+   "mSlot": 11044,
    "mFixed": 10878,
    "uSlot": 5253,
    "uFixed": 9849,
@@ -27,7 +27,7 @@
    },
    "M": {
     "slots": 378,
-    "gates": 4190073
+    "gates": 4192719
    },
    "U": {
     "slots": 790,
@@ -46,7 +46,7 @@
     71.41
    ],
    "M": [
-    74.95
+    75.01
    ],
    "U": [
     75.54
@@ -57,11 +57,12 @@
   },
   "peakMiB": {
    "T": 6284,
-   "M": 6377,
+   "M": 6430,
    "U": 5366,
    "node": 1982
   },
-  "proofBytes": 14656
+  "proofBytes": 14656,
+  "note": "M figures after the review's fix (two live-entry checks); per-slot and fixed figures are fits over small sizes, and full-size leaves measure 0.2-0.9% above them"
  },
  "days": [
   {
