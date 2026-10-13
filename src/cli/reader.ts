@@ -27,7 +27,7 @@ import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { V3ServiceClient, V3ServiceClientError } from "../pool/v3/service-client.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print,
+import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, integer, UsageError, openDirectory, parseArguments, print, READ_FLAGS,
   readJson, readOptional, readRequired, required, writeReplace, type Arguments, type Directory, type FlagSpec, type Role } from "./common.js";
 import { directoryVerifier } from "./backend.js";
 import { CONSTRUCTION_NAMES, constructionNamed, DEFAULT_CONSTRUCTION, isConstructionName, nameOf, type ConstructionName } from "./construction.js";
@@ -388,8 +388,6 @@ export function openEvidence(directory: Pick<Directory, "file" | "construction">
     throw inUse(error);
   }
 }
-
-const READ_FLAGS = { dir: "value", package: "value", verifiers: "value" } as const;
 
 export async function supplyCommand(argv: readonly string[], role: Role): Promise<void> {
   const args = parseArguments(argv, READ_FLAGS, 1);

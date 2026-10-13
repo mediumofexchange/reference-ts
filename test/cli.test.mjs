@@ -5,7 +5,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { CommandError, integer, hex32, openDirectory, parseArguments, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
+import { CommandError, fresh, integer, hex32, openDirectory, parseArguments, readSecret, refusalOf, UsageError, writeExclusive, writeReplace, writeSame } from '../src/cli/common.js';
+import { FaultEvidenceLimitError } from '../src/pool/evidence-chain.js';
+import { PackageLimitError } from '../src/pool/v3/package.js';
+import { EvidenceRefusal } from '../src/pool/v3/refusals.js';
+import { TrailLimitError } from '../src/pool/v3/trail.js';
+import { RangeLimitError } from '../src/record-range.js';
 import { authenticate, explain } from '../src/cli/terms.js';
 import { LIT } from '../src/lit/construction.js';
 import { litConfigHash } from '../src/lit/configuration.js';
@@ -50,6 +55,32 @@ describe('moe command arguments', () => {
     expect(() => integer('7', 'n', 1n, 6n)).toThrow('out of range');
     expect(hex32('ab'.repeat(32), 'h')).toHaveLength(32);
     for (const bad of ['AB'.repeat(32), 'ab'.repeat(31), 'ab'.repeat(33)]) expect(() => hex32(bad, 'h')).toThrow(UsageError);
+  });
+  it('names evidence past a reader\'s budget as the read\'s resource refusal, never an uncoded failure (audit 32)', async () => {
+    const resource = { code: 'UNRESOLVED', check: 'resource-refusal' };
+    for (const error of [new PackageLimitError('package item exceeds the reader\'s budget'), new TrailLimitError('trail exceeds reader byte budget'),
+      new RangeLimitError('range reader budget exceeded'), new FaultEvidenceLimitError('evidence exceeds reader budget')]) {
+      expect(await refusalOf(error)).toEqual({ ...resource, message: error.message });
+    }
+    expect(await refusalOf(new EvidenceRefusal('resource-refusal'))).toMatchObject(resource);
+    expect(await refusalOf(new CommandError('BUSY', 'held', 'LOCK'))).toEqual({ code: 'BUSY', check: 'LOCK', message: 'held' });
+    expect(await refusalOf(new RangeError('a programming failure'))).toBeUndefined();
+  });
+  it('reads a secret file of exactly 32 bytes as a copy, refusing another length or an absent file by name (audit 32)', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'moe-secret-')), path = join(directory, 'backer.key');
+    try {
+      expect(() => readSecret(path, 'backer.key')).toThrow(expect.objectContaining({ code: 'ABSENT' }));
+      writeExclusive(path, new Uint8Array(32).fill(7));
+      const secret = readSecret(path, 'backer.key');
+      expect([...secret]).toEqual(Array(32).fill(7));
+      secret.fill(0);
+      expect([...readSecret(path, 'backer.key')]).toEqual(Array(32).fill(7));
+      writeFileSync(join(directory, 'short.key'), new Uint8Array(31));
+      expect(() => readSecret(join(directory, 'short.key'), 'short.key')).toThrow(expect.objectContaining({ code: 'INVALID' }));
+      const made = [fresh(), fresh()];
+      expect(made.map(bytes => [bytes.length, bytes.byteOffset, bytes.buffer.byteLength])).toEqual([[32, 0, 32], [32, 0, 32]]);
+      expect(made[0]).not.toEqual(made[1]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
 

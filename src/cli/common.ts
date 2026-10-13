@@ -14,6 +14,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import type { Construction } from "../pool/v3/construction.js";
+import type { Commitment } from "../venue-records.js";
 import { declared, isConstructionName, type ConstructionName } from "./construction.js";
 
 export const ROLES = Object.freeze(["wallet", "operator", "reader", "relay"] as const);
@@ -26,6 +27,35 @@ export class UsageError extends Error {
 /** A refusal of the command itself (a directory, file or argument it will not act on): exit 1. */
 export class CommandError extends Error {
   constructor(readonly code: string, message: string, readonly check?: string) { super(message); this.name = "CommandError"; }
+}
+
+/**
+ * The fields a refusal prints (exit 1), or undefined for an unexpected failure (exit 3). Evidence past a reader's
+ * budget (a package, trail, range or fault-evidence limit) is the read's `resource-refusal`, as an `EvidenceRefusal`
+ * names it: a source's hostile size is a refusal by name, never a stack.
+ */
+export async function refusalOf(error: unknown): Promise<{ code: string; check?: string; message: string } | undefined> {
+  if (!(error instanceof Error)) return undefined;
+  const [{ V3StoreError }, { V3ServiceClientError }, { ReferenceVenueError }, { ProgramError }, { ParameterError }, { EvidenceRefusal, ReplayRefusal },
+    { V3WalletError }, { PackageLimitError }, { TrailLimitError }, { RangeLimitError }, { FaultEvidenceLimitError }, { VenueError }, { EncodingError }] =
+    await Promise.all([import("../pool/v3/store.js"), import("../pool/v3/service-client.js"), import("../pool/v3/guard.js"),
+      import("../pool/v3/programs.js"), import("../pool/proof-verifier.js"), import("../pool/v3/refusals.js"), import("../pool/v3/wallet-store.js"),
+      import("../pool/v3/package.js"), import("../pool/v3/trail.js"), import("../record-range.js"), import("../pool/evidence-chain.js"),
+      import("../venue-error.js"), import("../bytes.js")]);
+  const coded = error as Error & { code?: string; check?: string };
+  if (error instanceof CommandError || error instanceof V3StoreError || error instanceof ProgramError || error instanceof ParameterError ||
+      error instanceof V3WalletError) {
+    return { code: coded.code!, ...(coded.check === undefined ? {} : { check: coded.check }), message: error.message };
+  }
+  if (error instanceof V3ServiceClientError) return { code: error.code, check: String(error.status), message: error.message };
+  if (error instanceof ReplayRefusal) return { code: "REFUSED", check: error.check, message: error.message };
+  if (error instanceof EvidenceRefusal) return { code: "UNRESOLVED", check: error.status, message: error.message };
+  if (error instanceof PackageLimitError || error instanceof TrailLimitError || error instanceof RangeLimitError ||
+      error instanceof FaultEvidenceLimitError) return { code: "UNRESOLVED", check: "resource-refusal", message: error.message };
+  if (error instanceof ReferenceVenueError) return { code: "REFERENCE", message: error.message };
+  if (error instanceof VenueError) return { code: "VENUE", message: error.message };
+  if (error instanceof EncodingError) return { code: "INVALID", message: error.message };
+  return undefined;
 }
 
 /** A command that is never replayed, rerun: its saved result is printed and the process exits 4 (`fulfill`). */
@@ -58,6 +88,8 @@ export function parseArguments(argv: readonly string[], spec: FlagSpec, position
   if (positional.length !== positionals) throw new UsageError(`expected ${positionals} argument${positionals === 1 ? "" : "s"}, got ${positional.length}`);
   return { positional, flags };
 }
+/** The flags every read takes: its directory, a package file in place of its sources, and its verifier's instances. */
+export const READ_FLAGS = { dir: "value", package: "value", verifiers: "value" } as const satisfies FlagSpec;
 export const flag = (args: Arguments, name: string): string | undefined => args.flags.get(name)?.[0];
 export const flags = (args: Arguments, name: string): readonly string[] => args.flags.get(name) ?? [];
 export const has = (args: Arguments, name: string): boolean => args.flags.has(name);
@@ -83,6 +115,8 @@ export const hex = (bytes: Uint8Array): string => bytesToHex(bytes);
 
 const json = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) => typeof v === "bigint" ? v.toString()
   : v instanceof Uint8Array ? bytesToHex(v) : v);
+/** A commitment as every output names it. */
+export const commitmentOut = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
 /** One JSON object on stdout: bytes as lowercase hex, integers as decimal strings. */
 export function print(value: unknown): void { process.stdout.write(`${json(value)}\n`); }
 /** One progress event on stderr, written as `print` writes. */
@@ -279,9 +313,19 @@ export function readJson(path: string, what: string): unknown {
   }
 }
 
-/** A 32-byte secret kept in a file of its own, written exclusively by `init`. */
+/** A 32-byte secret kept in a file of its own, written exclusively by `init`: a copy the caller wipes, and the buffer
+ * it was read into (which can share a pooled allocation) wiped here, so wiping the copy leaves no other. */
 export function readSecret(path: string, what: string): Uint8Array {
-  const bytes = readRequired(path, what);
-  if (bytes.length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
-  return bytes;
+  let read: Buffer;
+  try { read = readFileSync(path); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CommandError("ABSENT", `no ${what} at ${path}`);
+    throw error;
+  }
+  try {
+    if (read.length !== 32) throw new CommandError("INVALID", `${what} is not 32 bytes`);
+    return Uint8Array.from(read);
+  } finally { read.fill(0); }
 }
+
+/** 32 fresh random bytes for a key or token, in an array of their own (never a pooled allocation a wipe would miss). */
+export const fresh = (): Uint8Array => crypto.getRandomValues(new Uint8Array(32));

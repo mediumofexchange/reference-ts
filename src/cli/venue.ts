@@ -9,7 +9,6 @@
 // time a view opens. Each directory reads through its own node endpoints
 // (`config.json`) with `ergoNodeSupplier`, publishes with `ergoNodePublisher`,
 // and keeps its own view in `venue.db` (`ErgoVenueJournal`).
-import { randomBytes } from "node:crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
@@ -27,8 +26,8 @@ import { MempoolNode } from "../ergo-synthetic.js";
 import type { RecordKind } from "../record-range.js";
 import type { VenueReference } from "../pool/v3/guard.js";
 import { VenueError } from "../venue-error.js";
-import { CommandError, event, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive, writeReplace,
-  type Directory } from "./common.js";
+import { CommandError, event, fresh, openDirectory, parseArguments, print, readJson, readOptional, readSecret, required, UsageError, writeExclusive,
+  writeReplace, type Directory } from "./common.js";
 
 const KINDS: readonly RecordKind[] = [1, 2, 3, 4];
 const NODE_TIMEOUT_MS = 30_000;
@@ -170,11 +169,13 @@ export async function createVenue(directory: Directory, options: { readonly synt
   }
   if (anchor === undefined) throw new CommandError("UNAVAILABLE", "no node endpoint supplied the anchor header");
   // A fresh location key, reused if an interrupted run left one.
-  let key = readOptional(directory.file("location.key"));
-  if (key === undefined) { key = new Uint8Array(randomBytes(32)); writeExclusive(directory.file("location.key"), key); }
-  if (key.length !== 32) throw new CommandError("INVALID", "location.key is not 32 bytes");
-  const profile = ownErgoProfile({ reference: context, anchor, depth,
-    scripts: { 1: locationTree(key, 1), 2: locationTree(key, 2), 3: locationTree(key, 3), 4: locationTree(key, 4) } });
+  const kept = existsSync(directory.file("location.key")), key = kept ? readSecret(directory.file("location.key"), "location.key") : fresh();
+  let profile: ErgoProfile;
+  try {
+    if (!kept) writeExclusive(directory.file("location.key"), key);
+    profile = ownErgoProfile({ reference: context, anchor, depth,
+      scripts: { 1: locationTree(key, 1), 2: locationTree(key, 2), 3: locationTree(key, 3), 4: locationTree(key, 4) } });
+  } finally { key.fill(0); }
   const venue = parseVenue(JSON.parse(venueText(profile, anchorHeight)));
   await keepContext(directory, venue);
   writeExclusive(directory.file("venue.json"), venueText(profile, anchorHeight));
@@ -379,7 +380,5 @@ export class SpendBudget {
   close(): void { this.db.close(); }
 }
 
-/** Fresh random bytes for a key or token file. */
-export const fresh = (): Uint8Array => new Uint8Array(randomBytes(32));
 /** A fresh secp256k1 funding secret. */
 export const freshFunding = (): Uint8Array => secp256k1.utils.randomPrivateKey();

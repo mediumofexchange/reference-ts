@@ -21,15 +21,13 @@ import type { Commitment } from "../venue-records.js";
 import { createV3Service } from "../pool/v3/service-http.js";
 import { V3OperatorJournal, V3StoreError } from "../pool/v3/store.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
-import { CommandError, event, flag, has, hex, hex32, integer, openDirectory, parseArguments, pause, pollMs, print, readRequired, readSecret, required, UsageError,
+import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, integer, openDirectory, parseArguments, pause, pollMs, print, readRequired, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Arguments, type Directory } from "./common.js";
 import { directoryVerifier } from "./backend.js";
 import { initRole, keptBackings } from "./reader.js";
 import { closeListener, listenLoopback, portOf, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { authenticate, keepTerms, keptTerms } from "./terms.js";
-import { besideView, createVenue, fresh, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
-
-const commitmentOf = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
+import { besideView, createVenue, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";
 
 /** The operator's journal over its synced view, with its publisher attached under the journal's outbox. */
 interface Operator {
@@ -125,7 +123,7 @@ async function open(argv: readonly string[]): Promise<void> {
   const op = await openOperator(directory, args);
   try {
     const signed = await op.journal.open(id, kept.signed), published = await budgeted(op, () => op.journal.publish());
-    print({ status: "pending", backing: kept.backing, commitment: commitmentOf(signed), published: commitmentOf(published) });
+    print({ status: "pending", backing: kept.backing, commitment: commitmentOut(signed), published: commitmentOut(published) });
   } finally { await op.close(); }
 }
 
@@ -218,7 +216,7 @@ async function serve(argv: readonly string[]): Promise<void> {
     // The latest signed commitment, a pending return's opening included, is published until the venue holds it.
     if (!signed.held) {
       const published = await budgeted(op, () => journal.publish());
-      if (!signed.published) event({ event: "published", at: s.now, commitment: commitmentOf(published) });
+      if (!signed.published) event({ event: "published", at: s.now, commitment: commitmentOut(published) });
       return;
     }
     if (s.pendingReturn) {
@@ -230,9 +228,9 @@ async function serve(argv: readonly string[]): Promise<void> {
     const keepAlive = keepAliveDue(s.now, s.heldIndex, silence, lag);
     if (!admitted && !keepAlive) return;
     const commitment = await journal.commit(`serve:${s.now}`);
-    event({ event: "committed", at: s.now, admitted: signed.admitted, commitment: commitmentOf(commitment) });
+    event({ event: "committed", at: s.now, admitted: signed.admitted, commitment: commitmentOut(commitment) });
     await budgeted(op, () => journal.publish());
-    event({ event: "published", at: s.now, commitment: commitmentOf(commitment) });
+    event({ event: "published", at: s.now, commitment: commitmentOut(commitment) });
   };
   try {
     while (!stopping()) {
@@ -259,7 +257,7 @@ async function returnCommand(argv: readonly string[]): Promise<void> {
   try {
     const signed = await untilTaken(op, args, 4n * op.view.venue.lag(), ["SCHEDULE"], () => op.journal.return(id));
     const published = await budgeted(op, () => op.journal.publish());
-    print({ status: "pending", commitment: commitmentOf(signed), published: commitmentOf(published) });
+    print({ status: "pending", commitment: commitmentOut(signed), published: commitmentOut(published) });
   } finally { await op.close(); }
 }
 
@@ -298,7 +296,7 @@ async function restore(argv: readonly string[]): Promise<void> {
       return;
     }
     const published = await budgeted(op, () => op.journal.publish());
-    print({ status: "pending", commitment: commitmentOf(signed), published: commitmentOf(published),
+    print({ status: "pending", commitment: commitmentOut(signed), published: commitmentOut(published),
       notes: ["statements co-signed after the last witnessed commitment lapse at this return; holders reprove them",
         "once it is witnessed, moe operator adopt (never restore again), then serve"] });
   } finally { await op.close(); }

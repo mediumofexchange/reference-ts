@@ -24,14 +24,13 @@
 // acceptance owner is a key, it has no `freshen` (presented notes spend as any
 // other), `move-window` moves its owner-key window, and `presentation` reads an
 // acceptance only where K and its owner key both signed it (lit-v1 §7).
-import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { compareBytes, EncodingError } from "../bytes.js";
-import { ERGO_SYNTHETIC_REFERENCE } from "../ergo-profile.js";
 import type { Commitment } from "../venue-records.js";
+import { ERGO_SYNTHETIC_REFERENCE } from "../ergo-profile.js";
 import { adoptedDomain } from "../pool/v3/configuration.js";
 import type { Construction, KeyedAcceptance, KeyedRequest } from "../pool/v3/construction.js";
 import { decodePublication, encodePublication, type SignedAcceptance } from "../pool/v3/records.js";
@@ -43,11 +42,10 @@ import { litConfigHash } from "../lit/configuration.js";
 import { decodePublication as decodeLitPublication } from "../lit/records.js";
 import { encodeLitTerms } from "../lit/terms.js";
 import { authenticateLitPaymentRequest, encodeLitPaymentRequest, litPaymentRequestDigest } from "../lit/wallet.js";
-import { startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
-import { readParameters } from "../pool/parameter-files.js";
-import { CommandError, flag, has, hex, hex32, integer, openDirectory, parseArguments, print, readJson, readOptional, readRequired, readSecret, required,
+import type { ProofVerifier } from "../pool/proof-verifier.js";
+import { CommandError, commitmentOut, flag, fresh, has, hex, hex32, integer, openDirectory, parseArguments, print, readJson, READ_FLAGS, readOptional, readRequired, readSecret, required,
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
-import { directoryVerifier, verifierCount } from "./backend.js";
+import { directoryBackend, directoryVerifier, verifierCount } from "./backend.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
 import { initConstruction, initRole, presentationOf, readRepaired, repairRecord, replicaCommand, serviceClient, serviceCommand, syncSources, termsCommand, unanswered,
   type Skipped } from "./reader.js";
@@ -74,7 +72,6 @@ const EXPLAINED = "explained";
 /** Whether the directory holds lit-v1's keyed notes (no proofs) rather than pool-v3's. */
 const keyed = (directory: Directory): boolean => !directory.construction.reader.proofs;
 
-const commitmentOut = (c: Commitment) => ({ operator: c.operator, sequence: c.sequence, root: c.root });
 const receiptOut = (r: WalletReceipt | undefined) => r === undefined ? null : { operator: r.operator, segment: r.segment, position: r.position };
 const finalOut = (f: { readonly checkpoint: Commitment; readonly judgingIndex: bigint } | undefined) =>
   f === undefined ? null : { checkpoint: commitmentOut(f.checkpoint), judgingIndex: f.judgingIndex };
@@ -134,7 +131,7 @@ function walletOver(directory: Directory, view: View, verifier: ProofVerifier | 
 /** The prover over the directory's cached parameters, loaded by dynamic import so a non-proving process loads no
  * `@noir-lang` module; its verifier is the wallet's. */
 async function openProver(directory: Directory, instances: number) {
-  const api = await startBackend(await readParameters(directory.path));
+  const api = await directoryBackend(directory);
   try {
     const { openV3Prover } = await import("../pool/v3/prover.js");
     const prover = await openV3Prover(api, { instances });
@@ -290,15 +287,13 @@ export function outside(directory: Pick<Directory, "path">, ...paths: string[]):
   return resolved;
 }
 
-const READ = { dir: "value", package: "value", verifiers: "value" } as const satisfies FlagSpec;
-
 function open(args: Arguments): { readonly directory: Directory; readonly kept: KeptTerms } {
   const directory = openDirectory(required(args, "dir"), "wallet"), venue = requireVenue(directory);
   return { directory, kept: keptTerms(directory, hex32(args.positional[0]!, "the backing"), venue) };
 }
 /** The alias and the kept terms of `<alias> <backing> ...`. */
 function aliased(argv: readonly string[], spec: FlagSpec, positionals: number) {
-  const args = parseArguments(argv, { ...READ, ...spec }, positionals);
+  const args = parseArguments(argv, { ...READ_FLAGS, ...spec }, positionals);
   const directory = openDirectory(required(args, "dir"), "wallet"), venue = requireVenue(directory);
   return { args, directory, alias: args.positional[0]!, kept: keptTerms(directory, hex32(args.positional[1]!, "the backing"), venue) };
 }
@@ -308,7 +303,7 @@ async function init(argv: readonly string[]): Promise<void> {
     fill: async (directory, args) => {
       let shown: object = {};
       if (has(args, "backer")) {
-        const secret = new Uint8Array(randomBytes(32));
+        const secret = fresh();
         writeExclusive(directory.file("backer.key"), secret);
         shown = { backer: ed25519.getPublicKey(secret) };
         secret.fill(0);
@@ -461,16 +456,14 @@ async function handoff(argv: readonly string[]): Promise<void> {
   await withWallet(directory, args, {}, async ({ wallet }) => {
     // The key is on durable storage before the source freezes; a rerun reuses it. A frozen wallet takes only the
     // key it was exported under, so no new key file is made for it.
-    let key = readOptional(keyPath!);
-    if (key === undefined) {
+    let key: Uint8Array;
+    if (!existsSync(keyPath!)) {
       if (wallet.custody().frozen) throw new CommandError("FROZEN", "this wallet was already handed off: name the key file it was exported under");
-      key = new Uint8Array(randomBytes(32)); writeExclusive(keyPath!, key);
+      key = fresh(); writeExclusive(keyPath!, key);
     } else if (process.platform !== "win32" && (statSync(keyPath!).mode & 0o077) !== 0) {
-      key.fill(0);
       throw new CommandError("MODE", `${keyPath} is readable or writable by group or others; a handoff key is owner-only`);
-    }
+    } else key = readSecret(keyPath!, "the key file");
     try {
-      if (key.length !== 32) throw new CommandError("INVALID", "the key file is not 32 bytes");
       // The freeze cannot be undone: an output path that cannot take the handoff is refused before it.
       if (!wallet.custody().frozen) {
         if (readOptional(outPath!) !== undefined) throw new CommandError("EXISTS", `${outPath} already exists; the handoff is written to a new file`);
@@ -649,7 +642,7 @@ async function status(argv: readonly string[]): Promise<void> {
 
 /** `sync <backing>`: holdings and standing demands at the view's witnessed index; resolves saved records. */
 async function sync(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, READ, 1), { directory, kept } = open(args);
+  const args = parseArguments(argv, READ_FLAGS, 1), { directory, kept } = open(args);
   await withWallet(directory, args, { sync: true }, async opened => {
     await withEvidence(opened, args, kept, false, async source => {
       print({ ...viewOut(await opened.wallet.sync(source.bytes, kept.signed), keyed(directory)), evidence: source.source, ...source.from });
@@ -758,7 +751,7 @@ async function settle(argv: readonly string[]): Promise<void> {
 
 /** `presentation <backing> <demand>`: a demand's outcome under C3.8, from public evidence alone. */
 async function presentation(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, READ, 2), { directory, kept } = open(args);
+  const args = parseArguments(argv, READ_FLAGS, 2), { directory, kept } = open(args);
   const id = hex32(args.positional[1]!, "the demand");
   await withWallet(directory, args, { sync: true }, async opened => {
     await withEvidence(opened, args, kept, false, async source => {
