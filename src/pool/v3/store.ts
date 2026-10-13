@@ -59,7 +59,7 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { fieldToBytes, isField } from "../field.js";
 import { fileIdentity, otherNames } from "../../file-identity.js";
-import type { ErgoPublisherPersistence } from "../../ergo-publisher.js";
+import { rowOutbox, type ErgoPublisherPersistence } from "../../ergo-publisher.js";
 import { RangeLimitError, replacementChain, type ChainLink, type HeldCommitment, type RangeAnswer, type RangeEntry,
   type ReplacementChain } from "../../record-range.js";
 import type { RecordPublisher, RecordVenue } from "../../record-venue.js";
@@ -482,31 +482,7 @@ export class V3OperatorJournal {
    * not reenter run() or advance the protocol command log's revision. Each
    * adapter also fences stale publisher instances sharing the same owner. */
   publisherPersistence(): ErgoPublisherPersistence {
-    let revision: bigint | undefined;
-    const row = () => this.db.prepare("SELECT revision,snapshot FROM ergo_publisher WHERE id=1").get();
-    const current = () => {
-      const found = row();
-      requireThat(revision === undefined || (found?.revision ?? 0n) === revision, "FENCED", "another publisher changed this outbox");
-      return found;
-    };
-    return Object.freeze({
-      load: (): string | undefined => this.transaction(() => {
-        requireThat(revision === undefined, "STORAGE", "publisher persistence adapter is already loaded");
-        const found = current(); revision = found === undefined ? 0n : found.revision as bigint;
-        requireThat(found === undefined || (typeof found.revision === "bigint" && typeof found.snapshot === "string"), "STORAGE", "invalid publisher outbox");
-        return found?.snapshot as string | undefined;
-      }),
-      guard: (): void => this.transaction(() => { current(); }),
-      save: (snapshot: string): void => {
-        requireThat(typeof snapshot === "string" && revision !== undefined && revision < SQLITE_LIMIT, "STORAGE", "publisher outbox is not loaded or full");
-        const next = revision + 1n;
-        this.transaction(() => {
-          current();
-          this.db.prepare("INSERT INTO ergo_publisher VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot").run(next, snapshot);
-        });
-        revision = next;
-      },
-    });
+    return rowOutbox(this.db, work => this.transaction(work), (code, message) => { throw new V3StoreError(code, message); });
   }
 
   private metadata() { return this.db.prepare("SELECT * FROM identity WHERE id=1").get(); }

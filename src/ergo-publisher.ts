@@ -60,6 +60,7 @@
 // A record that reaches its eighth transaction with that one refused is kept
 // as it is, with its inputs, until a view holds the record however it got
 // there; no command abandons it yet.
+import type { DatabaseSync } from "node:sqlite";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
@@ -442,6 +443,45 @@ export interface ErgoPublisherPersistence {
   load(): string | undefined;
   save(snapshot: string): void;
   guard(): void;
+}
+
+/** SQLite's largest integer: a revision past it cannot be stored. */
+const MAX_REVISION = (1n << 63n) - 1n;
+
+/**
+ * The publisher's outbox in one row of `db`'s `ergo_publisher` table (id 1, revision, snapshot; read with
+ * `readBigInts`), under the load, save and guard contract, each step inside the caller's `transaction` (a journal's
+ * keeps its owner fence). A save or guard that finds another revision than the one this adapter loaded or saved
+ * refuses `FENCED`, so two publishers never both act on one outbox; a row of another shape refuses `STORAGE`.
+ * `refuse` throws the caller's own error with that code.
+ */
+export function rowOutbox(db: Pick<DatabaseSync, "prepare">, transaction: <T>(work: () => T) => T,
+  refuse: (code: "FENCED" | "STORAGE", message: string) => never): ErgoPublisherPersistence {
+  let revision: bigint | undefined;
+  const current = () => {
+    const found = db.prepare("SELECT revision,snapshot FROM ergo_publisher WHERE id=1").get();
+    if (found !== undefined && (typeof found.revision !== "bigint" || typeof found.snapshot !== "string")) refuse("STORAGE", "invalid publisher outbox");
+    if (revision !== undefined && ((found?.revision as bigint | undefined) ?? 0n) !== revision) refuse("FENCED", "another publisher changed this outbox");
+    return found as { readonly revision: bigint; readonly snapshot: string } | undefined;
+  };
+  return Object.freeze({
+    load: (): string | undefined => transaction(() => {
+      if (revision !== undefined) refuse("STORAGE", "the publisher outbox adapter is already loaded");
+      const found = current();
+      revision = found?.revision ?? 0n;
+      return found?.snapshot;
+    }),
+    guard: (): void => transaction(() => { current(); }),
+    save: (snapshot: string): void => {
+      if (typeof snapshot !== "string" || revision === undefined || revision >= MAX_REVISION) refuse("STORAGE", "the publisher outbox is not loaded or full");
+      const next = revision + 1n;
+      transaction(() => {
+        current();
+        db.prepare("INSERT INTO ergo_publisher VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot").run(next, snapshot);
+      });
+      revision = next;
+    },
+  });
 }
 
 /** A transaction a record had before its current one: its id, and its change's, which a replacement never spends. */
