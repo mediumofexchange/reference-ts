@@ -790,7 +790,8 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     let adoptedBlock: readonly Adopted[] = [];
     const servedTrail = async (): Promise<StoredTrail> => {
       const trail = scope.fullTrail();
-      await construction.trailChecks?.served(trail, adoptedBlock, context.verifier);
+      // Before a continuation's base is read here, the base its opening kept names its adopted block.
+      await construction.trailChecks?.served(trail, adoptedBlock.length > 0 ? adoptedBlock : keptBase(segment)?.block ?? [], context.verifier);
       return trail;
     };
     try {

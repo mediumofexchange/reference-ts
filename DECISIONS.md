@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-13` [Read a pool-v3 trail succinctly through the one walk, and establish every proof length before replay and before any refusal grounded on the trail (slice 35, Next 12)](decisions/2026-10.md#2026-10-13--read-a-pool-v3-trail-succinctly-through-the-one-walk-and-establish-every-proof-length-before-replay-and-before-any-refusal-grounded-on-the-trail-slice-35-next-12)
 - `2026-10-13` [Digest SQLite's lock-byte page as a constant, so a kept file grows past 1 GiB (slice 18)](decisions/2026-10.md#2026-10-13--digest-sqlites-lock-byte-page-as-a-constant-so-a-kept-file-grows-past-1-gib-slice-18)
 - `2026-10-13` [Read a backing's sources in one walk, and keep the publisher outbox and SQLite's busy refusal in one place each (simplify)](decisions/2026-10.md#2026-10-13--read-a-backings-sources-in-one-walk-and-keep-the-publisher-outbox-and-sqlites-busy-refusal-in-one-place-each-simplify)
 - `2026-10-13` [Specify the phone path as a reader's option: check proofs in place of a trail's proofs and a range's sections, never a verdict rule (slice 34, Next 12)](decisions/2026-10.md#2026-10-13--specify-the-phone-path-as-a-readers-option-check-proofs-in-place-of-a-trails-proofs-and-a-ranges-sections-never-a-verdict-rule-slice-34-next-12)

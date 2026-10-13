@@ -208,7 +208,7 @@ A phone wallet is outside the release target, as a scope choice. It
 verifies independently only through a reader its holder runs. Its own first
 sync would read about 20 GB under complete replay. The phone holder path is the next target
 after the release ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction)),
-specified as a reader's option, [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/8aa2f03/succinct-read.md);
+specified as a reader's option, [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md), whose trail reading runs in the library over a test check set ([slice 35](../decisions/2026-10.md#2026-10-13--read-a-pool-v3-trail-succinctly-through-the-one-walk-and-establish-every-proof-length-before-replay-and-before-any-refusal-grounded-on-the-trail-slice-35-next-12));
 its provers' costs are in the [aggregation](POOL_DEPLOYMENT_PROBES.md#the-trails-proof-aggregation-slice-33) and
 [exhaustion](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32) probes, and phone rates are unmeasured. A browser wallet is outside the release target too, as a
 scope choice (2026-10-09): the package targets Node, its host hash is

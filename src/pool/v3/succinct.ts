@@ -28,7 +28,7 @@ import { MAX_ROOT_TERMS_BYTES } from "./terms.js";
 import { MAX_TRAIL_RECORD_BYTES, trailCodec, type ServedTrail } from "./trail.js";
 
 /** The revision of succinct-read.md these rules implement; it names kept state with the set identity (§2 rule 8). */
-export const SUCCINCT_SPECIFICATION = "succinct-read 7cc3e06";
+export const SUCCINCT_SPECIFICATION = "succinct-read cb84f04";
 export const T_CHECK_LEAF = 1008n;
 export const T_CHECK_NODE = 1009n;
 /** The proof length a cover fixes (§3.2): 458 field elements. */
