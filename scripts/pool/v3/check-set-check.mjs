@@ -6,7 +6,7 @@
 // rule names. Hostile covers cover nothing: another kind's leaf key or the node key, a node cover as a leaf, a wrong
 // digest, other lengths and a flipped byte, a tree whose node-key input is not the pinned key's hash (the forged-tree
 // rule, §2 rules 1-2), a statement proof that fails natively (no leaf), a leaf forced over it, and nodes over a child
-// under another key than its admitted hash or over a child cover with a flipped byte. Times and the
+// verifying under a key other than its admitted hash's or over a child cover with a flipped byte. Times and the
 // process's peak memory are recorded per proof.
 //
 // Usage: node scripts/pool/v3/check-set-check.mjs (after npm run build); writes docs/pool-v3-check-set-verification.json.
@@ -158,12 +158,22 @@ try {
     keys: children.map(c => fields(c.vk)), proofs: children.map(c => fields(c.proof)), key_hashes: children.map(c => fieldToHex(c.keyHash)),
     digests: children.map(c => fieldToHex(c.digest)), node_key_hash: fieldToHex(keys.node.keyHash) })));
   const spendChild = { vk: keys["leaf-spend"].vk, keyHash: keys["leaf-spend"].keyHash, proof: leaves.spend.proof, digest: leaves.spend.digest };
-  const misKeyed = await nodeOver([{ ...spendChild, vk: keys["leaf-burn"].vk }, spendChild], "node over a child under another key than its hash's");
-  const flippedChild = Uint8Array.from(leaves.spend.proof); flippedChild[5000] ^= 1;
-  const misProved = await nodeOver([{ ...spendChild, proof: flippedChild }, spendChild], "node over a child cover with a flipped byte");
-  const twin = nodeDigest(leaves.spend.digest, leaves.spend.digest);
-  for (const made of [misKeyed, misProved]) if (made.proof !== undefined) await refused(undefined, twin, made.proof.proof, "a node over a hostile child");
-  check(`a node over a child under another key than its admitted hash ${outcome(misKeyed, "is proved but fails verification")}, and over a child cover with a flipped byte ${outcome(misProved, "is proved but fails verification")}`);
+  // A burn cover that verifies under the burn key it is given, presented with the spend leaf's (admitted) hash: were the
+  // given hash not bound to the key, this node would be proved and verify.
+  const burnUnderSpendHash = { vk: keys["leaf-burn"].vk, keyHash: keys["leaf-spend"].keyHash, proof: leaves.burn.proof, digest: leaves.burn.digest };
+  const misKeyed = await nodeOver([burnUnderSpendHash, spendChild], "node over a child whose key is not its admitted hash's");
+  // A flip in the last byte keeps every element well formed, so the in-circuit verification itself refuses; one inside
+  // a commitment limb may be refused while the proof is read.
+  const flips = [14656 - 1, 5000].map(at => { const proof = Uint8Array.from(leaves.spend.proof); proof[at] ^= 1; return proof; });
+  const misProved = [];
+  for (const [i, proof] of flips.entries()) misProved.push(await nodeOver([{ ...spendChild, proof }, spendChild], `node over a child cover with byte ${[14655, 5000][i]} flipped`));
+  const made = [[misKeyed, nodeDigest(leaves.burn.digest, leaves.spend.digest)], ...misProved.map(m => [m, nodeDigest(leaves.spend.digest, leaves.spend.digest)])];
+  for (const [attempted, digest] of made) {
+    // A refusal to prove must be the backend's verdict on the witness, not a resource failure.
+    if (attempted.error !== undefined) assert.doesNotMatch(attempted.error, /memory|RangeError|out of|abort/i, attempted.error);
+    else await refused(undefined, digest, attempted.proof.proof, "a node over a hostile child");
+  }
+  check(`a node over a child whose key is not its admitted hash's ${outcome(misKeyed, "is proved but fails verification")}, and over a child cover with its last byte flipped ${outcome(misProved[0], "is proved but fails verification")} or a limb byte flipped ${outcome(misProved[1], "is proved but fails verification")}`);
 
   const result = {
     specification: { pool: V3_SPECIFICATION, succinct: SUCCINCT_SPECIFICATION }, sources: digests,
