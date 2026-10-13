@@ -36,104 +36,122 @@
    "leaf": "spend",
    "host": true,
    "leafAccepts": true,
+   "failedAt": "verified",
    "agree": true
   },
   "genuine-burn": {
    "leaf": "burn",
    "host": true,
    "leafAccepts": true,
+   "failedAt": "verified",
    "agree": true
   },
   "public-input-changed": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "reduction step",
    "agree": true
   },
   "scalar-changed": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "reduction step",
    "agree": true
   },
   "pairing-part-only: KZG W replaced by the generator": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "pairing check",
    "agree": true
   },
   "pairing-point object set to (G, 2G)": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "reduction step",
    "agree": true
   },
   "pairing-point object: P0 = G, P1 at infinity": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "reduction step",
    "agree": true
   },
   "scalar word + p (same value mod p)": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "not executed",
    "agree": true
   },
   "commitment limb split non-canonically (same point)": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "no leaf proof",
    "agree": true
   },
   "commitment off the curve (x low limb + 1)": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "no leaf proof",
    "agree": true
   },
   "commitment at infinity (KZG W all zero)": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "no leaf proof",
    "agree": true
   },
   "spend proof presented as a burn (keys swapped)": {
    "leaf": "burn",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "reduction step",
    "agree": true
   },
   "burn proof presented as a spend (keys swapped)": {
    "leaf": "spend",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "reduction step",
    "agree": true
   },
   "arbitrary key: burn proof under burn key, leaf taking its key as a witness": {
    "leaf": "spend (free)",
    "host": false,
-   "leafAccepts": true
+   "leafAccepts": true,
+   "failedAt": "verified"
   },
   "changed key hash: spend key with burn key hash (key pinned, hash a witness)": {
    "leaf": "spend (kh)",
    "host": true,
-   "leafAccepts": false
+   "leafAccepts": false,
+   "failedAt": "reduction step"
   },
   "key and hash disagree: burn key with spend key hash, burn proof": {
    "leaf": "spend (free)",
    "host": false,
-   "leafAccepts": false
+   "leafAccepts": false,
+   "failedAt": "reduction step"
   },
   "key and hash disagree: spend key with burn key hash, spend proof": {
    "leaf": "spend (free)",
    "host": true,
-   "leafAccepts": false
+   "leafAccepts": false,
+   "failedAt": "reduction step"
   },
   "demand proof with a demand public input changed": {
    "leaf": "demand",
    "host": false,
    "leafAccepts": false,
+   "failedAt": "reduction step",
    "agree": true
   }
  },
@@ -159,6 +177,18 @@
    "node key input not the node key, children under it (level-1 node proofs)": false,
    "child digest substituted": false,
    "child proof of one leaf with the other leaf public inputs": false
+  }
+ },
+ "treeCases": {
+  "forged tree under a made-up node key": {
+   "rootVerifiesUnderPinnedNodeKey": true,
+   "rootNodeKeyInputIsPinned": false,
+   "phoneAccepts": false
+  },
+  "node over a leaf of a pairing-only tamper": {
+   "leafFailedAt": "pairing check",
+   "nodeVerified": false,
+   "nodeFailedAt": "pairing check"
   }
  },
  "phoneProxy": {

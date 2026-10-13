@@ -1,0 +1,43 @@
+{
+ "forged tree under a made-up node key": {
+  "leaf": {
+   "exit": 0,
+   "writeVkS": 0,
+   "proveS": 33.425876593,
+   "peakMiB": 2627,
+   "proofBytes": 14656,
+   "verified": true
+  },
+  "root": {
+   "exit": 0,
+   "writeVkS": 0,
+   "proveS": 24.801212028,
+   "peakMiB": 2009,
+   "proofBytes": 14656,
+   "verified": true
+  },
+  "rootVerifiesUnderPinnedNodeKey": true,
+  "rootNodeKeyInputIsPinned": false,
+  "phoneAccepts": false
+ },
+ "node over a leaf of a pairing-only tamper": {
+  "leaf": {
+   "exit": 0,
+   "writeVkS": 0,
+   "proveS": 33.947725655,
+   "peakMiB": 2607,
+   "proofBytes": 14656,
+   "verified": false,
+   "failedAt": "pairing check"
+  },
+  "node": {
+   "exit": 0,
+   "writeVkS": 0,
+   "proveS": 25.310246946,
+   "peakMiB": 2008,
+   "proofBytes": 14656,
+   "verified": false,
+   "failedAt": "pairing check"
+  }
+ }
+}
