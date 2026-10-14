@@ -28,6 +28,7 @@ export const SCRIPTS = Object.freeze([
       reports: [`docs/pool-v3-${name}-store-ergo-verification.json`] },
   ]),
   { group: "drill", script: `${v3}/command-drill.mjs`, args: [], reports: [] },
+  { group: "succinct", script: `${v3}/succinct-drill.mjs`, args: [], reports: [] },
   { group: "replay", script: `${v3}/local-check.mjs`, args: [], reports: ["scratch/pool-v3-local-replay-results.json"] },
   { group: "check-set", script: `${v3}/check-set-check.mjs`, args: [], reports: ["docs/pool-v3-check-set-verification.json"] },
 ].map(entry => Object.freeze({ ...entry, args: Object.freeze(entry.args), reports: Object.freeze(entry.reports) })));
