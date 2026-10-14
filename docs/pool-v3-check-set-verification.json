@@ -31,7 +31,7 @@
     "dist/pool/v3/recovery.js": "9edbfd461d586425dcf61ab12aeb6d17a0727e3b427d3439c4768ed88cc267d4",
     "dist/pool/v3/refusals.js": "f2feb5755d65d80bc6d74827484e029d6b4529c3c7334e56d13160a5f8460e6e",
     "dist/pool/v3/replay-store.js": "07c4b8c8e51edda21979774a0b4b5ddb11e734e27ba4b1c518ab9420e2315f63",
-    "dist/pool/v3/succinct.js": "609c3f69afa00a65767e61d24c879f914322bb7b00b533ba2f468e0714fd8151",
+    "dist/pool/v3/succinct.js": "1c329147c293fdc848eaff4df11fb2a3964e400c9409d5fc3dfae8fdedea9b62",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
@@ -80,7 +80,7 @@
     "src/pool/v3/refusals.ts": "01ed34552b2aeaa065b61205b622e2a442db4f5cc2b08ad3475516079c745457",
     "src/pool/v3/replay-store.ts": "4ca8eec8084a0a1112c70bc0759b2a42655da35bb9e758fb141657e80c15147f",
     "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
-    "src/pool/v3/succinct.ts": "2526ab647dd89e202a56534f54e5c19fef85331767834847dac1f72ea3b497ea",
+    "src/pool/v3/succinct.ts": "e085245e4a84d1d53b331253dc6a1379398eff61132e50ce9e62208fe9d146e3",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
     "src/pool/v3/trail.ts": "7cf64e03a6d0ecc2ab50580cd789b8fd7e4b4fc610de3d1a76746b5111003a9e",
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
@@ -90,7 +90,7 @@
   },
   "evidence": "real check proofs on the pinned WebAssembly backend over genuine statement proofs; a test-labelled set, not adopted (succinct-read §§1, 6)",
   "host": {
-    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
     "threads": 4,
     "memoryGiB": 16,
     "platform": "linux",
@@ -100,40 +100,40 @@
   "circuits": {
     "leaf-issue": {
       "gates": 1652294,
-      "compileS": 2.7,
-      "keyS": 25.3,
+      "compileS": 2.3,
+      "keyS": 27.3,
       "bytecode": "52575d108afd5b16707c203607110c40ed359bb98007e68441918a0a8c776eed",
       "vk": "b544f0672ddb223c3a4b6ca68f16de1baff64f9fd8a7f3e2136968c98df6ea51",
       "keyHash": "0x1ed136d79ff6482f5110ad8d412a4bccf4f78ef3bb26baa8742021bf05dae1f9"
     },
     "leaf-spend": {
       "gates": 1652618,
-      "compileS": 1.4,
-      "keyS": 24.6,
+      "compileS": 1.3,
+      "keyS": 26.5,
       "bytecode": "fc140ef8cba2dc25947ef2c5d9404b5e6fcc5295bcc91395f269f6e592134ca5",
       "vk": "d09081ce893e463d017c3bcffb7e7288917f6b07c8821a25dc5c292dc1c01fd5",
       "keyHash": "0x17ec3c97d60e19d6f767edbb8dd32cd1cc1e9d0efbb49c85fb0e7618be4e07ad"
     },
     "leaf-burn": {
       "gates": 1652618,
-      "compileS": 1.3,
-      "keyS": 24.7,
+      "compileS": 1.2,
+      "keyS": 26.7,
       "bytecode": "6a7f0476812e25d065b1cb9820267ee8dae81d2d49b0df9d909653f69b05cd80",
       "vk": "eb34d7e31535326e40c9e95354a30b40076cf94c2db5cb844cddd2f9940f2cf7",
       "keyHash": "0x15e5e6198192f2a6764a5fd5d92d49b3a6ebb390943ca36c13e01177a63adc28"
     },
     "leaf-demand": {
       "gates": 1652626,
-      "compileS": 1.3,
-      "keyS": 24.7,
+      "compileS": 1.2,
+      "keyS": 26.5,
       "bytecode": "d561a10d65ffd2bcb96ec9354a545a3c3953d040f316242545015c5177a91a5c",
       "vk": "6c7a019c8f8f3d47bef221979c73fc7d5328af2c77c503770222ee76af999547",
       "keyHash": "0x2eb8fb9f63aae39ed809c9141c1863e9f0c486b1ac9b2a99119ff3863301bd5e"
     },
     "leaf-settle": {
       "gates": 1652634,
-      "compileS": 1.4,
-      "keyS": 24.6,
+      "compileS": 1.2,
+      "keyS": 26.6,
       "bytecode": "ee593cfc033d3fe2bd853f41d7ce8c16027f38f38d4152e5ddd40e7bd856862e",
       "vk": "c92db81e26d2e2337e67b7c92029a85f615b8f1b12626bdf9a812ba80c746dd6",
       "keyHash": "0x18586fd043b8bcef2680760e07a783c8454e6d4546e5d58d8fd592f7015d4c01"
@@ -141,7 +141,7 @@
     "node": {
       "gates": 1469828,
       "compileS": 0.3,
-      "keyS": 19.1,
+      "keyS": 20,
       "bytecode": "3f0bb706ecd6c72dbe9a038333ed24055274f1bb4a8d41b09db016a5113bf2db",
       "vk": "9e9a1a3184d75789fe5e937b80fe8b65c538145defb24705552d1f8f4d727477",
       "keyHash": "0x2bdf9a3880b1d558bb229fabd02902bc646a7d755a2fa4594d58226e4f9d3282"
@@ -150,73 +150,73 @@
   "proofs": [
     {
       "label": "leaf-issue",
-      "seconds": 91.4,
+      "seconds": 98.6,
       "peakMiB": 3826
     },
     {
       "label": "leaf-spend",
-      "seconds": 89.3,
-      "peakMiB": 3869
+      "seconds": 97,
+      "peakMiB": 3862
     },
     {
       "label": "leaf-burn",
-      "seconds": 89.1,
-      "peakMiB": 3844
+      "seconds": 97,
+      "peakMiB": 3859
     },
     {
       "label": "leaf-demand",
-      "seconds": 89.1,
-      "peakMiB": 3834
+      "seconds": 97,
+      "peakMiB": 3846
     },
     {
       "label": "leaf-settle",
-      "seconds": 88.7,
-      "peakMiB": 3832
+      "seconds": 97,
+      "peakMiB": 3846
     },
     {
       "label": "node over two leaves",
-      "seconds": 74.2,
-      "peakMiB": 3414
+      "seconds": 80.8,
+      "peakMiB": 3423
     },
     {
       "label": "node over two leaves (2)",
-      "seconds": 74.1,
-      "peakMiB": 3091
+      "seconds": 80.7,
+      "peakMiB": 3071
     },
     {
       "label": "node over two nodes",
-      "seconds": 74,
-      "peakMiB": 3088
+      "seconds": 80.7,
+      "peakMiB": 3069
     },
     {
       "label": "leaf-spend under a forged node-key input",
-      "seconds": 88.7,
-      "peakMiB": 3183
+      "seconds": 96.9,
+      "peakMiB": 3157
     },
     {
       "label": "node under a forged node-key input",
-      "seconds": 74.1,
-      "peakMiB": 3202
+      "seconds": 80.6,
+      "peakMiB": 3177
     },
     {
       "label": "leaf-burn forced over a failing proof",
-      "seconds": 6.1,
-      "peakMiB": 4565
+      "seconds": 6.2,
+      "peakMiB": 4677
     },
     {
       "label": "node over a child whose key is not its admitted hash's",
-      "seconds": 76,
-      "peakMiB": 5993
+      "seconds": 82.2,
+      "peakMiB": 6007
     },
     {
       "label": "node over a child cover with byte 14655 flipped",
-      "seconds": 1.9,
-      "peakMiB": 4788
+      "seconds": 1.7,
+      "peakMiB": 4641
     },
     {
       "label": "node over a child cover with byte 5000 flipped",
-      "seconds": 76.4,
-      "peakMiB": 5982
+      "seconds": 82.3,
+      "peakMiB": 6001
     }
   ],
   "checks": [
