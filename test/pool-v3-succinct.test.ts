@@ -102,12 +102,15 @@ function oneBacking() {
   };
   const complete = (c: ReturnType<typeof checkpoint>) => outcome(readPackage(pack([{ kind: 2, payload: encodeCommitment(c.commitment) },
     ...trails.map(payload => ({ kind: 6, payload }))]), selection(c), { verifier, reference, venue }));
-  const succinct = (c: ReturnType<typeof checkpoint>, supply: CheckSupply) => outcome(readPackage(pack([{ kind: 2, payload: encodeCommitment(c.commitment) },
-    ...freeTrails.map(payload => ({ kind: 6, payload }))]), selection(c),
-  { verifier, reference, venue, construction: succinctPoolV3({ set: SET, supply }) }));
+  const succinctWith = (c: ReturnType<typeof checkpoint>, construction: ReturnType<typeof succinctPoolV3>) => outcome(readPackage(pack([
+    { kind: 2, payload: encodeCommitment(c.commitment) }, ...freeTrails.map(payload => ({ kind: 6, payload }))]), selection(c),
+  { verifier, reference, venue, construction }));
+  const succinct = (c: ReturnType<typeof checkpoint>, supply: CheckSupply) => succinctWith(c, succinctPoolV3({ set: SET, supply }));
   /** Keep only the first `n` records: the operator's next trail forks there. */
   const truncate = (n: number) => { records.length = n; free.length = n; digests.length = n; };
-  return { id, scope, name, issue, issueRecord, commitRaw, truncate, checkpoint, complete, succinct };
+  /** A supplier's lengthened trail: every record so far, with no checkpoint over its end (pool-v3 §10). */
+  const uncommitted = () => { freeTrails.push(PROOF_FREE_TRAILS.encodeTrail({ header: segmentBytes(header), terms: [signed], records: [...free] })); };
+  return { id, scope, name, issue, issueRecord, commitRaw, truncate, checkpoint, complete, succinct, succinctWith, uncommitted };
 }
 
 /** A supply over the complete trail's proofs, covers made for the proved records (by the caller's rule), and counts. */
@@ -339,8 +342,94 @@ describe("succinct reading against the complete read (succinct-read §§2–3)",
     for (let i = 3; i < 5; i++) await f.issue(BigInt(i + 1), BigInt(100 + i));
     const c = f.checkpoint(3n, 5n), supply = supplyOf(c.trail.records, { cover: honest });
     expect(await f.succinct(c, supply)).toEqual({ valid: 5n, issued: 15n });
-    // Records 0–2 as spans (1, 0) and (0, 2); records 3 and 4, after the kept three, as (0, 3) and (0, 4).
-    expect(supply.asked).toEqual({ covers: 4, proofs: 0 });
+    // The segment is partitioned once, over its latest checkpoint's trail (§3.4): spans (2, 0) and (0, 4). The second checkpoint's
+    // records 3 and 4, numbered from the kept three, take what that partition found for them: no ask of their own.
+    expect(supply.asked).toEqual({ covers: 2, proofs: 0 });
+  });
+  it("partitions a segment read checkpoint by checkpoint once: about 2·log2 N asks, the tail asked once, a fork on its own (§3.4)", async () => {
+    // Sixteen records over eight checkpoints, covered by an honest prover: the latest checkpoint's trail's one span (4, 0).
+    const f = oneBacking();
+    f.checkpoint(1n, 1n);
+    let c!: ReturnType<typeof f.checkpoint>;
+    for (let k = 0; k < 8; k++) {
+      for (let i = 0; i < 2; i++) await f.issue(BigInt(2 * k + i + 1), BigInt(100 + 2 * k + i));
+      c = f.checkpoint(BigInt(k + 2), BigInt(k + 2));
+    }
+    const all = supplyOf(c.trail.records, { cover: honest });
+    expect(await f.succinct(c, all)).toEqual({ valid: 16n, issued: 136n });
+    // Checkpoint by checkpoint, each pair of records alone was one ask: eight.
+    expect(all.asked).toEqual({ covers: 1, proofs: 0 });
+    // A prover that reached the first eleven records: (4, 0) none; (3, 0) covered; (3, 1) none, (2, 2) none, (1, 4)
+    // covered, (1, 5) none, (0, 10) covered, (0, 11) none: the first uncovered record; then (2, 3) once. Nine asks for
+    // the whole segment; records 12-15, found none only in that wider span, are asked once more by the two checkpoints
+    // holding them, each over its own pair: eleven. Each uncovered proof is fetched once.
+    const partial = supplyOf(c.trail.records, { cover: (digests, kinds) => honest(digests.slice(0, 11), kinds.slice(0, 11)) });
+    expect(await f.succinct(c, partial)).toEqual({ valid: 16n, issued: 136n });
+    expect(partial.asked).toEqual({ covers: 11, proofs: 5 });
+    // An early gap (record 1 uncovered: a refusal, a skipped proof) before a prover that reached fourteen records. The
+    // segment's spans past the gap are asked once each, so (3, 1) over records 8-15 finds none; the checkpoints holding
+    // 8-15 ask their own pairs and find 8-13 covered. Records 1, 14 and 15 are fetched, not 1 and 8-15 (review).
+    const gap = supplyOf(c.trail.records, { cover: (digests, kinds) => {
+      const covers = honest(digests.slice(0, 14), kinds.slice(0, 14)), n01 = nodeDigest(digests[0]!, digests[1]!);
+      const n03 = nodeDigest(n01, nodeDigest(digests[2]!, digests[3]!));
+      for (const digest of [digests[1]!, n01, n03, nodeDigest(n03, nodeDigest(nodeDigest(digests[4]!, digests[5]!), nodeDigest(digests[6]!, digests[7]!)))]) covers.delete(digest);
+      return covers;
+    } });
+    expect(await f.succinct(c, gap)).toEqual({ valid: 16n, issued: 136n });
+    // (4, 0), (3, 0), (2, 0), (1, 0), (0, 0), (0, 1); then (1, 1), (2, 1), (3, 1) once; then (1, 4) to (1, 7).
+    expect(gap.asked).toEqual({ covers: 13, proofs: 3 });
+    // A checkpoint whose records differ from the latest checkpoint's (another fork) is partitioned with its own trail.
+    const g = oneBacking();
+    g.checkpoint(1n, 1n);
+    for (let i = 0; i < 2; i++) await g.issue(BigInt(i + 1), BigInt(100 + i));
+    const valid = g.checkpoint(2n, 3n);
+    g.truncate(0);
+    const distinct = proofOf(1); distinct[1] = 2;
+    for (let i = 0; i < 4; i++) { const r = g.issueRecord(BigInt(i + 5), BigInt(200 + i), distinct); g.commitRaw(encodeRecord(r), encodeProofFree(proofFreeOf(r)), evidenceHashes(r)); }
+    const forked = g.checkpoint(3n, 4n), records = [...valid.trail.records, ...forked.trail.records];
+    const both = supplyOf(records, { cover: honest });
+    expect(await g.succinct(forked, both)).toEqual(await g.complete(forked));
+    // The latest checkpoint is the fork's: its (2, 0) has no cover (the prover's tree runs over all six records), its two
+    // pairs do. The valid checkpoint's two records, unlike the fork's, are partitioned on their own as (1, 0); the fork's
+    // own establishment (CONTINUITY's) takes the segment's partition: four asks in all.
+    expect(both.asked).toEqual({ covers: 4, proofs: 0 });
+  });
+  it("partitions no trail a supplier lengthened past every checkpoint, and keeps a partition for its walk only (review)", async () => {
+    // Eight records over four checkpoints, then 24 more no checkpoint commits, served as a longer trail: the asks are
+    // those of the committed segment alone.
+    const read = async (junk: number) => {
+      const f = oneBacking();
+      f.checkpoint(1n, 1n);
+      let c!: ReturnType<typeof f.checkpoint>;
+      for (let k = 0; k < 4; k++) {
+        for (let i = 0; i < 2; i++) await f.issue(BigInt(2 * k + i + 1), BigInt(100 + 2 * k + i));
+        c = f.checkpoint(BigInt(k + 2), BigInt(k + 2));
+      }
+      for (let i = 0; i < junk; i++) await f.issue(BigInt(i + 50), BigInt(300 + i));
+      if (junk > 0) f.uncommitted();
+      const supply = supplyOf(c.trail.records, { cover: honest });
+      return { result: await f.succinct(c, supply), asked: supply.asked };
+    };
+    const plain = await read(0), lengthened = await read(24);
+    expect(lengthened).toEqual(plain);
+    expect(plain.asked).toEqual({ covers: 1, proofs: 0 });
+
+    // A read left unresolved (records 2-3 uncovered, their proofs withheld) and retried on the same construction once
+    // provers have covered them asks again, rather than taking the first walk's "none".
+    const f = oneBacking();
+    f.checkpoint(1n, 1n);
+    let c!: ReturnType<typeof f.checkpoint>;
+    for (let k = 0; k < 2; k++) {
+      for (let i = 0; i < 2; i++) await f.issue(BigInt(2 * k + i + 1), BigInt(100 + 2 * k + i));
+      c = f.checkpoint(BigInt(k + 2), BigInt(k + 2));
+    }
+    let leaves: bigint[] = [], kinds: number[] = [];
+    const withheld = supplyOf(c.trail.records, { cover: (digests, of) => { leaves = digests; kinds = of; return new Map(); }, withhold: () => true });
+    let covers = honest(leaves.slice(0, 2), kinds.slice(0, 2));
+    const construction = succinctPoolV3({ set: SET, supply: { cover: digest => covers.get(digest), proof: hash => withheld.proof(hash) } });
+    expect(await f.succinctWith(c, construction)).toEqual({ status: "unresolved-evidence" });
+    covers = honest(leaves, kinds);
+    expect(await f.succinctWith(c, construction)).toEqual({ valid: 4n, issued: 10n });
   });
   it("fetches nothing again when a resumed replay refuses: its kept prefix and its own records were established (review)", async () => {
     const f = oneBacking();

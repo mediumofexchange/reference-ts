@@ -560,6 +560,43 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, evidence, record, context.reference, store));
     return views.get(id)!;
   };
+  // Succinct-read §3.4: a succinct read partitions a segment once, over the served trail of the latest checkpoint held of
+  // an operator, within the term the walk judges it in, that carries a backing in that segment, whose snapshot that
+  // operator signed; never over a trail no checkpoint commits, which a supplier could lengthen with records of its own,
+  // nor one a retired key signed past its term. One pass over each term's held commitments finds every segment's.
+  const latestOfTerm = new Map<string, Map<string, { readonly digest: Uint8Array; readonly snapshot: Snapshot }>>();
+  const latestTrails = new Map<string, StoredTrail | undefined>();
+  const latestTrail = async (held: HeldCommitment, backing: Uint8Array, segment: Uint8Array): Promise<StoredTrail | undefined> => {
+    const view = await views.get(hex(backing)), operator = held.commitment.operator;
+    if (view === undefined) return undefined;
+    let i = view.chain.length - 1;
+    while (i > 0 && view.chain[i]!.from > held.index) i--;
+    if (i < 0 || view.chain[i]!.from > held.index || !same(view.chain[i]!.operator, operator)) return undefined;
+    const term = `${hex(backing)}:${i}`, from = view.chain[i]!.from, end = view.termEnd(i);
+    if (!latestOfTerm.has(term)) {
+      const latest = new Map<string, { readonly digest: Uint8Array; readonly snapshot: Snapshot }>();
+      for (let next = view.nextHeld(operator, from); next !== undefined && next.index <= end; next = view.nextHeld(operator, from, next.commitment.sequence)) {
+        let snapshot: Snapshot, digest: Uint8Array | undefined;
+        try { digest = view.carries(next)?.digest; snapshot = snapshotFor(digest ?? new Uint8Array()); } catch (error) {
+          // A checkpoint whose directory or snapshot the evidence does not hold names no trail here.
+          if (error instanceof EvidenceRefusal) continue;
+          throw error;
+        }
+        if (same(snapshot.backing, backing)) latest.set(hex(snapshot.segment), { digest: digest!, snapshot });
+      }
+      latestOfTerm.set(term, latest);
+    }
+    // One trail object a segment for the walk: a succinct construction keeps its partition by it.
+    const key = `${term}:${hex(segment)}`;
+    if (!latestTrails.has(key)) {
+      const latest = latestOfTerm.get(term)!.get(hex(segment));
+      latestTrails.set(key, latest === undefined ? undefined : trails.served({ backing, segment, digest: latest.digest }, latest.snapshot));
+    }
+    return latestTrails.get(key);
+  };
+  /** `trail` with the latest served trail of its segment where the construction establishes succinctly. */
+  const withLatest = async (trail: StoredTrail, held: HeldCommitment, backing: Uint8Array): Promise<StoredTrail> =>
+    construction.trailChecks === undefined ? trail : Object.freeze({ ...trail, latest: await latestTrail(held, backing, trail.segment) });
   // A committed preimage that hashes to its digest but does not decode is no snapshot: a strict codec's rejection
   // supplies no exclusion verdict (pool-v3 §7), so the read is unresolved, as for an undecodable directory (§12).
   const snapshotFor = (digest: Uint8Array): Snapshot => {
@@ -791,7 +828,10 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     const servedTrail = async (): Promise<StoredTrail> => {
       const trail = scope.fullTrail();
       // Before a continuation's base is read here, the base its opening kept names its adopted block.
-      await construction.trailChecks?.served(trail, adoptedBlock.length > 0 ? adoptedBlock : keptBase(segment)?.block ?? [], context.verifier);
+      if (construction.trailChecks !== undefined) {
+        await construction.trailChecks.served(await withLatest(trail, held, backing), adoptedBlock.length > 0 ? adoptedBlock : keptBase(segment)?.block ?? [],
+          context.verifier);
+      }
       return trail;
     };
     try {
@@ -949,7 +989,7 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
       let state: ReplayResult;
       try {
         state = await replayTrail({ ...context, selection: { ...selection, backing, operator: c.operator, sequence: c.sequence, root: c.root }, terms: scopedTerms.get(hex(backing))!, header, scopedTerms },
-        snapshot, classification.trail, { index: held.index, revocations, lastValid, imported, isOpening: opening,
+        snapshot, await withLatest(classification.trail, held, backing), { index: held.index, revocations, lastValid, imported, isOpening: opening,
           block: opening ? [] : block, openingIndex, scopedSnapshots });
       } catch (error) {
         // A succinct read's trail whose proofs it could not establish is not served, as the complete read's undecodable

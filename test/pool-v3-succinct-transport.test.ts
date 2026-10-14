@@ -141,9 +141,9 @@ describe("succinct transport (slice 37)", () => {
     const read = await f.read(succinct, new V3ServiceClient(f.replicaUrl, undefined, f.identity(succinct)), "succinct");
     expect(read.result).toBe(complete.result);
     expect(JSON.parse(complete.result)).not.toHaveProperty("refused");
-    // Each checkpoint's new records are read on the state kept before them (§3.4): the two covered records each by its
-    // leaf, the third fetched by its place (position 3 of the genesis segment).
-    expect(counted.asked).toMatchObject({ covers: 3, answered: 2, fetched: 1, proofs: 1 });
+    // The segment is partitioned once over its latest checkpoint's trail (§3.4), though each checkpoint's new records are read on
+    // the state kept before them: the two covered records by their node, the third fetched by its place (position 3).
+    expect(counted.asked).toMatchObject({ covers: 2, answered: 1, fetched: 1, proofs: 1 });
     expect(counted.asked.places.map(at => at.position)).toEqual([3n]);
     // The reader's file holds proof-free records only, and is refused to a complete reader.
     const segment = f.replicaStore.keptTops()[0]!.segment;
@@ -225,7 +225,8 @@ describe("succinct transport (slice 37)", () => {
     // The reader's own check refuses the wrong cover inside the supply, so no cover is taken: each record is checked
     // natively, its proof given by the operator after the junk and the overlong answer. Each wrong source was asked
     // once, never again by that supply (audit 34); the operator, which answered last, was asked first for the second.
-    expect(counted.asked).toMatchObject({ covers: 2, answered: 0, fetched: 2 });
+    // The segment's one partition asked the node, then each leaf (§3.4).
+    expect(counted.asked).toMatchObject({ covers: 3, answered: 0, fetched: 2 });
     expect(asked).toEqual({ covers: 1, junk: 1, long: 1 });
 
     // A source that changes one byte of a proof-free record: the evidence chain refuses the trail, so the sync does.
@@ -325,9 +326,9 @@ describe("succinct transport (slice 37)", () => {
     const succinct = succinctPoolV3({ set: SET, supply: counted.supply });
     const read = await f.read(succinct, new V3ServiceClient(f.replicaUrl, undefined, f.identity(succinct)), "behind");
     expect(read.result).toBe(complete.result);
-    // Both covers came from the replica behind the wrong source; no proof was fetched; the silent source and the one
-    // whose cover the reader refused were each asked once (audit 34).
-    expect(counted.asked).toMatchObject({ covers: 2, answered: 2, proofs: 0 });
+    // The node over both records came from the replica behind the wrong source; no proof was fetched; the silent source
+    // and the one whose cover the reader refused were each asked once (audit 34).
+    expect(counted.asked).toMatchObject({ covers: 1, answered: 1, proofs: 0 });
     expect([silentAsks, wrongAsks]).toEqual([1, 1]);
     // A source that has none is asked again only where the source that answered last has none too.
     let noneAsks = 0;
