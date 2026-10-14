@@ -111,7 +111,7 @@ two-in, four-out spend. `npm test` checks the successor's
 [canonical compressed spent root](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
 (`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys.
 
-[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)'s
+[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/94fc751/succinct-read.md)'s
 trail reading (§§2–3, a reader's option) is `src/pool/v3/succinct.ts`, a construction the one walk reads proof-free
 trails through. Its check set is §3.2's six circuits in production form (`src/pool/v3/check-set.ts`, sources in
 `scripts/pool/v3/trail-circuits/`), labelled a test set since none is adopted (§6), whose covers any party proves with

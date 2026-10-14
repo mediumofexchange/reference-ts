@@ -638,9 +638,9 @@ publications. `npm run check:lit:commands` drills a lit backing on the synthetic
 (operator, replica, relays, wallets, reader) from its own install of the release.
 
 A pool-v3 wallet or reader directory may read succinctly, declared at `init`, `restore-seed` or `restore` with
-`--read succinct` and kept in config.json (`complete` by default; a lit directory reads completely)
+`--read succinct` and kept in config.json (`complete` by default; a lit directory and a backer's read completely, since a backer's acts are judged by every reader: `--backer` and `--backer-key` refuse it, as K's commands refuse `SUCCINCT` in a succinct directory)
 ([slice 38 decision](../decisions/2026-10.md#2026-10-14--read-succinctly-through-the-commands-a-wallet-and-a-reader-over-proof-free-evidence-from-covers-a-replica-proves-and-each-segment-partitioned-once-slice-38-next-12)).
-Its reads are [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/b519c74/succinct-read.md)'s:
+Its reads are [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/94fc751/succinct-read.md)'s:
 it syncs each trail's proof-free form (about a thirteenth of the bytes) into an evidence file of its own
 (`succinct-evidence.db`; a wallet's `wallet.db.succinct-evidence`), takes "the proof verifies" from check proofs
 (covers) its replicas keep, asked once per segment over the latest checkpoint's trail, and fetches and verifies
@@ -652,7 +652,9 @@ covers asked and taken and the proofs fetched. The shipped set is a test set: no
 holder's own basis for its own acts and is never served: a succinct reader directory serves no replica (`reader serve`
 refuses `SUCCINCT`). The wallet's own records (payments, demands, settlements) stay complete; it proves and verifies as
 a complete wallet does. A directory reads one way for its life; a holder who wants the other makes a new directory
-(`restore-seed`) under the same seed.
+(`restore-seed`) under the same seed. A read over `--package` still asks the backing's replicas, then the operator's
+service (with its credential), for covers and for the proofs no cover reaches; a proof is asked for by its segment and
+position, which every backing of the scope shares.
 
 ### Transport
 
@@ -716,8 +718,9 @@ operator answers again or the holder lists another (Limits in the decision).
 With `--prove [--parameters <dir>]` a replica also proves covers for succinct readers (slice 38): after each round it
 walks its kept pool-v3 trails, checks each statement proof natively and proves a leaf over it, then a node over each two
 covered spans, keeping each cover in `evidence.db` under the check set's identity, and serves them (`GET /covers`). A
-round proves new covers for at most ten minutes, then syncs again; a cover kept is never proved again, and a line says
-what each round proved. Proving reads the check set's parameters (the leading 2^21 Ignition points, 128 MiB), copied
+round proves new covers for at most ten minutes, then syncs again; the walk of a segment goes on from where the last
+round's stood, so a long trail is read once, a cover kept is never proved again, and a line says what each round
+proved. It proves over the trails of selections its own read kept, never over what a supplier's answer alone indexed. Proving reads the check set's parameters (the leading 2^21 Ignition points, 128 MiB), copied
 from `--parameters` or fetched into the directory, and takes the WebAssembly backend about a minute a leaf and 3.5 GiB
 on four cores ([slice 36](POOL_DEPLOYMENT_PROBES.md#the-trail-check-set-slice-36)). Anyone may prove: a cover carries
 no authority, and every reader checks it under its own pinned keys. A refusal inside the backend ends this process's
