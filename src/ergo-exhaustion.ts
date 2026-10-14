@@ -12,8 +12,9 @@
 // proofs are hashes any party computes, which exercise every rule of the reader and attest nothing.
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { attributeTransaction, ergoOrdinal, orderedEntries, ownErgoProfile, sectionMatchesRoot, type AttributedObject, type ErgoProfile }
+import { attributeTransaction, frameTransaction, orderedEntries, ownErgoProfile, sectionMatchesRoot, type AttributedObject, type ErgoProfile }
   from "./ergo-profile.js";
 import { scanTransaction } from "./ergo-scan.js";
 import { fieldToBytes, isField, limbsOf } from "./pool/field.js";
@@ -223,13 +224,21 @@ export interface FoldInputs {
 /** A fold proof with its inputs; `first` names the circuit whose key it verifies under. */
 export interface Fold { readonly first: boolean; readonly inputs: FoldInputs; readonly proof: Uint8Array }
 
-/** The inputs in §4.3's order, `startHi, startLo, startHeight, endHi, endLo, endHeight, mapRoot, foldKeyHash`, the ids
- * as limbs; undefined for a malformed value. */
-export function foldPublicInputs(inputs: FoldInputs): readonly bigint[] | undefined {
+/** The inputs read once into owned values, or undefined for a malformed value. */
+function ownInputs(inputs: FoldInputs): FoldInputs | undefined {
   if (inputs === null || typeof inputs !== "object") return undefined;
   const { startId, startHeight, endId, endHeight, mapRoot, foldKeyHash } = inputs;
   if (!isBytes(startId, 32) || !isBytes(endId, 32) || !below(startHeight, U32) || !below(endHeight, U32) || !isField(mapRoot) || !isField(foldKeyHash)) return undefined;
-  return Object.freeze([...limbsOf(startId), startHeight, ...limbsOf(endId), endHeight, mapRoot, foldKeyHash]);
+  return Object.freeze({ startId: copyBytes(startId), startHeight, endId: copyBytes(endId), endHeight, mapRoot, foldKeyHash });
+}
+/** The fields of owned inputs in §4.3's order. */
+const fieldsOf = (own: FoldInputs): readonly bigint[] =>
+  Object.freeze([...limbsOf(own.startId), own.startHeight, ...limbsOf(own.endId), own.endHeight, own.mapRoot, own.foldKeyHash]);
+/** The inputs in §4.3's order, `startHi, startLo, startHeight, endHi, endLo, endHeight, mapRoot, foldKeyHash`, the ids
+ * as limbs; undefined for a malformed value. */
+export function foldPublicInputs(inputs: FoldInputs): readonly bigint[] | undefined {
+  const own = ownInputs(inputs);
+  return own === undefined ? undefined : fieldsOf(own);
 }
 
 /** An exhaustion circuit set as a reader pins it (§§2, 4.3, 6). */
@@ -257,19 +266,25 @@ export interface ReaderChain {
  * the reader's header at that height, at least the depth below its tip. */
 export type FoldRefusal = "fold-proof" | "fold-key" | "fold-start" | "fold-end" | "fold-depth";
 
-/** §4.3 rules 1–4. */
-export async function foldRefusal(set: ExhaustionSet, fold: Fold, chain: ReaderChain, depth: bigint): Promise<FoldRefusal | undefined> {
-  if (fold === null || typeof fold !== "object" || typeof fold.first !== "boolean" || !isBytes(fold.proof)) return "fold-proof";
-  const inputs = foldPublicInputs(fold.inputs);
-  if (inputs === undefined) return "fold-proof";
-  const { startId, startHeight, endId, endHeight, foldKeyHash } = fold.inputs;
-  if (await set.verifyFold(fold.first, inputs, copyBytes(fold.proof)) !== true) return "fold-proof";
-  if (foldKeyHash !== set.foldKeyHash) return "fold-key";
-  if (!same(startId, set.start.id) || startHeight !== set.start.height) return "fold-start";
-  const header = chain.at(endHeight);
-  if (header === undefined || !same(header.id, endId)) return "fold-end";
-  if (chain.tipHeight - endHeight < depth) return "fold-depth";
-  return undefined;
+/**
+ * §4.3 rules 1–4 over the fold read once into owned values, which are what a read uses after it: a supplier's object
+ * cannot show one value to a check and another to a use, before or during the verification. The cheap rules run
+ * before the proof's verification.
+ */
+export async function checkFold(set: ExhaustionSet, fold: Fold, chain: ReaderChain, depth: bigint):
+    Promise<{ readonly refused: FoldRefusal } | { readonly inputs: FoldInputs }> {
+  if (fold === null || typeof fold !== "object") return { refused: "fold-proof" };
+  const { first, inputs: given, proof: givenProof } = fold;
+  if (typeof first !== "boolean" || !isBytes(givenProof)) return { refused: "fold-proof" };
+  const inputs = ownInputs(given), proof = copyBytes(givenProof);
+  if (inputs === undefined) return { refused: "fold-proof" };
+  if (inputs.foldKeyHash !== set.foldKeyHash) return { refused: "fold-key" };
+  if (!same(inputs.startId, set.start.id) || inputs.startHeight !== set.start.height) return { refused: "fold-start" };
+  const header = chain.at(inputs.endHeight);
+  if (header === undefined || !same(header.id, inputs.endId)) return { refused: "fold-end" };
+  if (chain.tipHeight - inputs.endHeight < depth) return { refused: "fold-depth" };
+  if (await set.verifyFold(first, fieldsOf(inputs), proof) !== true) return { refused: "fold-proof" };
+  return { inputs };
 }
 
 /** What a reader may keep for a key after a read (§4.4): the map's count and chain value for it at a fold's end. */
@@ -304,8 +319,10 @@ export interface SuccinctRangeSources {
 
 /** Why a succinct read did not resolve: a fold refusal, a start above the anchor, a path that does not give the fold's
  * root, entries that do not reproduce it, a kept tuple that does not continue, a withheld or unincluded transaction,
- * or a missing section above the fold. The reader then reads natively, or the read stays unresolved (§4.6). */
-export type SuccinctRangeRefusal = FoldRefusal | "start" | "path" | "entries" | "kept" | "transaction" | "section";
+ * or a missing section above the fold. The reader then reads natively, or the read stays unresolved (§4.6).
+ * `disagreement` is §2 rule 7's evidence: an included transaction inside venue-ergo §5's grammar whose shaped outputs
+ * for the key are not the entries the fold's map names at its place. A reader holding it stops using the set. */
+export type SuccinctRangeRefusal = FoldRefusal | "start" | "path" | "entries" | "kept" | "transaction" | "section" | "disagreement";
 export type SuccinctRange =
   | { readonly entries: readonly RangeEntry[]; readonly kept: KeptTuple }
   | { readonly refused: SuccinctRangeRefusal };
@@ -317,33 +334,39 @@ export type SuccinctRange =
  */
 export async function succinctRange(request: RangeRequest, sources: SuccinctRangeSources): Promise<SuccinctRange> {
   const profile = ownErgoProfile(sources.profile);
-  const { anchorHeight: A, set, chain, fold, kept } = sources;
+  const { anchorHeight: A, set, chain, fold, kept: givenKept, path: givenPath, entries: givenEntries } = sources;
   const refused = (reason: SuccinctRangeRefusal): SuccinctRange => ({ refused: reason });
   // 1. The fold, and a start at or below the anchor.
-  const refusal = await foldRefusal(set, fold, chain, profile.depth);
-  if (refusal !== undefined) return refused(refusal);
+  const checked = await checkFold(set, fold, chain, profile.depth);
+  if ("refused" in checked) return refused(checked.refused);
+  const { inputs } = checked;
   if (set.start.height > A) return refused("start");
-  const E = fold.inputs.endHeight, first = A + 1n + request.fromIndex, last = A + 1n + request.toIndex;
-  // 2. The path, and the entries that make its leaf from the kept tuple or from nothing.
-  const key = subjectKey(request.subject), given = sources.path;
-  if (given === null || typeof given !== "object" || !Array.isArray(given.siblings)) return refused("path");
-  const path: MapPath = { count: given.count, chain: given.chain, siblings: [...given.siblings] };
-  if (pathRoot(key, path) !== fold.inputs.mapRoot) return refused("path");
+  const E = inputs.endHeight, first = A + 1n + request.fromIndex, last = A + 1n + request.toIndex;
+  // 2. The path, and the entries that make its leaf from the kept tuple or from nothing, each read once.
+  const key = subjectKey(request.subject);
+  if (givenPath === null || typeof givenPath !== "object") return refused("path");
+  const { count: pathCount, chain: pathChain, siblings } = givenPath;
+  if (!Array.isArray(siblings)) return refused("path");
+  const path: MapPath = { count: pathCount, chain: pathChain, siblings: Array.from(siblings) };
+  if (pathRoot(key, path) !== inputs.mapRoot) return refused("path");
   let count = 0n, value = 0n;
-  if (kept !== undefined) {
-    if (kept === null || typeof kept !== "object" || !isBytes(kept.endId, 32) || !below(kept.count, U64) || !isField(kept.chain)) return refused("kept");
+  if (givenKept !== undefined) {
+    if (givenKept === null || typeof givenKept !== "object") return refused("kept");
+    const { identity, key: keptKey, count: keptCount, chain: keptChain, endHeight, endId } = givenKept;
+    if (!isBytes(identity) || !isBytes(endId, 32) || !below(keptCount, U64) || !isField(keptChain) || !below(endHeight, U32)) return refused("kept");
     // A kept tuple continues a later read of the same set and key only where the best chain still holds its end.
-    const at = chain.at(kept.endHeight);
-    if (!same(kept.identity, set.identity) || kept.key !== key || kept.endHeight > E || at === undefined || !same(at.id, kept.endId)) return refused("kept");
-    if (first <= kept.endHeight) throw new RangeError("a kept tuple serves only heights above its end");
-    count = kept.count; value = kept.chain;
+    const at = chain.at(endHeight);
+    if (!same(identity, set.identity) || keptKey !== key || endHeight > E || at === undefined || !same(at.id, endId)) return refused("kept");
+    if (first <= endHeight) throw new RangeError("a kept tuple serves only heights above its end");
+    count = keptCount; value = keptChain;
   }
   const entries: MapEntry[] = [];
-  if (!Array.isArray(sources.entries)) return refused("entries");
-  for (const entry of sources.entries) {
-    if (entry === null || typeof entry !== "object" || !isBytes(entry.subject, 32) || !below(entry.height, U32) ||
-        !below(entry.position, U32) || !below(entry.output, U32)) return refused("entries");
-    const own = { subject: copyBytes(entry.subject), height: entry.height, position: entry.position, output: entry.output };
+  if (!Array.isArray(givenEntries)) return refused("entries");
+  for (const entry of Array.from(givenEntries)) {
+    if (entry === null || typeof entry !== "object") return refused("entries");
+    const { subject, height, position, output } = entry;
+    if (!isBytes(subject, 32) || !below(height, U32) || !below(position, U32) || !below(output, U32)) return refused("entries");
+    const own = Object.freeze({ subject: copyBytes(subject), height, position, output });
     if (subjectKey(own.subject) !== key) return refused("entries");
     value = entryChain(value, own);
     count += 1n;
@@ -360,9 +383,19 @@ export async function succinctRange(request: RangeRequest, sources: SuccinctRang
   const ordered = [...places.values()].sort((x, y) => x.height === y.height ? Number(x.position - y.position) : x.height < y.height ? -1 : 1);
   for (const { height, position } of ordered) {
     const header = chain.at(height), included = await sources.transaction(height, position);
-    if (header === undefined || included === undefined || included === null || typeof included !== "object" || !isBytes(included.unsigned)) return refused("transaction");
-    const unsigned = copyBytes(included.unsigned), root = inclusionRoot(blake2b(unsigned, { dkLen: 32 }), Number(position), included.steps);
+    if (header === undefined || included === undefined || included === null || typeof included !== "object") return refused("transaction");
+    const { unsigned: givenBytes, steps: givenSteps } = included;
+    if (!isBytes(givenBytes) || !Array.isArray(givenSteps)) return refused("transaction");
+    const unsigned = copyBytes(givenBytes), steps = Array.from(givenSteps, step => isBytes(step) ? copyBytes(step) : step);
+    const root = inclusionRoot(blake2b(unsigned, { dkLen: 32 }), Number(position), steps);
     if (root === undefined || !same(root, header.transactionsRoot)) return refused("transaction");
+    // §2 rule 7: a transaction inside the grammar whose shaped outputs for this key are not the entries the map names
+    // at its place shows the set unsound.
+    if (frameTransaction(unsigned) !== undefined) {
+      const scanned = scanTransaction(unsigned).filter(e => subjectKey(e.subject) === key).map(e => `${e.output}:${bytesToHex(e.subject)}`);
+      const named = entries.filter(e => e.height === height && e.position === position).map(e => `${e.output}:${bytesToHex(e.subject)}`);
+      if (scanned.join() !== named.join()) return refused("disagreement");
+    }
     for (const object of attributeTransaction(profile, unsigned, Number(position))) {
       if (object.kind === request.kind && same(object.subject, request.subject)) objects.push({ index: height - A - 1n, ordinal: object.ordinal, record: object.record });
     }
@@ -378,7 +411,7 @@ export async function succinctRange(request: RangeRequest, sources: SuccinctRang
   // 5. Entered as venue-ergo §7 enters them.
   return {
     entries: orderedEntries(request.kind, objects),
-    kept: Object.freeze({ identity: copyBytes(set.identity), key, count, chain: value, endHeight: E, endId: copyBytes(fold.inputs.endId) }),
+    kept: Object.freeze({ identity: copyBytes(set.identity), key, count, chain: value, endHeight: E, endId: copyBytes(inputs.endId) }),
   };
 }
 

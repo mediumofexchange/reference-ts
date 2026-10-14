@@ -188,8 +188,8 @@ describe("inclusion paths (succinct-read §4.5)", () => {
           const path = inclusionPath(leaves, j);
           expect(inclusionRoot(ids[j]!, j, path)).toEqual(root);
           expect(sectionInclusionPath(txs, root, j)).toEqual(path);
-          // Another position's id, or this id at another position, gives another root.
-          expect(inclusionRoot(ids[(j + 1) % n]!, j, path)).not.toEqual(n > 1 ? root : undefined);
+          // Another position's id gives another root.
+          if (n > 1) expect(inclusionRoot(ids[(j + 1) % n]!, j, path)).not.toEqual(root);
         }
       }
     }
@@ -206,7 +206,8 @@ describe("inclusion paths (succinct-read §4.5)", () => {
     expect(inclusionRoot(ids[2]!, 3, path)).toBeUndefined();
     // Position 6 has a bit at the path's length (2): refused although its low bits are position 2's.
     expect(inclusionRoot(ids[2]!, 6, path)).toBeUndefined();
-    expect(inclusionRoot(ids[2]!, 2, [...path, null].slice(0, 2))).toEqual(inclusionRoot(ids[2]!, 2, path));
+    // A trailing lone child is one more level: another root.
+    expect(inclusionRoot(ids[2]!, 2, [...path, null])).not.toEqual(inclusionRoot(ids[2]!, 2, path));
     expect(inclusionRoot(ids[2]!, 2, [new Uint8Array(31), path[1]!])).toBeUndefined();
     expect(inclusionRoot(ids[2]!, 2, [])).toBeUndefined();
     expect(inclusionRoot(ids[0]!, 0, Array.from({ length: 33 }, () => null))).toBeUndefined();
@@ -362,7 +363,59 @@ describe("a succinct range (succinct-read §4.4)", () => {
     expect(await succinctRange(later, sources(later, A + 18n, { kept: moved, entries: map.entries(key, kept.count) }))).toEqual({ refused: "kept" });
     expect(await succinctRange(later, sources(later, A + 18n, { kept: { ...kept, identity: new Uint8Array(32) }, entries: map.entries(key, kept.count) })))
       .toEqual({ refused: "kept" });
+    expect(await succinctRange(later, sources(later, A + 18n, { kept: { ...kept, key: kept.key ^ 1n }, entries: map.entries(key, kept.count) })))
+      .toEqual({ refused: "kept" });
+    // A tuple kept at a fold above this read's fold does not continue it.
+    const laterKept = (continued as { kept: KeptTuple }).kept;
+    expect(await succinctRange(request(3, u, 19n, 20n), sources(request(3, u, 19n, 20n), A + 15n, { kept: laterKept, entries: [] })))
+      .toEqual({ refused: "kept" });
     await expect(succinctRange(early, sources(early, A + 18n, { kept }))).rejects.toThrow(RangeError);
+  });
+
+  it("shows the set unsound where an included grammatical transaction's shaped outputs are not the map's entries (§2 rule 7)", async () => {
+    const r = request(1, s, 0n, 20n), { map, fold } = foldAt(A + 15n), key = subjectKey(s), honest = map.path(key), entries = map.entries(key);
+    const forged = async (changed: readonly MapEntry[]): Promise<unknown> => {
+      let chain = 0n;
+      for (const e of changed) chain = entryChain(chain, e);
+      const path = { count: BigInt(changed.length), chain, siblings: honest.siblings };
+      const inputs = { ...fold.inputs, mapRoot: pathRoot(key, path)! };
+      return succinctRange(r, sources(r, A + 15n, { fold: { first: false, inputs, proof: set.prove(false, inputs) }, path, entries: changed }));
+    };
+    // An entry naming an output its transaction does not have with the shape.
+    const at = entries.findIndex(e => same(e.subject, s));
+    expect(await forged(entries.map((e, i) => i === at ? { ...e, output: e.output + 1n } : e))).toEqual({ refused: "disagreement" });
+    // A shaped output for the key left out of the map, in a transaction fetched for s: t's output beside s's.
+    const lone = entries.findIndex(e => same(e.subject, t) && entries.some(x => same(x.subject, s) && x.height === e.height && x.position === e.position &&
+      x.height > A && x.height <= A + 15n));
+    expect(lone).toBeGreaterThanOrEqual(0);
+    expect(await forged(entries.filter((_, i) => i !== lone))).toEqual({ refused: "disagreement" });
+    // The ungrammatical transaction's entry is the scan's own: no disagreement is read from it.
+    expect(await forged(entries)).toEqual({ entries: rangeEntries(i => sections.get(i), r), kept: expect.anything() });
+  });
+
+  it("reads a supplier's fold, path, entries and transactions once, whatever they show later or during the verification", async () => {
+    const r = request(1, s, 0n, 20n), complete = rangeEntries(i => sections.get(i), r)!, { map, fold } = foldAt(A + 9n), key = subjectKey(s);
+    const empty = { count: 0n, chain: 0n, siblings: map.path(key).siblings };
+    // A mapRoot that shows the verified root once, then a root where s's key is empty: the empty path is refused.
+    let reads = 0;
+    const swapping = { ...fold.inputs, get mapRoot() { return reads++ === 0 ? fold.inputs.mapRoot : pathRoot(key, empty)!; } };
+    expect(await succinctRange(r, sources(r, A + 9n, { fold: { ...fold, inputs: swapping }, path: empty, entries: [] }))).toEqual({ refused: "path" });
+    // An end height that moves up after the checks: the read uses the height it checked.
+    let heights = 0;
+    const moving = { ...fold.inputs, get endHeight() { return heights++ === 0 ? fold.inputs.endHeight : readerChain.tipHeight - depth; } };
+    expect(await succinctRange(r, sources(r, A + 9n, { fold: { ...fold, inputs: moving } }))).toEqual({ entries: complete, kept: expect.anything() });
+    // An end id the supplier rewrites to the reader's header while an asynchronous verification runs, under a proof of a
+    // made-up end with s's key empty: the id checked is the made-up one.
+    const madeUp = { ...fold.inputs, endId: new Uint8Array(sha256(Uint8Array.of(0xff))), mapRoot: pathRoot(key, empty)! };
+    const slow = { ...set, verifyFold: async (f: boolean, i: readonly bigint[], p: Uint8Array) => { await new Promise(go => setImmediate(go)); return set.verifyFold(f, i, p); } };
+    const proof = set.prove(false, madeUp);
+    setImmediate(() => madeUp.endId.set(map.end.id));
+    expect(await succinctRange(r, sources(r, A + 9n, { set: slow, fold: { first: false, inputs: madeUp, proof }, path: empty, entries: [] }))).toEqual({ refused: "fold-end" });
+    // An entry whose height reads in range once and out of range after: refused, not thrown.
+    const entries = map.entries(key);
+    let looks = 0;
+    const flipping = entries.map((e, i) => i === 0 ? { ...e, get height() { return looks++ === 0 ? e.height : e.height + (1n << 40n); } } : e);
+    expect(await succinctRange(r, sources(r, A + 9n, { entries: flipping }))).toEqual({ entries: complete, kept: expect.anything() });
   });
 
   it("lays a fold's public inputs out in §4.3's order, the ids as big-endian limbs", () => {
