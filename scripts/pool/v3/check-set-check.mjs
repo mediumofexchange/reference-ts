@@ -160,7 +160,9 @@ try {
   assert.notEqual(thrown, undefined, "the backend made a node over a child it cannot verify");
   assert.doesNotMatch(thrown, /memory|RangeError|out of|closed/i, thrown);
   if (native) assert(await ended(proving), "the refusing native process did not end");
-  const right = await timed("node over two leaves (2)", () => prover.node(leaves.burn, leaves.demand));
+  const left = await timed("node over two leaves", () => prover.node(leaves.issue, leaves.spend));
+  if (native) assert.equal(children().filter(child => !proving.includes(child.pid)).length, 1, "a fresh native process proves");
+  const right =await timed("node over two leaves (2)", () => prover.node(leaves.burn, leaves.demand));
   const top = await timed("node over two nodes", () => prover.node(left, right));
   assert.equal(top.digest, nodeDigest(nodeDigest(leaves.issue.digest, leaves.spend.digest), nodeDigest(leaves.burn.digest, leaves.demand.digest)));
   for (const cover of [left, right, top]) assert.equal(await set.verify(undefined, cover.digest, cover.proof), true);

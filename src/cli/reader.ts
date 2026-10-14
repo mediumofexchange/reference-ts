@@ -56,8 +56,8 @@ const roundRefusal = (error: unknown): string | undefined =>
  * With `--prove [--parameters <dir>] [--prover native|wasm]` (slices 38, 42) it also proves check proofs over its kept
  * pool-v3 trails after each round (`V3Replica.prove`), for at most PROVE_ROUND_MS of new covers, and serves them by set
  * and digest (`GET /covers`): any party may prove (succinct-read §2 rule 6), and the replica checks each statement proof
- * first. A line says what a round proved and on which backend. A succinct directory serves no replica (`SUCCINCT`): a replica's evidence is judged by every reader
- * that takes it, so it reads completely (succinct-read §1).
+ * first. A line says what a round proved and on which backend. A succinct directory serves no replica (`SUCCINCT`):
+ * a replica's evidence is judged by every reader that takes it, so it reads completely (succinct-read §1).
  */
 async function serve(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, { dir: "value", verifiers: "value", prove: "switch", parameters: "value", prover: "value", ...SERVE_FLAGS }, 0);
