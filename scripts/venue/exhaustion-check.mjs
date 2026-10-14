@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { Noir } from "@noir-lang/noir_js";
-import { build, compile, root } from "./exhaustion-build.mjs";
+import { build, compile, EXHAUSTION_SPECIFICATION, root, sourceHashes } from "./exhaustion-build.mjs";
 import { foldFirst, foldNext } from "./exhaustion-sources.mjs";
 import { recordedPeriod, syntheticPeriod } from "./exhaustion-periods.mjs";
 import { EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustion.js";
@@ -25,7 +25,7 @@ const argv = process.argv.slice(2);
 const option = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
 const SIZES = { t: 6, m: 12, u: 6 };
 const KEYS = { t: "0x01", m: "0x02", u: "0x03", n: "0x04" }, FOLD_KEY = 5n, FIRST_KEY = "0x06";
-const report = { sizes: SIZES, periods: [], hostile: [], folds: [] };
+const report = { specification: EXHAUSTION_SPECIFICATION, sources: sourceHashes(), sizes: SIZES, periods: [], hostile: [], folds: [] };
 let failed = 0;
 const fail = message => { failed++; console.error(`FAIL ${message}`); };
 
