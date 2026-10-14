@@ -1102,10 +1102,17 @@ export async function* formParts(trail: StoredTrail, after: TrailTip | undefined
  * record's bytes in it, such as succinct-read §3.3's proof-free form (`PROOF_FREE_FORM`). The records' evidence chain
  * values are the kept ones, so a part's base and every position mean the same in either form. */
 export interface TrailForm {
+  /** The namespace of the construction whose records it converts; a source of another refuses it (`formServes`). */
+  readonly of: string;
   trailHead(header: Uint8Array, terms: readonly SignedTermsField[], events: bigint): Uint8Array;
   record(bytes: Uint8Array): Uint8Array;
   /** The records one served part holds at most (`formParts`). */
   readonly piece: number;
+}
+/** Whether a source keeping `construction`'s records serves them in `form` (none asks for their own): a form of another
+ * construction's records is refused before the stream starts, never cut off at its first record. */
+export function formServes(form: TrailForm | undefined, construction: Construction): boolean {
+  return form === undefined || form.of === construction.namespace.name;
 }
 /** The name a party's evidence file records for `construction`: its namespace's, marked where its trails' records are
  * proof-free (succinct-read §3.3), so a file of one form is never read by the other's frames. */

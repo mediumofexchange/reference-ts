@@ -194,11 +194,12 @@ describe("succinct reading against the complete read (succinct-read §§2–3)",
     expect(covered.asked).toEqual({ covers: 2, proofs: 0 });
     const none = supplyOf(c.trail.records);
     expect(await f.succinct(c, none)).toEqual({ valid: 5n, issued: 15n });
-    // Spans of four, then two and one, then single records: 7 asks for the first four, one for the fifth.
-    expect(none.asked).toEqual({ covers: 8, proofs: 5 });
+    // Spans of four and two, then the first record: none covers it, so each span after it is asked once and not split
+    // (record 1, records 2-3, record 4; audit 34): 6 asks. Before, 8.
+    expect(none.asked).toEqual({ covers: 6, proofs: 5 });
   });
 
-  it("excludes a failing proof natively where an honest prover leaves it uncovered, and splits only the span holding it", async () => {
+  it("excludes a failing proof natively where an honest prover leaves it uncovered, and asks each span after it once", async () => {
     const { f, c } = await issued(4, i => proofOf(i === 2 ? 7 : 1));
     expect(await f.complete(c)).toEqual({ check: "PROOF" });
     const supply = supplyOf(c.trail.records, { cover: (digests, kinds) => {
@@ -208,7 +209,26 @@ describe("succinct reading against the complete read (succinct-read §§2–3)",
       return covers;
     } });
     expect(await f.succinct(c, supply)).toEqual({ check: "PROOF" });
-    expect(supply.asked.proofs).toBe(1);
+    // Spans of four and of two (the first two records' node), then record 2, which none covers, and record 3, asked once
+    // and covered: only record 2's proof is fetched.
+    expect(supply.asked).toEqual({ covers: 5, proofs: 1 });
+  });
+
+  it("asks each span past the first record none covers once, unsplit: a long tail costs its proofs, not two asks a record (audit 34)", async () => {
+    const { f, c } = await issued(12);
+    const complete = await f.complete(c);
+    // A prover reached the first five records: leaves 0-4 and the nodes over 0-1, 2-3 and 0-3.
+    const supply = supplyOf(c.trail.records, { cover: (digests, kinds) => honest(digests.slice(0, 5), kinds.slice(0, 5)) });
+    expect(await f.succinct(c, supply)).toEqual(complete);
+    // The span of eight (none), its first four (covered), its last four and records 4-5 (none), record 4 (covered) and
+    // record 5 (none); then once each records 6-7 and 8-11 (none): 8 asks, where splitting every span down to single
+    // records asked 16. Records 5-11 are fetched.
+    expect(supply.asked).toEqual({ covers: 8, proofs: 7 });
+    // A whole span covered past the gap (another fork's covers, or a refused burst) is still taken.
+    const past = supplyOf(c.trail.records, { cover: (digests, kinds) => new Map([...honest(digests.slice(0, 5), kinds.slice(0, 5)),
+      ...honest(digests.slice(8), kinds.slice(8))]) });
+    expect(await f.succinct(c, past)).toEqual(complete);
+    expect(past.asked).toEqual({ covers: 8, proofs: 3 });
   });
 
   it("takes a cover as the set attests it: a test cover over a failing proof reads valid, the disagreement §2 rule 7 names", async () => {

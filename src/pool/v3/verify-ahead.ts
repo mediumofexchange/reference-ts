@@ -15,7 +15,7 @@
 // holds more than the window of started verifications, however many of the
 // read's replays abandoned theirs.
 import { compareBytes } from "../../bytes.js";
-import { decodeRecord } from "./records.js";
+import { decodeRecord, provedKind } from "./records.js";
 import type { Adopted, ProofCheck } from "./state.js";
 
 /** Records started ahead per verification the verifier runs at once: one running and one waiting on each. */
@@ -61,7 +61,7 @@ export function verifyAhead(verifier: ProofCheck, records: Iterable<Uint8Array>,
     if (block[Number(entry.at)] !== undefined) return false;
     let record;
     try { record = decodeRecord(entry.bytes); } catch { return false; }
-    if (![1, 2, 3, 4, 6].includes(record.kind)) return false;
+    if (!provedKind(record.kind)) return false;
     const inputs = [...record.publicInputs], proof = new Uint8Array(record.proof);
     let verdict: Promise<unknown>;
     // A verifier that throws at the call is surfaced as its judgment would see it: at that record's proof check.

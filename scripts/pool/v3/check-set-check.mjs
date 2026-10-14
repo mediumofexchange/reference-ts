@@ -33,7 +33,8 @@ import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs"
 const here = import.meta.dirname, root = resolve(here, "../../.."), report = join(root, "docs/pool-v3-check-set-verification.json");
 const sources = sourceClosure(["scripts/pool/v3/check-set-check.mjs", "scripts/pool/v3/check-set.mjs", "scripts/pool/v3/trail-circuits/trail.nr",
   ...["issue", "spend", "burn", "demand", "settle"].map(name => `scripts/pool/v3/trail-circuits/leaf-${name}.nr`), "scripts/pool/v3/trail-circuits/node.nr",
-  "src/pool/circuits/vendor/poseidon2.nr", "test/fixtures/pool-v3-genuine-proofs.json", "package-lock.json"]);
+  "src/pool/circuits/vendor/poseidon2.nr", "src/pool/v3/check-set.json", "src/pool/v3/check-set-programs.json", "test/fixtures/pool-v3-genuine-proofs.json",
+  "package-lock.json"]);
 const digests = sourceHashes(sources);
 const checks = [], proofs = [];
 const check = label => { checks.push(label); console.log(`passed: ${label}`); };

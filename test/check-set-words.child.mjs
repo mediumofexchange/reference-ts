@@ -1,7 +1,9 @@
 // Child of test/pool-v3-check-set.test.ts: trail.nr's own word constraints (`words_of`) driven with chosen words. The
 // circuit is trail.nr as shipped, with the hint lifted into an input: `words_of` calls `words_of_given` over the same
 // constraint body, which a probe's main takes words for. Prints each case's outcome as JSON. Run in its own process,
-// since Noir needs POSIX paths and this patches the path module.
+// since Noir needs POSIX paths and this patches the path module. A word of 2^32 or more never reaches the body through
+// the probe's u32 inputs, so this does not test the 32-bit range of a hinted word: that every hinted word of each
+// shipped leaf carries a 32-bit range constraint was read from the leaves' ACIR (audit 34, 2026-10-14).
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";

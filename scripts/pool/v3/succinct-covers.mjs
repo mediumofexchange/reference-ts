@@ -1,6 +1,6 @@
 // A backing read succinctly through the reference's transport with real check proofs (succinct-read §§3.3-3.5, 4.7;
 // slices 36-37): a replica syncs the operator's evidence over its listener and keeps the covers the aggregator proves over
-// chosen spans of the trail's proved records (check-set.ts); a succinct reader then syncs the proof-free evidence from the
+// chosen spans of the trail's proved records (check-set.ts), walked as any replica walks them (`V3Replica.prove`); a succinct reader then syncs the proof-free evidence from the
 // replica and fetches covers and the uncovered proofs over HTTP, from the replica first and the operator after. A store
 // check compares the read with the complete read; covers not proved here leave their records to the native check, so
 // one read exercises both. The check set's parameters (the leading 2^21 points) are prepared in the checks' parameter
@@ -12,7 +12,6 @@ import { prepareCheckSetParameters, readCheckSetParameters } from "../../../dist
 import { startCheckSetBackend } from "../../../dist/pool/proof-verifier.js";
 import { openTrailProver } from "../../../dist/pool/v3/aggregator.js";
 import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
-import { fieldToBytes } from "../../../dist/pool/field.js";
 import { readPackage } from "../../../dist/pool/v3/package-reader.js";
 import { decodeRecord } from "../../../dist/pool/v3/records.js";
 import { V3Replica } from "../../../dist/pool/v3/replica.js";
@@ -66,14 +65,13 @@ export async function readWithCovers(journal, backing, selection, ranges, { veri
     let prover;
     try {
       prover = await openTrailProver(api, verifier);
-      const proving = [];
-      for (const { first, count } of ranges) {
-        const started = performance.now();
-        for (const cover of (await prover.covers(proved.slice(first, first + count), first)).values()) {
-          replicaStore.keepCover(prover.set.identity, fieldToBytes(cover.digest), cover.proof);
-        }
-        proving.push({ first, count, seconds: Number(((performance.now() - started) / 1000).toFixed(1)) });
-      }
+      // The replica proves as it does for any reader (`V3Replica.prove`), with leaves only over the chosen records:
+      // `coverTrail` proves a node only over two covered spans, so it keeps the aligned spans inside the ranges.
+      const chosen = new Set(ranges.flatMap(({ first, count }) => proved.slice(first, first + count).map(record => sha(record.proof))));
+      const partial = { identity: prover.identity, leaf: async record => chosen.has(sha(record.proof)) ? prover.leaf(record) : undefined,
+        node: (left, right) => prover.node(left, right) };
+      const started = performance.now(), walk = await replica.prove(partial);
+      const proving = { ...walk, seconds: Number(((performance.now() - started) / 1000).toFixed(1)) };
       const used = { answered: 0, verified: 0, fetched: 0, proving }, fetched = new Set();
       const set = { identity: prover.set.identity, test: prover.set.test,
         verify: async (kind, digest, proof) => { const ok = await prover.set.verify(kind, digest, proof); if (ok) used.verified++; return ok; } };
