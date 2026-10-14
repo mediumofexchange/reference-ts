@@ -12,14 +12,15 @@
     "dist/pool/field.js": "73888d191756f21adf62822c2355034756fe027c1cacdd54a1b5aa079149989c",
     "dist/pool/note-tree.js": "48fa3cfdcc8183f5aaa86889c9a066a775afc6ff79148d294933d26a1fbf40d1",
     "dist/pool/notes.js": "eb63d7562dea56fa98ab5313b8049524d51f8e733b26a09e25e666a967bbeb31",
+    "dist/pool/packaged-binary.js": "444a4447c427563a9cbe36176b9043428b56c194ae6cbd5accdb6df4c0baf51a",
     "dist/pool/parameter-files.js": "16da59074b8d415f7b4f1d1e4e3b859ddc0d3c7b3e44ba6c47c2651d2af7ca77",
     "dist/pool/parameters.js": "2dd3b075341679c725998d60dcc50456fdd1fbbae8f7c1cd133f08688bd48c03",
-    "dist/pool/poseidon2.js": "31f449ab8890ccf23b63fc327a0d4a3e79e6ef04fb3663d1955c3dc999619180",
-    "dist/pool/proof-verifier.js": "541124c57a021cda8b2abe7abbda590c8d83193047f349c3263c17261d8a5026",
+    "dist/pool/poseidon2.js": "3504aa8cd7cca6b82f0625e7ce103ac17867521df9391963dea0d71f82233ed4",
+    "dist/pool/proof-verifier.js": "15622a91f2f26631b85aa1b4fdf11728148bad18e1d1e6a0ffd929de4980361a",
     "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
     "dist/pool/v3/aggregator.js": "40c2109b5b893b2f2c24b706506868a6f5c926ae45adf8188d265dec401c65b1",
     "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
-    "dist/pool/v3/check-set.js": "5b80fcdb42ae33a9c22ff0ef08387cd1f5f0fdc6179b7981f26fbdbf58a6a89b",
+    "dist/pool/v3/check-set.js": "e1f952467633decd9ad562ca979a5db27f6657de81e4ef5c26ed407475eee577",
     "dist/pool/v3/commitments.js": "65c8db54ea145bbeaf613153364b2f01e4f74cf32c01c3b4405706f68e647fd9",
     "dist/pool/v3/configuration.js": "7af6147f90d70c7c03372751ae6f7be172c836adcf9d7197c8daac36d7caabc5",
     "dist/pool/v3/construction.js": "ceefbce88cd83fedc99d84c6154351b8fcfe13bc76aa5679f3ac6e66bfed1d13",
@@ -35,7 +36,7 @@
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
-    "package-lock.json": "4c40a78f216c8ddc3ec55b576a5a4f216e83afc9c702ca1d0ab7b85c1ffabd7d",
+    "package-lock.json": "e66c28bdfaea12c7bffec97eb49cdf0149c59de85527d76f38f0d0f7ddfc1542",
     "scripts/pool/prepare-crs.mjs": "7efbcbe292559a26225c83720b053d38d36294f47ed3d5684d2cfa478e9ad6cb",
     "scripts/pool/v3/check-set-check.mjs": "949eacb21437702c41f41160cfe27956c10be12ed4c160fe710a29c501d96a51",
     "scripts/pool/v3/check-set.mjs": "2245696a656cc1ccf300adca79c5df58ce031ba7bd712e0a39a8d4ab599535b9",
@@ -56,16 +57,17 @@
     "src/pool/field.ts": "bea76598133a80199b39fc8b93943b35dcd92148a8d89837a7fca13f276cf8a0",
     "src/pool/note-tree.ts": "05087d8637faa1db300b8b98af7002eff3a6eb40b8e48900c7c90ee5a51a8fbb",
     "src/pool/notes.ts": "df1ced5d5384fa5de5b8071071ecc1f057ddaca4cc38ad252984b326a7e2e3a7",
+    "src/pool/packaged-binary.ts": "ce79d4431f3f97bd9520a2312967fea908a67b559b0b915a09ab03e2a854e780",
     "src/pool/parameter-files.ts": "2ef94a7c70085a86929b46e1e0e6b8ae58006ced7feb9379bede39c2783e3d24",
     "src/pool/parameters.ts": "a2046431b38d1f369e968a5e1ab31d6116430c178857f2adf78d0f915f76b807",
-    "src/pool/poseidon2.ts": "4f85ec230619481c36f6f1f1b94f7f6c3fde9e40af4e7984b36c8707a5500973",
-    "src/pool/proof-verifier.ts": "1f7ad4dd109a8c819033b18952239bb5cf1c4758109624ee0942728e5cd578e3",
+    "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
+    "src/pool/proof-verifier.ts": "81a54d1253c00513f848da5200e7924b97d182df8372d5396015a0c5e920da78",
     "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
     "src/pool/v3/aggregator.ts": "31f56cfed1775e92120271b51ec48b185858abe73816334cc1bb5987b54270a1",
     "src/pool/v3/authorization-evidence.ts": "34e821be1bb700f3ca107e7390f08854f856ebd1e44e1afdd856f4dd5f63ca60",
     "src/pool/v3/check-set-programs.json": "2e1d677923e2c213ca86af36abb85a8cf006dc0d00af28a228203afe086b7349",
     "src/pool/v3/check-set.json": "1a58d3fdb8bf64eeeb0a0dcb59b66670f8d7c2109fd9bcc454b75db00148459e",
-    "src/pool/v3/check-set.ts": "426b763ba115e499596507e95c1d450dbdb21d7c81a692defc4d17681c37821f",
+    "src/pool/v3/check-set.ts": "0b04b49737182c7d7202673f5bd1058f08ee7863235bacbbdc163a22d9395c37",
     "src/pool/v3/commitments.ts": "31c64c325efbe7605236d8a2132717ffcbe667b77b8fb1f7d74b18a2d75ab148",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
     "src/pool/v3/construction.ts": "3db0e079c400dab5acc92a6b500e9bb205e33e36945f7fe76489b0dcdc6c98d6",
@@ -101,15 +103,15 @@
     "leaf-issue": {
       "gates": 1652294,
       "compileS": 2.1,
-      "keyS": 21.5,
+      "keyS": 21.2,
       "bytecode": "52575d108afd5b16707c203607110c40ed359bb98007e68441918a0a8c776eed",
       "vk": "b544f0672ddb223c3a4b6ca68f16de1baff64f9fd8a7f3e2136968c98df6ea51",
       "keyHash": "0x1ed136d79ff6482f5110ad8d412a4bccf4f78ef3bb26baa8742021bf05dae1f9"
     },
     "leaf-spend": {
       "gates": 1652618,
-      "compileS": 1.1,
-      "keyS": 20.8,
+      "compileS": 1,
+      "keyS": 20.6,
       "bytecode": "fc140ef8cba2dc25947ef2c5d9404b5e6fcc5295bcc91395f269f6e592134ca5",
       "vk": "d09081ce893e463d017c3bcffb7e7288917f6b07c8821a25dc5c292dc1c01fd5",
       "keyHash": "0x17ec3c97d60e19d6f767edbb8dd32cd1cc1e9d0efbb49c85fb0e7618be4e07ad"
@@ -117,7 +119,7 @@
     "leaf-burn": {
       "gates": 1652618,
       "compileS": 1,
-      "keyS": 20.8,
+      "keyS": 20.9,
       "bytecode": "6a7f0476812e25d065b1cb9820267ee8dae81d2d49b0df9d909653f69b05cd80",
       "vk": "eb34d7e31535326e40c9e95354a30b40076cf94c2db5cb844cddd2f9940f2cf7",
       "keyHash": "0x15e5e6198192f2a6764a5fd5d92d49b3a6ebb390943ca36c13e01177a63adc28"
@@ -132,7 +134,7 @@
     },
     "leaf-settle": {
       "gates": 1652634,
-      "compileS": 1,
+      "compileS": 1.1,
       "keyS": 20.7,
       "bytecode": "ee593cfc033d3fe2bd853f41d7ce8c16027f38f38d4152e5ddd40e7bd856862e",
       "vk": "c92db81e26d2e2337e67b7c92029a85f615b8f1b12626bdf9a812ba80c746dd6",
@@ -150,73 +152,73 @@
   "proofs": [
     {
       "label": "leaf-issue",
-      "seconds": 77.3,
-      "peakMiB": 3855
+      "seconds": 77.5,
+      "peakMiB": 3789
     },
     {
       "label": "leaf-spend",
-      "seconds": 76.2,
-      "peakMiB": 4011
+      "seconds": 76.3,
+      "peakMiB": 3805
     },
     {
       "label": "leaf-burn",
-      "seconds": 75.8,
-      "peakMiB": 3889
+      "seconds": 76,
+      "peakMiB": 3845
     },
     {
       "label": "leaf-demand",
-      "seconds": 76,
-      "peakMiB": 3895
+      "seconds": 76.1,
+      "peakMiB": 3798
     },
     {
       "label": "leaf-settle",
-      "seconds": 75.7,
-      "peakMiB": 3870
+      "seconds": 76,
+      "peakMiB": 3798
     },
     {
       "label": "node over two leaves",
-      "seconds": 63.3,
-      "peakMiB": 3422
+      "seconds": 63.4,
+      "peakMiB": 3365
     },
     {
       "label": "node over two leaves (2)",
-      "seconds": 63.1,
-      "peakMiB": 3097
+      "seconds": 63.3,
+      "peakMiB": 3015
     },
     {
       "label": "node over two nodes",
-      "seconds": 63.2,
-      "peakMiB": 3096
+      "seconds": 63.3,
+      "peakMiB": 3023
     },
     {
       "label": "leaf-spend under a forged node-key input",
-      "seconds": 75.8,
-      "peakMiB": 3195
+      "seconds": 76,
+      "peakMiB": 3117
     },
     {
       "label": "node under a forged node-key input",
-      "seconds": 63.1,
-      "peakMiB": 3205
+      "seconds": 63.3,
+      "peakMiB": 3141
     },
     {
       "label": "leaf-burn forced over a failing proof",
       "seconds": 4.9,
-      "peakMiB": 4673
+      "peakMiB": 4578
     },
     {
       "label": "node over a child whose key is not its admitted hash's",
-      "seconds": 64.5,
-      "peakMiB": 5972
+      "seconds": 64.7,
+      "peakMiB": 5916
     },
     {
       "label": "node over a child cover with byte 14655 flipped",
       "seconds": 1.3,
-      "peakMiB": 4603
+      "peakMiB": 4520
     },
     {
       "label": "node over a child cover with byte 5000 flipped",
-      "seconds": 64.4,
-      "peakMiB": 5958
+      "seconds": 64.5,
+      "peakMiB": 5903
     }
   ],
   "checks": [
