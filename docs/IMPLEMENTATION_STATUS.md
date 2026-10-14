@@ -130,6 +130,13 @@ checked points, on an instance replaced after any failure, and verifies each cov
 ([slice 42](../decisions/2026-10.md#2026-10-14--prove-covers-on-the-native-binary-bbjs-bundles-from-a-private-copy-of-the-checked-points-on-an-instance-replaced-after-any-failure-slice-42-next-12)); `check-set-check.mjs --native` (CI's `native` group, Ubuntu and
 macOS) runs the check set's cases on it ([report](pool-v3-check-set-native-verification.json)).
 
+Its venue exhaustion (§4, a reader's option over venue-ergo) has its reader's side in `src/ergo-exhaustion.ts`: the
+subject map and its paths, inclusion paths, a fold's four rules and a range read from a fold, a path, the key's
+entries and included transactions, with kept tuples; `src/ergo-scan.ts` is the scan the exhaustion circuits are to
+run. `npm test` holds the scan to the framer and a succinct range to the complete read
+([slice 43](../decisions/2026-10.md#2026-10-14--read-a-venue-range-succinctly-from-a-fold-a-subject-map-path-the-keys-entries-and-included-transactions-and-take-the-venues-pace-as-a-prover-pool-slice-43-next-12)).
+Its folds come from a test set: the exhaustion circuits are not built, and no venue read calls it yet.
+
 The holder's read path also runs in a browser engine (slice 39, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)):
 `scripts/browser/build.mjs` bundles the library with `src/browser/`'s substitutes for node:sqlite (SQLite's
 WebAssembly build, memory databases), node:crypto and node:fs; `npm run check:browser` holds them to Node and runs ten
