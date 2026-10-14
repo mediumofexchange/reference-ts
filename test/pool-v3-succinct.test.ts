@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ByteWriter, compareBytes } from "../src/bytes.js";
 import { SUCCINCT_TRAIL_CONTEXT } from "../src/contexts.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
-import { directoryRoot, encodeCommitment, signCommitment } from "../src/venue-records.js";
+import { directoryRoot, encodeCommitment, encodeReplacement, replacementMessage, ROLE_OPERATOR, signCommitment } from "../src/venue-records.js";
 import { limbsOf } from "../src/pool/field.js";
 import { poseidon2Hash } from "../src/pool/poseidon2.js";
 import { ScopeTree } from "../src/pool/scope.js";
@@ -41,8 +41,8 @@ const SET = testCheckSet("succinct test");
 const proofOf = (first: number, length = COVER_PROOF_BYTES) => new Uint8Array(length).fill(first);
 
 /** One operator, one backing, one segment; records the operator applies, and raw records it commits without judging. */
-function oneBacking() {
-  const venue = FixtureVenue.reference(label, lag, 10n), operatorStore = new ReplayStore();
+function oneBacking(window = 10n) {
+  const venue = FixtureVenue.reference(label, lag, window), operatorStore = new ReplayStore();
   const fields = { configuration: domain, venue: venue.id, obligor: issuer, operator, interval: 10n,
     payout: { thing: "succinct test", quantumExponent: 0, perUnit: 1n }, replacementRule: ed25519.getPublicKey(b(6)) };
   const terms = encodeRootTerms(fields), name = rootTermsName(terms);
@@ -70,6 +70,11 @@ function oneBacking() {
   function commitRaw(bytes: Uint8Array, form: Uint8Array, evidence: ReturnType<typeof evidenceHashes>) {
     records.push(bytes); free.push(form); digests.push(evidence); raw = true;
   }
+  /** Commit a decodable record the operator never judged. */
+  const commit = (r: Record) => commitRaw(encodeRecord(r), encodeProofFree(proofFreeOf(r)), evidenceHashes(r));
+  /** A kind-5 record (no proof): decodable, never proved. */
+  const kind5 = (n: number): Record => ({ domain, kind: 5, publicInputs: [...limbsOf(domain), ...limbsOf(id), BigInt(n), ...limbsOf(b(200))],
+    proof: new Uint8Array(), authorization: new Uint8Array(64), capsules: [] });
   function checkpoint(sequence: bigint, index: bigint) {
     let evidence = POOL_V3.genesisEvidence(id);
     digests.forEach((d, i) => { evidence = POOL_V3.nextEvidence(evidence, d, BigInt(i + 1)); });
@@ -110,7 +115,8 @@ function oneBacking() {
   const truncate = (n: number) => { records.length = n; free.length = n; digests.length = n; };
   /** A supplier's lengthened trail: every record so far, with no checkpoint over its end (pool-v3 §10). */
   const uncommitted = () => { freeTrails.push(PROOF_FREE_TRAILS.encodeTrail({ header: segmentBytes(header), terms: [signed], records: [...free] })); };
-  return { id, scope, name, issue, issueRecord, commitRaw, truncate, checkpoint, complete, succinct, succinctWith, uncommitted };
+  return { id, scope, name, venue, records: () => [...records], issue, issueRecord, commitRaw, commit, kind5, truncate, checkpoint, complete, succinct,
+    succinctWith, uncommitted };
 }
 
 /** A supply over the complete trail's proofs, covers made for the proved records (by the caller's rule), and counts. */
@@ -431,6 +437,65 @@ describe("succinct reading against the complete read (succinct-read §§2–3)",
     covers = honest(leaves, kinds);
     expect(await f.succinctWith(c, construction)).toEqual({ valid: 4n, issued: 10n });
   });
+  it("partitions no checkpoint a retired key signs past its term, and partitions a segment's latest trail once however many forks follow it (review)", async () => {
+    const distinct = (n: number) => { const p = proofOf(1); p[1] = n & 255; p[2] = n >> 8; return p; };
+    // Eight covered records over four checkpoints; the operator replaced from index 11. The retired key then signs, at
+    // 12, a checkpoint of the segment whose trail is a fork from record 0: it is past the term, so never partitioned.
+    // Signed within the term (at 6), the same fork is the latest checkpoint and cancels the gain (its records differ).
+    const run = async (variant: "plain" | "retired" | "within") => {
+      const f = oneBacking(40n);
+      f.checkpoint(1n, 1n);
+      let c!: ReturnType<typeof f.checkpoint>;
+      for (let k = 0; k < 4; k++) {
+        for (let i = 0; i < 2; i++) await f.issue(BigInt(2 * k + i + 1), BigInt(100 + 2 * k + i), distinct(2 * k + i));
+        c = f.checkpoint(BigInt(k + 2), BigInt(k + 2));
+      }
+      const honestRecords = [...c.trail.records];
+      if (variant !== "within") {
+        const fields = { role: ROLE_OPERATOR, successor: ed25519.getPublicKey(b(9)), predecessor: f.name, effective: 11n,
+          signature: new Uint8Array(64), successorSignature: new Uint8Array(64) };
+        const message = replacementMessage(f.name, fields);
+        f.venue.witness(2, f.name, 6n, encodeReplacement(f.name, { ...fields, signature: ed25519.sign(message, b(6)), successorSignature: ed25519.sign(message, b(9)) }));
+      }
+      if (variant !== "plain") {
+        f.truncate(0);
+        for (let i = 0; i < 12; i++) f.commit(f.issueRecord(BigInt(700 + i), BigInt(700 + i), distinct(700 + i)));
+        f.checkpoint(6n, variant === "retired" ? 12n : 6n);
+      }
+      const supply = supplyOf([...honestRecords, ...f.records()], { cover: (digests, kinds) => honest(digests.slice(0, 8), kinds.slice(0, 8)) });
+      return { result: await f.succinct(c, supply), complete: await f.complete(c), asked: supply.asked };
+    };
+    const plain = await run("plain"), retired = await run("retired"), within = await run("within");
+    for (const r of [plain, retired, within]) expect(r.result).toEqual(r.complete);
+    expect(retired.asked).toEqual(plain.asked);
+    expect(plain.asked).toEqual({ covers: 1, proofs: 0 });
+    expect(within.asked.covers).toBeGreaterThan(plain.asked.covers);
+
+    // Forks from record 0, each with more proved records than the latest checkpoint's trail (a fork of two proved records
+    // and thirty kind-5 ones): the latest trail's partition is made once, and each fork is partitioned with its own trail.
+    const forked = async (forks: number) => {
+      const f = oneBacking(40n);
+      f.checkpoint(1n, 1n);
+      await f.issue(1n, 100n, distinct(1)); await f.issue(2n, 101n, distinct(2));
+      const valid = f.checkpoint(2n, 2n);
+      let sequence = 3n, n = 10;
+      for (let k = 0; k < forks; k++, sequence++) {
+        f.truncate(0);
+        for (let i = 0; i < 3; i++, n++) f.commit(f.issueRecord(BigInt(50 + n), BigInt(500 + n), distinct(n)));
+        f.checkpoint(sequence, sequence);
+      }
+      f.truncate(0);
+      f.commit(f.issueRecord(900n, 900n, distinct(900))); f.commit(f.issueRecord(901n, 901n, distinct(901)));
+      const latest = f.records().map(bytes => leafDigest(proofFreeOf(decodeRecord(bytes))));
+      for (let i = 0; i < 30; i++) f.commit(f.kind5(i));
+      f.checkpoint(sequence, sequence);
+      const asks = new Map<bigint, number>();
+      const supply: CheckSupply = { cover: digest => { asks.set(digest, (asks.get(digest) ?? 0) + 1); return undefined; }, proof: () => undefined };
+      await f.succinct(valid, supply);
+      return asks.get(nodeDigest(latest[0]!, latest[1]!)) ?? 0;
+    };
+    expect([await forked(0), await forked(3), await forked(6)]).toEqual([1, 1, 1]);
+  });
   it("fetches nothing again when a resumed replay refuses: its kept prefix and its own records were established (review)", async () => {
     const f = oneBacking();
     f.checkpoint(1n, 1n);
@@ -459,11 +524,11 @@ describe("succinct reading: a prover's walk over a trail (succinct-read §§3.2,
     const walk = () => coverTrail(prover, records.map(encodeRecord), digest => kept.get(digest), cover => {
       expect(SET.verify(cover.kind, cover.digest, cover.proof)).toBe(true); kept.set(cover.digest, cover.proof);
     });
-    expect(await walk()).toEqual({ proved: 6, made: 6 });
+    expect(await walk()).toMatchObject({ proved: 6, made: 6 });
     // Leaves 0, 1, 4, 5 and the nodes over (0, 1) and (4, 5): (2, 3) and every span above them hold a record without one.
     expect(new Set(kept.keys())).toEqual(new Set([digests[0], digests[1], digests[4], digests[5],
       nodeDigest(digests[0]!, digests[1]!), nodeDigest(digests[4]!, digests[5]!)]));
-    expect(await walk()).toEqual({ proved: 6, made: 0 });
+    expect(await walk()).toMatchObject({ proved: 6, made: 0 });
   });
 });
 

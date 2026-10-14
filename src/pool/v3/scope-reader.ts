@@ -560,11 +560,12 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     if (!views.has(id)) views.set(id, readRecordView({ ...selection, backing }, terms, evidence, record, context.reference, store));
     return views.get(id)!;
   };
-  // Succinct-read §3.4: a succinct read partitions a segment once, over the served trail of the latest checkpoint held of
-  // an operator, within the term the walk judges it in, that carries a backing in that segment, whose snapshot that
-  // operator signed; never over a trail no checkpoint commits, which a supplier could lengthen with records of its own,
-  // nor one a retired key signed past its term. One pass over each term's held commitments finds every segment's.
-  const latestOfTerm = new Map<string, Map<string, { readonly digest: Uint8Array; readonly snapshot: Snapshot }>>();
+  // Succinct-read §3.4: a succinct read partitions a segment once, over the served trail of the latest held commitment of
+  // an operator, within its term in the backing whose checkpoints the walk judges, that carries the backing in that
+  // segment and whose directory, snapshot and served trail the evidence holds: a trail that operator signed. Never one no
+  // checkpoint commits, which a supplier could lengthen with records of its own, nor one a retired key signed past its
+  // term. Found once a walk for each term and segment, walking back from the term's end, so a resumed read, whose
+  // segment's latest checkpoint is near that end, reads a few commitments rather than the term.
   const latestTrails = new Map<string, StoredTrail | undefined>();
   const latestTrail = async (held: HeldCommitment, backing: Uint8Array, segment: Uint8Array): Promise<StoredTrail | undefined> => {
     const view = await views.get(hex(backing)), operator = held.commitment.operator;
@@ -572,25 +573,22 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
     let i = view.chain.length - 1;
     while (i > 0 && view.chain[i]!.from > held.index) i--;
     if (i < 0 || view.chain[i]!.from > held.index || !same(view.chain[i]!.operator, operator)) return undefined;
-    const term = `${hex(backing)}:${i}`, from = view.chain[i]!.from, end = view.termEnd(i);
-    if (!latestOfTerm.has(term)) {
-      const latest = new Map<string, { readonly digest: Uint8Array; readonly snapshot: Snapshot }>();
-      for (let next = view.nextHeld(operator, from); next !== undefined && next.index <= end; next = view.nextHeld(operator, from, next.commitment.sequence)) {
+    // One trail object a segment for the walk: a succinct construction keeps its partition by it.
+    const key = `${hex(backing)}:${i}:${hex(segment)}`;
+    if (!latestTrails.has(key)) {
+      const from = view.chain[i]!.from, end = view.termEnd(i);
+      let found: StoredTrail | undefined;
+      for (let held = view.previousHeld(operator, end); held !== undefined && held.index >= from && found === undefined;
+        held = view.previousHeld(operator, end, held.commitment.sequence)) {
         let snapshot: Snapshot, digest: Uint8Array | undefined;
-        try { digest = view.carries(next)?.digest; snapshot = snapshotFor(digest ?? new Uint8Array()); } catch (error) {
+        try { digest = view.carries(held)?.digest; snapshot = snapshotFor(digest ?? new Uint8Array()); } catch (error) {
           // A checkpoint whose directory or snapshot the evidence does not hold names no trail here.
           if (error instanceof EvidenceRefusal) continue;
           throw error;
         }
-        if (same(snapshot.backing, backing)) latest.set(hex(snapshot.segment), { digest: digest!, snapshot });
+        if (same(snapshot.backing, backing) && same(snapshot.segment, segment)) found = trails.served({ backing, segment, digest: digest! }, snapshot);
       }
-      latestOfTerm.set(term, latest);
-    }
-    // One trail object a segment for the walk: a succinct construction keeps its partition by it.
-    const key = `${term}:${hex(segment)}`;
-    if (!latestTrails.has(key)) {
-      const latest = latestOfTerm.get(term)!.get(hex(segment));
-      latestTrails.set(key, latest === undefined ? undefined : trails.served({ backing, segment, digest: latest.digest }, latest.snapshot));
+      latestTrails.set(key, found);
     }
     return latestTrails.get(key);
   };

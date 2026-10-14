@@ -30,7 +30,7 @@ import { MAX_TRAIL_RECORD_BYTES, trailCodec, type ServedTrail } from "./trail.js
 import type { TrailForm } from "./evidence-store.js";
 
 /** The revision of succinct-read.md these rules implement; it names kept state with the set identity (§2 rule 8). */
-export const SUCCINCT_SPECIFICATION = "succinct-read cb84f04";
+export const SUCCINCT_SPECIFICATION = "succinct-read 94fc751";
 export const T_CHECK_LEAF = 1008n;
 export const T_CHECK_NODE = 1009n;
 /** The proof length a cover fixes (§3.2): 458 field elements. */
@@ -127,19 +127,27 @@ export interface SpanProver {
   node(left: Cover, right: Cover): Promise<Cover>;
 }
 
+/** Where a walk of a trail's proved records stands: how many it has walked, and the cover of each height's left span
+ * whose right sibling comes next (undefined where it has none). */
+export interface CoverWalk { readonly proved: number; readonly pending: readonly (Cover | undefined)[] }
+
 /**
  * Covers of every aligned span (§3.2) of a trail's proved records, from its complete records in position order
  * (`records`; records of other kinds are passed over), numbered from 0: each leaf whose proof verifies and each node over
  * two covered spans of equal height, given to `keep` as made. A cover `held` gives for a span's digest is used as
  * made, not proved again, so walking a trail again proves only its new spans. Memory holds one cover per height.
+ * A walk may go on from where an earlier one stood (`from`, with `records` the records after those it read), and stops
+ * before the next record once `stop` holds; it returns how many records it read and where it stands.
  */
 export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
-  held: (digest: bigint) => Uint8Array | undefined, keep: (cover: Cover) => void): Promise<{ readonly proved: number; readonly made: number }> {
-  // pending[h]: the cover of the left span of height h whose right sibling comes next, or undefined where it has none.
-  const pending: (Cover | undefined)[] = [];
-  let n = 0, made = 0;
+  held: (digest: bigint) => Uint8Array | undefined, keep: (cover: Cover) => void, options: { readonly from?: CoverWalk; readonly stop?: () => boolean } = {}):
+  Promise<{ readonly proved: number; readonly made: number; readonly read: number; readonly stopped: boolean; readonly walk: CoverWalk }> {
+  const pending: (Cover | undefined)[] = [...options.from?.pending ?? []];
+  let n = options.from?.proved ?? 0, made = 0, read = 0, stopped = false;
   const kept = (cover: Cover): Cover => { keep(cover); made++; return cover; };
   for await (const bytes of records) {
+    if (options.stop?.() === true) { stopped = true; break; }
+    read++;
     const record = decodeRecord(bytes);
     if (!provedKind(record.kind)) continue;
     let cover: Cover | undefined;
@@ -158,7 +166,7 @@ export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Arra
     }
     n++;
   }
-  return { proved: n, made };
+  return { proved: n, made, read, stopped, walk: { proved: n, pending: [...pending] } };
 }
 
 /** A test set's prover (§1): a leaf over a proof `statements` accepts, and every node, made by the set's `cover`. */
@@ -359,14 +367,15 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
     requireReplay(await native(verifier, record, established.held.get(i), { segment: established.segment, position: established.positions[i]! }), "PROOF");
   };
 
-  /** The segment's partition (§3.4) over proved records `start` to `end`: the one kept where it reaches them, else one
-   * made over the latest served trail the walk names for the segment (`trail.latest`), from `start` on. Undefined where
-   * there is none longer than this trail, which is then partitioned on its own. */
+  /** The segment's partition (§3.4) from proved record `start` on: the one kept where it starts at or before it (a
+   * record past its end, as on a longer fork, is partitioned with its own trail), else one made over the latest served
+   * trail the walk names for the segment (`trail.latest`), from `start` on. Undefined where there is none longer than
+   * this trail, which is then partitioned on its own. */
   const partitionOf = async (trail: ServedTrailOf, from: bigint, start: number, end: number, block: readonly Adopted[]): Promise<Partition | undefined> => {
     const latest = trail.latest;
     if (start === end || latest === undefined || !same(latest.segment, trail.segment)) return undefined;
     const kept = partitions.get(latest);
-    if (kept !== undefined && kept.start <= start && end <= kept.start + kept.found.length) return kept;
+    if (kept !== undefined && kept.start <= start) return kept;
     if (latest.length <= trail.length) return undefined;
     const top = latest.evidence(latest.length);
     if (top === undefined) return undefined;
@@ -392,10 +401,11 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       // this trail's spans meet. The others are partitioned with this trail. The partitioned trail itself, from the same
       // record, would meet the same spans again.
       const wide = await partitionOf(trail, from, start, start + m, block);
+      const itself = wide !== undefined && start === wide.start && same(trail.evidence(trail.length) ?? new Uint8Array(), wide.top);
       const known = wide === undefined ? undefined : (i: number): number => {
         const w = start + i - wide.start;
         if (w < 0 || w >= wide.found.length || !same(wide.digests.subarray(32 * w, 32 * w + 32), digests.subarray(32 * i, 32 * i + 32))) return UNKNOWN;
-        return wide.found[w] === UNSPLIT && (start !== wide.start || !same(trail.evidence(trail.length) ?? new Uint8Array(), wide.top)) ? ONCE : wide.found[w]!;
+        return wide.found[w] === UNSPLIT && !itself ? ONCE : wide.found[w]!;
       };
       const found = await partition(set, supply, digests, kinds, start, m, known);
       const covered = found.map(state => state === COVERED ? 1 : 0);
