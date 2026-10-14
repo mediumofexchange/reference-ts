@@ -198,7 +198,7 @@ export function nativeRefusal(): string | undefined {
 async function loadNative(points: Uint8Array, threads: number | undefined): Promise<Barretenberg> {
   // `start` refused a host without one, and nothing has run since.
   const bbPath = findBbBinary()!;
-  const { mkdtempSync, rmSync, writeFileSync } = process.getBuiltinModule("node:fs");
+  const { existsSync, mkdtempSync, rmSync, writeFileSync } = process.getBuiltinModule("node:fs");
   const { join } = process.getBuiltinModule("node:path"), { tmpdir } = process.getBuiltinModule("node:os");
   const directory = mkdtempSync(join(tmpdir(), "moe-bb-points-"));
   const remove = (): void => { rmSync(directory, { recursive: true, force: true }); };
@@ -218,8 +218,18 @@ async function loadNative(points: Uint8Array, threads: number | undefined): Prom
     remove();
     throw error;
   }
+  // bb.js's destroy only signals bb, which removes its socket from the directory as it exits: a removal racing that
+  // leaves the directory behind, so it is retried until bb has gone (a few seconds at most).
   const destroy = api.destroy.bind(api);
-  api.destroy = async () => { try { await destroy(); } finally { remove(); } };
+  api.destroy = async () => {
+    try { await destroy(); } finally {
+      for (let tries = 0; tries < 100; tries++) {
+        remove();
+        if (!existsSync(directory)) break;
+        await new Promise(done => setTimeout(done, 50));
+      }
+    }
+  };
   return api;
 }
 

@@ -20,7 +20,7 @@
 // docs/pool-v3-check-set-verification.json, or docs/pool-v3-check-set-native-verification.json with --native.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism, cpus, tmpdir, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -95,7 +95,9 @@ await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: console.log });
 // show nothing was fetched.
 const sentinel = native ? mkdtempSync(join(tmpdir(), "moe-crs-sentinel-")) : undefined;
 if (native) process.env.CRS_PATH = sentinel;
-const privateCopies = () => readdirSync(tmpdir()).filter(name => name.startsWith("moe-bb-points-"))
+// Only this run's: a directory another process or an earlier run left is not this run's evidence.
+const earlier = new Set(readdirSync(tmpdir()));
+const privateCopies = () => readdirSync(tmpdir()).filter(name => name.startsWith("moe-bb-points-") && !earlier.has(name))
   .map(name => ({ name, files: readdirSync(join(tmpdir(), name)).filter(file => !file.endsWith(".sock")).sort(),
     bytes: statSync(join(tmpdir(), name, "bn254_g1.dat"), { throwIfNoEntry: false })?.size }));
 const parameters = await readCheckSetParameters(PARAMETER_DIRECTORY), api = await startCheckSetBackend(parameters, { threads, native });
@@ -279,6 +281,7 @@ try {
   if (native) {
     assert.equal(process.env.CRS_PATH, sentinel);
     assert.deepEqual(readdirSync(sentinel), []);
+    rmSync(sentinel, { recursive: true });
     check("the native instances proved from private copies of the checked points alone (each held only them and bb's lock), and nothing was fetched");
   }
 
@@ -298,6 +301,7 @@ try {
       compared = { leaf: { native: seconds("leaf-spend"), wasm: seconds("leaf-spend on WebAssembly") },
         node: { native: seconds("node over two leaves"), wasm: seconds("node over two leaves on WebAssembly") } };
     } finally { await wasm.close(); }
+    assert.deepEqual(privateCopies().map(copy => copy.name), [], "a destroyed native instance left its directory");
     check(`on this host a leaf takes ${compared.leaf.native} s natively against ${compared.leaf.wasm} s on WebAssembly, a node ${compared.node.native} s against ${compared.node.wasm} s`);
   }
 

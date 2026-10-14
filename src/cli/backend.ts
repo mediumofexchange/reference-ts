@@ -81,7 +81,7 @@ export async function openCoverProver(directory: Pick<Directory, "path">, statem
   } catch (error) {
     // A native binary that would not start (a parameter fault stays its own): by name, with the way round it.
     if (native && error instanceof Error && !(error instanceof ParameterError)) {
-      throw new CommandError("PROVER", `the native backend did not start (${error.message.split("\n")[0]}); prove with --prover wasm`);
+      throw new CommandError("PROVER", `proving on the native backend could not begin (${error.message.split("\n")[0]}); prove with --prover wasm`);
     }
     throw error;
   }

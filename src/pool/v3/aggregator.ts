@@ -84,7 +84,7 @@ export async function openTrailProver(parameters: () => Promise<ProvingParameter
     // The instance is abandoned either way; a failed destroy changes nothing the caller is told.
     if (retired !== undefined) await retired.api.destroy().catch(() => {});
   };
-  let queue: Promise<unknown> = Promise.resolve(), closing = false, closed = false;
+  let queue: Promise<unknown> = Promise.resolve(), closing: Promise<void> | undefined, closed = false;
   const serially = <T>(task: () => Promise<T>): Promise<T> => {
     const run = queue.then(task, task);
     queue = run.catch(() => {});
@@ -133,10 +133,8 @@ export async function openTrailProver(parameters: () => Promise<ProvingParameter
   };
   return { identity: set.identity, set, backend: native ? "native" : "wasm", leaf, node,
     // Proofs asked for before `close` finish; later ones refuse.
-    async close() {
-      if (closing) return;
-      closing = true;
-      await serially(async () => { closed = true; await retire(); });
-      await set.close();
+    close() {
+      closing ??= serially(async () => { closed = true; await retire(); }).then(() => set.close());
+      return closing;
     } };
 }
