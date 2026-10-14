@@ -214,8 +214,8 @@ try {
       assert(round < 24, `the shop did not fulfill: ${result.stdout}${result.stderr}`);
     }
     assert.deepEqual([fulfilled.status, fulfilled.value, fulfilled.read.judgment], ["final", "3", "succinct"]);
+    // Its earlier tries read and kept the covered issues (pool-v3 §14), so this read asks about the payment alone.
     assert(Number(fulfilled.read.proofsFetched) >= 1, JSON.stringify(fulfilled.read));
-    assert(Number(fulfilled.read.coversTaken) >= 1, JSON.stringify(fulfilled.read));
     await finalOf(HS, "pay-1");
     // 10 + 4 held, 3 paid: whichever note the payment spent, 11 remain available.
     const after = await ok(wallet("sync", HS, backing));
