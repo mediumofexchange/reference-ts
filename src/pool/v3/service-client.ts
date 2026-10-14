@@ -8,6 +8,7 @@ import { EVIDENCE_QUOTA, evidenceName, wholePackage, type EvidenceStore } from "
 import { FAULT_LIMITS } from "./fault-observer.js";
 import { referenceVenue, type VenueReference } from "./guard.js";
 import { PackageLimitError } from "./package.js";
+import { MAX_PROOF } from "./records.js";
 import { decodeV3ServiceReply, parseV3ServiceCommand, readServed, servedTooSlow, V3_SERVICE_PROFILE,
   MAX_V3_SERVICE_REQUEST_BYTES, MAX_V3_SERVICE_REPLY_BYTES, type V3ServiceCommand } from "./service-wire.js";
 import type { ServedPackage } from "./store.js";
@@ -43,11 +44,11 @@ async function json(response: Response, maximum: number): Promise<unknown> {
   try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))) as unknown; }
   catch { throw new EncodingError("invalid service JSON or UTF-8"); }
 }
-/** A whole binary body of at most `maximum` bytes, or undefined past it: a longer answer is stopped unread. */
-async function body(response: Response, maximum: number): Promise<Uint8Array | undefined> {
+/** A whole binary body of at most `maximum` bytes: a longer answer is stopped unread, a malformed answer. */
+async function body(response: Response, maximum: number): Promise<Uint8Array> {
   const chunks: Uint8Array[] = []; let size = 0;
   for await (const chunk of chunksOf(response)) {
-    size += chunk.length; if (size > maximum) return undefined;
+    size += chunk.length; if (size > maximum) throw new EncodingError("an answer past its bound");
     chunks.push(chunk);
   }
   return new Uint8Array(Buffer.concat(chunks));
@@ -56,8 +57,6 @@ async function body(response: Response, maximum: number): Promise<Uint8Array | u
 export const unanswered = (error: unknown): boolean =>
   (error instanceof TypeError && (error.message === "fetch failed" || error.message === "terminated")) ||
   (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
-/** A succinct reader's fetches answer at most pool-v3 §5's bound on a proof field. */
-const MAX_FETCHED_PROOF = 131_072;
 
 /** A v3 onion service's host: 56 base32 characters, the last its version byte's (3). Tor checks the checksum. */
 export const ONION_HOST = /^[a-z2-7]{55}d\.onion$/;
@@ -361,7 +360,7 @@ export class V3ServiceClient {
   }
 
   /** A succinct reader's fetch of a record's proof by its hash and place (succinct-read §3.5): the source's bytes, which
-   * the reader hashes, or undefined where it has none or answers past pool-v3 §5's bound. */
+   * the reader hashes, or undefined where it has none; an answer past pool-v3 §5's bound is malformed (`EncodingError`). */
   async proof(proofHash: Uint8Array, at: RecordAt): Promise<Uint8Array | undefined> {
     const hash = identifier(proofHash), segment = identifier(at.segment);
     if (typeof at.position !== "bigint" || at.position < 1n || at.position >= 1n << 63n) throw new TypeError("a record's position is a positive u63");
@@ -372,8 +371,10 @@ export class V3ServiceClient {
   async cover(set: Uint8Array, digest: bigint): Promise<Uint8Array | undefined> {
     return this.fetched(`/covers/${hex(identifier(set))}/${hex(fieldToBytes(digest))}`);
   }
+  /** A fetch whose answer is at most pool-v3 §5's bound on a proof field (past it, `EncodingError`), or undefined where the
+   * source has none. */
   private fetched(path: string): Promise<Uint8Array | undefined> {
-    return this.exchange(path, this.#walletToken, undefined, "application/octet-stream", response => body(response, MAX_FETCHED_PROOF))
+    return this.exchange(path, this.#walletToken, undefined, "application/octet-stream", response => body(response, MAX_PROOF))
       .catch((error: unknown) => {
         if (error instanceof V3ServiceClientError && error.code === "NOT_FOUND") return undefined;
         throw error;
@@ -391,24 +392,30 @@ export class V3ServiceClient {
 
 /**
  * A succinct reader's supply over `sources` (succinct-read §2 rule 6): each fetch asks them in turn until one answers,
- * covers under the set whose identity is `set`. A source that refuses or answers malformed is passed over, and so is a
- * proof whose bytes do not hash to the asked `proofHash` and a cover the reader's own check (`accept`) refuses, so an
- * honest source behind a wrong one is still asked. A source that does not answer is not asked again by this supply
- * (a reader makes one per read), so a dead or dripping source costs one wait. The holder's own proxy refusing the route
- * is the holder's to fix, not a source's answer: it ends the read, as it ends a sync.
+ * covers under the set whose identity is `set`, the source that answered last first. A source that refuses or has
+ * none is passed over for that fetch, so an honest source behind it is still asked. A source that does not answer, or
+ * answers malformed bytes, a proof whose bytes do not hash to the asked `proofHash` or a cover the reader's own check
+ * (`accept`) refuses, is not asked again by this supply (a reader makes one per read; a wrong answer is the supplier's
+ * failure, §2 rule 5), so a dead, dripping or lying source costs one wait, and one that refuses or answers "none"
+ * slowly costs a wait only where the source that answered last has none either. The holder's own proxy
+ * refusing the route is the holder's to fix, not a source's answer: it ends the read, as it ends a sync.
  */
 export function serviceSupply(set: Uint8Array, sources: readonly V3ServiceClient[]): CheckSupply {
   const own = identifier(set), list = [...sources], silent = new Set<V3ServiceClient>();
   const ask = async (fetch: (source: V3ServiceClient) => Promise<Uint8Array | undefined>, holds: (answer: Uint8Array) => Promise<boolean> | boolean) => {
-    for (const source of list) {
+    for (const source of [...list]) {
       if (silent.has(source)) continue;
       try {
         const answer = await fetch(source);
-        if (answer !== undefined && await holds(answer)) return answer;
+        if (answer === undefined) continue;
+        if (!await holds(answer)) { silent.add(source); continue; }
+        list.splice(list.indexOf(source), 1); list.unshift(source);
+        return answer;
       } catch (error) {
         if (unanswered(error)) { silent.add(source); continue; }
         if (error instanceof V3ServiceClientError && !(error.code === "PROXY" && error.status === 0)) continue;
-        if (error instanceof EncodingError) continue;
+        // A malformed answer is a wrong one.
+        if (error instanceof EncodingError) { silent.add(source); continue; }
         throw error;
       }
     }

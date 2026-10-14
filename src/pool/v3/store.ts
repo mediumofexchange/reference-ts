@@ -68,7 +68,7 @@ import { decodeCommitment, encodeCommitment, signCommitment, verifyCommitment, t
 import { scopeSchedule } from "../schedule.js";
 import type { Snapshot } from "./commitments.js";
 import { POOL_V3, type Construction, type ReaderFrames } from "./construction.js";
-import { addLineage, EvidenceStore, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailForm, type TrailTip } from "./evidence-store.js";
+import { addLineage, EvidenceStore, formServes, MAX_ITEM_BYTES, partPacker, topTrails, wholePackage, type EvidenceBatch, type EvidencePart, type StoredTrail, type TrailForm, type TrailTip } from "./evidence-store.js";
 import { requireReferenceVenue, type VenueReference } from "./guard.js";
 import type { SegmentHeader } from "./headers.js";
 import { decodeEvidenceDirectory, encodeEvidenceDirectory, PackageLimitError } from "./package.js";
@@ -1714,6 +1714,7 @@ export class V3OperatorJournal {
   async serve(backing?: Uint8Array, after = 0n, form?: TrailForm): Promise<ServedEvidence> {
     const named = backing === undefined ? undefined : copyBytes(backing);
     requireThat(typeof after === "bigint" && after >= 0n && after < U64, "REFUSED", "the served sequence is not a u64", "SEQUENCE");
+    requireThat(formServes(form, this.construction), "UNSUPPORTED", "the journal's records have no such form");
     requireThat(!this.closed, "STORAGE", "store is closed");
     // Everything from the clock to the selection runs without an await, so no command's transaction falls between.
     const view = this.servingView();

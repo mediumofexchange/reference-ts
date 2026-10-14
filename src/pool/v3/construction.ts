@@ -22,7 +22,7 @@ import { decodeFaultEvidence, verifyFaultEvidence, type ExpectedSnapshot } from 
 import { V3_HEADERS, type SegmentHeader, type SegmentHeaderCodec } from "./headers.js";
 import { V3_PACKAGES, type PackageCodec } from "./package.js";
 import {
-  acceptanceBytes, acceptanceId, decodePublication, decodeRecord, decodeStatement, encodeRecord, evidenceHashes, hashEvidenceFields, settlementAuthorization,
+  acceptanceBytes, acceptanceId, decodePublication, decodeRecord, decodeStatement, encodeRecord, evidenceHashes, hashEvidenceFields, PROVED_KINDS, settlementAuthorization,
   statementBytes, statementHash, withdrawalBytes, type EvidenceDigests, type Record, type SignedAcceptance, type Statement,
 } from "./records.js";
 import { effectOf, recoveryEffect, tagOf } from "./recovery.js";
@@ -412,7 +412,7 @@ function v3FaultTarget(payload: Uint8Array, maxSuffixEntries: bigint): FaultTarg
       if (statement === undefined || !same(statement.domain, domain)) return [];
       if (rejected === undefined) {
         rejected = false;
-        if ([1, 2, 3, 4, 6].includes(statement.kind) && value.proof.length > 0 && value.proof.length % 32 === 0) {
+        if (PROVED_KINDS.has(statement.kind) && value.proof.length > 0 && value.proof.length % 32 === 0) {
           try { rejected = await verifier.verify(statement.kind, [...statement.publicInputs], new Uint8Array(value.proof)) === false; }
           catch (cause) {
             rejected = undefined;

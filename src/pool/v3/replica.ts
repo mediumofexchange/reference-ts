@@ -8,7 +8,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes } from "../../bytes.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import type { Construction } from "./construction.js";
-import { EvidenceStore, type StoredTrail, type TrailForm } from "./evidence-store.js";
+import { EvidenceStore, formServes, type StoredTrail, type TrailForm } from "./evidence-store.js";
 import { fieldToBytes } from "../field.js";
 import type { V3EvidenceSource } from "./service-http.js";
 import { V3StoreError, type ServedEvidence, type ServedPackage } from "./store.js";
@@ -110,6 +110,7 @@ export class V3Replica implements V3EvidenceSource {
     if (kept === undefined) throw new V3StoreError("STALE", "the replica holds no read of this backing");
     const construction = this.#evidence.construction, proofFree = construction.trailChecks !== undefined;
     if (proofFree && form === undefined) throw new V3StoreError("UNSUPPORTED", "the replica holds proof-free trails only");
+    if (!formServes(form, construction)) throw new V3StoreError("UNSUPPORTED", "the replica's records have no such form");
     const served = copied(kept);
     return { ...served, parts: EvidenceStore.served(this.#path, construction, served.selection.operator, served.selection.sequence, after,
       proofFree ? undefined : form) };

@@ -12,7 +12,10 @@ export type Kind = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 const COUNTS = [0, 11, 15, 15, 16, 7, 17, 7] as const;
 const AUTH_LENGTHS = [0, 64, 0, 0, 0, 64, 136, 0] as const;
 const CAPSULE_COUNTS = [0, 1, 4, 1, 0, 0, 0, 0] as const;
-const MAX_PROOF = 131072;
+/** §5's bound on a proof field. */
+export const MAX_PROOF = 131072;
+/** The kinds whose records carry a proof replay verifies (§5): every kind but the withdrawal (5) and the request (7). */
+export const PROVED_KINDS: ReadonlySet<number> = new Set([1, 2, 3, 4, 6]);
 
 export interface Statement {
   readonly domain: Uint8Array;
@@ -118,14 +121,13 @@ export function deliveryHash(domain: Uint8Array, outputs: readonly bigint[], cap
 
 function requireRecord(s: Record): void {
   requireStatement(s);
-  if (!(s.proof instanceof Uint8Array) || (s.kind === 5 ? s.proof.length !== 0 :
-      s.proof.length === 0 || s.proof.length > MAX_PROOF || s.proof.length % 32 !== 0)) {
-    throw new EncodingError("wrong proof length");
-  }
+  if (!(s.proof instanceof Uint8Array) || !proofLengthHolds(s.kind, s.proof.length)) throw new EncodingError("wrong proof length");
+  requireAuthorizationAndCapsules(s);
+}
+/** §5's authorization length, capsule count and delivery association, alike in a record and its proof-free form. */
+function requireAuthorizationAndCapsules(s: Statement & { readonly authorization: Uint8Array; readonly capsules: readonly Uint8Array[] }): void {
   requireBytes(s.authorization, AUTH_LENGTHS[s.kind]);
-  if (!Array.isArray(s.capsules) || s.capsules.length !== CAPSULE_COUNTS[s.kind]) {
-    throw new EncodingError("wrong capsule count");
-  }
+  if (!Array.isArray(s.capsules) || s.capsules.length !== CAPSULE_COUNTS[s.kind]) throw new EncodingError("wrong capsule count");
   if (s.capsules.length) {
     const p = s.publicInputs;
     const outputs = s.kind === 1 ? [p[8]!] : s.kind === 2 ? p.slice(9, 13) : [p[12]!];
@@ -188,13 +190,7 @@ function requireProofFree(s: ProofFreeRecord): void {
   requireStatement(s);
   requireBytes(s.proofHash, 32);
   if ((s.kind === 5) !== s.proofHash.every(byte => byte === 0)) throw new EncodingError("wrong proof digest sentinel");
-  requireBytes(s.authorization, AUTH_LENGTHS[s.kind]);
-  if (!Array.isArray(s.capsules) || s.capsules.length !== CAPSULE_COUNTS[s.kind]) throw new EncodingError("wrong capsule count");
-  if (s.capsules.length) {
-    const p = s.publicInputs;
-    const outputs = s.kind === 1 ? [p[8]!] : s.kind === 2 ? p.slice(9, 13) : [p[12]!];
-    same(pair(p, p.length - 2), deliveryHash(s.domain, outputs, s.capsules));
-  }
+  requireAuthorizationAndCapsules(s);
 }
 /** `freeRecordBytes` of §3.3. */
 export function encodeProofFree(s: ProofFreeRecord): Uint8Array {

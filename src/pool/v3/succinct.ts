@@ -18,8 +18,9 @@ import { bytesToField, fieldToBytes, limbsOf } from "../field.js";
 import { poseidon2Hash } from "../poseidon2.js";
 import { POOL_V3, v3View, type Construction, type PublicationView, type ReaderFrames, type RequestView, type ServedTrailOf, type TrailChecks } from "./construction.js";
 import {
-  decodeProofFree, decodePublication, decodeRecord, encodeProofFree, proofFreeDigests, proofFreeOf, proofLengthHolds, statementHash,
-  type ProofFreeRecord, type Record,
+  decodeProofFree, decodePublication, decodeRecord, encodeProofFree, MAX_PROOF, proofFreeDigests, proofFreeOf, proofLengthHolds, PROVED_KINDS,
+  statementHash,
+  type Kind, type ProofFreeRecord, type Record,
 } from "./records.js";
 import { recoveryEffect } from "./recovery.js";
 import { requireReplay, UnestablishedTrail } from "./refusals.js";
@@ -34,12 +35,8 @@ export const T_CHECK_LEAF = 1008n;
 export const T_CHECK_NODE = 1009n;
 /** The proof length a cover fixes (§3.2): 458 field elements. */
 export const COVER_PROOF_BYTES = 14656;
-/** Kinds with a proof check, whose records are the trail's proved records (§3.2). */
-const PROVED = new Set([1, 2, 3, 4, 6]);
 /** Fetched proof bytes a trail's establishment holds for its replay; past it, replay fetches a proof again. */
 const HELD_BYTES = 64 << 20;
-/** Pool-v3 §5's bound on a proof field: a supplier's longer answer is stopped unhashed, a withheld supply (§3.4 step 3). */
-const MAX_PROOF = 131072;
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
@@ -97,6 +94,7 @@ export interface RecordAt { readonly segment: Uint8Array; readonly position: big
 /** The proof-free form a supplier serves its complete trails in (§3.3), record by record. A kept record decodes, so it
  * has its form. */
 export const PROOF_FREE_FORM: TrailForm = Object.freeze({
+  of: POOL_V3.namespace.name,
   trailHead: PROOF_FREE_TRAILS.trailHead,
   record: (bytes: Uint8Array) => encodeProofFree(proofFreeOf(decodeRecord(bytes))),
   // About a second of a busy laptop's work and 2 MB a part: far inside both sides' stream bounds.
@@ -143,7 +141,7 @@ export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Arra
   const kept = (cover: Cover): Cover => { keep(cover); made++; return cover; };
   for await (const bytes of records) {
     const record = decodeRecord(bytes);
-    if (!PROVED.has(record.kind)) continue;
+    if (!PROVED_KINDS.has(record.kind)) continue;
     let cover: Cover | undefined;
     if (record.proof.length === COVER_PROOF_BYTES) {
       const digest = statementLeafDigest(record.kind, record.publicInputs, sha256(record.proof)), proof = held(digest);
@@ -205,7 +203,6 @@ interface Established {
   readonly digests: Uint8Array;
   readonly covered: Uint8Array;
   readonly held: Map<number, Uint8Array>;
-  readonly hashes: Uint8Array;
   readonly kinds: Uint8Array;
   /** Each proved record's place, which a fetch names. */
   readonly segment: Uint8Array;
@@ -267,82 +264,82 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
 
   const trailChecks: TrailChecks = {
     async establish(trail, from, proved, block, verifier) {
-      const records = trail.records(from);
       // Pass 1 (§3.4 steps 1–2): each proved record's digest, kind and proofHash; kind-7 proofs to fetch for their length.
-      const digests: Uint8Array[] = [], hashes: Uint8Array[] = [], kinds: number[] = [], adopted: boolean[] = [], positions: bigint[] = [];
+      // At most one proved record a record after `from`, each in flat arrays: about 75 bytes, plus 32 while its spans are asked.
+      const records = trail.length - from;
+      if (records < 0n || records > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("a trail past the safe integer range");
+      const capacity = Number(records), digests = new Uint8Array(32 * capacity), hashes = new Uint8Array(32 * capacity);
+      const kinds = new Uint8Array(capacity), adopted = new Uint8Array(capacity), positions = new BigUint64Array(capacity);
       const requests: { readonly proofHash: Uint8Array; readonly at: RecordAt }[] = [];
-      let position = from;
-      for (const bytes of records) {
+      let position = from, m = 0;
+      for (const bytes of trail.records(from)) {
         const at = block[Number(position)];
         position++;
         const record = decodeProofFree(bytes);
         // A record whose proofHash is the adopted publication's has the length of the proof the reader holds (§3.5).
         const held = at !== undefined && same(record.proofHash, decodeProofFree(at.bytes).proofHash);
         if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position } }); continue; }
-        if (!PROVED.has(record.kind)) continue;
-        digests.push(fieldToBytes(leafDigest(record))); hashes.push(record.proofHash); kinds.push(record.kind); adopted.push(held);
-        positions.push(position);
+        if (!PROVED_KINDS.has(record.kind)) continue;
+        if (m === capacity) throw new Error("a served trail holding more records than its length");
+        digests.set(fieldToBytes(leafDigest(record)), 32 * m); hashes.set(record.proofHash, 32 * m);
+        kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; m++;
       }
-      const m = kinds.length, start = Number(proved);
+      const start = Number(proved);
       if (!Number.isSafeInteger(start + m)) throw new RangeError("a trail past the safe integer range");
       const covered = new Uint8Array(m);
-      // §3.2, §3.4 step 2: aligned spans over proved-record numbers, each asked for a cover, split where none verifies.
-      const spanDigest = (s: number, first: number, memo: Map<string, bigint>): bigint => {
-        const key = `${s}:${first}`;
-        let value = memo.get(key);
-        if (value === undefined) {
-          value = s === 0 ? bytesToField(digests[first - start]!) :
-            nodeDigest(spanDigest(s - 1, first, memo), spanDigest(s - 1, first + 2 ** (s - 1), memo));
-          memo.set(key, value);
+      const digestAt = (values: Uint8Array, i: number): bigint => bytesToField(values.subarray(32 * i, 32 * i + 32));
+      // §3.2, §3.4 step 2: aligned spans over proved-record numbers, each asked for a cover, split where none verifies. A
+      // top span's digests are made once, bottom up: `levels[l]` holds those of its spans of height l, in order.
+      const coverSpan = async (s: number, first: number): Promise<void> => {
+        const levels = [digests.subarray(32 * (first - start), 32 * (first - start + 2 ** s))];
+        for (let l = 1; l <= s; l++) {
+          const below = levels[l - 1]!, out = new Uint8Array(below.length / 2);
+          for (let j = 0; j < out.length / 32; j++) out.set(fieldToBytes(nodeDigest(digestAt(below, 2 * j), digestAt(below, 2 * j + 1))), 32 * j);
+          levels.push(out);
         }
-        return value;
-      };
-      const cover = async (s: number, first: number, memo: Map<string, bigint>): Promise<void> => {
-        const digest = spanDigest(s, first, memo), kind = s === 0 ? kinds[first - start] : undefined;
-        // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
-        let accepted: Uint8Array | undefined;
-        const accept = async (proof: Uint8Array): Promise<boolean> => {
-          const own = proof instanceof Uint8Array ? copyBytes(proof) : undefined;
-          if (own === undefined || await set.verify(kind, digest, own) !== true) return false;
-          accepted = own;
-          return true;
+        const ask = async (l: number, j: number): Promise<void> => {
+          const digest = digestAt(levels[l]!, j), index = first - start + j * 2 ** l, kind = l === 0 ? kinds[index] : undefined;
+          // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
+          let accepted: Uint8Array | undefined;
+          const accept = async (proof: Uint8Array): Promise<boolean> => {
+            const own = proof instanceof Uint8Array ? copyBytes(proof) : undefined;
+            if (own === undefined || await set.verify(kind, digest, own) !== true) return false;
+            accepted = own;
+            return true;
+          };
+          const answer: unknown = await supply.cover(digest, accept);
+          if (answer instanceof Uint8Array && ((accepted !== undefined && same(answer, accepted)) || await set.verify(kind, digest, copyBytes(answer)) === true)) {
+            covered.fill(1, index, index + 2 ** l);
+            return;
+          }
+          if (l === 0) return;
+          await ask(l - 1, 2 * j);
+          await ask(l - 1, 2 * j + 1);
         };
-        const answer: unknown = await supply.cover(digest, accept);
-        if (answer instanceof Uint8Array && ((accepted !== undefined && same(answer, accepted)) || await set.verify(kind, digest, copyBytes(answer)) === true)) {
-          covered.fill(1, first - start, first - start + 2 ** s);
-          return;
-        }
-        if (s === 0) return;
-        await cover(s - 1, first, memo);
-        await cover(s - 1, first + 2 ** (s - 1), memo);
+        await ask(s, 0);
       };
       for (let i = start; i < start + m;) {
         let s = 0;
         while (i % 2 ** (s + 1) === 0 && i + 2 ** (s + 1) <= start + m) s++;
-        await cover(s, i, new Map());
+        await coverSpan(s, i);
         i += 2 ** s;
       }
       // Pass 2 (§3.4 step 3): every other proof's bytes, fetched for their length; verified only when replay asks (step 4).
       const held = new Map<number, Uint8Array>();
       let room = HELD_BYTES;
       for (let i = 0; i < m; i++) {
-        if (covered[i] === 1 || adopted[i] === true) continue;
-        const bytes = await fetchProof(hashes[i]!, { segment: trail.segment, position: positions[i]! });
-        if (bytes === undefined || !proofLengthHolds(kinds[i] as 1, bytes.length)) throw new UnestablishedTrail();
+        if (covered[i] === 1 || adopted[i] === 1) continue;
+        const bytes = await fetchProof(hashes.subarray(32 * i, 32 * i + 32), { segment: trail.segment, position: positions[i]! });
+        if (bytes === undefined || !proofLengthHolds(kinds[i] as Kind, bytes.length)) throw new UnestablishedTrail();
         if (bytes.length <= room) { held.set(i, bytes); room -= bytes.length; }
       }
       for (const { proofHash, at } of requests) {
         const bytes = await fetchProof(proofHash, at);
         if (bytes === undefined || !proofLengthHolds(7, bytes.length)) throw new UnestablishedTrail();
       }
-      const flat = (parts: readonly Uint8Array[]): Uint8Array => {
-        const out = new Uint8Array(32 * parts.length);
-        parts.forEach((part, i) => out.set(part, 32 * i));
-        return out;
-      };
       const replayCheck: ProofCheck = { verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) };
-      ESTABLISHED.set(replayCheck, { digests: flat(digests), hashes: flat(hashes), kinds: Uint8Array.from(kinds), covered, held,
-        segment: copyBytes(trail.segment), positions: BigUint64Array.from(positions), cursor: 0 });
+      ESTABLISHED.set(replayCheck, { digests: digests.subarray(0, 32 * m), kinds: kinds.subarray(0, m), covered, held,
+        segment: copyBytes(trail.segment), positions: positions.subarray(0, m), cursor: 0 });
       // Records before a resumed tip were established when the namespace holding them replayed them, under these rules.
       servedTrails.add(servedKey(trail));
       return replayCheck;

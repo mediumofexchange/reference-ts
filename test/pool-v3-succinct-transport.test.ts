@@ -208,23 +208,25 @@ describe("succinct transport (slice 37)", () => {
     await f.mirror();
     await f.replica.prove(testProver(SET, verifier));
     const complete = await f.read(POOL_V3 as Construction, f.operatorClient, "complete");
-    // A hostile source first: it serves the replica's stream, but every proof is junk (one overlong) and every cover wrong.
-    let asked = 0;
-    const hostile: V3EvidenceSource = {
-      serve: (backingIn, after, form) => f.replica.serve(backingIn, after, form),
-      proof: () => (asked++ % 2 === 0 ? new Uint8Array(COVER_PROOF_BYTES) : new Uint8Array(131_073)),
-      cover: (_set, digest) => sha256(digest),
-    };
+    // Hostile sources first, each serving the replica's stream: one answers every cover wrong, one every proof with
+    // junk, one every proof past §5's bound; none has the other.
+    const asked = { covers: 0, junk: 0, long: 0 };
+    const serve: V3EvidenceSource["serve"] = (backingIn, after, form) => f.replica.serve(backingIn, after, form);
+    const hostile: V3EvidenceSource = { serve, proof: () => undefined, cover: (_set, digest) => { asked.covers++; return sha256(digest); } };
+    const junk: V3EvidenceSource = { serve, proof: () => { asked.junk++; return new Uint8Array(COVER_PROOF_BYTES); }, cover: () => undefined };
+    const long: V3EvidenceSource = { serve, proof: () => { asked.long++; return new Uint8Array(131_073); }, cover: () => undefined };
     const hostileUrl = await listen(service.createV3EvidenceService(hostile));
-    const sources = [new V3ServiceClient(hostileUrl, undefined, f.identity()), new V3ServiceClient(f.operatorUrl, TOKEN, f.identity())];
-    const counted = counting(serviceSupply(SET.identity, sources));
+    const sources = [hostileUrl, await listen(service.createV3EvidenceService(junk)), await listen(service.createV3EvidenceService(long))]
+      .map(url => new V3ServiceClient(url, undefined, f.identity()));
+    const counted = counting(serviceSupply(SET.identity, [...sources, new V3ServiceClient(f.operatorUrl, TOKEN, f.identity())]));
     const succinct = succinctPoolV3({ set: SET, supply: counted.supply });
     const read = await f.read(succinct, new V3ServiceClient(hostileUrl, undefined, f.identity(succinct)), "hostile");
     expect(read.result).toBe(complete.result);
-    // The reader's own check refuses each wrong cover inside the supply, so no cover is taken: each record is checked
-    // natively, its proof given by the operator after the hostile junk.
+    // The reader's own check refuses the wrong cover inside the supply, so no cover is taken: each record is checked
+    // natively, its proof given by the operator after the junk and the overlong answer. Each wrong source was asked
+    // once, never again by that supply (audit 34); the operator, which answered last, was asked first for the second.
     expect(counted.asked).toMatchObject({ covers: 2, answered: 0, fetched: 2 });
-    expect(asked).toBe(2);
+    expect(asked).toEqual({ covers: 1, junk: 1, long: 1 });
 
     // A source that changes one byte of a proof-free record: the evidence chain refuses the trail, so the sync does.
     const forging: V3EvidenceSource = { ...hostile, serve: async (backingIn, after, form) => {
@@ -307,7 +309,9 @@ describe("succinct transport (slice 37)", () => {
     await f.mirror();
     await f.replica.prove(testProver(SET, verifier));
     const complete = await f.read(POOL_V3 as Construction, f.operatorClient, "complete");
-    const wrong: V3EvidenceSource = { serve: (b, after, form) => f.replica.serve(b, after, form), proof: () => undefined, cover: (_s, digest) => sha256(digest) };
+    let wrongAsks = 0;
+    const wrong: V3EvidenceSource = { serve: (b, after, form) => f.replica.serve(b, after, form), proof: () => undefined,
+      cover: (_s, digest) => { wrongAsks++; return sha256(digest); } };
     const wrongUrl = await listen(service.createV3EvidenceService(wrong));
     // A listener closed before it is asked: nothing answers there.
     const closed = service.createV3EvidenceService(wrong), closedUrl = await listen(closed);
@@ -321,9 +325,17 @@ describe("succinct transport (slice 37)", () => {
     const succinct = succinctPoolV3({ set: SET, supply: counted.supply });
     const read = await f.read(succinct, new V3ServiceClient(f.replicaUrl, undefined, f.identity(succinct)), "behind");
     expect(read.result).toBe(complete.result);
-    // Both covers came from the replica behind the wrong source; no proof was fetched; the silent source was asked once.
+    // Both covers came from the replica behind the wrong source; no proof was fetched; the silent source and the one
+    // whose cover the reader refused were each asked once (audit 34).
     expect(counted.asked).toMatchObject({ covers: 2, answered: 2, proofs: 0 });
-    expect(silentAsks).toBe(1);
+    expect([silentAsks, wrongAsks]).toEqual([1, 1]);
+    // A source that has none is asked again only where the source that answered last has none too.
+    let noneAsks = 0;
+    const none = { cover: async () => { noneAsks++; return undefined; }, proof: async () => undefined } as unknown as V3ServiceClient;
+    const holding = { cover: async (_s: Uint8Array, digest: bigint) => digest === 1n ? Uint8Array.of(1) : undefined } as unknown as V3ServiceClient;
+    const ordered = serviceSupply(SET.identity, [none, holding]);
+    expect([await ordered.cover(1n), await ordered.cover(1n), await ordered.cover(2n)]).toEqual([Uint8Array.of(1), Uint8Array.of(1), undefined]);
+    expect(noneAsks).toBe(2);
     // The holder's own proxy refusing the route ends the fetch, as it ends a sync.
     const proxied = new V3ServiceClient(f.replicaUrl, undefined, f.identity());
     proxied.cover = async () => { throw new V3ServiceClientError(0, "PROXY", "the proxy refused the tunnel (403)"); };
