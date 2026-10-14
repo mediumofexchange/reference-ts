@@ -6,12 +6,20 @@
 // rule names. Hostile covers cover nothing: another kind's leaf key or the node key, a node cover as a leaf, a wrong
 // digest, other lengths and a flipped byte, a tree whose node-key input is not the pinned key's hash (the forged-tree
 // rule, §2 rules 1-2), a statement proof that fails natively (no leaf), a leaf forced over it, and nodes over a child
-// verifying under a key other than its admitted hash's or over a child cover with a flipped byte. Times and the
-// process's peak memory are recorded per proof.
+// verifying under a key other than its admitted hash's or over a child cover with a flipped byte. A proof the backend
+// refuses to make retires the aggregator's instance, and its next proof is made on a fresh one. Times and the peak
+// memory are recorded per proof.
 //
-// Usage: node scripts/pool/v3/check-set-check.mjs (after npm run build); writes docs/pool-v3-check-set-verification.json.
+// With --native (slice 42) the same cases run on the native binary bb.js bundles: each of the six keys and pool-v3's are
+// derived on it and must be the pinned ones (in place of check-set.mjs, the WebAssembly run's), every proof is made on
+// it and verified on WebAssembly, and one leaf and one node are proved on WebAssembly too, on the same host, for the
+// rate. Peak memory then counts the native processes. On a host where bb.js bundles no native backend it records that a
+// native start is refused by name, and proves nothing.
+//
+// Usage: node scripts/pool/v3/check-set-check.mjs [--native] (after npm run build); writes
+// docs/pool-v3-check-set-verification.json, or docs/pool-v3-check-set-native-verification.json with --native.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { availableParallelism, cpus, totalmem } from "node:os";
 import { join, resolve } from "node:path";
@@ -19,7 +27,7 @@ import { performance } from "node:perf_hooks";
 import { Noir } from "@noir-lang/noir_js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { prepareCheckSetParameters, readCheckSetParameters } from "../../../dist/pool/parameter-files.js";
-import { keyedVerifier, PROOF_OPTIONS, startCheckSetBackend } from "../../../dist/pool/proof-verifier.js";
+import { keyedVerifier, nativeRefusal, PROOF_OPTIONS, startCheckSetBackend } from "../../../dist/pool/proof-verifier.js";
 import { fieldToHex } from "../../../dist/pool/field.js";
 import { adoptedDomain } from "../../../dist/pool/v3/configuration.js";
 import { openTrailProver } from "../../../dist/pool/v3/aggregator.js";
@@ -30,7 +38,10 @@ import { openV3Verifier } from "../../../dist/pool/v3/verifier.js";
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { V3_SPECIFICATION, sourceClosure, sourceHashes } from "./provenance.mjs";
 
-const here = import.meta.dirname, root = resolve(here, "../../.."), report = join(root, "docs/pool-v3-check-set-verification.json");
+const native = process.argv.includes("--native");
+if (process.argv.slice(2).some(arg => arg !== "--native")) throw new Error("usage: check-set-check.mjs [--native]");
+const here = import.meta.dirname, root = resolve(here, "../../.."),
+  report = join(root, `docs/pool-v3-check-set${native ? "-native" : ""}-verification.json`);
 const sources = sourceClosure(["scripts/pool/v3/check-set-check.mjs", "scripts/pool/v3/check-set.mjs", "scripts/pool/v3/trail-circuits/trail.nr",
   ...["issue", "spend", "burn", "demand", "settle"].map(name => `scripts/pool/v3/trail-circuits/leaf-${name}.nr`), "scripts/pool/v3/trail-circuits/node.nr",
   "src/pool/circuits/vendor/poseidon2.nr", "src/pool/v3/check-set.json", "src/pool/v3/check-set-programs.json", "test/fixtures/pool-v3-genuine-proofs.json",
@@ -39,9 +50,21 @@ const digests = sourceHashes(sources);
 const checks = [], proofs = [];
 const check = label => { checks.push(label); console.log(`passed: ${label}`); };
 
-// The process's peak resident memory, sampled: the backend's WebAssembly workers live in this process.
+// The peak resident memory, sampled: the backend's WebAssembly workers live in this process; native instances are
+// child processes (`bb`), whose resident memory is added (ps reports KiB on Linux and macOS).
+const children = () => {
+  if (!native) return [];
+  const listed = spawnSync("ps", ["-A", "-o", "pid=,ppid=,rss=,comm="], { encoding: "utf8" }).stdout ?? "";
+  return listed.split("\n").map(line => line.trim().split(/\s+/)).filter(([, ppid, , comm]) => Number(ppid) === process.pid && /(^|\/)bb$/.test(comm ?? ""))
+    .map(([pid, , rss]) => ({ pid: Number(pid), rss: Number(rss) * 1024 }));
+};
+/** Whether every process in `pids` has ended, waiting up to 30 s. */
+const ended = async pids => {
+  for (let i = 0; i < 150 && children().some(child => pids.includes(child.pid)); i++) await new Promise(done => setTimeout(done, 200));
+  return !children().some(child => pids.includes(child.pid));
+};
 let peak = 0;
-const sample = () => { peak = Math.max(peak, process.memoryUsage().rss); };
+const sample = () => { peak = Math.max(peak, process.memoryUsage().rss + children().reduce((sum, child) => sum + child.rss, 0)); };
 const sampler = setInterval(sample, 200);
 const timed = async (label, run) => {
   peak = 0; sample();
@@ -52,23 +75,60 @@ const timed = async (label, run) => {
   return value;
 };
 
-await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: console.log });
-// The sources and shipped files are what the keys compile to, and their identities the ones check-set.ts pins.
-const generated = execFileSync(process.execPath, [join(here, "check-set.mjs"), "--stats"], { cwd: root, encoding: "utf8",
-  env: { ...process.env, CHECK_SET_PARAMETERS: PARAMETER_DIRECTORY }, maxBuffer: 1 << 26 });
-const derived = JSON.parse(generated.slice(generated.indexOf("identities ") + "identities ".length, generated.lastIndexOf("}") + 1));
-assert.deepEqual(derived, CHECK_SET_MANIFEST.circuits);
-const gates = Object.fromEntries([...generated.matchAll(/^(\S+): compiled in ([\d.]+) s, key in ([\d.]+) s, (\d+) gates$/gm)]
-  .map(([, name, compileS, keyS, count]) => [name, { gates: Number(count), compileS: Number(compileS), keyS: Number(keyS) }]));
-assert.equal(Object.keys(gates).length, 6);
-check("the six sources and the shipped keys and programs are what check-set.mjs generates; every identity is the one check-set.ts pins");
-
 const threads = availableParallelism();
-const parameters = await readCheckSetParameters(PARAMETER_DIRECTORY), api = await startCheckSetBackend(parameters, { threads });
+const host = { cpu: cpus()[0]?.model, threads, memoryGiB: Math.round(totalmem() / 2 ** 30), platform: process.platform, arch: process.arch, node: process.version };
+const write = result => { writeFileSync(report, `${JSON.stringify(result, null, 2)}\n`); console.log(`check-set: ${checks.length} checks passed; wrote ${report}`); };
+const refusal = native ? nativeRefusal() : undefined;
+if (refusal !== undefined) {
+  // No native backend here: a native start is refused by name before any parameter is read, and nothing is proved.
+  await assert.rejects(startCheckSetBackend(null, { native: true }), { name: "ParameterError", code: "BACKEND", message: refusal });
+  check(`this host has no native backend: a native start is refused BACKEND (${refusal})`);
+  write({ specification: { pool: V3_SPECIFICATION, succinct: SUCCINCT_SPECIFICATION }, sources: digests, backend: "none", host, checks,
+    evidence: "no native backend on this host; nothing proved" });
+  clearInterval(sampler);
+  process.exit(0);
+}
+
+await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: console.log });
+const parameters = await readCheckSetParameters(PARAMETER_DIRECTORY), api = await startCheckSetBackend(parameters, { threads, native });
+const keyProcesses = children().map(child => child.pid);
+let live = api;
+let gates;
+if (native) {
+  // Each key derived on the native binary is the one check-set.ts pins (the WebAssembly run regenerates the sources).
+  const programs = trailPrograms();
+  gates = {};
+  for (const name of Object.keys(CHECK_SET_MANIFEST.circuits)) {
+    const started = performance.now();
+    const vk = await new UltraHonkBackend(programs[name].bytecode, api).getVerificationKey(PROOF_OPTIONS);
+    assert.equal(Buffer.from(sha256(vk)).toString("hex"), CHECK_SET_MANIFEST.circuits[name].vk, name);
+    gates[name] = { keyS: Number(((performance.now() - started) / 1000).toFixed(1)) };
+  }
+  check("each of the six keys derived on the native binary is the one check-set.ts pins");
+} else {
+  // The sources and shipped files are what the keys compile to, and their identities the ones check-set.ts pins.
+  const generated = execFileSync(process.execPath, [join(here, "check-set.mjs"), "--stats"], { cwd: root, encoding: "utf8",
+    env: { ...process.env, CHECK_SET_PARAMETERS: PARAMETER_DIRECTORY }, maxBuffer: 1 << 26 });
+  const derived = JSON.parse(generated.slice(generated.indexOf("identities ") + "identities ".length, generated.lastIndexOf("}") + 1));
+  assert.deepEqual(derived, CHECK_SET_MANIFEST.circuits);
+  gates = Object.fromEntries([...generated.matchAll(/^(\S+): compiled in ([\d.]+) s, key in ([\d.]+) s, (\d+) gates$/gm)]
+    .map(([, name, compileS, keyS, count]) => [name, { gates: Number(count), compileS: Number(compileS), keyS: Number(keyS) }]));
+  assert.equal(Object.keys(gates).length, 6);
+  check("the six sources and the shipped keys and programs are what check-set.mjs generates; every identity is the one check-set.ts pins");
+}
+
 let statements, prover;
 try {
+  // pool-v3's verifier derives its keys on `api` and refuses any that is not the configuration's: natively too.
   statements = await openV3Verifier(api);
-  prover = await openTrailProver(api, statements);
+  if (native) check("pool-v3's keys derived on the native binary are the adopted configuration's");
+  // The keys are derived. Proofs are made on the aggregator's own instance and on fresh ones, so this one ends here and
+  // the peaks below are a prover's; verifiers built over it keep only its `[1]_1` and `[x]_2`.
+  live = undefined;
+  await api.destroy();
+  assert(await ended(keyProcesses), "the key-deriving native process did not end");
+  prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, { native, threads });
+  assert.equal(prover.backend, native ? "native" : "wasm");
   const { set } = prover, keys = trailKeys();
   assert.equal(set.test, true);
   assert.deepEqual(set.identity, checkSetIdentity());
@@ -88,12 +148,24 @@ try {
     leaves[name] = cover;
   }
   check("each of the five leaves proves over a genuine proof, outputs the host's leaf digest and verifies under its kind's pinned leaf key");
-  const left = await timed("node over two leaves", () => prover.node(leaves.issue, leaves.spend));
+  // A child cover whose last byte is flipped: the backend refuses to make the node (bb's assertion on the inner proof),
+  // the aggregator retires the instance that refused, and the next node is made on a fresh one.
+  const lastFlipped = Uint8Array.from(leaves.spend.proof); lastFlipped[lastFlipped.length - 1] ^= 1;
+  const proving = children().map(child => child.pid);
+  if (native) assert.equal(proving.length, 1, "one native process proves");
+  const thrown = await timed("the aggregator's node over a child cover with its last byte flipped", async () => {
+    try { await prover.node({ ...leaves.spend, proof: lastFlipped }, leaves.spend); } catch (error) { return String(error?.message ?? error).split("\n")[0]; }
+    return undefined;
+  });
+  assert.notEqual(thrown, undefined, "the backend made a node over a child it cannot verify");
+  assert.doesNotMatch(thrown, /memory|RangeError|out of|closed/i, thrown);
+  if (native) assert(await ended(proving), "the refusing native process did not end");
   const right = await timed("node over two leaves (2)", () => prover.node(leaves.burn, leaves.demand));
   const top = await timed("node over two nodes", () => prover.node(left, right));
   assert.equal(top.digest, nodeDigest(nodeDigest(leaves.issue.digest, leaves.spend.digest), nodeDigest(leaves.burn.digest, leaves.demand.digest)));
   for (const cover of [left, right, top]) assert.equal(await set.verify(undefined, cover.digest, cover.proof), true);
   check("the node proves over two leaves and over two nodes, outputs the host's node digests and verifies under the pinned node key");
+  check(`a node the backend refuses to make (${thrown}) retires the aggregator's instance${native ? " (its process ended)" : ""}, and its next proofs are made on a fresh one`);
 
   // A cover verifies only under the key its rule names, for the digest the reader computed, at its exact length.
   const refused = async (kind, digest, proof, label) => { assert.equal(await set.verify(kind, digest, proof), false, label); };
@@ -114,17 +186,21 @@ try {
   // §2 rules 1-2: the node-key input is free in every circuit; a tree proved under another value verifies under the
   // pinned node key with that value as its input, and only the reader's comparison refuses it.
   const forged = keys.node.keyHash + 1n, programs = trailPrograms();
-  const proveRaw = async (name, inputs, on = api) => {
+  const proveRaw = async (name, inputs, on) => {
     const { witness } = await new Noir(programs[name]).execute(inputs);
     return new UltraHonkBackend(programs[name].bytecode, on).generateProof(witness, PROOF_OPTIONS);
   };
   const fields = bytes => Array.from({ length: bytes.length / 32 }, (_, i) => `0x${Buffer.from(bytes.subarray(32 * i, 32 * i + 32)).toString("hex")}`);
-  const forgedLeaf = await timed("leaf-spend under a forged node-key input", () => proveRaw("leaf-spend",
-    { proof: fields(records.spend.proof), inputs: records.spend.publicInputs.map(fieldToHex), node_key_hash: fieldToHex(forged) }));
-  const forgedRoot = await timed("node under a forged node-key input", () => proveRaw("node", {
-    keys: [fields(keys["leaf-spend"].vk), fields(keys["leaf-spend"].vk)], proofs: [forgedLeaf.proof, forgedLeaf.proof].map(fields),
-    key_hashes: [fieldToHex(keys["leaf-spend"].keyHash), fieldToHex(keys["leaf-spend"].keyHash)],
-    digests: [leaves.spend.digest, leaves.spend.digest].map(fieldToHex), node_key_hash: fieldToHex(forged) }));
+  const forging = await startCheckSetBackend(parameters, { threads, native });
+  let forgedLeaf, forgedRoot;
+  try {
+    forgedLeaf = await timed("leaf-spend under a forged node-key input", () => proveRaw("leaf-spend",
+      { proof: fields(records.spend.proof), inputs: records.spend.publicInputs.map(fieldToHex), node_key_hash: fieldToHex(forged) }, forging));
+    forgedRoot = await timed("node under a forged node-key input", () => proveRaw("node", {
+      keys: [fields(keys["leaf-spend"].vk), fields(keys["leaf-spend"].vk)], proofs: [forgedLeaf.proof, forgedLeaf.proof].map(fields),
+      key_hashes: [fieldToHex(keys["leaf-spend"].keyHash), fieldToHex(keys["leaf-spend"].keyHash)],
+      digests: [leaves.spend.digest, leaves.spend.digest].map(fieldToHex), node_key_hash: fieldToHex(forged) }, forging));
+  } finally { await forging.destroy(); }
   const forgedDigest = nodeDigest(leaves.spend.digest, leaves.spend.digest);
   assert.deepEqual(forgedRoot.publicInputs.map(BigInt), [forged, forgedDigest]);
   const bare = keyedVerifier(api, [{ kind: 0, vk: keys.node.vk, publicInputs: 2 }, { kind: 2, vk: keys["leaf-spend"].vk, publicInputs: 2 }], 14656);
@@ -144,7 +220,7 @@ try {
   // Each attempt proves on an instance of its own: a refusal inside the backend can leave its WebAssembly instance
   // unusable (a later call traps), and the next attempt would then fail for that, not for its witness.
   const attempt = async (name, inputs) => {
-    const fresh = await startCheckSetBackend(parameters, { threads });
+    const fresh = await startCheckSetBackend(parameters, { threads, native });
     try { return { proof: await proveRaw(name, inputs, fresh) }; } catch (error) { return { error: String(error?.message ?? error).split("\n")[0] }; }
     finally { await fresh.destroy().catch(() => {}); }
   };
@@ -182,21 +258,37 @@ try {
   }
   check(`a node over a child whose key is not its admitted hash's ${outcome(misKeyed, "is proved but fails verification")}, and over a child cover with its last byte flipped ${outcome(misProved[0], "is proved but fails verification")} or a limb byte flipped ${outcome(misProved[1], "is proved but fails verification")}`);
 
+  // The rate against WebAssembly on this host: one leaf and one node proved there by an aggregator of its own.
+  let compared;
+  if (native) {
+    const wasm = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, { threads });
+    try {
+      const leaf = await timed("leaf-spend on WebAssembly", () => wasm.leaf(records.spend));
+      const node = await timed("node over two leaves on WebAssembly", () => wasm.node(leaves.issue, leaves.spend));
+      assert.equal(leaf.digest, leaves.spend.digest); assert.equal(node.digest, left.digest);
+      const seconds = label => proofs.find(entry => entry.label === label).seconds;
+      compared = { leaf: { native: seconds("leaf-spend"), wasm: seconds("leaf-spend on WebAssembly") },
+        node: { native: seconds("node over two leaves"), wasm: seconds("node over two leaves on WebAssembly") } };
+    } finally { await wasm.close(); }
+    check(`on this host a leaf takes ${compared.leaf.native} s natively against ${compared.leaf.wasm} s on WebAssembly, a node ${compared.node.native} s against ${compared.node.wasm} s`);
+  }
+
   const result = {
-    specification: { pool: V3_SPECIFICATION, succinct: SUCCINCT_SPECIFICATION }, sources: digests,
-    evidence: "real check proofs on the pinned WebAssembly backend over genuine statement proofs; a test-labelled set, not adopted (succinct-read §§1, 6)",
-    host: { cpu: cpus()[0]?.model, threads, memoryGiB: Math.round(totalmem() / 2 ** 30), platform: process.platform, node: process.version },
+    specification: { pool: V3_SPECIFICATION, succinct: SUCCINCT_SPECIFICATION }, sources: digests, backend: native ? "native" : "wasm",
+    evidence: native ? "real check proofs on the native binary the pinned bb.js bundles, verified on the pinned WebAssembly backend, over genuine statement proofs; a test-labelled set, not adopted (succinct-read §§1, 6)"
+      : "real check proofs on the pinned WebAssembly backend over genuine statement proofs; a test-labelled set, not adopted (succinct-read §§1, 6)",
+    host,
     setIdentity: Buffer.from(set.identity).toString("hex"), circuits: Object.fromEntries(Object.entries(gates).map(([name, g]) =>
       [name, { ...g, ...CHECK_SET_MANIFEST.circuits[name] }])),
-    proofs, checks,
+    proofs, ...native ? { compared } : {}, checks,
     limits: ["one genuine proof per kind here; a served trail read with real covers is the recovery check's",
-      "one run on one runner", "bb's in-circuit limb and curve constraints and key-hash binding are read from source by review, not proved (adoption evidence, §6)"],
+      "one run on one runner", "bb's in-circuit limb and curve constraints and key-hash binding are read from source by review, not proved (adoption evidence, §6)",
+      ...native ? ["the native binary is bb.js's own build, run as shipped; its source is the WebAssembly build's, not shown equal beyond the keys and proofs here"] : []],
   };
-  writeFileSync(report, `${JSON.stringify(result, null, 2)}\n`);
-  console.log(`check-set: ${checks.length} checks passed; wrote ${report}`);
+  write(result);
 } finally {
   clearInterval(sampler);
   await prover?.close();
   await statements?.close();
-  await api.destroy();
+  await live?.destroy();
 }

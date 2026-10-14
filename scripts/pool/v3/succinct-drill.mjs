@@ -1,7 +1,7 @@
 // Slice 38 (succinct-read §§2–3, Next 12 step 4): holders and a reader reading succinctly through the `moe` commands,
 // with real proofs, on the synthetic Ergo node. An operator serves a backing whose backer issues two notes to a complete
 // holder; a replica (`reader serve --prove`) proves check proofs over its kept trail under the shipped check set (a
-// test set); a holder restored from the same seed with `--read succinct` syncs and reads the same holdings from the
+// test set), natively where bb.js bundles a native backend and on WebAssembly elsewhere (slice 42); a holder restored from the same seed with `--read succinct` syncs and reads the same holdings from the
 // covers, fetching no proof; it pays a succinct shop, which fulfills, reading the tail natively; a succinct reader's
 // supply equals a complete reader's. A succinct directory serves no replica (SUCCINCT), and no process that proves
 // nothing loads `@noir-lang`. The commands run from the build (`dist/cli/moe.js`); the release's own install drill is
@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { prepareCheckSetParameters } from "../../../dist/pool/parameter-files.js";
+import { nativeRefusal } from "../../../dist/pool/proof-verifier.js";
 import { PARAMETER_DIRECTORY } from "../prepare-crs.mjs";
 import { serveSyntheticNode } from "./synthetic-node.mjs";
 
@@ -163,6 +164,13 @@ try {
   await check("a replica proves covers over its kept trail (reader serve --prove); a succinct directory serves none", async () => {
     // The check set's parameters, the leading 2^21 points, in the checks' shared parameter directory.
     await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: line => process.stderr.write(`${line}\n`) });
+    // --prover names a backend for --prove only, native or wasm; native where the host has none is refused by name.
+    for (const args of [["--prover", "wasm"], ["--prove", "--prover", "gpu"]]) {
+      const usage = await moe(["reader", "serve", "--dir", RP, ...args]);
+      assert.equal(usage.status, 2, usage.stderr);
+    }
+    const refusal = nativeRefusal();
+    if (refusal !== undefined) await refused(["reader", "serve", "--dir", RP, "--prove", "--prover", "native"], "PROVER");
     replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--prove", "--parameters", PARAMETER_DIRECTORY]);
     await replica.line(line => line.status === "serving", 300_000);
     // Two issues: two leaves and their node, proved once the replica's read serves the selection holding them (`proved`
@@ -170,6 +178,7 @@ try {
     const proved = await replica.line(line => line.status === "proved" && Number(line.proved) >= 2, 1_200_000);
     assert.equal(Number(proved.made), 3);
     assert.equal(proved.testSet, true);
+    assert.equal(proved.backend, refusal === undefined ? "native" : "wasm");
     await ok(["reader", "init", "--dir", RS, "--read", "succinct", "--venue", join(OP, "venue.json"), ...common]);
     await refused(["reader", "serve", "--dir", RS], "SUCCINCT");
     const lit = await moe(["reader", "init", "--dir", join(scratch, "lit"), "--read", "succinct", "--construction", "moe/lit/v1", "--venue", join(OP, "venue.json"), ...common]);

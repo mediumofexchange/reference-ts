@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Barretenberg } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit } from "@noir-lang/noir_js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { FIELD_MODULUS, fieldToHex } from "../src/pool/field.js";
+import { nativeRefusal } from "../src/pool/proof-verifier.js";
 import { openTrailProver } from "../src/pool/v3/aggregator.js";
 import { adoptedDomain } from "../src/pool/v3/configuration.js";
 import {
@@ -54,9 +54,13 @@ describe("the trail check set (succinct-read §3.2)", () => {
       .toThrow(/`proof\[100\]` is invalid:\nValue 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001 exceeds field modulus/);
   }, 120_000);
 
-  it("the aggregator refuses an instance not started with the check set's points", async () => {
-    await expect(openTrailProver({} as Barretenberg, { verify: async () => true, parallel: 1, close: async () => {} })).rejects
-      .toMatchObject({ name: "ParameterError", code: "UNCHECKED", message: "the aggregator proves on an instance startCheckSetBackend started" });
+  it("the aggregator starts its instance only from checked parameters, natively as on WebAssembly", async () => {
+    for (const native of [false, true]) {
+      const refusal = native ? nativeRefusal() : undefined;
+      await expect(openTrailProver(async () => ({ g1: new Uint8Array(64), g2: new Uint8Array(128) }), { verify: async () => true, parallel: 1, close: async () => {} },
+        { native })).rejects.toMatchObject(refusal === undefined ? { name: "ParameterError", code: "G2", message: "the BN254 G2 parameters are not the manifest's" }
+        : { name: "ParameterError", code: "BACKEND", message: refusal });
+    }
   });
 
   it("trail.nr's word constraints take exactly an element's canonical big-endian words", () => {

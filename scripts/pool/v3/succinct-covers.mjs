@@ -9,7 +9,6 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { availableParallelism } from "node:os";
 import { prepareCheckSetParameters, readCheckSetParameters } from "../../../dist/pool/parameter-files.js";
-import { startCheckSetBackend } from "../../../dist/pool/proof-verifier.js";
 import { openTrailProver } from "../../../dist/pool/v3/aggregator.js";
 import { EvidenceStore } from "../../../dist/pool/v3/evidence-store.js";
 import { readPackage } from "../../../dist/pool/v3/package-reader.js";
@@ -61,10 +60,9 @@ export async function readWithCovers(journal, backing, selection, ranges, { veri
     finally { kept.release(); }
 
     await prepareCheckSetParameters(PARAMETER_DIRECTORY);
-    const api = await startCheckSetBackend(await readCheckSetParameters(PARAMETER_DIRECTORY), { threads: availableParallelism() });
     let prover;
     try {
-      prover = await openTrailProver(api, verifier);
+      prover = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), verifier, { threads: availableParallelism() });
       // The replica proves as it does for any reader (`V3Replica.prove`), with leaves only over the chosen records:
       // `coverTrail` proves a node only over two covered spans, so it keeps the aligned spans inside the ranges.
       const chosen = new Set(ranges.flatMap(({ first, count }) => proved.slice(first, first + count).map(record => sha(record.proof))));
@@ -94,7 +92,6 @@ export async function readWithCovers(journal, backing, selection, ranges, { veri
       return { result, used, proved: proved.length, fetchedRecords, bytes };
     } finally {
       await prover?.close();
-      await api.destroy();
     }
   } finally {
     await Promise.all(servers.map(close));

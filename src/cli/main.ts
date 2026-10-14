@@ -12,7 +12,8 @@ roles: wallet (init, seed --show, restore-seed, handoff, restore, terms add|show
        venue (audit: any role's directory, after a restore or a copy, before any other command)
 init --construction moe/pool/v3 (the default) or moe/lit/v1 (wallet, operator, reader) names the one construction a directory serves.
 init, restore-seed and restore --read succinct (pool-v3 wallet, reader) read trails succinctly, from covers replicas prove (test set).
-reader serve --prove [--parameters <dir>] proves covers over the replica's kept trails each round.
+reader serve --prove [--parameters <dir>] [--prover native|wasm] proves covers over the replica's kept trails each round
+(natively by default on Linux and macOS, x64 and arm64; WebAssembly elsewhere).
 A rerun of init, restore or restore-seed over the directory it finished prints what it printed, with replay: true.
 serve --onion <v3 host> [--holder-port <p>] adds a holders' listener for a Tor onion service and writes holders.json; a holder
 reaches an onion URL only with NODE_USE_ENV_PROXY=1 and HTTP_PROXY naming a loopback HTTP CONNECT proxy (Tor's HTTPTunnelPort).

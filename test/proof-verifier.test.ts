@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EncodingError } from "../src/bytes.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { ParameterError, proofVerifier, startBackend, type CircuitTable, type ProvingParameters } from "../src/pool/proof-verifier.js";
+import { nativeRefusal, ParameterError, proofVerifier, startBackend, startCheckSetBackend, type CircuitTable, type ProvingParameters } from "../src/pool/proof-verifier.js";
 import { BN254_PARAMETERS } from "../src/pool/parameters.js";
 
 // The table is checked before any key is derived, so no backend is needed:
@@ -89,5 +89,18 @@ describe("the pinned backend binary (proof-verifier.ts)", () => {
       await expect(start).rejects.toThrow(new ParameterError("BACKEND", "BB_WASM_PATH would replace the pinned backend's WASM"));
       await expect(start).rejects.toMatchObject({ code: "BACKEND" });
     } finally { delete process.env.BB_WASM_PATH; }
+  });
+
+  it("starts a native instance only from the bb.js package's own binary, where it bundles one (slice 42)", async () => {
+    const bundled = ["linux", "darwin"].includes(process.platform) && ["x64", "arm64"].includes(process.arch);
+    expect(nativeRefusal()).toBe(bundled ? undefined : `the pinned bb.js bundles no native backend for ${process.platform}-${process.arch}`);
+    process.env.BB_BINARY_PATH = process.execPath;
+    try {
+      expect(nativeRefusal()).toBe("BB_BINARY_PATH would replace the pinned backend's native binary");
+      // Refused before the parameters are read; startBackend takes no native option.
+      await expect(startCheckSetBackend(null as never, { native: true })).rejects
+        .toThrow(new ParameterError("BACKEND", "BB_BINARY_PATH would replace the pinned backend's native binary"));
+      await expect(startBackend(null as never, { native: true } as never)).rejects.toMatchObject({ code: "G2" });
+    } finally { delete process.env.BB_BINARY_PATH; }
   });
 });

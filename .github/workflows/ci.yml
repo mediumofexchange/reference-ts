@@ -57,6 +57,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         group: ${{ fromJSON(needs.gate.outputs.groups) }}
+        # The native backend's group on macOS as well (slice 42): bb.js bundles bb for Linux and macOS. Its report stays
+        # in its own artifact (pool-v3-reports-macos-latest-native); the merged ones are Ubuntu's and Windows'.
+        include:
+          - os: macos-latest
+            group: native
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
