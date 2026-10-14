@@ -1259,10 +1259,10 @@ a fresh one.
 
 | Same-host rate in CI's `native` group (spend leaf; node over two leaves) | Native | WebAssembly |
 |---|---:|---:|
-| Ubuntu runner, 4 vCPU x64 | 31.7 s; 27.5 s | 83.5 s; 66.4 s |
+| Ubuntu runner, 4-vCPU AMD EPYC 9V74 (the report) | 30.5 s; 26.7 s | 81.7 s; 64.7 s |
 | macOS runner, 3-core arm64 | 45.1 s; 48.8 s | 100.3 s; 74.2 s |
 
-**Rate.** Natively a leaf is 2.2–2.6 times faster on x64 (2.2 on the arm64 runner), a node 2.2–2.4 on x64 (1.5 there): a statement (a leaf and about one node) takes about
+**Rate.** Natively a leaf is 2.2–2.7 times faster on x64 (2.2 on the arm64 runner), a node 2.2–2.4 on x64 (1.5 there): a statement (a leaf and about one node) takes about
 1 minute against 2.2, so one 4-vCPU prover keeps up with the design point's mean (900 a day in about 15 hours) where
 WebAssembly needs about 33. The native leaf is near the [aggregation probe](#the-trails-proof-aggregation-slice-33)'s
 (32.4–34.9 s on the same host type), so the production circuits cost what the probe's did natively.

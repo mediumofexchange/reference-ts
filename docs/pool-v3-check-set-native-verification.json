@@ -93,7 +93,7 @@
   "backend": "native",
   "evidence": "real check proofs on the native binary the pinned bb.js bundles, verified on the pinned WebAssembly backend, over genuine statement proofs; a test-labelled set, not adopted (succinct-read §§1, 6)",
   "host": {
-    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
     "threads": 4,
     "memoryGiB": 16,
     "platform": "linux",
@@ -103,37 +103,37 @@
   "setIdentity": "4259ee047202aabef96108fb3f6878c4c95b8b26a6d25e9d04b09ab4b5a30d67",
   "circuits": {
     "leaf-issue": {
-      "keyS": 12.1,
+      "keyS": 9.7,
       "bytecode": "52575d108afd5b16707c203607110c40ed359bb98007e68441918a0a8c776eed",
       "vk": "b544f0672ddb223c3a4b6ca68f16de1baff64f9fd8a7f3e2136968c98df6ea51",
       "keyHash": "0x1ed136d79ff6482f5110ad8d412a4bccf4f78ef3bb26baa8742021bf05dae1f9"
     },
     "leaf-spend": {
-      "keyS": 11.2,
+      "keyS": 9.1,
       "bytecode": "fc140ef8cba2dc25947ef2c5d9404b5e6fcc5295bcc91395f269f6e592134ca5",
       "vk": "d09081ce893e463d017c3bcffb7e7288917f6b07c8821a25dc5c292dc1c01fd5",
       "keyHash": "0x17ec3c97d60e19d6f767edbb8dd32cd1cc1e9d0efbb49c85fb0e7618be4e07ad"
     },
     "leaf-burn": {
-      "keyS": 10.4,
+      "keyS": 9.2,
       "bytecode": "6a7f0476812e25d065b1cb9820267ee8dae81d2d49b0df9d909653f69b05cd80",
       "vk": "eb34d7e31535326e40c9e95354a30b40076cf94c2db5cb844cddd2f9940f2cf7",
       "keyHash": "0x15e5e6198192f2a6764a5fd5d92d49b3a6ebb390943ca36c13e01177a63adc28"
     },
     "leaf-demand": {
-      "keyS": 10.1,
+      "keyS": 9.1,
       "bytecode": "d561a10d65ffd2bcb96ec9354a545a3c3953d040f316242545015c5177a91a5c",
       "vk": "6c7a019c8f8f3d47bef221979c73fc7d5328af2c77c503770222ee76af999547",
       "keyHash": "0x2eb8fb9f63aae39ed809c9141c1863e9f0c486b1ac9b2a99119ff3863301bd5e"
     },
     "leaf-settle": {
-      "keyS": 10.5,
+      "keyS": 9.1,
       "bytecode": "ee593cfc033d3fe2bd853f41d7ce8c16027f38f38d4152e5ddd40e7bd856862e",
       "vk": "c92db81e26d2e2337e67b7c92029a85f615b8f1b12626bdf9a812ba80c746dd6",
       "keyHash": "0x18586fd043b8bcef2680760e07a783c8454e6d4546e5d58d8fd592f7015d4c01"
     },
     "node": {
-      "keyS": 8.4,
+      "keyS": 7.1,
       "bytecode": "3f0bb706ecd6c72dbe9a038333ed24055274f1bb4a8d41b09db016a5113bf2db",
       "vk": "9e9a1a3184d75789fe5e937b80fe8b65c538145defb24705552d1f8f4d727477",
       "keyHash": "0x2bdf9a3880b1d558bb229fabd02902bc646a7d755a2fa4594d58226e4f9d3282"
@@ -142,98 +142,98 @@
   "proofs": [
     {
       "label": "leaf-issue",
-      "seconds": 32.4,
-      "peakMiB": 2845
+      "seconds": 31.9,
+      "peakMiB": 2933
     },
     {
       "label": "leaf-spend",
-      "seconds": 29.8,
-      "peakMiB": 3054
+      "seconds": 30.5,
+      "peakMiB": 3108
     },
     {
       "label": "leaf-burn",
-      "seconds": 29.4,
-      "peakMiB": 3130
+      "seconds": 30.5,
+      "peakMiB": 3218
     },
     {
       "label": "leaf-demand",
-      "seconds": 30.1,
-      "peakMiB": 3176
+      "seconds": 30.5,
+      "peakMiB": 3238
     },
     {
       "label": "leaf-settle",
-      "seconds": 29.6,
-      "peakMiB": 3094
+      "seconds": 30.6,
+      "peakMiB": 3296
     },
     {
       "label": "the aggregator's node over a child cover with its last byte flipped",
-      "seconds": 0.3,
-      "peakMiB": 2175
+      "seconds": 0.1,
+      "peakMiB": 2270
     },
     {
       "label": "node over two leaves",
-      "seconds": 26.6,
-      "peakMiB": 2645
+      "seconds": 26.7,
+      "peakMiB": 2820
     },
     {
       "label": "node over two leaves (2)",
-      "seconds": 25.3,
-      "peakMiB": 2731
+      "seconds": 25.5,
+      "peakMiB": 2846
     },
     {
       "label": "node over two nodes",
-      "seconds": 24.7,
-      "peakMiB": 2756
+      "seconds": 25.5,
+      "peakMiB": 2921
     },
     {
       "label": "leaf-spend under a forged node-key input",
-      "seconds": 30.3,
-      "peakMiB": 3894
+      "seconds": 30.8,
+      "peakMiB": 4133
     },
     {
       "label": "node under a forged node-key input",
-      "seconds": 24.2,
-      "peakMiB": 3681
+      "seconds": 25.6,
+      "peakMiB": 3829
     },
     {
       "label": "leaf-burn forced over a failing proof",
-      "seconds": 3.8,
-      "peakMiB": 2278
+      "seconds": 2.5,
+      "peakMiB": 2368
     },
     {
       "label": "node over a child whose key is not its admitted hash's",
-      "seconds": 25.9,
-      "peakMiB": 3849
+      "seconds": 26.6,
+      "peakMiB": 3943
     },
     {
       "label": "node over a child cover with byte 14655 flipped",
-      "seconds": 1.3,
-      "peakMiB": 1771
+      "seconds": 0.8,
+      "peakMiB": 1907
     },
     {
       "label": "node over a child cover with byte 5000 flipped",
-      "seconds": 26.6,
-      "peakMiB": 3787
+      "seconds": 26.5,
+      "peakMiB": 3986
     },
     {
       "label": "leaf-spend on WebAssembly",
-      "seconds": 82.7,
-      "peakMiB": 3828
+      "seconds": 81.7,
+      "peakMiB": 3899
     },
     {
       "label": "node over two leaves on WebAssembly",
-      "seconds": 59.9,
-      "peakMiB": 3828
+      "seconds": 64.7,
+      "peakMiB": 3985
     }
   ],
   "compared": {
     "leaf": {
-      "native": 29.8,
-      "wasm": 82.7
+      "native": 30.5,
+      "wasm": 81.7
     },
     "node": {
-      "native": 26.6,
-      "wasm": 59.9
+      "native": 26.7,
+      "wasm": 64.7
     }
   },
   "checks": [
@@ -248,7 +248,7 @@
     "a statement proof that fails natively gets no leaf, and a leaf forced over it is not proved (Assertion failed: (remainder_1024.lo == uint512_t(0)))",
     "a node over a child whose key is not its admitted hash's is proved but fails verification, and over a child cover with its last byte flipped is not proved (Assertion failed: (remainder_1024.lo == uint512_t(0))) or a limb byte flipped is proved but fails verification",
     "the native instances proved from private copies of the checked points alone (each held only them and bb's lock), and nothing was fetched",
-    "on this host a leaf takes 29.8 s natively against 82.7 s on WebAssembly, a node 26.6 s against 59.9 s"
+    "on this host a leaf takes 30.5 s natively against 81.7 s on WebAssembly, a node 26.7 s against 64.7 s"
   ],
   "limits": [
     "one genuine proof per kind here; a served trail read with real covers is the recovery check's",
