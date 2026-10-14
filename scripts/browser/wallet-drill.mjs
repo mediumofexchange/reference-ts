@@ -160,8 +160,11 @@ export async function drill({ command, route, log, parameters, root }) {
       assert.equal(again.json.digest, fund.digest);
       assert.deepEqual(again.files["/fund-2.request"], fund.frame);
       // A read-back the pool refuses is reported beside the command's own outcome, never in its place.
-      const after = await browser(["status", "--dir", holder, "nothing"], { read: ["/fund.request", "/"] });
-      assert.deepEqual([after.code, after.files["/fund.request"], after.fileErrors], [1, null, { "/": "EISDIR" }], after.stderr);
+      // A removal naming the whole pool, however spelt, is refused, never read as its root.
+      // (The holder's own commands below show the wallet still there.)
+      const after = await browser(["status", "--dir", holder, "nothing"], { read: ["/fund.request", holder], remove: ["", "/", "/a/..", "holder"] });
+      assert.deepEqual([after.code, after.files["/fund.request"], after.fileErrors],
+        [1, null, { [holder]: "EISDIR", "": "EINVAL", "/": "EINVAL", "/a/..": "EINVAL", holder: "EINVAL" }], after.stderr);
       const frameFile = join(scratch, "fund.request");
       writeFileSync(frameFile, fund.frame);
       await ok(node$("issue", BK, "issue-1", backing, "--request", frameFile, "--digest", fund.digest, "--value", "10"));

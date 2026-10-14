@@ -14,7 +14,7 @@
 // removes after it (`remove`), as a holder removes a file under Node. The seed a restore takes comes on its stdin
 // (`stdin`), which is zeroed once read; the page transfers its buffer, so no copy stays there.
 import { moeProcess } from "./globals.js";
-import { mountFiles } from "./files.js";
+import { mountFiles, normal } from "./files.js";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "./node-fs.js";
 import { dirname } from "./node-path.js";
 import { run } from "../cli/main.js";
@@ -28,7 +28,9 @@ export interface CommandRequest {
   readonly files?: Readonly<Record<string, Uint8Array | string>>;
   /** Files read back from the pool after the command, by absolute path: their bytes, or null where there is none. */
   readonly read?: readonly string[];
-  /** Paths removed from the pool after the command and its read-back (a file, or a directory with what it holds). */
+  /** Paths removed from the pool after the command and its read-back (a file, or a directory with what it holds). Each
+   * must be absolute and name less than the whole pool: an empty, relative or root path is refused (`EINVAL`), never
+   * read as the pool's root, which would remove every wallet in it. */
   readonly remove?: readonly string[];
   /** The command's stdin (restore-seed's seed); none reads as an empty pipe. Zeroed once read. */
   readonly stdin?: Uint8Array;
@@ -89,6 +91,7 @@ export async function runCommand(request: CommandRequest): Promise<CommandResult
     }
   }
   for (const path of request.remove ?? []) {
+    if (typeof path !== "string" || !path.startsWith("/") || normal(path) === "/") { fileErrors[String(path)] = "EINVAL"; continue; }
     try { rmSync(path, { recursive: true, force: true }); } catch (error) { fileErrors[path] = refusal(error); }
   }
   return result(code, persisted);

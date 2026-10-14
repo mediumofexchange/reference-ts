@@ -25,18 +25,22 @@
 <p id="storage"></p>
 <pre id="out"></pre>
 <script type="module">
-// Only a window may ask the browser to keep the origin's files under storage pressure; its workers report the answer.
-const persisting = navigator.storage?.persist?.().catch(() => undefined);
+// Only a window may ask the browser to keep the origin's files under storage pressure; its workers report the answer. A
+// browser that asks its user (Firefox) does not hold the first command past a few seconds.
+const persisting = Promise.race([navigator.storage?.persist?.().catch(() => undefined), new Promise(done => setTimeout(done, 3000))]);
 
 /** One command in a worker of its own, ended once it answers: the worker is the command's process. The seed on stdin is
- * transferred, so no copy of it stays in the page. */
+ * transferred, so no copy of it stays in the page: its whole buffer, so pass a view of a buffer of its own. */
 export async function moeCommand(request) {
   await persisting;
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("command.js", import.meta.url), { type: "module" });
     const end = () => worker.terminate();
     worker.onmessage = event => {
-      if (event.data?.ready === true) { worker.postMessage(request, request.stdin ? [request.stdin.buffer] : []); return; }
+      if (event.data?.ready === true) {
+        try { worker.postMessage(request, request.stdin ? [request.stdin.buffer] : []); } catch (error) { end(); reject(error); }
+        return;
+      }
       end(); resolve(event.data);
     };
     worker.onerror = event => { end(); reject(new Error(`the command worker failed: ${event.message || "it did not start"}`)); };
