@@ -86,6 +86,9 @@ export function pathRoot(key: bigint, path: MapPath): bigint | undefined {
   return node;
 }
 
+/** An entry appended to the map, with its key's path just before. */
+export interface MapUpdate { readonly entry: MapEntry; readonly before: MapPath }
+
 interface KeyState { count: bigint; chain: bigint; readonly entries: MapEntry[] }
 
 /**
@@ -112,18 +115,23 @@ export class SubjectMap {
   #node(level: number, index: bigint): bigint { return this.#nodes[level]!.get(index) ?? EMPTY_SUBTREES[level]!; }
 
   /** Append the next block: its header id, and its section's transactions' unsigned bytes in section order. The caller
-   * has authenticated the section against the header and the header against its parent. */
-  appendBlock(id: Uint8Array, transactions: readonly Uint8Array[]): void {
+   * has authenticated the section against the header and the header against its parent. Returns each entry appended,
+   * in order, with its key's path just before it (what a map-update leaf proves the update against). */
+  appendBlock(id: Uint8Array, transactions: readonly Uint8Array[]): readonly MapUpdate[] {
     if (!isBytes(id, 32) || !Array.isArray(transactions)) throw new EncodingError("invalid exhaustion block");
     const height = this.#height + 1n;
     if (height >= U32) throw new EncodingError("exhaustion height out of range");
+    const updates: MapUpdate[] = [];
     transactions.forEach((unsigned, position) => {
       for (const { output, subject } of scanTransaction(unsigned)) {
-        this.#append({ subject, height, position: BigInt(position), output: BigInt(output) });
+        const entry = Object.freeze({ subject, height, position: BigInt(position), output: BigInt(output) });
+        updates.push(Object.freeze({ entry, before: this.path(subjectKey(subject)) }));
+        this.#append(entry);
       }
     });
     this.#id = copyBytes(id);
     this.#height = height;
+    return Object.freeze(updates);
   }
   #append(entry: MapEntry): void {
     const key = subjectKey(entry.subject);
