@@ -720,7 +720,8 @@ walks its kept pool-v3 trails, checks each statement proof natively and proves a
 covered spans, keeping each cover in `evidence.db` under the check set's identity, and serves them (`GET /covers`). A
 round proves new covers for at most ten minutes, then syncs again; the walk of a segment goes on from where the last
 round's stood, so a long trail is read once, a cover kept is never proved again, and a line says what each round
-proved. It proves over the trails of selections its own read kept, never over what a supplier's answer alone indexed. Proving reads the check set's parameters (the leading 2^21 Ignition points, 128 MiB), copied
+proved. It proves over the trails its own kept selections name, and the earlier segments their openings import, never
+over what a supplier's answer alone brought. Proving reads the check set's parameters (the leading 2^21 Ignition points, 128 MiB), copied
 from `--parameters` or fetched into the directory, and takes the WebAssembly backend about a minute a leaf and 3.5 GiB
 on four cores ([slice 36](POOL_DEPLOYMENT_PROBES.md#the-trail-check-set-slice-36)). Anyone may prove: a cover carries
 no authority, and every reader checks it under its own pinned keys. A refusal inside the backend ends this process's
