@@ -125,9 +125,12 @@ describe("succinct transport (slice 37)", () => {
     await f.j.submit(f.issue()); await f.checkpoint("c2");
     await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
     await f.mirror();
+    // A replica keeps covers under the identity of the set its prover proves for, never one a caller names apart.
+    const { leaf, node } = testProver(SET, verifier);
+    await expect(f.replica.prove({ leaf, node } as unknown as ReturnType<typeof testProver>)).rejects.toThrow(/prover of a set/);
     // The prover covers the two proved records and their node; walking again proves nothing new.
-    expect(await f.replica.prove(testProver(SET, verifier), SET.identity)).toEqual({ trails: 1, proved: 2, made: 3 });
-    expect(await f.replica.prove(testProver(SET, verifier), SET.identity)).toEqual({ trails: 1, proved: 2, made: 0 });
+    expect(await f.replica.prove(testProver(SET, verifier))).toEqual({ trails: 1, proved: 2, made: 3 });
+    expect(await f.replica.prove(testProver(SET, verifier))).toEqual({ trails: 1, proved: 2, made: 0 });
     // One more issue after the covers: the tail, which no cover reaches yet.
     await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
     await f.mirror();
@@ -182,7 +185,7 @@ describe("succinct transport (slice 37)", () => {
     const f = await fixture();
     await f.j.submit(f.issue()); await f.checkpoint("c2");
     await f.mirror();
-    await f.replica.prove(testProver(SET, verifier), SET.identity);
+    await f.replica.prove(testProver(SET, verifier));
     const client = new V3ServiceClient(f.replicaUrl, undefined, f.identity()), operatorClient = f.operatorClient;
     const proof = decodeRecord(f.issue()).proof, hash = sha256(proof), segment = f.replicaStore.keptTops()[0]!.segment;
     for (const source of [client, operatorClient]) {
@@ -203,7 +206,7 @@ describe("succinct transport (slice 37)", () => {
     await f.j.submit(f.issue()); await f.checkpoint("c2");
     await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
     await f.mirror();
-    await f.replica.prove(testProver(SET, verifier), SET.identity);
+    await f.replica.prove(testProver(SET, verifier));
     const complete = await f.read(POOL_V3 as Construction, f.operatorClient, "complete");
     // A hostile source first: it serves the replica's stream, but every proof is junk (one overlong) and every cover wrong.
     let asked = 0;
@@ -302,7 +305,7 @@ describe("succinct transport (slice 37)", () => {
     await f.j.submit(f.issue()); await f.checkpoint("c2");
     await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
     await f.mirror();
-    await f.replica.prove(testProver(SET, verifier), SET.identity);
+    await f.replica.prove(testProver(SET, verifier));
     const complete = await f.read(POOL_V3 as Construction, f.operatorClient, "complete");
     const wrong: V3EvidenceSource = { serve: (b, after, form) => f.replica.serve(b, after, form), proof: () => undefined, cover: (_s, digest) => sha256(digest) };
     const wrongUrl = await listen(service.createV3EvidenceService(wrong));
@@ -336,7 +339,7 @@ describe("succinct transport (slice 37)", () => {
     const freeReplica = new V3Replica(freePath, freeStore, f.venue.id);
     expect(freeReplica.keep(await new V3ServiceClient(f.operatorUrl, TOKEN, f.identity(succinct)).sync(backing, freeStore))).toBe(true);
     await expect(freeReplica.serve(backing, 0n)).rejects.toMatchObject({ code: "UNSUPPORTED" });
-    await expect(freeReplica.prove(testProver(SET, verifier), SET.identity)).rejects.toMatchObject({ code: "UNSUPPORTED" });
+    await expect(freeReplica.prove(testProver(SET, verifier))).rejects.toMatchObject({ code: "UNSUPPORTED" });
     const completeStore = new EvidenceStore(join(directory, "complete.db")); closing.push(completeStore);
     await expect(new V3ServiceClient(f.operatorUrl, TOKEN, f.identity(succinct)).sync(backing, completeStore)).rejects.toThrow("another construction");
   });

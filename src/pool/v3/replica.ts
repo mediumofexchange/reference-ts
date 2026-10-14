@@ -69,13 +69,14 @@ export class V3Replica implements V3EvidenceSource {
   }
 
   /**
-   * Prove covers (succinct-read §§2 rule 6, 3.2) over the replica's kept trails with `prover`, under the set whose
-   * identity is `set`, keeping each in the replica's file, which serves them. Each segment's trails are walked from
-   * their furthest top, and a top a walked trail reaches is walked with it; a span already kept is not proved again.
+   * Prove covers (succinct-read §§2 rule 6, 3.2) over the replica's kept trails with `prover`, keeping each in the
+   * replica's file under the prover's set identity, which serves them. Each segment's trails are walked from their
+   * furthest top, and a top a walked trail reaches is walked with it; a span already kept is not proved again.
    */
-  async prove(prover: SpanProver, set: Uint8Array): Promise<{ readonly trails: number; readonly proved: number; readonly made: number }> {
+  async prove(prover: SpanProver): Promise<{ readonly trails: number; readonly proved: number; readonly made: number }> {
     if (this.#evidence.construction.trailChecks !== undefined) throw new V3StoreError("UNSUPPORTED", "the replica holds no proofs to cover");
-    if (!(set instanceof Uint8Array) || set.length !== 32) throw new TypeError("a 32-byte set identity");
+    const set: unknown = prover?.identity;
+    if (!(set instanceof Uint8Array) || set.length !== 32) throw new TypeError("a prover of a set with a 32-byte identity");
     const own = copyBytes(set), batch = this.#evidence.retained(), walked: StoredTrail[] = [];
     let proved = 0, made = 0;
     try {

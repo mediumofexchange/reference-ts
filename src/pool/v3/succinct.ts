@@ -12,7 +12,7 @@
 // proofs are hashes any party computes, which exercise every rule of the reader and attest nothing.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as hex } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
+import { ByteWriter, compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { SUCCINCT_TRAIL_CONTEXT, V3_SEGMENT_CONTEXT } from "../../contexts.js";
 import { bytesToField, fieldToBytes, limbsOf } from "../field.js";
 import { poseidon2Hash } from "../poseidon2.js";
@@ -123,6 +123,8 @@ export interface Cover {
 /** What proves covers (§§2 rule 6, 3.5): the aggregator (aggregator.ts), or a test set's maker (`testProver`). `leaf` checks
  * the statement proof natively first and gives no cover where it fails. */
 export interface SpanProver {
+  /** The identity of the set whose keys its covers verify under (§6), which names them where they are kept. */
+  readonly identity: Uint8Array;
   leaf(record: Record): Promise<Cover | undefined>;
   node(left: Cover, right: Cover): Promise<Cover>;
 }
@@ -147,7 +149,7 @@ export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Arra
       const digest = statementLeafDigest(record.kind, record.publicInputs, sha256(record.proof)), proof = held(digest);
       if (proof !== undefined) cover = { kind: record.kind, digest, proof };
     }
-    if (cover === undefined) { const made = await prover.leaf(record); if (made !== undefined) cover = kept(made); }
+    if (cover === undefined) { const leaf = await prover.leaf(record); if (leaf !== undefined) cover = kept(leaf); }
     for (let h = 0, index = n; ; h++, index = Math.floor(index / 2)) {
       if (index % 2 === 0) { pending[h] = cover; break; }
       const left = pending[h];
@@ -164,6 +166,7 @@ export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Arra
 /** A test set's prover (§1): a leaf over a proof `statements` accepts, and every node, made by the set's `cover`. */
 export function testProver(set: ReturnType<typeof testCheckSet>, statements: ProofCheck): SpanProver {
   return {
+    identity: set.identity,
     async leaf(record) {
       if (record.proof.length !== COVER_PROOF_BYTES || await statements.verify(record.kind, [...record.publicInputs], record.proof) !== true) return undefined;
       const digest = statementLeafDigest(record.kind, record.publicInputs, sha256(record.proof));
@@ -176,19 +179,20 @@ export function testProver(set: ReturnType<typeof testCheckSet>, statements: Pro
   };
 }
 
+/** A set identity's frame (§6): each part u32-length-prefixed. */
+export function setFrame(parts: readonly Uint8Array[]): Uint8Array {
+  const w = new ByteWriter();
+  for (const part of parts) w.lengthPrefixed(part);
+  return w.finish();
+}
+
 /** A test set (§1): its check proof for a span is SHA-256 over a fixed context, the circuit and the digest. Anyone makes
  * them, so they attest nothing; `cover` makes one, as a prover would after checking the span's proofs natively. */
 export function testCheckSet(label: string): CheckSet & { cover(kind: number | undefined, digest: bigint): Uint8Array } {
   const encoder = new TextEncoder(), name = encoder.encode(label);
-  const frame = (parts: readonly Uint8Array[]): Uint8Array => {
-    const out = new Uint8Array(parts.reduce((n, p) => n + 4 + p.length, 0)), view = new DataView(out.buffer);
-    let at = 0;
-    for (const part of parts) { view.setUint32(at, part.length); out.set(part, at + 4); at += 4 + part.length; }
-    return out;
-  };
-  const identity = sha256(frame([encoder.encode("moe/succinct/v1/set"), encoder.encode("test"), name]));
+  const identity = sha256(setFrame([encoder.encode("moe/succinct/v1/set"), encoder.encode("test"), name]));
   const cover = (kind: number | undefined, digest: bigint): Uint8Array =>
-    sha256(frame([encoder.encode("moe/succinct/v1/test-cover"), identity, Uint8Array.of(kind ?? 0), fieldToBytes(digest)]));
+    sha256(setFrame([encoder.encode("moe/succinct/v1/test-cover"), identity, Uint8Array.of(kind ?? 0), fieldToBytes(digest)]));
   return Object.freeze({
     identity, test: true, cover,
     verify: (kind: number | undefined, digest: bigint, proof: Uint8Array) => proof instanceof Uint8Array && same(proof, cover(kind, digest)),

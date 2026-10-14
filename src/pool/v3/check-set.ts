@@ -21,7 +21,7 @@ import { hexToField, isField } from "../field.js";
 import { CHECK_SET_PARAMETERS } from "../parameters.js";
 import { keyedVerifier, type VerifierOptions } from "../proof-verifier.js";
 import { POOL_V3_MANIFEST, PROOF_BYTES } from "./configuration.js";
-import { COVER_PROOF_BYTES, SUCCINCT_SPECIFICATION, type CheckSet } from "./succinct.js";
+import { COVER_PROOF_BYTES, setFrame, SUCCINCT_SPECIFICATION, type CheckSet } from "./succinct.js";
 
 /** The set's circuits in the order the set identity frames them: the five leaves by kind, then the node. */
 export const TRAIL_CIRCUITS = Object.freeze(["leaf-issue", "leaf-spend", "leaf-burn", "leaf-demand", "leaf-settle", "node"] as const);
@@ -72,18 +72,11 @@ export const CHECK_SET_MANIFEST = Object.freeze({
 /** The shipped set is missing, malformed or not the manifest's: an install fault, never a verdict. */
 export class CheckSetError extends Error {
   constructor(readonly code: "MISSING" | "IDENTITY", message: string, options?: ErrorOptions) {
-    super(message); this.name = "CheckSetError";
+    super(message, options); this.name = "CheckSetError";
   }
 }
 
 const encoder = new TextEncoder();
-/** u32-length-prefixed parts. */
-function frame(parts: readonly Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((n, p) => n + 4 + p.length, 0)), view = new DataView(out.buffer);
-  let at = 0;
-  for (const part of parts) { view.setUint32(at, part.length); out.set(part, at + 4); at += 4 + part.length; }
-  return out;
-}
 const hexBytes = (hex: string): Uint8Array => Uint8Array.from(hex.match(/../g) ?? [], x => parseInt(x, 16));
 
 /**
@@ -93,7 +86,7 @@ const hexBytes = (hex: string): Uint8Array => Uint8Array.from(hex.match(/../g) ?
  */
 export function checkSetIdentity(): Uint8Array {
   const m = CHECK_SET_MANIFEST;
-  return sha256(frame([encoder.encode("moe/succinct/v1/set"), encoder.encode("test"), encoder.encode("trail"),
+  return sha256(setFrame([encoder.encode("moe/succinct/v1/set"), encoder.encode("test"), encoder.encode("trail"),
     ...TRAIL_CIRCUITS.flatMap(name => [encoder.encode(name), hexBytes(m.circuits[name].bytecode), hexBytes(m.circuits[name].vk),
       hexBytes(m.circuits[name].keyHash.slice(2))]),
     encoder.encode(m.toolchain["@noir-lang/noir_wasm"]), encoder.encode(m.toolchain["@aztec/bb.js"]), encoder.encode(m.verifierTarget),

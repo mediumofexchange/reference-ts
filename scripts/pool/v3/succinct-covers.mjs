@@ -68,8 +68,9 @@ export async function readWithCovers(journal, backing, selection, ranges, { veri
       // The replica proves as it does for any reader (`V3Replica.prove`), with leaves only over the chosen records:
       // `coverTrail` proves a node only over two covered spans, so it keeps the aligned spans inside the ranges.
       const chosen = new Set(ranges.flatMap(({ first, count }) => proved.slice(first, first + count).map(record => sha(record.proof))));
-      const partial = { leaf: async record => chosen.has(sha(record.proof)) ? prover.leaf(record) : undefined, node: (left, right) => prover.node(left, right) };
-      const started = performance.now(), walk = await replica.prove(partial, prover.set.identity);
+      const partial = { identity: prover.identity, leaf: async record => chosen.has(sha(record.proof)) ? prover.leaf(record) : undefined,
+        node: (left, right) => prover.node(left, right) };
+      const started = performance.now(), walk = await replica.prove(partial);
       const proving = { ...walk, seconds: Number(((performance.now() - started) / 1000).toFixed(1)) };
       const used = { answered: 0, verified: 0, fetched: 0, proving }, fetched = new Set();
       const set = { identity: prover.set.identity, test: prover.set.test,

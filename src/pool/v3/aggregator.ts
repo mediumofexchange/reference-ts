@@ -91,5 +91,5 @@ export async function openTrailProver(api: Barretenberg, statements: KeyedVerifi
       key_hashes: children.map(c => fieldToHex(c.key.keyHash)), digests: children.map(c => fieldToHex(c.digest)), node_key_hash: nodeKeyHash,
     }, undefined, digest);
   };
-  return { set, leaf, node, close: () => set.close() };
+  return { identity: set.identity, set, leaf, node, close: () => set.close() };
 }
