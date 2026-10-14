@@ -322,35 +322,45 @@ export function ergoOrdinal(transaction: number, output: number): bigint {
 interface ReadTransaction { readonly id: Uint8Array; readonly witnessId: Uint8Array; readonly unsigned: Uint8Array }
 function attributeOwned(profile: ErgoProfile, transactions: readonly ReadTransaction[]): readonly AttributedObject[] {
   const objects: AttributedObject[] = [];
-  transactions.forEach((transaction, position) => {
-    // A transaction the framer does not read carries no record.
-    const outputs = frameTransaction(transaction.unsigned);
-    if (outputs === undefined) return;
-    for (let at = 0; at < outputs.length; at++) {
-      const first = attributeOutput(profile, outputs[at]!);
-      if (first === undefined) continue;
-      const ordinal = ergoOrdinal(position, at);
-      if (first.kind !== PUBLICATION_RANGE) {
-        if (first.piece.length === MAX_RANGE_RECORD_BYTES[first.kind]) {
-          objects.push(Object.freeze({ kind: first.kind, subject: copyBytes(first.subject), ordinal, record: copyBytes(first.piece) }));
-        }
-        continue;
+  transactions.forEach((transaction, position) => attributeInto(profile, transaction.unsigned, position, objects));
+  return Object.freeze(objects);
+}
+/** The objects of the owned transaction at `position` of its section, appended to `objects` in output order. */
+function attributeInto(profile: ErgoProfile, unsigned: Uint8Array, position: number, objects: AttributedObject[]): void {
+  // A transaction the framer does not read carries no record.
+  const outputs = frameTransaction(unsigned);
+  if (outputs === undefined) return;
+  for (let at = 0; at < outputs.length; at++) {
+    const first = attributeOutput(profile, outputs[at]!);
+    if (first === undefined) continue;
+    const ordinal = ergoOrdinal(position, at);
+    if (first.kind !== PUBLICATION_RANGE) {
+      if (first.piece.length === MAX_RANGE_RECORD_BYTES[first.kind]) {
+        objects.push(Object.freeze({ kind: first.kind, subject: copyBytes(first.subject), ordinal, record: copyBytes(first.piece) }));
       }
-      const pieces = [first.piece];
-      let end = at + 1;
-      for (; end < outputs.length; end++) {
-        const next = attributeOutput(profile, outputs[end]!);
-        if (next === undefined || next.kind !== PUBLICATION_RANGE || compareBytes(next.subject, first.subject) !== 0) break;
-        pieces.push(next.piece);
-      }
-      const record = concat(pieces);
-      if (record.length <= MAX_RANGE_RECORD_BYTES[PUBLICATION_RANGE]) {
-        objects.push(Object.freeze({ kind: PUBLICATION_RANGE, subject: copyBytes(first.subject), ordinal, record }));
-      }
-      // The boundary output is read again as the next object's first candidate.
-      at = end - 1;
+      continue;
     }
-  });
+    const pieces = [first.piece];
+    let end = at + 1;
+    for (; end < outputs.length; end++) {
+      const next = attributeOutput(profile, outputs[end]!);
+      if (next === undefined || next.kind !== PUBLICATION_RANGE || compareBytes(next.subject, first.subject) !== 0) break;
+      pieces.push(next.piece);
+    }
+    const record = concat(pieces);
+    if (record.length <= MAX_RANGE_RECORD_BYTES[PUBLICATION_RANGE]) {
+      objects.push(Object.freeze({ kind: PUBLICATION_RANGE, subject: copyBytes(first.subject), ordinal, record }));
+    }
+    // The boundary output is read again as the next object's first candidate.
+    at = end - 1;
+  }
+}
+/** §6 for one transaction, the one at `position` of its block's section: the objects it carries, in output order, or
+ * none where the framer does not read it. The caller has authenticated the bytes at that position (succinct-read §4.5). */
+export function attributeTransaction(profile: ErgoProfile, unsigned: Uint8Array, position: number): readonly AttributedObject[] {
+  const owned = ownErgoProfile(profile), objects: AttributedObject[] = [];
+  if (!isBytes(unsigned)) throw new EncodingError("invalid Ergo transaction bytes");
+  attributeInto(owned, copyBytes(unsigned), position, objects);
   return Object.freeze(objects);
 }
 /** Every view is read once, field by field, into an owned copy before

@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-14` [Read a venue range succinctly from a fold, a subject-map path, the key's entries and included transactions, and take the venue's pace as a prover pool (slice 43, Next 12)](decisions/2026-10.md#2026-10-14--read-a-venue-range-succinctly-from-a-fold-a-subject-map-path-the-keys-entries-and-included-transactions-and-take-the-venues-pace-as-a-prover-pool-slice-43-next-12)
 - `2026-10-14` [Prove covers on the native binary bb.js bundles, from a private copy of the checked points, on an instance replaced after any failure (slice 42, Next 12)](decisions/2026-10.md#2026-10-14--prove-covers-on-the-native-binary-bbjs-bundles-from-a-private-copy-of-the-checked-points-on-an-instance-replaced-after-any-failure-slice-42-next-12)
 - `2026-10-14` [Run the wallet commands in a browser engine, one command a worker over its file pool, and take a wrapped app as the holder's route (slice 41, Next 12)](decisions/2026-10.md#2026-10-14--run-the-wallet-commands-in-a-browser-engine-one-command-a-worker-over-its-file-pool-and-take-a-wrapped-app-as-the-holders-route-slice-41-next-12)
 - `2026-10-14` [Keep the browser host's database files on the origin's private file system, under the code and write-ahead logs Node keeps (slice 40, Next 12)](decisions/2026-10.md#2026-10-14--keep-the-browser-hosts-database-files-on-the-origins-private-file-system-under-the-code-and-write-ahead-logs-node-keeps-slice-40-next-12)

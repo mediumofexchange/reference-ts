@@ -233,13 +233,21 @@ Per-slot and fixed figures are fits over small sizes; the full-size leaves measu
 
 **A day of Ergo mainnet.**
 
-| | Slice 22's day (to height 1,892,959) | The latest day (to 1,893,553) |
-|---|---|---|
-| Unsigned bytes and transactions a day | 4.08 MB, 4,898 | 9.89 MB, 5,048 (237 transactions over 10 KB, 5.9 MB) |
-| Transaction and tree-or-header compressions | 34,793 and 20,996 | 80,148 and 21,591 |
-| Leaves (T, M, U) and nodes | 203, 56, 0; 258 | 466, 58, 0; 523 |
-| Prover hours: leaves and nodes | 5.2 + 1.8 = 7.0 | 10.5 + 3.6 = 14.1 |
-| One 4-vCPU prover keeps up | 3.4 times | 1.7 times |
+| | Slice 22's day (to height 1,892,959) | The latest day (to 1,893,553) | Slice 43's day (to 1,894,624) |
+|---|---|---|---|
+| Unsigned bytes and transactions a day | 4.08 MB, 4,898 | 9.89 MB, 5,048 (237 transactions over 10 KB, 5.9 MB) | 13.3 MB, 5,899 |
+| Transaction and tree-or-header compressions | 34,793 and 20,996 | 80,148 and 21,591 | 107,371 and 25,069 |
+| Leaves (T, M, U) and nodes | 203, 56, 0; 258 | 466, 58, 0; 523 | 625, 67, 0; 691 |
+| Prover hours: leaves and nodes | 5.2 + 1.8 = 7.0 | 10.5 + 3.6 = 14.1 | 13.8 + 4.8 = 18.6 |
+| One 4-vCPU prover keeps up | 3.4 times | 1.7 times | 1.29 times |
+
+The proofs were timed on bb.js's bundled native `bb`. Slice 43's day (720 blocks, heights 1,893,905–1,894,624, fetched
+2026-10-14 and modelled with this probe's tooling and slot costs) shows how far a day varies: its unsigned bytes are
+3.3 times slice 22's, and one prover keeps up with it only 1.29 times. A period's leaves and each level's nodes are
+independent proofs, so provers on several machines share a day: two keep up about 2.6 times. Its 640 grammatical
+transactions hold no output with §6's shape, and the scan
+([slice 43](../decisions/2026-10.md#2026-10-14--read-a-venue-range-succinctly-from-a-fold-a-subject-map-path-the-keys-entries-and-included-transactions-and-take-the-venues-pace-as-a-prover-pool-slice-43-next-12))
+reads none in any of its 6,125 transactions.
 
 Folds add one 1.5 M-gate proof a period. The two windows overlap by 126 blocks.
 
