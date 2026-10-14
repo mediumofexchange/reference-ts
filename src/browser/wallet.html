@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>moe wallet</title>
+<!--
+  The holder's surface in a browser engine (slice 41), served beside the command bundle (command.js) cross-origin
+  isolated (Cross-Origin-Opener-Policy same-origin, Cross-Origin-Embedder-Policy require-corp), which proving needs.
+  Each command runs as `moe wallet` runs it, in a worker of its own over the origin's file pool (src/browser/command.ts),
+  and prints the command's own JSON. For an agent, `moeCommand(request)` is the same call: `{ argv, files?, read?,
+  stdin?, pool? }` in, `{ code, stdout, stderr, files, persisted }` out, with moe's exit codes and named refusals.
+  A stand-in for a holder's interface: it takes the command line as `moe` does.
+-->
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0 auto; max-width: 48rem; padding: 1rem; }
+  input, textarea, button { font: inherit; width: 100%; box-sizing: border-box; margin: 0.25rem 0; }
+  pre { white-space: pre-wrap; word-break: break-all; background: color-mix(in srgb, currentColor 8%, transparent); padding: 0.5rem; }
+</style>
+<h1>moe wallet</h1>
+<form id="command">
+  <label>moe wallet <input id="argv" placeholder="status --dir /wallet" autocomplete="off" spellcheck="false"></label>
+  <label>stdin (restore-seed's seed; cleared once sent) <textarea id="stdin" rows="2" autocomplete="off" spellcheck="false"></textarea></label>
+  <button>Run</button>
+</form>
+<p id="storage"></p>
+<pre id="out"></pre>
+<script type="module">
+// Only a window may ask the browser to keep the origin's files under storage pressure; its workers report the answer. A
+// browser that asks its user (Firefox) does not hold the first command past a few seconds.
+const persisting = Promise.race([navigator.storage?.persist?.().catch(() => undefined), new Promise(done => setTimeout(done, 3000))]);
+
+/** One command in a worker of its own, ended once it answers: the worker is the command's process. The seed on stdin is
+ * transferred, so no copy of it stays in the page: its whole buffer, so pass a view of a buffer of its own. */
+export async function moeCommand(request) {
+  await persisting;
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("command.js", import.meta.url), { type: "module" });
+    const end = () => worker.terminate();
+    worker.onmessage = event => {
+      if (event.data?.ready === true) {
+        try { worker.postMessage(request, request.stdin ? [request.stdin.buffer] : []); } catch (error) { end(); reject(error); }
+        return;
+      }
+      end(); resolve(event.data);
+    };
+    worker.onerror = event => { end(); reject(new Error(`the command worker failed: ${event.message || "it did not start"}`)); };
+  });
+}
+globalThis.moeCommand = moeCommand;
+
+const form = document.getElementById("command"), out = document.getElementById("out");
+form.addEventListener("submit", async event => {
+  event.preventDefault();
+  const argv = ["wallet", ...document.getElementById("argv").value.trim().split(/\s+/).filter(Boolean)];
+  const field = document.getElementById("stdin"), seed = field.value;
+  field.value = "";
+  out.textContent = `moe ${argv.join(" ")} ...`;
+  try {
+    const result = await moeCommand({ argv, ...(seed === "" ? {} : { stdin: new TextEncoder().encode(seed) }) });
+    out.textContent = `exit ${result.code}\n${result.stdout}${result.stderr}`;
+    document.getElementById("storage").textContent = result.persisted === true ? "" :
+      "This browser may clear this wallet's files under storage pressure: keep the seed's backup.";
+  } catch (error) { out.textContent = String(error); }
+});
+</script>

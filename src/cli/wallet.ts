@@ -51,7 +51,7 @@ import { checkSetIdentity, type TrailCheckSet } from "../pool/v3/check-set.js";
 import type { CheckSet, CheckSupply } from "../pool/v3/succinct.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
 import { initConstruction, initRead, initRole, presentationOf, succinctSupply, readSources, repairRecord, replicaCommand, serviceClient, serviceCommand, sourcesOf, termsCommand, unanswered,
-  type Skipped } from "./reader.js";
+  type Skipped } from "./read.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
 

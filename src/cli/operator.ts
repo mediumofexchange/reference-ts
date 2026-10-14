@@ -24,7 +24,7 @@ import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, integer, openDirectory, parseArguments, pause, pollMs, print, readRequired, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Arguments, type Directory } from "./common.js";
 import { directoryVerifier } from "./backend.js";
-import { initRole, keptBackings } from "./reader.js";
+import { initRole, keptBackings } from "./read.js";
 import { closeListener, listenLoopback, portOf, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { authenticate, keepTerms, keptTerms } from "./terms.js";
 import { besideView, createVenue, freshFunding, fundingTree, openPublisher, openView, requireVenue, venueText, type SpendBudget, type View } from "./venue.js";

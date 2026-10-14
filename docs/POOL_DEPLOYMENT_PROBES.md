@@ -1297,6 +1297,30 @@ The records' own work dominates; the browser's files add little to a walk. **Lim
 loses no write the browser accepted, so no run stands in for a device's power loss (the torn-header and stopped-rename
 cases are simulated); one run per figure.
 
+## The wallet's flows in a browser engine (slice 41)
+
+Measured 2026-10-14 in headless Chromium 141 on a 4-vCPU cloud container (Intel Xeon @ 2.10 GHz), `scripts/browser/check.mjs
+--wallet` ([decision](../decisions/2026-10.md#2026-10-14--run-the-wallet-commands-in-a-browser-engine-one-command-a-worker-over-its-file-pool-and-take-a-wrapped-app-as-the-holders-route-slice-41-next-12)); CI's
+`browser` group repeats it on Ubuntu and Windows (`scratch/browser-wallet.json` in each `pool-v3-reports-<os>` artifact).
+A holder's `moe wallet` commands ran in the page's workers, one a worker over the origin's file pool, against an
+operator, a backer and a shop running `moe` as processes over the synthetic node; every flow passed (init, request,
+receive, pay with a proof made in the browser, restore from the seed) with its refusals by name (`REQUEST`, `BUSY`,
+`PROXY`).
+
+| Command, same host | Browser worker | Node process |
+|---|---:|---:|
+| `init` (parameters copied, venue context kept) | 5.2 s | 4.3 s |
+| `request` | 4.2–4.3 s | 4.0 s |
+| `fulfill` | 4.1–4.7 s | 4.6–4.8 s |
+| A spend proved (browser `pay`, with its submission; Node, the backer's `issue`) | 9.0 s | 6.3 s |
+| `terms add`, `service add` (no verifier) | 0.7–0.8 s | 0.5 s |
+
+A command that verifies starts the verifier and derives the relations' keys, about 3.5 s of each under both hosts
+([slice 39](#the-holders-read-path-in-a-browser-engine-slice-39)), so the browser adds little to a command. The
+browser's process tree peaked at 1.2–1.9 GiB over the three runs. Headless Chromium refused persistent
+storage (`persist()` false). **Limits.** Three runs on one host; Chromium only; the worker reaches the loopback parties
+through the check's server, standing in for an app's native transport; no device.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the

@@ -14,6 +14,12 @@
 //             wallet's files) with the worker's file pool mounted (files.ts); then a crash: a worker keeping a replay
 //             file is ended mid-walk, and a new worker must reopen the file through §14's digest check at its last
 //             keep point, while a third worker's mount is refused by name (crash.mjs). Part of `npm run check:browser`.
+//   --wallet  the wallet's flows (wallet-drill.mjs, slice 41): a holder's `moe wallet` commands in the holder's page
+//             (src/browser/wallet.html), each in a command worker over the origin's file pool, with real proofs, against
+//             an operator, a backer and a shop running `moe` as processes over the synthetic node: init, request,
+//             receive, pay, restore from the seed. The page's worker reaches their loopback ports through this server
+//             (`/via/<port>/`, wallet-worker.mjs), standing in for a wrapped app's native transport. CI's real-proof
+//             group `browser` runs it (after `npm run build`).
 //   --browser <path>   the engine (default: MOE_BROWSER, else Chrome or Edge where installed, else Playwright's).
 //   --serve [--port <n>]  launch no browser: serve the check on 127.0.0.1:<n> and judge the first result a browser
 //             posts, such as a phone's Chrome reaching it through `adb reverse tcp:<n> tcp:<n>` (a secure context, as
@@ -23,7 +29,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { bundle, root } from "./build.mjs";
@@ -47,7 +53,7 @@ function parse(argv) {
   const options = { check: "suites", serve: false, port: 0, browser: process.env.MOE_BROWSER, parameters: join(root, "scratch/private-payment-crs"), report: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--suites" || arg === "--proofs" || arg === "--files") options.check = arg.slice(2);
+    if (arg === "--suites" || arg === "--proofs" || arg === "--files" || arg === "--wallet") options.check = arg.slice(2);
     else if (arg === "--serve") options.serve = true;
     else if (arg === "--port" && i + 1 < argv.length) options.port = Number(argv[++i]);
     else if (["--browser", "--parameters", "--report"].includes(arg) && i + 1 < argv.length) options[arg.slice(2)] = resolve(argv[++i]);
@@ -111,7 +117,7 @@ for (const { worker } of race) worker.terminate();
  * `/plain/`, which serves the same files without the isolation headers. A post counts only with the run's token: a
  * progress line is logged, and each result is handed to the next `result()`.
  */
-function serve(directory, parameters, log, port, token) {
+function serve(directory, parameters, log, port, token, routes = new Set()) {
   const results = [], waiting = [];
   const deliver = body => { const next = waiting.shift(); if (next) next(body); else results.push(body); };
   const server = createServer((request, response) => {
@@ -122,6 +128,11 @@ function serve(directory, parameters, log, port, token) {
         "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp", "cross-origin-resource-policy": "same-origin" }) });
       response.end(body);
     };
+    const via = /^\/via\/([0-9]{1,5})(\/.*)$/.exec(url.pathname);
+    if (via !== null) {
+      if (!routes.has(Number(via[1]))) { request.resume(); return send(404, "no such route"); }
+      return forward(request, response, Number(via[1]), `${via[2]}${url.search}`);
+    }
     if (request.method === "POST") {
       if (request.headers["x-moe-token"] !== token) { request.resume(); return send(403, "refused"); }
       const chunks = [];
@@ -146,6 +157,22 @@ function serve(directory, parameters, log, port, token) {
   });
   const result = () => results.length > 0 ? Promise.resolve(results.shift()) : new Promise(resolve => waiting.push(resolve));
   return new Promise(resolve => server.listen(port, "127.0.0.1", () => resolve({ server, port: server.address().port, result })));
+}
+
+/** A request forwarded unchanged to a loopback port the wallet check routes (`/via/<port>/`): its method, path, body
+ * and the headers a client sends; the answer's status, type, encoding and body come back as they are. */
+function forward(request, response, port, path) {
+  const headers = Object.fromEntries(["authorization", "content-type", "content-length", "content-encoding", "accept-encoding"]
+    .filter(name => request.headers[name] !== undefined).map(name => [name, request.headers[name]]));
+  const onward = httpRequest({ host: "127.0.0.1", port, path, method: request.method, headers }, answer => {
+    response.writeHead(answer.statusCode, { ...Object.fromEntries(["content-type", "content-encoding", "content-length"]
+      .filter(name => answer.headers[name] !== undefined).map(name => [name, answer.headers[name]])),
+      "cache-control": "no-store", "cross-origin-resource-policy": "same-origin" });
+    answer.pipe(response);
+  });
+  onward.on("error", () => response.destroy());
+  response.on("close", () => onward.destroy());
+  request.pipe(onward);
 }
 
 /** On Linux, the summed resident memory of `pid` and its descendants, in bytes, from /proc; undefined elsewhere. */
@@ -190,6 +217,30 @@ async function devtools(endpoint, onEvent) {
   return { send, close: () => socket.close() };
 }
 
+/** One command through the page's `moeCommand`, once the page defines it; bytes cross the protocol as base64. */
+async function pageCommand(connection, sessionId, request) {
+  const encode = bytes => Buffer.from(bytes).toString("base64");
+  const sent = { ...request, ...(request.files === undefined ? {} : { files: Object.fromEntries(Object.entries(request.files).map(([path, bytes]) => [path, encode(bytes)])) }),
+    ...(request.stdin === undefined ? {} : { stdin: encode(request.stdin) }) };
+  const expression = `(async () => {
+    while (typeof moeCommand !== "function") await new Promise(r => setTimeout(r, 50));
+    const bytes = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
+    const text = data => { let s = ""; for (let i = 0; i < data.length; i += 8192) s += String.fromCharCode(...data.subarray(i, i + 8192)); return btoa(s); };
+    const request = ${JSON.stringify(sent)};
+    if (request.files) request.files = Object.fromEntries(Object.entries(request.files).map(([path, data]) => [path, bytes(data)]));
+    if (request.stdin) request.stdin = bytes(request.stdin);
+    const result = await moeCommand(request);
+    // Whether any of the seed stays in the page after the command: its buffer is transferred to the worker.
+    // A transferred buffer is detached: its view reads as empty.
+    const stdinLeft = request.stdin === undefined ? null : request.stdin.byteLength === 0 ? 0 : request.stdin.byteLength + request.stdin.reduce((sum, byte) => sum + byte, 0);
+    return JSON.stringify({ ...result, stdinLeft, files: Object.fromEntries(Object.entries(result.files ?? {}).map(([path, data]) => [path, data === null ? null : text(data)])) });
+  })()`;
+  const evaluated = await connection.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId);
+  if (evaluated.exceptionDetails !== undefined) throw new Error(`browser check: the page's command failed: ${JSON.stringify(evaluated.exceptionDetails)}`);
+  const result = JSON.parse(evaluated.result.value);
+  return { ...result, files: Object.fromEntries(Object.entries(result.files).map(([path, data]) => [path, data === null ? null : Buffer.from(data, "base64")])) };
+}
+
 const within = (promise, minutes) => Promise.race([promise,
   new Promise((_, reject) => setTimeout(() => reject(new Error(`browser check: no result within ${minutes} minutes`)), minutes * 60_000).unref())]);
 
@@ -203,14 +254,18 @@ async function main() {
     build.onResolve({ filter: /^node:(os|child_process)$/ }, () => ({ path: join(root, "scripts/browser/test-modules.mjs") }));
   } };
   const entry = options.check, extra = entry === "suites" && !options.serve ? ["isolation"] : entry === "files" && !options.serve ? ["crash"] : [];
-  const { code } = await bundle([entry, ...extra].map(name => ({ in: join(root, `scripts/browser/${name}.mjs`), out: name })), out, [shim]);
+  // The wallet check's command worker is the library's behind the loopback route (wallet-worker.mjs), beside the page.
+  const entries = entry === "wallet" ? [{ in: join(root, "scripts/browser/wallet-worker.mjs"), out: "command" }]
+    : [entry, ...extra].map(name => ({ in: join(root, `scripts/browser/${name}.mjs`), out: name }));
+  const { code } = await bundle(entries, out, [shim]);
   log({ built: [entry, ...extra], code, seconds: (Date.now() - started) / 1000 });
-  if (entry === "proofs" && !existsSync(join(options.parameters, "bn254_g1.dat"))) {
+  if ((entry === "proofs" || entry === "wallet") && !existsSync(join(options.parameters, "bn254_g1.dat"))) {
     throw new Error(`browser check: no proving parameters in ${options.parameters}; run scripts/pool/prepare-crs.mjs`);
   }
 
-  const { server, port, result } = await serve(out, options.parameters, log, options.port, token);
+  const routes = new Set(), { server, port, result } = await serve(out, options.parameters, log, options.port, token, routes);
   const address = (path, name) => `http://127.0.0.1:${port}${path}?t=${token}#${name}`;
+  if (options.serve && entry === "wallet") throw new Error("browser check: --wallet drives the page itself; it is not served to another browser");
   if (options.serve) {
     log(`open ${address("/", entry)} in the browser to measure (a phone: adb reverse tcp:${port} tcp:${port})`);
     try {
@@ -252,8 +307,18 @@ async function main() {
     const idle = treeRss(browser.pid);
     let peak = idle;
     const sampler = setInterval(() => { const rss = treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
-    await connection.send("Page.navigate", { url: address("/", entry) }, sessionId);
-    const outcome = await within(Promise.race([resultOf(entry), crashed]), 25).finally(() => clearInterval(sampler));
+    let outcome;
+    if (entry === "wallet") {
+      await connection.send("Page.navigate", { url: `http://127.0.0.1:${port}/wallet.html` }, sessionId);
+      await connection.send("Runtime.enable", {}, sessionId);
+      const command = request => pageCommand(connection, sessionId, request);
+      const { drill } = await import("./wallet-drill.mjs");
+      const drilled = drill({ command, route: routed => routes.add(routed), log, parameters: options.parameters, root });
+      outcome = await within(Promise.race([drilled.catch(error => ({ error: error.stack ?? String(error) })), crashed]), 25).finally(() => clearInterval(sampler));
+    } else {
+      await connection.send("Page.navigate", { url: address("/", entry) }, sessionId);
+      outcome = await within(Promise.race([resultOf(entry), crashed]), 25).finally(() => clearInterval(sampler));
+    }
     let isolation, crashes;
     if (entry === "files") {
       await connection.send("Page.navigate", { url: `http://127.0.0.1:${port}/crash?t=${token}` }, sessionId);
@@ -314,6 +379,10 @@ function judge(report, log) {
       failures.push(`two workers mounting an empty pool: ${JSON.stringify(races)}`);
     }
     log({ crash: { written: write.files, reopened: reopen.files, kept: reopen.kept, second: second.code, race: races.map(r => r.mounted ? "mounted" : r.code), ms: { write: write.ms, reopen: reopen.ms } } });
+  }
+  if (report.check === "wallet" && !report.error) {
+    if ((report.checks?.length ?? 0) !== 6) failures.push(`the wallet drill ran ${report.checks?.length ?? 0} of 6 checks`);
+    log({ checks: report.checks, commands: report.commands });
   }
   if (report.check === "proofs" && !report.error) {
     const c = report.checks;

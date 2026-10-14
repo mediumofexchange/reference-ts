@@ -89,7 +89,7 @@ describe("real-proof groups", () => {
     "recovery-store-check.mjs", "recovery-store-check.mjs --ergo", "succession-store-check.mjs", "succession-store-check.mjs --ergo",
     "scope-store-check.mjs", "scope-store-check.mjs --ergo", "redemption-store-check.mjs", "redemption-store-check.mjs --ergo",
     "command-drill.mjs", "succinct-drill.mjs", "local-check.mjs", "check-set-check.mjs",
-  ].map(label => `scripts/pool/v3/${label}`).concat(["scripts/browser/check.mjs --proofs"]);
+  ].map(label => `scripts/pool/v3/${label}`).concat(["scripts/browser/check.mjs --proofs", "scripts/browser/check.mjs --wallet"]);
 
   it("runs every script of the serial check once, each in one group", () => {
     expect(runner.SCRIPTS.map(entry => [entry.script, ...entry.args].join(" "))).toEqual(serial);
@@ -97,9 +97,9 @@ describe("real-proof groups", () => {
     for (const group of runner.GROUPS) expect(runner.SCRIPTS.some(entry => entry.group === group)).toBe(true);
   });
 
-  it("collects the fourteen reports CI retained, and the gate counts each re-recorded one as unread", () => {
+  it("collects the fifteen reports CI retained, and the gate counts each re-recorded one as unread", () => {
     const reports = runner.SCRIPTS.flatMap(entry => entry.reports);
-    expect(new Set(reports).size).toBe(14);
+    expect(new Set(reports).size).toBe(15);
     for (const report of reports.filter(path => path.startsWith("docs/"))) {
       expect(gate.compareTrees(tree({ [report]: blob(A) }), tree({ [report]: blob(B) })).skippable).toBe(true);
     }

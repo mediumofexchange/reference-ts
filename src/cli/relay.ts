@@ -30,7 +30,7 @@ import { VenueError } from "../venue-error.js";
 import { CommandError, event, flag, fresh, integer, openDirectory, parseArguments, pause, pollMs, print, readJson, readSecret, required, UsageError,
   writeExclusive, writeReplace, type Directory } from "./common.js";
 import { constructions } from "./construction.js";
-import { initRole, unanswered } from "./reader.js";
+import { initRole, unanswered } from "./read.js";
 import { closeListener, listenerFile, listenLoopback, serialized, SERVE_FLAGS, serveFlags, tokenFile, untilStopped } from "./serve.js";
 import { freshFunding, fundingTree, openPublisher, openView, publisherStore, requireVenue, type SpendBudget, type View } from "./venue.js";
 
