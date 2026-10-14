@@ -16,7 +16,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import type { Construction } from "../pool/v3/construction.js";
 import type { Commitment } from "../venue-records.js";
 import { busy } from "../pool/v3/replay-store.js";
-import { declared, isConstructionName, type ConstructionName } from "./construction.js";
+import { declared, DEFAULT_CONSTRUCTION, isConstructionName, type ConstructionName } from "./construction.js";
 
 export const ROLES = Object.freeze(["wallet", "operator", "reader", "relay"] as const);
 export type Role = (typeof ROLES)[number];
@@ -137,6 +137,8 @@ export interface Config {
   readonly spendBudgetNanoErg?: string;
   /** The construction the directory serves (slice 14 M14g4); absent in a directory made before the choice: pool-v3. */
   readonly construction?: ConstructionName;
+  /** `succinct` where a pool-v3 holder's or reader's reads are succinct (succinct-read.md, slice 38); absent: complete. */
+  readonly read?: "succinct";
 }
 const CONFIG = "config.json";
 
@@ -151,7 +153,9 @@ function readConfig(directory: string): Config {
       !config.nodes.every(node => typeof node === "string" && /^https?:\/\/[^\s]+$/.test(node)) ||
       (config.spendBudgetNanoErg !== undefined && !(typeof config.spendBudgetNanoErg === "string" && /^(0|[1-9][0-9]{0,18})$/.test(config.spendBudgetNanoErg))) ||
       (config.construction !== undefined && !isConstructionName(config.construction)) ||
-      Object.keys(parsed).some(key => !["role", "nodes", "spendBudgetNanoErg", "construction"].includes(key))) {
+      (config.read !== undefined && !(config.read === "succinct" && (config.role === "wallet" || config.role === "reader") &&
+        (config.construction ?? DEFAULT_CONSTRUCTION) === "moe/pool/v3")) ||
+      Object.keys(parsed).some(key => !["role", "nodes", "spendBudgetNanoErg", "construction", "read"].includes(key))) {
     throw new CommandError("INVALID", "config.json is not a moe directory configuration");
   }
   return config as Config;
@@ -162,6 +166,8 @@ export interface Directory {
   readonly path: string;
   readonly config: Config;
   readonly construction: Construction;
+  /** Whether its reads are succinct (`config.read`). */
+  readonly succinct: boolean;
   file(name: string): string;
 }
 
@@ -208,7 +214,7 @@ function lock(path: string): void {
 const held: DatabaseSync[] = [];
 
 function directory(path: string, config: Config): Directory {
-  return Object.freeze({ path, config, construction: declared(config), file: (name: string) => join(path, name) });
+  return Object.freeze({ path, config, construction: declared(config), succinct: config.read === "succinct", file: (name: string) => join(path, name) });
 }
 
 function absolute(path: string): string {
