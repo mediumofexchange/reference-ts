@@ -5,7 +5,7 @@
 // selections are kept in that file. A reader authenticates everything it keeps and judges at its own index, as with any
 // source (pool-v3 §14).
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { compareBytes, copyBytes } from "../../bytes.js";
+import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { POOL_V3, type Construction } from "./construction.js";
 import { EvidenceStore, formServes, type EvidenceBatch, type StoredTrail, type TrailForm } from "./evidence-store.js";
@@ -75,17 +75,31 @@ export class V3Replica implements V3EvidenceSource {
   readonly #walks = new Map<string, readonly { readonly position: bigint; readonly evidence: Uint8Array; readonly walk: CoverWalk }[]>();
 
   /** The served trails of the selections this replica's own read kept: for each, every snapshot its directory names, by
-   * its segment and chain value. A trail a supplier's answer alone brought (a fork, a lengthened trail) is none of them. */
+   * its segment and chain value; and back from each segment, the trail of the checkpoint each scoped entry's opening
+   * names (the earlier segment it imports, pool-v3 §8), so a segment a rescope or a succession left behind stays
+   * covered. All are named by commitments the operator signed: a trail a supplier's answer alone brought (a fork, a
+   * lengthened trail) is none of them. */
   #selectedTrails(batch: EvidenceBatch): StoredTrail[] {
     const construction = this.#evidence.construction, trails = new Map<string, StoredTrail>();
-    for (const served of this.#selections.values()) {
-      for (const entry of batch.directory(served.selection.root) ?? []) {
+    const named: { readonly root: Uint8Array; readonly backing?: Uint8Array }[] = [...this.#selections.values()].map(served => ({ root: served.selection.root }));
+    const roots = new Set<string>();
+    for (let next = named.pop(); next !== undefined; next = named.pop()) {
+      const key = `${bytesToHex(next.root)}:${next.backing === undefined ? "" : bytesToHex(next.backing)}`;
+      if (roots.has(key)) continue;
+      roots.add(key);
+      for (const entry of batch.directory(next.root) ?? []) {
+        if (next.backing !== undefined && !same(entry.name, next.backing)) continue;
         const bytes = batch.snapshot(entry.digest);
         if (bytes === undefined) continue;
-        let snapshot;
-        try { snapshot = construction.reader.snapshot.decode(bytes); } catch { continue; }
+        let snapshot, header;
+        try { snapshot = construction.reader.snapshot.decode(bytes); } catch (error) { if (error instanceof EncodingError) continue; throw error; }
         const trail = batch.trail(snapshot.segment, snapshot.evidenceHash);
-        if (trail !== undefined) trails.set(`${bytesToHex(snapshot.segment)}:${bytesToHex(snapshot.evidenceHash)}`, trail);
+        if (trail === undefined) continue;
+        const id = `${bytesToHex(snapshot.segment)}:${bytesToHex(snapshot.evidenceHash)}`;
+        if (trails.has(id)) continue;
+        trails.set(id, trail);
+        try { header = construction.reader.header.decodeSegmentHeader(trail.header); } catch (error) { if (error instanceof EncodingError) continue; throw error; }
+        for (const scoped of header.entries) if (scoped.opening !== undefined) named.push({ root: scoped.opening.root, backing: scoped.backing });
       }
     }
     // Each segment's furthest first, so a shorter one it reaches is walked with it.
@@ -144,6 +158,11 @@ export class V3Replica implements V3EvidenceSource {
         if (position !== after + BigInt(done.read)) throw new Error("a walk's position and its records read disagree");
         this.#walks.set(key, [{ position, evidence: value, walk: done.walk }, ...walks.filter(kept => kept !== from)].slice(0, WALKS));
         proved += done.proved; made += done.made; read += done.read; stopped = done.stopped;
+      }
+      // A whole round walked every segment it proves: the positions of segments it no longer proves are dropped.
+      if (!stopped) {
+        const prefix = `${bytesToHex(own)}:`, live = new Set(walked.map(trail => `${prefix}${bytesToHex(trail.segment)}`));
+        for (const key of [...this.#walks.keys()]) if (key.startsWith(prefix) && !live.has(key)) this.#walks.delete(key);
       }
     } finally { batch.release(); }
     return { trails: walked.length, proved, made, read, stopped };
