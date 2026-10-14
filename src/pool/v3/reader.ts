@@ -342,7 +342,7 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
     const state = resumed ?? openSegmentState(store, snapshot.segment, identity, imported, construction);
     // The records replay reaches, past a resumed tip whose records were established when they were replayed.
     const checked = checks === undefined ? verifier : await checks.establish(trail, state.position,
-      store.provedCount(state.ns, state.position), isOpening ? [] : block, verifier);
+      store.provedCount(state.ns, state.position), isOpening ? [] : block, verifier, state.evidence);
     if (!isOpening) requireReplay(trail.length >= BigInt(block.length), "ADOPTION");
     // Records are read from the reader's own storage one at a time, their proofs started ahead where the verifier runs off this thread.
     const ahead = verifyAhead(checked, trail.records(state.position), state.position, block);

@@ -293,28 +293,28 @@ async function partition(set: CheckSet, supply: CheckSupply, digests: Uint8Array
 /** Pass 1 of an establishment (§3.4 steps 1–2) over a trail's records after position `from`: each proved record's leaf
  * digest, kind, `proofHash`, position and chain value there, and whether its `proofHash` is the adopted publication's at its position
  * (`block`), in flat arrays sized by the records; and the kind-7 proofs to fetch for their length. */
-function provedRecords(trail: ServedTrailOf, from: bigint, block: readonly Adopted[]) {
+function provedRecords(trail: ServedTrailOf, from: bigint, block: readonly Adopted[], start: Uint8Array | undefined) {
   // At most one proved record a record after `from`, each in flat arrays: about 107 bytes, plus 32 while its spans are asked.
   const records = trail.length - from;
   if (records < 0n || records > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("a trail past the safe integer range");
   const capacity = Number(records), digests = new Uint8Array(32 * capacity), hashes = new Uint8Array(32 * capacity);
   const kinds = new Uint8Array(capacity), adopted = new Uint8Array(capacity), positions = new BigUint64Array(capacity), chains = new Uint8Array(32 * capacity);
   const requests: { readonly proofHash: Uint8Array; readonly at: RecordAt }[] = [];
-  // Each record's chain value, carried forward from the trail's value at `from`: a fetch names the one record it fixes.
-  let position = from, m = 0, chain = trail.evidence(from);
-  if (chain === undefined) throw new Error("a served trail without its chain value at its tip");
+  // Each record's chain value, carried forward from the trail's value at `from` (`start`; none where nothing is fetched):
+  // a fetch names the one record it fixes.
+  let position = from, m = 0, chain = start;
   for (const bytes of trail.records(from)) {
     const at = block[Number(position)];
     position++;
     const record = decodeProofFree(bytes);
-    chain = POOL_V3.nextEvidence(chain, proofFreeDigests(record), position);
+    if (chain !== undefined) chain = POOL_V3.nextEvidence(chain, proofFreeDigests(record), position);
     // A record whose proofHash is the adopted publication's has the length of the proof the reader holds (§3.5).
     const held = at !== undefined && same(record.proofHash, decodeProofFree(at.bytes).proofHash);
-    if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position, evidence: chain } }); continue; }
+    if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position, evidence: chain! } }); continue; }
     if (!provedKind(record.kind)) continue;
     if (m === capacity) throw new Error("a served trail holding more records than its length");
     digests.set(fieldToBytes(leafDigest(record)), 32 * m); hashes.set(record.proofHash, 32 * m);
-    kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; chains.set(chain, 32 * m); m++;
+    kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; if (chain !== undefined) chains.set(chain, 32 * m); m++;
   }
   return { capacity, m, digests, hashes, kinds, adopted, positions, chains, requests };
 }
@@ -383,7 +383,8 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
     if (latest.length <= trail.length) return undefined;
     const top = latest.evidence(latest.length);
     if (top === undefined) return undefined;
-    const wide = provedRecords(latest, from, block);
+    // Its records are only asked about, never fetched: no chain values.
+    const wide = provedRecords(latest, from, block, undefined);
     const found = await partition(set, supply, wide.digests, wide.kinds, start, wide.m);
     const made = { start, digests: wide.digests.slice(0, 32 * wide.m), found, top: copyBytes(top) };
     partitions.set(latest, made);
@@ -394,9 +395,9 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
   const partitions = new WeakMap<ServedTrailOf, Partition>();
 
   const trailChecks: TrailChecks = {
-    async establish(trail, from, proved, block, verifier) {
+    async establish(trail, from, proved, block, verifier, evidence) {
       // Pass 1 (§3.4 steps 1–2): each proved record's digest, kind and proofHash; kind-7 proofs to fetch for their length.
-      const { capacity, m, digests, hashes, kinds, adopted, positions, chains, requests } = provedRecords(trail, from, block);
+      const { capacity, m, digests, hashes, kinds, adopted, positions, chains, requests } = provedRecords(trail, from, block, copyBytes(evidence));
       const start = Number(proved);
       if (!Number.isSafeInteger(start + m)) throw new RangeError("a trail past the safe integer range");
       // §3.4: a record the segment's partition covered at its number, with its digest, is covered, and one it asked about
@@ -437,7 +438,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       return replayCheck;
     },
     async served(trail, block, verifier) {
-      if (!servedTrails.has(servedKey(trail))) await trailChecks.establish(trail, 0n, 0n, block, verifier);
+      if (!servedTrails.has(servedKey(trail))) await trailChecks.establish(trail, 0n, 0n, block, verifier, trail.evidence(0n)!);
     },
   };
   /** Trails whose every length this construction has established, each by its segment and its chain value at its length,

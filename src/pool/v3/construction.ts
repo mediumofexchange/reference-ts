@@ -113,9 +113,9 @@ export interface Construction<R = unknown> {
  * read's authentication establishes them, and each proof's check, from a cover or natively. A record whose bytes equal
  * the adopted publication at its position (`block`, proof-free forms) has its length from the bytes the reader holds.
  * Throws `UnestablishedTrail` where a proof is withheld or does not decode; returns the verifier the replay's statement
- * checks ask. */
+ * checks ask. `evidence` is the trail's chain value at `from`, which the replayed state holds. */
 export interface TrailChecks {
-  establish(trail: ServedTrailOf, from: bigint, proved: bigint, block: readonly Adopted[], verifier: ProofCheck): Promise<ProofCheck>;
+  establish(trail: ServedTrailOf, from: bigint, proved: bigint, block: readonly Adopted[], verifier: ProofCheck, evidence: Uint8Array): Promise<ProofCheck>;
   /** The whole served trail's lengths, as the complete read's authentication has them before any refusal it grounds on
    * the trail's being served (a non-extension, an opening's records, a header-only refusal); once per trail. */
   served(trail: ServedTrailOf, block: readonly Adopted[], verifier: ProofCheck): Promise<void>;
