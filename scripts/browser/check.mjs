@@ -111,7 +111,7 @@ function treeRss(pid) {
   if (process.platform !== "linux") return undefined;
   const children = new Map();
   for (const name of readdirSync("/proc")) {
-    if (!/^d+$/.test(name)) continue;
+    if (!/^\d+$/.test(name)) continue;
     try {
       const stat = readFileSync(`/proc/${name}/stat`, "utf8"), parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
       children.set(parent, [...(children.get(parent) ?? []), Number(name)]);
@@ -120,7 +120,7 @@ function treeRss(pid) {
   let total = 0;
   for (const queue = [pid]; queue.length > 0;) {
     const next = queue.pop();
-    try { total += 1024 * Number(/VmRSS:s+(d+)/.exec(readFileSync(`/proc/${next}/status`, "utf8"))?.[1] ?? 0); } catch { /* gone */ }
+    try { total += 1024 * Number(/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${next}/status`, "utf8"))?.[1] ?? 0); } catch { /* gone */ }
     queue.push(...(children.get(next) ?? []));
   }
   return total;
