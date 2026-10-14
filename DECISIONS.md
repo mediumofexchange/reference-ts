@@ -36,6 +36,7 @@ as current instructions.
 
 ## Index
 
+- `2026-10-14` [Keep the browser host's database files on the origin's private file system, under the code and write-ahead logs Node keeps (slice 40, Next 12)](decisions/2026-10.md#2026-10-14--keep-the-browser-hosts-database-files-on-the-origins-private-file-system-under-the-code-and-write-ahead-logs-node-keeps-slice-40-next-12)
 - `2026-10-14` [Run the holder's read path in a browser engine over bundle-time substitutes for Node's built-ins, ahead of the native backend and the exhaustion half (slice 39, Next 12)](decisions/2026-10.md#2026-10-14--run-the-holders-read-path-in-a-browser-engine-over-bundle-time-substitutes-for-nodes-built-ins-ahead-of-the-native-backend-and-the-exhaustion-half-slice-39-next-12)
 - `2026-10-14` [Read succinctly through the commands: a wallet and a reader over proof-free evidence from covers a replica proves, and each segment partitioned once (slice 38, Next 12)](decisions/2026-10.md#2026-10-14--read-succinctly-through-the-commands-a-wallet-and-a-reader-over-proof-free-evidence-from-covers-a-replica-proves-and-each-segment-partitioned-once-slice-38-next-12)
 - `2026-10-14` [Ask the source that answered last first and drop a lying one, refuse a trail form a source's construction lacks, establish trails in flat arrays, and prove CI's covers as a replica does (audit 34)](decisions/2026-10.md#2026-10-14--ask-the-source-that-answered-last-first-and-drop-a-lying-one-refuse-a-trail-form-a-sources-construction-lacks-establish-trails-in-flat-arrays-and-prove-cis-covers-as-a-replica-does-audit-34)

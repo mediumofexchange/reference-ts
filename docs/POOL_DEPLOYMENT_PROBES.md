@@ -1267,8 +1267,35 @@ cross-origin isolation Poseidon2 refuses to start, by name.
 
 **Limits.** CI runners, not phones: DevTools' CPU throttling is refused for workers, where every check runs, so no
 throttled run stands in for a device, and `check.mjs --serve` is the route to a phone's rates. Memory databases only:
-no kept replay or evidence file, no wallet store and no durability in the browser yet. One genuine proof per kind;
+no kept replay or evidence file, no wallet store and no durability in the browser then ([slice 40](#the-holders-files-in-a-browser-engine-slice-40) adds them). One genuine proof per kind;
 one spend shape.
+
+## The holder's files in a browser engine (slice 40)
+
+Measured 2026-10-14 in headless Chromium 141 on a 4-vCPU cloud container (Intel Xeon @ 2.10 GHz), `scripts/browser/check.mjs
+--files` ([decision](../decisions/2026-10.md#2026-10-14--keep-the-browser-hosts-database-files-on-the-origins-private-file-system-under-the-code-and-write-ahead-logs-node-keeps-slice-40-next-12)).
+*Probe:* SQLite's own OPFS pool VFS kept a write-ahead log only under exclusive locking, recovered 1,000 committed rows
+after its worker was ended holding an uncheckpointed log, and refused a second worker; the reference's pool
+(`src/browser/files.ts`) carries node:fs and SQLite over the same files instead.
+
+*Suites:* the replay-store, evidence-store, wallet and wallet-backup suites and the pool's own cases ran with the pool
+mounted: 76 tests passing, the 17 kept-file tests among them, and one skipping (it needs `vi.mock`'s module registry).
+Each test left no file named or open; at most 39 members were in use at once (two wallets and an operator journal).
+
+*A crash:* a worker kept a replay file through a walk of 300 records, then appended in a second walk until its
+transaction spilled one uncommitted 4,120-byte frame into the log, and was ended. A new worker mounted the pool in
+0.10 s and reopened the file through the digest check in 0.05 s, at the keep point's tip; a third worker's mount, and
+the second of two racing on a new pool, were refused (EBUSY).
+
+| On one host | Browser (OPFS) | Node (disk) |
+|---|---:|---:|
+| Append 300 records in a kept walk | 1.07 s | 0.90–1.02 s |
+| Its keep point (digest, log moved in) | 24 ms | 13–15 ms |
+| Reopen through the digest check | 51 ms | 6–7 ms |
+
+The records' own work dominates; the browser's files add little to a walk. **Limits.** Chromium only; ending a worker
+loses no write the browser accepted, so no run stands in for a device's power loss (the torn-header and stopped-rename
+cases are simulated); one run per figure.
 
 ## Invalid-checkpoint evidence
 

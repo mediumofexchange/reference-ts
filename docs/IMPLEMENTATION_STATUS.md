@@ -129,8 +129,11 @@ real-proof group) drives a succinct holder, shop and reader from such a replica
 The holder's read path also runs in a browser engine (slice 39, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)):
 `scripts/browser/build.mjs` bundles the library with `src/browser/`'s substitutes for node:sqlite (SQLite's
 WebAssembly build, memory databases), node:crypto and node:fs; `npm run check:browser` holds them to Node and runs ten
-suites in headless Chromium, and CI's `browser` real-proof group verifies and proves there. No database file, wallet
-store or command runs there yet.
+suites in headless Chromium, and CI's `browser` real-proof group verifies and proves there. Database files live there
+too (slice 40, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-files-in-a-browser-engine-slice-40)): a file pool on the
+origin's private file system serves node:fs and SQLite (`src/browser/files.ts`, `sqlite-files.ts`), so the kept replay,
+evidence and wallet files run their Node code there (`check.mjs --files`). No wallet flow, command or user interface
+runs there yet.
 
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
