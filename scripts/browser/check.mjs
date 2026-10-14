@@ -29,7 +29,7 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>moe browser check</tit
 const token = new URLSearchParams(location.search).get("t");
 const worker = new Worker(new URL(location.hash.slice(1) + ".js?t=" + token, location.href), { type: "module" });
 const post = body => fetch("/result", { method: "POST", headers: { "content-type": "application/json", "x-moe-token": token }, body: JSON.stringify(body) });
-worker.onerror = event => post({ error: "the worker failed: " + (event.message || "it did not start") + " " + (event.filename || "") + ":" + (event.lineno || "") });
+worker.onerror = event => post({ kind: location.hash.slice(1), error: "the worker failed: " + (event.message || "it did not start") + " " + (event.filename || "") + ":" + (event.lineno || "") });
 worker.onmessage = async event => {
   const id = event.data && event.data.measure;
   if (id === undefined) return;
@@ -141,14 +141,14 @@ function treeRss(pid) {
 }
 
 /** A DevTools protocol connection over the browser's own endpoint, with flattened sessions. */
-async function devtools(endpoint) {
+async function devtools(endpoint, onEvent) {
   const socket = new WebSocket(endpoint);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = () => reject(new Error("browser check: no DevTools connection")); });
   let next = 0;
   const pending = new Map();
   socket.onmessage = event => {
     const message = JSON.parse(event.data);
-    if (message.id === undefined) return;
+    if (message.id === undefined) { onEvent(message); return; }
     const waiter = pending.get(message.id);
     pending.delete(message.id);
     if (message.error) waiter?.reject(Object.assign(new Error(message.error.message), { code: message.error.code }));
@@ -203,19 +203,29 @@ async function main() {
       await new Promise(r => setTimeout(r, 100));
     }
     const [devPort, path] = readFileSync(portFile, "utf8").split("\n");
-    connection = await devtools(`ws://127.0.0.1:${devPort}${path}`);
+    // A crashed page posts nothing: its check fails at once rather than after the wait.
+    let crash;
+    const crashed = new Promise((_, reject) => { crash = method => reject(new Error(`browser check: the page crashed (${method})`)); });
+    crashed.catch(() => {});
+    connection = await devtools(`ws://127.0.0.1:${devPort}${path}`, message => {
+      if (message.method === "Inspector.targetCrashed" || message.method === "Target.targetCrashed") crash(message.method);
+    });
     const version = await connection.send("Browser.getVersion");
+    await connection.send("Target.setDiscoverTargets", { discover: true });
     const { targetId } = await connection.send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await connection.send("Target.attachToTarget", { targetId, flatten: true });
+    await connection.send("Inspector.enable", {}, sessionId);
+    // Each page's own result: a late post from an earlier page is set aside, not taken for this one's.
+    const resultOf = async kind => { for (;;) { const posted = await result(); if (posted.kind === kind) return posted; log({ setAside: posted }); } };
     const idle = treeRss(browser.pid);
     let peak = idle;
     const sampler = setInterval(() => { const rss = treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
     await connection.send("Page.navigate", { url: address("/", entry) }, sessionId);
-    const outcome = await within(result(), 25).finally(() => clearInterval(sampler));
+    const outcome = await within(Promise.race([resultOf(entry), crashed]), 25).finally(() => clearInterval(sampler));
     let isolation;
     if (extra.length > 0) {
       await connection.send("Page.navigate", { url: address("/plain/", "isolation") }, sessionId);
-      isolation = await within(result(), 5);
+      isolation = await within(Promise.race([resultOf("isolation"), crashed]), 5);
     }
     const report = { check: entry, browser: version.product, userAgent: version.userAgent, platform: process.platform,
       ...(idle === undefined ? {} : { browserRssBytes: { idle, peak } }), code, seconds: (Date.now() - started) / 1000, ...outcome,

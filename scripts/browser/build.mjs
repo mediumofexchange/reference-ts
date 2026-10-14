@@ -8,7 +8,7 @@
 //
 // Usage: node scripts/browser/build.mjs [--out <directory>]   (default dist-browser/)
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -75,17 +75,19 @@ function codeName(metafile, settings) {
   const hash = createHash("sha256").update("moe-browser-code");
   const add = part => { const bytes = typeof part === "string" ? Buffer.from(part) : part; hash.update(`${bytes.length}:`).update(bytes); };
   add(esbuild.version);
-  add(JSON.stringify(settings, (key, value) => key === "plugins" ? value.map(plugin => plugin.name) : value));
+  // Paths by repository path, so the same sources name the same code wherever they are checked out.
+  const portable = value => typeof value === "string" && resolve(value) === value ? relative(root, value).split(sep).join("/") : value;
+  add(JSON.stringify(settings, (key, value) => key === "plugins" ? value.map(plugin => plugin.name) : portable(value)));
   for (const input of Object.keys(metafile.inputs).sort()) { add(input.split(sep).join("/")); add(readFileSync(resolve(root, input))); }
   for (const asset of ASSETS) { add(relative(root, asset).split(sep).join("/")); add(readFileSync(asset)); }
   return hash.digest("hex");
 }
 
-/** A directory this script made, which it may empty again: absent, or holding its marker. */
+/** A directory this script may fill, emptying it first: absent, empty, or holding its marker. */
 const MARKER = ".moe-browser-build";
 function claim(outdir) {
-  if (existsSync(outdir) && !existsSync(join(outdir, MARKER))) {
-    throw new Error(`browser build: ${outdir} exists and was not made by this build; name an empty or new directory`);
+  if (existsSync(outdir) && readdirSync(outdir).length > 0 && !existsSync(join(outdir, MARKER))) {
+    throw new Error(`browser build: ${outdir} holds files this build did not make; name an empty or new directory`);
   }
   rmSync(outdir, { recursive: true, force: true });
   mkdirSync(outdir, { recursive: true });

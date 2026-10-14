@@ -61,6 +61,13 @@ describe.skipIf(BROWSER_HOST)("the browser host's node:sqlite against node:sqlit
       tooMany: outcome(() => db.prepare("SELECT ? AS a").get(1n, 2n)),
       empty: outcome(() => db.prepare("")),
       blank: outcome(() => db.prepare("  ;")),
+      numberedKeys: outcome(() => db.prepare("SELECT ?1 AS a, ?2 AS b").get({ 1: 5n, "?2": 6n })),
+      numberedConflict: outcome(() => db.prepare("SELECT ?1 AS a, :1 AS b").get({ 1: 5n })),
+      sqlNumber: outcome(() => db.prepare(5 as never)),
+      execNumber: outcome(() => db.exec(5 as never)),
+      readBigIntsString: outcome(() => db.prepare("SELECT 1 AS one").setReadBigInts("yes" as never)),
+      bigBind: outcome(() => db.prepare("SELECT ? AS a").get(1n << 70n)),
+
     }));
     expect(seen[1]).toEqual(seen[0]);
   });
@@ -109,8 +116,13 @@ describe.skipIf(BROWSER_HOST)("the browser host's node:sqlite against node:sqlit
       const one = running.next();
       const other = statement.get(Uint8Array.of(2));
       const invalidated = outcome(() => running.next());
+      const again = outcome(() => running.next());
       const fresh = [...statement.iterate(Uint8Array.of(1))];
-      return { first, head, after, one, other, invalidated, fresh };
+      db.exec("CREATE TABLE big (n INTEGER); INSERT INTO big VALUES (1), (9223372036854775807), (3)");
+      const past = db.prepare("SELECT n FROM big ORDER BY rowid").iterate();
+      const overflow = [outcome(() => past.next()), outcome(() => past.next()), outcome(() => past.next()), outcome(() => past.next())];
+      return { first, head, after, one, other, invalidated, again, fresh, overflow };
+
     });
     expect(seen[1]).toEqual(seen[0]);
   });
@@ -139,17 +151,30 @@ describe("the browser host's database files", () => {
     expect(() => new BrowserDatabase("wallet.db")).toThrow(expect.objectContaining({ code: "ERR_SQLITE_ERROR", errcode: 14, message: "a browser host keeps no database files: wallet.db" }));
   });
 
-  it("finalizes a statement no wrapper reaches, as node:sqlite does, so a walk's prepares do not accumulate", async () => {
-    setFlagsFromString("--expose-gc");
-    const gc = runInNewContext("gc") as () => void, turn = () => new Promise(resolve => setTimeout(resolve, 0));
+  it("holds SQLite statements by execution, not by statement object, so a walk that never yields does not accumulate them", async () => {
     const db = new BrowserDatabase(":memory:");
-    // SQLite's own count of the connection's prepared statements (the WebAssembly build has the sqlite_stmt table).
+    // SQLite's own count of the connection's compiled statements (the WebAssembly build has the sqlite_stmt table).
     const live = (): number => (db.prepare("SELECT count(*) AS c FROM sqlite_stmt").get() as { c: number }).c;
     const kept = db.prepare("SELECT 7 AS seven");
+    // As a walk does: a statement object a record, no turn of the event loop between them.
     for (let i = 0; i < 5000; i++) db.prepare("SELECT ? AS x").get(i);
-    expect(live()).toBeGreaterThan(1000);
-    for (let round = 0; round < 10 && live() > 10; round++) { gc(); await turn(); }
-    expect(live()).toBeLessThan(10);
+    expect(live()).toBeLessThanOrEqual(4);
+    // Many distinct texts stay within the idle bound.
+    for (let i = 0; i < 1000; i++) db.prepare(`SELECT ${i} AS x`).get();
+    expect(live()).toBeLessThanOrEqual(257);
+    // Two iterations of one text in flight at once hold a statement each; an abandoned one's is reset once collected.
+    const open = [db.prepare("SELECT ? AS x").iterate(1n), db.prepare("SELECT ? AS x").iterate(2n)];
+    expect(open.map(it => it.next())).toEqual([{ done: false, value: { x: 1 } }, { done: false, value: { x: 2 } }]);
+    expect(open.map(it => it.next())).toEqual([{ done: true, value: null }, { done: true, value: null }]);
+    const stepping = (): number => (db.prepare("SELECT count(*) AS c FROM sqlite_stmt WHERE busy").get() as { c: number }).c;
+    let abandoned: Iterator<unknown> | undefined = db.prepare("SELECT 8 AS eight UNION ALL SELECT 9").iterate();
+    abandoned.next();
+    const before = stepping();
+    abandoned = undefined;
+    setFlagsFromString("--expose-gc");
+    const gc = runInNewContext("gc") as () => void;
+    for (let round = 0; round < 10 && stepping() >= before; round++) { gc(); await new Promise(resolve => setTimeout(resolve, 0)); }
+    expect(stepping()).toBe(before - 1);
     expect(kept.get()).toEqual({ seven: 7 });
     db.close();
     expect(() => kept.get()).toThrow(expect.objectContaining({ code: "ERR_INVALID_STATE", message: "statement has been finalized" }));

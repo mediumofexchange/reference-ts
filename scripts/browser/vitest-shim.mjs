@@ -10,7 +10,14 @@ chai.use(JestExtend);
 chai.use(JestChaiExpect);
 chai.use(JestAsymmetricMatchers);
 
-export const expect = (value, message) => chai.expect(value, message);
+/** The running test, as vitest's `expect` records it: an unawaited `.rejects` or `.resolves` lands in its promises,
+ * which the runner awaits when the test ends, as vitest does. */
+let running;
+export const expect = (value, message) => {
+  const assertion = chai.expect(value, message);
+  if (running !== undefined) chai.util.flag(assertion, "vitest-test", running);
+  return assertion;
+};
 Object.assign(expect, chai.expect);
 expect.unreachable = message => chai.assert.fail(`expected${message ? ` "${message}" ` : " "}not to be reached`);
 
@@ -61,10 +68,13 @@ export async function run(report = () => {}) {
       const name = fullName(suite, t.name), started = performance.now();
       if (skip || t.skip) { const result = { name, state: "skip" }; results.push(result); report(result); continue; }
       let error;
+      running = { name, promises: [], onFinished: [] };
       try {
         for (const s of chain(suite)) for (const hook of s.hooks.beforeEach) await hook();
         await t.body?.();
-      } catch (caught) { error = caught; }
+        // Assertions left unawaited settle before the test ends, as under vitest.
+        while (running.promises.length > 0) await Promise.all([...running.promises]);
+      } catch (caught) { error = caught; } finally { running = undefined; }
       for (const s of chain(suite).reverse()) for (const hook of s.hooks.afterEach) { try { await hook(); } catch (caught) { error ??= caught; } }
       const result = { name, state: error === undefined ? "pass" : "fail", ms: Math.round(performance.now() - started),
         ...(error === undefined ? {} : { error: String(error?.stack ?? error) }) };
