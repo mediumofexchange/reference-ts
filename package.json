@@ -47,6 +47,7 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"for (const f of ['programs.json','check-set.json','check-set-programs.json']) require('node:fs').copyFileSync('src/pool/v3/'+f,'dist/pool/v3/'+f)\"",
+    "build:browser": "node scripts/browser/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -72,7 +73,8 @@
     "check:pool:v3-synthetic-node": "node scripts/pool/v3/synthetic-node-check.mjs",
     "check:pool:v3-transfer": "node scripts/pool/v3/testnet.mjs --check",
     "check:lit:commands": "node scripts/lit/command-drill.mjs",
-    "check:scripts": "npm run check:pool:v3-programs && npm run check:package && npm run check:ergo-persistence && npm run check:pool:v3-wallet && npm run check:pool:v3-journal && npm run check:pool:v3-service && npm run check:pool:v3-synthetic-node && npm run check:pool:v3-transfer && npm run check:lit:commands",
+    "check:browser": "vitest run --config vitest.browser-host.config.ts && node scripts/browser/build.mjs --out scratch/dist-browser && node scripts/browser/check.mjs --suites",
+    "check:scripts": "npm run check:pool:v3-programs && npm run check:package && npm run check:ergo-persistence && npm run check:pool:v3-wallet && npm run check:pool:v3-journal && npm run check:pool:v3-service && npm run check:pool:v3-synthetic-node && npm run check:pool:v3-transfer && npm run check:lit:commands && npm run check:browser",
     "check": "npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:scripts",
     "prepublishOnly": "npm run check"
   },
@@ -81,8 +83,12 @@
     "tag": "next"
   },
   "devDependencies": {
+    "@noble/ciphers": "1.3.0",
     "@noir-lang/noir_wasm": "1.0.0-beta.26",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build2",
     "@types/node": "^24.13.3",
+    "buffer": "6.0.3",
+    "esbuild": "0.28.2",
     "msgpackr": "1.12.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
