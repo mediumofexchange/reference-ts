@@ -10,7 +10,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bytesToHex as hex } from "@noble/hashes/utils.js";
+import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes, EncodingError } from "../../bytes.js";
 import {
   admittedReplacements, copyLimits, decodeRangeAnswer, heldCommitments, RangeLimitError, replacementChain, revocationIndex,
@@ -370,11 +370,13 @@ export async function replayTrail(context: ReplayContext, snapshot: Snapshot, tr
 let code: Uint8Array | undefined;
 /** The reader rules (§14 kept classes): the construction's specification revision (construction.ts `specification`)
  * and the implementation's own code, every file of the package's source or build tree by path and content. Any change
- * to either discards kept state. */
+ * to either discards kept state. The browser bundle's code is named when it is built, over every source it holds
+ * (slice 39, scripts/browser/build.mjs). */
 function replayRules(specification: string): Uint8Array {
   return sha256(identityFrame(["v3-replay-rules", specification, codeName()]));
 }
 function codeName(): Uint8Array {
+  if (code === undefined && typeof MOE_BROWSER_CODE === "string") code = hexToBytes(MOE_BROWSER_CODE);
   if (code === undefined) {
     const root = join(dirname(fileURLToPath(import.meta.url)), "..", ".."), hash = createHash("sha256");
     const add = (name: string, path: string): void => { hash.update(identityFrame([name, readFileSync(path)])); };

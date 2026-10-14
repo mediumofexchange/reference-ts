@@ -38,9 +38,11 @@ import { isField } from "./field.js";
 const WIDTH = 4;
 
 /** The WebAssembly binary inside the installed bb.js, where its own loader finds it by default: beside its Node build,
- * found from that build's `platform` export (dest/node/bb_backends/node/). */
-const PACKAGED_WASM = join(dirname(createRequire(import.meta.url).resolve("@aztec/bb.js/platform")), "../../barretenberg_wasm/barretenberg-threads.wasm.gz");
-const backend = await BarretenbergSync.new({ backend: BackendType.Wasm, threads: 1, wasmPath: PACKAGED_WASM });
+ * found from that build's `platform` export (dest/node/bb_backends/node/). In the browser bundle (slice 39) bb.js's
+ * browser build loads the binary it carries, and no environment can name another. */
+const PACKAGED_WASM = typeof MOE_BROWSER_CODE === "string" ? undefined
+  : join(dirname(createRequire(import.meta.url).resolve("@aztec/bb.js/platform")), "../../barretenberg_wasm/barretenberg-threads.wasm.gz");
+const backend = await BarretenbergSync.new({ backend: BackendType.Wasm, threads: 1, ...(PACKAGED_WASM === undefined ? {} : { wasmPath: PACKAGED_WASM }) });
 
 export type PermutationState = readonly [bigint, bigint, bigint, bigint];
 
