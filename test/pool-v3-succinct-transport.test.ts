@@ -9,7 +9,8 @@ import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { adoptedConfiguration, configurationHash } from "../src/pool/v3/configuration.js";
 import { POOL_V3, type Construction } from "../src/pool/v3/construction.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
-import type { SegmentHeader } from "../src/pool/v3/headers.js";
+import { segmentBytes, type SegmentHeader } from "../src/pool/v3/headers.js";
+import { encodeTrail } from "../src/pool/v3/trail.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { decodeProofFree, decodeRecord, encodeRecord, type Record } from "../src/pool/v3/records.js";
 import { serviceSupply, V3ServiceClient, V3ServiceClientError } from "../src/pool/v3/service-client.js";
@@ -166,18 +167,38 @@ describe("succinct transport (slice 37)", () => {
     const prover = { ...inner, leaf: async (record: Record) => { leaves++; return inner.leaf(record); } };
     // Stopped before its second record: the first leaf only.
     let asked = 0;
-    expect(await f.replica.prove(prover, { stop: () => asked++ >= 1 })).toMatchObject({ made: 1, stopped: true });
+    expect(await f.replica.prove(prover, { stop: () => asked++ >= 1 })).toMatchObject({ made: 1, read: 1, stopped: true });
     // The next walk reads only the record after it: its leaf and the node over the two.
-    expect(await f.replica.prove(prover)).toMatchObject({ trails: 1, proved: 2, made: 2, stopped: false });
+    expect(await f.replica.prove(prover)).toMatchObject({ trails: 1, proved: 2, made: 2, read: 1, stopped: false });
     expect(leaves).toBe(2);
     // Nothing new: no record is read again, so no leaf is asked for.
-    expect(await f.replica.prove(prover)).toMatchObject({ proved: 2, made: 0 });
+    expect(await f.replica.prove(prover)).toMatchObject({ proved: 2, made: 0, read: 0 });
     expect(leaves).toBe(2);
     // A new record: the walk goes on from the last one and proves its leaf alone (its node waits for a sibling).
     await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
     await f.mirror();
-    expect(await f.replica.prove(prover)).toMatchObject({ proved: 3, made: 1 });
+    expect(await f.replica.prove(prover)).toMatchObject({ proved: 3, made: 1, read: 1 });
     expect(leaves).toBe(3);
+  });
+
+  it("proves over the trails of its own kept selections only, never a fork a supplier's answer brought, and reads nothing again (review)", async () => {
+    const f = await fixture();
+    await f.j.submit(f.issue()); await f.checkpoint("c2");
+    await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
+    await f.mirror();
+    // A supplier's answer: the segment forked after its first record, two records no checkpoint commits.
+    const segment = f.replicaStore.keptTops()[0]!.segment, first = f.replicaStore.recordsAt(segment, 1n)[0]!;
+    const forked = encodeTrail({ header: segmentBytes(header), terms: [signed], records: [first, f.issue(output(51, 3n), 7), f.issue(output(52, 4n), 8)] });
+    expect(await f.replicaStore.take([{ trail: { after: undefined, size: BigInt(forked.length), chunks: (async function* () { yield forked; })() } }], operator)).toBe(true);
+    // The replica's next kept selection indexes every pending top, the fork's included.
+    await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
+    await f.mirror();
+    const inner = testProver(SET, verifier);
+    let leaves = 0;
+    const prover = { ...inner, leaf: async (record: Record) => { leaves++; return inner.leaf(record); } };
+    expect(await f.replica.prove(prover)).toMatchObject({ trails: 1, proved: 3, read: 3 });
+    expect(leaves).toBe(3);
+    expect(await f.replica.prove(prover)).toMatchObject({ read: 0, made: 0 });
   });
 
   it("serves a trail's records in their proof-free form, the same chain values in both forms, sized before its records", async () => {

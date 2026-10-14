@@ -475,11 +475,10 @@ export class EvidenceStore {
   // --- What a supplier answers a succinct reader's fetches from (succinct-read §§3.2, 3.5): unchecked here, since
   // each answer authenticates itself to its asker, who hashes or verifies it.
 
-  /** A replica's trail tops indexed under a selection it kept (its own read found it canonical), each segment's furthest
-   * first; not those a supplier's answer indexed and no kept selection took. None in a file that is not indexed. */
+  /** A replica's indexed trail tops, each segment's furthest first; none in a file that is not indexed. */
   keptTops(): TrailTip[] {
     if (!this.#indexed) return [];
-    return (this.#db.prepare("SELECT DISTINCT segment, evidence, position FROM served_top WHERE sequence IS NOT NULL ORDER BY segment, position DESC").all() as
+    return (this.#db.prepare("SELECT DISTINCT segment, evidence, position FROM served_top ORDER BY segment, position DESC").all() as
       { segment: Uint8Array; evidence: Uint8Array; position: bigint }[]).map(row => ({ segment: bytes(row.segment), position: BigInt(row.position),
       evidence: bytes(row.evidence) }));
   }

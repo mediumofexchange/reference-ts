@@ -8,13 +8,15 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { compareBytes, copyBytes } from "../../bytes.js";
 import { decodeCommitment, verifyCommitment } from "../../venue-records.js";
 import { POOL_V3, type Construction } from "./construction.js";
-import { EvidenceStore, formServes, type StoredTrail, type TrailForm } from "./evidence-store.js";
+import { EvidenceStore, formServes, type EvidenceBatch, type StoredTrail, type TrailForm } from "./evidence-store.js";
 import { fieldToBytes } from "../field.js";
 import type { V3EvidenceSource } from "./service-http.js";
 import { V3StoreError, type ServedEvidence, type ServedPackage } from "./store.js";
 import { coverTrail, proofAmong, type CoverWalk, type RecordAt, type SpanProver } from "./succinct.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
+/** Walk positions a replica keeps a segment: an operator's equivocation leaves at most a few forks among its own reads. */
+const WALKS = 4;
 const copied = (served: ServedPackage): ServedPackage => ({ selection: { ...served.selection, domain: copyBytes(served.selection.domain),
   venue: copyBytes(served.selection.venue), backing: copyBytes(served.selection.backing), operator: copyBytes(served.selection.operator),
   root: copyBytes(served.selection.root) }, package: copyBytes(served.package) });
@@ -68,19 +70,38 @@ export class V3Replica implements V3EvidenceSource {
     return true;
   }
 
-  /** Where each segment's walk stood after the last `prove` that walked it, by set identity and segment: the position
-   * and chain value it had read through, and its covers pending. */
-  readonly #walks = new Map<string, { readonly position: bigint; readonly evidence: Uint8Array; readonly walk: CoverWalk }>();
+  /** Where the last walks of each segment stood, by set identity and segment, most recent first (at most WALKS, so forks
+   * of one segment keep their own): the position and chain value each had read through, and its covers pending. */
+  readonly #walks = new Map<string, readonly { readonly position: bigint; readonly evidence: Uint8Array; readonly walk: CoverWalk }[]>();
+
+  /** The served trails of the selections this replica's own read kept: for each, every snapshot its directory names, by
+   * its segment and chain value. A trail a supplier's answer alone brought (a fork, a lengthened trail) is none of them. */
+  #selectedTrails(batch: EvidenceBatch): StoredTrail[] {
+    const construction = this.#evidence.construction, trails = new Map<string, StoredTrail>();
+    for (const served of this.#selections.values()) {
+      for (const entry of batch.directory(served.selection.root) ?? []) {
+        const bytes = batch.snapshot(entry.digest);
+        if (bytes === undefined) continue;
+        let snapshot;
+        try { snapshot = construction.reader.snapshot.decode(bytes); } catch { continue; }
+        const trail = batch.trail(snapshot.segment, snapshot.evidenceHash);
+        if (trail !== undefined) trails.set(`${bytesToHex(snapshot.segment)}:${bytesToHex(snapshot.evidenceHash)}`, trail);
+      }
+    }
+    // Each segment's furthest first, so a shorter one it reaches is walked with it.
+    return [...trails.values()].sort((a, b) => compareBytes(a.segment, b.segment) || (a.length > b.length ? -1 : a.length < b.length ? 1 : 0));
+  }
 
   /**
-   * Prove covers (succinct-read §§2 rule 6, 3.2) over the replica's kept trails with `prover`, keeping each in the
-   * replica's file under the prover's set identity, which serves them. Each segment's trails are walked from their
-   * furthest top, and a top a walked trail reaches is walked with it; a span already kept is not proved again. A walk
-   * goes on from where this replica's last walk of the segment stood, where the trail still passes through it, so a
-   * long trail is read once, not every time; `stop` ends the walk before its next record, and the next call goes on.
+   * Prove covers (succinct-read §§2 rule 6, 3.2) over the served trails of the selections this replica kept, with
+   * `prover`, keeping each in the replica's file under the prover's set identity, which serves them. Each segment's
+   * trails are walked from their furthest, and one a walked trail reaches is walked with it; a span already kept is not
+   * proved again. A walk goes on from where this replica's last walk of the segment stood, where the trail still passes
+   * through it, so a long trail is read once, not every time; `stop` ends the walk before its next record, and the next
+   * call goes on. `read` counts the records this call read.
    */
   async prove(prover: SpanProver, options: { readonly stop?: () => boolean } = {}):
-    Promise<{ readonly trails: number; readonly proved: number; readonly made: number; readonly stopped: boolean }> {
+    Promise<{ readonly trails: number; readonly proved: number; readonly made: number; readonly read: number; readonly stopped: boolean }> {
     // Covers are of pool-v3 statement proofs (§3.2): a replica of proof-free trails, or of another construction, has none to cover.
     const construction = this.#evidence.construction;
     if (construction.trailChecks !== undefined || construction.namespace.name !== POOL_V3.namespace.name) {
@@ -89,29 +110,43 @@ export class V3Replica implements V3EvidenceSource {
     const set: unknown = prover?.identity;
     if (!(set instanceof Uint8Array) || set.length !== 32) throw new TypeError("a prover of a set with a 32-byte identity");
     const own = copyBytes(set), batch = this.#evidence.retained(), walked: StoredTrail[] = [];
-    let proved = 0, made = 0, stopped = false;
+    let proved = 0, made = 0, read = 0, stopped = false;
     try {
-      for (const top of this.#evidence.keptTops()) {
+      for (const trail of this.#selectedTrails(batch)) {
         if (stopped) break;
         let reached = false;
-        for (const trail of walked) {
-          if (same(trail.segment, top.segment) && trail.length >= top.position && await trail.reaches(top.position, top.evidence) !== undefined) { reached = true; break; }
+        const top = trail.evidence(trail.length)!;
+        for (const other of walked) {
+          if (same(other.segment, trail.segment) && other.length >= trail.length && await other.reaches(trail.length, top) !== undefined) { reached = true; break; }
         }
-        const trail = reached ? undefined : batch.trail(top.segment, top.evidence);
-        if (trail === undefined) continue;
+        if (reached) continue;
         walked.push(trail);
-        const key = `${bytesToHex(own)}:${bytesToHex(trail.segment)}`, kept = this.#walks.get(key);
-        const from = kept !== undefined && kept.position <= trail.length && await trail.reaches(kept.position, kept.evidence) !== undefined ? kept : undefined;
+        // The furthest earlier walk this trail passes through.
+        const key = `${bytesToHex(own)}:${bytesToHex(trail.segment)}`, walks = this.#walks.get(key) ?? [];
+        let from: typeof walks[number] | undefined;
+        for (const kept of walks) {
+          if (kept.position <= trail.length && (from === undefined || kept.position > from.position) && await trail.reaches(kept.position, kept.evidence) !== undefined) from = kept;
+        }
+        // The chain value is carried over each record the walk reads (pool-v3 §7), so a stopped walk records where it
+        // stood without walking the trail back from its top.
         const after = from?.position ?? 0n;
-        const done = await coverTrail(prover, trail.stream(after), digest => this.#evidence.cover(own, fieldToBytes(digest)),
+        let position = after, value = from?.evidence ?? construction.genesisEvidence(trail.segment);
+        const records = (async function* () {
+          for await (const bytes of trail.stream(after)) {
+            const next = construction.nextEvidence(value, construction.reader.digests(bytes), position + 1n);
+            yield bytes;
+            value = next; position++;
+          }
+        })();
+        const done = await coverTrail(prover, records, digest => this.#evidence.cover(own, fieldToBytes(digest)),
           cover => this.#evidence.keepCover(own, fieldToBytes(cover.digest), cover.proof), { ...(from === undefined ? {} : { from: from.walk }),
             ...(options.stop === undefined ? {} : { stop: options.stop }) });
-        const position = after + BigInt(done.read), evidence = trail.evidence(position);
-        if (evidence !== undefined) this.#walks.set(key, { position, evidence, walk: done.walk });
-        proved += done.proved; made += done.made; stopped = done.stopped;
+        if (position !== after + BigInt(done.read)) throw new Error("a walk's position and its records read disagree");
+        this.#walks.set(key, [{ position, evidence: value, walk: done.walk }, ...walks.filter(kept => kept !== from)].slice(0, WALKS));
+        proved += done.proved; made += done.made; read += done.read; stopped = done.stopped;
       }
     } finally { batch.release(); }
-    return { trails: walked.length, proved, made, stopped };
+    return { trails: walked.length, proved, made, read, stopped };
   }
 
   /** A succinct reader's fetch (succinct-read §3.5): the proof of a record kept at `at` whose SHA-256 is `proofHash`. */

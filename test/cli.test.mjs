@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
@@ -435,7 +435,9 @@ describe('moe succinct reads (slice 38)', () => {
     // Refused before anything is created: the directory is never made.
     const backer = join(tmpdir(), `moe-succinct-backer-${process.pid}-${Date.now()}`);
     expect(await refusal(() => wallet(['init', '--dir', backer, '--backer', '--read', 'succinct', '--node', 'http://127.0.0.1:1']))).toBe('USAGE');
-    expect(readdirSync(tmpdir()).includes(backer.split(/[\/]/).at(-1))).toBe(false);
+    expect(await refusal(() => wallet(['restore-seed', '--dir', backer, '--venue', join(tmpdir(), 'none.json'), '--node', 'http://127.0.0.1:1',
+      '--read', 'succinct', '--backer-key', join(tmpdir(), 'none.key')]))).toBe('USAGE');
+    expect(existsSync(backer)).toBe(false);
   });
   it('takes --read complete or succinct at init, succinct only for pool-v3', () => {
     const args = read => parseArguments(read === undefined ? [] : ['--read', read], { read: 'value' }, 0);

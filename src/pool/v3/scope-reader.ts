@@ -564,33 +564,36 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
   // an operator, within its term in the backing whose checkpoints the walk judges, that carries the backing in that
   // segment and whose directory, snapshot and served trail the evidence holds: a trail that operator signed. Never one no
   // checkpoint commits, which a supplier could lengthen with records of its own, nor one a retired key signed past its
-  // term. Found once a walk for each term and segment, walking back from the term's end, so a resumed read, whose
-  // segment's latest checkpoint is near that end, reads a few commitments rather than the term.
-  const latestTrails = new Map<string, StoredTrail | undefined>();
+  // term. One walk a term, back from its end, which records each segment's latest trail as it passes it and goes on only
+  // for a segment not yet met: a resumed read, whose segment's latest checkpoint is near that end, reads a few
+  // commitments, and a fresh read of many segments reads the term once. One trail object a segment for the walk: a
+  // succinct construction keeps its partition by it.
+  const termWalks = new Map<string, { next: HeldCommitment | undefined; readonly latest: Map<string, StoredTrail> }>();
   const latestTrail = async (held: HeldCommitment, backing: Uint8Array, segment: Uint8Array): Promise<StoredTrail | undefined> => {
     const view = await views.get(hex(backing)), operator = held.commitment.operator;
     if (view === undefined) return undefined;
     let i = view.chain.length - 1;
     while (i > 0 && view.chain[i]!.from > held.index) i--;
     if (i < 0 || view.chain[i]!.from > held.index || !same(view.chain[i]!.operator, operator)) return undefined;
-    // One trail object a segment for the walk: a succinct construction keeps its partition by it.
-    const key = `${hex(backing)}:${i}:${hex(segment)}`;
-    if (!latestTrails.has(key)) {
-      const from = view.chain[i]!.from, end = view.termEnd(i);
-      let found: StoredTrail | undefined;
-      for (let held = view.previousHeld(operator, end); held !== undefined && held.index >= from && found === undefined;
-        held = view.previousHeld(operator, end, held.commitment.sequence)) {
-        let snapshot: Snapshot, digest: Uint8Array | undefined;
-        try { digest = view.carries(held)?.digest; snapshot = snapshotFor(digest ?? new Uint8Array()); } catch (error) {
-          // A checkpoint whose directory or snapshot the evidence does not hold names no trail here.
-          if (error instanceof EvidenceRefusal) continue;
-          throw error;
-        }
-        if (same(snapshot.backing, backing) && same(snapshot.segment, segment)) found = trails.served({ backing, segment, digest: digest! }, snapshot);
+    const term = `${hex(backing)}:${i}`, from = view.chain[i]!.from, end = view.termEnd(i);
+    if (!termWalks.has(term)) termWalks.set(term, { next: view.previousHeld(operator, end), latest: new Map() });
+    const walk = termWalks.get(term)!, name = hex(segment);
+    while (!walk.latest.has(name) && walk.next !== undefined && walk.next.index >= from) {
+      const at = walk.next;
+      walk.next = view.previousHeld(operator, end, at.commitment.sequence);
+      let snapshot: Snapshot, digest: Uint8Array | undefined;
+      try { digest = view.carries(at)?.digest; snapshot = snapshotFor(digest ?? new Uint8Array()); } catch (error) {
+        // A checkpoint whose directory or snapshot the evidence does not hold names no trail here.
+        if (error instanceof EvidenceRefusal) continue;
+        throw error;
       }
-      latestTrails.set(key, found);
+      const met = hex(snapshot.segment);
+      if (!same(snapshot.backing, backing) || walk.latest.has(met)) continue;
+      // A checkpoint whose served trail the evidence does not hold leaves the segment to an earlier one.
+      const trail = trails.served({ backing, segment: snapshot.segment, digest: digest! }, snapshot);
+      if (trail !== undefined) walk.latest.set(met, trail);
     }
-    return latestTrails.get(key);
+    return walk.latest.get(name);
   };
   /** `trail` with the latest served trail of its segment where the construction establishes succinctly. */
   const withLatest = async (trail: StoredTrail, held: HeldCommitment, backing: Uint8Array): Promise<StoredTrail> =>
