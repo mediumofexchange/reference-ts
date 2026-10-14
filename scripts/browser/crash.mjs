@@ -5,6 +5,8 @@
 //   reopen  mounts the pool again: the kept file must pass §14's digest check and give the keep point's state (the
 //           open walk's records gone), not be discarded; it then holds the pool.
 //   second  mounts the pool while `reopen` holds it: refused by name (EBUSY), holding nothing.
+//   race    two workers at once mount a new, empty pool: one mounts it and the other is refused (EBUSY), so two tabs
+//           never each make their own files under one name.
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { mountFiles } from "../../src/browser/files.js";
 import { fieldToBytes } from "../../src/pool/field.js";
@@ -32,21 +34,34 @@ try {
     const store = new ReplayStore(path, { digest });
     let { walk } = store.openWalk(context);
     const ns = store.open(fieldToBytes(1n), new Uint8Array(32).fill(2), undefined, genesis);
+    let at = performance.now();
     for (let i = 0; i < 300; i++) store.append(ns, append([next(), next()], [next()]));
+    const appendMs = performance.now() - at;
+    at = performance.now();
     store.closeWalk(walk);
+    const keepMs = performance.now() - at;
     const tip = plain(store.tip(ns)), vouchedAtKeep = readFileSync(digest, "utf8") === keptFileDigest(path);
     // A second walk, left open: what it appends is no keep point's, until its transaction spills pages into the log.
     ({ walk } = store.openWalk(context));
     for (let i = 0; i < 100_000 && !(sizeOf(`${path}-wal`) > 0); i++) store.append(ns, append([next(), next()], [next()]));
-    await finish({ kind: "crash-write", mount, ns, tip, vouchedAtKeep, open: plain(store.tip(ns)), files: { db: sizeOf(path), wal: sizeOf(`${path}-wal`), digest: sizeOf(digest) } });
+    const ms = { append300: Math.round(appendMs), keepPoint: Math.round(keepMs) };
+    await finish({ kind: "crash-write", mount, ms, ns, tip, vouchedAtKeep, open: plain(store.tip(ns)), files: { db: sizeOf(path), wal: sizeOf(`${path}-wal`), digest: sizeOf(digest) } });
     self.postMessage({ held: ns });
     await new Promise(() => {});
   } else if (phase === "reopen") {
-    const mount = await mountFiles(POOL), files = { db: sizeOf(path), wal: sizeOf(`${path}-wal`), digest: sizeOf(digest) };
-    const ns = Number(query.get("ns")), store = new ReplayStore(path, { digest });
+    let at = performance.now();
+    const mount = await mountFiles(POOL), mountMs = performance.now() - at, files = { db: sizeOf(path), wal: sizeOf(`${path}-wal`), digest: sizeOf(digest) };
+    at = performance.now();
+    const ns = Number(query.get("ns")), store = new ReplayStore(path, { digest }), openMs = performance.now() - at;
     const kept = store.hasNamespace(ns);
-    await finish({ kind: "crash-reopen", mount, files, kept, tip: kept ? plain(store.tip(ns)) : undefined });
+    await finish({ kind: "crash-reopen", mount, ms: { mount: Math.round(mountMs), open: Math.round(openMs) }, files, kept, tip: kept ? plain(store.tip(ns)) : undefined });
     self.postMessage({ holding: true });
+    await new Promise(() => {});
+  } else if (phase === "race") {
+    let outcome;
+    try { outcome = { mounted: true, mount: await mountFiles("moe-check-race") }; } catch (error) { outcome = { mounted: false, code: error.code, message: error.message }; }
+    await finish({ kind: `crash-race-${query.get("n")}`, ...outcome });
+    self.postMessage({ done: true });
     await new Promise(() => {});
   } else if (phase === "second") {
     let outcome;

@@ -13,8 +13,13 @@
 //   copy does not share: file-identity.ts) and a sequence number, in two copies, each with its SHA-256: a header is
 //   rewritten over the older copy, so a write torn by a crash leaves the newer one standing. At a mount, a name two
 //   members claim (a rename stopped between its two header writes) belongs to the one written last.
-// - A member's handle is exclusive to the worker that took it: a second worker's mount (another tab) is refused by
-//   name (EBUSY) and holds nothing; the operating system releases the handles when the worker ends, a crash included.
+// - A mount first takes the access handle of the pool's lock file, which one worker at a time may hold: a second
+//   worker's mount (another tab), of an empty pool too, is refused by name (EBUSY) and holds nothing; the browser
+//   releases the handles when the worker ends, a crash included.
+// - A failure of the browser's storage (a read or flush it could not make, a quota) is reported as a system call's
+//   (EIO, ENOSPC), never as damage (replay-store.ts `systemFailure`). A header write that fails leaves the names as
+//   they were in memory, but it may have reached the disk: every later call is refused (EIO) until the pool is mounted
+//   again, when the headers on disk decide.
 // - Directories are names' prefixes, and those made in this mount: an empty directory does not outlive its mount.
 // - Durability: a header write is flushed; data is flushed by `flush` (fsync, SQLite's sync), as on a disk.
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -24,6 +29,8 @@ import { dirname, resolve } from "./node-path.js";
 export const HEADER = 4096;
 const COPY = HEADER / 2, SUM = COPY - 32;
 const MAGIC = new TextEncoder().encode("moe-files 1\0\0\0\0\0");
+/** The pool's lock file: held by the mounted worker, never a member. */
+const LOCK = "lock";
 /** Free members kept ready by default. More are made once a quarter of them is taken: a synchronous run of calls
  * (a wallet opening its files, its evidence and its kept replay file) takes members with no turn for the background to
  * add any, so the reserve bounds the files one such run may make. */
@@ -64,6 +71,7 @@ export interface Member {
 
 interface Mounted {
   readonly root: DirectoryHandle;
+  readonly lock: SyncHandle;
   readonly reserve: number;
   /** Every member, in use or free. */
   readonly all: Set<Member>;
@@ -75,6 +83,8 @@ interface Mounted {
   peak: number;
   refilling: Promise<void> | undefined;
   refillError: unknown;
+  /** A header write or a release that failed: its outcome on disk is unknown, so every call is refused until a remount. */
+  failed: unknown;
 }
 let mounted: Mounted | undefined;
 
@@ -82,7 +92,7 @@ let mounted: Mounted | undefined;
 export function systemError(code: string, errno: number, syscall: string, path: unknown, message: string): Error {
   return Object.assign(new Error(`${code}: ${message}, ${syscall} '${String(path)}'`), { code, errno, syscall, path: String(path) });
 }
-const ERRNO = { ENOENT: -2, EBADF: -9, EBUSY: -16, EEXIST: -17, ENOTDIR: -20, EISDIR: -21, EINVAL: -22, ENOSPC: -28, ENOSYS: -38, ENOTEMPTY: -39 } as const;
+const ERRNO = { EIO: -5, ENOENT: -2, EBADF: -9, EBUSY: -16, EEXIST: -17, ENOTDIR: -20, EISDIR: -21, EINVAL: -22, ENOSPC: -28, ENOSYS: -38, ENOTEMPTY: -39 } as const;
 export const fail = (code: keyof typeof ERRNO, syscall: string, path: unknown, message: string): Error =>
   systemError(code, ERRNO[code], syscall, path, message);
 
@@ -90,8 +100,21 @@ export const fail = (code: keyof typeof ERRNO, syscall: string, path: unknown, m
 export const isMounted = (): boolean => mounted !== undefined;
 function pool(syscall: string, path: unknown): Mounted {
   if (mounted === undefined) throw fail("ENOSYS", syscall, path, "a browser host keeps no files until its file pool is mounted");
+  if (mounted.failed !== undefined) throw fail("EIO", syscall, path, `a header write failed (${String(mounted.failed)}); mount the pool again`);
   return mounted;
 }
+
+/** A storage call, its browser failure reported as a system call's: a quota as ENOSPC, anything else as EIO. */
+function storage<T>(syscall: string, path: unknown, call: () => T): T {
+  try { return call(); } catch (error) {
+    if (typeof (error as { errno?: unknown }).errno === "number") throw error;
+    const name = (error as { name?: string }).name;
+    throw fail(name === "QuotaExceededError" ? "ENOSPC" : "EIO", syscall, path, `the browser's storage failed: ${String((error as Error)?.message ?? error)}`);
+  }
+}
+const nonNegative = (value: number, syscall: string, path: unknown): void => {
+  if (!Number.isSafeInteger(value) || value < 0) throw fail("EINVAL", syscall, path, "invalid argument");
+};
 
 /** A path as this system names it: absolute, normalized. */
 export const normal = (path: string | URL): string => resolve(path instanceof URL ? path.pathname : String(path));
@@ -114,13 +137,13 @@ function decode(bytes: Uint8Array, copy: 0 | 1): { names: string[]; ino: bigint;
   return { names, ino, birth, sequence };
 }
 
-function encode(member: Member, sequence: bigint): Uint8Array {
+function encode(member: Member, names: readonly string[], sequence: bigint): Uint8Array {
   const part = new Uint8Array(COPY), view = new DataView(part.buffer);
   part.set(MAGIC);
   view.setBigUint64(16, sequence); view.setBigUint64(24, member.ino); view.setBigUint64(32, member.birth);
-  view.setUint16(40, member.names.length);
+  view.setUint16(40, names.length);
   let at = 42;
-  for (const name of member.names) {
+  for (const name of names) {
     const bytes = new TextEncoder().encode(name);
     if (at + 2 + bytes.length > SUM) throw fail("EINVAL", "open", name, "a file's names exceed its header");
     view.setUint16(at, bytes.length); part.set(bytes, at + 2);
@@ -130,19 +153,23 @@ function encode(member: Member, sequence: bigint): Uint8Array {
   return part;
 }
 
-/** Rewrite a member's header over its older copy, and flush it. */
-function writeHeader(state: Mounted, member: Member): void {
+/** Rewrite a member's header over its older copy with `names`, and flush it; only then does the member take them. A
+ * failed write may have reached the disk: the pool refuses every later call until it is mounted again. */
+function writeHeader(state: Mounted, member: Member, names: readonly string[], syscall: string): void {
   const copy: 0 | 1 = member.copy === 0 ? 1 : 0, sequence = state.sequence++;
-  const part = encode(member, sequence);
-  if (member.handle.write(part, { at: copy * COPY }) !== COPY) throw fail("ENOSPC", "write", member.names[0], "a header write fell short");
-  member.handle.flush();
-  member.sequence = sequence; member.copy = copy;
+  const part = encode(member, names, sequence);
+  try {
+    storage(syscall, names[0], () => {
+      if (member.handle.write(part, { at: copy * COPY }) !== COPY) throw fail("ENOSPC", syscall, names[0], "a header write fell short");
+      member.handle.flush();
+    });
+  } catch (error) { state.failed = error; throw error; }
+  member.names = [...names]; member.sequence = sequence; member.copy = copy;
 }
 
-/** Empty a member and return it to the free ones. */
-function release(state: Mounted, member: Member): void {
-  member.handle.truncate(0);
-  member.handle.flush();
+/** Empty a member and return it to the free ones; one that cannot be emptied fails the pool as a header write does. */
+function release(state: Mounted, member: Member, syscall: string): void {
+  try { storage(syscall, member.names[0], () => { member.handle.truncate(0); member.handle.flush(); }); } catch (error) { state.failed = error; throw error; }
   member.names = []; member.anonymous = false; member.opens = 0; member.sequence = 0n; member.copy = 1;
   state.free.push(member);
 }
@@ -156,7 +183,8 @@ const randomIno = (): bigint => {
 function refill(state: Mounted, count: number): Promise<void> {
   state.refilling ??= (async () => {
     try {
-      while (state.free.length < count) {
+      // A pool being unmounted takes no new member.
+      while (state.free.length < count && mounted === state) {
         const name = `m${Array.from(crypto.getRandomValues(new Uint8Array(8)), byte => byte.toString(16).padStart(2, "0")).join("")}`;
         const handle = await (await state.root.getFileHandle(name, { create: true })).createSyncAccessHandle();
         const member: Member = { handle, names: [], ino: 0n, birth: 0n, sequence: 0n, copy: 1, opens: 0, anonymous: false };
@@ -189,13 +217,18 @@ export interface Mount {
  * one. Each later synchronous call reads and writes through it. */
 export async function mountFiles(name = "moe-files", options: { readonly reserve?: number; readonly persist?: boolean } = {}): Promise<Mount> {
   if (mounted !== undefined) throw fail("EBUSY", "mount", name, "the file pool is already mounted");
-  const storage = (globalThis as { navigator?: { storage?: StorageManager } }).navigator?.storage;
-  if (storage?.getDirectory === undefined) throw fail("ENOSYS", "mount", name, "this engine has no origin private file system");
-  const root = await (await storage.getDirectory()).getDirectoryHandle(name, { create: true });
+  const manager = (globalThis as { navigator?: { storage?: StorageManager } }).navigator?.storage;
+  if (manager?.getDirectory === undefined) throw fail("ENOSYS", "mount", name, "this engine has no origin private file system");
+  const root = await (await manager.getDirectory()).getDirectoryHandle(name, { create: true });
+  // The lock file first: two workers mounting an empty pool would otherwise each make their own members.
+  let lock: SyncHandle;
+  try { lock = await (await root.getFileHandle(LOCK, { create: true })).createSyncAccessHandle(); } catch (error) {
+    throw (error as { name?: string }).name === "NoModificationAllowedError" ? fail("EBUSY", "mount", name, "another worker holds the file pool") : error;
+  }
   const members: Member[] = [];
   try {
-    for await (const [, entry] of root.entries()) {
-      if (entry.kind !== "file") continue;
+    for await (const [entryName, entry] of root.entries()) {
+      if (entry.kind !== "file" || entryName === LOCK) continue;
       let handle: SyncHandle;
       try { handle = await entry.createSyncAccessHandle(); } catch (error) {
         throw (error as { name?: string }).name === "NoModificationAllowedError"
@@ -203,9 +236,9 @@ export async function mountFiles(name = "moe-files", options: { readonly reserve
       }
       const member: Member = { handle, names: [], ino: 0n, birth: 0n, sequence: 0n, copy: 1, opens: 0, anonymous: false };
       members.push(member);
-      const bytes = new Uint8Array(HEADER);
-      if (handle.getSize() < HEADER || handle.read(bytes, { at: 0 }) < HEADER) continue;
-      const copies = [decode(bytes, 0), decode(bytes, 1)];
+      // A file's first header copy is written before its data; the second may never have been.
+      const bytes = new Uint8Array(HEADER), length = handle.read(bytes, { at: 0 });
+      const copies = [length >= COPY ? decode(bytes, 0) : undefined, length >= HEADER ? decode(bytes, 1) : undefined];
       const newer: 0 | 1 = copies[1] !== undefined && (copies[0] === undefined || copies[1].sequence > copies[0].sequence) ? 1 : 0;
       const header = copies[newer];
       if (header === undefined) continue;
@@ -213,40 +246,53 @@ export async function mountFiles(name = "moe-files", options: { readonly reserve
     }
   } catch (error) {
     for (const member of members) member.handle.close();
+    lock.close();
     throw error;
   }
-  const state: Mounted = { root, reserve: Math.max(2, options.reserve ?? RESERVE), all: new Set(members), free: [], names: new Map(), directories: new Set(["/"]),
-    sequence: 1n, peak: 0, refilling: undefined, refillError: undefined };
-  for (const member of members) if (member.sequence >= state.sequence) state.sequence = member.sequence + 1n;
-  // A name two members claim belongs to the one written last: a rename stopped between its two header writes.
-  for (const member of [...members].sort((a, b) => (a.sequence < b.sequence ? 1 : a.sequence > b.sequence ? -1 : 0))) {
-    const kept = member.names.filter(name => !state.names.has(name));
-    for (const name of kept) state.names.set(name, member);
-    if (kept.length === 0) { release(state, member); continue; }
-    if (kept.length !== member.names.length) { member.names = kept; writeHeader(state, member); }
+  const state: Mounted = { root, lock, reserve: Math.max(2, options.reserve ?? RESERVE), all: new Set(members), free: [], names: new Map(), directories: new Set(["/"]),
+    sequence: 1n, peak: 0, refilling: undefined, refillError: undefined, failed: undefined };
+  try {
+    for (const member of members) if (member.sequence >= state.sequence) state.sequence = member.sequence + 1n;
+    // A name two members claim belongs to the one written last: a rename stopped between its two header writes.
+    for (const member of [...members].sort((a, b) => (a.sequence < b.sequence ? 1 : a.sequence > b.sequence ? -1 : 0))) {
+      const kept = member.names.filter(name => !state.names.has(name));
+      for (const name of kept) state.names.set(name, member);
+      if (kept.length === 0) release(state, member, "mount");
+      else if (kept.length !== member.names.length) writeHeader(state, member, kept, "mount");
+      if (state.failed !== undefined) throw state.failed;
+    }
+  } catch (error) {
+    for (const member of members) member.handle.close();
+    lock.close();
+    throw error;
   }
   mounted = state;
   await refill(state, state.reserve);
   let persisted: boolean | undefined;
-  if (options.persist !== false) { try { persisted = await storage.persist?.(); } catch { persisted = undefined; } }
+  if (options.persist !== false) { try { persisted = await manager.persist?.(); } catch { persisted = undefined; } }
   return { files: state.names.size, persisted };
 }
 
 /** The pool's members by use: files by name, open unnamed ones (temporary files, and files removed while open), and
  * free ones, and the most in use at once. */
 export function poolUse(): { readonly files: number; readonly unnamed: number; readonly free: number; readonly members: number; readonly peak: number; readonly refill?: string } {
-  const state = pool("stat", "(pool)"), named = new Set(state.names.values());
+  const state = mounted;
+  if (state === undefined) throw fail("ENOSYS", "stat", "(pool)", "a browser host keeps no files until its file pool is mounted");
+  const named = new Set(state.names.values());
   return { files: named.size, unnamed: state.all.size - named.size - state.free.length, free: state.free.length, members: state.all.size, peak: state.peak,
     ...(state.refillError === undefined ? {} : { refill: String(state.refillError) }) };
 }
 
-/** Close every member's handle, so another worker may mount the pool. Open files are the caller's to close first. */
+/** Close every member's handle and the lock's, so another worker may mount the pool: refused (EBUSY) while a file is
+ * open (a descriptor, a SQLite connection, a kept file's lock), whose state would outlive the mount. */
 export async function unmountFiles(): Promise<void> {
   const state = mounted;
   if (state === undefined) return;
-  await state.refilling;
+  for (const member of state.all) if (member.opens > 0) throw fail("EBUSY", "umount", member.names[0] ?? "(temporary)", "a file of the pool is open");
   mounted = undefined;
+  await state.refilling;
   for (const member of state.all) member.handle.close();
+  state.lock.close();
 }
 
 /** The file at `path`, if any. */
@@ -281,8 +327,10 @@ export function create(path: string, exclusive: boolean): Member {
   if (isDirectory(name)) throw fail("EISDIR", "open", name, "illegal operation on a directory");
   parentExists(state, "open", name);
   const member = take(state, name);
-  member.names = [name]; member.ino = randomIno(); member.birth = BigInt(Date.now()) * 1_000_000n;
-  try { writeHeader(state, member); } catch (error) { release(state, member); throw error; }
+  member.ino = randomIno(); member.birth = BigInt(Date.now()) * 1_000_000n;
+  // The whole header's length first, so an empty file reads as one at the next mount.
+  try { storage("open", name, () => member.handle.truncate(HEADER)); } catch (error) { state.free.push(member); throw error; }
+  writeHeader(state, member, [name], "open");
   state.names.set(name, member);
   return member;
 }
@@ -298,30 +346,37 @@ export const opened = (member: Member): void => { member.opens++; };
 /** Close one opening of `member`: one with no name left is freed at its last close. */
 export function closed(member: Member): void {
   const state = pool("close", member.names[0]);
-  if (--member.opens <= 0 && member.names.length === 0) release(state, member);
+  if (--member.opens <= 0 && member.names.length === 0) release(state, member, "close");
 }
 
 /** The data's size, in bytes. */
-export const size = (member: Member): number => Math.max(0, member.handle.getSize() - HEADER);
+export const size = (member: Member): number => Math.max(0, storage("fstat", member.names[0], () => member.handle.getSize()) - HEADER);
 /** Read into `bytes` from data offset `at`; the count read. */
-export const read = (member: Member, bytes: Uint8Array, at: number): number =>
-  at >= size(member) ? 0 : member.handle.read(bytes.subarray(0, Math.min(bytes.length, size(member) - at)), { at: HEADER + at });
+export function read(member: Member, bytes: Uint8Array, at: number): number {
+  nonNegative(at, "read", member.names[0]);
+  const length = size(member);
+  return at >= length ? 0 : storage("read", member.names[0], () => member.handle.read(bytes.subarray(0, Math.min(bytes.length, length - at)), { at: HEADER + at }));
+}
 /** Write `bytes` at data offset `at`; the count written. */
 export function write(member: Member, bytes: Uint8Array, at: number): number {
+  nonNegative(at, "write", member.names[0]);
   // An anonymous file has no header: its first bytes stay zero, so a crash leaves it free.
-  return member.handle.write(bytes, { at: HEADER + at });
+  return storage("write", member.names[0], () => member.handle.write(bytes, { at: HEADER + at }));
 }
-export const truncate = (member: Member, length: number): void => member.handle.truncate(HEADER + length);
-export const flush = (member: Member): void => member.handle.flush();
+export function truncate(member: Member, length: number): void {
+  nonNegative(length, "ftruncate", member.names[0]);
+  storage("ftruncate", member.names[0], () => member.handle.truncate(HEADER + length));
+}
+export const flush = (member: Member): void => storage("fsync", member.names[0], () => member.handle.flush());
 
 /** Remove the name `path`; the file goes with its last name, once no opening holds it. */
 export function unlink(path: string, syscall = "unlink"): void {
   const state = pool(syscall, path), name = normal(path), member = state.names.get(name);
   if (member === undefined) throw fail(isDirectory(name) ? "EISDIR" : "ENOENT", syscall, name, isDirectory(name) ? "illegal operation on a directory" : "no such file or directory");
-  member.names = member.names.filter(other => other !== name);
+  const names = member.names.filter(other => other !== name);
+  if (names.length > 0 || member.opens > 0) writeHeader(state, member, names, syscall);
+  else release(state, member, syscall);
   state.names.delete(name);
-  if (member.names.length > 0 || member.opens > 0) writeHeader(state, member);
-  else release(state, member);
 }
 
 /** A second name `to` for the file at `from` (a hard link): EEXIST where `to` exists. */
@@ -330,8 +385,7 @@ export function link(from: string, to: string): void {
   if (member === undefined) throw fail("ENOENT", "link", source, "no such file or directory");
   if (state.names.has(target) || isDirectory(target)) throw fail("EEXIST", "link", target, "file already exists");
   parentExists(state, "link", target);
-  member.names = [...member.names, target];
-  writeHeader(state, member);
+  writeHeader(state, member, [...member.names, target], "link");
   state.names.set(target, member);
 }
 
@@ -343,26 +397,28 @@ export function rename(from: string, to: string): void {
   if (isDirectory(target)) throw fail("EISDIR", "rename", target, "illegal operation on a directory");
   parentExists(state, "rename", target);
   const replaced = state.names.get(target);
-  if (replaced === member) { unlink(source, "rename"); return; }
-  member.names = member.names.map(name => (name === source ? target : name));
-  writeHeader(state, member);
+  // Two names of one file: POSIX leaves both.
+  if (replaced === member) return;
+  writeHeader(state, member, member.names.map(name => (name === source ? target : name)), "rename");
   state.names.delete(source);
   state.names.set(target, member);
   if (replaced !== undefined) {
-    replaced.names = replaced.names.filter(name => name !== target);
-    if (replaced.names.length > 0 || replaced.opens > 0) writeHeader(state, replaced);
-    else release(state, replaced);
+    const names = replaced.names.filter(name => name !== target);
+    if (names.length > 0 || replaced.opens > 0) writeHeader(state, replaced, names, "rename");
+    else release(state, replaced, "rename");
   }
 }
 
-/** Make the directory `path` (and its parents with `recursive`). */
-export function mkdir(path: string, recursive: boolean): void {
+/** Make the directory `path` (and its parents with `recursive`): the first directory made, if any. */
+export function mkdir(path: string, recursive: boolean): string | undefined {
   const state = pool("mkdir", path), name = normal(path);
   if (state.names.has(name)) throw fail("EEXIST", "mkdir", name, "file already exists");
-  if (isDirectory(name)) { if (recursive) return; throw fail("EEXIST", "mkdir", name, "file already exists"); }
-  if (recursive) { if (name !== "/") mkdir(dirname(name), true); }
+  if (isDirectory(name)) { if (recursive) return undefined; throw fail("EEXIST", "mkdir", name, "file already exists"); }
+  let first: string | undefined;
+  if (recursive) { if (name !== "/") first = mkdir(dirname(name), true); }
   else parentExists(state, "mkdir", name);
   state.directories.add(name);
+  return first ?? name;
 }
 
 /** The names directly in directory `path`, sorted. */

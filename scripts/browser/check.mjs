@@ -101,6 +101,8 @@ write.worker.terminate();
 const reopen = await step("phase=reopen&ns=" + write.data.held, "holding");
 const second = await step("phase=second", "done");
 reopen.worker.terminate(); second.worker.terminate();
+const race = await Promise.all([step("phase=race&n=1", "done"), step("phase=race&n=2", "done")]);
+for (const { worker } of race) worker.terminate();
 </script>`;
 
 /**
@@ -256,6 +258,12 @@ async function main() {
       await connection.send("Page.navigate", { url: `http://127.0.0.1:${port}/crash?t=${token}` }, sessionId);
       crashes = {};
       for (const phase of ["write", "reopen", "second"]) crashes[phase] = await within(Promise.race([resultOf(`crash-${phase}`), crashed]), 5);
+      // The two racing workers report in either order.
+      while (crashes["race-1"] === undefined || crashes["race-2"] === undefined) {
+        const posted = await within(Promise.race([result(), crashed]), 5);
+        if (/^crash-race-[12]$/.test(posted.kind ?? "")) crashes[posted.kind.slice("crash-".length)] = posted;
+        else log({ setAside: posted });
+      }
     } else if (extra.length > 0) {
       await connection.send("Page.navigate", { url: address("/plain/", "isolation") }, sessionId);
       isolation = await within(Promise.race([resultOf("isolation"), crashed]), 5);
@@ -294,13 +302,17 @@ function judge(report, log) {
     }
   }
   if (report.check === "files" && report.crash !== undefined) {
-    const { write, reopen, second } = report.crash;
+    const { write, reopen, second, "race-1": race1, "race-2": race2 } = report.crash;
     if (write.error || write.vouchedAtKeep !== true || !(write.files?.wal > 0)) failures.push(`the crash's writer: ${JSON.stringify(write)}`);
     else if (reopen.error || reopen.kept !== true || JSON.stringify(reopen.tip) !== JSON.stringify(write.tip)) {
       failures.push(`the kept file after a crash is not the keep point's: ${JSON.stringify({ write, reopen })}`);
     }
     if (second.error || second.mounted !== false || second.code !== "EBUSY") failures.push(`a second worker's mount: ${JSON.stringify(second)}`);
-    log({ crash: { written: write.files, reopened: reopen.files, kept: reopen.kept, second: second.code } });
+    const races = [race1, race2];
+    if (races.some(r => r.error) || races.filter(r => r.mounted === true).length !== 1 || !races.some(r => r.mounted === false && r.code === "EBUSY")) {
+      failures.push(`two workers mounting an empty pool: ${JSON.stringify(races)}`);
+    }
+    log({ crash: { written: write.files, reopened: reopen.files, kept: reopen.kept, second: second.code, race: races.map(r => r.mounted ? "mounted" : r.code), ms: { write: write.ms, reopen: reopen.ms } } });
   }
   if (report.check === "proofs" && !report.error) {
     const c = report.checks;

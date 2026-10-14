@@ -91,12 +91,16 @@ export function writeFileSync(path: string | URL | number, data: string | ArrayB
   const fd = typeof path === "number" ? path : openSync(path, flag);
   try {
     const bytes = bytesOf(data, encodingOf(options));
-    for (let done = 0; done < bytes.length;) done += writeSync(fd, bytes, done, bytes.length - done);
+    for (let done = 0; done < bytes.length;) {
+      const wrote = writeSync(fd, bytes, done, bytes.length - done);
+      if (wrote <= 0) throw fail("ENOSPC", "write", path, "no space left on device");
+      done += wrote;
+    }
   } finally { if (typeof path !== "number") closeSync(fd); }
 }
 
 export function existsSync(path: unknown): boolean {
-  if (!isMounted() || (typeof path !== "string" && !(path instanceof URL))) return false;
+  if (!isMounted() || (typeof path !== "string" && !(path instanceof URL)) || path === "") return false;
   const name = normal(path);
   return files.lookup(name) !== undefined || files.isDirectory(name);
 }
@@ -248,9 +252,8 @@ export function rmdirSync(path: string | URL, options?: { readonly recursive?: b
 
 export function mkdirSync(path: string | URL, options?: number | { readonly recursive?: boolean; readonly mode?: number }): string | undefined {
   const name = pathOf(path, "mkdir"), recursive = typeof options === "object" && options?.recursive === true;
-  const existed = files.isDirectory(name);
-  files.mkdir(name, recursive);
-  return recursive && !existed ? name : undefined;
+  const first = files.mkdir(name, recursive);
+  return recursive ? first : undefined;
 }
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

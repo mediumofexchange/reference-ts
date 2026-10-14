@@ -19,6 +19,8 @@ export const FILES_VFS = "moe-files";
 const SECTOR = 4096;
 const SHM_UNLOCK = 1, SHM_LOCK = 2, SHM_SHARED = 4, SHM_EXCLUSIVE = 8, SHM_LOCKS = 8;
 const LOCK_NONE = 0, LOCK_SHARED = 1, LOCK_RESERVED = 2, LOCK_PENDING = 3, LOCK_EXCLUSIVE = 4;
+/** SQLITE_FCNTL_HAS_MOVED, and SQLITE_IOCAP_POWERSAFE_OVERWRITE, which unix reports by default. */
+const FCNTL_HAS_MOVED = 20, POWERSAFE_OVERWRITE = 0x1000;
 
 /** A file lock's holders among the worker's connections, as unix's per-inode lock. */
 interface FileLock { readonly shared: Set<Pointer>; reserved: Pointer; pending: Pointer; exclusive: Pointer }
@@ -100,22 +102,19 @@ export function installFilesVfs(sqlite3: Sqlite3): string {
     xFileSize(pFile: Pointer, pSize: Pointer): number {
       try { wasm.poke64(pSize, BigInt(files.size(fileOf(pFile).member))); return 0; } catch (error) { return failed(error, capi.SQLITE_IOERR_FSTAT); }
     },
-    // File locks, as unix's among one process's connections: a shared lock waits on no pending or exclusive one; a
-    // reserved lock is one connection's; an exclusive one passes through pending until no other shared lock is held.
+    // File locks, as unix's among one process's connections (os_unix.c unixLock): a connection whose lock is not the
+    // file's strongest is refused where that lock is pending or stronger, or where it asks for more than a shared
+    // lock; a reserved lock is one connection's; an exclusive one passes through pending until no other shared lock
+    // is held.
     xLock(pFile: Pointer, level: number): number {
       const open = fileOf(pFile), lock = lockOf(open.member);
       if (open.level >= level) return 0;
-      const other = (holder: Pointer) => holder !== 0 && holder !== pFile;
-      if (level === LOCK_SHARED) {
-        if (other(lock.pending) || other(lock.exclusive)) return capi.SQLITE_BUSY;
-        lock.shared.add(pFile); open.level = LOCK_SHARED; return 0;
-      }
-      if (level === LOCK_RESERVED) {
-        if (other(lock.reserved) || other(lock.pending) || other(lock.exclusive)) return capi.SQLITE_BUSY;
-        lock.reserved = pFile; open.level = LOCK_RESERVED; return 0;
-      }
+      const strongest = lock.exclusive !== 0 ? LOCK_EXCLUSIVE : lock.pending !== 0 ? LOCK_PENDING : lock.reserved !== 0 ? LOCK_RESERVED
+        : lock.shared.size > 0 ? LOCK_SHARED : LOCK_NONE;
+      if (open.level !== strongest && (strongest >= LOCK_PENDING || level > LOCK_SHARED)) return capi.SQLITE_BUSY;
+      if (level === LOCK_SHARED) { lock.shared.add(pFile); open.level = LOCK_SHARED; return 0; }
+      if (level === LOCK_RESERVED) { lock.reserved = pFile; open.level = LOCK_RESERVED; return 0; }
       // EXCLUSIVE (SQLite asks for no other level here): pending first, so no new shared lock starts meanwhile.
-      if (other(lock.pending) || other(lock.exclusive)) return capi.SQLITE_BUSY;
       lock.pending = pFile; open.level = LOCK_PENDING;
       for (const holder of lock.shared) if (holder !== pFile) return capi.SQLITE_BUSY;
       lock.exclusive = pFile; open.level = LOCK_EXCLUSIVE;
@@ -136,9 +135,19 @@ export function installFilesVfs(sqlite3: Sqlite3): string {
       wasm.poke32(pOut, lock.reserved !== 0 || lock.pending !== 0 || lock.exclusive !== 0 ? 1 : 0);
       return 0;
     },
-    xFileControl(_pFile: Pointer, _op: number, _pArg: Pointer): number { return capi.SQLITE_NOTFOUND; },
+    // A file removed or renamed under an open connection has moved, as unix reports it: closing that connection then
+    // neither checkpoints nor deletes the log, which another file of the same name may now own.
+    xFileControl(pFile: Pointer, op: number, pArg: Pointer): number {
+      if (op !== FCNTL_HAS_MOVED) return capi.SQLITE_NOTFOUND;
+      try {
+        const open = fileOf(pFile);
+        wasm.poke32(pArg, open.path !== undefined && files.lookup(open.path) !== open.member ? 1 : 0);
+        return 0;
+      } catch (error) { return failed(error, capi.SQLITE_IOERR_FSTAT); }
+    },
     xSectorSize(_pFile: Pointer): number { return SECTOR; },
-    xDeviceCharacteristics(_pFile: Pointer): number { return 0; },
+    // As unix's default (Node's SQLite), so a write-ahead log is laid out as Node's is.
+    xDeviceCharacteristics(_pFile: Pointer): number { return POWERSAFE_OVERWRITE; },
     xShmMap(pFile: Pointer, region: number, size: number, extend: number, pp: Pointer): number {
       try {
         const open = fileOf(pFile);
