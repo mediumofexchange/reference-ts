@@ -671,4 +671,18 @@ describe("v3 evidence store", () => {
     for (const sequence of [-1n, 1n << 63n, 1 as unknown as bigint]) expect(() => store.supplied(b(1), sequence)).toThrow(TypeError);
     store.close();
   });
+
+  it.skipIf(BROWSER_HOST)("names a record at its place by its chain value, however many forks a supplier planted there first (review)", () => {
+    const file = evidenceFile(), store = new EvidenceStore(file.path);
+    // Seventeen records at position 1, each chained from the segment's seed and needing no signature, kept before the real one.
+    store.importTrails(Array.from({ length: 17 }, (_, i) => encodeTrail({ header: headerBytes, terms, records: [issue(100 + i)] })));
+    store.importTrails([trail(2)]);
+    expect([...store.recordAt(segment, 1n, chain[1]!)!]).toEqual([...records[0]!]);
+    expect([...store.recordAt(segment, 2n, chain[2]!)!]).toEqual([...records[1]!]);
+    expect(store.recordAt(segment, 2n, chain[1]!)).toBeUndefined();
+    expect(store.recordAt(b(8), 1n, chain[1]!)).toBeUndefined();
+    for (const position of [0n, 1n << 63n]) expect(store.recordAt(segment, position, chain[1]!)).toBeUndefined();
+    store.close();
+    expect(file.count("chain")).toBe(19);
+  });
 });

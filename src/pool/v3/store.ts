@@ -81,7 +81,7 @@ import { mergeFinalizedPrefixes, type CanonicalCheckpoint, type FrontierResult, 
 import { busy, FileInUse, KeptStateMismatch, removeKeptFile, ReplayStore } from "./replay-store.js";
 import { applyJudged, judgeAdopted, judgeRecord, openSegmentState, StateHandle, type ImportSource, type DeclaredVerifier, type Judged, type SegmentReplay,
   type SegmentState } from "./state.js";
-import { proofAmong, type RecordAt } from "./succinct.js";
+import { recordProof, type RecordAt } from "./succinct.js";
 import type { RootTerms } from "./terms.js";
 
 /** The database's layout and the meaning of its rows. `/10`: a taken directory or snapshot is named only where kept, so
@@ -1782,7 +1782,7 @@ export class V3OperatorJournal {
    * `proofHash`, read without a turn as serving is; the reader hashes it. */
   proof(proofHash: Uint8Array, at: RecordAt): Uint8Array | undefined {
     if (this.closed) return undefined;
-    return proofAmong(this.evidence.recordsAt(at.segment, at.position), proofHash);
+    return recordProof(this.evidence.recordAt(at.segment, at.position, at.evidence), proofHash);
   }
   /** A journal keeps no check proofs: a prover keeps them in a file of its own (a replica's). */
   cover(_set: Uint8Array, _digest: Uint8Array): Uint8Array | undefined { return undefined; }

@@ -88,8 +88,9 @@ export interface CheckSupply {
    * look it up by; it authenticates nothing (§4.7), and a publication's proof is never fetched. */
   proof(proofHash: Uint8Array, at?: RecordAt): Promise<Uint8Array | undefined> | Uint8Array | undefined;
 }
-/** A trail record's place: its segment and its position, from 1. */
-export interface RecordAt { readonly segment: Uint8Array; readonly position: bigint }
+/** A trail record's place: its segment, its position, from 1, and its chain value there (pool-v3 §7.1), which names the
+ * one record a supplier keeps there however many forks it keeps beside it. */
+export interface RecordAt { readonly segment: Uint8Array; readonly position: bigint; readonly evidence: Uint8Array }
 
 /** The proof-free form a supplier serves its complete trails in (§3.3), record by record. A kept record decodes, so it
  * has its form. */
@@ -101,15 +102,13 @@ export const PROOF_FREE_FORM: TrailForm = Object.freeze({
   piece: 2048,
 });
 
-/** A supplier's answer to a reader's fetch (§3.5): the proof field of a record among `records` (those kept at the asked
- * place, one per fork) whose SHA-256 is `proofHash`, or undefined. */
-export function proofAmong(records: Iterable<Uint8Array>, proofHash: Uint8Array): Uint8Array | undefined {
-  for (const bytes of records) {
-    let proof: Uint8Array;
-    try { proof = decodeRecord(bytes).proof; } catch (error) { if (error instanceof EncodingError) continue; throw error; }
-    if (proof.length > 0 && same(sha256(proof), proofHash)) return proof;
-  }
-  return undefined;
+/** A supplier's answer to a reader's fetch (§3.5): the proof field of `record` (the one kept at the asked place under the
+ * asked chain value) where its SHA-256 is `proofHash`, or undefined. */
+export function recordProof(record: Uint8Array | undefined, proofHash: Uint8Array): Uint8Array | undefined {
+  if (record === undefined) return undefined;
+  let proof: Uint8Array;
+  try { proof = decodeRecord(record).proof; } catch (error) { if (error instanceof EncodingError) return undefined; throw error; }
+  return proof.length > 0 && same(sha256(proof), proofHash) ? proof : undefined;
 }
 
 /** A check proof and the span it covers: a leaf's kind, or undefined for a node, and the span's digest (§3.2). */
@@ -212,9 +211,10 @@ interface Established {
   readonly covered: Uint8Array;
   readonly held: Map<number, Uint8Array>;
   readonly kinds: Uint8Array;
-  /** Each proved record's place, which a fetch names. */
+  /** Each proved record's place and chain value there, which a fetch names. */
   readonly segment: Uint8Array;
   readonly positions: BigUint64Array;
+  readonly chains: Uint8Array;
   cursor: number;
 }
 const ESTABLISHED = new WeakMap<ProofCheck, Established>();
@@ -291,29 +291,32 @@ async function partition(set: CheckSet, supply: CheckSupply, digests: Uint8Array
 }
 
 /** Pass 1 of an establishment (§3.4 steps 1–2) over a trail's records after position `from`: each proved record's leaf
- * digest, kind, `proofHash` and position, and whether its `proofHash` is the adopted publication's at its position
+ * digest, kind, `proofHash`, position and chain value there, and whether its `proofHash` is the adopted publication's at its position
  * (`block`), in flat arrays sized by the records; and the kind-7 proofs to fetch for their length. */
 function provedRecords(trail: ServedTrailOf, from: bigint, block: readonly Adopted[]) {
-  // At most one proved record a record after `from`, each in flat arrays: about 75 bytes, plus 32 while its spans are asked.
+  // At most one proved record a record after `from`, each in flat arrays: about 107 bytes, plus 32 while its spans are asked.
   const records = trail.length - from;
   if (records < 0n || records > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("a trail past the safe integer range");
   const capacity = Number(records), digests = new Uint8Array(32 * capacity), hashes = new Uint8Array(32 * capacity);
-  const kinds = new Uint8Array(capacity), adopted = new Uint8Array(capacity), positions = new BigUint64Array(capacity);
+  const kinds = new Uint8Array(capacity), adopted = new Uint8Array(capacity), positions = new BigUint64Array(capacity), chains = new Uint8Array(32 * capacity);
   const requests: { readonly proofHash: Uint8Array; readonly at: RecordAt }[] = [];
-  let position = from, m = 0;
+  // Each record's chain value, carried forward from the trail's value at `from`: a fetch names the one record it fixes.
+  let position = from, m = 0, chain = trail.evidence(from);
+  if (chain === undefined) throw new Error("a served trail without its chain value at its tip");
   for (const bytes of trail.records(from)) {
     const at = block[Number(position)];
     position++;
     const record = decodeProofFree(bytes);
+    chain = POOL_V3.nextEvidence(chain, proofFreeDigests(record), position);
     // A record whose proofHash is the adopted publication's has the length of the proof the reader holds (§3.5).
     const held = at !== undefined && same(record.proofHash, decodeProofFree(at.bytes).proofHash);
-    if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position } }); continue; }
+    if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position, evidence: chain } }); continue; }
     if (!provedKind(record.kind)) continue;
     if (m === capacity) throw new Error("a served trail holding more records than its length");
     digests.set(fieldToBytes(leafDigest(record)), 32 * m); hashes.set(record.proofHash, 32 * m);
-    kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; m++;
+    kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; chains.set(chain, 32 * m); m++;
   }
-  return { capacity, m, digests, hashes, kinds, adopted, positions, requests };
+  return { capacity, m, digests, hashes, kinds, adopted, positions, chains, requests };
 }
 
 /** A pool-v3 reader's construction over proof-free trails, under check set `set` with proofs and check proofs from
@@ -338,7 +341,8 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
   /** The bytes whose SHA-256 is `proofHash` from the supply, or undefined. A supplier's answer past §5's bound is
    * stopped unhashed and its wrong bytes are no bytes: either is a withheld supply. */
   const fetchProof = async (proofHash: Uint8Array, at?: RecordAt): Promise<Uint8Array | undefined> => {
-    const answer: unknown = await supply.proof(copyBytes(proofHash), at === undefined ? undefined : { segment: copyBytes(at.segment), position: at.position });
+    const answer: unknown = await supply.proof(copyBytes(proofHash), at === undefined ? undefined :
+      { segment: copyBytes(at.segment), position: at.position, evidence: copyBytes(at.evidence) });
     if (!(answer instanceof Uint8Array) || answer.length > MAX_PROOF) return undefined;
     const bytes = copyBytes(answer);
     return same(sha256(bytes), proofHash) ? bytes : undefined;
@@ -364,7 +368,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
     if (i === count) throw new Error("a record its trail's establishment did not reach");
     established.cursor = i + 1;
     if (established.covered[i] === 1) return;
-    requireReplay(await native(verifier, record, established.held.get(i), { segment: established.segment, position: established.positions[i]! }), "PROOF");
+    requireReplay(await native(verifier, record, established.held.get(i), { segment: established.segment, position: established.positions[i]!, evidence: established.chains.slice(32 * i, 32 * i + 32) }), "PROOF");
   };
 
   /** The segment's partition (§3.4) from proved record `start` on: the one kept where it starts at or before it (a
@@ -392,7 +396,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
   const trailChecks: TrailChecks = {
     async establish(trail, from, proved, block, verifier) {
       // Pass 1 (§3.4 steps 1–2): each proved record's digest, kind and proofHash; kind-7 proofs to fetch for their length.
-      const { capacity, m, digests, hashes, kinds, adopted, positions, requests } = provedRecords(trail, from, block);
+      const { capacity, m, digests, hashes, kinds, adopted, positions, chains, requests } = provedRecords(trail, from, block);
       const start = Number(proved);
       if (!Number.isSafeInteger(start + m)) throw new RangeError("a trail past the safe integer range");
       // §3.4: a record the segment's partition covered at its number, with its digest, is covered, and one it asked about
@@ -414,7 +418,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       let room = HELD_BYTES;
       for (let i = 0; i < m; i++) {
         if (covered[i] === 1 || adopted[i] === 1) continue;
-        const bytes = await fetchProof(hashes.subarray(32 * i, 32 * i + 32), { segment: trail.segment, position: positions[i]! });
+        const bytes = await fetchProof(hashes.subarray(32 * i, 32 * i + 32), { segment: trail.segment, position: positions[i]!, evidence: chains.slice(32 * i, 32 * i + 32) });
         if (bytes === undefined || !proofLengthHolds(kinds[i] as Kind, bytes.length)) throw new UnestablishedTrail();
         if (bytes.length <= room) { held.set(i, bytes); room -= bytes.length; }
       }
@@ -427,7 +431,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       const own = <T extends Uint8Array | BigUint64Array>(values: T, length: number): T =>
         (m === capacity ? values.subarray(0, length) : values.slice(0, length)) as T;
       ESTABLISHED.set(replayCheck, { digests: own(digests, 32 * m), kinds: own(kinds, m), covered, held,
-        segment: copyBytes(trail.segment), positions: own(positions, m), cursor: 0 });
+        segment: copyBytes(trail.segment), positions: own(positions, m), chains: own(chains, 32 * m), cursor: 0 });
       // Records before a resumed tip were established when the namespace holding them replayed them, under these rules.
       servedTrails.add(servedKey(trail));
       return replayCheck;

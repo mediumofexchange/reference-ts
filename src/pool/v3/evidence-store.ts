@@ -207,8 +207,6 @@ const SERVED_SCHEMA = `CREATE TABLE IF NOT EXISTS served_object (operator BLOB, 
  * span's digest, beside layout 4's tables in a party's own file. A reader verifies each under its own pinned keys. */
 const COVER_SCHEMA = `CREATE TABLE IF NOT EXISTS check_cover (set_identity BLOB, digest BLOB, proof BLOB NOT NULL,
   PRIMARY KEY(set_identity, digest)) WITHOUT ROWID;`;
-/** Forks one fetch's answer reads at a position: a supplier's answer, not a read's evidence. */
-const FORKS_READ = 16;
 /** What a read of kept evidence asks, on the party's connection or a replica's serving one. */
 const READ_SQL = {
   object: "SELECT payload FROM object WHERE kind = ? AND hash = ?",
@@ -359,7 +357,7 @@ export class EvidenceStore {
       record: `INSERT INTO chain VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(evidence) DO UPDATE SET segment = excluded.segment, prev = excluded.prev,
         position = excluded.position, size = excluded.size, bytes = excluded.bytes WHERE segment != excluded.segment OR prev != excluded.prev
         OR position != excluded.position OR size != excluded.size OR bytes != excluded.bytes`,
-      recordsAt: `SELECT bytes FROM chain WHERE segment = ? AND position = ? LIMIT ${FORKS_READ}`,
+      recordAt: "SELECT bytes FROM chain WHERE evidence = ? AND segment = ? AND position = ?",
       ...(this.#hosted ? {} : {
         keepCover: "INSERT INTO check_cover VALUES (?, ?, ?) ON CONFLICT(set_identity, digest) DO UPDATE SET proof = excluded.proof WHERE proof != excluded.proof",
         cover: "SELECT proof FROM check_cover WHERE set_identity = ? AND digest = ?",
@@ -482,10 +480,13 @@ export class EvidenceStore {
       { segment: Uint8Array; evidence: Uint8Array; position: bigint }[]).map(row => ({ segment: bytes(row.segment), position: BigInt(row.position),
       evidence: bytes(row.evidence) }));
   }
-  /** The kept records of `segment` at `position`, at most one per fork read. */
-  recordsAt(segment: Uint8Array, position: bigint): Uint8Array[] {
-    if (!(segment instanceof Uint8Array) || segment.length !== 32 || typeof position !== "bigint" || position < 1n || position >= 1n << 63n) return [];
-    return (this.#q.recordsAt!.all(segment, position) as { bytes: Uint8Array }[]).map(row => bytes(row.bytes));
+  /** The kept record of `segment` at `position` whose chain value there is `evidence`, or undefined: the one record
+   * that value fixes, however many forks are kept at that place. */
+  recordAt(segment: Uint8Array, position: bigint, evidence: Uint8Array): Uint8Array | undefined {
+    if (!(segment instanceof Uint8Array) || segment.length !== 32 || !(evidence instanceof Uint8Array) || evidence.length !== 32 ||
+        typeof position !== "bigint" || position < 1n || position >= 1n << 63n) return undefined;
+    const row = this.#q.recordAt!.get(evidence, segment, position) as { bytes: Uint8Array } | undefined;
+    return row === undefined ? undefined : bytes(row.bytes);
   }
   /** Keep `proof`, a check proof a prover made of the span whose digest is `digest` under the set whose identity is
    * `set`. A party's own file keeps them; a host's database keeps none. */
