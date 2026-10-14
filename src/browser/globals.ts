@@ -22,3 +22,43 @@ export function setImmediate<A extends unknown[]>(callback: (...args: A) => void
   waiting.push(() => callback(...args));
   channel.port2.postMessage(0);
 }
+
+// - `process`'s members a command reaches (slice 41): the bundle names `process.env`, `.stdout`, `.stderr`, `.stdin` and
+//   `.umask` as this object's (build.mjs `define`), while `process` itself stays undefined, as a library testing for
+//   Node finds it. Its environment is empty (no proxy, so an onion URL is refused by name, service-client.ts), umask
+//   changes nothing (an origin's files are its own), and a command's output goes where the command worker
+//   (command.ts) collects it; outside a command it goes to the console.
+interface Writable { write(text: string | Uint8Array, done?: () => void): boolean }
+interface Readable extends AsyncIterable<Buffer> { readonly isTTY?: boolean }
+const toConsole = (log: (text: string) => void): Writable => ({
+  write(text, done) { log(typeof text === "string" ? text : new TextDecoder().decode(text)); done?.(); return true; },
+});
+export const moeProcess: { env: Record<string, string | undefined>; stdout: Writable; stderr: Writable; stdin: Readable; umask(mask?: number): number } = {
+  env: {},
+  stdout: toConsole(text => console.log(text)),
+  stderr: toConsole(text => console.error(text)),
+  stdin: { isTTY: true, async *[Symbol.asyncIterator]() { /* no input outside a command */ } },
+  umask: () => 0o077,
+};
+
+// - `setTimeout` and `clearTimeout` with Node's `Timeout` (slice 41): a service client restarts its bound with
+//   `refresh()` as a stream's chunks arrive (service-client.ts), which a browser's numeric timer id lacks. The object
+//   reads as its id where a number is wanted, and `clearTimeout` takes either.
+const browserSetTimeout = globalThis.setTimeout, browserClearTimeout = globalThis.clearTimeout;
+export class Timeout {
+  private id: ReturnType<typeof browserSetTimeout> | undefined;
+  constructor(private readonly callback: () => void, private readonly ms: number | undefined) { this.id = browserSetTimeout(callback, ms); }
+  refresh(): this { if (this.id !== undefined) browserClearTimeout(this.id); this.id = browserSetTimeout(this.callback, this.ms); return this; }
+  ref(): this { return this; }
+  unref(): this { return this; }
+  hasRef(): boolean { return true; }
+  close(): this { browserClearTimeout(this.id); this.id = undefined; return this; }
+  [Symbol.toPrimitive](): number { return Number(this.id); }
+}
+function setTimeoutNode<A extends unknown[]>(callback: (...args: A) => void, ms?: number, ...args: A): Timeout {
+  return new Timeout(() => callback(...args), ms);
+}
+function clearTimeoutNode(timer: Timeout | number | undefined): void {
+  if (timer instanceof Timeout) timer.close(); else browserClearTimeout(timer);
+}
+export { setTimeoutNode as setTimeout, clearTimeoutNode as clearTimeout };

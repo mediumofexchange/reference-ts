@@ -23,6 +23,8 @@ export const SUBSTITUTES = Object.freeze({
   "node:sqlite": own("src/browser/node-sqlite.ts"),
   "node:crypto": own("src/browser/node-crypto.ts"),
   "node:fs": own("src/browser/node-fs.ts"),
+  "node:fs/promises": own("src/browser/node-fs-promises.ts"),
+  "node:os": own("src/browser/node-os.ts"),
   "node:path": own("src/browser/node-path.ts"),
   "node:url": own("src/browser/node-url.ts"),
   "node:module": own("src/browser/node-module.ts"),
@@ -39,12 +41,21 @@ export const ASSETS = Object.freeze([
   join(dirname(require.resolve("@noir-lang/noirc_abi/package.json")), "web/noirc_abi_wasm_bg.wasm"),
 ]);
 
+/** The holder's page (slice 41), copied beside the bundle: it reads nothing the library verifies, so it names no code. */
+export const PAGES = Object.freeze([own("src/browser/wallet.html")]);
+
 /** Barretenberg's browser build starts its own workers from these modules, beside the module that starts them: a
  * bundle carries them beside itself under the names it asks for. */
 const bbBrowser = join(dirname(require.resolve("@aztec/bb.js")), "../browser/barretenberg_wasm");
 export const BB_WORKERS = Object.freeze([
   { in: join(bbBrowser, "barretenberg_wasm_main/factory/browser/main.worker.js"), out: "main.worker" },
   { in: join(bbBrowser, "barretenberg_wasm_thread/factory/browser/thread.worker.js"), out: "thread.worker" },
+]);
+
+/** The bundle's entries: the holder's read path (slice 39) and one wallet command a worker (slice 41). */
+export const ENTRIES = Object.freeze([
+  { in: own("src/browser/holder.ts"), out: "holder" },
+  { in: own("src/browser/command.ts"), out: "command" },
 ]);
 
 const substitution = {
@@ -64,8 +75,10 @@ const options = (entryPoints, define, extra) => ({
   conditions: ["browser"], mainFields: ["browser", "module", "main"], logLevel: "silent", metafile: true,
   // A caller's plugins first, so a test bundle may resolve a test-only module before the substitution refuses it.
   inject: [own("src/browser/globals.ts")], plugins: [...(extra ?? []), substitution],
-  // A browser has no process: its platform reads as "browser" (file-identity.ts), and no process id names a file.
-  define: { MOE_BROWSER_CODE: JSON.stringify(define), "process.platform": "\"browser\"", "process.pid": "0" },
+  // A browser has no process: its platform reads as "browser" (file-identity.ts), and no process id names a file. The
+  // members a command reaches are globals.ts' `moeProcess`'s (slice 41), and `process` itself stays undefined.
+  define: { MOE_BROWSER_CODE: JSON.stringify(define), "process.platform": "\"browser\"", "process.pid": "0",
+    ...Object.fromEntries(["env", "stdout", "stderr", "stdin", "umask"].map(name => [`process.${name}`, `moeProcess.${name}`])) },
   // The package's own assets and SQLite's binary are read beside the bundle at run time, never inlined.
   loader: { ".wasm": "file", ".json": "json" },
 });
@@ -107,12 +120,12 @@ export async function bundle(entries, outdir, extra) {
   const code = codeName(first.metafile, settings);
   claim(outdir);
   const result = await esbuild.build({ ...options(entryPoints, code, extra), absWorkingDir: root, write: true, outdir });
-  for (const asset of ASSETS) copyFileSync(asset, join(outdir, asset.split(sep).pop().split("/").pop()));
+  for (const asset of [...ASSETS, ...PAGES]) copyFileSync(asset, join(outdir, asset.split(sep).pop().split("/").pop()));
   return { code, outputs: Object.keys(result.metafile.outputs) };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const at = process.argv.indexOf("--out"), outdir = at > 0 ? resolve(process.argv[at + 1]) : own("dist-browser");
-  const { code, outputs } = await bundle([{ in: own("src/browser/holder.ts"), out: "holder" }], outdir);
+  const { code, outputs } = await bundle(ENTRIES, outdir);
   console.log(JSON.stringify({ code, outputs: outputs.map(path => relative(root, resolve(root, path)).split(sep).join("/")) }));
 }

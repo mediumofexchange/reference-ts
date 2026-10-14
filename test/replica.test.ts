@@ -16,7 +16,7 @@ import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.
 import { EvidenceRefusal, ReplayRefusal } from "../src/pool/v3/refusals.js";
 import { V3ServiceClient, V3ServiceClientError } from "../src/pool/v3/service-client.js";
 import type { V3OperatorJournal as Journal, ServedPackage } from "../src/pool/v3/store.js";
-import type { RepairRecord, Skipped, Source, Synced } from "../src/cli/reader.js";
+import type { RepairRecord, Skipped, Source, Synced } from "../src/cli/read.js";
 import type { V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
 import { FixtureVenue, LOCAL_REFERENCE } from "../src/record-venue.js";
 
@@ -35,17 +35,18 @@ describe("a replica of a lit operator's evidence", () => {
   let V3Wallet: typeof import("../src/pool/v3/wallet-store.js").V3Wallet;
   let service: typeof import("../src/pool/v3/service-http.js");
   let V3Replica: typeof import("../src/pool/v3/replica.js").V3Replica;
-  let passedOver: typeof import("../src/cli/reader.js").passedOver;
+  let passedOver: typeof import("../src/cli/read.js").passedOver;
   let ownSources: typeof import("../src/cli/reader.js").ownSources;
-  let readSources: typeof import("../src/cli/reader.js").readSources;
-  let sourcesOf: typeof import("../src/cli/reader.js").sourcesOf;
+  let readSources: typeof import("../src/cli/read.js").readSources;
+  let sourcesOf: typeof import("../src/cli/read.js").sourcesOf;
   const closing: { close(): void }[] = [], servers: Server[] = [], directories: string[] = [], scratch = resolve("scratch");
   beforeAll(async () => {
     ({ V3OperatorJournal } = await import("../src/pool/v3/store.js"));
     ({ V3Wallet } = await import("../src/pool/v3/wallet-store.js"));
     service = await import("../src/pool/v3/service-http.js");
     ({ V3Replica } = await import("../src/pool/v3/replica.js"));
-    ({ passedOver, readSources, sourcesOf, ownSources } = await import("../src/cli/reader.js"));
+    ({ passedOver, readSources, sourcesOf } = await import("../src/cli/read.js"));
+    ({ ownSources } = await import("../src/cli/reader.js"));
   });
   afterEach(async () => {
     await Promise.all(servers.splice(0).map(server => new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); })));
