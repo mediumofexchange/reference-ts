@@ -120,6 +120,8 @@ const abandoned = new FinalizationRegistry<{ readonly connection: Connection; re
 });
 
 export class StatementSync {
+  /** Its database, held as Node's statement holds it: a database is collected only once its statements are. */
+  readonly #database: DatabaseSync;
   readonly #connection: Connection;
   readonly #sql: string;
   #bigints: boolean;
@@ -129,8 +131,8 @@ export class StatementSync {
   #iteration: (() => void) | undefined;
 
   /** @internal */
-  constructor(connection: Connection, sql: string, bigints: boolean) {
-    this.#connection = connection; this.#sql = sql; this.#bigints = bigints;
+  constructor(database: DatabaseSync, connection: Connection, sql: string, bigints: boolean) {
+    this.#database = database; this.#connection = connection; this.#sql = sql; this.#bigints = bigints;
   }
 
   setReadBigInts(enabled: boolean): void {
@@ -322,6 +324,8 @@ export class DatabaseSync {
       }
       this.#connection.db = db;
     } finally { wasm.pstack.restore(stack); }
+    dropped.register(this, this.#connection, this);
+    open++;
     capi.sqlite3_extended_result_codes(this.#connection.db, 1);
     capi.sqlite3_busy_timeout(this.#connection.db, options.timeout ?? 0);
     // Node's SQLite makes a new database's pages 4096 bytes, the WebAssembly build's default 8192: Node's, as a kept
@@ -350,19 +354,34 @@ export class DatabaseSync {
     this.#open();
     if (typeof sql !== "string") throw argumentType("The \"sql\" argument must be a string.");
     release(this.#connection, sql, compile(this.#connection, sql));
-    return new StatementSync(this.#connection, sql, this.#bigints);
+    return new StatementSync(this, this.#connection, sql, this.#bigints);
   }
 
   close(): void {
-    const db = this.#open(), { idle, busy } = this.#connection;
-    for (const statements of idle.values()) for (const statement of statements) capi.sqlite3_finalize(statement);
-    for (const statement of busy) capi.sqlite3_finalize(statement);
-    idle.clear(); busy.clear();
-    this.#connection.idleCount = 0;
-    this.#connection.db = 0;
-    const rc = capi.sqlite3_close_v2(db);
+    this.#open();
+    dropped.unregister(this);
+    const rc = shut(this.#connection);
     if (rc !== 0) throw sqliteError(capi.sqlite3_errstr(rc), rc);
   }
 }
+
+/** Finalize a connection's statements and close it: SQLite's answer to the close. */
+function shut(connection: Connection): number {
+  const db = connection.db, { idle, busy } = connection;
+  open--;
+  for (const statements of idle.values()) for (const statement of statements) capi.sqlite3_finalize(statement);
+  for (const statement of busy) capi.sqlite3_finalize(statement);
+  idle.clear(); busy.clear();
+  connection.idleCount = 0;
+  connection.db = 0;
+  return capi.sqlite3_close_v2(db);
+}
+/** A database its program dropped without `close()` is closed once collected, as Node's is (slice 39 review, slice 41):
+ * a read that makes its own replay store and returns state over it (package-reader.ts) leaves it to the collector, and
+ * the WebAssembly memory it holds is freed only so. Its statements hold it (`StatementSync`), so none outlives it. */
+let open = 0;
+/** @internal The databases open now (test/browser-host.test.ts). */
+export const openDatabases = (): number => open;
+const dropped = new FinalizationRegistry<Connection>(connection => { if (connection.db !== 0) shut(connection); });
 
 export default { DatabaseSync, StatementSync };

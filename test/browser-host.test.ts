@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import * as browserCrypto from "../src/browser/node-crypto.js";
 import * as browserFs from "../src/browser/node-fs.js";
 import * as browserPath from "../src/browser/node-path.js";
-import { DatabaseSync as BrowserDatabase } from "../src/browser/node-sqlite.js";
+import { DatabaseSync as BrowserDatabase, openDatabases } from "../src/browser/node-sqlite.js";
 import { fileURLToPath } from "../src/browser/node-url.js";
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { ReplayStore } from "../src/pool/v3/replay-store.js";
@@ -196,6 +196,27 @@ describe("the browser host's database files", () => {
     expect(kept.get()).toEqual({ seven: 7 });
     db.close();
     expect(() => kept.get()).toThrow(expect.objectContaining({ code: "ERR_INVALID_STATE", message: "statement has been finalized" }));
+  });
+
+  it("closes a database dropped without close() once it is collected, as Node's is, and none while a statement holds it", async () => {
+    setFlagsFromString("--expose-gc");
+    const gc = runInNewContext("gc") as () => void;
+    const settle = async (until: () => boolean): Promise<void> => {
+      for (let round = 0; round < 20 && !until(); round++) { gc(); await new Promise(resolve => setTimeout(resolve, 0)); }
+    };
+    const before = openDatabases();
+    // As a read that makes its own replay store and returns state over it (package-reader.ts): the caller drops both.
+    let dropped: BrowserDatabase | undefined = new BrowserDatabase(":memory:");
+    dropped.exec("CREATE TABLE t(x); INSERT INTO t VALUES (1)");
+    let statement: ReturnType<BrowserDatabase["prepare"]> | undefined = dropped.prepare("SELECT x FROM t");
+    dropped = undefined;
+    await settle(() => false);
+    // Held by its statement: still open and readable.
+    expect(openDatabases()).toBe(before + 1);
+    expect(statement.get()).toEqual({ x: 1 });
+    statement = undefined;
+    await settle(() => openDatabases() === before);
+    expect(openDatabases()).toBe(before);
   });
 
   it.runIf(BROWSER_HOST)("before a file pool is mounted, refuses a kept replay file and a retained evidence file visibly, never as damage to discard", () => {
