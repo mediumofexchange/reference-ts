@@ -14,7 +14,7 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { ByteWriter, compareBytes, copyBytes, EncodingError } from "./bytes.js";
-import { attributeTransaction, frameTransaction, orderedEntries, ownErgoProfile, sectionMatchesRoot, type AttributedObject, type ErgoProfile }
+import { attributeTransaction, orderedEntries, ownErgoProfile, sectionMatchesRoot, shapedOutputs, type AttributedObject, type ErgoProfile }
   from "./ergo-profile.js";
 import { scanTransaction } from "./ergo-scan.js";
 import { fieldToBytes, isField, limbsOf } from "./pool/field.js";
@@ -389,12 +389,14 @@ export async function succinctRange(request: RangeRequest, sources: SuccinctRang
     const unsigned = copyBytes(givenBytes), steps = Array.from(givenSteps, step => isBytes(step) ? copyBytes(step) : step);
     const root = inclusionRoot(blake2b(unsigned, { dkLen: 32 }), Number(position), steps);
     if (root === undefined || !same(root, header.transactionsRoot)) return refused("transaction");
-    // §2 rule 7: a transaction inside the grammar whose shaped outputs for this key are not the entries the map names
-    // at its place shows the set unsound.
-    if (frameTransaction(unsigned) !== undefined) {
-      const scanned = scanTransaction(unsigned).filter(e => subjectKey(e.subject) === key).map(e => `${e.output}:${bytesToHex(e.subject)}`);
+    // §2 rule 7: a transaction inside the grammar whose shaped outputs for this key, as the framer reads them (the
+    // native check, not the scan the circuits evaluate), are not the entries the map names at its place shows the set
+    // unsound.
+    const shaped = shapedOutputs(unsigned);
+    if (shaped !== undefined) {
+      const read = shaped.filter(e => subjectKey(e.subject) === key).map(e => `${e.output}:${bytesToHex(e.subject)}`);
       const named = entries.filter(e => e.height === height && e.position === position).map(e => `${e.output}:${bytesToHex(e.subject)}`);
-      if (scanned.join() !== named.join()) return refused("disagreement");
+      if (read.join() !== named.join()) return refused("disagreement");
     }
     for (const object of attributeTransaction(profile, unsigned, Number(position))) {
       if (object.kind === request.kind && same(object.subject, request.subject)) objects.push({ index: height - A - 1n, ordinal: object.ordinal, record: object.record });

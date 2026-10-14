@@ -289,6 +289,22 @@ export function frameTransaction(unsigned: Uint8Array): readonly ErgoOutputView[
   return cursor.at === unsigned.length ? Object.freeze(outputs) : undefined;
 }
 
+/** The outputs of a transaction with the shape (succinct-read §4.2's
+ * entries, at any location), by the framer's reading: each output whose own
+ * R4 is a 32-byte `Coll[Byte]` and R5 a `Coll[Byte]`, its index and subject in
+ * output order; undefined for a transaction outside the grammar. */
+export function shapedOutputs(unsigned: Uint8Array): readonly { readonly output: number; readonly subject: Uint8Array }[] | undefined {
+  const outputs = frameTransaction(unsigned);
+  if (outputs === undefined) return undefined;
+  const found: { readonly output: number; readonly subject: Uint8Array }[] = [];
+  outputs.forEach(({ registers }, output) => {
+    const r4 = Object.hasOwn(registers, "R4") ? collBytes(registers["R4"]!) : undefined;
+    const r5 = Object.hasOwn(registers, "R5") ? collBytes(registers["R5"]!) : undefined;
+    if (r4 !== undefined && r4.length === 32 && r5 !== undefined) found.push(Object.freeze({ output, subject: r4 }));
+  });
+  return Object.freeze(found);
+}
+
 /** An object the profile attributes at one height: its kind and subject by
  * location and shape, its position in the venue's order and its exact bytes. */
 export interface AttributedObject { readonly kind: RecordKind; readonly subject: Uint8Array; readonly ordinal: bigint; readonly record: Uint8Array }
