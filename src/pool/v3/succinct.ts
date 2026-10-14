@@ -210,6 +210,9 @@ interface Established {
   cursor: number;
 }
 const ESTABLISHED = new WeakMap<ProofCheck, Established>();
+/** The verifier one establishment's replay asks, a fresh object its cursor is kept under. Made here, so its closure
+ * holds nothing of the establishment's buffers. */
+const relay = (verifier: ProofCheck): ProofCheck => ({ verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) });
 
 /** A pool-v3 reader's construction over proof-free trails, under check set `set` with proofs and check proofs from
  * `supply`. A reader keeping an evidence store across reads passes the same construction (package-reader.ts); it holds
@@ -290,9 +293,9 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       const digestAt = (values: Uint8Array, i: number): bigint => bytesToField(values.subarray(32 * i, 32 * i + 32));
       // §3.2, §3.4 step 2: aligned spans over proved-record numbers, each asked for a cover, split where none verifies. A
       // top span's digests are made once, bottom up: `levels[l]` holds those of its spans of height l, in order. Provers
-      // walk a trail in order (`coverTrail`), so what sources cover is a prefix of its proved records: once one record
-      // has no cover from any source, the rest is the tail (§3.5), whose spans would cost about two asks a record and
-      // change no judgment (§2 rule 3), so none is asked.
+      // walk a trail in order (`coverTrail`), so what sources cover is mostly a prefix of its proved records: once one
+      // record has no cover from any source, the spans after it are asked once each and never split, since splitting
+      // them asked about two covers a record of the tail (§3.5) and a missing cover changes no judgment (§2 rule 3).
       let tail = false;
       const coverSpan = async (s: number, first: number): Promise<void> => {
         const levels = [digests.subarray(32 * (first - start), 32 * (first - start + 2 ** s))];
@@ -302,7 +305,6 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
           levels.push(out);
         }
         const ask = async (l: number, j: number): Promise<void> => {
-          if (tail) return;
           const digest = digestAt(levels[l]!, j), index = first - start + j * 2 ** l, kind = l === 0 ? kinds[index] : undefined;
           // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
           let accepted: Uint8Array | undefined;
@@ -318,12 +320,13 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
             return;
           }
           if (l === 0) { tail = true; return; }
+          if (tail) return;
           await ask(l - 1, 2 * j);
           await ask(l - 1, 2 * j + 1);
         };
         await ask(s, 0);
       };
-      for (let i = start; i < start + m && !tail;) {
+      for (let i = start; i < start + m;) {
         let s = 0;
         while (i % 2 ** (s + 1) === 0 && i + 2 ** (s + 1) <= start + m) s++;
         await coverSpan(s, i);
@@ -342,7 +345,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
         const bytes = await fetchProof(proofHash, at);
         if (bytes === undefined || !proofLengthHolds(7, bytes.length)) throw new UnestablishedTrail();
       }
-      const replayCheck: ProofCheck = { verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) };
+      const replayCheck = relay(verifier);
       // The cursor keeps the proved records' entries alone, not buffers sized for every record after the tip.
       const own = <T extends Uint8Array | BigUint64Array>(values: T, length: number): T =>
         (m === capacity ? values.subarray(0, length) : values.slice(0, length)) as T;
