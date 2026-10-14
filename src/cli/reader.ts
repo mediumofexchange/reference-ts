@@ -27,7 +27,7 @@ import type { FrontierResult } from "../pool/v3/scope-reader.js";
 import { serviceSupply, unanswered, V3ServiceClient, V3ServiceClientError, type CheckSource } from "../pool/v3/service-client.js";
 import type { TrailCheckSet } from "../pool/v3/check-set.js";
 import type { Construction } from "../pool/v3/construction.js";
-import { succinctPoolV3, type CheckSet, type CheckSupply, type SpanProver } from "../pool/v3/succinct.js";
+import { succinctPoolV3, type CheckSet, type CheckSupply } from "../pool/v3/succinct.js";
 import { copyParameters, prepareParameters } from "../pool/parameter-files.js";
 import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, event, flag, flags, has, hex, hex32, initDirectory, initialized, integer, requireNew, UsageError, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, READ_FLAGS,
@@ -559,10 +559,11 @@ const roundRefusal = (error: unknown): string | undefined =>
  */
 async function serve(argv: readonly string[]): Promise<void> {
   const args = parseArguments(argv, { dir: "value", verifiers: "value", prove: "switch", parameters: "value", ...SERVE_FLAGS }, 0);
-  const directory = openDirectory(required(args, "dir"), "reader"), venue = requireVenue(directory);
-  if (directory.succinct) throw new CommandError("SUCCINCT", "a replica reads completely (succinct-read §1): serve from a reader directory made without --read succinct");
   if (has(args, "parameters") && !has(args, "prove")) throw new UsageError("--parameters names the check set's parameters for --prove");
+  const directory = openDirectory(required(args, "dir"), "reader");
+  if (directory.succinct) throw new CommandError("SUCCINCT", "a replica reads completely (succinct-read §1): serve from a reader directory made without --read succinct");
   if (has(args, "prove") && !directory.construction.reader.proofs) throw new UsageError(`a ${nameOf(directory.construction)} replica holds no proofs to cover`);
+  const venue = requireVenue(directory);
   const { port, onion, ms } = serveFlags(args);
   const view = openView(directory);
   let evidence: EvidenceStore | undefined, verifier: Awaited<ReturnType<typeof directoryVerifier>> | undefined;
@@ -611,20 +612,19 @@ async function serve(argv: readonly string[]): Promise<void> {
       }
     }
   };
-  /** A round's proving: new covers over the kept trails (held ones are not proved again) until PROVE_ROUND_MS has
-   * passed or the replica stops; the nodes over two covered spans follow their leaves. */
+  /** A round's proving: the walk of the kept trails goes on from where the last round's stood, proving new covers (held
+   * ones are not proved again), until PROVE_ROUND_MS has passed or the replica stops. */
   const prove = async (): Promise<void> => {
     if (covers === undefined || stopping()) return;
     const { prover } = covers, until = Date.now() + PROVE_ROUND_MS;
-    const bounded: SpanProver = { identity: prover.identity, node: (left, right) => prover.node(left, right),
-      leaf: async record => Date.now() < until && !stopping() ? prover.leaf(record) : undefined };
     try {
-      const walked = await replica.prove(bounded);
+      const walked = await replica.prove(prover, { stop: () => Date.now() >= until || stopping() });
       if (walked.made > 0) print({ status: "proved", set: prover.identity, testSet: prover.set.test, ...walked });
     } catch (error) {
-      // A refusal inside the backend leaves its instance unusable (slice 36): this process proves no more.
+      // A refusal inside the backend leaves its instance unusable (slice 36): this process proves no more, and serves on.
       event({ event: "prove", code: "PROVER", message: (error as Error).message });
-      const failed = covers; covers = undefined; await failed.close();
+      const failed = covers; covers = undefined;
+      await failed.close().catch((closing: unknown) => { event({ event: "prove", code: "PROVER", message: (closing as Error).message }); });
     }
   };
   try {

@@ -12,7 +12,7 @@ import { EvidenceStore, formServes, type StoredTrail, type TrailForm } from "./e
 import { fieldToBytes } from "../field.js";
 import type { V3EvidenceSource } from "./service-http.js";
 import { V3StoreError, type ServedEvidence, type ServedPackage } from "./store.js";
-import { coverTrail, proofAmong, type RecordAt, type SpanProver } from "./succinct.js";
+import { coverTrail, proofAmong, type CoverWalk, type RecordAt, type SpanProver } from "./succinct.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 const copied = (served: ServedPackage): ServedPackage => ({ selection: { ...served.selection, domain: copyBytes(served.selection.domain),
@@ -68,12 +68,19 @@ export class V3Replica implements V3EvidenceSource {
     return true;
   }
 
+  /** Where each segment's walk stood after the last `prove` that walked it, by set identity and segment: the position
+   * and chain value it had read through, and its covers pending. */
+  readonly #walks = new Map<string, { readonly position: bigint; readonly evidence: Uint8Array; readonly walk: CoverWalk }>();
+
   /**
    * Prove covers (succinct-read §§2 rule 6, 3.2) over the replica's kept trails with `prover`, keeping each in the
    * replica's file under the prover's set identity, which serves them. Each segment's trails are walked from their
-   * furthest top, and a top a walked trail reaches is walked with it; a span already kept is not proved again.
+   * furthest top, and a top a walked trail reaches is walked with it; a span already kept is not proved again. A walk
+   * goes on from where this replica's last walk of the segment stood, where the trail still passes through it, so a
+   * long trail is read once, not every time; `stop` ends the walk before its next record, and the next call goes on.
    */
-  async prove(prover: SpanProver): Promise<{ readonly trails: number; readonly proved: number; readonly made: number }> {
+  async prove(prover: SpanProver, options: { readonly stop?: () => boolean } = {}):
+    Promise<{ readonly trails: number; readonly proved: number; readonly made: number; readonly stopped: boolean }> {
     // Covers are of pool-v3 statement proofs (§3.2): a replica of proof-free trails, or of another construction, has none to cover.
     const construction = this.#evidence.construction;
     if (construction.trailChecks !== undefined || construction.namespace.name !== POOL_V3.namespace.name) {
@@ -82,9 +89,10 @@ export class V3Replica implements V3EvidenceSource {
     const set: unknown = prover?.identity;
     if (!(set instanceof Uint8Array) || set.length !== 32) throw new TypeError("a prover of a set with a 32-byte identity");
     const own = copyBytes(set), batch = this.#evidence.retained(), walked: StoredTrail[] = [];
-    let proved = 0, made = 0;
+    let proved = 0, made = 0, stopped = false;
     try {
       for (const top of this.#evidence.keptTops()) {
+        if (stopped) break;
         let reached = false;
         for (const trail of walked) {
           if (same(trail.segment, top.segment) && trail.length >= top.position && await trail.reaches(top.position, top.evidence) !== undefined) { reached = true; break; }
@@ -92,12 +100,18 @@ export class V3Replica implements V3EvidenceSource {
         const trail = reached ? undefined : batch.trail(top.segment, top.evidence);
         if (trail === undefined) continue;
         walked.push(trail);
-        const done = await coverTrail(prover, trail.stream(), digest => this.#evidence.cover(own, fieldToBytes(digest)),
-          cover => this.#evidence.keepCover(own, fieldToBytes(cover.digest), cover.proof));
-        proved += done.proved; made += done.made;
+        const key = `${bytesToHex(own)}:${bytesToHex(trail.segment)}`, kept = this.#walks.get(key);
+        const from = kept !== undefined && kept.position <= trail.length && await trail.reaches(kept.position, kept.evidence) !== undefined ? kept : undefined;
+        const after = from?.position ?? 0n;
+        const done = await coverTrail(prover, trail.stream(after), digest => this.#evidence.cover(own, fieldToBytes(digest)),
+          cover => this.#evidence.keepCover(own, fieldToBytes(cover.digest), cover.proof), { ...(from === undefined ? {} : { from: from.walk }),
+            ...(options.stop === undefined ? {} : { stop: options.stop }) });
+        const position = after + BigInt(done.read), evidence = trail.evidence(position);
+        if (evidence !== undefined) this.#walks.set(key, { position, evidence, walk: done.walk });
+        proved += done.proved; made += done.made; stopped = done.stopped;
       }
     } finally { batch.release(); }
-    return { trails: walked.length, proved, made };
+    return { trails: walked.length, proved, made, stopped };
   }
 
   /** A succinct reader's fetch (succinct-read §3.5): the proof of a record kept at `at` whose SHA-256 is `proofHash`. */

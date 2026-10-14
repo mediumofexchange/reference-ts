@@ -129,8 +129,8 @@ describe("succinct transport (slice 37)", () => {
     const { leaf, node } = testProver(SET, verifier);
     await expect(f.replica.prove({ leaf, node } as unknown as ReturnType<typeof testProver>)).rejects.toThrow(/prover of a set/);
     // The prover covers the two proved records and their node; walking again proves nothing new.
-    expect(await f.replica.prove(testProver(SET, verifier))).toEqual({ trails: 1, proved: 2, made: 3 });
-    expect(await f.replica.prove(testProver(SET, verifier))).toEqual({ trails: 1, proved: 2, made: 0 });
+    expect(await f.replica.prove(testProver(SET, verifier))).toMatchObject({ trails: 1, proved: 2, made: 3 });
+    expect(await f.replica.prove(testProver(SET, verifier))).toMatchObject({ trails: 1, proved: 2, made: 0 });
     // One more issue after the covers: the tail, which no cover reaches yet.
     await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
     await f.mirror();
@@ -154,6 +154,30 @@ describe("succinct transport (slice 37)", () => {
     }
     read.evidence.close();
     expect(() => new EvidenceStore(join(directories.at(-1)!, "succinct.db"))).toThrow("another construction's evidence");
+  });
+
+  it("goes on proving from where its last walk of a segment stood, and stops before the next record when asked (slice 38)", async () => {
+    const f = await fixture();
+    await f.j.submit(f.issue()); await f.checkpoint("c2");
+    await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
+    await f.mirror();
+    const inner = testProver(SET, verifier);
+    let leaves = 0;
+    const prover = { ...inner, leaf: async (record: Record) => { leaves++; return inner.leaf(record); } };
+    // Stopped before its second record: the first leaf only.
+    let asked = 0;
+    expect(await f.replica.prove(prover, { stop: () => asked++ >= 1 })).toMatchObject({ made: 1, stopped: true });
+    // The next walk reads only the record after it: its leaf and the node over the two.
+    expect(await f.replica.prove(prover)).toMatchObject({ trails: 1, proved: 2, made: 2, stopped: false });
+    expect(leaves).toBe(2);
+    // Nothing new: no record is read again, so no leaf is asked for.
+    expect(await f.replica.prove(prover)).toMatchObject({ proved: 2, made: 0 });
+    expect(leaves).toBe(2);
+    // A new record: the walk goes on from the last one and proves its leaf alone (its node waits for a sibling).
+    await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
+    await f.mirror();
+    expect(await f.replica.prove(prover)).toMatchObject({ proved: 3, made: 1 });
+    expect(leaves).toBe(3);
   });
 
   it("serves a trail's records in their proof-free form, the same chain values in both forms, sized before its records", async () => {

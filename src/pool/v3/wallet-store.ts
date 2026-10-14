@@ -735,8 +735,8 @@ export class V3Wallet {
     // only copy of the evidence. The holder removes it to sync again from nothing.
     const file = `${this.path}.${this.reading === this.construction ? "evidence" : "succinct-evidence"}`;
     try { return this.retained ??= new EvidenceStore(file, { construction: this.reading }); } catch (error) {
-      if (error instanceof FileInUse) throw new V3WalletError("STORAGE", "another handle holds this wallet's evidence file");
-      throw new V3WalletError("STORAGE", "the wallet's evidence file cannot be read; remove it to sync again");
+      if (error instanceof FileInUse) throw new V3WalletError("STORAGE", `another handle holds this wallet's evidence file ${file}`);
+      throw new V3WalletError("STORAGE", `the wallet's evidence file ${file} cannot be read; remove it to sync again`);
     }
   }
   /** The kept state of the wallet's reads (§14 kept classes), named by the verifier's circuits. */
