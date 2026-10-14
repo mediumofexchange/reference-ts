@@ -162,10 +162,10 @@ describe.skipIf(BROWSER_HOST)("the browser host's node:sqlite against node:sqlit
 });
 
 describe("the browser host's database files", () => {
-  it("opens memory and the anonymous temporary database, and refuses a path as SQLite refuses a file it cannot open", () => {
+  it("opens memory and the anonymous temporary database, and before a file pool is mounted refuses a path as SQLite refuses a file it cannot open", () => {
     expect(new BrowserDatabase(":memory:").isOpen).toBe(true);
     expect(new BrowserDatabase("").isOpen).toBe(true);
-    expect(() => new BrowserDatabase("wallet.db")).toThrow(expect.objectContaining({ code: "ERR_SQLITE_ERROR", errcode: 14, message: "a browser host keeps no database files: wallet.db" }));
+    expect(() => new BrowserDatabase("wallet.db")).toThrow(expect.objectContaining({ code: "ERR_SQLITE_ERROR", errcode: 14, message: "a browser host keeps no database files until its file pool is mounted: wallet.db" }));
   });
 
   it("holds SQLite statements by execution, not by statement object, so a walk that never yields does not accumulate them", async () => {
@@ -198,7 +198,7 @@ describe("the browser host's database files", () => {
     expect(() => kept.get()).toThrow(expect.objectContaining({ code: "ERR_INVALID_STATE", message: "statement has been finalized" }));
   });
 
-  it.runIf(BROWSER_HOST)("refuses a kept replay file and a retained evidence file visibly, never as damage to discard", () => {
+  it.runIf(BROWSER_HOST)("before a file pool is mounted, refuses a kept replay file and a retained evidence file visibly, never as damage to discard", () => {
     const dir = mkdtempSync(join(tmpdir(), "browser-host-"));
     try {
       expect(() => new ReplayStore(join(dir, "kept.db"), { digest: join(dir, "kept.sha256") })).toThrow(expect.objectContaining({ errcode: 14 }));

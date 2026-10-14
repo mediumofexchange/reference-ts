@@ -18,12 +18,15 @@
 // A `StatementSync` holds no SQLite statement of its own: each execution takes one, compiled from the same text, from
 // its connection's pool and returns it when done, so memory follows the distinct texts in use and the executions in
 // flight, not the statement objects a walk has made, whether or not the engine has collected them yet.
-// The browser host keeps no database files (slice 39's stop): only `:memory:` and the anonymous temporary database
-// open, and any other path is refused as SQLite refuses a file it cannot open (SQLITE_CANTOPEN), so a kept file's opening
-// fails visibly, as a failure of the system, never as damage to discard (replay-store.ts `systemFailure`). No caller
-// attaches a database or vacuums into one, which would open a file in SQLite's own virtual file system.
+// A database path opens on the worker's file pool once it is mounted (files.ts, sqlite-files.ts: slice 40), with a
+// write-ahead log as on Node. Before that the host keeps no database files (slice 39): only `:memory:` and the
+// anonymous temporary database open, and any other path is refused as SQLite refuses a file it cannot open
+// (SQLITE_CANTOPEN), so a kept file's opening fails visibly, as a failure of the system, never as damage to discard
+// (replay-store.ts `systemFailure`). No caller attaches a database or vacuums into one.
 // test/browser-host.test.ts and the equivalence run (vitest.browser-host.config.ts) hold it to node:sqlite's behaviour.
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
+import { isMounted } from "./files.js";
+import { installFilesVfs } from "./sqlite-files.js";
 
 const sqlite3 = await sqlite3InitModule();
 const { capi, wasm } = sqlite3;
@@ -302,13 +305,15 @@ export class DatabaseSync {
     if (typeof path !== "string") throw argumentType("The \"path\" argument must be a string");
     if (options.open === false) throw new TypeError("a browser host opens a database as it is made");
     this.#bigints = options.readBigInts === true;
-    // The host keeps no database files: a path is refused as SQLite refuses a file it cannot open.
-    if (path !== ":memory:" && path !== "") throw sqliteError(`a browser host keeps no database files: ${path}`, SQLITE_CANTOPEN);
+    // Before the file pool is mounted the host keeps no database files: a path is refused as SQLite refuses a file it
+    // cannot open.
+    const file = path !== ":memory:" && path !== "";
+    if (file && !isMounted()) throw sqliteError(`a browser host keeps no database files until its file pool is mounted: ${path}`, SQLITE_CANTOPEN);
     const flags = options.readOnly === true ? capi.SQLITE_OPEN_READONLY : capi.SQLITE_OPEN_READWRITE | capi.SQLITE_OPEN_CREATE;
     const stack = wasm.pstack.pointer;
     try {
       const out = wasm.pstack.allocPtr() as Pointer;
-      const rc = capi.sqlite3_open_v2(path, out, flags, 0);
+      const rc = capi.sqlite3_open_v2(path, out, flags, file ? installFilesVfs(sqlite3) : 0);
       const db = wasm.peekPtr(out) as Pointer;
       if (rc !== 0) {
         const error = db === 0 ? sqliteError(capi.sqlite3_errstr(rc), rc) : failure(db);
@@ -319,6 +324,9 @@ export class DatabaseSync {
     } finally { wasm.pstack.restore(stack); }
     capi.sqlite3_extended_result_codes(this.#connection.db, 1);
     capi.sqlite3_busy_timeout(this.#connection.db, options.timeout ?? 0);
+    // Node's SQLite makes a new database's pages 4096 bytes, the WebAssembly build's default 8192: Node's, as a kept
+    // file's page digest groups its pages (replay-store.ts). A database with pages keeps its own.
+    if (options.readOnly !== true) this.exec("PRAGMA page_size = 4096");
     this.exec("PRAGMA foreign_keys = ON");
   }
 

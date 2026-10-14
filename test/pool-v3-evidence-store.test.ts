@@ -17,7 +17,7 @@ import { POOL_V3 } from "../src/pool/v3/construction.js";
 import { authenticatedScope } from "../src/pool/v3/scope-evidence.js";
 import { encodeRootTerms, MAX_ROOT_TERMS_BYTES, rootTermsName, rootTermsSignatureMessage, verifyRootTermsSignature } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
-import { BROWSER_HOST, collected } from "./support.js";
+import { BROWSER_HOST, collected, MODULE_MOCKS } from "./support.js";
 
 // The terms signature check, counted where it runs and otherwise unchanged.
 vi.mock("../src/pool/v3/terms.js", async original => {
@@ -257,7 +257,7 @@ describe("v3 evidence store", () => {
     store.close(); exact.close(); parts.close(); skipped.close();
   });
 
-  it("keeps only a terms field that names its backing and verifies, skipping one too long to verify", () => {
+  it.runIf(MODULE_MOCKS)("keeps only a terms field that names its backing and verifies, skipping one too long to verify", () => {
     const issuerSecret = b(12), realTerms = encodeRootTerms({ obligor: ed25519.getPublicKey(issuerSecret), payout: { thing: "t", quantumExponent: 0, perUnit: 1n },
       operator: header.operator, configuration: domain, venue: header.venue, interval: 1n });
     const named = { ...header, entries: [{ backing: rootTermsName(realTerms), link: b(6) }] }, id = segmentIdentity(named);

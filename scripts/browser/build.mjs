@@ -62,7 +62,8 @@ const substitution = {
 const options = (entryPoints, define, extra) => ({
   entryPoints, bundle: true, format: "esm", platform: "browser", target: "es2022", splitting: false,
   conditions: ["browser"], mainFields: ["browser", "module", "main"], logLevel: "silent", metafile: true,
-  inject: [own("src/browser/globals.ts")], plugins: [substitution, ...(extra ?? [])],
+  // A caller's plugins first, so a test bundle may resolve a test-only module before the substitution refuses it.
+  inject: [own("src/browser/globals.ts")], plugins: [...(extra ?? []), substitution],
   // A browser has no process: its platform reads as "browser" (file-identity.ts), and no process id names a file.
   define: { MOE_BROWSER_CODE: JSON.stringify(define), "process.platform": "\"browser\"", "process.pid": "0" },
   // The package's own assets and SQLite's binary are read beside the bundle at run time, never inlined.
