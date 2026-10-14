@@ -1,6 +1,8 @@
 // How an in-browser check's worker reports (slice 39, scripts/browser/check.mjs): progress lines and the final result
-// go to the serving script by POST; memory is measured by the page, which alone may ask the engine for every
-// worker's memory (`performance.measureUserAgentSpecificMemory`, cross-origin isolated).
+// go to the serving script by POST, with the run's token from the worker's own address; memory is measured by the
+// page, which alone may ask the engine for every worker's memory (`performance.measureUserAgentSpecificMemory`,
+// cross-origin isolated).
+const token = new URL(self.location.href).searchParams.get("t") ?? "";
 let asked = 0;
 const waiting = new Map();
 self.addEventListener("message", event => {
@@ -9,7 +11,7 @@ self.addEventListener("message", event => {
   waiting.delete(id);
 });
 
-const post = (path, body) => fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const post = (path, body) => fetch(path, { method: "POST", headers: { "content-type": "application/json", "x-moe-token": token }, body: JSON.stringify(body) });
 
 /** A progress line for the serving script's log. */
 export const report = line => post("/progress", line);

@@ -15,9 +15,14 @@ import "../../test/pool-v3-scope-reader.test.ts";
 import "../../test/pool-v3-state.test.ts";
 import "../../test/pool-v3-capsules.test.ts";
 
+// An assertion left unawaited (an `expect(...).rejects` without await) fails nowhere but here: the run fails with it.
+const unhandled = [];
+self.addEventListener("unhandledrejection", event => { unhandled.push(String(event.reason?.stack ?? event.reason)); });
+
 const started = performance.now();
 const results = await run(result => { if (result.state === "fail") report({ failed: result.name }); });
+await new Promise(resolve => setTimeout(resolve, 0));
 await finish({
-  kind: "suites", ms: Math.round(performance.now() - started), results,
+  kind: "suites", ms: Math.round(performance.now() - started), results, unhandled,
   counts: { pass: results.filter(r => r.state === "pass").length, fail: results.filter(r => r.state === "fail").length, skip: results.filter(r => r.state === "skip").length },
 });

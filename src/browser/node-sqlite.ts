@@ -1,19 +1,25 @@
 // node:sqlite's `DatabaseSync` and `StatementSync` in a browser engine (slice 39), over SQLite's own WebAssembly
 // build, for the browser bundle (scripts/browser/build.mjs substitutes this module for node:sqlite). The stores are
-// written against node:sqlite; this gives them the same surface with the same semantics, so one store implementation
-// serves both hosts:
+// written against node:sqlite; this gives them the same surface with the same semantics (Node 24.21's), so one store
+// implementation serves both hosts:
 // - a JavaScript number binds as REAL, a bigint as INTEGER, a boolean as 0 or 1, a string as TEXT, bytes as a BLOB and
 //   null as NULL; undefined, and anything else, is refused;
 // - an INTEGER reads as a number, or a bigint under `readBigInts`, and a number outside the safe range is refused
 //   (ERR_OUT_OF_RANGE); a REAL as a number, TEXT as a string, a BLOB as a Uint8Array copy, NULL as null;
-// - a first argument that is an object binds named parameters by their bare names, the rest bind in order to the
-//   anonymous ones (`?` and `?NNN`); a name the statement lacks is refused;
+// - a first argument that is an object binds named parameters, by their bare names or with their prefix; a bare name
+//   two prefixes share and a name the statement lacks are refused; the rest bind in order to the anonymous ones
+//   (`?` and `?NNN`);
+// - `run` steps once, `get` reads the first row, `all` every row; `iterate` binds at once, and running its statement
+//   again invalidates it;
+// - a statement is finalized when it is collected, as Node's is, or when its database closes, after which it refuses;
 // - rows are objects with no prototype; a failure is an Error with code ERR_SQLITE_ERROR and SQLite's extended
-//   result code (`errcode`) and its text (`errstr`), the message SQLite's own;
+//   result code (`errcode`) and its text (`errstr`), the message SQLite's own; argument and state refusals carry
+//   Node's codes and messages;
 // - foreign keys are enforced and extended result codes reported, as node:sqlite does by default.
 // The browser host keeps no database files (slice 39's stop): only `:memory:` and the anonymous temporary database
-// open; any other path is refused as SQLite refuses a file it cannot open (SQLITE_CANTOPEN), so a kept file's opening
-// fails visibly, as a failure of the system, never as damage to discard (replay-store.ts `systemFailure`).
+// open, and any other path is refused as SQLite refuses a file it cannot open (SQLITE_CANTOPEN), so a kept file's opening
+// fails visibly, as a failure of the system, never as damage to discard (replay-store.ts `systemFailure`). No caller
+// attaches a database or vacuums into one, which would open a file in SQLite's own virtual file system.
 // test/browser-host.test.ts and the equivalence run (vitest.browser-host.config.ts) hold it to node:sqlite's behaviour.
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 
@@ -26,6 +32,7 @@ const SQLITE_CANTOPEN = 14;
 type Pointer = number;
 export type SQLInputValue = null | number | bigint | string | boolean | ArrayBufferView;
 export type SQLOutputValue = null | number | bigint | string | Uint8Array;
+type Row = Record<string, SQLOutputValue>;
 
 interface SqliteError extends Error { code: string; errcode: number; errstr: string }
 
@@ -33,6 +40,7 @@ function sqliteError(message: string, errcode: number): SqliteError {
   return Object.assign(new Error(message), { code: "ERR_SQLITE_ERROR", errcode, errstr: capi.sqlite3_errstr(errcode) });
 }
 const failure = (db: Pointer): SqliteError => sqliteError(capi.sqlite3_errmsg(db), capi.sqlite3_extended_errcode(db));
+const invalidState = (message: string): Error => Object.assign(new Error(message), { code: "ERR_INVALID_STATE" });
 
 /** UTF-8 or raw bytes copied into WebAssembly memory, which SQLite frees once it is done with them. */
 function copied(bytes: Uint8Array): Pointer {
@@ -43,36 +51,59 @@ function copied(bytes: Uint8Array): Pointer {
 const ENCODER = new TextEncoder();
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER), MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
 
+/** What a database shares with its statements: its handle while open, and the statements not yet finalized. */
+interface Connection { db: Pointer; readonly statements: Set<Pointer> }
+
+/** A statement no wrapper reaches any more is finalized, as Node's are when collected: without this, every prepare of
+ * a long walk would hold its statement in WebAssembly memory until the database closed. */
+const collected = new FinalizationRegistry<{ readonly connection: Connection; readonly statement: Pointer }>(({ connection, statement }) => {
+  if (connection.db !== 0 && connection.statements.delete(statement)) capi.sqlite3_finalize(statement);
+});
+
 export class StatementSync {
-  readonly #db: Pointer;
+  readonly #connection: Connection;
   readonly #statement: Pointer;
   #bigints: boolean;
-  readonly #live: () => void;
+  /** Counts the statement's executions: an iterator stands only while its own execution is the latest. */
+  #execution = 0;
 
   /** @internal */
-  constructor(db: Pointer, statement: Pointer, bigints: boolean, live: () => void) {
-    this.#db = db; this.#statement = statement; this.#bigints = bigints; this.#live = live;
+  constructor(connection: Connection, statement: Pointer, bigints: boolean) {
+    this.#connection = connection; this.#statement = statement; this.#bigints = bigints;
   }
 
-  setReadBigInts(enabled: boolean): void { this.#bigints = enabled === true; }
+  setReadBigInts(enabled: boolean): void { this.#live(); this.#bigints = enabled === true; }
 
+  #live(): Pointer {
+    if (this.#connection.db === 0 || !this.#connection.statements.has(this.#statement)) throw invalidState("statement has been finalized");
+    return this.#connection.db;
+  }
+
+  /** A new execution: reset, bindings cleared and the arguments bound. */
   #bind(args: readonly unknown[]): void {
     this.#live();
     const s = this.#statement;
+    this.#execution++;
     capi.sqlite3_reset(s);
     capi.sqlite3_clear_bindings(s);
     let anonymous = args;
     const first = args[0];
     if (first !== null && typeof first === "object" && !ArrayBuffer.isView(first)) {
       anonymous = args.slice(1);
-      const names = new Map<string, number>();
+      // As Node: any named binding first maps the statement's bare names, refusing one two prefixes share.
+      const bare = new Map<string, { readonly index: number; readonly name: string }>();
       for (let i = 1, count = capi.sqlite3_bind_parameter_count(s); i <= count; i++) {
         const name = capi.sqlite3_bind_parameter_name(s, i);
-        if (name && name[0] !== "?") names.set(name.slice(1), i);
+        if (!name || name[0] === "?") continue;
+        const known = bare.get(name.slice(1));
+        if (known !== undefined && known.name !== name) {
+          throw invalidState(`Cannot create bare named parameter '${name.slice(1)}' because of conflicting names '${known.name}' and '${name}'.`);
+        }
+        bare.set(name.slice(1), { index: i, name });
       }
       for (const [key, value] of Object.entries(first)) {
-        const index = names.get(key);
-        if (index === undefined) throw Object.assign(new Error(`Unknown named parameter '${key}'`), { code: "ERR_INVALID_STATE" });
+        const index = ":$@".includes(key[0] ?? "") ? capi.sqlite3_bind_parameter_index(s, key) : bare.get(key)?.index ?? 0;
+        if (index === 0) throw invalidState(`Unknown named parameter '${key}'`);
         this.#value(index, value);
       }
     }
@@ -102,7 +133,7 @@ export class StatementSync {
       const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
       rc = capi.sqlite3_bind_blob(s, index, copied(bytes), bytes.length, capi.SQLITE_WASM_DEALLOC);
     } else throw Object.assign(new TypeError(`Provided value cannot be bound to SQLite parameter ${index}.`), { code: "ERR_INVALID_ARG_TYPE" });
-    if (rc !== 0) throw failure(this.#db);
+    if (rc !== 0) throw failure(this.#connection.db);
   }
 
   /** One step: true at a row, false when done; a failure resets the statement and is thrown. */
@@ -110,13 +141,13 @@ export class StatementSync {
     const rc = capi.sqlite3_step(this.#statement);
     if (rc === capi.SQLITE_ROW) return true;
     if (rc === capi.SQLITE_DONE) return false;
-    const error = failure(this.#db);
+    const error = failure(this.#connection.db);
     capi.sqlite3_reset(this.#statement);
     throw error;
   }
 
-  #row(): Record<string, SQLOutputValue> {
-    const s = this.#statement, row: Record<string, SQLOutputValue> = Object.create(null);
+  #row(): Row {
+    const s = this.#statement, row: Row = Object.create(null);
     for (let i = 0, n = capi.sqlite3_column_count(s); i < n; i++) {
       const name = capi.sqlite3_column_name(s, i) as string;
       switch (capi.sqlite3_column_type(s, i)) {
@@ -141,28 +172,43 @@ export class StatementSync {
     return row;
   }
 
+  /** One step, as Node's: a statement's changes are made on its first step, and rows after it are not read. */
   run(...args: unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint } {
     this.#bind(args);
-    try { while (this.#step()); } finally { capi.sqlite3_reset(this.#statement); }
-    const changes = BigInt(capi.sqlite3_changes64(this.#db)), id = BigInt(capi.sqlite3_last_insert_rowid(this.#db));
+    try { this.#step(); } finally { capi.sqlite3_reset(this.#statement); }
+    const db = this.#connection.db, changes = BigInt(capi.sqlite3_changes64(db)), id = BigInt(capi.sqlite3_last_insert_rowid(db));
     return this.#bigints ? { changes, lastInsertRowid: id } : { changes: Number(changes), lastInsertRowid: Number(id) };
   }
 
-  get(...args: unknown[]): Record<string, SQLOutputValue> | undefined {
+  get(...args: unknown[]): Row | undefined {
     this.#bind(args);
     try { return this.#step() ? this.#row() : undefined; } finally { capi.sqlite3_reset(this.#statement); }
   }
 
-  all(...args: unknown[]): Record<string, SQLOutputValue>[] {
+  all(...args: unknown[]): Row[] {
     this.#bind(args);
-    const rows: Record<string, SQLOutputValue>[] = [];
+    const rows: Row[] = [];
     try { while (this.#step()) rows.push(this.#row()); } finally { capi.sqlite3_reset(this.#statement); }
     return rows;
   }
 
-  *iterate(...args: unknown[]): IterableIterator<Record<string, SQLOutputValue>> {
+  /** Bound now; each row read as the iterator is advanced, until another execution of the statement invalidates it. */
+  iterate(...args: unknown[]): IterableIterator<Row> {
     this.#bind(args);
-    try { while (this.#step()) yield this.#row(); } finally { capi.sqlite3_reset(this.#statement); }
+    const execution = this.#execution, self = this;
+    return (function* rows(): Generator<Row, null, undefined> {
+      try {
+        for (;;) {
+          self.#live();
+          if (self.#execution !== execution) throw invalidState("iterator was invalidated");
+          if (!self.#step()) return null;
+          yield self.#row();
+        }
+      } finally {
+        // An invalidated iterator leaves the newer execution as it is.
+        if (self.#execution === execution && self.#connection.db !== 0 && self.#connection.statements.has(self.#statement)) capi.sqlite3_reset(self.#statement);
+      }
+    })();
   }
 }
 
@@ -174,9 +220,8 @@ export interface DatabaseSyncOptions {
 }
 
 export class DatabaseSync {
-  #db: Pointer = 0;
+  readonly #connection: Connection = { db: 0, statements: new Set<Pointer>() };
   readonly #bigints: boolean;
-  readonly #statements = new Set<Pointer>();
 
   constructor(path: string, options: DatabaseSyncOptions = {}) {
     if (typeof path !== "string") throw Object.assign(new TypeError("The \"path\" argument must be a string"), { code: "ERR_INVALID_ARG_TYPE" });
@@ -195,19 +240,19 @@ export class DatabaseSync {
         if (db !== 0) capi.sqlite3_close_v2(db);
         throw error;
       }
-      this.#db = db;
+      this.#connection.db = db;
     } finally { wasm.pstack.restore(stack); }
-    capi.sqlite3_extended_result_codes(this.#db, 1);
-    capi.sqlite3_busy_timeout(this.#db, options.timeout ?? 0);
+    capi.sqlite3_extended_result_codes(this.#connection.db, 1);
+    capi.sqlite3_busy_timeout(this.#connection.db, options.timeout ?? 0);
     this.exec("PRAGMA foreign_keys = ON");
   }
 
-  get isOpen(): boolean { return this.#db !== 0; }
+  get isOpen(): boolean { return this.#connection.db !== 0; }
   get isTransaction(): boolean { return capi.sqlite3_get_autocommit(this.#open()) === 0; }
 
   #open(): Pointer {
-    if (this.#db === 0) throw Object.assign(new Error("database is not open"), { code: "ERR_INVALID_STATE" });
-    return this.#db;
+    if (this.#connection.db === 0) throw invalidState("database is not open");
+    return this.#connection.db;
   }
 
   exec(sql: string): void {
@@ -217,20 +262,24 @@ export class DatabaseSync {
 
   prepare(sql: string): StatementSync {
     const db = this.#open(), stack = wasm.pstack.pointer;
+    let statement: Pointer;
     try {
       const out = wasm.pstack.allocPtr() as Pointer;
       if (capi.sqlite3_prepare_v2(db, sql, -1, out, 0) !== 0) throw failure(db);
-      const statement = wasm.peekPtr(out) as Pointer;
-      this.#statements.add(statement);
-      return new StatementSync(db, statement, this.#bigints, () => { this.#open(); });
+      statement = wasm.peekPtr(out) as Pointer;
     } finally { wasm.pstack.restore(stack); }
+    if (statement === 0) throw Object.assign(new TypeError("The SQL query contains no statements."), { code: "ERR_INVALID_ARG_VALUE" });
+    this.#connection.statements.add(statement);
+    const wrapper = new StatementSync(this.#connection, statement, this.#bigints);
+    collected.register(wrapper, { connection: this.#connection, statement });
+    return wrapper;
   }
 
   close(): void {
     const db = this.#open();
-    for (const statement of this.#statements) capi.sqlite3_finalize(statement);
-    this.#statements.clear();
-    this.#db = 0;
+    for (const statement of this.#connection.statements) capi.sqlite3_finalize(statement);
+    this.#connection.statements.clear();
+    this.#connection.db = 0;
     const rc = capi.sqlite3_close_v2(db);
     if (rc !== 0) throw sqliteError(capi.sqlite3_errstr(rc), rc);
   }

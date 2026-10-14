@@ -28,7 +28,7 @@ const asset = (path: unknown): URL | undefined => {
 
 export function readFileSync(path: string | URL, options?: string | { readonly encoding?: string | null }): string | Buffer {
   const url = asset(path);
-  if (url === undefined || XMLHttpRequest === undefined) throw absent("open", path);
+  if (url === undefined || typeof XMLHttpRequest === "undefined") throw absent("open", path);
   const encoding = typeof options === "string" ? options : options?.encoding ?? undefined;
   const request = new XMLHttpRequest();
   request.open("GET", url.href, false);

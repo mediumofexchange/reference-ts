@@ -1,29 +1,34 @@
 // The browser host in a browser engine (slice 39): build the in-browser checks over the browser bundle's substitutes,
 // serve them on loopback, cross-origin isolated, to a headless Chromium (Chrome or Edge) driven over the DevTools
 // protocol, and judge what the worker reports.
-//   --suites  the library's succinct-read, scope-reader, state-machine and capsule suites (suites.mjs): every test
-//             passes. No proof; part of `npm run check:browser`.
+//   --suites  the library's primitive, record, trail, succinct-read, scope-reader, state-machine and capsule suites
+//             (suites.mjs): every test passes, and no rejection goes unhandled. Then, on a page served without the
+//             isolation headers, the library's Poseidon2 refuses to start (isolation.mjs, packaged-binary.ts). No
+//             proof; part of `npm run check:browser`.
 //   --proofs  the pinned backend, key derivation, a genuine proof of each kind, a tampered proof, a spend proved and
 //             verified, and a restore's capsule scan (proofs.mjs), with times and memory. CI's real-proof group
 //             `browser` runs it. On Linux the browser's processes' peak resident memory is sampled from outside too.
 // DevTools' CPU throttling reaches pages, not workers ("only supported for pages", Chrome 154), and every check runs
 // in workers, so no throttled run stands in for a slower device: phone rates need a phone.
 //   --browser <path>   the engine (default: MOE_BROWSER, else Chrome or Edge where installed).
-//   --serve [--port <n>]  launch no browser: serve the check on 127.0.0.1:<n> and judge the first result any browser
+//   --serve [--port <n>]  launch no browser: serve the check on 127.0.0.1:<n> and judge the first result a browser
 //             posts, such as a phone's Chrome reaching it through `adb reverse tcp:<n> tcp:<n>` (a secure context, as
-//             cross-origin isolation needs).
+//             cross-origin isolation needs). The address printed carries the run's token, which every post must.
 //   --parameters <dir> the proving parameters (default scratch/private-payment-crs, as prepare-crs.mjs keeps them).
 //   --report <file>    where the result is written as JSON (default scratch/browser-<check>.json).
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { bundle, root } from "./build.mjs";
 
+/** The page: it starts the check's worker, relays memory measurements to it, and reports a worker that fails. */
 const PAGE = `<!doctype html><meta charset="utf-8"><title>moe browser check</title><script type="module">
-const worker = new Worker(new URL(location.hash.slice(1) + ".js", location.href), { type: "module" });
-const post = body => fetch("/result", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const token = new URLSearchParams(location.search).get("t");
+const worker = new Worker(new URL(location.hash.slice(1) + ".js?t=" + token, location.href), { type: "module" });
+const post = body => fetch("/result", { method: "POST", headers: { "content-type": "application/json", "x-moe-token": token }, body: JSON.stringify(body) });
 worker.onerror = event => post({ error: "the worker failed: " + (event.message || "it did not start") + " " + (event.filename || "") + ":" + (event.lineno || "") });
 worker.onmessage = async event => {
   const id = event.data && event.data.measure;
@@ -44,6 +49,7 @@ function parse(argv) {
     else if (["--browser", "--parameters", "--report"].includes(arg) && i + 1 < argv.length) options[arg.slice(2)] = resolve(argv[++i]);
     else throw new Error(`browser check: unknown or incomplete option ${arg}`);
   }
+  if (!Number.isSafeInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error("browser check: --port takes a port number");
   options.report ??= join(root, `scratch/browser-${options.check}.json`);
   return options;
 }
@@ -73,36 +79,44 @@ function leading(path, length) {
   return buffer;
 }
 
-function serve(directory, parameters, log, port) {
-  let settle;
-  const result = new Promise(resolve => { settle = resolve; });
+/**
+ * Serve `directory` and the proving parameters on loopback. Everything is served cross-origin isolated, except under
+ * `/plain/`, which serves the same files without the isolation headers. A post counts only with the run's token: a
+ * progress line is logged, and each result is handed to the next `result()`.
+ */
+function serve(directory, parameters, log, port, token) {
+  const results = [], waiting = [];
+  const deliver = body => { const next = waiting.shift(); if (next) next(body); else results.push(body); };
   const server = createServer((request, response) => {
+    const url = new URL(request.url, "http://127.0.0.1"), plain = url.pathname.startsWith("/plain/");
+    const path = plain ? url.pathname.slice("/plain".length) : url.pathname;
     const send = (status, body, type = "text/plain") => {
-      response.writeHead(status, { "content-type": type, "cross-origin-opener-policy": "same-origin",
-        "cross-origin-embedder-policy": "require-corp", "cross-origin-resource-policy": "same-origin", "cache-control": "no-store" });
+      response.writeHead(status, { "content-type": type, "cache-control": "no-store", ...(plain ? {} : {
+        "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp", "cross-origin-resource-policy": "same-origin" }) });
       response.end(body);
     };
-    const url = new URL(request.url, "http://127.0.0.1");
     if (request.method === "POST") {
+      if (request.headers["x-moe-token"] !== token) { request.resume(); return send(403, "refused"); }
       const chunks = [];
       request.on("data", chunk => chunks.push(chunk)).on("end", () => {
         let body;
         try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { body = { error: "an unreadable report" }; }
         send(204, "");
-        if (url.pathname === "/progress") log(body);
-        else if (url.pathname === "/result") settle(body);
+        if (path === "/progress") log(body);
+        else if (path === "/result") deliver(body);
       });
       return;
     }
     try {
-      if (url.pathname === "/") return send(200, PAGE, "text/html");
-      if (url.pathname === "/parameters/g1") return send(200, leading(join(parameters, "bn254_g1.dat"), 64 * 32768), "application/octet-stream");
-      if (url.pathname === "/parameters/g2") return send(200, leading(join(parameters, "bn254_g2.dat"), 128), "application/octet-stream");
-      const name = url.pathname.slice(1);
+      if (path === "/") return send(200, PAGE, "text/html");
+      if (path === "/parameters/g1") return send(200, leading(join(parameters, "bn254_g1.dat"), 64 * 32768), "application/octet-stream");
+      if (path === "/parameters/g2") return send(200, leading(join(parameters, "bn254_g2.dat"), 128), "application/octet-stream");
+      const name = path.slice(1);
       if (!/^[\w.-]+$/.test(name) || !existsSync(join(directory, name))) return send(404, "absent");
       return send(200, readFileSync(join(directory, name)), TYPES[extname(name)] ?? "application/octet-stream");
     } catch (error) { return send(500, String(error)); }
   });
+  const result = () => results.length > 0 ? Promise.resolve(results.shift()) : new Promise(resolve => waiting.push(resolve));
   return new Promise(resolve => server.listen(port, "127.0.0.1", () => resolve({ server, port: server.address().port, result })));
 }
 
@@ -127,19 +141,18 @@ function treeRss(pid) {
 }
 
 /** A DevTools protocol connection over the browser's own endpoint, with flattened sessions. */
-async function devtools(endpoint, onEvent) {
+async function devtools(endpoint) {
   const socket = new WebSocket(endpoint);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = () => reject(new Error("browser check: no DevTools connection")); });
   let next = 0;
   const pending = new Map();
   socket.onmessage = event => {
     const message = JSON.parse(event.data);
-    if (message.id !== undefined) {
-      const waiter = pending.get(message.id);
-      pending.delete(message.id);
-      if (message.error) waiter?.reject(Object.assign(new Error(message.error.message), { code: message.error.code }));
-      else waiter?.resolve(message.result);
-    } else onEvent(message);
+    if (message.id === undefined) return;
+    const waiter = pending.get(message.id);
+    pending.delete(message.id);
+    if (message.error) waiter?.reject(Object.assign(new Error(message.error.message), { code: message.error.code }));
+    else waiter?.resolve(message.result);
   };
   const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++next;
@@ -149,29 +162,33 @@ async function devtools(endpoint, onEvent) {
   return { send, close: () => socket.close() };
 }
 
+const within = (promise, minutes) => Promise.race([promise,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`browser check: no result within ${minutes} minutes`)), minutes * 60_000).unref())]);
+
 async function main() {
-  const options = parse(process.argv.slice(2)), started = Date.now();
+  const options = parse(process.argv.slice(2)), started = Date.now(), token = randomBytes(16).toString("hex");
   const log = line => console.log(`browser check: ${typeof line === "string" ? line : JSON.stringify(line)}`);
   const out = join(root, "scratch/browser-check");
   const shim = { name: "vitest-shim", setup(build) { build.onResolve({ filter: /^vitest$/ }, () => ({ path: join(root, "scripts/browser/vitest-shim.mjs") })); } };
-  const entry = options.check;
-  const { code } = await bundle([{ in: join(root, `scripts/browser/${entry}.mjs`), out: entry }], out, [shim]);
-  log({ built: entry, code, seconds: (Date.now() - started) / 1000 });
+  const entry = options.check, extra = entry === "suites" && !options.serve ? ["isolation"] : [];
+  const { code } = await bundle([entry, ...extra].map(name => ({ in: join(root, `scripts/browser/${name}.mjs`), out: name })), out, [shim]);
+  log({ built: [entry, ...extra], code, seconds: (Date.now() - started) / 1000 });
   if (entry === "proofs" && !existsSync(join(options.parameters, "bn254_g1.dat"))) {
     throw new Error(`browser check: no proving parameters in ${options.parameters}; run scripts/pool/prepare-crs.mjs`);
   }
 
-  const { server, port, result } = await serve(out, options.parameters, log, options.port);
+  const { server, port, result } = await serve(out, options.parameters, log, options.port, token);
+  const address = (path, name) => `http://127.0.0.1:${port}${path}?t=${token}#${name}`;
   if (options.serve) {
-    log(`open http://127.0.0.1:${port}/#${entry} in the browser to measure (a phone: adb reverse tcp:${port} tcp:${port})`);
+    log(`open ${address("/", entry)} in the browser to measure (a phone: adb reverse tcp:${port} tcp:${port})`);
     try {
-      const outcome = await result;
+      const outcome = await result();
       const report = { check: entry, browser: "served", platform: process.platform, code, seconds: (Date.now() - started) / 1000, ...outcome };
-      writeFileSync(options.report, `${JSON.stringify(report, null, 2)}
-`);
+      writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`);
       return judge(report, log);
     } finally { server.close(); }
   }
+
   const executable = findBrowser(options.browser), profile = mkdtempSync(join(tmpdir(), "moe-browser-"));
   const browser = spawn(executable, [
     "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
@@ -186,18 +203,23 @@ async function main() {
       await new Promise(r => setTimeout(r, 100));
     }
     const [devPort, path] = readFileSync(portFile, "utf8").split("\n");
-    connection = await devtools(`ws://127.0.0.1:${devPort}${path}`, () => {});
+    connection = await devtools(`ws://127.0.0.1:${devPort}${path}`);
     const version = await connection.send("Browser.getVersion");
     const { targetId } = await connection.send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await connection.send("Target.attachToTarget", { targetId, flatten: true });
     const idle = treeRss(browser.pid);
     let peak = idle;
     const sampler = setInterval(() => { const rss = treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
-    await connection.send("Page.navigate", { url: `http://127.0.0.1:${port}/#${entry}` }, sessionId);
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("browser check: no result within 25 minutes")), 25 * 60_000).unref());
-    const outcome = await Promise.race([result, timeout]).finally(() => clearInterval(sampler));
+    await connection.send("Page.navigate", { url: address("/", entry) }, sessionId);
+    const outcome = await within(result(), 25).finally(() => clearInterval(sampler));
+    let isolation;
+    if (extra.length > 0) {
+      await connection.send("Page.navigate", { url: address("/plain/", "isolation") }, sessionId);
+      isolation = await within(result(), 5);
+    }
     const report = { check: entry, browser: version.product, userAgent: version.userAgent, platform: process.platform,
-      ...(idle === undefined ? {} : { browserRssBytes: { idle, peak } }), code, seconds: (Date.now() - started) / 1000, ...outcome };
+      ...(idle === undefined ? {} : { browserRssBytes: { idle, peak } }), code, seconds: (Date.now() - started) / 1000, ...outcome,
+      ...(isolation === undefined ? {} : { isolation }) };
     writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`);
     return judge(report, log);
   } finally {
@@ -217,8 +239,14 @@ function judge(report, log) {
   if (report.error) failures.push(report.error);
   if (report.check === "suites" && !report.error) {
     for (const r of report.results.filter(r => r.state === "fail")) failures.push(`${r.name}\n${r.error}`);
+    for (const rejection of report.unhandled ?? []) failures.push(`an unhandled rejection: ${rejection}`);
     if (report.counts.pass === 0) failures.push("no test ran");
     log({ suites: report.counts, ms: report.ms });
+    if (report.isolation !== undefined) {
+      const i = report.isolation;
+      if (i.error || i.isolated !== false || i.started !== false || i.refusedByName !== true) failures.push(`a page without isolation: ${JSON.stringify(i)}`);
+      log({ isolation: i });
+    }
   }
   if (report.check === "proofs" && !report.error) {
     const c = report.checks;
@@ -229,7 +257,8 @@ function judge(report, log) {
     log({ phases: report.phases, checks: { ...c, genuine: undefined } });
   }
   for (const failure of failures) console.error(`browser check: FAILED ${failure}`);
-  log(`${failures.length === 0 ? "passed" : "failed"} in ${report.browser}, ${report.browserRssBytes === undefined ? "" : `peak browser RSS ${Math.round(report.browserRssBytes.peak / 2 ** 20)} MiB, `}${report.seconds.toFixed(1)} s; report ${report.check}`);
+  const memory = report.browserRssBytes === undefined ? "" : `peak browser RSS ${Math.round(report.browserRssBytes.peak / 2 ** 20)} MiB, `;
+  log(`${failures.length === 0 ? "passed" : "failed"} in ${report.browser}, ${memory}${report.seconds.toFixed(1)} s; report ${report.check}`);
   return failures.length === 0 ? 0 : 1;
 }
 

@@ -7,6 +7,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { DatabaseSync as NodeDatabase } from "node:sqlite";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import * as browserCrypto from "../src/browser/node-crypto.js";
 import * as browserFs from "../src/browser/node-fs.js";
@@ -19,8 +21,6 @@ import { BROWSER_HOST } from "./support.js";
 
 type Database = InstanceType<typeof NodeDatabase>;
 const hosts = (): [string, Database][] => [["node", new NodeDatabase(":memory:")], ["browser", new BrowserDatabase(":memory:") as unknown as Database]];
-/** Whether a call throws. */
-const refused = (run: () => unknown): boolean => { try { run(); return false; } catch { return true; } };
 /** What a call gives, or the error's shape where it throws. */
 function outcome(run: () => unknown): unknown {
   try { return { value: run() }; } catch (error) {
@@ -47,14 +47,20 @@ describe.skipIf(BROWSER_HOST)("the browser host's node:sqlite against node:sqlit
     expect((seen[0]!.plain as { message: string }).message).toMatch(/too large/);
   });
 
-  it("binds named, anonymous and numbered parameters alike, and refuses an unknown name and an unbindable value", () => {
+  it("binds named, anonymous and numbered parameters alike, and refuses what node:sqlite refuses, with its codes and messages", () => {
     const seen = hosts().map(([, db]) => ({
-      mixed: db.prepare("SELECT :a AS a, ? AS b, $c AS c, ? AS d").get({ a: 1n, c: "c" }, 2n, 4n),
-      numbered: db.prepare("SELECT ?1 AS x, ?1 + ?2 AS y").get(3n, 4n),
-      repeated: db.prepare("SELECT :k AS a, :k AS b").get({ k: "same" }),
-      unknown: refused(() => db.prepare("SELECT :a AS a").get({ b: 1 })),
-      undefinedValue: refused(() => db.prepare("SELECT ? AS a").get(undefined as never)),
-      object: refused(() => db.prepare("SELECT ? AS a").get(1n, {} as never)),
+      mixed: outcome(() => db.prepare("SELECT :a AS a, ? AS b, $c AS c, ? AS d").get({ a: 1n, c: "c" }, 2n, 4n)),
+      numbered: outcome(() => db.prepare("SELECT ?1 AS x, ?1 + ?2 AS y").get(3n, 4n)),
+      repeated: outcome(() => db.prepare("SELECT :k AS a, :k AS b").get({ k: "same" })),
+      prefixed: outcome(() => db.prepare("SELECT :a AS a, @b AS b").get({ ":a": 1n, "@b": 2n })),
+      conflicting: outcome(() => db.prepare("SELECT :a AS a, $a AS b").get({ a: 1n })),
+      conflictingPrefixed: outcome(() => db.prepare("SELECT :a AS a, $a AS b").get({ ":a": 1n, $a: 2n })),
+      unknown: outcome(() => db.prepare("SELECT :a AS a").get({ b: 1 })),
+      undefinedValue: outcome(() => db.prepare("SELECT ? AS a").get(undefined as never)),
+      object: outcome(() => db.prepare("SELECT ? AS a").get(1n, {} as never)),
+      tooMany: outcome(() => db.prepare("SELECT ? AS a").get(1n, 2n)),
+      empty: outcome(() => db.prepare("")),
+      blank: outcome(() => db.prepare("  ;")),
     }));
     expect(seen[1]).toEqual(seen[0]);
   });
@@ -73,23 +79,45 @@ describe.skipIf(BROWSER_HOST)("the browser host's node:sqlite against node:sqlit
     expect(seen[1]).toEqual(seen[0]);
   });
 
-  it("tracks transactions and savepoints, iterates lazily and refuses a closed database", () => {
+  it("tracks transactions and savepoints, and refuses a closed database and its statements as node:sqlite does", () => {
     const seen = hosts().map(([, db]) => {
       const states = [db.isTransaction];
       db.exec("CREATE TABLE w (n INTEGER); BEGIN; INSERT INTO w VALUES (1); SAVEPOINT s; INSERT INTO w VALUES (2)");
       states.push(db.isTransaction);
       db.exec("ROLLBACK TO s; RELEASE s; COMMIT");
       states.push(db.isTransaction);
-      const it = db.prepare("SELECT n FROM w").iterate();
-      const first = it.next();
-      it.return?.(undefined);
       const statement = db.prepare("SELECT 1 AS one");
       db.close();
-      return { states, first, rows: undefined, open: db.isOpen, closed: outcome(() => db.exec("SELECT 1")), stale: outcome(() => statement.get()) };
+      return { states, open: db.isOpen, closed: outcome(() => db.exec("SELECT 1")), transaction: outcome(() => db.isTransaction),
+        stale: outcome(() => statement.get()), again: outcome(() => db.close()) };
     });
-    expect(seen[1]).toMatchObject({ states: seen[0]!.states, first: seen[0]!.first, open: false });
-    expect((seen[1]!.closed as { message: string }).message).toBe((seen[0]!.closed as { message: string }).message);
-    expect((seen[1]!.stale as { message?: string }).message).toBeDefined();
+    expect(seen[1]).toEqual(seen[0]);
+  });
+
+  it("binds an iteration at once, reads it lazily, and invalidates it when its statement runs again", () => {
+    const seen = hosts().map(([, db]) => {
+      db.exec("CREATE TABLE v (n INTEGER, b BLOB); INSERT INTO v VALUES (1, x'01'), (2, x'02'), (3, x'03')");
+      const statement = db.prepare("SELECT n FROM v WHERE b >= ? ORDER BY n");
+      const bound = new Uint8Array([2]), early = statement.iterate(bound);
+      bound[0] = 1;
+      const first = [early.next(), early.next(), early.next()];
+      const stopped = statement.iterate(Uint8Array.of(1));
+      const head = stopped.next();
+      stopped.return?.(undefined);
+      const after = statement.all(Uint8Array.of(3));
+      const running = statement.iterate(Uint8Array.of(1));
+      const one = running.next();
+      const other = statement.get(Uint8Array.of(2));
+      const invalidated = outcome(() => running.next());
+      const fresh = [...statement.iterate(Uint8Array.of(1))];
+      return { first, head, after, one, other, invalidated, fresh };
+    });
+    expect(seen[1]).toEqual(seen[0]);
+  });
+
+  it("steps a run once, as node:sqlite does, so a later row's failure is not reached", () => {
+    const seen = hosts().map(([, db]) => outcome(() => db.prepare("SELECT 1 AS x UNION ALL SELECT 9223372036854775807 + 1").run()));
+    expect(seen[1]).toEqual(seen[0]);
   });
 
   it("returns run's counts as numbers, or bigints when reading bigints", () => {
@@ -109,6 +137,22 @@ describe("the browser host's database files", () => {
     expect(new BrowserDatabase(":memory:").isOpen).toBe(true);
     expect(new BrowserDatabase("").isOpen).toBe(true);
     expect(() => new BrowserDatabase("wallet.db")).toThrow(expect.objectContaining({ code: "ERR_SQLITE_ERROR", errcode: 14, message: "a browser host keeps no database files: wallet.db" }));
+  });
+
+  it("finalizes a statement no wrapper reaches, as node:sqlite does, so a walk's prepares do not accumulate", async () => {
+    setFlagsFromString("--expose-gc");
+    const gc = runInNewContext("gc") as () => void, turn = () => new Promise(resolve => setTimeout(resolve, 0));
+    const db = new BrowserDatabase(":memory:");
+    // SQLite's own count of the connection's prepared statements (the WebAssembly build has the sqlite_stmt table).
+    const live = (): number => (db.prepare("SELECT count(*) AS c FROM sqlite_stmt").get() as { c: number }).c;
+    const kept = db.prepare("SELECT 7 AS seven");
+    for (let i = 0; i < 5000; i++) db.prepare("SELECT ? AS x").get(i);
+    expect(live()).toBeGreaterThan(1000);
+    for (let round = 0; round < 10 && live() > 10; round++) { gc(); await turn(); }
+    expect(live()).toBeLessThan(10);
+    expect(kept.get()).toEqual({ seven: 7 });
+    db.close();
+    expect(() => kept.get()).toThrow(expect.objectContaining({ code: "ERR_INVALID_STATE", message: "statement has been finalized" }));
   });
 
   it.runIf(BROWSER_HOST)("refuses a kept replay file and a retained evidence file visibly, never as damage to discard", () => {

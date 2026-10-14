@@ -8,7 +8,7 @@
 //
 // Usage: node scripts/browser/build.mjs [--out <directory>]   (default dist-browser/)
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -69,14 +69,27 @@ const options = (entryPoints, define, extra) => ({
   loader: { ".wasm": "file", ".json": "json" },
 });
 
-/** SHA-256 over every source a build holds, by repository path and content, each framed by its length. */
-function codeName(metafile) {
+/** SHA-256 over what makes a build: the bundler's version and options, every source it holds by repository path and
+ * content, and the assets copied beside it, each part framed by its length. */
+function codeName(metafile, settings) {
   const hash = createHash("sha256").update("moe-browser-code");
-  for (const input of Object.keys(metafile.inputs).sort()) {
-    const path = input.split(sep).join("/"), bytes = readFileSync(resolve(root, input));
-    for (const part of [Buffer.from(path), bytes]) hash.update(`${part.length}:`).update(part);
-  }
+  const add = part => { const bytes = typeof part === "string" ? Buffer.from(part) : part; hash.update(`${bytes.length}:`).update(bytes); };
+  add(esbuild.version);
+  add(JSON.stringify(settings, (key, value) => key === "plugins" ? value.map(plugin => plugin.name) : value));
+  for (const input of Object.keys(metafile.inputs).sort()) { add(input.split(sep).join("/")); add(readFileSync(resolve(root, input))); }
+  for (const asset of ASSETS) { add(relative(root, asset).split(sep).join("/")); add(readFileSync(asset)); }
   return hash.digest("hex");
+}
+
+/** A directory this script made, which it may empty again: absent, or holding its marker. */
+const MARKER = ".moe-browser-build";
+function claim(outdir) {
+  if (existsSync(outdir) && !existsSync(join(outdir, MARKER))) {
+    throw new Error(`browser build: ${outdir} exists and was not made by this build; name an empty or new directory`);
+  }
+  rmSync(outdir, { recursive: true, force: true });
+  mkdirSync(outdir, { recursive: true });
+  writeFileSync(join(outdir, MARKER), "made by scripts/browser/build.mjs; emptied by its next build\n");
 }
 
 /**
@@ -86,10 +99,10 @@ function codeName(metafile) {
  */
 export async function bundle(entries, outdir, extra) {
   const entryPoints = [...entries, ...BB_WORKERS];
-  const first = await esbuild.build({ ...options(entryPoints, "0".repeat(64), extra), absWorkingDir: root, write: false, outdir });
-  const code = codeName(first.metafile);
-  rmSync(outdir, { recursive: true, force: true });
-  mkdirSync(outdir, { recursive: true });
+  const settings = options(entryPoints, "0".repeat(64), extra);
+  const first = await esbuild.build({ ...settings, absWorkingDir: root, write: false, outdir });
+  const code = codeName(first.metafile, settings);
+  claim(outdir);
   const result = await esbuild.build({ ...options(entryPoints, code, extra), absWorkingDir: root, write: true, outdir });
   for (const asset of ASSETS) copyFileSync(asset, join(outdir, asset.split(sep).pop().split("/").pop()));
   return { code, outputs: Object.keys(result.metafile.outputs) };

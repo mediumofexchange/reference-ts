@@ -6,7 +6,8 @@
 // - AES-256-GCM from @noble/ciphers, one `update` a cipher, as every caller makes: a cipher's ciphertext comes from
 //   its update and its tag after `final`; a decipher's plaintext comes from its update once its tag is set, and a
 //   failed authentication throws at `final`, as Node's does, with no unauthenticated plaintext returned.
-// The equivalence run (vitest.browser-host.config.ts) runs the library's capsule, holdings and backup suites over it.
+// test/browser-host.test.ts holds it to node:crypto; the equivalence run (vitest.browser-host.config.ts) runs the
+// capsule and lit wallet-key suites over it, and the browser check (scripts/browser/check.mjs) the capsule suite.
 import { gcm } from "@noble/ciphers/aes.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { hmac } from "@noble/hashes/hmac.js";
