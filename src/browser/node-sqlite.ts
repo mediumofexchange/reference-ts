@@ -30,8 +30,8 @@ const { capi, wasm } = sqlite3;
 
 /** SQLite's primary result code for a file it cannot open. */
 const SQLITE_CANTOPEN = 14;
-/** Compiled statements a connection keeps idle for reuse, the least recently used text's dropped first. */
-const IDLE_STATEMENTS = 256;
+/** Compiled statements a connection keeps idle for reuse, the least recently used text's dropped first, and of one text. */
+const IDLE_STATEMENTS = 256, IDLE_PER_TEXT = 4;
 
 type Pointer = number;
 export type SQLInputValue = null | number | bigint | string | boolean | ArrayBufferView;
@@ -74,6 +74,11 @@ function acquire(connection: Connection, sql: string): Pointer {
     connection.busy.add(statement);
     return statement;
   }
+  return compile(connection, sql);
+}
+
+/** A newly compiled statement for `sql`, held as `acquire`'s are. */
+function compile(connection: Connection, sql: string): Pointer {
   const db = connection.db, stack = wasm.pstack.pointer;
   let statement: Pointer;
   try {
@@ -94,6 +99,8 @@ function release(connection: Connection, sql: string, statement: Pointer): void 
   const idle = connection.idle.get(sql) ?? [];
   connection.idle.delete(sql);
   connection.idle.set(sql, idle);
+  // Every prepare compiles, so one text's idle copies are bounded too.
+  if (idle.length >= IDLE_PER_TEXT) { capi.sqlite3_finalize(statement); return; }
   idle.push(statement);
   connection.idleCount++;
   for (const [text, statements] of connection.idle) {
@@ -115,6 +122,8 @@ export class StatementSync {
   #bigints: boolean;
   /** Counts the statement's executions: an iterator stands only while its own execution is the latest. */
   #execution = 0;
+  /** Ends the latest iteration's hold on its statement: a new execution resets the old cursor, as Node's does. */
+  #iteration: (() => void) | undefined;
 
   /** @internal */
   constructor(connection: Connection, sql: string, bigints: boolean) {
@@ -135,6 +144,8 @@ export class StatementSync {
   #start(args: readonly unknown[]): Pointer {
     this.#live();
     this.#execution++;
+    this.#iteration?.();
+    this.#iteration = undefined;
     const statement = acquire(this.#connection, this.#sql);
     try { this.#bind(statement, args); } catch (error) { release(this.#connection, this.#sql, statement); throw error; }
     return statement;
@@ -231,6 +242,8 @@ export class StatementSync {
     const s = this.#start(args), db = this.#connection.db;
     try {
       this.#step(s);
+      // Counted once the statement completes, as Node's are: a RETURNING statement's changes land at its reset.
+      capi.sqlite3_reset(s);
       const changes = BigInt(capi.sqlite3_changes64(db)), id = BigInt(capi.sqlite3_last_insert_rowid(db));
       return this.#bigints ? { changes, lastInsertRowid: id } : { changes: Number(changes), lastInsertRowid: Number(id) };
     } finally { release(this.#connection, this.#sql, s); }
@@ -263,11 +276,12 @@ export class StatementSync {
         return { done: false, value: self.#row(held.statement) };
       },
       return(): IteratorResult<Row, null> {
-        if (self.#execution === execution) finish();
+        finish();
         return { done: true, value: null };
       },
       [Symbol.iterator]() { return iterator; },
     });
+    this.#iteration = finish;
     abandoned.register(iterator, { connection, sql, held });
     return iterator;
   }
@@ -322,11 +336,12 @@ export class DatabaseSync {
     if (capi.sqlite3_exec(db, sql, 0, 0, 0) !== 0) throw failure(db);
   }
 
-  /** Compiled now, so a statement SQLite refuses is refused here, as Node's is; then kept idle for its first execution. */
+  /** Compiled now, against the schema as it stands, so a statement SQLite refuses is refused here, as Node's is; then
+   * kept idle for an execution. */
   prepare(sql: string): StatementSync {
     this.#open();
     if (typeof sql !== "string") throw argumentType("The \"sql\" argument must be a string.");
-    release(this.#connection, sql, acquire(this.#connection, sql));
+    release(this.#connection, sql, compile(this.#connection, sql));
     return new StatementSync(this.#connection, sql, this.#bigints);
   }
 

@@ -183,7 +183,7 @@ async function main() {
     log(`open ${address("/", entry)} in the browser to measure (a phone: adb reverse tcp:${port} tcp:${port})`);
     try {
       const outcome = await result();
-      const report = { check: entry, browser: "served", platform: process.platform, code, seconds: (Date.now() - started) / 1000, ...outcome };
+      const report = { ...outcome, check: entry, browser: "served", platform: process.platform, code, seconds: (Date.now() - started) / 1000 };
       writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`);
       return judge(report, log);
     } finally { server.close(); }
@@ -216,7 +216,7 @@ async function main() {
     const { sessionId } = await connection.send("Target.attachToTarget", { targetId, flatten: true });
     await connection.send("Inspector.enable", {}, sessionId);
     // Each page's own result: a late post from an earlier page is set aside, not taken for this one's.
-    const resultOf = async kind => { for (;;) { const posted = await result(); if (posted.kind === kind) return posted; log({ setAside: posted }); } };
+    const resultOf = async kind => { for (;;) { const posted = await result(); if (posted.kind === kind || posted.kind === undefined) return posted; log({ setAside: posted }); } };
     const idle = treeRss(browser.pid);
     let peak = idle;
     const sampler = setInterval(() => { const rss = treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
@@ -227,8 +227,9 @@ async function main() {
       await connection.send("Page.navigate", { url: address("/plain/", "isolation") }, sessionId);
       isolation = await within(Promise.race([resultOf("isolation"), crashed]), 5);
     }
-    const report = { check: entry, browser: version.product, userAgent: version.userAgent, platform: process.platform,
-      ...(idle === undefined ? {} : { browserRssBytes: { idle, peak } }), code, seconds: (Date.now() - started) / 1000, ...outcome,
+    // The page's fields first, so none it posts can stand in for the run's own.
+    const report = { ...outcome, check: entry, browser: version.product, userAgent: version.userAgent, platform: process.platform,
+      ...(idle === undefined ? {} : { browserRssBytes: { idle, peak } }), code, seconds: (Date.now() - started) / 1000,
       ...(isolation === undefined ? {} : { isolation }) };
     writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`);
     return judge(report, log);

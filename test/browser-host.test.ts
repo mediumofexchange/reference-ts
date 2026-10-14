@@ -127,6 +127,23 @@ describe.skipIf(BROWSER_HOST)("the browser host's node:sqlite against node:sqlit
     expect(seen[1]).toEqual(seen[0]);
   });
 
+  it("counts a RETURNING run's changes, closes a re-run iteration's cursor and compiles every prepare, as node:sqlite does", () => {
+    const seen = hosts().map(([, db]) => {
+      db.exec("CREATE TABLE r (n INTEGER); INSERT INTO r VALUES (1), (2), (3)");
+      const returning = outcome(() => db.prepare("INSERT INTO r VALUES (?) RETURNING n").run(7n));
+      const statement = db.prepare("SELECT n FROM r ORDER BY n"), open = statement.iterate();
+      open.next();
+      statement.get();
+      const drop = outcome(() => db.exec("CREATE TABLE gone (x); DROP TABLE gone"));
+      const broken = db.prepare("SELECT n FROM r");
+      broken.get();
+      db.exec("DROP TABLE r");
+      const recompiled = outcome(() => db.prepare("SELECT n FROM r"));
+      return { returning, drop, recompiled };
+    });
+    expect(seen[1]).toEqual(seen[0]);
+  });
+
   it("steps a run once, as node:sqlite does, so a later row's failure is not reached", () => {
     const seen = hosts().map(([, db]) => outcome(() => db.prepare("SELECT 1 AS x UNION ALL SELECT 9223372036854775807 + 1").run()));
     expect(seen[1]).toEqual(seen[0]);
@@ -158,10 +175,11 @@ describe("the browser host's database files", () => {
     const kept = db.prepare("SELECT 7 AS seven");
     // As a walk does: a statement object a record, no turn of the event loop between them.
     for (let i = 0; i < 5000; i++) db.prepare("SELECT ? AS x").get(i);
-    expect(live()).toBeLessThanOrEqual(4);
+    // A few idle copies of each text in use (the loop's, the count's and the kept one's), not one an object.
+    expect(live()).toBeLessThanOrEqual(12);
     // Many distinct texts stay within the idle bound.
     for (let i = 0; i < 1000; i++) db.prepare(`SELECT ${i} AS x`).get();
-    expect(live()).toBeLessThanOrEqual(257);
+    expect(live()).toBeLessThanOrEqual(260);
     // Two iterations of one text in flight at once hold a statement each; an abandoned one's is reset once collected.
     const open = [db.prepare("SELECT ? AS x").iterate(1n), db.prepare("SELECT ? AS x").iterate(2n)];
     expect(open.map(it => it.next())).toEqual([{ done: false, value: { x: 1 } }, { done: false, value: { x: 2 } }]);
