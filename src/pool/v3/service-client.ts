@@ -390,6 +390,8 @@ export class V3ServiceClient {
   }
 }
 
+/** What a supply asks of a source: a client, or one made when first asked (an onion source needs the holder's proxy). */
+export type CheckSource = Pick<V3ServiceClient, "cover" | "proof">;
 /**
  * A succinct reader's supply over `sources` (succinct-read §2 rule 6): each fetch asks them in turn until one answers,
  * covers under the set whose identity is `set`, the source that answered last first. A source that refuses or has
@@ -400,9 +402,9 @@ export class V3ServiceClient {
  * slowly costs a wait only where the source that answered last has none either. The holder's own proxy
  * refusing the route is the holder's to fix, not a source's answer: it ends the read, as it ends a sync.
  */
-export function serviceSupply(set: Uint8Array, sources: readonly V3ServiceClient[]): CheckSupply {
-  const own = identifier(set), list = [...sources], silent = new Set<V3ServiceClient>();
-  const ask = async (fetch: (source: V3ServiceClient) => Promise<Uint8Array | undefined>, holds: (answer: Uint8Array) => Promise<boolean> | boolean) => {
+export function serviceSupply(set: Uint8Array, sources: readonly CheckSource[]): CheckSupply {
+  const own = identifier(set), list = [...sources], silent = new Set<CheckSource>();
+  const ask = async (fetch: (source: CheckSource) => Promise<Uint8Array | undefined>, holds: (answer: Uint8Array) => Promise<boolean> | boolean) => {
     for (const source of [...list]) {
       if (silent.has(source)) continue;
       try {
