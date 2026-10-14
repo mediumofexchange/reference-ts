@@ -565,7 +565,8 @@ async function handoff(argv: readonly string[]): Promise<void> {
     let key: Uint8Array;
     if (!existsSync(keyPath!)) {
       if (wallet.custody().frozen) throw new CommandError("FROZEN", "this wallet was already handed off: name the key file it was exported under");
-      key = fresh(); writeExclusive(keyPath!, key);
+      key = fresh();
+      try { writeExclusive(keyPath!, key); } catch (error) { key.fill(0); throw error; }
     } else if (process.platform !== "win32" && (statSync(keyPath!).mode & 0o077) !== 0) {
       throw new CommandError("MODE", `${keyPath} is readable or writable by group or others; a handoff key is owner-only`);
     } else key = readSecret(keyPath!, "the key file");

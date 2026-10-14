@@ -399,6 +399,29 @@ describe("replay storage", () => {
     } finally { for (const store of stores) store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it.skipIf(BROWSER_HOST)("lets a mark stand as committed while another store of the process reads the kept file (review)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "moe-remark-shared-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
+    const context = new Uint8Array(32).fill(7), identity = new Uint8Array(16).fill(3), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
+    const first = new ReplayStore(path, { digest }), second = new ReplayStore(path, { digest });
+    try {
+      // A walk kept from evidence the mark names.
+      const key = { selected: new Uint8Array(32).fill(5), evidence: Buffer.concat([identity, new Uint8Array(32).fill(9)]), mark: new Uint8Array(32).fill(1),
+        holds: () => true, through: 10n };
+      const { walk } = first.openWalk(context, key), ns = first.open(fieldToBytes(5n), new Uint8Array(32).fill(2), undefined, genesis);
+      first.append(ns, append([next()], []));
+      first.closeWalk(walk);
+      // The second's read keeps the first's log from moving in: the mark commits, is vouched for, and is not refused.
+      let resume!: () => void;
+      const gate = new Promise<void>(done => { resume = done; });
+      const reading = second.replay(async () => { second.tip(ns); await gate; });
+      expect(() => first.remark(identity, new Uint8Array(32).fill(2))).not.toThrow();
+      expect(statSync(`${path}-wal`).size).toBeGreaterThan(0);
+      resume(); await reading;
+    } finally { first.close(); second.close(); }
+    expect(vouched()).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it.skipIf(BROWSER_HOST)("keeps a discard and a collection through a crash right after them: each commits with its digest (§14, review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-discard-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7);
