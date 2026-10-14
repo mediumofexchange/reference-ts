@@ -14,8 +14,8 @@ const AUTH_LENGTHS = [0, 64, 0, 0, 0, 64, 136, 0] as const;
 const CAPSULE_COUNTS = [0, 1, 4, 1, 0, 0, 0, 0] as const;
 /** §5's bound on a proof field. */
 export const MAX_PROOF = 131072;
-/** The kinds whose records carry a proof replay verifies (§5): every kind but the withdrawal (5) and the request (7). */
-export const PROVED_KINDS: ReadonlySet<number> = new Set([1, 2, 3, 4, 6]);
+/** Whether records of `kind` carry a proof replay verifies (§5): every kind but the withdrawal (5) and the request (7). */
+export function provedKind(kind: number): boolean { return kind === 1 || kind === 2 || kind === 3 || kind === 4 || kind === 6; }
 
 export interface Statement {
   readonly domain: Uint8Array;

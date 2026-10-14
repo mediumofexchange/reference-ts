@@ -18,7 +18,7 @@ import { bytesToField, fieldToBytes, limbsOf } from "../field.js";
 import { poseidon2Hash } from "../poseidon2.js";
 import { POOL_V3, v3View, type Construction, type PublicationView, type ReaderFrames, type RequestView, type ServedTrailOf, type TrailChecks } from "./construction.js";
 import {
-  decodeProofFree, decodePublication, decodeRecord, encodeProofFree, MAX_PROOF, proofFreeDigests, proofFreeOf, proofLengthHolds, PROVED_KINDS,
+  decodeProofFree, decodePublication, decodeRecord, encodeProofFree, MAX_PROOF, proofFreeDigests, proofFreeOf, proofLengthHolds, provedKind,
   statementHash,
   type Kind, type ProofFreeRecord, type Record,
 } from "./records.js";
@@ -141,7 +141,7 @@ export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Arra
   const kept = (cover: Cover): Cover => { keep(cover); made++; return cover; };
   for await (const bytes of records) {
     const record = decodeRecord(bytes);
-    if (!PROVED_KINDS.has(record.kind)) continue;
+    if (!provedKind(record.kind)) continue;
     let cover: Cover | undefined;
     if (record.proof.length === COVER_PROOF_BYTES) {
       const digest = statementLeafDigest(record.kind, record.publicInputs, sha256(record.proof)), proof = held(digest);
@@ -279,7 +279,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
         // A record whose proofHash is the adopted publication's has the length of the proof the reader holds (§3.5).
         const held = at !== undefined && same(record.proofHash, decodeProofFree(at.bytes).proofHash);
         if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position } }); continue; }
-        if (!PROVED_KINDS.has(record.kind)) continue;
+        if (!provedKind(record.kind)) continue;
         if (m === capacity) throw new Error("a served trail holding more records than its length");
         digests.set(fieldToBytes(leafDigest(record)), 32 * m); hashes.set(record.proofHash, 32 * m);
         kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; m++;
@@ -289,7 +289,11 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
       const covered = new Uint8Array(m);
       const digestAt = (values: Uint8Array, i: number): bigint => bytesToField(values.subarray(32 * i, 32 * i + 32));
       // §3.2, §3.4 step 2: aligned spans over proved-record numbers, each asked for a cover, split where none verifies. A
-      // top span's digests are made once, bottom up: `levels[l]` holds those of its spans of height l, in order.
+      // top span's digests are made once, bottom up: `levels[l]` holds those of its spans of height l, in order. Provers
+      // walk a trail in order (`coverTrail`), so what sources cover is a prefix of its proved records: once one record
+      // has no cover from any source, the rest is the tail (§3.5), whose spans would cost about two asks a record and
+      // change no judgment (§2 rule 3), so none is asked.
+      let tail = false;
       const coverSpan = async (s: number, first: number): Promise<void> => {
         const levels = [digests.subarray(32 * (first - start), 32 * (first - start + 2 ** s))];
         for (let l = 1; l <= s; l++) {
@@ -298,6 +302,7 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
           levels.push(out);
         }
         const ask = async (l: number, j: number): Promise<void> => {
+          if (tail) return;
           const digest = digestAt(levels[l]!, j), index = first - start + j * 2 ** l, kind = l === 0 ? kinds[index] : undefined;
           // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
           let accepted: Uint8Array | undefined;
@@ -312,13 +317,13 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
             covered.fill(1, index, index + 2 ** l);
             return;
           }
-          if (l === 0) return;
+          if (l === 0) { tail = true; return; }
           await ask(l - 1, 2 * j);
           await ask(l - 1, 2 * j + 1);
         };
         await ask(s, 0);
       };
-      for (let i = start; i < start + m;) {
+      for (let i = start; i < start + m && !tail;) {
         let s = 0;
         while (i % 2 ** (s + 1) === 0 && i + 2 ** (s + 1) <= start + m) s++;
         await coverSpan(s, i);
@@ -338,8 +343,11 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
         if (bytes === undefined || !proofLengthHolds(7, bytes.length)) throw new UnestablishedTrail();
       }
       const replayCheck: ProofCheck = { verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) };
-      ESTABLISHED.set(replayCheck, { digests: digests.subarray(0, 32 * m), kinds: kinds.subarray(0, m), covered, held,
-        segment: copyBytes(trail.segment), positions: positions.subarray(0, m), cursor: 0 });
+      // The cursor keeps the proved records' entries alone, not buffers sized for every record after the tip.
+      const own = <T extends Uint8Array | BigUint64Array>(values: T, length: number): T =>
+        (m === capacity ? values.subarray(0, length) : values.slice(0, length)) as T;
+      ESTABLISHED.set(replayCheck, { digests: own(digests, 32 * m), kinds: own(kinds, m), covered, held,
+        segment: copyBytes(trail.segment), positions: own(positions, m), cursor: 0 });
       // Records before a resumed tip were established when the namespace holding them replayed them, under these rules.
       servedTrails.add(servedKey(trail));
       return replayCheck;

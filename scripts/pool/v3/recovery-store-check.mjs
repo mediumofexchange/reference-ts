@@ -80,16 +80,18 @@ async function acceptance(mode) {
       assert.deepEqual(drill.fresh(input), answer);
       if (mode === "local") {
         // succinct-read §3.4 with real check proofs, through a replica and the wire (slice 37): the two issues under one
-        // node cover and the settlement under a leaf cover; the two demands are checked natively from their fetched proofs.
-        const succinct = await readWithCovers(journal, backing, input.selection, [{ first: 0, count: 2 }, { first: 4, count: 1 }],
+        // node cover and the first demand under a leaf cover; the second demand and the settlement are the tail no prover
+        // reached, checked natively from their fetched proofs (a prover covers a prefix, audit 34).
+        const succinct = await readWithCovers(journal, backing, input.selection, [{ first: 0, count: 3 }],
           { verifier: drill.verifier, venue, reference, directory: build, operator });
         assert.equal(succinct.proved, 5);
         // The replica's walk made the three chosen leaves and the node over the first two, once each.
         assert.deepEqual([succinct.used.proving.trails, succinct.used.proving.proved, succinct.used.proving.made], [1, 5, 4], JSON.stringify(succinct.used));
         assert.deepEqual(summary(succinct.result), answer);
-        // The node and the settlement leaf replace their records' native checks: only the demands' proofs are fetched.
+        // The node and the first demand's leaf replace their records' native checks: only the tail's proofs are fetched,
+        // and no cover is asked past the first record none covers.
         assert.deepEqual([succinct.used.answered, succinct.used.verified, succinct.used.fetched], [2, 2, 2], JSON.stringify(succinct.used));
-        assert.deepEqual(succinct.fetchedRecords, [2, 3]);
+        assert.deepEqual(succinct.fetchedRecords, [3, 4]);
         // The proof-free stream carries no proof: far under the complete one.
         assert(succinct.bytes.proofFree * 5 < succinct.bytes.complete, JSON.stringify(succinct.bytes));
         drill.succinct = { ...succinct.used, servedBytes: succinct.bytes };

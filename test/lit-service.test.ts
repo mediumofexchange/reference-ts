@@ -15,7 +15,7 @@ import { encodeReceipt as encodeV3Receipt, receiptBytes as v3ReceiptBytes } from
 import { EvidenceStore } from "../src/pool/v3/evidence-store.js";
 import { encodeRecord as encodeV3Record } from "../src/pool/v3/records.js";
 import { V3ServiceClient } from "../src/pool/v3/service-client.js";
-import { PROOF_FREE_FORM } from "../src/pool/v3/succinct.js";
+import { PROOF_FREE_FORM, testCheckSet, testProver } from "../src/pool/v3/succinct.js";
 import { parseV3ServiceCommand, replyFromReceipt, V3_SERVICE_PROFILE } from "../src/pool/v3/service-wire.js";
 import type { V3OperatorJournal as Journal } from "../src/pool/v3/store.js";
 import type { V3Wallet as Wallet } from "../src/pool/v3/wallet-store.js";
@@ -146,6 +146,16 @@ describe("the operator's service for a lit scope", () => {
     await expect(f.j.serve(f.backing, 0n, PROOF_FREE_FORM)).rejects.toMatchObject({ code: "UNSUPPORTED" });
     const answer = await fetch(`${f.url}evidence?backing=${bytesToHex(f.backing)}&after=0&form=proof-free`, { headers: { authorization: `Bearer ${TOKEN}` } });
     expect([answer.status, await answer.json()]).toEqual([400, { code: "UNSUPPORTED" }]);
+    // A lit replica alike; and it holds no pool-v3 proofs to cover.
+    const { V3Replica } = await import("../src/pool/v3/replica.js");
+    const path = join(f.directory, "replica.db"), store = new EvidenceStore(path, { construction: LIT, shared: true });
+    try {
+      const replica = new V3Replica(path, store, f.venue.id);
+      expect(replica.keep(await f.client.sync(f.backing, store))).toBe(true);
+      await expect(replica.serve(f.backing, 0n, PROOF_FREE_FORM)).rejects.toMatchObject({ code: "UNSUPPORTED" });
+      expect((await replica.serve(f.backing, 0n)).selection.backing).toEqual(f.backing);
+      await expect(replica.prove(testProver(testCheckSet("lit"), { verify: async () => true }))).rejects.toMatchObject({ code: "UNSUPPORTED" });
+    } finally { store.close(); }
   });
 
   it("binds a lit receipt to the submitted statement, its segment and the expected operator", async () => {
