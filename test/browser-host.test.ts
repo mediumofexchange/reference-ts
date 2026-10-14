@@ -292,6 +292,7 @@ describe("the browser host's file system, paths and URLs", () => {
     }
     expect(browserPath.basename("x.db.lock", ".lock")).toBe(posix.basename("x.db.lock", ".lock"));
     expect(browserPath.resolve("/a/b", "../c", "d")).toBe(posix.resolve("/a/b", "../c", "d"));
+    for (const parts of [["/a/b/"], ["/a/", "b//"], ["/a/b/.."], ["/"], ["//"]]) expect(browserPath.resolve(...parts)).toBe(posix.resolve(...parts));
     expect(browserPath.relative("/a/b/c", "/a/d")).toBe(posix.relative("/a/b/c", "/a/d"));
     expect(fileURLToPath("file:///a/b%20c")).toBe("/a/b c");
     expect(() => fileURLToPath("https://example.org/a")).toThrow(expect.objectContaining({ code: "ERR_INVALID_URL_SCHEME" }));

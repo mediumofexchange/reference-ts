@@ -56,6 +56,10 @@ describe.runIf(isMounted())("the browser host's file pool", () => {
       writeFileSync(`${dir}/sub/e`, "");
       expect(readdirSync(dir)).toEqual(["b", "d", "sub"]);
       expect(() => rmSync(`${dir}/sub`)).toThrow(expect.objectContaining({ code: "ERR_FS_EISDIR" }));
+      // A trailing slash names the directory itself, as in Node (review): a handed directory named so is removed.
+      expect(statSync(`${dir}/sub/`).isDirectory()).toBe(true);
+      rmSync(`${dir}/sub/`, { recursive: true, force: true });
+      expect([existsSync(`${dir}/sub/e`), existsSync(`${dir}/sub`)]).toEqual([false, false]);
     } finally { rmSync(dir, { recursive: true, force: true }); }
     expect(existsSync(dir)).toBe(false);
   });

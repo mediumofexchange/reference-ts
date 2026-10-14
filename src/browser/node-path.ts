@@ -19,7 +19,9 @@ export const join = (...paths: string[]): string => normalized(paths.filter(path
 export function resolve(...paths: string[]): string {
   let resolved = "";
   for (let i = paths.length - 1; i >= 0 && !resolved.startsWith("/"); i--) if (paths[i] !== "") resolved = resolved === "" ? paths[i]! : `${paths[i]}/${resolved}`;
-  return normalized(resolved.startsWith("/") ? resolved : `/${resolved}`);
+  // As Node's, a resolved name keeps no trailing slash: `/w/` names the directory `/w`.
+  const out = normalized(resolved.startsWith("/") ? resolved : `/${resolved}`);
+  return out.length > 1 && out.endsWith("/") ? out.slice(0, -1) : out;
 }
 export function dirname(path: string): string {
   const trimmed = path.length > 1 ? path.replace(/\/+$/, "") : path, at = trimmed.lastIndexOf("/");
