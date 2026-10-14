@@ -126,6 +126,12 @@ a replica proves covers with `reader serve --prove`, and `scripts/pool/v3/succin
 real-proof group) drives a succinct holder, shop and reader from such a replica
 ([slice 38](../decisions/2026-10.md#2026-10-14--read-succinctly-through-the-commands-a-wallet-and-a-reader-over-proof-free-evidence-from-covers-a-replica-proves-and-each-segment-partitioned-once-slice-38-next-12)).
 
+The holder's read path also runs in a browser engine (slice 39, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)):
+`scripts/browser/build.mjs` bundles the library with `src/browser/`'s substitutes for node:sqlite (SQLite's
+WebAssembly build, memory databases), node:crypto and node:fs; `npm run check:browser` holds them to Node and runs ten
+suites in headless Chromium, and CI's `browser` real-proof group verifies and proves there. No database file, wallet
+store or command runs there yet.
+
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),
 is implemented in `src/ergo-profile.ts` (attribution, reassembly, ordinals, the

@@ -214,8 +214,8 @@ after the release ([direction 2026-10-13](../decisions/2026-10.md#2026-10-13--ke
 specified as a reader's option, [succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/94fc751/succinct-read.md), whose trail reading runs in the library with real check proofs of a test-labelled set ([slice 36](../decisions/2026-10.md#2026-10-13--prove-the-trail-check-sets-six-circuits-on-the-pinned-webassembly-backend-verify-covers-under-pinned-keys-and-take-native-proving-as-the-aggregators-lever-slice-36-next-12)) over the reader of [slice 35](../decisions/2026-10.md#2026-10-13--read-a-pool-v3-trail-succinctly-through-the-one-walk-and-establish-every-proof-length-before-replay-and-before-any-refusal-grounded-on-the-trail-slice-35-next-12));
 its provers' costs are in the [aggregation](POOL_DEPLOYMENT_PROBES.md#the-trails-proof-aggregation-slice-33) and
 [exhaustion](VENUE_ALTERNATIVES.md#the-complete-exhaustion-leaf-slice-32) probes, and phone rates are unmeasured. A browser wallet is outside the release target too, as a
-scope choice (2026-10-09): the package targets Node, its host hash is
-Node-only, and a browser holder would face the phone's sync costs.
+scope choice (2026-10-09): the package's commands target Node, and a browser holder would face the phone's sync costs.
+The holder's read path also runs in a browser engine, without database files yet ([slice 39](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)).
 
 ## Release gates
 
