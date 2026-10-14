@@ -285,11 +285,20 @@ async function main() {
   let connection;
   try {
     const portFile = join(profile, "DevToolsActivePort");
-    for (let i = 0; !existsSync(portFile) || readFileSync(portFile, "utf8").split("\n").length < 2; i++) {
+    // The port file's lines once both are written; on Windows the browser holds it open while writing (EBUSY), which is
+    // read as not written yet.
+    const portLines = () => {
+      try { return existsSync(portFile) ? readFileSync(portFile, "utf8").split("\n") : []; } catch (error) {
+        if (error?.code === "EBUSY" || error?.code === "EPERM") return [];
+        throw error;
+      }
+    };
+    let lines;
+    for (let i = 0; (lines = portLines()).length < 2; i++) {
       if (i > 300 || browser.exitCode !== null) throw new Error(`browser check: ${executable} did not open DevTools`);
       await new Promise(r => setTimeout(r, 100));
     }
-    const [devPort, path] = readFileSync(portFile, "utf8").split("\n");
+    const [devPort, path] = lines;
     // A crashed page posts nothing: its check fails at once rather than after the wait.
     let crash;
     const crashed = new Promise((_, reject) => { crash = method => reject(new Error(`browser check: the page crashed (${method})`)); });

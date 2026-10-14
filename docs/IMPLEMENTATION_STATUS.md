@@ -125,6 +125,10 @@ directories (`--read succinct`) read succinctly, each segment's covers asked onc
 a replica proves covers with `reader serve --prove`, and `scripts/pool/v3/succinct-drill.mjs` (CI's `succinct`
 real-proof group) drives a succinct holder, shop and reader from such a replica
 ([slice 38](../decisions/2026-10.md#2026-10-14--read-succinctly-through-the-commands-a-wallet-and-a-reader-over-proof-free-evidence-from-covers-a-replica-proves-and-each-segment-partitioned-once-slice-38-next-12)).
+The aggregator proves on the native binary bb.js bundles where it runs (Linux, macOS), from a private copy of the
+checked points, on an instance replaced after any failure, and verifies each cover on WebAssembly
+([slice 42](../decisions/2026-10.md#2026-10-14--prove-covers-on-the-native-binary-bbjs-bundles-from-a-private-copy-of-the-checked-points-on-an-instance-replaced-after-any-failure-slice-42-next-12)); `check-set-check.mjs --native` (CI's `native` group, Ubuntu and
+macOS) runs the check set's cases on it ([report](pool-v3-check-set-native-verification.json)).
 
 The holder's read path also runs in a browser engine (slice 39, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-read-path-in-a-browser-engine-slice-39)):
 `scripts/browser/build.mjs` bundles the library with `src/browser/`'s substitutes for node:sqlite (SQLite's

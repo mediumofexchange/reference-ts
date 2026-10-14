@@ -17,7 +17,7 @@ import { V3Replica } from "../pool/v3/replica.js";
 import { V3ServiceClientError } from "../pool/v3/service-client.js";
 import { createV3EvidenceService } from "../pool/v3/service-http.js";
 import { CommandError, event, flag, has, hex, openDirectory, parseArguments, print, required, UsageError, writeReplace } from "./common.js";
-import { directoryVerifier, openCoverProver } from "./backend.js";
+import { directoryVerifier, openCoverProver, proverBackend } from "./backend.js";
 import { nameOf } from "./construction.js";
 import { initRole, keptBackings, keptReplay, openEvidence, originOf, passedOver, presentationCommand, readAt, replicaCommand, replicaUrls, served,
   serviceCommand, supplyCommand, supplyOf, termsCommand } from "./read.js";
@@ -26,8 +26,11 @@ import { keptTerms } from "./terms.js";
 import { openView, requireVenue } from "./venue.js";
 
 /** How long a replica proves new covers after each round (`serve --prove`) before it syncs again: about ten leaves on
- * four cores with the WebAssembly backend (slice 36). */
+ * four cores with the WebAssembly backend (slice 36), twenty natively (slice 42). */
 const PROVE_ROUND_MS = 600_000;
+/** After consecutive proving failures a replica waits before proving again, doubling from a minute to at most an hour, so
+ * a failure that recurs (a backend that will not start, a span it will not prove) costs no round's work each time. */
+const PROVE_RETRY_MS = 60_000, PROVE_RETRY_MAX_MS = 3_600_000;
 
 
 /** The sources a replica never asks (`sourcesOf`' `except`): its loopback listener by the URL a client keeps (`new
@@ -53,15 +56,17 @@ const roundRefusal = (error: unknown): string | undefined =>
  * one per backing whose served sequence moved, and one once stopped; a round's refusal is an event on stderr. Stops on
  * SIGTERM or SIGINT.
  *
- * With `--prove [--parameters <dir>]` (slice 38) it also proves check proofs over its kept pool-v3 trails after each
- * round (`V3Replica.prove`), for at most PROVE_ROUND_MS of new covers, and serves them by set and digest (`GET /covers`):
- * any party may prove (succinct-read §2 rule 6), and the replica checks each statement proof first. A line says what a
- * round proved. A succinct directory serves no replica (`SUCCINCT`): a replica's evidence is judged by every reader
- * that takes it, so it reads completely (succinct-read §1).
+ * With `--prove [--parameters <dir>] [--prover native|wasm]` (slices 38, 42) it also proves check proofs over its kept
+ * pool-v3 trails after each round (`V3Replica.prove`), for at most PROVE_ROUND_MS of new covers, and serves them by set
+ * and digest (`GET /covers`): any party may prove (succinct-read §2 rule 6), and the replica checks each statement proof
+ * first. A line says what a round proved and on which backend. A succinct directory serves no replica (`SUCCINCT`):
+ * a replica's evidence is judged by every reader that takes it, so it reads completely (succinct-read §1).
  */
 async function serve(argv: readonly string[]): Promise<void> {
-  const args = parseArguments(argv, { dir: "value", verifiers: "value", prove: "switch", parameters: "value", ...SERVE_FLAGS }, 0);
+  const args = parseArguments(argv, { dir: "value", verifiers: "value", prove: "switch", parameters: "value", prover: "value", ...SERVE_FLAGS }, 0);
   if (has(args, "parameters") && !has(args, "prove")) throw new UsageError("--parameters names the check set's parameters for --prove");
+  if (has(args, "prover") && !has(args, "prove")) throw new UsageError("--prover names the backend --prove proves on");
+  const native = has(args, "prove") && proverBackend(args);
   const directory = openDirectory(required(args, "dir"), "reader");
   if (directory.succinct) throw new CommandError("SUCCINCT", "a replica reads completely (succinct-read §1): serve from a reader directory made without --read succinct");
   if (has(args, "prove") && !directory.construction.reader.proofs) throw new UsageError(`a ${nameOf(directory.construction)} replica holds no proofs to cover`);
@@ -73,7 +78,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   try {
     verifier = await directoryVerifier(directory, args);
     evidence = openEvidence(directory, true);
-    if (has(args, "prove")) covers = await openCoverProver(directory, verifier!, flag(args, "parameters"), line => process.stderr.write(`${line}\n`));
+    if (has(args, "prove")) covers = await openCoverProver(directory, verifier!, flag(args, "parameters"), native, line => process.stderr.write(`${line}\n`));
   } catch (error) { await covers?.close(); await verifier?.close(); evidence?.close(); view.close(); throw error; }
   const replica = new V3Replica(directory.file("evidence.db"), evidence, view.venue.id);
   const server = createV3EvidenceService(replica);
@@ -84,7 +89,7 @@ async function serve(argv: readonly string[]): Promise<void> {
   const local = `http://127.0.0.1:${listened}/`, url = onion === undefined ? local : `http://${onion}/`;
   writeReplace(directory.file("replica.json"), `${JSON.stringify({ url }, null, 2)}\n`);
   const { stopping, pause: rest } = untilStopped();
-  print({ status: "serving", url, port: listened, backings: keptBackings(directory).map(hex),
+  print({ status: "serving", url, port: listened, prover: covers?.prover.backend ?? null, backings: keptBackings(directory).map(hex),
     served: keptBackings(directory).map(backing => ({ backing, sequence: replica.selection(backing)?.selection.sequence ?? null })) });
   const round = async (): Promise<void> => {
     const synced = await view.syncWitnessed(), at = synced.witnessedIndex;
@@ -116,17 +121,20 @@ async function serve(argv: readonly string[]): Promise<void> {
   };
   /** A round's proving: the walk of the kept trails goes on from where the last round's stood, proving new covers (held
    * ones are not proved again), until PROVE_ROUND_MS has passed or the replica stops. */
+  let failures = 0, retryAt = 0;
   const prove = async (): Promise<void> => {
-    if (covers === undefined || stopping()) return;
+    if (covers === undefined || stopping() || Date.now() < retryAt) return;
     const { prover } = covers, until = Date.now() + PROVE_ROUND_MS;
     try {
       const walked = await replica.prove(prover, { stop: () => Date.now() >= until || stopping() });
-      if (walked.made > 0) print({ status: "proved", set: prover.identity, testSet: prover.set.test, ...walked });
+      failures = 0;
+      if (walked.made > 0) print({ status: "proved", set: prover.identity, testSet: prover.set.test, backend: prover.backend, ...walked });
     } catch (error) {
-      // A refusal inside the backend leaves its instance unusable (slice 36): this process proves no more, and serves on.
-      event({ event: "prove", code: "PROVER", message: (error as Error).message });
-      const failed = covers; covers = undefined;
-      await failed.close().catch((closing: unknown) => { event({ event: "prove", code: "PROVER", message: (closing as Error).message }); });
+      // The prover retired the instance that failed and starts a fresh one for the next proof (slice 42), after a wait.
+      failures++;
+      const wait = Math.min(PROVE_RETRY_MS * 2 ** Math.min(failures - 1, 6), PROVE_RETRY_MAX_MS);
+      retryAt = Date.now() + wait;
+      event({ event: "prove", code: "PROVER", message: (error as Error).message, failures, retryMs: wait });
     }
   };
   try {

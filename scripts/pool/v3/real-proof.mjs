@@ -31,6 +31,9 @@ export const SCRIPTS = Object.freeze([
   { group: "succinct", script: `${v3}/succinct-drill.mjs`, args: [], reports: [] },
   { group: "replay", script: `${v3}/local-check.mjs`, args: [], reports: ["scratch/pool-v3-local-replay-results.json"] },
   { group: "check-set", script: `${v3}/check-set-check.mjs`, args: [], reports: ["docs/pool-v3-check-set-verification.json"] },
+  // The same on the native binary bb.js bundles (slice 42), with a leaf and a node on WebAssembly for the rate; where the
+  // host has none (Windows), its report records the named refusal. CI also runs this group on macOS.
+  { group: "native", script: `${v3}/check-set-check.mjs`, args: ["--native"], reports: ["docs/pool-v3-check-set-native-verification.json"] },
   // The holder's read path in a browser engine (slice 39): proving and verifying there, with times and memory in its
   // report (the probes section records them).
   { group: "browser", script: "scripts/browser/check.mjs", args: ["--proofs"], reports: ["scratch/browser-proofs.json"] },

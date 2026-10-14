@@ -21,7 +21,7 @@
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
+import { Barretenberg, BackendType, findBbBinary, UltraHonkBackend, UltraHonkVerifierBackend } from "@aztec/bb.js";
 import { BN254_PARAMETERS, CHECK_SET_PARAMETERS } from "./parameters.js";
 import { copyArray, copyBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { fieldToHex, isField } from "./field.js";
@@ -102,6 +102,12 @@ export interface BackendOptions {
   readonly threads?: number;
 }
 
+/** How `startCheckSetBackend` starts an instance. */
+export interface CheckSetBackendOptions extends BackendOptions {
+  /** On the native binary the pinned bb.js bundles (`nativeRefusal`), not its WebAssembly (slice 42). */
+  readonly native?: boolean;
+}
+
 // Every instance `startBackend` loaded, with what the verifier's own instances
 // load: `[1]_1` and `[x]_2`. Verification given a key reads nothing else (§4).
 const STARTED = new WeakMap<Barretenberg, { readonly generator: Uint8Array; readonly g2: Uint8Array; readonly points: number }>();
@@ -149,6 +155,84 @@ async function load(points: Uint8Array, count: number, g2: Uint8Array, threads: 
   return api;
 }
 
+/** The version the bundled `bb` reports, which the pinned bb.js's is. */
+const NATIVE_VERSION = /^5\.2\.0(?:-|$)/;
+/** Each bundled binary's answer to `--version`, asked once per process. */
+const ran = new Map<string, string | undefined>();
+
+/**
+ * Why this host starts no native backend, or undefined where it does. bb.js
+ * bundles its native `bb` for Linux and macOS on x64 and arm64 and runs the
+ * file `BB_BINARY_PATH` names in its place, so a native start refuses that
+ * variable as a WebAssembly one refuses `BB_WASM_PATH`. A bundled binary
+ * may still not run here (it needs glibc 2.34 on Linux), so it is asked for
+ * its version once, which must be the pinned package's.
+ */
+export function nativeRefusal(): string | undefined {
+  if (typeof MOE_BROWSER_CODE === "string" || typeof process === "undefined") return "a browser host runs no native backend";
+  if (process.env.BB_BINARY_PATH !== undefined) return "BB_BINARY_PATH would replace the pinned backend's native binary";
+  const bbPath = findBbBinary();
+  if (bbPath === null) return `the pinned bb.js bundles no native backend for ${process.platform}-${process.arch}`;
+  if (!ran.has(bbPath)) {
+    const { spawnSync } = process.getBuiltinModule("node:child_process");
+    const answer = spawnSync(bbPath, ["--version"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+    const version = answer.status === 0 ? answer.stdout.trim() : "";
+    ran.set(bbPath, NATIVE_VERSION.test(version) ? undefined
+      : `the bundled native backend does not run here (${version || answer.error?.message || answer.stderr.trim().split("\n")[0] || `exit ${answer.status ?? answer.signal}`})`);
+  }
+  return ran.get(bbPath);
+}
+
+/**
+ * A native instance proving from the checked `points` (slice 42). The native
+ * `bb` proves from points it reads from the directory `CRS_PATH` names (by
+ * default `~/.bb-crs`), fetching them over plain HTTP where that holds too
+ * few, and `srsInitSrs` does not change them. So each instance gets a private
+ * directory holding exactly the checked bytes, as many as every check-set
+ * circuit reads, and nothing is fetched; it is removed when the instance is
+ * destroyed. bb.js passes this process's environment to `bb` while it starts
+ * it, synchronously inside `Barretenberg.new`, so `CRS_PATH` is set only
+ * for that call, and so is `TMPDIR`, where bb.js puts the instance's socket:
+ * in the same directory rather than at a name another local user could take.
+ */
+async function loadNative(points: Uint8Array, threads: number | undefined): Promise<Barretenberg> {
+  // `start` refused a host without one, and nothing has run since.
+  const bbPath = findBbBinary()!;
+  const { existsSync, mkdtempSync, rmSync, writeFileSync } = process.getBuiltinModule("node:fs");
+  const { join } = process.getBuiltinModule("node:path"), { tmpdir } = process.getBuiltinModule("node:os");
+  const directory = mkdtempSync(join(tmpdir(), "moe-bb-points-"));
+  const remove = (): void => { rmSync(directory, { recursive: true, force: true }); };
+  let api: Barretenberg;
+  try {
+    writeFileSync(join(directory, "bn254_g1.dat"), points, { mode: 0o600 });
+    const before = { CRS_PATH: process.env.CRS_PATH, TMPDIR: process.env.TMPDIR };
+    process.env.CRS_PATH = process.env.TMPDIR = directory;
+    let starting: Promise<Barretenberg>;
+    try {
+      starting = Barretenberg.new({ backend: BackendType.NativeUnixSocket, bbPath, threads: threads ?? 1, skipSrsInit: true });
+    } finally {
+      for (const [name, value] of Object.entries(before)) if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+    api = await starting;
+  } catch (error) {
+    remove();
+    throw error;
+  }
+  // bb.js's destroy only signals bb, which removes its socket from the directory as it exits: a removal racing that
+  // leaves the directory behind, so it is retried until bb has gone (a few seconds at most).
+  const destroy = api.destroy.bind(api);
+  api.destroy = async () => {
+    try { await destroy(); } finally {
+      for (let tries = 0; tries < 100; tries++) {
+        remove();
+        if (!existsSync(directory)) break;
+        await new Promise(done => setTimeout(done, 50));
+      }
+    }
+  };
+  return api;
+}
+
 /**
  * Start a backend instance from `parameters` once their copies match
  * `BN254_PARAMETERS`; anything else is refused before a backend starts. The
@@ -156,25 +240,31 @@ async function load(points: Uint8Array, count: number, g2: Uint8Array, threads: 
  * backend's own API is outside what this check can stop.
  */
 export async function startBackend(parameters: ProvingParameters, options: BackendOptions = {}): Promise<Barretenberg> {
-  return start(parameters, BN254_PARAMETERS, options);
+  return start(parameters, BN254_PARAMETERS, false, options?.threads);
 }
 
 /**
  * Start an instance from the leading `CHECK_SET_PARAMETERS.points` points
  * instead, for a party that proves the trail check set's circuits or derives
  * their keys (succinct-read §6); `[x]_2` is the same. Refused as
- * `startBackend` refuses.
+ * `startBackend` refuses. With `native` the instance is the bundled native
+ * binary (`loadNative`), for proving: every check-set circuit fills the
+ * points it holds, so it reads no others. Verifiers built over it verify on
+ * WebAssembly instances of their own, as over any instance.
  */
-export async function startCheckSetBackend(parameters: ProvingParameters, options: BackendOptions = {}): Promise<Barretenberg> {
-  return start(parameters, CHECK_SET_PARAMETERS, options);
+export async function startCheckSetBackend(parameters: ProvingParameters, options: CheckSetBackendOptions = {}): Promise<Barretenberg> {
+  return start(parameters, CHECK_SET_PARAMETERS, options?.native === true, options?.threads);
 }
 
-async function start(parameters: ProvingParameters, size: { readonly points: number; readonly g1: string }, options: BackendOptions): Promise<Barretenberg> {
+async function start(parameters: ProvingParameters, size: { readonly points: number; readonly g1: string }, native: boolean,
+  threads: number | undefined): Promise<Barretenberg> {
   pinnedBackend();
+  const refusal = native ? nativeRefusal() : undefined;
+  if (refusal !== undefined) throw new ParameterError("BACKEND", refusal);
   if (parameters === null || typeof parameters !== "object") throw new ParameterError("G2", "the BN254 G2 parameters are not bytes");
   const g2 = checked(parameters.g2, "G2", G2_BYTES, BN254_PARAMETERS.g2);
   const g1 = checked(parameters.g1, "G1", size.points * POINT_BYTES, size.g1);
-  const api = await load(g1, size.points, g2, options.threads);
+  const api = native ? await loadNative(g1, threads) : await load(g1, size.points, g2, threads);
   STARTED.set(api, Object.freeze({ generator: copyBytes(g1.subarray(0, POINT_BYTES)), g2, points: size.points }));
   return api;
 }
