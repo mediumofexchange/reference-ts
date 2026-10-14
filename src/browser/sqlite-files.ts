@@ -73,8 +73,10 @@ export function installFilesVfs(sqlite3: Sqlite3): string {
           if (lock.pending === pFile) lock.pending = 0;
           if (lock.exclusive === pFile) lock.exclusive = 0;
         }
-        if ((open.flags & capi.SQLITE_OPEN_DELETEONCLOSE) !== 0 && open.path !== undefined && files.lookup(open.path) === open.member) files.unlink(open.path);
-        files.closed(open.member);
+        // The close is counted whatever the removal does, so a failed pool can still be unmounted.
+        try {
+          if ((open.flags & capi.SQLITE_OPEN_DELETEONCLOSE) !== 0 && open.path !== undefined && files.lookup(open.path) === open.member) files.unlink(open.path);
+        } finally { files.closed(open.member); }
         if (open.member.opens <= 0) locks.delete(open.member);
         return 0;
       } catch (error) { return failed(error, capi.SQLITE_IOERR_CLOSE); }

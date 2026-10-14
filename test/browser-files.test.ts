@@ -140,13 +140,20 @@ describe.runIf(isMounted())("the browser host's file pool", () => {
       // A header write the browser refuses changes nothing in memory, and may have reached the disk: every later call is
       // refused until a remount, when the headers on disk decide. Here it did not reach it.
       writeFileSync("/t/a", "A"); writeFileSync("/t/b", "B");
+      // Files open across the failure close, so the pool can be unmounted and mounted again.
+      const held = openSync("/t/b", "r"), db = new DatabaseSync("/t/d.db");
+      db.exec("PRAGMA journal_mode=WAL; CREATE TABLE t (x); INSERT INTO t VALUES (1)");
       failOnce(lookup("/t/a")!.handle, "write", browserFailure("QuotaExceededError"));
       expect(() => renameSync("/t/a", "/t/b")).toThrow(expect.objectContaining({ code: "ENOSPC", syscall: "rename" }));
       expect(() => readFileSync("/t/a")).toThrow(expect.objectContaining({ code: "EIO" }));
       expect(() => linkSync("/t/a", "/t/c")).toThrow(expect.objectContaining({ code: "EIO" }));
+      closeSync(held); db.close();
       await unmountFiles();
       await mountFiles(OTHER);
       expect([text("/t/a"), text("/t/b"), existsSync("/t/c")]).toEqual(["A", "B", false]);
+      const reopened = new DatabaseSync("/t/d.db");
+      expect(reopened.prepare("SELECT x FROM t").all()).toEqual([{ x: 1 }]);
+      reopened.close();
     });
   });
 });

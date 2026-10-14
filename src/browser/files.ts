@@ -343,10 +343,12 @@ export function anonymous(): Member {
 }
 
 export const opened = (member: Member): void => { member.opens++; };
-/** Close one opening of `member`: one with no name left is freed at its last close. */
+/** Close one opening of `member`: one with no name left is freed at its last close. A failed pool still counts the
+ * close, so it can be unmounted and mounted again, but frees nothing: the next mount judges the member. */
 export function closed(member: Member): void {
-  const state = pool("close", member.names[0]);
-  if (--member.opens <= 0 && member.names.length === 0) release(state, member, "close");
+  const state = mounted;
+  if (state === undefined) throw fail("ENOSYS", "close", member.names[0], "a browser host keeps no files until its file pool is mounted");
+  if (--member.opens <= 0 && member.names.length === 0 && state.failed === undefined) release(state, member, "close");
 }
 
 /** The data's size, in bytes. */
