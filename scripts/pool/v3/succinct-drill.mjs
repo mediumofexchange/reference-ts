@@ -159,14 +159,16 @@ try {
     assert.deepEqual(holdings(await ok(wallet("sync", HD, backing))), [["10", "available", 0], ["4", "available", 0]]);
   });
 
-  let replica;
+  let replica, provedLines = [];
   await check("a replica proves covers over its kept trail (reader serve --prove); a succinct directory serves none", async () => {
     // The check set's parameters, the leading 2^21 points, in the checks' shared parameter directory.
     await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: line => process.stderr.write(`${line}\n`) });
     replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--prove", "--parameters", PARAMETER_DIRECTORY]);
     await replica.line(line => line.status === "serving", 300_000);
-    // Two issues: two leaves and their node, proved once the replica's read serves the selection holding them.
-    const proved = await replica.line(line => line.status === "proved" && Number(line.proved) >= 2, 1_800_000);
+    // Two issues: two leaves and their node, proved once the replica's read serves the selection holding them (`proved`
+    // counts the proved records its walk has read, `made` the covers it made). Within the CI job's 30 minutes.
+    const proved = await replica.line(line => line.status === "proved" && Number(line.proved) >= 2, 1_200_000);
+    assert.equal(Number(proved.made), 3);
     assert.equal(proved.testSet, true);
     await ok(["reader", "init", "--dir", RS, "--read", "succinct", "--venue", join(OP, "venue.json"), ...common]);
     await refused(["reader", "serve", "--dir", RS], "SUCCINCT");
@@ -193,6 +195,11 @@ try {
   });
 
   await check("the succinct holder pays a succinct shop, which fulfills over the tail's fetched proof", async () => {
+    // The replica serves on without proving, so the payment is the tail no cover reaches: its proof is fetched.
+    provedLines = replica.lines.filter(line => line.status === "proved");
+    await replica.stop();
+    replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--port", new URL(replicaUrl).port]);
+    await replica.line(line => line.status === "serving", 300_000);
     await ok(wallet("init", SS, "--read", "succinct", "--venue", join(OP, "venue.json"), ...common));
     await ok(wallet("terms add", SS, backing, "--terms", terms, "--signature", signature, ...SYN));
     await ok(wallet("service add", SS, backing, join(OP, "service.json")));
@@ -207,6 +214,8 @@ try {
       assert(round < 24, `the shop did not fulfill: ${result.stdout}${result.stderr}`);
     }
     assert.deepEqual([fulfilled.status, fulfilled.value, fulfilled.read.judgment], ["final", "3", "succinct"]);
+    assert(Number(fulfilled.read.proofsFetched) >= 1, JSON.stringify(fulfilled.read));
+    assert(Number(fulfilled.read.coversTaken) >= 1, JSON.stringify(fulfilled.read));
     await finalOf(HS, "pay-1");
     // 10 + 4 held, 3 paid: whichever note the payment spent, 11 remain available.
     const after = await ok(wallet("sync", HS, backing));
@@ -229,7 +238,7 @@ try {
   });
 
   await replica.stop(); await serving.stop();
-  const report = { status: "passed", checks, processes, proved: replica.lines.filter(line => line.status === "proved"),
+  const report = { status: "passed", checks, processes, proved: provedLines,
     elapsedMs: Math.round(performance.now() - started) };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   completed = true;
