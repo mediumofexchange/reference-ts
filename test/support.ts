@@ -3,6 +3,10 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { keptFileDigest } from "../src/pool/v3/replay-store.js";
 
+/** The browser host's equivalence run (vitest.browser-host.config.ts, slice 39): its node:sqlite keeps no database
+ * file, so a test of a kept file skips there. */
+export const BROWSER_HOST = process.env.MOE_TEST_HOST === "browser";
+
 // Shared keys for the Ergo venue tests: real Ed25519 points, a distinct secret
 // per role.
 

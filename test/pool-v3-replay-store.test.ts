@@ -8,7 +8,7 @@ import { EMPTY_NOTE_ROOT, NoteTree, notePathProves } from "../src/pool/note-tree
 import { EvidenceRefusal } from "../src/pool/v3/refusals.js";
 import { keptFileDigest, ReplayStore, type Append } from "../src/pool/v3/replay-store.js";
 import { RadixSpentSet } from "../src/pool/v3/spent-set.js";
-import { stoppedKeepPoint } from "./support.js";
+import { BROWSER_HOST, stoppedKeepPoint } from "./support.js";
 
 // The storage module against the runtime's own structures: stored spent-set
 // nodes give RadixSpentSet's root, the frontier gives NoteTree's root, and an
@@ -202,7 +202,7 @@ describe("replay storage", () => {
     db.close();
   });
 
-  it("holds a kept file's write lock across a keep point, so another store's walk is refused while the walk awaits", () => {
+  it.skipIf(BROWSER_HOST)("holds a kept file's write lock across a keep point, so another store's walk is refused while the walk awaits", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-point-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const first = new ReplayStore(path, { digest, every: 1 }), context = new Uint8Array(32).fill(7);
     try {
@@ -221,7 +221,7 @@ describe("replay storage", () => {
     } finally { first.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("records at each keep point the digest the whole file gives, through growth, freed pages and reopening (M11b12)", () => {
+  it.skipIf(BROWSER_HOST)("records at each keep point the digest the whole file gives, through growth, freed pages and reopening (M11b12)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-page-digest-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
     let store = new ReplayStore(path, { digest });
@@ -250,7 +250,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("reopens a keep point stopped between its commit and its digest as the digest names it, never whole replay (Next 4 (bb))", () => {
+  it.skipIf(BROWSER_HOST)("reopens a keep point stopped between its commit and its digest as the digest names it, never whole replay (Next 4 (bb))", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-stopped-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
     let store = new ReplayStore(path, { digest });
@@ -315,7 +315,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("stops a walk whose keep point another connection keeps from moving the log in: what it writes after commits nothing (M11b12 review)", () => {
+  it.skipIf(BROWSER_HOST)("stops a walk whose keep point another connection keeps from moving the log in: what it writes after commits nothing (M11b12 review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-busy-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const store = new ReplayStore(path, { digest, every: 1 }), context = new Uint8Array(32).fill(7);
     try {
@@ -336,7 +336,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("keeps the digest through a keep point another connection kept from moving the log in, though the log restarted between (M11b12 review)", () => {
+  it.skipIf(BROWSER_HOST)("keeps the digest through a keep point another connection kept from moving the log in, though the log restarted between (M11b12 review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-pending-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
     let store = new ReplayStore(path, { digest });
@@ -365,7 +365,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("shares a kept file between two stores of one process: each digest names both stores' commits, and a later opening leaves the first's log (review)", async () => {
+  it.skipIf(BROWSER_HOST)("shares a kept file between two stores of one process: each digest names both stores' commits, and a later opening leaves the first's log (review)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-shared-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
     const stores: ReplayStore[] = [];
@@ -399,7 +399,7 @@ describe("replay storage", () => {
     } finally { for (const store of stores) store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("keeps a discard and a collection through a crash right after them: each commits with its digest (§14, review)", () => {
+  it.skipIf(BROWSER_HOST)("keeps a discard and a collection through a crash right after them: each commits with its digest (§14, review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-discard-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7);
     /** The store stopped where it stands: its files as they lie, written back in place so the file keeps its identity. */
@@ -427,7 +427,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("keeps a commit made outside a walk through the last close and a crash: each records its digest (Next 4 (bm), (bo))", () => {
+  it.skipIf(BROWSER_HOST)("keeps a commit made outside a walk through the last close and a crash: each records its digest (Next 4 (bm), (bo))", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-outside-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const context = new Uint8Array(32).fill(7), subject = new Uint8Array(32).fill(5), vouched = () => readFileSync(digest, "utf8") === keptFileDigest(path);
     let store = new ReplayStore(path, { digest });
@@ -460,7 +460,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("records at the close a digest a commit could not record, so the last close never moves an unvouched log in (Next 4 (bm), review)", () => {
+  it.skipIf(BROWSER_HOST)("records at the close a digest a commit could not record, so the last close never moves an unvouched log in (Next 4 (bm), review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-retry-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     let store = new ReplayStore(path, { digest });
     try {
@@ -483,7 +483,7 @@ describe("replay storage", () => {
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("keeps a kept file whose opening meets a failure of the system: the caller's error, never damage to discard (review)", () => {
+  it.skipIf(BROWSER_HOST)("keeps a kept file whose opening meets a failure of the system: the caller's error, never damage to discard (review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-keep-system-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     let store = new ReplayStore(path, { digest });
     try {
@@ -517,7 +517,7 @@ describe("replay storage", () => {
     } finally { store.close(); }
   });
 
-  it("marks a kept walk read from retained evidence whatever fault set named it beside that evidence (Next 4 (bg), (bk) review)", () => {
+  it.skipIf(BROWSER_HOST)("marks a kept walk read from retained evidence whatever fault set named it beside that evidence (Next 4 (bg), (bk) review)", () => {
     const dir = mkdtempSync(join(tmpdir(), "moe-remark-")), path = join(dir, "replay.sqlite"), digest = join(dir, "replay.sha256");
     const store = new ReplayStore(path, { digest }), context = new Uint8Array(32).fill(7), identity = new Uint8Array(16).fill(3);
     const old = new Uint8Array(32).fill(1), later = new Uint8Array(32).fill(2), set = new Uint8Array(32).fill(9);

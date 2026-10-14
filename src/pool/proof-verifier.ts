@@ -25,6 +25,7 @@ import { Barretenberg, BackendType, UltraHonkBackend, UltraHonkVerifierBackend }
 import { BN254_PARAMETERS, CHECK_SET_PARAMETERS } from "./parameters.js";
 import { copyArray, copyBytes, copyUnshared, EncodingError } from "../bytes.js";
 import { fieldToHex, isField } from "./field.js";
+import { PACKAGED_BINARY_REFUSAL, packagedBinary } from "./packaged-binary.js";
 
 /** The proof options every construction here is defined under. */
 export const PROOF_OPTIONS = Object.freeze({ verifierTarget: "noir-recursive" as const });
@@ -124,12 +125,15 @@ function checked(value: unknown, code: "G1" | "G2", length: number, expected: st
  * bb.js runs the WASM binary `BB_WASM_PATH` names instead of its own, and
  * that binary is what refuses any other `[x]_2` and derives the keys (§4), so
  * a backend starts only without it. Checked at every start, since the
- * environment can change between them.
+ * environment can change between them. A browser bundle starts one only
+ * cross-origin isolated, where bb.js loads the binary the package ships
+ * (packaged-binary.ts, slice 39).
  */
 function pinnedBackend(): void {
   if (typeof process !== "undefined" && process.env?.BB_WASM_PATH !== undefined) {
     throw new ParameterError("BACKEND", "BB_WASM_PATH would replace the pinned backend's WASM");
   }
+  if (!packagedBinary()) throw new ParameterError("BACKEND", PACKAGED_BINARY_REFUSAL);
 }
 
 /** A WASM worker instance holding `count` G1 points and G2, and no Grumpkin points (UltraHonk reads none). */

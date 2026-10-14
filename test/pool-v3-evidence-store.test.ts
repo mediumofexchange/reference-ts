@@ -17,7 +17,7 @@ import { POOL_V3 } from "../src/pool/v3/construction.js";
 import { authenticatedScope } from "../src/pool/v3/scope-evidence.js";
 import { encodeRootTerms, MAX_ROOT_TERMS_BYTES, rootTermsName, rootTermsSignatureMessage, verifyRootTermsSignature } from "../src/pool/v3/terms.js";
 import { decodeTrail, encodeTrail, MAX_TRAIL_RECORD_BYTES, type ServedTrail } from "../src/pool/v3/trail.js";
-import { collected } from "./support.js";
+import { BROWSER_HOST, collected } from "./support.js";
 
 // The terms signature check, counted where it runs and otherwise unchanged.
 vi.mock("../src/pool/v3/terms.js", async original => {
@@ -78,7 +78,7 @@ function evidenceFile() {
 
 
 describe("v3 evidence store", () => {
-  it("reads a host's evidence beside its owner, writing it nothing but the lineage row it is given to add (Next 4 (bg))", () => {
+  it.skipIf(BROWSER_HOST)("reads a host's evidence beside its owner, writing it nothing but the lineage row it is given to add (Next 4 (bg))", () => {
     const { path, count } = evidenceFile(), host = new DatabaseSync(path, { readBigInts: true });
     // Closed before the directory is removed (Windows refuses to remove a file held open).
     const connections: DatabaseSync[] = [host];
@@ -361,7 +361,7 @@ describe("v3 evidence store", () => {
     store.close();
   });
 
-  it("assembles a later trail from its head and the records after a kept position, sharing the kept records", async () => {
+  it.skipIf(BROWSER_HOST)("assembles a later trail from its head and the records after a kept position, sharing the kept records", async () => {
     const file = evidenceFile(), tip = { segment, position: 3n, evidence: chain[3]! };
     let store = new EvidenceStore(file.path);
     store.importTrails([trail(3)]);
@@ -413,7 +413,7 @@ describe("v3 evidence store", () => {
     store.close();
   });
 
-  it("keeps each record once for trails sharing a prefix, so a fork costs only its own records", () => {
+  it.skipIf(BROWSER_HOST)("keeps each record once for trails sharing a prefix, so a fork costs only its own records", () => {
     const file = evidenceFile(), store = new EvidenceStore(file.path);
     store.importTrails([trail(4)]); store.importTrails([trail(2), trail(4)]); store.importBytes(pack([{ kind: 6, payload: trail(4) }]));
     const forked = [...records.slice(0, 2), issue(9)];
@@ -477,7 +477,7 @@ describe("v3 evidence store", () => {
     store.close();
   });
 
-  it("checks retained evidence when it is used: damage reads as absent or unresolved, and a copy supplied again repairs it", () => {
+  it.skipIf(BROWSER_HOST)("checks retained evidence when it is used: damage reads as absent or unresolved, and a copy supplied again repairs it", () => {
     const file = evidenceFile(), directory = [{ name: backing, digest: snapshotDigest(snapshotAt(4)) }], root = directoryRoot(directory);
     const snapshot = snapshotBytes(snapshotAt(4)), all = pack([{ kind: 3, payload: encodeEvidenceDirectory(directory) }, { kind: 4, payload: snapshot },
       { kind: 6, payload: trail(4) }]);
@@ -531,7 +531,7 @@ describe("v3 evidence store", () => {
       batch => [...batch.heads(segment)][0]);
   });
 
-  it("keeps a read's own items only while it lasts, and refuses a file of another layout", () => {
+  it.skipIf(BROWSER_HOST)("keeps a read's own items only while it lasts, and refuses a file of another layout", () => {
     const file = evidenceFile();
     let store = new EvidenceStore(file.path);
     const batch = store.importBytes(pack([{ kind: 1, payload: Uint8Array.of(1) }, { kind: 10, payload: Uint8Array.of(2) }, { kind: 6, payload: trail(1) }]));
@@ -659,7 +659,7 @@ describe("v3 evidence store", () => {
     supplierDb.close();
   });
 
-  it("records the sequence each supplier's evidence was kept through, in the file that holds the evidence", () => {
+  it.skipIf(BROWSER_HOST)("records the sequence each supplier's evidence was kept through, in the file that holds the evidence", () => {
     const file = evidenceFile();
     let store = new EvidenceStore(file.path);
     expect(store.suppliedThrough(b(1))).toBe(0n);

@@ -34,13 +34,18 @@ import { BackendType, BarretenbergSync } from "@aztec/bb.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { EncodingError } from "../bytes.js";
 import { isField } from "./field.js";
+import { PACKAGED_BINARY_REFUSAL, packagedBinary } from "./packaged-binary.js";
 
 const WIDTH = 4;
 
 /** The WebAssembly binary inside the installed bb.js, where its own loader finds it by default: beside its Node build,
- * found from that build's `platform` export (dest/node/bb_backends/node/). */
-const PACKAGED_WASM = join(dirname(createRequire(import.meta.url).resolve("@aztec/bb.js/platform")), "../../barretenberg_wasm/barretenberg-threads.wasm.gz");
-const backend = await BarretenbergSync.new({ backend: BackendType.Wasm, threads: 1, wasmPath: PACKAGED_WASM });
+ * found from that build's `platform` export (dest/node/bb_backends/node/). In the browser bundle (slice 39) bb.js's
+ * browser build loads the threaded binary it carries, the same file, but only on a cross-origin isolated page
+ * (packaged-binary.ts), and no environment can name another. */
+if (!packagedBinary()) throw new Error(PACKAGED_BINARY_REFUSAL);
+const PACKAGED_WASM = typeof MOE_BROWSER_CODE === "string" ? undefined
+  : join(dirname(createRequire(import.meta.url).resolve("@aztec/bb.js/platform")), "../../barretenberg_wasm/barretenberg-threads.wasm.gz");
+const backend = await BarretenbergSync.new({ backend: BackendType.Wasm, threads: 1, ...(PACKAGED_WASM === undefined ? {} : { wasmPath: PACKAGED_WASM }) });
 
 export type PermutationState = readonly [bigint, bigint, bigint, bigint];
 

@@ -142,6 +142,8 @@ export interface TrailProgram {
 
 /** The six programs, read afresh and each checked against the manifest's bytecode identity and compiler. */
 export function trailPrograms(): Readonly<Record<TrailCircuit, TrailProgram>> {
+  // The identities hash decompressed bytes, which only Node's zlib gives here: a browser host proves no check set (slice 39).
+  if (typeof process === "undefined") throw new CheckSetError("MISSING", "a browser host proves no check set");
   const shipped = readShipped("check-set-programs.json"), programs: { [name: string]: TrailProgram } = {};
   const compiler = CHECK_SET_MANIFEST.toolchain["@noir-lang/noir_wasm"];
   for (const name of TRAIL_CIRCUITS) {

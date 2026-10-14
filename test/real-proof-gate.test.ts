@@ -83,23 +83,23 @@ describe("real-proof gate", () => {
 
 describe("real-proof groups", () => {
   // The serial check:pool:v3 before CI split it into groups; nothing may drop out (the proof-free offline transfer check
-  // moved to check:scripts); the trail check set (slice 36) adds its own group.
+  // moved to check:scripts); the trail check set (slice 36) and the browser engine's proofs (slice 39) add their own groups.
   const serial = [
     "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
     "recovery-store-check.mjs", "recovery-store-check.mjs --ergo", "succession-store-check.mjs", "succession-store-check.mjs --ergo",
     "scope-store-check.mjs", "scope-store-check.mjs --ergo", "redemption-store-check.mjs", "redemption-store-check.mjs --ergo",
     "command-drill.mjs", "succinct-drill.mjs", "local-check.mjs", "check-set-check.mjs",
-  ].map(label => `scripts/pool/v3/${label}`);
+  ].map(label => `scripts/pool/v3/${label}`).concat(["scripts/browser/check.mjs --proofs"]);
 
   it("runs every script of the serial check once, each in one group", () => {
     expect(runner.SCRIPTS.map(entry => [entry.script, ...entry.args].join(" "))).toEqual(serial);
-    expect(runner.GROUPS).toEqual(["history", "stores", "redemption", "drill", "succinct", "replay", "check-set"]);
+    expect(runner.GROUPS).toEqual(["history", "stores", "redemption", "drill", "succinct", "replay", "check-set", "browser"]);
     for (const group of runner.GROUPS) expect(runner.SCRIPTS.some(entry => entry.group === group)).toBe(true);
   });
 
-  it("collects the thirteen reports CI retained, and the gate counts each re-recorded one as unread", () => {
+  it("collects the fourteen reports CI retained, and the gate counts each re-recorded one as unread", () => {
     const reports = runner.SCRIPTS.flatMap(entry => entry.reports);
-    expect(new Set(reports).size).toBe(13);
+    expect(new Set(reports).size).toBe(14);
     for (const report of reports.filter(path => path.startsWith("docs/"))) {
       expect(gate.compareTrees(tree({ [report]: blob(A) }), tree({ [report]: blob(B) })).skippable).toBe(true);
     }

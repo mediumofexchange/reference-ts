@@ -66,7 +66,8 @@ describe("pool-v2 §1: the in-circuit hash on the host", () => {
     expect(chained).toBe(oracle);
   });
 
-  it("hashes on the binary the pinned package ships, whatever BB_WASM_PATH names", async () => {
+  // Node's environment only: a browser bundle carries its binary and has no environment (slice 39).
+  it.skipIf(typeof process === "undefined")("hashes on the binary the pinned package ships, whatever BB_WASM_PATH names", async () => {
     // bb.js runs the binary BB_WASM_PATH names unless it is given a path; the host hash starts once, at import.
     process.env.BB_WASM_PATH = "/nonexistent/elsewhere.wasm";
     try {

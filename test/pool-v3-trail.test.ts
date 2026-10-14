@@ -84,10 +84,11 @@ function rawSnapshot(snapshot: Snapshot): Buffer {
   return cat(ascii("snapshot"), snapshot.backing, snapshot.segment, snapshot.historyHash,
     snapshot.evidenceHash, integer(snapshot.issued, 8), integer(snapshot.burned, 8));
 }
+// One array, not spread arguments: a trail of 65,537 records would pass a browser worker's stack (slice 39).
 function rawTrail(served: trailCodec.ServedTrail): Buffer {
-  return cat(ascii("trail"), u32(served.header.length), served.header,
+  return Buffer.concat([ascii("trail"), u32(served.header.length), served.header,
     ...served.terms.map(term => cat(u32(term.terms.length), term.terms, term.signature)),
-    integer(BigInt(served.records.length), 8), ...served.records.map(record => cat(u32(record.length), record)));
+    integer(BigInt(served.records.length), 8), ...served.records.map(record => cat(u32(record.length), record))]);
 }
 function offsets(served: trailCodec.ServedTrail): { termLengths: number[]; eventCount: number; recordLengths: number[] } {
   let offset = ascii("trail").length + 4 + served.header.length;

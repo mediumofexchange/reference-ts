@@ -10,5 +10,5 @@
     "removeComments": false
   },
   "include": ["src"],
-  "exclude": ["test"]
+  "exclude": ["test", "src/browser"]
 }

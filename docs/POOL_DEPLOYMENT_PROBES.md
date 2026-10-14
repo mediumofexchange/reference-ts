@@ -1232,6 +1232,44 @@ verifier lanes and Node beside it.
 **Limits.** One run on each system, runners differing 1.7 times; no native or phone measurement here; one genuine
 proof per kind.
 
+## The holder's read path in a browser engine (slice 39)
+
+Measured 2026-10-14 in CI's real-proof group `browser` (`scripts/browser/check.mjs --proofs`, run 38549803306; each
+system's report is `scratch/browser-proofs.json` in its `pool-v3-reports-<os>` artifact; [decision](../decisions/2026-10.md#2026-10-14--run-the-holders-read-path-in-a-browser-engine-over-bundle-time-substitutes-for-nodes-built-ins-ahead-of-the-native-backend-and-the-exhaustion-half-slice-39-next-12)).
+The library's own modules, bundled for a browser (`scripts/browser/build.mjs`), run in a dedicated worker of headless
+Chrome 154 on CI's 4-vCPU runners, cross-origin isolated, with Barretenberg as WebAssembly on one thread and the
+spend's 2^15 points:
+
+| Phase | Ubuntu | Windows | Engine's measure after it |
+|---|---:|---:|---:|
+| Start the backend from the parameters | 0.27 s | 0.27 s | 78 MiB |
+| Derive and check the six relations' keys against the configuration | 2.5 s | 2.9 s | 100 MiB |
+| Verify a genuine proof of each of the five proved kinds | 0.32 s | 0.31 s | 120 MiB |
+| Prove a spend (two inputs, four outputs, real capsules) | 3.6 s | 3.5 s | 125 MiB |
+| Verify it | 23 ms | 29 ms | 125 MiB |
+| Try 4,000 capsules under one seed (a quarter its own) | 0.15 ms each | 0.14 ms each | 125 MiB |
+
+The engine's measure is `performance.measureUserAgentSpecificMemory()`, the page and its workers. The browser's
+whole process tree on Linux, sampled every 200 ms, held 1,113 MiB idle and peaked at 1,511 MiB; its resident sizes
+count shared pages once in each process, so the difference, about 400 MiB, bounds the check's own share. Over the six
+CI runs of the group the spend took 2.9–4.0 s and key derivation 2.0–2.9 s. A tampered proof was refused in each.
+
+*Against slice 33's Node proxy* ([phone-class proxy](#the-trails-proof-aggregation-slice-33), another host): a spend
+3.9 s on one thread and a verification 22.7 ms there, so the browser engine costs the proof nothing of note. A capsule
+costs 0.11–0.16 ms against 0.061 ms, @noble/ciphers' AES-GCM against OpenSSL's, so a restore's 4·10⁶ capsules at the design
+point would take about 7–11 minutes rather than 4 (extrapolated).
+
+*Equivalence:* the substitutes pass `test/browser-host.test.ts` against node:sqlite, node:crypto and node:path; 31
+suites (488 tests) pass over them in Node, skipping the 17 kept-file tests by name and the oracle comparisons, which
+would compare a substitute with itself there; ten suites run in the browser,
+180 tests passing and one (Node's `BB_WASM_PATH`) skipping, as many as Node runs of those files; on a page without
+cross-origin isolation Poseidon2 refuses to start, by name.
+
+**Limits.** CI runners, not phones: DevTools' CPU throttling is refused for workers, where every check runs, so no
+throttled run stands in for a device, and `check.mjs --serve` is the route to a phone's rates. Memory databases only:
+no kept replay or evidence file, no wallet store and no durability in the browser yet. One genuine proof per kind;
+one spend shape.
+
 ## Invalid-checkpoint evidence
 
 `model/pool-fault-boundary.test.ts` (nine cases over the authority and recovery models) shows, under the

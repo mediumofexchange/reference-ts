@@ -137,7 +137,8 @@ jobs:
 
   check:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # Windows took about 14 minutes before the browser host's check (slice 39) added about two.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
