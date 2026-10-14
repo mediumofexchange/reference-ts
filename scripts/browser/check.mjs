@@ -5,13 +5,17 @@
 //             passes. No proof; part of `npm run check:browser`.
 //   --proofs  the pinned backend, key derivation, a genuine proof of each kind, a tampered proof, a spend proved and
 //             verified, and a restore's capsule scan (proofs.mjs), with times and memory. CI's real-proof group
-//             `browser` runs it.
-//   --throttle <rate>  slow the page and every worker's CPU by <rate> (DevTools' CPU throttling), as a slower device.
+//             `browser` runs it. On Linux the browser's processes' peak resident memory is sampled from outside too.
+// DevTools' CPU throttling reaches pages, not workers ("only supported for pages", Chrome 154), and every check runs
+// in workers, so no throttled run stands in for a slower device: phone rates need a phone.
 //   --browser <path>   the engine (default: MOE_BROWSER, else Chrome or Edge where installed).
+//   --serve [--port <n>]  launch no browser: serve the check on 127.0.0.1:<n> and judge the first result any browser
+//             posts, such as a phone's Chrome reaching it through `adb reverse tcp:<n> tcp:<n>` (a secure context, as
+//             cross-origin isolation needs).
 //   --parameters <dir> the proving parameters (default scratch/private-payment-crs, as prepare-crs.mjs keeps them).
 //   --report <file>    where the result is written as JSON (default scratch/browser-<check>.json).
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, openSync, readSync, closeSync } from "node:fs";
+import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
@@ -31,16 +35,16 @@ worker.onmessage = async event => {
 </script>`;
 
 function parse(argv) {
-  const options = { check: "suites", throttle: 1, browser: process.env.MOE_BROWSER, parameters: join(root, "scratch/private-payment-crs"), report: undefined };
+  const options = { check: "suites", serve: false, port: 0, browser: process.env.MOE_BROWSER, parameters: join(root, "scratch/private-payment-crs"), report: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--suites" || arg === "--proofs") options.check = arg.slice(2);
-    else if (arg === "--throttle" && i + 1 < argv.length) options.throttle = Number(argv[++i]);
+    else if (arg === "--serve") options.serve = true;
+    else if (arg === "--port" && i + 1 < argv.length) options.port = Number(argv[++i]);
     else if (["--browser", "--parameters", "--report"].includes(arg) && i + 1 < argv.length) options[arg.slice(2)] = resolve(argv[++i]);
     else throw new Error(`browser check: unknown or incomplete option ${arg}`);
   }
-  if (!(options.throttle >= 1)) throw new Error("browser check: --throttle takes a rate of 1 or more");
-  options.report ??= join(root, `scratch/browser-${options.check}${options.throttle > 1 ? `-x${options.throttle}` : ""}.json`);
+  options.report ??= join(root, `scratch/browser-${options.check}.json`);
   return options;
 }
 
@@ -69,7 +73,7 @@ function leading(path, length) {
   return buffer;
 }
 
-function serve(directory, parameters, log) {
+function serve(directory, parameters, log, port) {
   let settle;
   const result = new Promise(resolve => { settle = resolve; });
   const server = createServer((request, response) => {
@@ -99,7 +103,27 @@ function serve(directory, parameters, log) {
       return send(200, readFileSync(join(directory, name)), TYPES[extname(name)] ?? "application/octet-stream");
     } catch (error) { return send(500, String(error)); }
   });
-  return new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve({ server, port: server.address().port, result })));
+  return new Promise(resolve => server.listen(port, "127.0.0.1", () => resolve({ server, port: server.address().port, result })));
+}
+
+/** On Linux, the summed resident memory of `pid` and its descendants, in bytes, from /proc; undefined elsewhere. */
+function treeRss(pid) {
+  if (process.platform !== "linux") return undefined;
+  const children = new Map();
+  for (const name of readdirSync("/proc")) {
+    if (!/^d+$/.test(name)) continue;
+    try {
+      const stat = readFileSync(`/proc/${name}/stat`, "utf8"), parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+      children.set(parent, [...(children.get(parent) ?? []), Number(name)]);
+    } catch { /* gone meanwhile */ }
+  }
+  let total = 0;
+  for (const queue = [pid]; queue.length > 0;) {
+    const next = queue.pop();
+    try { total += 1024 * Number(/VmRSS:s+(d+)/.exec(readFileSync(`/proc/${next}/status`, "utf8"))?.[1] ?? 0); } catch { /* gone */ }
+    queue.push(...(children.get(next) ?? []));
+  }
+  return total;
 }
 
 /** A DevTools protocol connection over the browser's own endpoint, with flattened sessions. */
@@ -137,7 +161,17 @@ async function main() {
     throw new Error(`browser check: no proving parameters in ${options.parameters}; run scripts/pool/prepare-crs.mjs`);
   }
 
-  const { server, port, result } = await serve(out, options.parameters, log);
+  const { server, port, result } = await serve(out, options.parameters, log, options.port);
+  if (options.serve) {
+    log(`open http://127.0.0.1:${port}/#${entry} in the browser to measure (a phone: adb reverse tcp:${port} tcp:${port})`);
+    try {
+      const outcome = await result;
+      const report = { check: entry, browser: "served", platform: process.platform, code, seconds: (Date.now() - started) / 1000, ...outcome };
+      writeFileSync(options.report, `${JSON.stringify(report, null, 2)}
+`);
+      return judge(report, log);
+    } finally { server.close(); }
+  }
   const executable = findBrowser(options.browser), profile = mkdtempSync(join(tmpdir(), "moe-browser-"));
   const browser = spawn(executable, [
     "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
@@ -152,36 +186,28 @@ async function main() {
       await new Promise(r => setTimeout(r, 100));
     }
     const [devPort, path] = readFileSync(portFile, "utf8").split("\n");
-    const throttled = [];
-    connection = await devtools(`ws://127.0.0.1:${devPort}${path}`, async message => {
-      // Every worker, bb.js's own included, waits at its start until throttled and itself watched for workers.
-      if (message.method !== "Target.attachedToTarget") return;
-      const session = message.params.sessionId, type = message.params.targetInfo.type;
-      try { await connection.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, session); } catch {}
-      if (options.throttle > 1) {
-        try { await connection.send("Emulation.setCPUThrottlingRate", { rate: options.throttle }, session); throttled.push(type); }
-        catch (error) { throttled.push(`${type} (refused: ${error.message})`); }
-      }
-      try { await connection.send("Runtime.runIfWaitingForDebugger", {}, session); } catch {}
-    });
+    connection = await devtools(`ws://127.0.0.1:${devPort}${path}`, () => {});
     const version = await connection.send("Browser.getVersion");
     const { targetId } = await connection.send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await connection.send("Target.attachToTarget", { targetId, flatten: true });
-    await connection.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId);
-    if (options.throttle > 1) { await connection.send("Emulation.setCPUThrottlingRate", { rate: options.throttle }, sessionId); throttled.push("page"); }
+    const idle = treeRss(browser.pid);
+    let peak = idle;
+    const sampler = setInterval(() => { const rss = treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
     await connection.send("Page.navigate", { url: `http://127.0.0.1:${port}/#${entry}` }, sessionId);
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("browser check: no result within 25 minutes")), 25 * 60_000).unref());
-    const outcome = await Promise.race([result, timeout]);
-    const report = { check: entry, browser: version.product, userAgent: version.userAgent, platform: process.platform, throttle: options.throttle,
-      throttled, code, seconds: (Date.now() - started) / 1000, ...outcome };
+    const outcome = await Promise.race([result, timeout]).finally(() => clearInterval(sampler));
+    const report = { check: entry, browser: version.product, userAgent: version.userAgent, platform: process.platform,
+      ...(idle === undefined ? {} : { browserRssBytes: { idle, peak } }), code, seconds: (Date.now() - started) / 1000, ...outcome };
     writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`);
     return judge(report, log);
   } finally {
     connection?.close();
-    browser.kill();
     server.close();
-    await new Promise(r => setTimeout(r, 500));
-    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    const exited = browser.exitCode !== null ? Promise.resolve() : new Promise(r => browser.once("exit", r));
+    browser.kill();
+    await Promise.race([exited, new Promise(r => setTimeout(r, 10_000).unref())]);
+    // A profile the browser still holds (Windows) is left in the system's temporary directory, not a failure.
+    try { rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch (error) { log(`left ${profile}: ${error.code}`); }
   }
 }
 
@@ -203,7 +229,7 @@ function judge(report, log) {
     log({ phases: report.phases, checks: { ...c, genuine: undefined } });
   }
   for (const failure of failures) console.error(`browser check: FAILED ${failure}`);
-  log(`${failures.length === 0 ? "passed" : "failed"} in ${report.browser}, throttle ${report.throttle} (${report.throttled.join(", ") || "none"}), ${report.seconds.toFixed(1)} s; report ${report.check}`);
+  log(`${failures.length === 0 ? "passed" : "failed"} in ${report.browser}, ${report.browserRssBytes === undefined ? "" : `peak browser RSS ${Math.round(report.browserRssBytes.peak / 2 ** 20)} MiB, `}${report.seconds.toFixed(1)} s; report ${report.check}`);
   return failures.length === 0 ? 0 : 1;
 }
 

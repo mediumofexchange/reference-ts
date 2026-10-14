@@ -31,10 +31,9 @@ export const SCRIPTS = Object.freeze([
   { group: "succinct", script: `${v3}/succinct-drill.mjs`, args: [], reports: [] },
   { group: "replay", script: `${v3}/local-check.mjs`, args: [], reports: ["scratch/pool-v3-local-replay-results.json"] },
   { group: "check-set", script: `${v3}/check-set-check.mjs`, args: [], reports: ["docs/pool-v3-check-set-verification.json"] },
-  // The holder's read path in a browser engine (slice 39): proving and verifying there, unthrottled and as a device
-  // four times slower, each run's times and memory in its report (the probes section records them).
+  // The holder's read path in a browser engine (slice 39): proving and verifying there, with times and memory in its
+  // report (the probes section records them).
   { group: "browser", script: "scripts/browser/check.mjs", args: ["--proofs"], reports: ["scratch/browser-proofs.json"] },
-  { group: "browser", script: "scripts/browser/check.mjs", args: ["--proofs", "--throttle", "4"], reports: ["scratch/browser-proofs-x4.json"] },
 ].map(entry => Object.freeze({ ...entry, args: Object.freeze(entry.args), reports: Object.freeze(entry.reports) })));
 
 /** The group names, in order of first appearance. */

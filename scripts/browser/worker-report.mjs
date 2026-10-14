@@ -20,5 +20,6 @@ export function memory() {
   return new Promise(resolve => { waiting.set(id, resolve); self.postMessage({ measure: id }); });
 }
 
-/** The result, after which the serving script closes the browser. */
-export const finish = result => post("/result", result);
+/** The result with the engine and device the worker ran on, after which the serving script closes the browser. */
+export const finish = result => post("/result", { ...result, worker: { userAgent: navigator.userAgent,
+  hardwareConcurrency: navigator.hardwareConcurrency, deviceMemory: navigator.deviceMemory } });
