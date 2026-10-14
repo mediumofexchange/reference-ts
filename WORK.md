@@ -65,7 +65,7 @@ Order ([direction 2026-10-13](decisions/2026-10.md#2026-10-13--keep-the-release-
    **The phone holder path** ([direction 2026-10-13](decisions/2026-10.md#2026-10-13--keep-the-release-target-take-the-phone-path-now-and-prove-the-trails-proofs-rather-than-its-state-machine-direction)): the reference's reader over proof-free bytes, an aggregation of the trail's statement proofs, Ergo's headers, native checks of venue publications and a succinct proof of exhaustion. Order:
    (1)–(3) done: slices 32–34 (exhaustion leaf, aggregation, `succinct-read.md`);
    (4) to `succinct-read.md` §§2–4 and an adopted set (§6). Done: slices 35–38 (slice 38's accepted limit: an early gap in the covers costs fetches up to one checkpoint's span). Next: the aggregator's native backend (bb.js's bundled `bb`, Linux and macOS; keys shown equal to the pinned ones; a fresh instance after a proving throw), the exhaustion half (§4), adoption with adversarial review (bb's in-circuit limb and curve constraints; pairing points at infinity, audit 34); (5) a phone-class build: slice 39 (the read path in a browser engine) done; next the wallet there (Goal); phone rates need a device (Open questions). Falsifiers are in the decision.
-   After step 4: Dogecoin's two probes and asset work (bare BTC holdings, XMR holdings, the hashlocked release's C0a). Otherwise pool-v4 candidates wait on their triggers.
+   After step 4: Dogecoin's two probes and asset work (bare BTC holdings, XMR holdings, the hashlocked release's C0a). Pool-v4 candidates wait on their triggers.
 
 ## Retained boundaries and local state
 - Own v6.0.6 mainnet snapshot (:9053) and testnet archive/index (:9052) nodes under `scratch/ergo-nodes/`, stopped
