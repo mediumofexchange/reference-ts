@@ -209,7 +209,8 @@ function take(state: Mounted, path: string): Member {
 export interface Mount {
   /** Files found by name. */
   readonly files: number;
-  /** Whether the browser keeps the origin's storage under storage pressure (`navigator.storage.persist`). */
+  /** Whether the browser keeps the origin's storage under storage pressure: `navigator.storage.persist`'s answer, or in a
+   * worker, which cannot ask (only a window can), `persisted`'s, so a page asks before its workers mount. */
   readonly persisted: boolean | undefined;
 }
 
@@ -269,7 +270,9 @@ export async function mountFiles(name = "moe-files", options: { readonly reserve
   mounted = state;
   await refill(state, state.reserve);
   let persisted: boolean | undefined;
-  if (options.persist !== false) { try { persisted = await manager.persist?.(); } catch { persisted = undefined; } }
+  if (options.persist !== false) {
+    try { persisted = await (manager.persist !== undefined ? manager.persist() : manager.persisted?.()); } catch { persisted = undefined; }
+  }
   return { files: state.names.size, persisted };
 }
 

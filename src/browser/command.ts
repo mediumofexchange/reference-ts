@@ -10,10 +10,12 @@
 //
 // What a command reads that a holder hands it (a venue file, a service file, a request frame) the host writes into the
 // pool first (`files`); what it writes that the holder takes away (a request frame, a backup) the host reads back after
-// it (`read`). The seed a restore takes comes on its stdin (`stdin`), which is zeroed once read.
+// it (`read`); what the holder should not leave in the pool (a key file handed in, an init that did not finish) the host
+// removes after it (`remove`), as a holder removes a file under Node. The seed a restore takes comes on its stdin
+// (`stdin`), which is zeroed once read; the page transfers its buffer, so no copy stays there.
 import { moeProcess } from "./globals.js";
 import { mountFiles } from "./files.js";
-import { mkdirSync, readFileSync, writeFileSync } from "./node-fs.js";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "./node-fs.js";
 import { dirname } from "./node-path.js";
 import { run } from "../cli/main.js";
 
@@ -26,6 +28,8 @@ export interface CommandRequest {
   readonly files?: Readonly<Record<string, Uint8Array | string>>;
   /** Files read back from the pool after the command, by absolute path: their bytes, or null where there is none. */
   readonly read?: readonly string[];
+  /** Paths removed from the pool after the command and its read-back (a file, or a directory with what it holds). */
+  readonly remove?: readonly string[];
   /** The command's stdin (restore-seed's seed); none reads as an empty pipe. Zeroed once read. */
   readonly stdin?: Uint8Array;
 }
@@ -36,6 +40,8 @@ export interface CommandResult {
   readonly stdout: string;
   readonly stderr: string;
   readonly files: Readonly<Record<string, Uint8Array | null>>;
+  /** Paths read back or removed that the pool refused, by the refusal's code: the command's own outcome stands. */
+  readonly fileErrors: Readonly<Record<string, string>>;
   /** Whether the browser keeps the origin's storage under pressure (the mount's `navigator.storage.persist` answer). */
   readonly persisted: boolean | undefined;
 }
@@ -54,8 +60,9 @@ export async function runCommand(request: CommandRequest): Promise<CommandResult
   moeProcess.stdout = collect(stdout);
   moeProcess.stderr = collect(stderr);
   moeProcess.stdin = pipe(request.stdin);
-  const result = (code: number, files: Record<string, Uint8Array | null> = {}, persisted?: boolean): CommandResult =>
-    ({ code, stdout: stdout.join(""), stderr: stderr.join(""), files, persisted });
+  const files: Record<string, Uint8Array | null> = {}, fileErrors: Record<string, string> = {};
+  const result = (code: number, persisted?: boolean): CommandResult =>
+    ({ code, stdout: stdout.join(""), stderr: stderr.join(""), files, fileErrors, persisted });
   let persisted: boolean | undefined;
   try {
     persisted = (await mountFiles(request.pool, { persist: true })).persisted;
@@ -73,14 +80,18 @@ export async function runCommand(request: CommandRequest): Promise<CommandResult
     writeFileSync(path, data);
   }
   const code = await run(request.argv, { wallet: async () => (await import("../cli/wallet.js")).wallet });
-  const files: Record<string, Uint8Array | null> = {};
+  // The command's outcome is final here: a path the pool refuses is reported beside it, never in its place.
+  const refusal = (error: unknown): string => String((error as { code?: unknown }).code ?? "EIO");
   for (const path of request.read ?? []) {
     try { files[path] = new Uint8Array(readFileSync(path) as Buffer); } catch (error) {
-      if ((error as { code?: string }).code !== "ENOENT") throw error;
       files[path] = null;
+      if ((error as { code?: string }).code !== "ENOENT") fileErrors[path] = refusal(error);
     }
   }
-  return result(code, files, persisted);
+  for (const path of request.remove ?? []) {
+    try { rmSync(path, { recursive: true, force: true }); } catch (error) { fileErrors[path] = refusal(error); }
+  }
+  return result(code, persisted);
 }
 
 /** `input` as a pipe on stdin: one chunk, then its end; the caller's bytes are zeroed once taken. */
@@ -97,13 +108,15 @@ function pipe(input: Uint8Array | undefined): typeof moeProcess.stdin {
 }
 
 /** As a dedicated worker's module (wallet.html `moeCommand`): `{ ready: true }` once it listens, so the host's request
- * is never posted before, then one request message in and its result posted back. */
+ * is never posted before, then one request message in and its result posted back, after which the worker ends itself,
+ * as a process exits, so a host that kept it would not keep the pool (the host's `terminate` stays a backstop). */
 const scope = globalThis as unknown as { WorkerGlobalScope?: unknown; addEventListener?(type: "message", listener: (event: { data: CommandRequest }) => void): void;
-  postMessage?(message: CommandResult): void };
+  postMessage?(message: CommandResult): void; close?(): void };
 if (scope.WorkerGlobalScope !== undefined && scope.addEventListener !== undefined) {
   scope.addEventListener("message", event => {
     runCommand(event.data).then(result => scope.postMessage!(result), (error: unknown) => scope.postMessage!({
-      code: 3, stdout: "", stderr: `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`, files: {}, persisted: undefined }));
+      code: 3, stdout: "", stderr: `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`, files: {}, fileErrors: {}, persisted: undefined }))
+      .finally(() => scope.close?.());
   });
   (scope.postMessage as unknown as (message: { ready: true }) => void)({ ready: true });
 }

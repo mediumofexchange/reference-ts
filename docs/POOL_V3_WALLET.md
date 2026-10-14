@@ -577,6 +577,10 @@ fresh seed; with `--backer` it also holds K (`backer.key`), and `venue create`, 
 and `burn` are enabled (`publish-acceptance` signs nothing, so a backer's copy restored without K still
 republishes its saved acceptances). Only `init`, a backer's `venue create`, `restore-seed` and `restore`
 create a wallet database, so a lost one never comes back as a fresh seed. The directory holds no funding key.
+The same commands run in a browser engine ([slice 41](../decisions/2026-10.md#2026-10-14--run-the-wallet-commands-in-a-browser-engine-one-command-a-worker-over-its-file-pool-and-take-a-wrapped-app-as-the-holders-route-slice-41-next-12)):
+`src/browser/command.ts` runs one `moe wallet` command a worker over the origin's file pool, with the same output,
+exit codes and refusals, and `src/browser/wallet.html` takes a command line or `moeCommand({ argv, files?, read?, stdin? })`.
+A second command while one holds the pool is refused `BUSY`; an onion service is refused `PROXY` there.
 
 | Command | Does |
 |---|---|

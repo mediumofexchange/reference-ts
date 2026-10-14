@@ -46,13 +46,18 @@ export const moeProcess: { env: Record<string, string | undefined>; stdout: Writ
 //   reads as its id where a number is wanted, and `clearTimeout` takes either.
 const browserSetTimeout = globalThis.setTimeout, browserClearTimeout = globalThis.clearTimeout;
 export class Timeout {
-  private id: ReturnType<typeof browserSetTimeout> | undefined;
+  private id: ReturnType<typeof browserSetTimeout>;
+  private cleared = false;
   constructor(private readonly callback: () => void, private readonly ms: number | undefined) { this.id = browserSetTimeout(callback, ms); }
-  refresh(): this { if (this.id !== undefined) browserClearTimeout(this.id); this.id = browserSetTimeout(this.callback, this.ms); return this; }
+  /** Restarts the bound, also after it fired, as Node's does; a cleared timer stays cleared. */
+  refresh(): this {
+    if (this.cleared) return this;
+    browserClearTimeout(this.id); this.id = browserSetTimeout(this.callback, this.ms); return this;
+  }
   ref(): this { return this; }
   unref(): this { return this; }
   hasRef(): boolean { return true; }
-  close(): this { browserClearTimeout(this.id); this.id = undefined; return this; }
+  close(): this { browserClearTimeout(this.id); this.cleared = true; return this; }
   [Symbol.toPrimitive](): number { return Number(this.id); }
 }
 function setTimeoutNode<A extends unknown[]>(callback: (...args: A) => void, ms?: number, ...args: A): Timeout {

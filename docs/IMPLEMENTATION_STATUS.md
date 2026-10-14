@@ -132,8 +132,11 @@ WebAssembly build, memory databases), node:crypto and node:fs; `npm run check:br
 suites in headless Chromium, and CI's `browser` real-proof group verifies and proves there. Database files live there
 too (slice 40, [probes](POOL_DEPLOYMENT_PROBES.md#the-holders-files-in-a-browser-engine-slice-40)): a file pool on the
 origin's private file system serves node:fs and SQLite (`src/browser/files.ts`, `sqlite-files.ts`), so the kept replay,
-evidence and wallet files run their Node code there (`check.mjs --files`). No wallet flow, command or user interface
-runs there yet.
+evidence and wallet files run their Node code there (`check.mjs --files`). The `moe wallet` commands run there too
+(slice 41, [probes](POOL_DEPLOYMENT_PROBES.md#the-wallets-flows-in-a-browser-engine-slice-41)): one command a worker over
+the pool (`src/browser/command.ts`), driven from a stand-in page (`src/browser/wallet.html`); `check.mjs --wallet`
+(CI's `browser` group) creates a wallet, requests, receives, pays with a proof made there and restores from the seed,
+against an operator, backer and shop running `moe` as processes. No packaged app, device or onion route yet.
 
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),

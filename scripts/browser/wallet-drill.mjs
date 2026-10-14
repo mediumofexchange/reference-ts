@@ -20,7 +20,8 @@ const pause = ms => new Promise(done => setTimeout(done, ms));
 
 export async function drill({ command, route, log, parameters, root }) {
   const scratch = realpathSync(mkdtempSync(join(root, "scratch", "wallet-drill-")));
-  const moeBin = join(root, "dist/cli/moe.js"), checks = [], commands = [], servers = [];
+  const moeBin = join(root, "dist/cli/moe.js"), checks = [], commands = [], processes = [], servers = [];
+  let persisted, lastStdinLeft;
   const node = await serveSyntheticNode(), nodeUrl = node.url;
   route(Number(new URL(nodeUrl).port));
   const call = async (path, body) => {
@@ -33,12 +34,16 @@ export async function drill({ command, route, log, parameters, root }) {
 
   /** `moe` as a process here (the holder's counterparties). */
   const moe = (args, input) => new Promise((done, failed) => {
+    const began = Date.now();
     const child = spawn(process.execPath, [moeBin, ...args], { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], windowsHide: true });
     if (input !== undefined) child.stdin.end(input);
     let stdout = "", stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk; }); child.stderr.on("data", chunk => { stderr += chunk; });
     child.on("error", failed);
-    child.on("close", status => done({ status, stdout, stderr }));
+    child.on("close", status => {
+      processes.push({ command: args.slice(0, args[1] === "terms" || args[1] === "service" || args[1] === "venue" ? 3 : 2).join(" "), status, ms: Date.now() - began });
+      done({ status, stdout, stderr });
+    });
   });
   const ok = async args => {
     const result = await moe(args);
@@ -49,6 +54,8 @@ export async function drill({ command, route, log, parameters, root }) {
   /** One holder command in the browser, timed: its exit code, its one JSON object, its refusal and the files read back. */
   const browser = async (argv, options = {}) => {
     const began = Date.now(), result = await command({ argv: ["wallet", ...argv], ...options });
+    persisted ??= result.persisted;
+    lastStdinLeft = result.stdinLeft;
     commands.push({ command: argv[0] === "terms" || argv[0] === "service" ? argv.slice(0, 2).join(" ") : argv[0], code: result.code, ms: Date.now() - began });
     let json, refusal;
     try { json = result.stdout.trim() === "" ? undefined : JSON.parse(result.stdout.trim().split("\n").at(-1)); } catch { json = undefined; }
@@ -131,7 +138,7 @@ export async function drill({ command, route, log, parameters, root }) {
     });
 
     const holderInit = ["--venue", files.venue, "--node", nodeUrl, "--parameters", "/parameters"];
-    await check("the holder's wallet in the browser: init, terms and service kept, a request whose frame is read back", async () => {
+    await check("the holder's wallet in the browser: init (an exact rerun replays), terms and service kept", async () => {
       const init = await done(["init", "--dir", holder, ...holderInit], { files: inputs });
       assert.deepEqual([init.status, init.role], ["created", "wallet"]);
       // An exact rerun of init over the directory it finished replays, as under Node.
@@ -141,14 +148,20 @@ export async function drill({ command, route, log, parameters, root }) {
     });
 
     let fund;
-    await check("receive: the backer issues to the browser's request; fulfill reads it final and sync holds it", async () => {
+    await check("receive: a request whose frame is read back (an exact retry the same frame), the backer's issue to it read final by fulfill (a rerun exits 4 with the saved result) and held by sync", async () => {
       const made = await browser(["request", "--dir", holder, "fund", backing, "10", "--out", "/fund.request"], { read: ["/fund.request"] });
       assert.equal(made.code, 0, made.stderr);
       fund = { ...made.json, frame: made.files["/fund.request"] };
       assert.equal(fund.frame?.length, 246, "the request frame is read back from the pool");
-      // An exact retry yields the same frame and digest.
-      const again = await done(["request", "--dir", holder, "fund", backing, "10", "--out", "/fund-2.request"]);
-      assert.equal(again.digest, fund.digest);
+      // An exact retry yields the same frame and digest; the frames handed out are removed from the pool after.
+      const again = await browser(["request", "--dir", holder, "fund", backing, "10", "--out", "/fund-2.request"],
+        { read: ["/fund-2.request"], remove: ["/fund.request", "/fund-2.request"] });
+      assert.equal(again.code, 0, again.stderr);
+      assert.equal(again.json.digest, fund.digest);
+      assert.deepEqual(again.files["/fund-2.request"], fund.frame);
+      // A read-back the pool refuses is reported beside the command's own outcome, never in its place.
+      const after = await browser(["status", "--dir", holder, "nothing"], { read: ["/fund.request", "/"] });
+      assert.deepEqual([after.code, after.files["/fund.request"], after.fileErrors], [1, null, { "/": "EISDIR" }], after.stderr);
       const frameFile = join(scratch, "fund.request");
       writeFileSync(frameFile, fund.frame);
       await ok(node$("issue", BK, "issue-1", backing, "--request", frameFile, "--digest", fund.digest, "--value", "10"));
@@ -158,6 +171,8 @@ export async function drill({ command, route, log, parameters, root }) {
       // fulfill is never replayed as a new credit: a rerun exits 4 with the saved result.
       const replay = await browser(["fulfill", "--dir", holder, "fund", backing]);
       assert.equal(replay.code, 4, replay.stderr);
+      const { status: _status, evidence: _evidence, ...saved } = fulfilled;
+      assert.deepEqual(replay.json, { status: "replay", ...saved });
       assert.deepEqual(holdings(await done(["sync", "--dir", holder, backing])), [["10", "available"]]);
     });
 
@@ -186,11 +201,17 @@ export async function drill({ command, route, log, parameters, root }) {
       assert.deepEqual(codes, [0, "BUSY"].sort(), JSON.stringify([first.stderr, second.stderr]));
     });
 
-    await check("restore: the seed shown in the browser restores into a new directory that finds the same holdings", async () => {
+    await check("restore: the seed shown in the browser restores into a new directory that finds the same holdings; an onion service is refused PROXY", async () => {
       const { seed } = await done(["seed", "--dir", holder, "--show"]);
       assert.match(seed, /^[0-9a-f]{64}$/);
-      await done(["restore-seed", "--dir", restored, ...holderInit], { stdin: new TextEncoder().encode(`${seed}\n`) });
+      const restoring = await done(["restore-seed", "--dir", restored, ...holderInit], { stdin: new TextEncoder().encode(`${seed}\n`) });
+      assert.equal(restoring.status, "created");
+      assert.equal(lastStdinLeft, 0, "no byte of the seed stays in the page");
       await done(["terms", "add", "--dir", restored, backing, "--terms", files.terms, "--signature", files.signature, "--synthetic"]);
+      // A browser has no Tor: an operator reached as an onion service is refused by name before any request.
+      const onion = { "/in/onion.json": JSON.stringify({ url: `http://${"a".repeat(55)}d.onion/`, walletToken: "11".repeat(32) }) };
+      await done(["service", "add", "--dir", restored, backing, "/in/onion.json"], { files: onion });
+      await refusedIn(["sync", "--dir", restored, backing], "PROXY");
       await done(["service", "add", "--dir", restored, backing, files.service]);
       assert.deepEqual(holdings(await done(["sync", "--dir", restored, backing])), [["7", "available"]]);
     });
@@ -200,5 +221,8 @@ export async function drill({ command, route, log, parameters, root }) {
     await node.close?.();
   }
   rmSync(scratch, { recursive: true, force: true });
-  return { checks, commands };
+  // The browser's answer to the mount's persistence request (navigator.storage.persist): whether the origin's files
+  // outlive storage pressure.
+  assert.equal(typeof persisted, "boolean", "each command reports the browser's answer on persistence");
+  return { checks, commands, processes, persisted };
 }

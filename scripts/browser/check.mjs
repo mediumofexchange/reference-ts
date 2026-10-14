@@ -230,7 +230,10 @@ async function pageCommand(connection, sessionId, request) {
     if (request.files) request.files = Object.fromEntries(Object.entries(request.files).map(([path, data]) => [path, bytes(data)]));
     if (request.stdin) request.stdin = bytes(request.stdin);
     const result = await moeCommand(request);
-    return JSON.stringify({ ...result, files: Object.fromEntries(Object.entries(result.files ?? {}).map(([path, data]) => [path, data === null ? null : text(data)])) });
+    // Whether any of the seed stays in the page after the command: its buffer is transferred to the worker.
+    // A transferred buffer is detached: its view reads as empty.
+    const stdinLeft = request.stdin === undefined ? null : request.stdin.byteLength === 0 ? 0 : request.stdin.byteLength + request.stdin.reduce((sum, byte) => sum + byte, 0);
+    return JSON.stringify({ ...result, stdinLeft, files: Object.fromEntries(Object.entries(result.files ?? {}).map(([path, data]) => [path, data === null ? null : text(data)])) });
   })()`;
   const evaluated = await connection.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId);
   if (evaluated.exceptionDetails !== undefined) throw new Error(`browser check: the page's command failed: ${JSON.stringify(evaluated.exceptionDetails)}`);
