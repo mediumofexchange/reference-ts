@@ -14,7 +14,7 @@
 //             wallet's files) with the worker's file pool mounted (files.ts); then a crash: a worker keeping a replay
 //             file is ended mid-walk, and a new worker must reopen the file through §14's digest check at its last
 //             keep point, while a third worker's mount is refused by name (crash.mjs). Part of `npm run check:browser`.
-//   --browser <path>   the engine (default: MOE_BROWSER, else Chrome or Edge where installed).
+//   --browser <path>   the engine (default: MOE_BROWSER, else Chrome or Edge where installed, else Playwright's).
 //   --serve [--port <n>]  launch no browser: serve the check on 127.0.0.1:<n> and judge the first result a browser
 //             posts, such as a phone's Chrome reaching it through `adb reverse tcp:<n> tcp:<n>` (a secure context, as
 //             cross-origin isolation needs). The address printed carries the run's token, which every post must.
@@ -58,7 +58,7 @@ function parse(argv) {
   return options;
 }
 
-/** A Chromium-based engine: the one named, else Chrome, else Edge. */
+/** A Chromium-based engine: the one named, else Chrome, else Edge, else Playwright's Chromium (PLAYWRIGHT_BROWSERS_PATH). */
 function findBrowser(named) {
   if (named !== undefined) return named;
   const env = process.env, candidates = process.platform === "win32" ? [
@@ -69,6 +69,7 @@ function findBrowser(named) {
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
   ] : ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge"].map(name =>
     spawnSync("which", [name], { encoding: "utf8" }).stdout?.trim()).filter(Boolean);
+  if (env.PLAYWRIGHT_BROWSERS_PATH) candidates.push(join(env.PLAYWRIGHT_BROWSERS_PATH, "chromium"));
   const found = candidates.find(path => path && existsSync(path));
   if (found === undefined) throw new Error("browser check: no Chrome or Edge found; name one with --browser or MOE_BROWSER");
   return found;
