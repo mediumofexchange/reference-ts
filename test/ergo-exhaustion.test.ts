@@ -3,6 +3,7 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, it } from "vitest";
 import { compareBytes } from "../src/bytes.js";
+import { FIELD_MODULUS } from "../src/pool/field.js";
 import {
   EMPTY_SUBTREES, entryChain, foldPublicInputs, inclusionPath, inclusionRoot, mapLeaf, mapNode, pathRoot, sectionInclusionPath, SubjectMap,
   subjectKey, succinctRange, testExhaustionSet, type Fold, type IncludedTransaction, type KeptTuple, type MapEntry, type ReaderChain,
@@ -411,10 +412,11 @@ describe("a succinct range (succinct-read §4.4)", () => {
     const proof = set.prove(false, madeUp);
     setImmediate(() => madeUp.endId.set(map.end.id));
     expect(await succinctRange(r, sources(r, A + 9n, { set: slow, fold: { first: false, inputs: madeUp, proof }, path: empty, entries: [] }))).toEqual({ refused: "fold-end" });
-    // An entry whose height reads in range once and out of range after: refused, not thrown.
+    // An entry whose height reads in range once and as a non-canonical value after: read once, so the read neither
+    // throws nor changes.
     const entries = map.entries(key);
     let looks = 0;
-    const flipping = entries.map((e, i) => i === 0 ? { ...e, get height() { return looks++ === 0 ? e.height : e.height + (1n << 40n); } } : e);
+    const flipping = entries.map((e, i) => i === 0 ? { ...e, get height() { return looks++ === 0 ? e.height : e.height + FIELD_MODULUS; } } : e);
     expect(await succinctRange(r, sources(r, A + 9n, { entries: flipping }))).toEqual({ entries: complete, kept: expect.anything() });
   });
 
