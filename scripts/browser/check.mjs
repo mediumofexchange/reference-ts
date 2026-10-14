@@ -10,6 +10,10 @@
 //             `browser` runs it. On Linux the browser's processes' peak resident memory is sampled from outside too.
 // DevTools' CPU throttling reaches pages, not workers ("only supported for pages", Chrome 154), and every check runs
 // in workers, so no throttled run stands in for a slower device: phone rates need a phone.
+//   --files   the library's suites that keep database files (files.mjs: kept replay files, retained evidence, the
+//             wallet's files) with the worker's file pool mounted (files.ts); then a crash: a worker keeping a replay
+//             file is ended mid-walk, and a new worker must reopen the file through §14's digest check at its last
+//             keep point, while a third worker's mount is refused by name (crash.mjs). Part of `npm run check:browser`.
 //   --browser <path>   the engine (default: MOE_BROWSER, else Chrome or Edge where installed).
 //   --serve [--port <n>]  launch no browser: serve the check on 127.0.0.1:<n> and judge the first result a browser
 //             posts, such as a phone's Chrome reaching it through `adb reverse tcp:<n> tcp:<n>` (a secure context, as
@@ -43,7 +47,7 @@ function parse(argv) {
   const options = { check: "suites", serve: false, port: 0, browser: process.env.MOE_BROWSER, parameters: join(root, "scratch/private-payment-crs"), report: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--suites" || arg === "--proofs") options.check = arg.slice(2);
+    if (arg === "--suites" || arg === "--proofs" || arg === "--files") options.check = arg.slice(2);
     else if (arg === "--serve") options.serve = true;
     else if (arg === "--port" && i + 1 < argv.length) options.port = Number(argv[++i]);
     else if (["--browser", "--parameters", "--report"].includes(arg) && i + 1 < argv.length) options[arg.slice(2)] = resolve(argv[++i]);
@@ -79,6 +83,28 @@ function leading(path, length) {
   return buffer;
 }
 
+/** The crash page (--files): three workers in turn on one file pool, each reporting by POST itself; a worker that fails
+ * to start is reported here. */
+const CRASH_PAGE = `<!doctype html><meta charset="utf-8"><title>moe crash check</title><script type="module">
+const token = new URLSearchParams(location.search).get("t");
+const step = (query, until) => new Promise(resolve => {
+  const worker = new Worker(new URL("crash.js?t=" + token + "&" + query, location.href), { type: "module" });
+  worker.onmessage = event => { if (event.data && (until in event.data || event.data.failed)) resolve({ worker, data: event.data }); };
+  worker.onerror = event => {
+    fetch("/result", { method: "POST", headers: { "content-type": "application/json", "x-moe-token": token },
+      body: JSON.stringify({ kind: "crash-" + new URLSearchParams(query).get("phase"), error: "the worker failed: " + (event.message || "it did not start") }) });
+    resolve({ worker, data: { failed: true } });
+  };
+});
+const write = await step("phase=write", "held");
+write.worker.terminate();
+const reopen = await step("phase=reopen&ns=" + write.data.held, "holding");
+const second = await step("phase=second", "done");
+reopen.worker.terminate(); second.worker.terminate();
+const race = await Promise.all([step("phase=race&n=1", "done"), step("phase=race&n=2", "done")]);
+for (const { worker } of race) worker.terminate();
+</script>`;
+
 /**
  * Serve `directory` and the proving parameters on loopback. Everything is served cross-origin isolated, except under
  * `/plain/`, which serves the same files without the isolation headers. A post counts only with the run's token: a
@@ -109,6 +135,7 @@ function serve(directory, parameters, log, port, token) {
     }
     try {
       if (path === "/") return send(200, PAGE, "text/html");
+      if (path === "/crash") return send(200, CRASH_PAGE, "text/html");
       if (path === "/parameters/g1") return send(200, leading(join(parameters, "bn254_g1.dat"), 64 * 32768), "application/octet-stream");
       if (path === "/parameters/g2") return send(200, leading(join(parameters, "bn254_g2.dat"), 128), "application/octet-stream");
       const name = path.slice(1);
@@ -169,8 +196,12 @@ async function main() {
   const options = parse(process.argv.slice(2)), started = Date.now(), token = randomBytes(16).toString("hex");
   const log = line => console.log(`browser check: ${typeof line === "string" ? line : JSON.stringify(line)}`);
   const out = join(root, "scratch/browser-check");
-  const shim = { name: "vitest-shim", setup(build) { build.onResolve({ filter: /^vitest$/ }, () => ({ path: join(root, "scripts/browser/vitest-shim.mjs") })); } };
-  const entry = options.check, extra = entry === "suites" && !options.serve ? ["isolation"] : [];
+  const shim = { name: "vitest-shim", setup(build) {
+    build.onResolve({ filter: /^vitest$/ }, () => ({ path: join(root, "scripts/browser/vitest-shim.mjs") }));
+    // The suites' temporary directory and process starts (test-modules.mjs): test bundles only, never the library's.
+    build.onResolve({ filter: /^node:(os|child_process)$/ }, () => ({ path: join(root, "scripts/browser/test-modules.mjs") }));
+  } };
+  const entry = options.check, extra = entry === "suites" && !options.serve ? ["isolation"] : entry === "files" && !options.serve ? ["crash"] : [];
   const { code } = await bundle([entry, ...extra].map(name => ({ in: join(root, `scripts/browser/${name}.mjs`), out: name })), out, [shim]);
   log({ built: [entry, ...extra], code, seconds: (Date.now() - started) / 1000 });
   if (entry === "proofs" && !existsSync(join(options.parameters, "bn254_g1.dat"))) {
@@ -222,15 +253,25 @@ async function main() {
     const sampler = setInterval(() => { const rss = treeRss(browser.pid); if (rss !== undefined && rss > peak) peak = rss; }, 200);
     await connection.send("Page.navigate", { url: address("/", entry) }, sessionId);
     const outcome = await within(Promise.race([resultOf(entry), crashed]), 25).finally(() => clearInterval(sampler));
-    let isolation;
-    if (extra.length > 0) {
+    let isolation, crashes;
+    if (entry === "files") {
+      await connection.send("Page.navigate", { url: `http://127.0.0.1:${port}/crash?t=${token}` }, sessionId);
+      crashes = {};
+      for (const phase of ["write", "reopen", "second"]) crashes[phase] = await within(Promise.race([resultOf(`crash-${phase}`), crashed]), 5);
+      // The two racing workers report in either order.
+      while (crashes["race-1"] === undefined || crashes["race-2"] === undefined) {
+        const posted = await within(Promise.race([result(), crashed]), 5);
+        if (/^crash-race-[12]$/.test(posted.kind ?? "")) crashes[posted.kind.slice("crash-".length)] = posted;
+        else log({ setAside: posted });
+      }
+    } else if (extra.length > 0) {
       await connection.send("Page.navigate", { url: address("/plain/", "isolation") }, sessionId);
       isolation = await within(Promise.race([resultOf("isolation"), crashed]), 5);
     }
     // The page's fields first, so none it posts can stand in for the run's own.
     const report = { ...outcome, check: entry, browser: version.product, userAgent: version.userAgent, platform: process.platform,
       ...(idle === undefined ? {} : { browserRssBytes: { idle, peak } }), code, seconds: (Date.now() - started) / 1000,
-      ...(isolation === undefined ? {} : { isolation }) };
+      ...(isolation === undefined ? {} : { isolation }), ...(crashes === undefined ? {} : { crash: crashes }) };
     writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`);
     return judge(report, log);
   } finally {
@@ -248,16 +289,30 @@ async function main() {
 function judge(report, log) {
   const failures = [];
   if (report.error) failures.push(report.error);
-  if (report.check === "suites" && !report.error) {
+  if ((report.check === "suites" || report.check === "files") && !report.error) {
     for (const r of report.results.filter(r => r.state === "fail")) failures.push(`${r.name}\n${r.error}`);
     for (const rejection of report.unhandled ?? []) failures.push(`an unhandled rejection: ${rejection}`);
     if (report.counts.pass === 0) failures.push("no test ran");
-    log({ suites: report.counts, ms: report.ms });
+    log({ suites: report.counts, ms: report.ms, ...(report.pool === undefined ? {} : { pool: report.pool }) });
+    if (report.pool !== undefined && (report.pool.files !== 0 || report.pool.unnamed !== 0)) failures.push(`files left in the pool: ${JSON.stringify(report.pool)}`);
     if (report.isolation !== undefined) {
       const i = report.isolation;
       if (i.error || i.isolated !== false || i.started !== false || i.refusedByName !== true) failures.push(`a page without isolation: ${JSON.stringify(i)}`);
       log({ isolation: i });
     }
+  }
+  if (report.check === "files" && report.crash !== undefined) {
+    const { write, reopen, second, "race-1": race1, "race-2": race2 } = report.crash;
+    if (write.error || write.vouchedAtKeep !== true || !(write.files?.wal > 0)) failures.push(`the crash's writer: ${JSON.stringify(write)}`);
+    else if (reopen.error || reopen.kept !== true || JSON.stringify(reopen.tip) !== JSON.stringify(write.tip)) {
+      failures.push(`the kept file after a crash is not the keep point's: ${JSON.stringify({ write, reopen })}`);
+    }
+    if (second.error || second.mounted !== false || second.code !== "EBUSY") failures.push(`a second worker's mount: ${JSON.stringify(second)}`);
+    const races = [race1, race2];
+    if (races.some(r => r.error) || races.filter(r => r.mounted === true).length !== 1 || !races.some(r => r.mounted === false && r.code === "EBUSY")) {
+      failures.push(`two workers mounting an empty pool: ${JSON.stringify(races)}`);
+    }
+    log({ crash: { written: write.files, reopened: reopen.files, kept: reopen.kept, second: second.code, race: races.map(r => r.mounted ? "mounted" : r.code), ms: { write: write.ms, reopen: reopen.ms } } });
   }
   if (report.check === "proofs" && !report.error) {
     const c = report.checks;

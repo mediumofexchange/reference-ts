@@ -1,5 +1,5 @@
 // The part of vitest the in-browser suites use (slice 39, scripts/browser/check.mjs): describe, it and test with
-// skipIf, runIf, skip and each, the four hooks, vitest's own `expect` (@vitest/expect over chai, as vitest builds it)
+// skipIf, runIf, skip and each, the four hooks and onTestFinished, vitest's own `expect` (@vitest/expect over chai, as vitest builds it)
 // and its spies (@vitest/spy); a module reset has no meaning in a bundle and is refused.
 // The suites import "vitest"; the browser build resolves it here. Tests run in order, one at a time, each awaited.
 import * as chai from "chai";
@@ -49,11 +49,18 @@ const conditional = make => Object.assign(make(false), {
 export const describe = conditional(skip => (name, body) => suite(name, body, skip));
 export const it = conditional(skip => (name, body) => test(name, body, skip));
 export { it as test };
-export const vi = { fn, spyOn, resetModules() { throw new Error("a browser bundle has no module registry to reset"); } };
+// A bundle has no module registry: `vi.mock` applies nowhere (a suite's test that needs its mock runs only under vitest,
+// support.ts `MODULE_MOCKS`), and `vi.mocked` is the identity it is in types.
+export const vi = { fn, spyOn, mock() {}, mocked: value => value, resetModules() { throw new Error("a browser bundle has no module registry to reset"); } };
 export const beforeAll = fn => { current.hooks.beforeAll.push(fn); };
 export const afterAll = fn => { current.hooks.afterAll.push(fn); };
 export const beforeEach = fn => { current.hooks.beforeEach.push(fn); };
 export const afterEach = fn => { current.hooks.afterEach.push(fn); };
+/** A callback the running test leaves for after it ends, its afterEach hooks included, as vitest runs them. */
+export const onTestFinished = fn => {
+  if (running === undefined) throw new Error("onTestFinished is called inside a test");
+  running.onFinished.push(fn);
+};
 
 const chain = suite => suite === undefined ? [] : [...chain(suite.parent), suite];
 const fullName = (suite, name) => [...chain(suite).map(s => s.name).filter(Boolean), name].join(" > ");
@@ -68,7 +75,8 @@ export async function run(report = () => {}) {
       const name = fullName(suite, t.name), started = performance.now();
       if (skip || t.skip) { const result = { name, state: "skip" }; results.push(result); report(result); continue; }
       let error;
-      running = { name, promises: [], onFinished: [] };
+      const finished = [];
+      running = { name, promises: [], onFinished: finished };
       try {
         for (const s of chain(suite)) for (const hook of s.hooks.beforeEach) await hook();
         await t.body?.();
@@ -76,6 +84,7 @@ export async function run(report = () => {}) {
         while (running.promises.length > 0) await Promise.all([...running.promises]);
       } catch (caught) { error = caught; } finally { running = undefined; }
       for (const s of chain(suite).reverse()) for (const hook of s.hooks.afterEach) { try { await hook(); } catch (caught) { error ??= caught; } }
+      for (const callback of finished.reverse()) { try { await callback(); } catch (caught) { error ??= caught; } }
       const result = { name, state: error === undefined ? "pass" : "fail", ms: Math.round(performance.now() - started),
         ...(error === undefined ? {} : { error: String(error?.stack ?? error) }) };
       results.push(result);

@@ -6,8 +6,10 @@
 //
 // What runs here (scripts/browser/check.mjs shows it in a browser engine): the one walk over a proof-free trail and
 // over a complete one, its replay and evidence stores in memory, proof verification and proving under the adopted
-// configuration, the trail check set's covers, and capsules. What does not, yet: database files (the wallet's own,
-// kept replay files, retained evidence), the wallet store, the Ergo view, the commands and the service.
+// configuration, the trail check set's covers, and capsules; and once the host mounts the worker's file pool
+// (`mountFiles`, slice 40), database files: kept replay files, retained evidence and the wallet's own. What does not,
+// yet: the wallet's flows over `fetch`, the Ergo view, the commands and the service.
+export { mountFiles, unmountFiles } from "./files.js";
 export * as capsules from "../pool/v3/capsules.js";
 export * as checkSet from "../pool/v3/check-set.js";
 export * as commitments from "../pool/v3/commitments.js";
