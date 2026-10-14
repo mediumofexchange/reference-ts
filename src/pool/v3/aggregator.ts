@@ -4,7 +4,8 @@
 // backend proves a leaf over a proof that does not verify and only that leaf's verification then fails (§3.5); a record
 // whose proof fails, or does not have the 458 elements a leaf reads, gets no cover, and neither does any span holding
 // it. Every check proof made here is verified under the set's pinned key, with the public inputs a reader derives,
-// before it is returned. Nothing here is signed or carries authority: a reader checks every cover itself.
+// before it is returned. Nothing here is signed or carries authority: a reader checks every cover itself. A trail's
+// spans are walked by `coverTrail` (succinct.ts), as a replica proves them (`V3Replica.prove`).
 //
 // Proving reads the check set's parameters: the backend must be started by `startCheckSetBackend`.
 import type { Barretenberg } from "@aztec/bb.js";
@@ -13,7 +14,7 @@ import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { copyBytes, EncodingError } from "../../bytes.js";
-import { fieldToBytes, fieldToHex } from "../field.js";
+import { fieldToHex } from "../field.js";
 import { CHECK_SET_PARAMETERS } from "../parameters.js";
 import { ParameterError, PROOF_OPTIONS, startedPoints, type KeyedVerifier, type VerifierOptions } from "../proof-verifier.js";
 import { LEAF_KINDS, openTrailCheckSet, TRAIL_CIRCUITS, trailKeys, trailPrograms, type TrailCheckSet, type TrailCircuit } from "./check-set.js";
@@ -36,19 +37,12 @@ export interface TrailProver extends SpanProver {
   leaf(record: Record): Promise<Cover | undefined>;
   /** A cover of two adjacent spans, left then right. */
   node(left: Cover, right: Cover): Promise<Cover>;
-  /**
-   * Covers of every aligned span (§3.2) within a trail's proved records `records`, the first of them numbered
-   * `first`: every leaf whose proof verifies, and every node over two covered spans of equal height, by span digest.
-   */
-  covers(records: readonly Record[], first?: number): Promise<Map<string, Cover>>;
   close(): Promise<void>;
 }
 
 const LEAVES = new Map<number, TrailCircuit>(Object.entries(LEAF_KINDS).map(([name, kind]) => [kind, name as TrailCircuit]));
 /** A proof's or key's bytes as the field elements a circuit's ABI takes. */
 const fields = (bytes: Uint8Array): string[] => Array.from({ length: bytes.length / 32 }, (_, i) => `0x${bytesToHex(bytes.subarray(32 * i, 32 * i + 32))}`);
-/** The key of a span's digest in a cover map: its 32 big-endian bytes in hex. */
-export const coverKey = (digest: bigint): string => bytesToHex(fieldToBytes(digest));
 
 /**
  * The aggregator over `api`, which `startCheckSetBackend` started, checking statement proofs with `statements`
@@ -97,29 +91,5 @@ export async function openTrailProver(api: Barretenberg, statements: KeyedVerifi
       key_hashes: children.map(c => fieldToHex(c.key.keyHash)), digests: children.map(c => fieldToHex(c.digest)), node_key_hash: nodeKeyHash,
     }, undefined, digest);
   };
-  return {
-    set, leaf, node,
-    async covers(records, first = 0) {
-      if (!Number.isSafeInteger(first) || first < 0 || !Number.isSafeInteger(first + records.length)) throw new RangeError("proved-record numbers past the safe range");
-      const out = new Map<string, Cover>();
-      // The covered spans of the current height, by their first proved-record number.
-      let level = new Map<number, Cover>();
-      for (const [i, record] of records.entries()) {
-        const cover = await leaf(record);
-        if (cover !== undefined) { level.set(first + i, cover); out.set(coverKey(cover.digest), cover); }
-      }
-      for (let width = 2; width <= records.length; width *= 2) {
-        const next = new Map<number, Cover>();
-        for (let start = Math.ceil(first / width) * width; start + width <= first + records.length; start += width) {
-          const left = level.get(start), right = level.get(start + width / 2);
-          if (left === undefined || right === undefined) continue;
-          const cover = await node(left, right);
-          next.set(start, cover); out.set(coverKey(cover.digest), cover);
-        }
-        level = next;
-      }
-      return out;
-    },
-    close: () => set.close(),
-  };
+  return { set, leaf, node, close: () => set.close() };
 }

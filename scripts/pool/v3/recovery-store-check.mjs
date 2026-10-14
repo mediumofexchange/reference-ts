@@ -84,6 +84,8 @@ async function acceptance(mode) {
         const succinct = await readWithCovers(journal, backing, input.selection, [{ first: 0, count: 2 }, { first: 4, count: 1 }],
           { verifier: drill.verifier, venue, reference, directory: build, operator });
         assert.equal(succinct.proved, 5);
+        // The replica's walk made the three chosen leaves and the node over the first two, once each.
+        assert.deepEqual([succinct.used.proving.trails, succinct.used.proving.proved, succinct.used.proving.made], [1, 5, 4], JSON.stringify(succinct.used));
         assert.deepEqual(summary(succinct.result), answer);
         // The node and the settlement leaf replace their records' native checks: only the demands' proofs are fetched.
         assert.deepEqual([succinct.used.answered, succinct.used.verified, succinct.used.fetched], [2, 2, 2], JSON.stringify(succinct.used));
