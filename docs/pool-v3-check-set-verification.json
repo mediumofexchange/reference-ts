@@ -17,27 +17,27 @@
     "dist/pool/poseidon2.js": "31f449ab8890ccf23b63fc327a0d4a3e79e6ef04fb3663d1955c3dc999619180",
     "dist/pool/proof-verifier.js": "541124c57a021cda8b2abe7abbda590c8d83193047f349c3263c17261d8a5026",
     "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
-    "dist/pool/v3/aggregator.js": "b5ab371a009d5f98ea5e1adb2816a45afd13e40db8e4690463cc3829e3f59d71",
+    "dist/pool/v3/aggregator.js": "40c2109b5b893b2f2c24b706506868a6f5c926ae45adf8188d265dec401c65b1",
     "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
-    "dist/pool/v3/check-set.js": "647576ac4d39d5bf2b07a2c4c9a5c20c0bf0e2507a20685962ce3c5d5570155e",
+    "dist/pool/v3/check-set.js": "5b80fcdb42ae33a9c22ff0ef08387cd1f5f0fdc6179b7981f26fbdbf58a6a89b",
     "dist/pool/v3/commitments.js": "65c8db54ea145bbeaf613153364b2f01e4f74cf32c01c3b4405706f68e647fd9",
     "dist/pool/v3/configuration.js": "7af6147f90d70c7c03372751ae6f7be172c836adcf9d7197c8daac36d7caabc5",
-    "dist/pool/v3/construction.js": "3debea0e710454494275484d503c025cb50d7272a7c0466d2d9acbcba4b8ef66",
+    "dist/pool/v3/construction.js": "ceefbce88cd83fedc99d84c6154351b8fcfe13bc76aa5679f3ac6e66bfed1d13",
     "dist/pool/v3/fault-evidence.js": "076cf2386ef5835a39057102b1c31b542d6619973ecd755354aa52f617bbcbea",
     "dist/pool/v3/headers.js": "5470b430385a1474ff5c281e244549491e6b57efc6b06c37686590668f5a7d08",
     "dist/pool/v3/package.js": "e37924e12e51cc7005f177b981320defa251eca1e6ad4f126d2cb10fb04b1133",
     "dist/pool/v3/programs.js": "7f3fc7114320498c51795f287effcbd4a482a00aa64fd32f46dfe33c89a2f4f2",
-    "dist/pool/v3/records.js": "de936f2f026cb5db5f0a4f806df28afda4d0b5bee60d46b9a7f6176edb6ae6bb",
+    "dist/pool/v3/records.js": "b6d1bb0e8122ca010fd459d3f65db8dc62355d8ce52f5b1e9b71c80a73ba1d45",
     "dist/pool/v3/recovery.js": "9edbfd461d586425dcf61ab12aeb6d17a0727e3b427d3439c4768ed88cc267d4",
     "dist/pool/v3/refusals.js": "f2feb5755d65d80bc6d74827484e029d6b4529c3c7334e56d13160a5f8460e6e",
     "dist/pool/v3/replay-store.js": "07c4b8c8e51edda21979774a0b4b5ddb11e734e27ba4b1c518ab9420e2315f63",
-    "dist/pool/v3/succinct.js": "d90f78701bcbb2d0885fe8d7e32da00e26c6df64f02a0fc60ea52c58a48b735a",
+    "dist/pool/v3/succinct.js": "609c3f69afa00a65767e61d24c879f914322bb7b00b533ba2f468e0714fd8151",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
     "package-lock.json": "4c40a78f216c8ddc3ec55b576a5a4f216e83afc9c702ca1d0ab7b85c1ffabd7d",
     "scripts/pool/prepare-crs.mjs": "7efbcbe292559a26225c83720b053d38d36294f47ed3d5684d2cfa478e9ad6cb",
-    "scripts/pool/v3/check-set-check.mjs": "b195c55b1a40dcf37dc9f09d642a41122d7689a1909b77e05d72fa3f2e73bcc8",
+    "scripts/pool/v3/check-set-check.mjs": "949eacb21437702c41f41160cfe27956c10be12ed4c160fe710a29c501d96a51",
     "scripts/pool/v3/check-set.mjs": "2245696a656cc1ccf300adca79c5df58ce031ba7bd712e0a39a8d4ab599535b9",
     "scripts/pool/v3/provenance.mjs": "9a9dd856973ad5d55aff737cff8704af1aa1207e00891f693251160f8fc4eb38",
     "scripts/pool/v3/trail-circuits/leaf-burn.nr": "ebb12a572d4d6811ff9103b72888396c3f7ccbe3a301a1a0308a5c840320595c",
@@ -61,24 +61,26 @@
     "src/pool/poseidon2.ts": "4f85ec230619481c36f6f1f1b94f7f6c3fde9e40af4e7984b36c8707a5500973",
     "src/pool/proof-verifier.ts": "1f7ad4dd109a8c819033b18952239bb5cf1c4758109624ee0942728e5cd578e3",
     "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
-    "src/pool/v3/aggregator.ts": "939cce2c79fc7a32388adf3160ca58b6f3061a764f8c90218b7193340ea6d390",
+    "src/pool/v3/aggregator.ts": "31f56cfed1775e92120271b51ec48b185858abe73816334cc1bb5987b54270a1",
     "src/pool/v3/authorization-evidence.ts": "34e821be1bb700f3ca107e7390f08854f856ebd1e44e1afdd856f4dd5f63ca60",
-    "src/pool/v3/check-set.ts": "d26b09168545c76efec2fac4aed7a93e4a39a8b06ec73e2a27128e04c3a2da6c",
+    "src/pool/v3/check-set-programs.json": "2e1d677923e2c213ca86af36abb85a8cf006dc0d00af28a228203afe086b7349",
+    "src/pool/v3/check-set.json": "1a58d3fdb8bf64eeeb0a0dcb59b66670f8d7c2109fd9bcc454b75db00148459e",
+    "src/pool/v3/check-set.ts": "426b763ba115e499596507e95c1d450dbdb21d7c81a692defc4d17681c37821f",
     "src/pool/v3/commitments.ts": "31c64c325efbe7605236d8a2132717ffcbe667b77b8fb1f7d74b18a2d75ab148",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
-    "src/pool/v3/construction.ts": "268ba274bbe0e1b98c3092d3564548c1f48a2d0384cb5d3a20c86e0862ff7d22",
-    "src/pool/v3/evidence-store.ts": "3bdd36dd4e23747765c87072422f0c8b67e90a927160d2a98cda309f388a6f6c",
+    "src/pool/v3/construction.ts": "9265bf3d410e4e1088d60c54ae11c799d71e72ecf9927d17fda07b9bc17e8bbb",
+    "src/pool/v3/evidence-store.ts": "f71a44b72bae12b45060df508874212112532c8a2dd8b055675a2136fc191bd4",
     "src/pool/v3/fault-evidence.ts": "3bf052fb0fde8516d30ddc4879345d9e8447fef0a9633aa51e26f4774bb92f6b",
     "src/pool/v3/headers.ts": "cb7a0e825af793ea8f3b9bed05e084d113415db7775a13772ab57550058dfcaa",
     "src/pool/v3/package.ts": "55b631c7d40d44e7fd8b2caa6e6867d636b471c89c91cc9c189584aaa9e49758",
     "src/pool/v3/programs.json": "b129fcfca83a4b48cb725d839fda7957491948ff15362b3c29c8014b7e77a2ec",
     "src/pool/v3/programs.ts": "90bcb494e6d71242a52d4612246f62ed7e6eb2a1c1f1b183232c6a15fba53bac",
-    "src/pool/v3/records.ts": "1c0033aef02a108ac1862ffdf6e8aebd97b2ae2dd7c02cd539e52ca6e648249a",
+    "src/pool/v3/records.ts": "3f59eba568b5084cb1bfa94bc6177cfd121e2a2875e06d2f9ac6af1212793629",
     "src/pool/v3/recovery.ts": "533f740386adb0b78d579243cb7926df99dee4e209c2493a68d2684687ed37a0",
     "src/pool/v3/refusals.ts": "01ed34552b2aeaa065b61205b622e2a442db4f5cc2b08ad3475516079c745457",
     "src/pool/v3/replay-store.ts": "4ca8eec8084a0a1112c70bc0759b2a42655da35bb9e758fb141657e80c15147f",
     "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
-    "src/pool/v3/succinct.ts": "17bb4c697ed51f35dab648c48234d4d0a68fec5035521cc3b5087779cd83661c",
+    "src/pool/v3/succinct.ts": "2526ab647dd89e202a56534f54e5c19fef85331767834847dac1f72ea3b497ea",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
     "src/pool/v3/trail.ts": "7cf64e03a6d0ecc2ab50580cd789b8fd7e4b4fc610de3d1a76746b5111003a9e",
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
@@ -98,24 +100,24 @@
   "circuits": {
     "leaf-issue": {
       "gates": 1652294,
-      "compileS": 2.4,
-      "keyS": 25.1,
+      "compileS": 2.7,
+      "keyS": 25.3,
       "bytecode": "52575d108afd5b16707c203607110c40ed359bb98007e68441918a0a8c776eed",
       "vk": "b544f0672ddb223c3a4b6ca68f16de1baff64f9fd8a7f3e2136968c98df6ea51",
       "keyHash": "0x1ed136d79ff6482f5110ad8d412a4bccf4f78ef3bb26baa8742021bf05dae1f9"
     },
     "leaf-spend": {
       "gates": 1652618,
-      "compileS": 1.3,
-      "keyS": 24.3,
+      "compileS": 1.4,
+      "keyS": 24.6,
       "bytecode": "fc140ef8cba2dc25947ef2c5d9404b5e6fcc5295bcc91395f269f6e592134ca5",
       "vk": "d09081ce893e463d017c3bcffb7e7288917f6b07c8821a25dc5c292dc1c01fd5",
       "keyHash": "0x17ec3c97d60e19d6f767edbb8dd32cd1cc1e9d0efbb49c85fb0e7618be4e07ad"
     },
     "leaf-burn": {
       "gates": 1652618,
-      "compileS": 1.2,
-      "keyS": 24.3,
+      "compileS": 1.3,
+      "keyS": 24.7,
       "bytecode": "6a7f0476812e25d065b1cb9820267ee8dae81d2d49b0df9d909653f69b05cd80",
       "vk": "eb34d7e31535326e40c9e95354a30b40076cf94c2db5cb844cddd2f9940f2cf7",
       "keyHash": "0x15e5e6198192f2a6764a5fd5d92d49b3a6ebb390943ca36c13e01177a63adc28"
@@ -123,15 +125,15 @@
     "leaf-demand": {
       "gates": 1652626,
       "compileS": 1.3,
-      "keyS": 24.2,
+      "keyS": 24.7,
       "bytecode": "d561a10d65ffd2bcb96ec9354a545a3c3953d040f316242545015c5177a91a5c",
       "vk": "6c7a019c8f8f3d47bef221979c73fc7d5328af2c77c503770222ee76af999547",
       "keyHash": "0x2eb8fb9f63aae39ed809c9141c1863e9f0c486b1ac9b2a99119ff3863301bd5e"
     },
     "leaf-settle": {
       "gates": 1652634,
-      "compileS": 1.2,
-      "keyS": 24.1,
+      "compileS": 1.4,
+      "keyS": 24.6,
       "bytecode": "ee593cfc033d3fe2bd853f41d7ce8c16027f38f38d4152e5ddd40e7bd856862e",
       "vk": "c92db81e26d2e2337e67b7c92029a85f615b8f1b12626bdf9a812ba80c746dd6",
       "keyHash": "0x18586fd043b8bcef2680760e07a783c8454e6d4546e5d58d8fd592f7015d4c01"
@@ -139,7 +141,7 @@
     "node": {
       "gates": 1469828,
       "compileS": 0.3,
-      "keyS": 18.5,
+      "keyS": 19.1,
       "bytecode": "3f0bb706ecd6c72dbe9a038333ed24055274f1bb4a8d41b09db016a5113bf2db",
       "vk": "9e9a1a3184d75789fe5e937b80fe8b65c538145defb24705552d1f8f4d727477",
       "keyHash": "0x2bdf9a3880b1d558bb229fabd02902bc646a7d755a2fa4594d58226e4f9d3282"
@@ -148,73 +150,73 @@
   "proofs": [
     {
       "label": "leaf-issue",
-      "seconds": 90.6,
-      "peakMiB": 3844
+      "seconds": 91.4,
+      "peakMiB": 3826
     },
     {
       "label": "leaf-spend",
-      "seconds": 88.6,
-      "peakMiB": 3873
+      "seconds": 89.3,
+      "peakMiB": 3869
     },
     {
       "label": "leaf-burn",
-      "seconds": 88.3,
-      "peakMiB": 3924
+      "seconds": 89.1,
+      "peakMiB": 3844
     },
     {
       "label": "leaf-demand",
-      "seconds": 88.4,
-      "peakMiB": 3855
+      "seconds": 89.1,
+      "peakMiB": 3834
     },
     {
       "label": "leaf-settle",
-      "seconds": 88.3,
-      "peakMiB": 3853
+      "seconds": 88.7,
+      "peakMiB": 3832
     },
     {
       "label": "node over two leaves",
-      "seconds": 73.8,
-      "peakMiB": 3434
+      "seconds": 74.2,
+      "peakMiB": 3414
     },
     {
       "label": "node over two leaves (2)",
-      "seconds": 73.8,
-      "peakMiB": 3074
+      "seconds": 74.1,
+      "peakMiB": 3091
     },
     {
       "label": "node over two nodes",
-      "seconds": 73.8,
-      "peakMiB": 3070
+      "seconds": 74,
+      "peakMiB": 3088
     },
     {
       "label": "leaf-spend under a forged node-key input",
-      "seconds": 88.3,
-      "peakMiB": 3163
+      "seconds": 88.7,
+      "peakMiB": 3183
     },
     {
       "label": "node under a forged node-key input",
-      "seconds": 73.8,
-      "peakMiB": 3184
+      "seconds": 74.1,
+      "peakMiB": 3202
     },
     {
       "label": "leaf-burn forced over a failing proof",
       "seconds": 6.1,
-      "peakMiB": 4539
+      "peakMiB": 4565
     },
     {
       "label": "node over a child whose key is not its admitted hash's",
-      "seconds": 75.4,
-      "peakMiB": 5956
+      "seconds": 76,
+      "peakMiB": 5993
     },
     {
       "label": "node over a child cover with byte 14655 flipped",
       "seconds": 1.9,
-      "peakMiB": 4752
+      "peakMiB": 4788
     },
     {
       "label": "node over a child cover with byte 5000 flipped",
-      "seconds": 75.4,
-      "peakMiB": 5945
+      "seconds": 76.4,
+      "peakMiB": 5982
     }
   ],
   "checks": [

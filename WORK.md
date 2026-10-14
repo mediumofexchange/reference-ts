@@ -79,6 +79,6 @@ Order ([direction 2026-10-13](decisions/2026-10.md#2026-10-13--keep-the-release-
 - Non-blocking, maintainer (2026-10-08): the external security review, release assurance's one remaining item; commissioning it lies
   outside the standing authorization. The [security argument](docs/SECURITY_ARGUMENT.md) is its target and the [review brief](docs/REVIEW_BRIEF.md) its brief; rolling AI reviews continue meanwhile (Next 6).
 - Non-blocking, Ergo (2026-10-13): changes that would help, which the protocol never depends on: decentralized mining and a NiPoPoW comparison by work ([slice 29](docs/VENUE_ALTERNATIVES.md#the-venue-recheck-slice-29)).
-- Deletion list (2026-10-14, refused by the safety check): merged remote branches `claude/estimate-one-number`, `claude/live-drill-report`, `claude/succinct-transport` (`git push origin --delete <name>`).
+- Deletion list (2026-10-14, refused by the safety check): merged remote branches `claude/estimate-one-number`, `claude/live-drill-report`, `claude/succinct-transport`, and this audit's `claude/audit-succinct` once merged (`git push origin --delete <name>`).
 
 About **55%** of the complete project (one number, method in production requirements), reassessed 2026-10-14 after slice 37: the release target is far along; slice 18 at 10⁶, the external review and its findings, qualified storage and custody, mainnet, and the phone holder path's wallet option, exhaustion half, adoption and phone build remain.
