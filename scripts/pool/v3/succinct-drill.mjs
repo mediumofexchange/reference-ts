@@ -35,11 +35,11 @@ const advance = count => call("/synthetic/mine", { count });
 const nextRound = async () => { await advance(Number(DEPTH) + 2); await pause(400); };
 
 /** One `moe` process: exit code, stdout's last JSON line, stderr, and whether it loaded `@noir-lang`. */
-function moe(args, { input } = {}) {
+function moe(args, { input, env = {} } = {}) {
   return new Promise((done, failed) => {
     const rss = join(scratch, `rss-${processes.length}-${process.hrtime.bigint()}.json`), began = performance.now();
     const child = spawn(process.execPath, ["--import", RSS_HOOK, MOE, ...args], { cwd: root, windowsHide: true,
-      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...process.env, MOE_DRILL_RSS: rss } });
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: { ...process.env, ...env, MOE_DRILL_RSS: rss } });
     if (input !== undefined) child.stdin.end(input);
     const out = [], err = [];
     child.stdout.on("data", chunk => out.push(chunk)); child.stderr.on("data", chunk => err.push(chunk));
@@ -61,8 +61,8 @@ const ok = async (args, options) => {
   assert.equal(result.status, 0, `moe ${args.join(" ")}: ${result.stderr}`);
   return result.json;
 };
-const refused = async (args, code) => {
-  const result = await moe(args);
+const refused = async (args, code, options) => {
+  const result = await moe(args, options);
   assert.equal(result.status, 1, `moe ${args.join(" ")} exited ${result.status}: ${result.stderr}`);
   assert.equal(result.refusal?.code, code, result.stderr);
 };
@@ -171,6 +171,8 @@ try {
     }
     const refusal = nativeRefusal();
     if (refusal !== undefined) await refused(["reader", "serve", "--dir", RP, "--prove", "--prover", "native"], "PROVER");
+    // Anywhere, natively on a binary other than the package's.
+    await refused(["reader", "serve", "--dir", RP, "--prove", "--prover", "native"], "PROVER", { env: { BB_BINARY_PATH: process.execPath } });
     replica = background(["reader", "serve", "--dir", RP, "--poll-ms", "500", "--prove", "--parameters", PARAMETER_DIRECTORY]);
     await replica.line(line => line.status === "serving", 300_000);
     // Two issues: two leaves and their node, proved once the replica's read serves the selection holding them (`proved`

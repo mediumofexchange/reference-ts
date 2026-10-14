@@ -155,17 +155,32 @@ async function load(points: Uint8Array, count: number, g2: Uint8Array, threads: 
   return api;
 }
 
+/** The version the bundled `bb` reports, which the pinned bb.js's is. */
+const NATIVE_VERSION = /^5\.2\.0(?:-|$)/;
+/** Each bundled binary's answer to `--version`, asked once per process. */
+const ran = new Map<string, string | undefined>();
+
 /**
  * Why this host starts no native backend, or undefined where it does. bb.js
  * bundles its native `bb` for Linux and macOS on x64 and arm64 and runs the
  * file `BB_BINARY_PATH` names in its place, so a native start refuses that
- * variable as a WebAssembly one refuses `BB_WASM_PATH`.
+ * variable as a WebAssembly one refuses `BB_WASM_PATH`. A bundled binary
+ * may still not run here (it needs glibc 2.34 on Linux), so it is asked for
+ * its version once, which must be the pinned package's.
  */
 export function nativeRefusal(): string | undefined {
   if (typeof MOE_BROWSER_CODE === "string" || typeof process === "undefined") return "a browser host runs no native backend";
   if (process.env.BB_BINARY_PATH !== undefined) return "BB_BINARY_PATH would replace the pinned backend's native binary";
-  if (findBbBinary() === null) return `the pinned bb.js bundles no native backend for ${process.platform}-${process.arch}`;
-  return undefined;
+  const bbPath = findBbBinary();
+  if (bbPath === null) return `the pinned bb.js bundles no native backend for ${process.platform}-${process.arch}`;
+  if (!ran.has(bbPath)) {
+    const { spawnSync } = process.getBuiltinModule("node:child_process");
+    const answer = spawnSync(bbPath, ["--version"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+    const version = answer.status === 0 ? answer.stdout.trim() : "";
+    ran.set(bbPath, NATIVE_VERSION.test(version) ? undefined
+      : `the bundled native backend does not run here (${version || answer.error?.message || answer.stderr.trim().split("\n")[0] || `exit ${answer.status ?? answer.signal}`})`);
+  }
+  return ran.get(bbPath);
 }
 
 /**
@@ -177,7 +192,8 @@ export function nativeRefusal(): string | undefined {
  * circuit reads, and nothing is fetched; it is removed when the instance is
  * destroyed. bb.js passes this process's environment to `bb` while it starts
  * it, synchronously inside `Barretenberg.new`, so `CRS_PATH` is set only
- * for that call.
+ * for that call, and so is `TMPDIR`, where bb.js puts the instance's socket:
+ * in the same directory rather than at a name another local user could take.
  */
 async function loadNative(points: Uint8Array, threads: number | undefined): Promise<Barretenberg> {
   // `start` refused a host without one, and nothing has run since.
@@ -189,13 +205,13 @@ async function loadNative(points: Uint8Array, threads: number | undefined): Prom
   let api: Barretenberg;
   try {
     writeFileSync(join(directory, "bn254_g1.dat"), points, { mode: 0o600 });
-    const before = process.env.CRS_PATH;
-    process.env.CRS_PATH = directory;
+    const before = { CRS_PATH: process.env.CRS_PATH, TMPDIR: process.env.TMPDIR };
+    process.env.CRS_PATH = process.env.TMPDIR = directory;
     let starting: Promise<Barretenberg>;
     try {
       starting = Barretenberg.new({ backend: BackendType.NativeUnixSocket, bbPath, threads: threads ?? 1, skipSrsInit: true });
     } finally {
-      if (before === undefined) delete process.env.CRS_PATH; else process.env.CRS_PATH = before;
+      for (const [name, value] of Object.entries(before)) if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
     api = await starting;
   } catch (error) {

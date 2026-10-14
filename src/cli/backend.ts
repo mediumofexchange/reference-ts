@@ -6,7 +6,7 @@ import type { Barretenberg } from "@aztec/bb.js";
 import { openV3Verifier } from "../pool/v3/verifier.js";
 import { openTrailCheckSet, type TrailCheckSet } from "../pool/v3/check-set.js";
 import { availableParallelism } from "node:os";
-import { nativeRefusal, startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
+import { nativeRefusal, ParameterError, startBackend, type ProofVerifier } from "../pool/proof-verifier.js";
 import { CHECK_SET_FILES, copyParameters, prepareCheckSetParameters, readCheckSetParameters, readParameters } from "../pool/parameter-files.js";
 import type { TrailProver } from "../pool/v3/aggregator.js";
 import { CommandError, flag, integer, UsageError, type Arguments, type Directory } from "./common.js";
@@ -75,6 +75,14 @@ export async function openCoverProver(directory: Pick<Directory, "path">, statem
     throw error;
   }
   const { openTrailProver } = await import("../pool/v3/aggregator.js");
-  const prover = await openTrailProver(() => readCheckSetParameters(directory.path), statements, { native, threads: availableParallelism() });
-  return { prover, close: () => prover.close() };
+  try {
+    const prover = await openTrailProver(() => readCheckSetParameters(directory.path), statements, { native, threads: availableParallelism() });
+    return { prover, close: () => prover.close() };
+  } catch (error) {
+    // A native binary that would not start (a parameter fault stays its own): by name, with the way round it.
+    if (native && error instanceof Error && !(error instanceof ParameterError)) {
+      throw new CommandError("PROVER", `the native backend did not start (${error.message.split("\n")[0]}); prove with --prover wasm`);
+    }
+    throw error;
+  }
 }

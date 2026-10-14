@@ -20,8 +20,8 @@
 // docs/pool-v3-check-set-verification.json, or docs/pool-v3-check-set-native-verification.json with --native.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
-import { availableParallelism, cpus, totalmem } from "node:os";
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { availableParallelism, cpus, tmpdir, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { Noir } from "@noir-lang/noir_js";
@@ -90,6 +90,14 @@ if (refusal !== undefined) {
 }
 
 await prepareCheckSetParameters(PARAMETER_DIRECTORY, { log: console.log });
+// bb fetches points into the directory CRS_PATH names (by default ~/.bb-crs) where it holds too few; a native instance is
+// given a private copy of the checked ones instead. An empty sentinel here, and the private copies while instances live,
+// show nothing was fetched.
+const sentinel = native ? mkdtempSync(join(tmpdir(), "moe-crs-sentinel-")) : undefined;
+if (native) process.env.CRS_PATH = sentinel;
+const privateCopies = () => readdirSync(tmpdir()).filter(name => name.startsWith("moe-bb-points-"))
+  .map(name => ({ name, files: readdirSync(join(tmpdir(), name)).filter(file => !file.endsWith(".sock")).sort(),
+    bytes: statSync(join(tmpdir(), name, "bn254_g1.dat"), { throwIfNoEntry: false })?.size }));
 const parameters = await readCheckSetParameters(PARAMETER_DIRECTORY), api = await startCheckSetBackend(parameters, { threads, native });
 const keyProcesses = children().map(child => child.pid);
 let live = api;
@@ -148,6 +156,14 @@ try {
     leaves[name] = cover;
   }
   check("each of the five leaves proves over a genuine proof, outputs the host's leaf digest and verifies under its kind's pinned leaf key");
+  if (native) {
+    const copies = privateCopies();
+    assert(copies.length >= 1, "no private copy of the points while a native instance lives");
+    for (const copy of copies) {
+      assert.deepEqual(copy.files, ["bn254_g1.dat", "crs.lock"], copy.name);
+      assert.equal(copy.bytes, parameters.g1.length, copy.name);
+    }
+  }
   // A child cover whose last byte is flipped: the backend refuses to make the node (bb's assertion on the inner proof),
   // the aggregator retires the instance that refused, and the next node is made on a fresh one.
   const lastFlipped = Uint8Array.from(leaves.spend.proof); lastFlipped[lastFlipped.length - 1] ^= 1;
@@ -260,10 +276,20 @@ try {
   }
   check(`a node over a child whose key is not its admitted hash's ${outcome(misKeyed, "is proved but fails verification")}, and over a child cover with its last byte flipped ${outcome(misProved[0], "is proved but fails verification")} or a limb byte flipped ${outcome(misProved[1], "is proved but fails verification")}`);
 
-  // The rate against WebAssembly on this host: one leaf and one node proved there by an aggregator of its own.
+  if (native) {
+    assert.equal(process.env.CRS_PATH, sentinel);
+    assert.deepEqual(readdirSync(sentinel), []);
+    check("the native instances proved from private copies of the checked points alone (each held only them and bb's lock), and nothing was fetched");
+  }
+
+  // The rate against WebAssembly on this host: one leaf and one node proved there by an aggregator of its own, once the
+  // native one has ended, so its peaks are WebAssembly's alone.
   let compared;
   if (native) {
-    const wasm = await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, { threads });
+    const ending = prover; prover = undefined;
+    await ending.close();
+    assert(await ended(children().map(child => child.pid)), "the native prover's process did not end");
+    const wasm =await openTrailProver(() => readCheckSetParameters(PARAMETER_DIRECTORY), statements, { threads });
     try {
       const leaf = await timed("leaf-spend on WebAssembly", () => wasm.leaf(records.spend));
       const node = await timed("node over two leaves on WebAssembly", () => wasm.node(leaves.issue, leaves.spend));

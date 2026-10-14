@@ -11,7 +11,9 @@
 // on the pinned WebAssembly backend or the native binary bb.js bundles (slice 42), and verifies covers on WebAssembly
 // instances of the set's own either way. A failure while an instance proves can leave it unusable (a WebAssembly
 // instance traps on later calls; a native one may have exited), so the instance is destroyed and the next proof starts
-// a fresh one; proofs run one at a time, so none is in flight on an instance being retired.
+// a fresh one; proofs run one at a time, so none is in flight on an instance being retired. An instance is started for
+// the first proof, not when the aggregator opens: a native one reads its points when it first proves, and a copy that
+// waited idle in a temporary directory could be gone by then.
 import type { Barretenberg } from "@aztec/bb.js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit, type InputMap } from "@noir-lang/noir_js";
@@ -70,8 +72,11 @@ export async function openTrailProver(parameters: () => Promise<ProvingParameter
   /** An instance with each circuit's backend over it. */
   const over = (api: Barretenberg) => ({ api, backends: new Map(TRAIL_CIRCUITS.map(name =>
     [name, new UltraHonkBackend((programs[name] as unknown as CompiledCircuit).bytecode, api)] as const)) });
-  let current: ReturnType<typeof over> | undefined = over(await start()), set: TrailCheckSet;
-  try { set = openTrailCheckSet(current.api); } catch (error) { await current.api.destroy().catch(() => {}); throw error; }
+  // The set's verifiers keep only the started instance's `[1]_1` and `[x]_2`; starting it here also shows the backend
+  // starts at all before the caller relies on it.
+  const first = await start();
+  let current: ReturnType<typeof over> | undefined, set: TrailCheckSet;
+  try { set = openTrailCheckSet(first); } finally { await first.destroy().catch(() => {}); }
   const noir = new Map(TRAIL_CIRCUITS.map(name => [name, new Noir(programs[name] as unknown as CompiledCircuit)] as const));
   const retire = async (): Promise<void> => {
     const retired = current;
@@ -79,7 +84,7 @@ export async function openTrailProver(parameters: () => Promise<ProvingParameter
     // The instance is abandoned either way; a failed destroy changes nothing the caller is told.
     if (retired !== undefined) await retired.api.destroy().catch(() => {});
   };
-  let queue: Promise<unknown> = Promise.resolve(), closed = false;
+  let queue: Promise<unknown> = Promise.resolve(), closing = false, closed = false;
   const serially = <T>(task: () => Promise<T>): Promise<T> => {
     const run = queue.then(task, task);
     queue = run.catch(() => {});
@@ -129,8 +134,9 @@ export async function openTrailProver(parameters: () => Promise<ProvingParameter
   return { identity: set.identity, set, backend: native ? "native" : "wasm", leaf, node,
     // Proofs asked for before `close` finish; later ones refuse.
     async close() {
-      closed = true;
-      await serially(retire);
+      if (closing) return;
+      closing = true;
+      await serially(async () => { closed = true; await retire(); });
       await set.close();
     } };
 }
