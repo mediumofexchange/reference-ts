@@ -153,13 +153,13 @@ describe("v3 service HTTP trust boundary", () => {
     const free = await get(`/evidence?backing=${"0b".repeat(32)}&after=0&form=proof-free`);
     expect(free.status).toBe(200); await free.arrayBuffer();
     expect(f.journal.serve).toHaveBeenLastCalledWith(b(11), 0n, PROOF_FREE_FORM);
-    const proofPath = `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=3`, coverPath = `/covers/${"cc".repeat(32)}/${"dd".repeat(32)}`;
+    const proofPath = `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=3&evidence=${"ee".repeat(32)}`, coverPath = `/covers/${"cc".repeat(32)}/${"dd".repeat(32)}`;
     // Nothing kept: NOT_FOUND, as JSON.
     for (const path of [proofPath, coverPath]) {
       const missing = await get(path);
       expect([missing.status, await missing.json()]).toEqual([404, { code: "NOT_FOUND" }]);
     }
-    expect(f.journal.proof).toHaveBeenLastCalledWith(new Uint8Array(32).fill(0xaa), { segment: new Uint8Array(32).fill(0xbb), position: 3n });
+    expect(f.journal.proof).toHaveBeenLastCalledWith(new Uint8Array(32).fill(0xaa), { segment: new Uint8Array(32).fill(0xbb), position: 3n, evidence: new Uint8Array(32).fill(0xee) });
     expect(f.journal.cover).toHaveBeenLastCalledWith(new Uint8Array(32).fill(0xcc), new Uint8Array(32).fill(0xdd));
     // Kept: the bytes themselves.
     f.journal.proof.mockReturnValueOnce(b(5)); f.journal.cover.mockReturnValueOnce(b(6));
@@ -171,7 +171,8 @@ describe("v3 service HTTP trust boundary", () => {
     // The operator's listener asks its credential first; any other shape is no route.
     expect((await get(proofPath, "33".repeat(32))).status).toBe(401);
     f.journal.proof.mockClear(); f.journal.cover.mockClear(); f.journal.serve.mockClear();
-    for (const path of [`/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=0`, `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}`,
+    for (const path of [`/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=0&evidence=${"ee".repeat(32)}`, `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}`,
+      `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=3`, `/proofs/${"aa".repeat(32)}?segment=${"bb".repeat(32)}&position=3&evidence=${"ee".repeat(31)}`,
       `/proofs/${"AA".repeat(32)}?segment=${"bb".repeat(32)}&position=1`, `/covers/${"cc".repeat(32)}`, `/covers/${"cc".repeat(32)}/${"dd".repeat(31)}`,
       `/evidence?backing=${"0b".repeat(32)}&after=0&form=complete`, `/evidence?backing=${"0b".repeat(32)}&after=0&form=proof-free&x=1`]) {
       const refused = await get(path);

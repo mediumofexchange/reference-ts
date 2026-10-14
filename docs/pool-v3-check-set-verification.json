@@ -16,9 +16,9 @@
     "dist/pool/parameter-files.js": "16da59074b8d415f7b4f1d1e4e3b859ddc0d3c7b3e44ba6c47c2651d2af7ca77",
     "dist/pool/parameters.js": "2dd3b075341679c725998d60dcc50456fdd1fbbae8f7c1cd133f08688bd48c03",
     "dist/pool/poseidon2.js": "3504aa8cd7cca6b82f0625e7ce103ac17867521df9391963dea0d71f82233ed4",
-    "dist/pool/proof-verifier.js": "15622a91f2f26631b85aa1b4fdf11728148bad18e1d1e6a0ffd929de4980361a",
+    "dist/pool/proof-verifier.js": "b83ed4f4e62e0637b4836955101f015fa0effdb845f252cf165333e24a299af8",
     "dist/pool/scope.js": "de29da23e0b75149e1bc5b83568781b0821a26362ba8daec2da283f51a80bcf9",
-    "dist/pool/v3/aggregator.js": "40c2109b5b893b2f2c24b706506868a6f5c926ae45adf8188d265dec401c65b1",
+    "dist/pool/v3/aggregator.js": "a9f25774e475c8668bb022c94d6d752c57b220708e69467e7ff10bd556a605e5",
     "dist/pool/v3/authorization-evidence.js": "f25b522fd4062602befea7c4f75400059bf62a5a4f345849d15fd262ac07ea3e",
     "dist/pool/v3/check-set.js": "e1f952467633decd9ad562ca979a5db27f6657de81e4ef5c26ed407475eee577",
     "dist/pool/v3/commitments.js": "65c8db54ea145bbeaf613153364b2f01e4f74cf32c01c3b4405706f68e647fd9",
@@ -31,14 +31,14 @@
     "dist/pool/v3/records.js": "b6d1bb0e8122ca010fd459d3f65db8dc62355d8ce52f5b1e9b71c80a73ba1d45",
     "dist/pool/v3/recovery.js": "9edbfd461d586425dcf61ab12aeb6d17a0727e3b427d3439c4768ed88cc267d4",
     "dist/pool/v3/refusals.js": "f2feb5755d65d80bc6d74827484e029d6b4529c3c7334e56d13160a5f8460e6e",
-    "dist/pool/v3/replay-store.js": "07c4b8c8e51edda21979774a0b4b5ddb11e734e27ba4b1c518ab9420e2315f63",
-    "dist/pool/v3/succinct.js": "be9648ba39a058762cf521c0aad9b4b08bb31f3b1badd20f708f2b43f363adbb",
+    "dist/pool/v3/replay-store.js": "d61c520790d71faf72b89998be7ac3fcb42457f6c2160b3aaf84a0ffb2bed9ac",
+    "dist/pool/v3/succinct.js": "fd7d34d4e256282a54655c250b5e78e442dc200f6610d55ee01c736f879be4a7",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
     "package-lock.json": "e66c28bdfaea12c7bffec97eb49cdf0149c59de85527d76f38f0d0f7ddfc1542",
     "scripts/pool/prepare-crs.mjs": "7efbcbe292559a26225c83720b053d38d36294f47ed3d5684d2cfa478e9ad6cb",
-    "scripts/pool/v3/check-set-check.mjs": "949eacb21437702c41f41160cfe27956c10be12ed4c160fe710a29c501d96a51",
+    "scripts/pool/v3/check-set-check.mjs": "da3aa84f30727dfeab17767e1817fe903fdbd87e10239d7ed16911464e1f5325",
     "scripts/pool/v3/check-set.mjs": "2245696a656cc1ccf300adca79c5df58ce031ba7bd712e0a39a8d4ab599535b9",
     "scripts/pool/v3/provenance.mjs": "9a9dd856973ad5d55aff737cff8704af1aa1207e00891f693251160f8fc4eb38",
     "scripts/pool/v3/trail-circuits/leaf-burn.nr": "ebb12a572d4d6811ff9103b72888396c3f7ccbe3a301a1a0308a5c840320595c",
@@ -61,17 +61,17 @@
     "src/pool/parameter-files.ts": "2ef94a7c70085a86929b46e1e0e6b8ae58006ced7feb9379bede39c2783e3d24",
     "src/pool/parameters.ts": "a2046431b38d1f369e968a5e1ab31d6116430c178857f2adf78d0f915f76b807",
     "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
-    "src/pool/proof-verifier.ts": "81a54d1253c00513f848da5200e7924b97d182df8372d5396015a0c5e920da78",
+    "src/pool/proof-verifier.ts": "9b6feafb80bf932a084e392bfb724bb7735684720411f31194cdd0041b1248cc",
     "src/pool/scope.ts": "fe8a66c268bd6a96ba62a1cdbcefd26e0c634de2f5fac44bb4c72722436391c0",
-    "src/pool/v3/aggregator.ts": "31f56cfed1775e92120271b51ec48b185858abe73816334cc1bb5987b54270a1",
+    "src/pool/v3/aggregator.ts": "c648e2b67a3bb6ac6e1422088d9c71d5945c32415e7496fdecb9a91d62ba1e22",
     "src/pool/v3/authorization-evidence.ts": "34e821be1bb700f3ca107e7390f08854f856ebd1e44e1afdd856f4dd5f63ca60",
     "src/pool/v3/check-set-programs.json": "2e1d677923e2c213ca86af36abb85a8cf006dc0d00af28a228203afe086b7349",
     "src/pool/v3/check-set.json": "1a58d3fdb8bf64eeeb0a0dcb59b66670f8d7c2109fd9bcc454b75db00148459e",
     "src/pool/v3/check-set.ts": "0b04b49737182c7d7202673f5bd1058f08ee7863235bacbbdc163a22d9395c37",
     "src/pool/v3/commitments.ts": "31c64c325efbe7605236d8a2132717ffcbe667b77b8fb1f7d74b18a2d75ab148",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
-    "src/pool/v3/construction.ts": "3db0e079c400dab5acc92a6b500e9bb205e33e36945f7fe76489b0dcdc6c98d6",
-    "src/pool/v3/evidence-store.ts": "f71a44b72bae12b45060df508874212112532c8a2dd8b055675a2136fc191bd4",
+    "src/pool/v3/construction.ts": "7676faff552fca260aca7f0248111a36949e6f7c8b55571dd3a5c926eb0cf326",
+    "src/pool/v3/evidence-store.ts": "14ea7378929403a5e39de25b07c62339af3dea1d63406b0f9bc6e955c6c23c1b",
     "src/pool/v3/fault-evidence.ts": "3bf052fb0fde8516d30ddc4879345d9e8447fef0a9633aa51e26f4774bb92f6b",
     "src/pool/v3/headers.ts": "cb7a0e825af793ea8f3b9bed05e084d113415db7775a13772ab57550058dfcaa",
     "src/pool/v3/package.ts": "55b631c7d40d44e7fd8b2caa6e6867d636b471c89c91cc9c189584aaa9e49758",
@@ -80,9 +80,9 @@
     "src/pool/v3/records.ts": "3f59eba568b5084cb1bfa94bc6177cfd121e2a2875e06d2f9ac6af1212793629",
     "src/pool/v3/recovery.ts": "533f740386adb0b78d579243cb7926df99dee4e209c2493a68d2684687ed37a0",
     "src/pool/v3/refusals.ts": "01ed34552b2aeaa065b61205b622e2a442db4f5cc2b08ad3475516079c745457",
-    "src/pool/v3/replay-store.ts": "4ca8eec8084a0a1112c70bc0759b2a42655da35bb9e758fb141657e80c15147f",
+    "src/pool/v3/replay-store.ts": "433c20d7ab33c1ce9ca3d292f3162b06ebabb6f276a7843d9afee3f41dde56a1",
     "src/pool/v3/state.ts": "64620654dc72b76f5c110b2411b7697dd1f8efd4839d3189f78aff91e4733f3b",
-    "src/pool/v3/succinct.ts": "df58d1ee8d699658131e139c6eab89aba2093e5cb827b2637b6d1e3ece347dec",
+    "src/pool/v3/succinct.ts": "2453a4def0005497839f3c3bb6383ffcfe3fd7cebf63e8a4d25abf25b71d742d",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
     "src/pool/v3/trail.ts": "7cf64e03a6d0ecc2ab50580cd789b8fd7e4b4fc610de3d1a76746b5111003a9e",
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
@@ -90,52 +90,54 @@
     "src/venue-records.ts": "15dc7493e05d5d68132592d13fc2792d143c160790ca40a405d7a92b2218b0f7",
     "test/fixtures/pool-v3-genuine-proofs.json": "a7a5599fa7de6d7a3409675459c24fbd7cd6f4ef027edfdd6d8955015f60f842"
   },
+  "backend": "wasm",
   "evidence": "real check proofs on the pinned WebAssembly backend over genuine statement proofs; a test-labelled set, not adopted (succinct-read §§1, 6)",
   "host": {
     "cpu": "AMD EPYC 9V74 80-Core Processor",
     "threads": 4,
     "memoryGiB": 16,
     "platform": "linux",
+    "arch": "x64",
     "node": "v24.21.0"
   },
   "setIdentity": "4259ee047202aabef96108fb3f6878c4c95b8b26a6d25e9d04b09ab4b5a30d67",
   "circuits": {
     "leaf-issue": {
       "gates": 1652294,
-      "compileS": 2.1,
-      "keyS": 21.2,
+      "compileS": 2.3,
+      "keyS": 27.1,
       "bytecode": "52575d108afd5b16707c203607110c40ed359bb98007e68441918a0a8c776eed",
       "vk": "b544f0672ddb223c3a4b6ca68f16de1baff64f9fd8a7f3e2136968c98df6ea51",
       "keyHash": "0x1ed136d79ff6482f5110ad8d412a4bccf4f78ef3bb26baa8742021bf05dae1f9"
     },
     "leaf-spend": {
       "gates": 1652618,
-      "compileS": 1,
-      "keyS": 20.6,
+      "compileS": 1.3,
+      "keyS": 26.6,
       "bytecode": "fc140ef8cba2dc25947ef2c5d9404b5e6fcc5295bcc91395f269f6e592134ca5",
       "vk": "d09081ce893e463d017c3bcffb7e7288917f6b07c8821a25dc5c292dc1c01fd5",
       "keyHash": "0x17ec3c97d60e19d6f767edbb8dd32cd1cc1e9d0efbb49c85fb0e7618be4e07ad"
     },
     "leaf-burn": {
       "gates": 1652618,
-      "compileS": 1,
-      "keyS": 20.9,
+      "compileS": 1.2,
+      "keyS": 26.6,
       "bytecode": "6a7f0476812e25d065b1cb9820267ee8dae81d2d49b0df9d909653f69b05cd80",
       "vk": "eb34d7e31535326e40c9e95354a30b40076cf94c2db5cb844cddd2f9940f2cf7",
       "keyHash": "0x15e5e6198192f2a6764a5fd5d92d49b3a6ebb390943ca36c13e01177a63adc28"
     },
     "leaf-demand": {
       "gates": 1652626,
-      "compileS": 1,
-      "keyS": 20.8,
+      "compileS": 1.2,
+      "keyS": 26.6,
       "bytecode": "d561a10d65ffd2bcb96ec9354a545a3c3953d040f316242545015c5177a91a5c",
       "vk": "6c7a019c8f8f3d47bef221979c73fc7d5328af2c77c503770222ee76af999547",
       "keyHash": "0x2eb8fb9f63aae39ed809c9141c1863e9f0c486b1ac9b2a99119ff3863301bd5e"
     },
     "leaf-settle": {
       "gates": 1652634,
-      "compileS": 1.1,
-      "keyS": 20.7,
+      "compileS": 1.2,
+      "keyS": 26.6,
       "bytecode": "ee593cfc033d3fe2bd853f41d7ce8c16027f38f38d4152e5ddd40e7bd856862e",
       "vk": "c92db81e26d2e2337e67b7c92029a85f615b8f1b12626bdf9a812ba80c746dd6",
       "keyHash": "0x18586fd043b8bcef2680760e07a783c8454e6d4546e5d58d8fd592f7015d4c01"
@@ -143,7 +145,7 @@
     "node": {
       "gates": 1469828,
       "compileS": 0.3,
-      "keyS": 15.7,
+      "keyS": 20.2,
       "bytecode": "3f0bb706ecd6c72dbe9a038333ed24055274f1bb4a8d41b09db016a5113bf2db",
       "vk": "9e9a1a3184d75789fe5e937b80fe8b65c538145defb24705552d1f8f4d727477",
       "keyHash": "0x2bdf9a3880b1d558bb229fabd02902bc646a7d755a2fa4594d58226e4f9d3282"
@@ -152,73 +154,78 @@
   "proofs": [
     {
       "label": "leaf-issue",
-      "seconds": 77.5,
-      "peakMiB": 3789
+      "seconds": 101.1,
+      "peakMiB": 3864
     },
     {
       "label": "leaf-spend",
-      "seconds": 76.3,
-      "peakMiB": 3805
+      "seconds": 97.5,
+      "peakMiB": 3872
     },
     {
       "label": "leaf-burn",
-      "seconds": 76,
-      "peakMiB": 3845
+      "seconds": 97.5,
+      "peakMiB": 3846
     },
     {
       "label": "leaf-demand",
-      "seconds": 76.1,
-      "peakMiB": 3798
+      "seconds": 97.5,
+      "peakMiB": 3856
     },
     {
       "label": "leaf-settle",
-      "seconds": 76,
-      "peakMiB": 3798
+      "seconds": 97.4,
+      "peakMiB": 3863
+    },
+    {
+      "label": "the aggregator's node over a child cover with its last byte flipped",
+      "seconds": 0.3,
+      "peakMiB": 3878
     },
     {
       "label": "node over two leaves",
-      "seconds": 63.4,
-      "peakMiB": 3365
+      "seconds": 83,
+      "peakMiB": 3330
     },
     {
       "label": "node over two leaves (2)",
-      "seconds": 63.3,
-      "peakMiB": 3015
+      "seconds": 81.1,
+      "peakMiB": 3336
     },
     {
       "label": "node over two nodes",
-      "seconds": 63.3,
-      "peakMiB": 3023
+      "seconds": 81.2,
+      "peakMiB": 3340
     },
     {
       "label": "leaf-spend under a forged node-key input",
-      "seconds": 76,
-      "peakMiB": 3117
+      "seconds": 97.5,
+      "peakMiB": 5654
     },
     {
       "label": "node under a forged node-key input",
-      "seconds": 63.3,
-      "peakMiB": 3141
+      "seconds": 81,
+      "peakMiB": 5639
     },
     {
       "label": "leaf-burn forced over a failing proof",
-      "seconds": 4.9,
-      "peakMiB": 4578
+      "seconds": 6.3,
+      "peakMiB": 4444
     },
     {
       "label": "node over a child whose key is not its admitted hash's",
-      "seconds": 64.7,
-      "peakMiB": 5916
+      "seconds": 82.7,
+      "peakMiB": 5623
     },
     {
       "label": "node over a child cover with byte 14655 flipped",
-      "seconds": 1.3,
-      "peakMiB": 4520
+      "seconds": 1.7,
+      "peakMiB": 4438
     },
     {
       "label": "node over a child cover with byte 5000 flipped",
-      "seconds": 64.5,
-      "peakMiB": 5903
+      "seconds": 82.6,
+      "peakMiB": 5518
     }
   ],
   "checks": [
@@ -226,6 +233,7 @@
     "one genuine proof of each proved kind verifies natively under the adopted configuration's keys",
     "each of the five leaves proves over a genuine proof, outputs the host's leaf digest and verifies under its kind's pinned leaf key",
     "the node proves over two leaves and over two nodes, outputs the host's node digests and verifies under the pinned node key",
+    "a node the backend refuses to make (Assertion failed: (remainder_1024.lo == uint512_t(0))) retires the aggregator's instance, and its next proofs are made on a fresh one",
     "a cover covers nothing under another kind's leaf key or the node key, for another digest, at another length or with a flipped byte, and kinds 5 and 7 have no leaf",
     "a tree and a leaf proved under another node-key input verify under the pinned keys with that input, and the check set refuses both (§2 rules 1-2)",
     "a statement proof that fails natively gets no leaf, and a leaf forced over it is not proved (Assertion failed: (remainder_1024.lo == uint512_t(0)))",

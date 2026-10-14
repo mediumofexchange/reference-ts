@@ -12,7 +12,7 @@ import { EvidenceStore, formServes, type EvidenceBatch, type StoredTrail, type T
 import { fieldToBytes } from "../field.js";
 import type { V3EvidenceSource } from "./service-http.js";
 import { V3StoreError, type ServedEvidence, type ServedPackage } from "./store.js";
-import { coverTrail, proofAmong, type CoverWalk, type RecordAt, type SpanProver } from "./succinct.js";
+import { coverTrail, recordProof, type CoverWalk, type RecordAt, type SpanProver } from "./succinct.js";
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 /** Walk positions a replica keeps a segment: an operator's equivocation leaves at most a few forks among its own reads. */
@@ -170,7 +170,7 @@ export class V3Replica implements V3EvidenceSource {
 
   /** A succinct reader's fetch (succinct-read §3.5): the proof of a record kept at `at` whose SHA-256 is `proofHash`. */
   proof(proofHash: Uint8Array, at: RecordAt): Uint8Array | undefined {
-    return this.#evidence.construction.trailChecks !== undefined ? undefined : proofAmong(this.#evidence.recordsAt(at.segment, at.position), proofHash);
+    return this.#evidence.construction.trailChecks !== undefined ? undefined : recordProof(this.#evidence.recordAt(at.segment, at.position, at.evidence), proofHash);
   }
   /** A check proof a prover kept in the replica's file for `digest` under set `set` (§3.2). */
   cover(set: Uint8Array, digest: Uint8Array): Uint8Array | undefined { return this.#evidence.cover(set, digest); }

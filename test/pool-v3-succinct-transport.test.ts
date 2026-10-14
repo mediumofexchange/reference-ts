@@ -27,6 +27,15 @@ import { outcome } from "./succinct-differential.js";
 // by set and digest; the reader checks every answer, and its read equals the complete read's.
 
 const b = (n: number): Uint8Array => new Uint8Array(32).fill(n);
+/** The segment of a store's latest kept top, and its trail's chain value at each position, which names a record there. */
+function chainOf(store: EvidenceStore): { segment: Uint8Array; chain: (position: bigint) => Uint8Array } {
+  const top = store.keptTops()[0]!, batch = store.retained();
+  try {
+    const trail = batch.trail(top.segment, top.evidence)!, values = new Map<bigint, Uint8Array>();
+    for (let p = 0n; p <= top.position; p++) values.set(p, trail.evidence(p)!);
+    return { segment: top.segment, chain: position => values.get(position)! };
+  } finally { batch.release(); }
+}
 const configuration = adoptedConfiguration(), domain = configurationHash(configuration);
 const issuerSecret = b(15), operatorSecret = b(16), issuer = ed25519.getPublicKey(issuerSecret), operator = ed25519.getPublicKey(operatorSecret);
 const label = b(12), lag = 2n, reference = { context: LOCAL_REFERENCE, label, lag } as const, venueId = localVenueIdentity(label, lag);
@@ -147,11 +156,11 @@ describe("succinct transport (slice 37)", () => {
     expect(counted.asked).toMatchObject({ covers: 2, answered: 1, fetched: 1, proofs: 1 });
     expect(counted.asked.places.map(at => at.position)).toEqual([3n]);
     // The reader's file holds proof-free records only, and is refused to a complete reader.
-    const segment = f.replicaStore.keptTops()[0]!.segment;
+    const { segment, chain } = chainOf(f.replicaStore);
     for (const position of [1n, 2n, 3n]) {
-      const [kept] = read.evidence.recordsAt(segment, position);
+      const kept = read.evidence.recordAt(segment, position, chain(position));
       expect(kept!.length).toBeLessThan(1000);
-      expect(decodeProofFree(kept!).proofHash).toEqual(sha256(decodeRecord(complete.evidence.recordsAt(segment, position)[0]!).proof));
+      expect(decodeProofFree(kept!).proofHash).toEqual(sha256(decodeRecord(complete.evidence.recordAt(segment, position, chain(position))!).proof));
     }
     read.evidence.close();
     expect(() => new EvidenceStore(join(directories.at(-1)!, "succinct.db"))).toThrow("another construction's evidence");
@@ -187,7 +196,7 @@ describe("succinct transport (slice 37)", () => {
     await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
     await f.mirror();
     // A supplier's answer: the segment forked after its first record, two records no checkpoint commits.
-    const segment = f.replicaStore.keptTops()[0]!.segment, first = f.replicaStore.recordsAt(segment, 1n)[0]!;
+    const { segment, chain } = chainOf(f.replicaStore), first = f.replicaStore.recordAt(segment, 1n, chain(1n))!;
     const forked = encodeTrail({ header: segmentBytes(header), terms: [signed], records: [first, f.issue(output(51, 3n), 7), f.issue(output(52, 4n), 8)] });
     expect(await f.replicaStore.take([{ trail: { after: undefined, size: BigInt(forked.length), chunks: (async function* () { yield forked; })() } }], operator)).toBe(true);
     // The replica's next kept selection indexes every pending top, the fork's included.
@@ -232,12 +241,13 @@ describe("succinct transport (slice 37)", () => {
     await f.mirror();
     await f.replica.prove(testProver(SET, verifier));
     const client = new V3ServiceClient(f.replicaUrl, undefined, f.identity()), operatorClient = f.operatorClient;
-    const proof = decodeRecord(f.issue()).proof, hash = sha256(proof), segment = f.replicaStore.keptTops()[0]!.segment;
+    const proof = decodeRecord(f.issue()).proof, hash = sha256(proof), { segment, chain } = chainOf(f.replicaStore), evidence = chain(1n);
     for (const source of [client, operatorClient]) {
-      expect(await source.proof(hash, { segment, position: 1n })).toEqual(proof);
-      expect(await source.proof(hash, { segment, position: 2n })).toBeUndefined();
-      expect(await source.proof(sha256(hash), { segment, position: 1n })).toBeUndefined();
-      expect(await source.proof(hash, { segment: b(3), position: 1n })).toBeUndefined();
+      expect(await source.proof(hash, { segment, position: 1n, evidence })).toEqual(proof);
+      expect(await source.proof(hash, { segment, position: 2n, evidence })).toBeUndefined();
+      expect(await source.proof(hash, { segment, position: 1n, evidence: chain(0n) })).toBeUndefined();
+      expect(await source.proof(sha256(hash), { segment, position: 1n, evidence })).toBeUndefined();
+      expect(await source.proof(hash, { segment: b(3), position: 1n, evidence })).toBeUndefined();
     }
     const leaf = decodeRecord(f.issue()), digest = (await import("../src/pool/v3/succinct.js")).statementLeafDigest(leaf.kind, leaf.publicInputs, hash);
     expect(await client.cover(SET.identity, digest)).toEqual(SET.cover(leaf.kind, digest));

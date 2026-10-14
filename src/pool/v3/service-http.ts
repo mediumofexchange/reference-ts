@@ -164,18 +164,18 @@ function evidenceRoute(server: Server, source: V3EvidenceSource, streams: { coun
   })();
 }
 
-/** A succinct reader's fetches (succinct-read §§3.2, 3.5): `GET /proofs/<hash>?segment=<hex>&position=<n>` answers the
- * proof field of a record kept at that place whose SHA-256 is `hash`, and `GET /covers/<set>/<digest>` a check proof
+/** A succinct reader's fetches (succinct-read §§3.2, 3.5): `GET /proofs/<hash>?segment=<hex>&position=<n>&evidence=<hex>`
+ * answers the proof field of the record kept at that place under that chain value whose SHA-256 is `hash`, and `GET /covers/<set>/<digest>` a check proof
  * kept for that digest under that set, as bytes, or `NOT_FOUND`. False where the request is another. */
 function checkRoute(source: V3EvidenceSource, request: IncomingMessage, response: ServerResponse, send: Send): boolean {
   if (request.method !== "GET") return false;
   const url = request.url ?? "";
-  const proof = /^\/proofs\/([0-9a-f]{64})\?segment=([0-9a-f]{64})&position=([1-9][0-9]{0,18})$/.exec(url);
+  const proof = /^\/proofs\/([0-9a-f]{64})\?segment=([0-9a-f]{64})&position=([1-9][0-9]{0,18})&evidence=([0-9a-f]{64})$/.exec(url);
   const cover = /^\/covers\/([0-9a-f]{64})\/([0-9a-f]{64})$/.exec(url);
   if (proof === null && cover === null) return false;
   request.resume();
   const answer = proof !== null ?
-    source.proof(hexToBytes(proof[1]!), { segment: hexToBytes(proof[2]!), position: BigInt(proof[3]!) }) :
+    source.proof(hexToBytes(proof[1]!), { segment: hexToBytes(proof[2]!), position: BigInt(proof[3]!), evidence: hexToBytes(proof[4]!) }) :
     source.cover(hexToBytes(cover![1]!), hexToBytes(cover![2]!));
   if (answer === undefined) { send(404, { code: "NOT_FOUND" }); return true; }
   if (!response.destroyed && !response.writableEnded) {

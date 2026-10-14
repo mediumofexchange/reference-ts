@@ -1506,7 +1506,8 @@ export class ReplayStore {
       this.#rollback();
       throw error;
     }
-    if (this.#kept !== undefined) this.#recordDigest();
+    // A commit outside a walk, as `#atomic`'s: it stands once committed, whether or not its log moves in now.
+    if (this.#kept !== undefined) this.#vouch();
   }
   /** Rows held for walks still open, kept walks aside: none once every read has closed its walk. */
   walkRows(): number {

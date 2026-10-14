@@ -362,9 +362,9 @@ export class V3ServiceClient {
   /** A succinct reader's fetch of a record's proof by its hash and place (succinct-read §3.5): the source's bytes, which
    * the reader hashes, or undefined where it has none; an answer past pool-v3 §5's bound is malformed (`EncodingError`). */
   async proof(proofHash: Uint8Array, at: RecordAt): Promise<Uint8Array | undefined> {
-    const hash = identifier(proofHash), segment = identifier(at.segment);
+    const hash = identifier(proofHash), segment = identifier(at.segment), evidence = identifier(at.evidence);
     if (typeof at.position !== "bigint" || at.position < 1n || at.position >= 1n << 63n) throw new TypeError("a record's position is a positive u63");
-    return this.fetched(`/proofs/${hex(hash)}?segment=${hex(segment)}&position=${at.position}`);
+    return this.fetched(`/proofs/${hex(hash)}?segment=${hex(segment)}&position=${at.position}&evidence=${hex(evidence)}`);
   }
   /** A check proof the source keeps for `digest` under set `set` (succinct-read §3.2), which the reader verifies under
    * its own pinned keys, or undefined. */
