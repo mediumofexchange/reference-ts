@@ -6,6 +6,7 @@ const MALFORMED = [
   "Non-canonical proof element: value >= field modulus",
   "Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))\n  Left   : 0x30644e",
   "Assertion failed: (uint256_t(fr_vec[1]) < (uint256_t(1) << (TOTAL_BITS - NUM_LIMB_BITS * 2)))\n  Left   : 0x30644e",
+  "Assertion failed: (value < fq::modulus)\n  Left   : 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47",
   "Deserialized point is not on the curve",
   "Cannot aggregate: incoming pairing points are at infinity (probably uninitialized).",
 ];

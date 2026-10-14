@@ -271,8 +271,8 @@ async function start(parameters: ProvingParameters, size: { readonly points: num
 
 // What bb.js 5.2.0 throws while reading a well-sized proof whose bytes are not
 // a proof: an element at or above its field's modulus, a commitment coordinate
-// limb out of range, a commitment off the curve, or pairing points at
-// infinity. Each is a property of the supplied bytes, so the statement is
+// limb out of range, a coordinate whose two limbs together reach the base
+// field's modulus, a commitment off the curve, or pairing points at infinity. Each is a property of the supplied bytes, so the statement is
 // invalid and verifies as false. Any other failure is the backend's, not the
 // data's, and stays visible. The list is the pinned version's; a pin move
 // re-establishes it (scripts/pool/v3/check.mjs pins each message).
@@ -280,6 +280,7 @@ const MALFORMED_PROOF = Object.freeze([
   "Non-canonical proof element: value >= field modulus",
   "Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))",
   "Assertion failed: (uint256_t(fr_vec[1]) < (uint256_t(1) << (TOTAL_BITS - NUM_LIMB_BITS * 2)))",
+  "Assertion failed: (value < fq::modulus)",
   "Deserialized point is not on the curve",
   "Cannot aggregate: incoming pairing points are at infinity",
 ]);

@@ -628,11 +628,14 @@ try {
       assert.equal(await shared.verify(kindOf.issue, inputs, new Uint8Array(bytes)), false, label);
     }
     checks.push(`every relation proves in ${PROOF_BYTES} bytes, and a valid proof with a word appended, its last word repeated or removed verifies under neither the backend nor the shared verifier`);
-    const word =(i, value) => { const p = new Uint8Array(valid.proof); p.set(Buffer.from(value.toString(16).padStart(64, '0'), 'hex'), i * 32); return p; };
+    const word =(i, value, from = valid.proof) => { const p = new Uint8Array(from); p.set(Buffer.from(value.toString(16).padStart(64, '0'), 'hex'), i * 32); return p; };
+    // BN254's base field modulus: a commitment coordinate is two limbs (136 and 118 bits) whose value must lie below it.
+    const Q = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47n;
     const malformed = [
       ['an element past its modulus', word(0, (1n << 256n) - 1n), 'Non-canonical proof element: value >= field modulus'],
       ['a low coordinate limb out of range', word(8, FIELD - 1n), 'Assertion failed: (uint256_t(fr_vec[0]) < (uint256_t(1) << (NUM_LIMB_BITS * 2)))'],
       ['a high coordinate limb out of range', word(9, FIELD - 1n), 'Assertion failed: (uint256_t(fr_vec[1]) < (uint256_t(1) << (TOTAL_BITS - NUM_LIMB_BITS * 2)))'],
+      ['a coordinate whose limbs reach the base field\'s modulus', word(8, Q & ((1n << 136n) - 1n), word(9, Q >> 136n)), 'Assertion failed: (value < fq::modulus)'],
       ['a commitment off the curve', word(8, 1n), 'Deserialized point is not on the curve'],
       ['pairing points at infinity', new Uint8Array(valid.proof.length), 'Cannot aggregate: incoming pairing points are at infinity'],
     ];
@@ -641,11 +644,11 @@ try {
       const reused = new UltraHonkVerifierBackend(raw);
       const rawVerify = proof => reused.verifyProof({ proof, publicInputs: valid.publicInputs, verificationKey: vk }, options);
       for (const [label, bytes, message] of malformed) await assert.rejects(rawVerify(bytes), error => error.message.startsWith(message), label);
-      const offCurve = malformed[3][1];
+      const offCurve = malformed[4][1];
       for (let i = 0; i < 96; i++) await rawVerify(offCurve).catch(() => {});
       await assert.rejects(rawVerify(valid.proof), /memory access out of bounds/, 'the control: a reused instance fails after the run');
     } finally { await raw.destroy(); }
-    checks.push('the control: a reused raw backend throws the five pinned malformed-proof messages and fails a valid proof after 96 more');
+    checks.push('the control: a reused raw backend throws the six pinned malformed-proof messages and fails a valid proof after 96 more');
     for (const [label, bytes] of malformed) {
       assert.equal(await shared.verify(kindOf.issue, inputs, bytes), false, label);
       checks.push(`the shared verifier answers false for ${label}`);
@@ -659,7 +662,7 @@ try {
     const flipping = new Proxy(inputs, { get: (target, key, receiver) => key === '0' && reads++ > 0 ? FIELD : Reflect.get(target, key, receiver) });
     assert.equal(await shared.verify(kindOf.issue, flipping, valid.proof), true);
     checks.push('the shared verifier judges its own copies: a proof whose length understates its bytes answers false, one whose length overstates them verifies, and inputs read twice verify as first read');
-    for (let i = 0; i < 96; i++) assert.equal(await shared.verify(kindOf.issue, inputs, malformed[3][1]), false);
+    for (let i = 0; i < 96; i++) assert.equal(await shared.verify(kindOf.issue, inputs, malformed[4][1]), false);
     assert.equal(await shared.verify(kindOf.issue, inputs, valid.proof), true);
     checks.push('the shared verifier never reuses an instance that threw: a valid proof verifies after 96 malformed ones');
     await shared.close();
