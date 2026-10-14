@@ -726,10 +726,13 @@ round proves new covers for at most ten minutes, then syncs again; the walk of a
 round's stood, so a long trail is read once, a cover kept is never proved again, and a line says what each round
 proved. It proves over the trails its own kept selections name, and the earlier segments their openings import, never
 over what a supplier's answer alone brought. Proving reads the check set's parameters (the leading 2^21 Ignition points, 128 MiB), copied
-from `--parameters` or fetched into the directory, and takes the WebAssembly backend about a minute a leaf and 3.5 GiB
-on four cores ([slice 36](POOL_DEPLOYMENT_PROBES.md#the-trail-check-set-slice-36)). Anyone may prove: a cover carries
-no authority, and every reader checks it under its own pinned keys. A refusal inside the backend ends this process's
-proving (a `prove` event on stderr) while it goes on serving.
+from `--parameters` or fetched into the directory. It runs on the native binary bb.js bundles where the host has one
+(Linux and macOS, x64 and arm64), on WebAssembly elsewhere, or as `--prover native|wasm` names (native where the host
+has none refuses `PROVER`); a line says which. Natively a leaf takes about half a minute and 3 GiB on four cores,
+on WebAssembly over a minute and 3.5 GiB ([slice 42](POOL_DEPLOYMENT_PROBES.md#the-aggregators-native-backend-slice-42)).
+Either way each cover is verified on WebAssembly under the pinned key before it is kept. Anyone may prove: a cover
+carries no authority, and every reader checks it under its own pinned keys. A failure while proving is a `prove` event
+on stderr; the instance that failed is replaced, and the next round proves on a fresh one while the replica serves on.
 
 ### Relays
 

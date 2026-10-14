@@ -1232,6 +1232,40 @@ verifier lanes and Node beside it.
 **Limits.** One run on each system, runners differing 1.7 times; no native or phone measurement here; one genuine
 proof per kind.
 
+## The aggregator's native backend (slice 42)
+
+Measured 2026-10-14 by `check-set-check.mjs --native` (CI's real-proof group `native`: [report](pool-v3-check-set-native-verification.json);
+[decision](../decisions/2026-10.md#2026-10-14--prove-covers-on-the-native-binary-bbjs-bundles-from-a-private-copy-of-the-checked-points-on-an-instance-replaced-after-any-failure-slice-42-next-12)). The question (Next 12 step 4): does the native `bb` that bb.js 5.2.0
+bundles prove the [check set](#the-trail-check-set-slice-36) from the checked points alone, with the pinned keys, and
+how much faster than WebAssembly on one host?
+
+**Points.** Native `bb` ignores `srsInitSrs` for proving: it reads G1 points from `$CRS_PATH` (default `~/.bb-crs`)
+and, finding none, fetched 2^21 compressed points over plain HTTP from `crs.aztec-cdn.foundation` when it first derived
+a key (seen on this host). The file it wrote was byte-equal to the check set's (SHA-256 `2bb84462…`), so a private
+directory holding exactly the checked bytes as `bn254_g1.dat` serves it: bb then read that file, wrote only its lock
+and fetched nothing. The check holds an empty `CRS_PATH` sentinel that stays empty and asserts each private copy.
+
+**Keys and cases.** All six check-set keys and pool-v3's six derived natively equal the pinned ones; every hostile
+case of the WebAssembly check gives the same outcome natively (the same bb assertion where a proof is refused, the same
+unverifiable proofs where one is made); a node bb refuses retires the aggregator's process and the next node is made by
+a fresh one.
+
+| One 4-vCPU Xeon at 2.10 GHz, 15 GB (this run; CI's runners in the report) | Native | WebAssembly |
+|---|---:|---:|
+| Leaf, each of five kinds | 30.3–33.6 s | 72.8 s (spend, no other load) |
+| Node | 24.7–27.7 s | 60.8 s |
+| Peak memory proving a leaf, process and `bb` | 2.8–3.2 GiB | 3.2–3.8 GiB |
+| A key derived | 12–26 s | 23–27 s |
+
+**Rate.** Natively a leaf is 2.2–2.4 times faster here, a node 2.2: a statement (a leaf and about one node) takes about
+1 minute against 2.2, so one 4-vCPU prover keeps up with the design point's mean (900 a day in about 15 hours) where
+WebAssembly needs about 33. The native leaf is near the [aggregation probe](#the-trails-proof-aggregation-slice-33)'s
+(32.4–34.9 s on the same host type), so the production circuits cost what the probe's did natively.
+
+**Limits.** One host here plus CI's runners (Ubuntu, macOS) once each; peaks are sampled every 200 ms; the native
+binary is bb.js's own build, shown equal only by keys and proofs; a native binary that needs a newer glibc than a host
+has is refused by name, not measured.
+
 ## The holder's read path in a browser engine (slice 39)
 
 Measured 2026-10-14 in CI's real-proof group `browser` (`scripts/browser/check.mjs --proofs`, run 38549803306; each
