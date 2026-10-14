@@ -1,8 +1,10 @@
 // The part of vitest the in-browser suites use (slice 39, scripts/browser/check.mjs): describe, it and test with
-// skipIf, runIf and skip, the four hooks, and vitest's own `expect` (@vitest/expect over chai, as vitest builds it).
+// skipIf, runIf, skip and each, the four hooks, vitest's own `expect` (@vitest/expect over chai, as vitest builds it)
+// and its spies (@vitest/spy); a module reset has no meaning in a bundle and is refused.
 // The suites import "vitest"; the browser build resolves it here. Tests run in order, one at a time, each awaited.
 import * as chai from "chai";
 import { JestAsymmetricMatchers, JestChaiExpect, JestExtend } from "@vitest/expect";
+import { fn, spyOn } from "@vitest/spy";
 
 chai.use(JestExtend);
 chai.use(JestChaiExpect);
@@ -23,14 +25,24 @@ function suite(name, body, skip = false) {
   try { body?.(); } finally { current = outer; }
 }
 function test(name, body, skip = false) { current.tests.push({ name, body, skip }); }
+/** `each(rows)(name, body)`: one test a row, its arguments the row's (an array) or the row itself, named by printf-style %s, %i and %d. */
+const each = register => rows => (name, body) => {
+  for (const row of rows) {
+    const args = Array.isArray(row) ? row : [row];
+    let at = 0;
+    register(name.replace(/%[sidfjo]/g, () => String(args[at++])), () => body(...args));
+  }
+};
 const conditional = make => Object.assign(make(false), {
   skip: make(true),
   skipIf: condition => make(Boolean(condition)),
   runIf: condition => make(!condition),
+  each: each(make(false)),
 });
 export const describe = conditional(skip => (name, body) => suite(name, body, skip));
 export const it = conditional(skip => (name, body) => test(name, body, skip));
 export { it as test };
+export const vi = { fn, spyOn, resetModules() { throw new Error("a browser bundle has no module registry to reset"); } };
 export const beforeAll = fn => { current.hooks.beforeAll.push(fn); };
 export const afterAll = fn => { current.hooks.afterAll.push(fn); };
 export const beforeEach = fn => { current.hooks.beforeEach.push(fn); };
