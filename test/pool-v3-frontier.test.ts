@@ -460,6 +460,17 @@ describe("single-backing compact fault packages", () => {
       // Another set (a junk fault beside it) begins again and classifies as a fresh read does.
       const other = await read([f.fault, junk]);
       expect([other.checks > 0, other.carrying, other.excludedBy]).toEqual([true, first.carrying, first.excludedBy]);
+      // With its trail held and no fault presented, it replays: the refusal is its own trail's, as a fresh read's (review).
+      const full = pack([...f.f.items, { kind: 1, payload: configurationBytes(configuration) }, { kind: 2, payload: encodeCommitment(f.hostile) }]);
+      const selected = async (kept: boolean) => {
+        const v = counting(), refusal = await readPackage(full, f.f.selection(f.hostile), { ...f.f.options, verifier: v as DeclaredVerifier,
+          ...(kept ? { store, evidence } : {}) }).then(() => undefined, (error: unknown) => error);
+        return { check: (refusal as { check?: unknown }).check, checks: v.checks };
+      };
+      // The kept read checks only what its kept predecessors leave, but checks the selected trail.
+      const fresh = await selected(false), keptRead = await selected(true);
+      expect([fresh.check, fresh.checks > 0]).toEqual(["PROOF", true]);
+      expect([keptRead.check, keptRead.checks > 0]).toEqual(["PROOF", true]);
     } finally { store.close(); evidence.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 

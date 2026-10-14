@@ -973,9 +973,11 @@ function scopeWalk(context: WalkContext, record: RecordVenue, evidence: WalkEvid
         faults.excluded?.(held, scope, BigInt(block.length));
         return { ...base, class: "excluded", check: classification.intrinsic };
       }
-      // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot.
+      // A kept class stands in for the replay. Its state must pass §14's checks against this read's snapshot. A kept
+      // exclusion may rest on a §9.1 fault an earlier read presented, which never stands in for the selected
+      // checkpoint's own trail: that one replays.
       const s = kept?.state;
-      if (kept !== undefined) {
+      if (kept !== undefined && !(kept.class === "excluded" && isSelected(c))) {
         let verdict: ScopeVerdict;
         if (kept.class === "excluded" && kept.detail !== undefined) verdict = { ...base, class: "excluded", check: kept.detail };
         else if (kept.class === "valid" && s !== undefined && keptStateHolds(store, s.ns, s.position, s.identity, snapshot, construction, classification.trail, trails) &&
