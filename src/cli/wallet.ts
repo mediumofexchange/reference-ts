@@ -46,9 +46,11 @@ import { authenticateLitPaymentRequest, encodeLitPaymentRequest, litPaymentReque
 import type { ProofVerifier } from "../pool/proof-verifier.js";
 import { CommandError, commitmentOut, event, flag, fresh, has, hex, hex32, initialized, integer, openDirectory, PACKAGE_FILE_LIMIT, parseArguments, print, readJson, READ_FLAGS, readOptional, readRequired, readSecret, required, requireWritable,
   Replayed, UsageError, writeExclusive, writeReplace, writeSame, type Arguments, type Directory, type FlagSpec } from "./common.js";
-import { directoryBackend, directoryVerifier, verifierCount } from "./backend.js";
+import { directoryBackend, directoryVerifier, openCheckSet, verifierCount } from "./backend.js";
+import { checkSetIdentity, type TrailCheckSet } from "../pool/v3/check-set.js";
+import type { CheckSet, CheckSupply } from "../pool/v3/succinct.js";
 import { constructionNamed, constructions, nameOf } from "./construction.js";
-import { initConstruction, initRole, presentationOf, readSources, repairRecord, replicaCommand, serviceClient, serviceCommand, sourcesOf, termsCommand, unanswered,
+import { initConstruction, initRead, initRole, presentationOf, succinctSupply, readSources, repairRecord, replicaCommand, serviceClient, serviceCommand, sourcesOf, termsCommand, unanswered,
   type Skipped } from "./reader.js";
 import { authenticate, keepTerms, keptTerms, type KeptTerms } from "./terms.js";
 import { createVenue, openView, ownVenue, parseVenue, requireVenue, venueText, type View } from "./venue.js";
@@ -111,21 +113,26 @@ interface Opened {
   /** The read's witnessed index, where the command synced its view. */
   readonly at: bigint | undefined;
   readonly prove: LocalProver | undefined;
+  /** A succinct directory's reads (slice 38): the supply bound to a backing's sources before its read, and what the
+   * read's output says of its judgment. */
+  readonly succinct: { bind(kept: KeptTerms): void; out(): object } | undefined;
   close(): Promise<void>;
 }
 
 const WALLET_DB = "wallet.db", PENDING = "wallet.pending", SEEDED = "seed.restored";
 
-/** The wallet's options over a view: the directory's construction, and a verifier where it carries proofs. */
-const walletOptions = (directory: Directory, view: View, verifier: ProofVerifier | undefined) =>
-  ({ construction: directory.construction, venue: view.venue, reference: view.file.reference, ...(verifier === undefined ? {} : { verifier }) });
+/** The wallet's options over a view: the directory's construction, a verifier where it carries proofs, and a succinct
+ * directory's check set and supply. */
+const walletOptions = (directory: Directory, view: View, verifier: ProofVerifier | undefined, succinct?: { set: CheckSet; supply: CheckSupply }) =>
+  ({ construction: directory.construction, venue: view.venue, reference: view.file.reference, ...(verifier === undefined ? {} : { verifier }),
+    ...(succinct === undefined ? {} : { succinct }) });
 /** The wallet database over a view: a new one only where `create` says so. */
-function walletOver(directory: Directory, view: View, verifier: ProofVerifier | undefined, create = false): V3Wallet {
+function walletOver(directory: Directory, view: View, verifier: ProofVerifier | undefined, create = false, succinct?: { set: CheckSet; supply: CheckSupply }): V3Wallet {
   const path = directory.file(WALLET_DB);
   if (!create && !existsSync(path)) {
     throw new CommandError("ABSENT", "the directory has no wallet database: init with --venue, or a backer's venue create");
   }
-  const options = walletOptions(directory, view, verifier);
+  const options = walletOptions(directory, view, verifier, succinct);
   return create ? new V3Wallet(path, options) : V3Wallet.open(path, options);
 }
 
@@ -143,6 +150,7 @@ async function openProver(directory: Directory, instances: number) {
 async function openWallet(directory: Directory, args: Arguments, options: { readonly prove?: boolean; readonly sync?: boolean }): Promise<Opened> {
   const view = openView(directory);
   let closeProof: (() => Promise<void>) | undefined, verifier: ProofVerifier | undefined, wallet: V3Wallet | undefined;
+  let opening: Promise<TrailCheckSet> | undefined;
   try {
     let at: bigint | undefined;
     if (options.sync) {
@@ -155,16 +163,29 @@ async function openWallet(directory: Directory, args: Arguments, options: { read
       closeProof = opened.close; verifier = opened.prover.verifier;
       prove = task => opened.prover.prove(task);
     } else verifier = await directoryVerifier(directory, args);
-    wallet = walletOver(directory, view, verifier);
+    // A succinct directory reads under the shipped check set from the sources of the backing a read names (slice 38).
+    // The set's verifier starts when a read first checks a cover, so a command that reads nothing starts none.
+    let succinct: Opened["succinct"], reading: { set: CheckSet; supply: CheckSupply } | undefined;
+    if (directory.succinct) {
+      let bound: ReturnType<typeof succinctSupply> | undefined;
+      const target = (): CheckSupply => { if (bound === undefined) throw new Error("a succinct read before its sources were bound"); return bound.supply; };
+      const pinned = (): Promise<TrailCheckSet> => (opening ??= openCheckSet(directory));
+      const lazy: CheckSet = { identity: checkSetIdentity(), test: true, verify: async (kind, digest, proof) => (await pinned()).verify(kind, digest, proof) };
+      reading = { set: lazy, supply: { cover: (digest, accept) => target().cover(digest, accept), proof: (hash, at) => target().proof(hash, at) } };
+      succinct = { bind: kept => { bound = succinctSupply(directory, kept, view, lazy); }, out: () => bound?.out() ?? {} };
+    }
+    wallet = walletOver(directory, view, verifier, false, reading);
     const own = wallet, ownVerifier = verifier, ownClose = closeProof;
-    return { directory, view, wallet: own, at, prove, async close() {
+    return { directory, view, wallet: own, at, prove, succinct, async close() {
       own.close();
       if (ownClose !== undefined) await ownClose(); else await ownVerifier?.close();
+      await (await opening?.catch(() => undefined))?.close();
       view.close();
     } };
   } catch (error) {
     wallet?.close();
     if (closeProof !== undefined) await closeProof(); else await verifier?.close();
+    await (await opening?.catch(() => undefined))?.close();
     view.close();
     throw error;
   }
@@ -188,17 +209,24 @@ interface Evidence { readonly bytes: Uint8Array; readonly source: "saved" | "fil
  * its URL, `kept`, `file` or `saved`) and the sources passed over. */
 async function withEvidence<T>(opened: Opened, args: Arguments, kept: KeptTerms, saved: boolean, use: (source: Evidence) => Promise<T>): Promise<T> {
   if (saved) return use({ bytes: new Uint8Array(), source: "saved" });
+  // A succinct read asks the backing's own sources for covers and proofs, and its output says what it rests on.
+  opened.succinct?.bind(kept);
+  const reading = opened.succinct;
+  // Where the read came from, the sources passed over and, read when the output is made (after the read), its asks.
+  const passed = (skipped: readonly Skipped[], origin: object = {}): object => {
+    const from = { ...origin, ...(skipped.length > 0 ? { skipped } : {}) };
+    return reading === undefined ? from : Object.defineProperty(from, "read", { enumerable: true, get: () => (reading.out() as { read?: object }).read });
+  };
   const file = flag(args, "package");
-  if (file !== undefined) return use({ bytes: readRequired(file, "package file", PACKAGE_FILE_LIMIT), source: "file" });
+  if (file !== undefined) return use({ bytes: readRequired(file, "package file", PACKAGE_FILE_LIMIT), source: "file", from: passed([]) });
   const last = opened.directory.file(`packages/${hex(kept.backing)}`);
-  const passed = (skipped: readonly Skipped[]) => skipped.length > 0 ? { skipped } : {};
   const sources = sourcesOf(opened.directory, kept, opened.view,
-    (client, full) => opened.wallet.supply(store => client.sync(kept.backing, store, { full })));
+    (client, full) => opened.wallet.supply(store => client.sync(kept.backing, store, { full })), [], opened.wallet.reading);
   return readSources(sources, async synced => {
     if ("served" in synced) {
       // Kept only once a read over it resolved, so a source's refused answer never becomes the fallback (audit 32).
       const bytes = synced.served.package;
-      const result = await use({ bytes, source: synced.origin, from: { ...(synced.origin === "replica" ? { replica: synced.url } : {}), ...passed(synced.skipped) } });
+      const result = await use({ bytes, source: synced.origin, from: passed(synced.skipped, synced.origin === "replica" ? { replica: synced.url } : {}) });
       // Best effort, as the command has answered: a package not kept leaves the last one kept as the fallback.
       try {
         mkdirSync(opened.directory.file("packages"), { recursive: true, mode: 0o700 });
@@ -237,9 +265,17 @@ function savedDemandDeadline(directory: Directory, wallet: V3Wallet, alias: stri
   return act?.kind !== 4 ? undefined : directory.construction.view(directory.construction.decode(act.record), () => undefined).demand!.value.deadline;
 }
 
-/** A backer's directory holds K; the role check reads no key bytes. */
+/** A backer's directory holds K; the role check reads no key bytes. A backer reads completely: its acceptances and
+ * issues are acts every reader judges (succinct-read §1). */
 function requireBacker(directory: Directory): void {
   if (!existsSync(directory.file("backer.key"))) throw new CommandError("ROLE", "this wallet holds no backer key: a backer's wallet is created with init --backer");
+  if (directory.succinct) throw new CommandError("SUCCINCT", "a backer reads completely (succinct-read §1): its acts are judged by every reader");
+}
+/** `--read succinct` beside `--backer` or `--backer-key`, refused before anything is created or read from stdin. */
+function refuseSuccinctBacker(args: Arguments): void {
+  if ((has(args, "backer") || has(args, "backer-key")) && flag(args, "read") === "succinct") {
+    throw new UsageError("a backer reads completely (succinct-read §1): --read succinct is not taken with --backer or --backer-key");
+  }
 }
 /** K, as the wallet's signer: read only by the commands that sign, and wiped when they close. */
 function backerKey(directory: Directory): Uint8Array {
@@ -306,7 +342,9 @@ function aliased(argv: readonly string[], spec: FlagSpec, positionals: number) {
 }
 
 async function init(argv: readonly string[]): Promise<void> {
-  return initRole(argv, "wallet", { venue: args => has(args, "backer") ? "optional" : "required", construction: true, flags: { backer: "switch", verifiers: "value" },
+  refuseSuccinctBacker(parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", construction: "value", read: "value",
+    backer: "switch", verifiers: "value" }, 0));
+  return initRole(argv, "wallet", { venue: args => has(args, "backer") ? "optional" : "required", construction: true, read: true, flags: { backer: "switch", verifiers: "value" },
     fill: async (directory, args) => {
       let shown: object = {};
       if (has(args, "backer")) {
@@ -488,13 +526,13 @@ const windowNote = (sync: "first" | "next", instance: string): string =>
 async function restoreSeed(argv: readonly string[]): Promise<void> {
   // The arguments are checked before stdin is read, so a usage error does not wait on input.
   const checked = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", verifiers: "value", "backer-key": "value",
-    construction: "value" }, 0);
-  required(checked, "dir"); required(checked, "venue"); initConstruction(checked);
+    construction: "value", read: "value" }, 0);
+  required(checked, "dir"); required(checked, "venue"); initRead(checked, initConstruction(checked)); refuseSuccinctBacker(checked);
   // stdin is read once the directory is judged (`ready`): new, or a finished restore these arguments replay (Next 4 (br)).
   let secret: Uint8Array = new Uint8Array();
   const notes = (directory: Directory) => keyed(directory) ? { notes: [windowNote("first", "the seed's last instance's")] } : {};
   try {
-    await initRole(argv, "wallet", { venue: "required", construction: true, flags: { verifiers: "value", "backer-key": "value" },
+    await initRole(argv, "wallet", { venue: "required", construction: true, read: true, flags: { verifiers: "value", "backer-key": "value" },
       ready: async () => { secret = await seedFromStdin(); }, fill: async (directory, args) => {
         await withView(directory, args, (view, verifier) =>
           V3Wallet.restoreSeed(directory.file(WALLET_DB), walletOptions(directory, view, verifier), secret).close());
@@ -572,7 +610,7 @@ async function restoreCopy(argv: readonly string[]): Promise<void> {
 async function restore(argv: readonly string[]): Promise<void> {
   if (argv.includes("--copy")) return restoreCopy(argv);
   const flags = { verifiers: "value", key: "value", backup: "value", digest: "value", "backer-key": "value" } as const;
-  const probe = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", construction: "value", ...flags }, 0);
+  const probe = parseArguments(argv, { dir: "value", node: "values", parameters: "value", venue: "value", construction: "value", read: "value", ...flags }, 0);
   const digest = required(probe, "digest");
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new UsageError("--digest is not 64 lowercase hex digits");
   // A rerun over a finished restore reads neither the handoff nor its key: the digest it names is the provenance the
@@ -583,7 +621,8 @@ async function restore(argv: readonly string[]): Promise<void> {
   try {
     // The handoff is opened before the directory exists: one of the other construction, or under wrong credentials,
     // leaves nothing behind (the library would refuse either as INVALID only after init).
-    const named = constructionNamed(initConstruction(probe)), venue = parseVenue(readJson(required(probe, "venue"), "the venue file")).id;
+    const name = initConstruction(probe), named = constructionNamed(name), venue = parseVenue(readJson(required(probe, "venue"), "the venue file")).id;
+    initRead(probe, name); refuseSuccinctBacker(probe);
     const opens = (construction: Construction): boolean => {
       try { openWalletBackup(bytes, key, construction.reader.domain(), venue, digest).fill(0); return true; } catch { return false; }
     };
@@ -592,7 +631,7 @@ async function restore(argv: readonly string[]): Promise<void> {
       if (other !== undefined) throw new CommandError("CONSTRUCTION", `the handoff holds a ${nameOf(other)} wallet: restore it with --construction ${nameOf(other)}`);
       throw new CommandError("INVALID", "invalid wallet backup or recovery credentials");
     }
-    await initRole(argv, "wallet", { venue: "required", construction: true, flags, fill: async (directory, args) => {
+    await initRole(argv, "wallet", { venue: "required", construction: true, read: true, flags, fill: async (directory, args) => {
       await withView(directory, args, (view, verifier) =>
         V3Wallet.restoreBackup(directory.file(WALLET_DB), walletOptions(directory, view, verifier), bytes, key, digest).close());
       return { restored: "handoff", digest, ...restoreBacker(directory, args) };
@@ -854,7 +893,7 @@ async function publish(argv: readonly string[]): Promise<void> {
       const publication = await captured(publisher => opened.wallet.publish(alias, publisher));
       if (compareBytes(publication.subject, kept.backing) !== 0) throw new CommandError("BACKING", "the act is of another backing than the one whose gap the read judged");
       print({ status: "written", ...publicationFile(directory, kept, out, publication), act: act === undefined ? null : actOut(act, directory.construction), judgingIndex: view.judgingIndex,
-        notes: [RELAY_NOTE] });
+        evidence: source.source, ...source.from, notes: [RELAY_NOTE] });
     });
   });
 }

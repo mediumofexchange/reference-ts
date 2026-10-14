@@ -111,7 +111,7 @@ two-in, four-out spend. `npm test` checks the successor's
 [canonical compressed spent root](POOL_DEPLOYMENT_PROBES.md#spent-set-replay)
 (`src/pool/v3/spent-set.ts`) against independent batch roots and hostile keys.
 
-[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/cb84f04/succinct-read.md)'s
+[Succinct reading](https://github.com/mediumofexchange/money-from-first-principles/blob/94fc751/succinct-read.md)'s
 trail reading (§§2–3, a reader's option) is `src/pool/v3/succinct.ts`, a construction the one walk reads proof-free
 trails through. Its check set is §3.2's six circuits in production form (`src/pool/v3/check-set.ts`, sources in
 `scripts/pool/v3/trail-circuits/`), labelled a test set since none is adopted (§6), whose covers any party proves with
@@ -120,7 +120,11 @@ with hostile covers ([report](pool-v3-check-set-verification.json)). The service
 proof-free trails, proofs by place and covers by digest (`serviceSupply`, `V3Replica.prove`; [slice 37](../decisions/2026-10.md#2026-10-14--serve-succinct-readers-over-the-one-wire-proof-free-trails-proofs-by-place-and-covers-by-set-and-digest-from-the-operator-and-a-replica-slice-37-next-12)),
 and the recovery check reads a real trail with real covers through a replica over that wire. `npm test` reads the
 scope-reader, recovery, succession and store suites' packages both completely and succinctly and requires one outcome
-(`test/succinct-differential.ts`).
+(`test/succinct-differential.ts`). A wallet (`V3Wallet`'s `succinct` option) and the `moe` wallet and reader
+directories (`--read succinct`) read succinctly, each segment's covers asked once over its latest checkpoint's trail;
+a replica proves covers with `reader serve --prove`, and `scripts/pool/v3/succinct-drill.mjs` (CI's `succinct`
+real-proof group) drives a succinct holder, shop and reader from such a replica
+([slice 38](../decisions/2026-10.md#2026-10-14--read-succinctly-through-the-commands-a-wallet-and-a-reader-over-proof-free-evidence-from-covers-a-replica-proves-and-each-segment-partitioned-once-slice-38-next-12)).
 
 The [Ergo venue profile](ERGO_VENUE_PROFILE.md), selected by
 [venue-ergo.md](https://github.com/mediumofexchange/money-from-first-principles/blob/13e5b66/venue-ergo.md),

@@ -30,7 +30,7 @@ import { MAX_TRAIL_RECORD_BYTES, trailCodec, type ServedTrail } from "./trail.js
 import type { TrailForm } from "./evidence-store.js";
 
 /** The revision of succinct-read.md these rules implement; it names kept state with the set identity (§2 rule 8). */
-export const SUCCINCT_SPECIFICATION = "succinct-read cb84f04";
+export const SUCCINCT_SPECIFICATION = "succinct-read 94fc751";
 export const T_CHECK_LEAF = 1008n;
 export const T_CHECK_NODE = 1009n;
 /** The proof length a cover fixes (§3.2): 458 field elements. */
@@ -127,19 +127,27 @@ export interface SpanProver {
   node(left: Cover, right: Cover): Promise<Cover>;
 }
 
+/** Where a walk of a trail's proved records stands: how many it has walked, and the cover of each height's left span
+ * whose right sibling comes next (undefined where it has none). */
+export interface CoverWalk { readonly proved: number; readonly pending: readonly (Cover | undefined)[] }
+
 /**
  * Covers of every aligned span (§3.2) of a trail's proved records, from its complete records in position order
  * (`records`; records of other kinds are passed over), numbered from 0: each leaf whose proof verifies and each node over
  * two covered spans of equal height, given to `keep` as made. A cover `held` gives for a span's digest is used as
  * made, not proved again, so walking a trail again proves only its new spans. Memory holds one cover per height.
+ * A walk may go on from where an earlier one stood (`from`, with `records` the records after those it read), and stops
+ * before the next record once `stop` holds; it returns how many records it read and where it stands.
  */
 export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Array> | AsyncIterable<Uint8Array>,
-  held: (digest: bigint) => Uint8Array | undefined, keep: (cover: Cover) => void): Promise<{ readonly proved: number; readonly made: number }> {
-  // pending[h]: the cover of the left span of height h whose right sibling comes next, or undefined where it has none.
-  const pending: (Cover | undefined)[] = [];
-  let n = 0, made = 0;
+  held: (digest: bigint) => Uint8Array | undefined, keep: (cover: Cover) => void, options: { readonly from?: CoverWalk; readonly stop?: () => boolean } = {}):
+  Promise<{ readonly proved: number; readonly made: number; readonly read: number; readonly stopped: boolean; readonly walk: CoverWalk }> {
+  const pending: (Cover | undefined)[] = [...options.from?.pending ?? []];
+  let n = options.from?.proved ?? 0, made = 0, read = 0, stopped = false;
   const kept = (cover: Cover): Cover => { keep(cover); made++; return cover; };
   for await (const bytes of records) {
+    if (options.stop?.() === true) { stopped = true; break; }
+    read++;
     const record = decodeRecord(bytes);
     if (!provedKind(record.kind)) continue;
     let cover: Cover | undefined;
@@ -158,7 +166,7 @@ export async function coverTrail(prover: SpanProver, records: Iterable<Uint8Arra
     }
     n++;
   }
-  return { proved: n, made };
+  return { proved: n, made, read, stopped, walk: { proved: n, pending: [...pending] } };
 }
 
 /** A test set's prover (§1): a leaf over a proof `statements` accepts, and every node, made by the set's `cover`. */
@@ -214,6 +222,100 @@ const ESTABLISHED = new WeakMap<ProofCheck, Established>();
  * holds nothing of the establishment's buffers. */
 const relay = (verifier: ProofCheck): ProofCheck => ({ verify: (kind, inputs, proof) => verifier.verify(kind, inputs, proof) });
 
+/** What a span's asks found for each of its records: covered; none, asked alone; none in a wider span, never asked alone
+ * (past the first uncovered record); and, for an establishment, a record to ask about once more, unsplit. */
+const UNKNOWN = 0, COVERED = 1, NONE = 2, UNSPLIT = 3, ONCE = 4;
+/** A segment's partition (§3.4): what asks over the proved records of the served trail of the latest checkpoint the walk
+ * holds of it found, from proved-record number `start`, each record by its leaf digest, and that trail's chain value at
+ * its length (`top`). A record of any trail of the segment at the same number with the same digest takes what was found
+ * for it. */
+interface Partition { readonly start: number; readonly digests: Uint8Array; readonly found: Uint8Array; readonly top: Uint8Array }
+
+/**
+ * §3.2, §3.4 step 2: asks over the `m` proved records numbered from `start` (their leaf digests `digests` and kinds
+ * `kinds`), each aligned span of the canonical partition asked for a cover and split where none verifies. A record
+ * `known` resolves (what an earlier partition found for it) is not asked about again. A top span's digests are made
+ * once, bottom up. Provers walk a trail in order (`coverTrail`), so what sources cover is mostly a prefix of its proved
+ * records: once one record has no cover from any source, the spans after it are asked once each and never split, since
+ * splitting them asked about two covers a record of the tail (§3.5) and a missing cover changes no judgment (§2 rule 3).
+ * A span all of whose open records `known` names `ONCE` is asked once and never split either. Returns what was found for
+ * each record: `COVERED`, `NONE` or `UNSPLIT`.
+ */
+async function partition(set: CheckSet, supply: CheckSupply, digests: Uint8Array, kinds: Uint8Array, start: number, m: number,
+  known: (i: number) => number = () => UNKNOWN): Promise<Uint8Array> {
+  const found = new Uint8Array(m), once = new Uint8Array(m);
+  for (let i = 0; i < m; i++) { const state = known(i); if (state === ONCE) once[i] = 1; else found[i] = state; }
+  const digestAt = (values: Uint8Array, i: number): bigint => bytesToField(values.subarray(32 * i, 32 * i + 32));
+  let tail = false;
+  const coverSpan = async (s: number, first: number): Promise<void> => {
+    const levels = [digests.subarray(32 * (first - start), 32 * (first - start + 2 ** s))];
+    for (let l = 1; l <= s; l++) {
+      const below = levels[l - 1]!, out = new Uint8Array(below.length / 2);
+      for (let j = 0; j < out.length / 32; j++) out.set(fieldToBytes(nodeDigest(digestAt(below, 2 * j), digestAt(below, 2 * j + 1))), 32 * j);
+      levels.push(out);
+    }
+    const ask = async (l: number, j: number): Promise<void> => {
+      const index = first - start + j * 2 ** l, end = index + 2 ** l;
+      if (found.subarray(index, end).every(state => state !== UNKNOWN)) return;
+      const partly = found.subarray(index, end).some(state => state !== UNKNOWN);
+      if (!partly) {
+        const digest = digestAt(levels[l]!, j), kind = l === 0 ? kinds[index] : undefined;
+        // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
+        let accepted: Uint8Array | undefined;
+        const accept = async (proof: Uint8Array): Promise<boolean> => {
+          const own = proof instanceof Uint8Array ? copyBytes(proof) : undefined;
+          if (own === undefined || await set.verify(kind, digest, own) !== true) return false;
+          accepted = own;
+          return true;
+        };
+        const answer: unknown = await supply.cover(digest, accept);
+        if (answer instanceof Uint8Array && ((accepted !== undefined && same(answer, accepted)) || await set.verify(kind, digest, copyBytes(answer)) === true)) {
+          found.fill(COVERED, index, end);
+          return;
+        }
+        if (l === 0) { found[index] = NONE; tail = true; return; }
+        if (tail || once.subarray(index, end).every(flag => flag === 1)) { found.fill(UNSPLIT, index, end); return; }
+      }
+      await ask(l - 1, 2 * j);
+      await ask(l - 1, 2 * j + 1);
+    };
+    await ask(s, 0);
+  };
+  for (let i = start; i < start + m;) {
+    let s = 0;
+    while (i % 2 ** (s + 1) === 0 && i + 2 ** (s + 1) <= start + m) s++;
+    await coverSpan(s, i);
+    i += 2 ** s;
+  }
+  return found;
+}
+
+/** Pass 1 of an establishment (§3.4 steps 1–2) over a trail's records after position `from`: each proved record's leaf
+ * digest, kind, `proofHash` and position, and whether its `proofHash` is the adopted publication's at its position
+ * (`block`), in flat arrays sized by the records; and the kind-7 proofs to fetch for their length. */
+function provedRecords(trail: ServedTrailOf, from: bigint, block: readonly Adopted[]) {
+  // At most one proved record a record after `from`, each in flat arrays: about 75 bytes, plus 32 while its spans are asked.
+  const records = trail.length - from;
+  if (records < 0n || records > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("a trail past the safe integer range");
+  const capacity = Number(records), digests = new Uint8Array(32 * capacity), hashes = new Uint8Array(32 * capacity);
+  const kinds = new Uint8Array(capacity), adopted = new Uint8Array(capacity), positions = new BigUint64Array(capacity);
+  const requests: { readonly proofHash: Uint8Array; readonly at: RecordAt }[] = [];
+  let position = from, m = 0;
+  for (const bytes of trail.records(from)) {
+    const at = block[Number(position)];
+    position++;
+    const record = decodeProofFree(bytes);
+    // A record whose proofHash is the adopted publication's has the length of the proof the reader holds (§3.5).
+    const held = at !== undefined && same(record.proofHash, decodeProofFree(at.bytes).proofHash);
+    if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position } }); continue; }
+    if (!provedKind(record.kind)) continue;
+    if (m === capacity) throw new Error("a served trail holding more records than its length");
+    digests.set(fieldToBytes(leafDigest(record)), 32 * m); hashes.set(record.proofHash, 32 * m);
+    kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; m++;
+  }
+  return { capacity, m, digests, hashes, kinds, adopted, positions, requests };
+}
+
 /** A pool-v3 reader's construction over proof-free trails, under check set `set` with proofs and check proofs from
  * `supply`. A reader keeping an evidence store across reads passes the same construction (package-reader.ts); it holds
  * only which trails it established, not proof bytes. */
@@ -265,73 +367,48 @@ export function succinctPoolV3(options: { readonly set: CheckSet; readonly suppl
     requireReplay(await native(verifier, record, established.held.get(i), { segment: established.segment, position: established.positions[i]! }), "PROOF");
   };
 
+  /** The segment's partition (§3.4) from proved record `start` on: the one kept where it starts at or before it (a
+   * record past its end, as on a longer fork, is partitioned with its own trail), else one made over the latest served
+   * trail the walk names for the segment (`trail.latest`), from `start` on. Undefined where there is none longer than
+   * this trail, which is then partitioned on its own. */
+  const partitionOf = async (trail: ServedTrailOf, from: bigint, start: number, end: number, block: readonly Adopted[]): Promise<Partition | undefined> => {
+    const latest = trail.latest;
+    if (start === end || latest === undefined || !same(latest.segment, trail.segment)) return undefined;
+    const kept = partitions.get(latest);
+    if (kept !== undefined && kept.start <= start) return kept;
+    if (latest.length <= trail.length) return undefined;
+    const top = latest.evidence(latest.length);
+    if (top === undefined) return undefined;
+    const wide = provedRecords(latest, from, block);
+    const found = await partition(set, supply, wide.digests, wide.kinds, start, wide.m);
+    const made = { start, digests: wide.digests.slice(0, 32 * wide.m), found, top: copyBytes(top) };
+    partitions.set(latest, made);
+    return made;
+  };
+  /** Each walk's partitions, by the latest trail object it names a segment's checkpoints (scope-reader.ts): kept for that
+   * walk only, so a later read, or a retry, asks again what an earlier one found none for. */
+  const partitions = new WeakMap<ServedTrailOf, Partition>();
+
   const trailChecks: TrailChecks = {
     async establish(trail, from, proved, block, verifier) {
       // Pass 1 (§3.4 steps 1–2): each proved record's digest, kind and proofHash; kind-7 proofs to fetch for their length.
-      // At most one proved record a record after `from`, each in flat arrays: about 75 bytes, plus 32 while its spans are asked.
-      const records = trail.length - from;
-      if (records < 0n || records > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("a trail past the safe integer range");
-      const capacity = Number(records), digests = new Uint8Array(32 * capacity), hashes = new Uint8Array(32 * capacity);
-      const kinds = new Uint8Array(capacity), adopted = new Uint8Array(capacity), positions = new BigUint64Array(capacity);
-      const requests: { readonly proofHash: Uint8Array; readonly at: RecordAt }[] = [];
-      let position = from, m = 0;
-      for (const bytes of trail.records(from)) {
-        const at = block[Number(position)];
-        position++;
-        const record = decodeProofFree(bytes);
-        // A record whose proofHash is the adopted publication's has the length of the proof the reader holds (§3.5).
-        const held = at !== undefined && same(record.proofHash, decodeProofFree(at.bytes).proofHash);
-        if (record.kind === 7) { if (!held) requests.push({ proofHash: record.proofHash, at: { segment: trail.segment, position } }); continue; }
-        if (!provedKind(record.kind)) continue;
-        if (m === capacity) throw new Error("a served trail holding more records than its length");
-        digests.set(fieldToBytes(leafDigest(record)), 32 * m); hashes.set(record.proofHash, 32 * m);
-        kinds[m] = record.kind; adopted[m] = held ? 1 : 0; positions[m] = position; m++;
-      }
+      const { capacity, m, digests, hashes, kinds, adopted, positions, requests } = provedRecords(trail, from, block);
       const start = Number(proved);
       if (!Number.isSafeInteger(start + m)) throw new RangeError("a trail past the safe integer range");
-      const covered = new Uint8Array(m);
-      const digestAt = (values: Uint8Array, i: number): bigint => bytesToField(values.subarray(32 * i, 32 * i + 32));
-      // §3.2, §3.4 step 2: aligned spans over proved-record numbers, each asked for a cover, split where none verifies. A
-      // top span's digests are made once, bottom up: `levels[l]` holds those of its spans of height l, in order. Provers
-      // walk a trail in order (`coverTrail`), so what sources cover is mostly a prefix of its proved records: once one
-      // record has no cover from any source, the spans after it are asked once each and never split, since splitting
-      // them asked about two covers a record of the tail (§3.5) and a missing cover changes no judgment (§2 rule 3).
-      let tail = false;
-      const coverSpan = async (s: number, first: number): Promise<void> => {
-        const levels = [digests.subarray(32 * (first - start), 32 * (first - start + 2 ** s))];
-        for (let l = 1; l <= s; l++) {
-          const below = levels[l - 1]!, out = new Uint8Array(below.length / 2);
-          for (let j = 0; j < out.length / 32; j++) out.set(fieldToBytes(nodeDigest(digestAt(below, 2 * j), digestAt(below, 2 * j + 1))), 32 * j);
-          levels.push(out);
-        }
-        const ask = async (l: number, j: number): Promise<void> => {
-          const digest = digestAt(levels[l]!, j), index = first - start + j * 2 ** l, kind = l === 0 ? kinds[index] : undefined;
-          // The supply may try its sources' covers by the reader's own check (§2 rule 2); bytes that passed it are not checked again.
-          let accepted: Uint8Array | undefined;
-          const accept = async (proof: Uint8Array): Promise<boolean> => {
-            const own = proof instanceof Uint8Array ? copyBytes(proof) : undefined;
-            if (own === undefined || await set.verify(kind, digest, own) !== true) return false;
-            accepted = own;
-            return true;
-          };
-          const answer: unknown = await supply.cover(digest, accept);
-          if (answer instanceof Uint8Array && ((accepted !== undefined && same(answer, accepted)) || await set.verify(kind, digest, copyBytes(answer)) === true)) {
-            covered.fill(1, index, index + 2 ** l);
-            return;
-          }
-          if (l === 0) { tail = true; return; }
-          if (tail) return;
-          await ask(l - 1, 2 * j);
-          await ask(l - 1, 2 * j + 1);
-        };
-        await ask(s, 0);
+      // §3.4: a record the segment's partition covered at its number, with its digest, is covered, and one it asked about
+      // alone and found none for has none. One it found none for only in a wider span is asked again under this trail's
+      // own spans, once each and unsplit: past a gap in the covers that partition's spans can be wider than the covers
+      // this trail's spans meet. The others are partitioned with this trail. The partitioned trail itself, from the same
+      // record, would meet the same spans again.
+      const wide = await partitionOf(trail, from, start, start + m, block);
+      const itself = wide !== undefined && start === wide.start && same(trail.evidence(trail.length) ?? new Uint8Array(), wide.top);
+      const known = wide === undefined ? undefined : (i: number): number => {
+        const w = start + i - wide.start;
+        if (w < 0 || w >= wide.found.length || !same(wide.digests.subarray(32 * w, 32 * w + 32), digests.subarray(32 * i, 32 * i + 32))) return UNKNOWN;
+        return wide.found[w] === UNSPLIT && !itself ? ONCE : wide.found[w]!;
       };
-      for (let i = start; i < start + m;) {
-        let s = 0;
-        while (i % 2 ** (s + 1) === 0 && i + 2 ** (s + 1) <= start + m) s++;
-        await coverSpan(s, i);
-        i += 2 ** s;
-      }
+      const found = await partition(set, supply, digests, kinds, start, m, known);
+      const covered = found.map(state => state === COVERED ? 1 : 0);
       // Pass 2 (§3.4 step 3): every other proof's bytes, fetched for their length; verified only when replay asks (step 4).
       const held = new Map<number, Uint8Array>();
       let room = HELD_BYTES;

@@ -88,12 +88,12 @@ describe("real-proof groups", () => {
     "check.mjs", "store-check.mjs --ergo", "history-store-check.mjs",
     "recovery-store-check.mjs", "recovery-store-check.mjs --ergo", "succession-store-check.mjs", "succession-store-check.mjs --ergo",
     "scope-store-check.mjs", "scope-store-check.mjs --ergo", "redemption-store-check.mjs", "redemption-store-check.mjs --ergo",
-    "command-drill.mjs", "local-check.mjs", "check-set-check.mjs",
+    "command-drill.mjs", "succinct-drill.mjs", "local-check.mjs", "check-set-check.mjs",
   ].map(label => `scripts/pool/v3/${label}`);
 
   it("runs every script of the serial check once, each in one group", () => {
     expect(runner.SCRIPTS.map(entry => [entry.script, ...entry.args].join(" "))).toEqual(serial);
-    expect(runner.GROUPS).toEqual(["history", "stores", "redemption", "drill", "replay", "check-set"]);
+    expect(runner.GROUPS).toEqual(["history", "stores", "redemption", "drill", "succinct", "replay", "check-set"]);
     for (const group of runner.GROUPS) expect(runner.SCRIPTS.some(entry => entry.group === group)).toBe(true);
   });
 

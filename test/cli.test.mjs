@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
@@ -24,9 +24,10 @@ import { decodeRecord, encodePublication as encodePoolPublication, encodeRecord 
 import { tagOf } from '../src/pool/v3/recovery.js';
 import { limbsOf } from '../src/pool/field.js';
 import { EMPTY_NOTE_ROOT } from '../src/pool/note-tree.js';
-import { outside } from '../src/cli/wallet.js';
+import { outside, wallet } from '../src/cli/wallet.js';
 import { parsePublicationFile, readPublication } from '../src/cli/relay.js';
-import { keptReplay, openEvidence } from '../src/cli/reader.js';
+import { initRead, keptReplay, openEvidence, reader } from '../src/cli/reader.js';
+import { succinctPoolV3, testCheckSet } from '../src/pool/v3/succinct.js';
 import { keptFileDigest, ReplayStore } from '../src/pool/v3/replay-store.js';
 import { keepAliveDue, servePollsOn } from '../src/cli/operator.js';
 import { closeListener, isListenerUrl, listenLoopback, SERVE_FLAGS, serveFlags } from '../src/cli/serve.js';
@@ -414,5 +415,54 @@ describe('moe constructions (slice 14 M14g4)', () => {
       writeFileSync(join(bad, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'], construction: 'moe/lit/v2' }));
       expect(code(() => openDirectory(bad, 'reader'))).toBe('INVALID');
     } finally { remove(bad); }
+  });
+});
+
+describe('moe succinct reads (slice 38)', () => {
+  const remove = path => { try { rmSync(path, { recursive: true, force: true }); } catch (error) { if (process.platform !== 'win32') throw error; } };
+  const usage = run => { try { run(); } catch (error) { expect(error).toBeInstanceOf(UsageError); return error.message; } return undefined; };
+  const code = run => { try { run(); } catch (error) { expect(error).toBeInstanceOf(CommandError); return error.code; } return undefined; };
+  const refusal = async run => { try { await run(); } catch (error) { return error instanceof UsageError ? 'USAGE' : error.code; } return undefined; };
+  it('serves no replica from a succinct reader directory, takes --parameters only with --prove, and keeps a backer complete', async () => {
+    // A directory opened here stays locked by this process until it exits: each refusal opens a directory of its own.
+    for (const [args, refused] of [[['--parameters', tmpdir()], 'USAGE'], [[], 'SUCCINCT'], [['--prove'], 'SUCCINCT']]) {
+      const dir = mkdtempSync(join(tmpdir(), 'moe-succinct-serve-'));
+      try {
+        writeFileSync(join(dir, 'config.json'), JSON.stringify({ role: 'reader', nodes: ['http://127.0.0.1:1'], read: 'succinct' }));
+        expect(await refusal(() => reader(['serve', '--dir', dir, ...args]))).toBe(refused);
+      } finally { remove(dir); }
+    }
+    // Refused before anything is created: the directory is never made.
+    const backer = join(tmpdir(), `moe-succinct-backer-${process.pid}-${Date.now()}`);
+    expect(await refusal(() => wallet(['init', '--dir', backer, '--backer', '--read', 'succinct', '--node', 'http://127.0.0.1:1']))).toBe('USAGE');
+    expect(await refusal(() => wallet(['restore-seed', '--dir', backer, '--venue', join(tmpdir(), 'none.json'), '--node', 'http://127.0.0.1:1',
+      '--read', 'succinct', '--backer-key', join(tmpdir(), 'none.key')]))).toBe('USAGE');
+    expect(existsSync(backer)).toBe(false);
+  });
+  it('takes --read complete or succinct at init, succinct only for pool-v3', () => {
+    const args = read => parseArguments(read === undefined ? [] : ['--read', read], { read: 'value' }, 0);
+    expect(initRead(args(undefined), 'moe/pool/v3')).toBe(false);
+    expect(initRead(args('complete'), 'moe/lit/v1')).toBe(false);
+    expect(initRead(args('succinct'), 'moe/pool/v3')).toBe(true);
+    expect(usage(() => initRead(args('succinct'), 'moe/lit/v1'))).toMatch(/reads completely/);
+    expect(usage(() => initRead(args('fast'), 'moe/pool/v3'))).toMatch(/complete or succinct/);
+  });
+  it('keeps the read in config.json for a pool-v3 wallet or reader, refusing it elsewhere, and keeps a succinct evidence file apart', () => {
+    for (const [config, accepted] of [[{ role: 'reader', read: 'succinct' }, true], [{ role: 'wallet', read: 'succinct' }, true],
+      [{ role: 'operator', read: 'succinct' }, false], [{ role: 'reader', read: 'succinct', construction: 'moe/lit/v1' }, false],
+      [{ role: 'reader', read: 'complete' }, false]]) {
+      const dir = mkdtempSync(join(tmpdir(), 'moe-succinct-'));
+      try {
+        writeFileSync(join(dir, 'config.json'), JSON.stringify({ nodes: ['http://127.0.0.1:1'], ...config }));
+        if (!accepted) { expect(code(() => openDirectory(dir, config.role))).toBe('INVALID'); continue; }
+        const directory = openDirectory(dir, config.role);
+        expect(directory.succinct).toBe(true);
+        if (config.role !== 'reader') continue;
+        const construction = succinctPoolV3({ set: testCheckSet('cli'), supply: { cover: () => undefined, proof: () => undefined } });
+        openEvidence(directory, false, construction).close();
+        expect(readdirSync(dir)).toContain('succinct-evidence.db');
+        expect(readdirSync(dir)).not.toContain('evidence.db');
+      } finally { remove(dir); }
+    }
   });
 });

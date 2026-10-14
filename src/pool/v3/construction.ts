@@ -120,8 +120,9 @@ export interface TrailChecks {
    * the trail's being served (a non-extension, an opening's records, a header-only refusal); once per trail. */
   served(trail: ServedTrailOf, block: readonly Adopted[], verifier: ProofCheck): Promise<void>;
 }
-/** What establishment reads of a served trail. */
-export type ServedTrailOf = Pick<StoredTrail, "segment" | "length" | "evidence" | "records">;
+/** What establishment reads of a served trail; and where the walk names one, the served trail of the latest checkpoint
+ * it holds of the segment, whose snapshot the operator signed, which a succinct read partitions once (succinct-read §3.4). */
+export type ServedTrailOf = Pick<StoredTrail, "segment" | "length" | "evidence" | "records"> & { readonly latest?: ServedTrailOf | undefined };
 
 /** A note's public opening where openings are public (lit-v1 §2). */
 export interface KeyedOpening {

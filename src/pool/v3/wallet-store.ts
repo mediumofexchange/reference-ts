@@ -21,6 +21,10 @@
 //   nullifier and opening for each of this seed's notes (no spend secret),
 //   named by the verifier's circuits. It shows which outputs are this seed's
 //   and what they hold, so it needs the database's protection.
+// A pool-v3 wallet may read succinctly (succinct-read.md, `succinct`): its public evidence is then proof-free, kept in
+// `<path>.succinct-evidence`, and read through `succinctPoolV3` under the caller's check set and supply, with kept state
+// named by the set identity (§2 rule 8). Its own records, which it proves, saves and submits, stay complete, and nothing
+// it reads succinctly is served to another party (§1).
 import { randomBytes, randomInt } from "node:crypto";
 import { closeSync, existsSync, linkSync, openSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -42,6 +46,7 @@ import { EvidenceStore } from "./evidence-store.js";
 import type { SegmentHeader } from "./headers.js";
 import { inputOf, ownedNotes, seedWitness, type OwnedNote } from "./holdings.js";
 import { readFrontier, type ReadOptions } from "./package-reader.js";
+import { succinctPoolV3, type CheckSet, type CheckSupply } from "./succinct.js";
 import { POOL_V3, type Construction, type KeyedAcceptance, type KeyedInput, type KeyedNote, type KeyedOutput, type KeyedRequest, type KeyedWalletFrames,
   type Keyring, type OperatorReceipt } from "./construction.js";
 import type { SignedTerms } from "./reader.js";
@@ -165,24 +170,31 @@ function persistentPath(path: string): void {
     "STORAGE", "a persistent filesystem path is required");
 }
 /** A wallet's options: the reader's, its construction pool-v3's by default or lit-v1's (slice 14 M14g), which takes no
- * verifier. */
-export type WalletOptions = ReadOptions;
+ * verifier; and for pool-v3, `succinct` to read its public evidence succinctly (succinct-read.md) under a check set
+ * from a supply of check proofs and proofs. The verifier still checks what no cover reaches, and the wallet's own proofs. */
+export type WalletOptions = ReadOptions & { readonly succinct?: { readonly set: CheckSet; readonly supply: CheckSupply } | undefined };
 /** Each caller field read once: the wallet's construction and layout, domain, guarded venue identity and the owned
- * reader options every later step uses. A wallet holds pool-v3 notes, or the keyed notes of a construction that supplies wallet frames (lit-v1). */
+ * reader options every later step uses, whose construction (`reading`) reads public evidence: the wallet's own, or a
+ * succinct read's over pool-v3. A wallet holds pool-v3 notes, or the keyed notes of a construction that supplies wallet frames (lit-v1). */
 function ownOptions(options: WalletOptions) {
-  const { construction: chosen, verifier, venue, reference } = options;
+  const { construction: chosen, verifier, venue, reference, succinct } = options;
   const construction = (chosen ?? POOL_V3) as Construction;
   if (construction !== POOL_V3 && construction.wallet === undefined) throw new TypeError("a wallet holds pool-v3 notes or a construction's keyed notes");
+  if (succinct !== undefined && construction !== POOL_V3) throw new TypeError("a succinct read is pool-v3's (succinct-read §3)");
   const ownReference = structuredClone(reference), venueId = requireReferenceVenue(ownReference, venue);
   if (construction.wallet !== undefined) {
-    return { construction, layout: KEYED_LAYOUT, domain: construction.reader.domain(), venueId,
-      reader: { construction, venue, reference: ownReference } as WalletOptions };
+    const reader = { construction, venue, reference: ownReference } as WalletOptions;
+    return { construction, reading: construction, layout: KEYED_LAYOUT, domain: construction.reader.domain(), venueId, reader, read: reader as ReadOptions };
   }
   const verify = verifier!.verify.bind(verifier);
   const identities = requireConfigurationVerifier(verifier!.identities), parallel = declaredParallel(verifier!);
+  // One object for the evidence file and every read, which must be the same (package-reader.ts).
+  const reading = succinct === undefined ? construction : succinctPoolV3({ set: succinct.set, supply: succinct.supply }) as Construction;
+  // `reader` is a wallet's options again (a restoration opens its staging file with them); `read` is what reads take.
   const reader: WalletOptions = { verifier: { verify, identities, ...(parallel === undefined ? {} : { parallel }) },
-    venue, reference: ownReference };
-  return { construction, layout: POOL_LAYOUT, domain: adoptedDomain(), venueId, reader };
+    venue, reference: ownReference, ...(succinct === undefined ? {} : { succinct: { set: succinct.set, supply: succinct.supply } }) };
+  const read: ReadOptions = { verifier: reader.verifier, venue, reference: ownReference, ...(succinct === undefined ? {} : { construction: reading }) };
+  return { construction, reading, layout: POOL_LAYOUT, domain: adoptedDomain(), venueId, reader, read };
 }
 /** `uncredited`: the holder confirms, from records outside the wallet, that a request a restoration marked was not
  * credited by the wallet's lost instance (slice 13 M13e). */
@@ -419,8 +431,12 @@ function demandSelection<N extends Valued>(notes: readonly N[], presented: reado
 
 export class V3Wallet {
   private readonly db: DatabaseSync;
-  private readonly options: WalletOptions;
+  private readonly options: ReadOptions;
+  /** The construction of the wallet's own records, which it proves, saves and submits. */
   private readonly construction: Construction;
+  /** The construction its public evidence is read and kept under: `construction`, or a succinct read's over pool-v3,
+   * whose evidence a transport (`supply`) must bring in its form. */
+  readonly reading: Construction;
   private readonly layout: Layout;
   /** A lit wallet's owner keys (lit-v1 §8), derived once per handle as its window grows. */
   private readonly keys: Keyring | undefined;
@@ -454,8 +470,8 @@ export class V3Wallet {
   constructor(path: string, options: WalletOptions) {
     const restore = installing, existing = opening; installing = undefined; opening = false;
     const own = ownOptions(options);
-    this.venueId = own.venueId; this.domain = own.domain; this.options = own.reader; this.path = path;
-    this.construction = own.construction; this.layout = own.layout; this.keyed = own.construction.wallet;
+    this.venueId = own.venueId; this.domain = own.domain; this.options = own.read; this.path = path;
+    this.construction = own.construction; this.reading = own.reading; this.layout = own.layout; this.keyed = own.construction.wallet;
     requireThat(restore === undefined || (same(restore.domain, this.domain) && same(restore.venue, this.venueId)),
       "CONFLICT", "wallet configuration or venue changed");
     persistentPath(path);
@@ -712,13 +728,15 @@ export class V3Wallet {
     this.turn = result.then(() => {}, () => {});
     return result;
   }
-  /** The wallet's own evidence file (§14): what suppliers and packages brought, authenticated when a read uses it. */
+  /** The wallet's own evidence file (§14): what suppliers and packages brought, authenticated when a read uses it. A
+   * succinct read keeps its proof-free evidence in a file of its own, so neither form's file is read by the other. */
   private evidence(): EvidenceStore {
     // A file of another layout, or one that is no database, is never replaced here: it may be the holder's
     // only copy of the evidence. The holder removes it to sync again from nothing.
-    try { return this.retained ??= new EvidenceStore(`${this.path}.evidence`, { construction: this.construction }); } catch (error) {
-      if (error instanceof FileInUse) throw new V3WalletError("STORAGE", "another handle holds this wallet's evidence file");
-      throw new V3WalletError("STORAGE", "the wallet's evidence file cannot be read; remove it to sync again");
+    const file = `${this.path}.${this.reading === this.construction ? "evidence" : "succinct-evidence"}`;
+    try { return this.retained ??= new EvidenceStore(file, { construction: this.reading }); } catch (error) {
+      if (error instanceof FileInUse) throw new V3WalletError("STORAGE", `another handle holds this wallet's evidence file ${file}`);
+      throw new V3WalletError("STORAGE", `the wallet's evidence file ${file} cannot be read; remove it to sync again`);
     }
   }
   /** The kept state of the wallet's reads (§14 kept classes), named by the verifier's circuits. */
@@ -807,7 +825,7 @@ export class V3Wallet {
           // Each publication past its own backing's adoption index: each scoped backing has its own.
           const adoption = canonical.state.adoptionIndices;
           for (const publication of result.force) {
-            if (publication.index > (adoption.get(publication.backing) ?? 0n)) applyForceEffects(force, publication.record, this.construction);
+            if (publication.index > (adoption.get(publication.backing) ?? 0n)) applyForceEffects(force, publication.record, this.reading);
           }
           const spent = force;
           // A lit read whose keys reach past a window reads again from nothing under the larger one.
@@ -1044,7 +1062,7 @@ export class V3Wallet {
   private spentByOwn(view: Frontier, nf: bigint, tag: bigint): boolean {
     const state = view.canonical!.state;
     if (state.hasNullifier(nf)) return state.store.tagSpends(state.ns, state.position, tag).some(event => this.savedStatement(event.identity));
-    const forced = new Set(view.result.force.map(publication => hex(this.construction.journal.identity(publication.record))));
+    const forced = new Set(view.result.force.map(publication => hex(this.reading.journal.identity(publication.record))));
     return this.db.prepare("SELECT a.statement FROM saved_inputs i JOIN saved_records a ON a.alias=i.alias WHERE i.nf=? AND a.kind='6'")
       .all(nf.toString()).some(row => forced.has(row.statement as string));
   }
@@ -2183,7 +2201,7 @@ export class V3Wallet {
     this.mutable(true);
     const { obligor, own } = this.termsOf(signed), id = identifier(demand);
     return this.read(packageBytes, own, view => {
-      const reading = readPresentation(view.result, this.construction, view.backing, obligor, id);
+      const reading = readPresentation(view.result, this.reading, view.backing, obligor, id);
       requireThat(reading !== undefined, "ABSENT", "the demand is not in this backing's record");
       return reading;
     }, true, true);

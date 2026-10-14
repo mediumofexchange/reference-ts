@@ -1,7 +1,7 @@
 {
   "specification": {
     "pool": "e7f7f24",
-    "succinct": "succinct-read cb84f04"
+    "succinct": "succinct-read 94fc751"
   },
   "sources": {
     "dist/bytes.js": "1415f876403601605321063b5a4aa66abde3ae0219b0f7cc54953779a18bd729",
@@ -12,7 +12,7 @@
     "dist/pool/field.js": "73888d191756f21adf62822c2355034756fe027c1cacdd54a1b5aa079149989c",
     "dist/pool/note-tree.js": "48fa3cfdcc8183f5aaa86889c9a066a775afc6ff79148d294933d26a1fbf40d1",
     "dist/pool/notes.js": "eb63d7562dea56fa98ab5313b8049524d51f8e733b26a09e25e666a967bbeb31",
-    "dist/pool/parameter-files.js": "468c82c3b0352e2153730c546ebb98ae72dea62630826f758fbfc4c975833f0b",
+    "dist/pool/parameter-files.js": "16da59074b8d415f7b4f1d1e4e3b859ddc0d3c7b3e44ba6c47c2651d2af7ca77",
     "dist/pool/parameters.js": "2dd3b075341679c725998d60dcc50456fdd1fbbae8f7c1cd133f08688bd48c03",
     "dist/pool/poseidon2.js": "31f449ab8890ccf23b63fc327a0d4a3e79e6ef04fb3663d1955c3dc999619180",
     "dist/pool/proof-verifier.js": "541124c57a021cda8b2abe7abbda590c8d83193047f349c3263c17261d8a5026",
@@ -31,7 +31,7 @@
     "dist/pool/v3/recovery.js": "9edbfd461d586425dcf61ab12aeb6d17a0727e3b427d3439c4768ed88cc267d4",
     "dist/pool/v3/refusals.js": "f2feb5755d65d80bc6d74827484e029d6b4529c3c7334e56d13160a5f8460e6e",
     "dist/pool/v3/replay-store.js": "07c4b8c8e51edda21979774a0b4b5ddb11e734e27ba4b1c518ab9420e2315f63",
-    "dist/pool/v3/succinct.js": "1c329147c293fdc848eaff4df11fb2a3964e400c9409d5fc3dfae8fdedea9b62",
+    "dist/pool/v3/succinct.js": "be9648ba39a058762cf521c0aad9b4b08bb31f3b1badd20f708f2b43f363adbb",
     "dist/pool/v3/terms.js": "bbc7b95c0e6b01226fbb0d79cc5d0406da5a3ce425ed2124346c4a34d82647e9",
     "dist/pool/v3/trail.js": "bfe94117114933545927e7e681b8080450730faeb2fd1afe0cd82da8d7f92499",
     "dist/pool/v3/verifier.js": "d28c92989b4748133663437fda7bc537b7f6793d7382471b63abf3fa636ef34c",
@@ -56,7 +56,7 @@
     "src/pool/field.ts": "bea76598133a80199b39fc8b93943b35dcd92148a8d89837a7fca13f276cf8a0",
     "src/pool/note-tree.ts": "05087d8637faa1db300b8b98af7002eff3a6eb40b8e48900c7c90ee5a51a8fbb",
     "src/pool/notes.ts": "df1ced5d5384fa5de5b8071071ecc1f057ddaca4cc38ad252984b326a7e2e3a7",
-    "src/pool/parameter-files.ts": "3a4546c4bed0cd2437ea40ee5d33e911bbd97af8543a9b78a6534d170143d9c7",
+    "src/pool/parameter-files.ts": "2ef94a7c70085a86929b46e1e0e6b8ae58006ced7feb9379bede39c2783e3d24",
     "src/pool/parameters.ts": "a2046431b38d1f369e968a5e1ab31d6116430c178857f2adf78d0f915f76b807",
     "src/pool/poseidon2.ts": "4f85ec230619481c36f6f1f1b94f7f6c3fde9e40af4e7984b36c8707a5500973",
     "src/pool/proof-verifier.ts": "1f7ad4dd109a8c819033b18952239bb5cf1c4758109624ee0942728e5cd578e3",
@@ -68,7 +68,7 @@
     "src/pool/v3/check-set.ts": "426b763ba115e499596507e95c1d450dbdb21d7c81a692defc4d17681c37821f",
     "src/pool/v3/commitments.ts": "31c64c325efbe7605236d8a2132717ffcbe667b77b8fb1f7d74b18a2d75ab148",
     "src/pool/v3/configuration.ts": "e43d0d86e9ddf1ccfba96cab0904d00164c30b48196144d43753fb5feb11f0dc",
-    "src/pool/v3/construction.ts": "9265bf3d410e4e1088d60c54ae11c799d71e72ecf9927d17fda07b9bc17e8bbb",
+    "src/pool/v3/construction.ts": "3db0e079c400dab5acc92a6b500e9bb205e33e36945f7fe76489b0dcdc6c98d6",
     "src/pool/v3/evidence-store.ts": "f71a44b72bae12b45060df508874212112532c8a2dd8b055675a2136fc191bd4",
     "src/pool/v3/fault-evidence.ts": "3bf052fb0fde8516d30ddc4879345d9e8447fef0a9633aa51e26f4774bb92f6b",
     "src/pool/v3/headers.ts": "cb7a0e825af793ea8f3b9bed05e084d113415db7775a13772ab57550058dfcaa",
@@ -79,8 +79,8 @@
     "src/pool/v3/recovery.ts": "533f740386adb0b78d579243cb7926df99dee4e209c2493a68d2684687ed37a0",
     "src/pool/v3/refusals.ts": "01ed34552b2aeaa065b61205b622e2a442db4f5cc2b08ad3475516079c745457",
     "src/pool/v3/replay-store.ts": "4ca8eec8084a0a1112c70bc0759b2a42655da35bb9e758fb141657e80c15147f",
-    "src/pool/v3/state.ts": "9590d82bc1d8afba9c97e535f9b75208cf957e630bcc9138480d678809cf8345",
-    "src/pool/v3/succinct.ts": "e085245e4a84d1d53b331253dc6a1379398eff61132e50ce9e62208fe9d146e3",
+    "src/pool/v3/state.ts": "64620654dc72b76f5c110b2411b7697dd1f8efd4839d3189f78aff91e4733f3b",
+    "src/pool/v3/succinct.ts": "df58d1ee8d699658131e139c6eab89aba2093e5cb827b2637b6d1e3ece347dec",
     "src/pool/v3/terms.ts": "918f241b3c8636629eafe6d8360d341481dc8a21e147dd73ee6f81c9683c02df",
     "src/pool/v3/trail.ts": "7cf64e03a6d0ecc2ab50580cd789b8fd7e4b4fc610de3d1a76746b5111003a9e",
     "src/pool/v3/verifier.ts": "f7f5eca1e043e888c8b0096a71b102bf3252a8fd66619a757d328463b2624e6d",
@@ -100,40 +100,40 @@
   "circuits": {
     "leaf-issue": {
       "gates": 1652294,
-      "compileS": 2.3,
-      "keyS": 27.3,
+      "compileS": 2.1,
+      "keyS": 21.5,
       "bytecode": "52575d108afd5b16707c203607110c40ed359bb98007e68441918a0a8c776eed",
       "vk": "b544f0672ddb223c3a4b6ca68f16de1baff64f9fd8a7f3e2136968c98df6ea51",
       "keyHash": "0x1ed136d79ff6482f5110ad8d412a4bccf4f78ef3bb26baa8742021bf05dae1f9"
     },
     "leaf-spend": {
       "gates": 1652618,
-      "compileS": 1.3,
-      "keyS": 26.5,
+      "compileS": 1.1,
+      "keyS": 20.8,
       "bytecode": "fc140ef8cba2dc25947ef2c5d9404b5e6fcc5295bcc91395f269f6e592134ca5",
       "vk": "d09081ce893e463d017c3bcffb7e7288917f6b07c8821a25dc5c292dc1c01fd5",
       "keyHash": "0x17ec3c97d60e19d6f767edbb8dd32cd1cc1e9d0efbb49c85fb0e7618be4e07ad"
     },
     "leaf-burn": {
       "gates": 1652618,
-      "compileS": 1.2,
-      "keyS": 26.7,
+      "compileS": 1,
+      "keyS": 20.8,
       "bytecode": "6a7f0476812e25d065b1cb9820267ee8dae81d2d49b0df9d909653f69b05cd80",
       "vk": "eb34d7e31535326e40c9e95354a30b40076cf94c2db5cb844cddd2f9940f2cf7",
       "keyHash": "0x15e5e6198192f2a6764a5fd5d92d49b3a6ebb390943ca36c13e01177a63adc28"
     },
     "leaf-demand": {
       "gates": 1652626,
-      "compileS": 1.2,
-      "keyS": 26.5,
+      "compileS": 1,
+      "keyS": 20.8,
       "bytecode": "d561a10d65ffd2bcb96ec9354a545a3c3953d040f316242545015c5177a91a5c",
       "vk": "6c7a019c8f8f3d47bef221979c73fc7d5328af2c77c503770222ee76af999547",
       "keyHash": "0x2eb8fb9f63aae39ed809c9141c1863e9f0c486b1ac9b2a99119ff3863301bd5e"
     },
     "leaf-settle": {
       "gates": 1652634,
-      "compileS": 1.2,
-      "keyS": 26.6,
+      "compileS": 1,
+      "keyS": 20.7,
       "bytecode": "ee593cfc033d3fe2bd853f41d7ce8c16027f38f38d4152e5ddd40e7bd856862e",
       "vk": "c92db81e26d2e2337e67b7c92029a85f615b8f1b12626bdf9a812ba80c746dd6",
       "keyHash": "0x18586fd043b8bcef2680760e07a783c8454e6d4546e5d58d8fd592f7015d4c01"
@@ -141,7 +141,7 @@
     "node": {
       "gates": 1469828,
       "compileS": 0.3,
-      "keyS": 20,
+      "keyS": 15.7,
       "bytecode": "3f0bb706ecd6c72dbe9a038333ed24055274f1bb4a8d41b09db016a5113bf2db",
       "vk": "9e9a1a3184d75789fe5e937b80fe8b65c538145defb24705552d1f8f4d727477",
       "keyHash": "0x2bdf9a3880b1d558bb229fabd02902bc646a7d755a2fa4594d58226e4f9d3282"
@@ -150,73 +150,73 @@
   "proofs": [
     {
       "label": "leaf-issue",
-      "seconds": 98.6,
-      "peakMiB": 3826
+      "seconds": 77.3,
+      "peakMiB": 3855
     },
     {
       "label": "leaf-spend",
-      "seconds": 97,
-      "peakMiB": 3862
+      "seconds": 76.2,
+      "peakMiB": 4011
     },
     {
       "label": "leaf-burn",
-      "seconds": 97,
-      "peakMiB": 3859
+      "seconds": 75.8,
+      "peakMiB": 3889
     },
     {
       "label": "leaf-demand",
-      "seconds": 97,
-      "peakMiB": 3846
+      "seconds": 76,
+      "peakMiB": 3895
     },
     {
       "label": "leaf-settle",
-      "seconds": 97,
-      "peakMiB": 3846
+      "seconds": 75.7,
+      "peakMiB": 3870
     },
     {
       "label": "node over two leaves",
-      "seconds": 80.8,
-      "peakMiB": 3423
+      "seconds": 63.3,
+      "peakMiB": 3422
     },
     {
       "label": "node over two leaves (2)",
-      "seconds": 80.7,
-      "peakMiB": 3071
+      "seconds": 63.1,
+      "peakMiB": 3097
     },
     {
       "label": "node over two nodes",
-      "seconds": 80.7,
-      "peakMiB": 3069
+      "seconds": 63.2,
+      "peakMiB": 3096
     },
     {
       "label": "leaf-spend under a forged node-key input",
-      "seconds": 96.9,
-      "peakMiB": 3157
+      "seconds": 75.8,
+      "peakMiB": 3195
     },
     {
       "label": "node under a forged node-key input",
-      "seconds": 80.6,
-      "peakMiB": 3177
+      "seconds": 63.1,
+      "peakMiB": 3205
     },
     {
       "label": "leaf-burn forced over a failing proof",
-      "seconds": 6.2,
-      "peakMiB": 4677
+      "seconds": 4.9,
+      "peakMiB": 4673
     },
     {
       "label": "node over a child whose key is not its admitted hash's",
-      "seconds": 82.2,
-      "peakMiB": 6007
+      "seconds": 64.5,
+      "peakMiB": 5972
     },
     {
       "label": "node over a child cover with byte 14655 flipped",
-      "seconds": 1.7,
-      "peakMiB": 4641
+      "seconds": 1.3,
+      "peakMiB": 4603
     },
     {
       "label": "node over a child cover with byte 5000 flipped",
-      "seconds": 82.3,
-      "peakMiB": 6001
+      "seconds": 64.4,
+      "peakMiB": 5958
     }
   ],
   "checks": [

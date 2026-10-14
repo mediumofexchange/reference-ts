@@ -208,14 +208,14 @@ describe("v3 wallet reads over its kept evidence and replay files", () => {
     // on it and opens it once it is free.
     f.payer.close(); f.payer = f.open("payer");
     const holder = new DatabaseSync(evidence); holder.exec("BEGIN IMMEDIATE");
-    await expect(f.payer.sync(second.served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: "another handle holds this wallet's evidence file" });
+    await expect(f.payer.sync(second.served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: `another handle holds this wallet's evidence file ${evidence}` });
     holder.exec("ROLLBACK"); holder.close();
     expect(holdings(await f.payer.sync(second.served.package, f.signed))).toEqual(holdings(second.view));
 
     // An evidence file that is no database is never replaced by the wallet: the holder removes it.
     f.payer.close(); writeFileSync(evidence, new Uint8Array(8192).fill(7));
     f.payer = f.open("payer");
-    await expect(f.payer.sync(second.served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: "the wallet's evidence file cannot be read; remove it to sync again" });
+    await expect(f.payer.sync(second.served.package, f.signed)).rejects.toMatchObject({ code: "STORAGE", message: `the wallet's evidence file ${evidence} cannot be read; remove it to sync again` });
     await expect(f.payer.supply(async () => {})).rejects.toMatchObject({ code: "STORAGE" });
 
     // A lost evidence file loses its mark with it: the next sync asks from nothing.

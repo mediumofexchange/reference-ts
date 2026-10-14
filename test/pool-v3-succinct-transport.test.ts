@@ -9,7 +9,8 @@ import { prepareExactOutput } from "../src/pool/v3/capsules.js";
 import { adoptedConfiguration, configurationHash } from "../src/pool/v3/configuration.js";
 import { POOL_V3, type Construction } from "../src/pool/v3/construction.js";
 import { EvidenceStore, type EvidencePart } from "../src/pool/v3/evidence-store.js";
-import type { SegmentHeader } from "../src/pool/v3/headers.js";
+import { segmentBytes, type SegmentHeader } from "../src/pool/v3/headers.js";
+import { encodeTrail } from "../src/pool/v3/trail.js";
 import { readFrontier } from "../src/pool/v3/package-reader.js";
 import { decodeProofFree, decodeRecord, encodeRecord, type Record } from "../src/pool/v3/records.js";
 import { serviceSupply, V3ServiceClient, V3ServiceClientError } from "../src/pool/v3/service-client.js";
@@ -129,8 +130,8 @@ describe("succinct transport (slice 37)", () => {
     const { leaf, node } = testProver(SET, verifier);
     await expect(f.replica.prove({ leaf, node } as unknown as ReturnType<typeof testProver>)).rejects.toThrow(/prover of a set/);
     // The prover covers the two proved records and their node; walking again proves nothing new.
-    expect(await f.replica.prove(testProver(SET, verifier))).toEqual({ trails: 1, proved: 2, made: 3 });
-    expect(await f.replica.prove(testProver(SET, verifier))).toEqual({ trails: 1, proved: 2, made: 0 });
+    expect(await f.replica.prove(testProver(SET, verifier))).toMatchObject({ trails: 1, proved: 2, made: 3 });
+    expect(await f.replica.prove(testProver(SET, verifier))).toMatchObject({ trails: 1, proved: 2, made: 0 });
     // One more issue after the covers: the tail, which no cover reaches yet.
     await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
     await f.mirror();
@@ -141,9 +142,9 @@ describe("succinct transport (slice 37)", () => {
     const read = await f.read(succinct, new V3ServiceClient(f.replicaUrl, undefined, f.identity(succinct)), "succinct");
     expect(read.result).toBe(complete.result);
     expect(JSON.parse(complete.result)).not.toHaveProperty("refused");
-    // Each checkpoint's new records are read on the state kept before them (§3.4): the two covered records each by its
-    // leaf, the third fetched by its place (position 3 of the genesis segment).
-    expect(counted.asked).toMatchObject({ covers: 3, answered: 2, fetched: 1, proofs: 1 });
+    // The segment is partitioned once over its latest checkpoint's trail (§3.4), though each checkpoint's new records are read on
+    // the state kept before them: the two covered records by their node, the third fetched by its place (position 3).
+    expect(counted.asked).toMatchObject({ covers: 2, answered: 1, fetched: 1, proofs: 1 });
     expect(counted.asked.places.map(at => at.position)).toEqual([3n]);
     // The reader's file holds proof-free records only, and is refused to a complete reader.
     const segment = f.replicaStore.keptTops()[0]!.segment;
@@ -154,6 +155,50 @@ describe("succinct transport (slice 37)", () => {
     }
     read.evidence.close();
     expect(() => new EvidenceStore(join(directories.at(-1)!, "succinct.db"))).toThrow("another construction's evidence");
+  });
+
+  it("goes on proving from where its last walk of a segment stood, and stops before the next record when asked (slice 38)", async () => {
+    const f = await fixture();
+    await f.j.submit(f.issue()); await f.checkpoint("c2");
+    await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
+    await f.mirror();
+    const inner = testProver(SET, verifier);
+    let leaves = 0;
+    const prover = { ...inner, leaf: async (record: Record) => { leaves++; return inner.leaf(record); } };
+    // Stopped before its second record: the first leaf only.
+    let asked = 0;
+    expect(await f.replica.prove(prover, { stop: () => asked++ >= 1 })).toMatchObject({ made: 1, read: 1, stopped: true });
+    // The next walk reads only the record after it: its leaf and the node over the two.
+    expect(await f.replica.prove(prover)).toMatchObject({ trails: 1, proved: 2, made: 2, read: 1, stopped: false });
+    expect(leaves).toBe(2);
+    // Nothing new: no record is read again, so no leaf is asked for.
+    expect(await f.replica.prove(prover)).toMatchObject({ proved: 2, made: 0, read: 0 });
+    expect(leaves).toBe(2);
+    // A new record: the walk goes on from the last one and proves its leaf alone (its node waits for a sibling).
+    await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
+    await f.mirror();
+    expect(await f.replica.prove(prover)).toMatchObject({ proved: 3, made: 1, read: 1 });
+    expect(leaves).toBe(3);
+  });
+
+  it("proves over the trails of its own kept selections only, never a fork a supplier's answer brought, and reads nothing again (review)", async () => {
+    const f = await fixture();
+    await f.j.submit(f.issue()); await f.checkpoint("c2");
+    await f.j.submit(f.spend([output(32, 7n), output(33, 1n), output(34, 2n), output(35, 0n)], 2)); await f.checkpoint("c3");
+    await f.mirror();
+    // A supplier's answer: the segment forked after its first record, two records no checkpoint commits.
+    const segment = f.replicaStore.keptTops()[0]!.segment, first = f.replicaStore.recordsAt(segment, 1n)[0]!;
+    const forked = encodeTrail({ header: segmentBytes(header), terms: [signed], records: [first, f.issue(output(51, 3n), 7), f.issue(output(52, 4n), 8)] });
+    expect(await f.replicaStore.take([{ trail: { after: undefined, size: BigInt(forked.length), chunks: (async function* () { yield forked; })() } }], operator)).toBe(true);
+    // The replica's next kept selection indexes every pending top, the fork's included.
+    await f.j.submit(f.issue(output(41, 5n), 3)); await f.checkpoint("c4");
+    await f.mirror();
+    const inner = testProver(SET, verifier);
+    let leaves = 0;
+    const prover = { ...inner, leaf: async (record: Record) => { leaves++; return inner.leaf(record); } };
+    expect(await f.replica.prove(prover)).toMatchObject({ trails: 1, proved: 3, read: 3 });
+    expect(leaves).toBe(3);
+    expect(await f.replica.prove(prover)).toMatchObject({ read: 0, made: 0 });
   });
 
   it("serves a trail's records in their proof-free form, the same chain values in both forms, sized before its records", async () => {
@@ -225,7 +270,8 @@ describe("succinct transport (slice 37)", () => {
     // The reader's own check refuses the wrong cover inside the supply, so no cover is taken: each record is checked
     // natively, its proof given by the operator after the junk and the overlong answer. Each wrong source was asked
     // once, never again by that supply (audit 34); the operator, which answered last, was asked first for the second.
-    expect(counted.asked).toMatchObject({ covers: 2, answered: 0, fetched: 2 });
+    // The segment's one partition asked the node, then each leaf (§3.4).
+    expect(counted.asked).toMatchObject({ covers: 3, answered: 0, fetched: 2 });
     expect(asked).toEqual({ covers: 1, junk: 1, long: 1 });
 
     // A source that changes one byte of a proof-free record: the evidence chain refuses the trail, so the sync does.
@@ -325,9 +371,9 @@ describe("succinct transport (slice 37)", () => {
     const succinct = succinctPoolV3({ set: SET, supply: counted.supply });
     const read = await f.read(succinct, new V3ServiceClient(f.replicaUrl, undefined, f.identity(succinct)), "behind");
     expect(read.result).toBe(complete.result);
-    // Both covers came from the replica behind the wrong source; no proof was fetched; the silent source and the one
-    // whose cover the reader refused were each asked once (audit 34).
-    expect(counted.asked).toMatchObject({ covers: 2, answered: 2, proofs: 0 });
+    // The node over both records came from the replica behind the wrong source; no proof was fetched; the silent source
+    // and the one whose cover the reader refused were each asked once (audit 34).
+    expect(counted.asked).toMatchObject({ covers: 1, answered: 1, proofs: 0 });
     expect([silentAsks, wrongAsks]).toEqual([1, 1]);
     // A source that has none is asked again only where the source that answered last has none too.
     let noneAsks = 0;

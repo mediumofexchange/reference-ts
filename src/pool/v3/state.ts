@@ -24,7 +24,7 @@ import { compareBytes, EncodingError } from "../../bytes.js";
 import { isField, VALUE_BOUND } from "../field.js";
 import { EMPTY_NOTE_ROOT, NOTE_TREE_CAPACITY, type NotePath } from "../note-tree.js";
 import { POOL_V3, type Construction, type StatementView } from "./construction.js";
-import type { EvidenceDigests, Record } from "./records.js";
+import type { EvidenceDigests, Record, Statement } from "./records.js";
 import { checkRecovery, type Demand, type RecoveryView } from "./recovery.js";
 import { EvidenceRefusal, ReplayRefusal, requireReplay } from "./refusals.js";
 import type { ImportEntry, Imports, ReplayStore, StoredEvent, StoredOutput, Totals, WitnessMark } from "./replay-store.js";
@@ -63,11 +63,14 @@ export interface StateView extends RecoveryView {
   presentedWithTag(tag: bigint): readonly (readonly [string, Demand])[];
 }
 
-/** An output a receiver may scan: its capsule, or for a settlement the record naming its owner (pool-v3); or, where
- * openings are public (lit-v1 §2), its opening (`lit`). A construction names it (`Construction.scanOutput`). */
+/** An output a receiver may scan: its capsule, or for a settlement the statement and authorization naming its owner
+ * (pool-v3: a complete record, or a succinct read's proof-free form); or, where openings are public (lit-v1 §2), its
+ * opening (`lit`). A construction names it (`Construction.scanOutput`). */
 export interface ScanOutput {
-  readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: Record; readonly lit?: LitScan | undefined;
+  readonly cm: bigint; readonly capsule?: Uint8Array | undefined; readonly settlement?: SettlementScan | undefined; readonly lit?: LitScan | undefined;
 }
+/** What a settlement's output scan reads of its record: the statement and the acceptance its authorization carries. */
+export type SettlementScan = Statement & { readonly authorization: Uint8Array };
 /** A lit output as a wallet reads it (lit-v1 §8): its opening and, for a settlement's output, the demand and acceptance
  * deadline `acceptSecret` derives from. */
 export interface LitScan {
@@ -180,10 +183,11 @@ export class StateHandle implements StateView {
     const stored = this.store.output(this.ns, this.position, cm);
     return stored === undefined ? undefined : this.scanOutput(stored);
   }
-  /** Pool-v3's scan (a capsule, or a settlement's record); a lit wallet reads outputs by their openings (M14e). */
+  /** Pool-v3's scan (a capsule, or a settlement's record, complete or proof-free as the read replayed it); a lit wallet
+   * reads outputs by their openings (M14e). */
   scanOutput(stored: StoredOutput): ScanOutput {
-    if (this.construction !== POOL_V3) throw new TypeError("a capsule scan reads pool-v3 outputs");
-    return stored.settlement ? { cm: stored.cm, settlement: POOL_V3.decode(this.store.event(stored.ns, stored.position)!.settlement!) } :
+    if (this.construction.namespace.name !== POOL_V3.namespace.name) throw new TypeError("a capsule scan reads pool-v3 outputs");
+    return stored.settlement ? { cm: stored.cm, settlement: this.construction.decode(this.store.event(stored.ns, stored.position)!.settlement!) as SettlementScan } :
       { cm: stored.cm, capsule: stored.capsule };
   }
   /** The path of an output the replay witnessed, against the root of the segment holding it. */
