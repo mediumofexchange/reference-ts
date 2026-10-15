@@ -771,6 +771,11 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       succinctIndices: state.spans.reduce((total, span) => total + span.to - span.from + 1n, 0n) };
   }
 
+  /** Forget the subjects reads asked so far (`wanted`), so that a caller sees only what its next read asks. */
+  forgetWanted(): void {
+    this.succinct?.wanted.clear();
+  }
+
   /** The subjects this succinct view follows, as of its last sync; empty for a view that reads every section. */
   followed(): Uint8Array[] {
     return [...(this.succinct?.followed.values() ?? [])].map(copyBytes);

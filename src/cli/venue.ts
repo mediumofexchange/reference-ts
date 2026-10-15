@@ -264,7 +264,9 @@ function dropSet(directory: Directory, set: Uint8Array): void {
     const store = new ReplayStore(directory.file(kept), { digest: directory.file(`${kept}.sha256`) });
     try { store.discardKept(); } finally { store.close(); }
   }
-  for (const suffix of ["", "-wal", "-shm"]) rmSync(directory.file(`${viewFile(directory)}${suffix}`), { force: true });
+  // The view's -wal and -shm first: a crash after them leaves the main file, its disagreement and spans checkpointed,
+  // which the next opening drops again.
+  for (const suffix of ["-wal", "-shm", ""]) rmSync(directory.file(`${viewFile(directory)}${suffix}`), { force: true });
   event({ event: "exhaustion-dropped", set: name });
 }
 
@@ -275,7 +277,9 @@ export function openView(directory: Directory): View {
     const set = directory.succinct ? exhaustionSet(file) : undefined;
     const open = () => new ErgoVenue(file.profile, readContext(directory), {}, undefined, journal, set === undefined ? undefined : { set });
     let venue = open();
-    if (venue.disagreed()) {
+    // A view holding indices read under a dropped set (one restored from before the drop) is dropped again.
+    const dropped = set !== undefined && droppedSets(directory).includes(bytesToHex(set.identity));
+    if (venue.disagreed() || (dropped && venue.succinctSummary()!.succinctIndices > 0n)) {
       journal.close();
       dropSet(directory, set!.identity);
       journal = new ErgoVenueJournal(directory.file(viewFile(directory)), file.id);
@@ -296,6 +300,8 @@ export function openView(directory: Directory): View {
     };
     const following = async <T>(read: () => Promise<T>): Promise<T> => {
       for (;;) {
+        // Only what this read asks counts: a subject an earlier read wanted is not this read's reason.
+        venue.forgetWanted();
         try { return await read(); } catch (error) {
           const wanted = venue.wanted(), before = venue.followed().length;
           if (!(error instanceof EvidenceRefusal && error.status === "unresolved-evidence") || wanted.length === 0) throw error;

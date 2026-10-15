@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -28,7 +28,7 @@ function directory(): Directory {
   const path = mkdtempSync(resolve("scratch/cli-succinct-")); directories.push(path);
   writeFileSync(join(path, "venue.json"), venueText(profile, A));
   writeFileSync(join(path, "anchor.json"), `${JSON.stringify(chain.context.map(bytesToHex))}\n`);
-  return Object.freeze({ path, config: { role: "wallet", nodes: ["http://127.0.0.1:9/"], read: "succinct" }, construction: POOL_V3 as Construction,
+  return Object.freeze({ path, config: { role: "wallet" as const, nodes: ["http://127.0.0.1:9/"], read: "succinct" as const }, construction: POOL_V3 as Construction,
     succinct: true, file: (name: string) => join(path, name) });
 }
 
@@ -46,8 +46,16 @@ describe("a succinct directory's view", () => {
     kept.keepAnswer(1, s, () => ({ through: 5n, value: 0n }));
     expect(kept.answersThrough()).toBe(5n);
     kept.close();
+    // A copy of the view as it stood with indices read under the set, before the disagreement.
     let view = openView(dir);
     view.venue.follow(s);
+    const early = new ExhaustionServer({ start: set.start, foldKeyHash: set.foldKeyHash, prove: (f, i) => set.prove(f, i) });
+    await early.extend(blocks.slice(0, 3).map(b => ({ id: b.id, transactionsRoot: root(b), section: b.section })));
+    await view.venue.sync([new BranchSupplier("node", blocks[5]!, chain)], [early]);
+    expect(view.venue.succinctSummary()!.succinctIndices).toBe(3n);
+    view.close();
+    copyFileSync(dir.file("succinct-venue.db"), dir.file("before.db"));
+    view = openView(dir);
     await expect(view.venue.sync([new BranchSupplier("node", blocks.at(-1)!, chain)],
       [{ name: "unsound", fold: h => map.fold(h), key: (e, k, f) => map.key(e, k, f), transaction: (h, p) => honest.transaction(h, p) }]))
       .rejects.toThrow("the exhaustion set disagreed");
@@ -66,5 +74,10 @@ describe("a succinct directory's view", () => {
       expect(view.venue.range({ venue: view.venue.id, kind: 2, subject: s, fromIndex: 0n, toIndex: 8n }, { maxBytes: 1n << 20n, maxEntries: 100n })).toBeDefined();
     } finally { view.close(); }
     expect(existsSync(dir.file("succinct-venue.db"))).toBe(true);
+    // The copy restored after the drop holds indices read under the dropped set: it is dropped again.
+    for (const suffix of ["-wal", "-shm"]) rmSync(dir.file(`succinct-venue.db${suffix}`), { force: true });
+    copyFileSync(dir.file("before.db"), dir.file("succinct-venue.db"));
+    view = openView(dir);
+    try { expect(view.venue.succinctSummary()!.succinctIndices).toBe(0n); } finally { view.close(); }
   });
 });
