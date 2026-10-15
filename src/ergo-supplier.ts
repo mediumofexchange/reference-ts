@@ -151,8 +151,8 @@ const hash = (input: Uint8Array): Uint8Array => blake2b(input, { dkLen: 32 });
  * `/blocks/chainSlice` lists them), or undefined where the statement is not
  * of the node's shape or the copy does not hash to the id it states. The
  * bytes are the node's serialization: fixed-width roots, VLQ timestamp and
- * height, big-endian nBits; for versions 2–127 (the node reads the version as
- * a signed byte) a new-fields length, zero through version 4 and followed by
+ * height, big-endian nBits; for versions 2–127 (the node reads and states the
+ * version as a signed byte) a new-fields length, zero through version 4 and followed by
  * `unparsedBytes` above it; then the Autolykos solution, for version 1 the
  * key, `w`, the nonce and `d` (a length byte and its minimal unsigned bytes),
  * otherwise the key and the nonce. Nodes before 6.0 omit `unparsedBytes`,
@@ -161,8 +161,10 @@ export function supplyHeader(statement: NodeJson): { readonly id: Uint8Array; re
   try {
     if (!(statement instanceof Map)) refuse();
     const header = statement as Map<string, NodeJson>;
-    const version = integer(field(header, "version"), 255n), solution = field(header, "powSolutions");
-    const signed = version < 128n ? version : version - 256n;
+    // The node states the version as it reads it, a signed byte (−128 to 127): versions 128–255 are written negative.
+    const stated = field(header, "version"), solution = field(header, "powSolutions");
+    const signed = typeof stated === "bigint" && stated >= -128n && stated <= 127n ? stated : refuse();
+    const version = signed < 0n ? signed + 256n : signed;
     const fields = header.has("unparsedBytes") ? bytes(header.get("unparsedBytes")!) : new Uint8Array(0);
     if (fields.length > 255 || (fields.length !== 0 && signed <= 4n)) refuse();
     const nBits = new Uint8Array(4);
