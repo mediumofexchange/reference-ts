@@ -3,6 +3,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { timingSafeEqual } from "node:crypto";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { compareBytes, EncodingError } from "../../bytes.js";
+import type { ExhaustionSupplier } from "../../ergo-exhaustion.js";
+import { encodeFold, encodeIncluded, encodeKeyAnswer } from "../../ergo-exhaustion-wire.js";
 import type { TrailForm } from "./evidence-store.js";
 import { V3OperatorJournal, V3StoreError, type ServedEvidence } from "./store.js";
 import { PROOF_FREE_FORM, type RecordAt } from "./succinct.js";
@@ -184,6 +186,38 @@ function checkRoute(source: V3EvidenceSource, request: IncomingMessage, response
   return true;
 }
 
+/** What a replica serves of the venue's exhaustion (succinct-read §4.7): one set's folds, paths and entries, and
+ * transactions with inclusion paths, from a supplier that keeps the map (`ExhaustionServer`). */
+export interface ExhaustionSource { readonly set: Uint8Array; readonly supplier: ExhaustionSupplier }
+const U32_TEXT = "(0|[1-9][0-9]{0,9})", U64_TEXT = "(0|[1-9][0-9]{0,19})";
+/** The exhaustion's fetches (succinct-read §4.7), each under the set's identity: `GET /exhaustion/<set>/fold?max=<h>`
+ * answers the latest fold ending at or below height `h`, `GET /exhaustion/<set>/key/<end>/<key>?from=<n>` the key's
+ * path at the fold ending at height `end` and its entries after the first `n`, and `GET
+ * /exhaustion/<set>/transaction/<height>/<position>` that transaction with its inclusion path, as bytes
+ * (`ergo-exhaustion-wire.ts`), or `NOT_FOUND`. Undefined where the request is another. */
+function exhaustionRoute(source: ExhaustionSource | undefined, request: IncomingMessage, response: ServerResponse, send: Send): Promise<void> | undefined {
+  if (source === undefined || request.method !== "GET") return undefined;
+  const url = request.url ?? "", set = /^\/exhaustion\/([0-9a-f]{64})\//.exec(url);
+  if (set === null) return undefined;
+  const rest = url.slice(set[0].length);
+  const fold = new RegExp(`^fold\\?max=${U64_TEXT}$`).exec(rest);
+  const key = new RegExp(`^key/${U64_TEXT}/${U32_TEXT}\\?from=${U64_TEXT}$`).exec(rest);
+  const transaction = new RegExp(`^transaction/${U64_TEXT}/${U32_TEXT}$`).exec(rest);
+  if (fold === null && key === null && transaction === null) return undefined;
+  request.resume();
+  return (async () => {
+    const own = compareBytes(hexToBytes(set[1]!), source.set) === 0;
+    const answer = !own ? undefined :
+      fold !== null ? await source.supplier.fold(BigInt(fold[1]!)).then(f => f === undefined ? undefined : encodeFold(f)) :
+      key !== null ? await source.supplier.key(BigInt(key[1]!), BigInt(key[2]!), BigInt(key[3]!)).then(k => k === undefined ? undefined : encodeKeyAnswer(k)) :
+      await source.supplier.transaction(BigInt(transaction![1]!), BigInt(transaction![2]!)).then(t => t === undefined ? undefined : encodeIncluded(t));
+    if (answer === undefined) { send(404, { code: "NOT_FOUND" }); return; }
+    if (!response.destroyed && !response.writableEnded) {
+      response.setHeader("content-type", "application/octet-stream"); response.writeHead(200); response.end(answer);
+    }
+  })();
+}
+
 /** Bind to 127.0.0.1. The server also refuses non-loopback connections. Behind an onion service every peer is the
  * loopback Tor daemon, so that listener takes no admin credential and has its own sixteen connections.
  * Credentials permit operations; protocol proofs/signatures remain authoritative.
@@ -230,15 +264,18 @@ export function createV3Service(journal: V3OperatorJournal, credentials: V3Servi
 }
 
 /**
- * A replica's listener (slice 12 M12b): the evidence route alone, on a loopback port, with no credential. Published
+ * A replica's listener (slice 12 M12b): the evidence route alone (with the exhaustion's where it keeps one), on a
+ * loopback port, with no credential. Published
  * evidence is retrievable by a stranger (Construction), so it gates nothing and identifies nobody; every other request
  * is `NOT_FOUND`. Behind an onion service every peer is the loopback Tor daemon. The listener's bounds are the
  * operator's: sixteen connections, eight streams, a minimum rate.
  */
-export function createV3EvidenceService(source: V3EvidenceSource): Server {
+export function createV3EvidenceService(source: V3EvidenceSource, exhaustion?: ExhaustionSource): Server {
   const streams = { count: 0 };
   const server: Server = listener(async (request, response, send, timer) => {
     if (checkRoute(source, request, response, send)) return;
+    const exhausted = exhaustionRoute(exhaustion, request, response, send);
+    if (exhausted !== undefined) { await exhausted; return; }
     const streamed = evidenceRoute(server, source, streams, request, response, send, timer);
     if (streamed !== undefined) { await streamed; return; }
     request.resume(); send(404, { code: "NOT_FOUND" });

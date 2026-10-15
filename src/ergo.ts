@@ -163,10 +163,12 @@ export interface ErgoSuccinctReport {
   /** The fold whose end the pass read through, as an index, and its supplier; absent where no fold was used. */
   readonly foldIndex?: bigint;
   readonly supplier?: string;
-  /** Indices read succinctly, subjects newly followed and transactions fetched. */
+  /** Indices read succinctly, subjects newly followed, transactions fetched and the bytes the used supplier's answers
+   * held (paths, entries and transactions). */
   readonly indicesRead: number;
   readonly followed: number;
   readonly transactionsFetched: number;
+  readonly bytes: number;
   /** Each supplier not used, and why. */
   readonly refused: readonly { readonly name: string; readonly reason: string }[];
 }
@@ -474,6 +476,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    */
   async sync(suppliers: readonly ErgoSupplier[], exhaustion: readonly ExhaustionSupplier[] = []): Promise<ErgoSyncReport> {
     if (this.failure !== undefined) throw new VenueError(this.failure);
+    if (this.succinct?.disagreement === true) throw new VenueError(DISAGREEMENT);
     if (this.syncing) throw new VenueError("a sync is already in progress");
     // The caller's list is read once, before the sync starts, so a list that is not one is the caller's error alone;
     // each supplier's name once, for its report.
@@ -603,7 +606,8 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     } catch (error) {
       // Suppliers' failures are answers, so whatever reaches here is the view's own: it may have read sections past
       // its clock, and it fails closed rather than answer from a state no sync completed.
-      if (this.failure === undefined) {
+      // A set shown unsound was committed as such, and refuses as such.
+      if (this.failure === undefined && this.succinct?.disagreement !== true) {
         this.failure = this.durable ? "durable Ergo sync failed; reopen the journal" : "Ergo sync failed; open a new view";
       }
       throw error;
@@ -627,7 +631,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     const promoted = spanTop < 0n ? [...state.pending.values()] : [], newcomers = spanTop < 0n ? [] : [...state.pending.values()];
     const refused: { name: string; reason: string }[] = [];
     const none = (disagreement = false): SuccinctPass => ({ rows: [], backfill: [], followed: disagreement ? [] : promoted, kept: [], included: [], bytes: 0,
-      ...(disagreement ? { disagreement } : {}), report: Object.freeze({ indicesRead: 0, followed: disagreement ? 0 : promoted.length, transactionsFetched: 0, refused }) });
+      ...(disagreement ? { disagreement } : {}), report: Object.freeze({ indicesRead: 0, followed: disagreement ? 0 : promoted.length, transactionsFetched: 0, bytes: 0, refused }) });
     if (bound <= clock && newcomers.length === 0) return none();
     if (state.set.start.height > anchorHeight) {
       // The set's map starts above the anchor: its entries cannot cover the venue's first indices (§4.4).
@@ -657,7 +661,7 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
       }
       const followed = [...promoted, ...(backfill ? newcomers : [])];
       return { ...read, followed, report: Object.freeze({ foldIndex: top, supplier: name, indicesRead: read.rows.length, followed: followed.length,
-        transactionsFetched: read.included.length, refused }) };
+        transactionsFetched: read.included.length, bytes: read.bytes, refused }) };
     }
     return none();
   }
@@ -749,6 +753,15 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
    * reading again; empty for a view that reads every section. */
   wanted(): Uint8Array[] {
     return [...(this.succinct?.wanted.values() ?? [])].map(copyBytes);
+  }
+
+  /** What this succinct view rests on, for a read's output: its set, how many subjects it follows and how many indices it
+   * read succinctly; undefined for a view that reads every section. */
+  succinctSummary(): { readonly set: Uint8Array; readonly followed: number; readonly succinctIndices: bigint } | undefined {
+    const state = this.succinct;
+    if (state === undefined) return undefined;
+    return { set: copyBytes(state.set.identity), followed: state.followed.size,
+      succinctIndices: state.spans.reduce((total, span) => total + span.to - span.from + 1n, 0n) };
   }
 
   /** The subjects this succinct view follows, as of its last sync; empty for a view that reads every section. */
@@ -954,6 +967,16 @@ export class ErgoVenue implements RecordVenue, RecordPublisher {
     return encodeRangeAnswer({ request: own, entries: orderedEntries(own.kind, objects) }, bound);
   }
 
+  /** The section this view read natively at `index`, with its header's id and transactions root; undefined past the
+   * clock or where it read the index succinctly. For a supplier serving the venue's exhaustion from its own rows. */
+  section(index: bigint): { readonly id: Uint8Array; readonly transactionsRoot: Uint8Array; readonly section: readonly ErgoTransactionView[] } | undefined {
+    const snapshot = this.requireSnapshot();
+    if (typeof index !== "bigint" || index < 0n || index > snapshot.witnessed) return undefined;
+    const row = this.journal.section(index), header = this.store.bestAt(this.store.tip().anchorHeight + 1n + index);
+    if (row === undefined || header === undefined || compareBytes(header.id, row.header) !== 0) return undefined;
+    return { id: header.id, transactionsRoot: header.transactionsRoot, section: row.views };
+  }
+
   /** `ERGO_INDEX_LIMITS`: no section this view reads holds more under one kind and subject. */
   indexLimits(): RangeLimits {
     return ERGO_INDEX_LIMITS;
@@ -1036,9 +1059,9 @@ export interface ErgoCatchUpReport extends ErgoSyncReport {
  * follows.
  */
 export async function syncCaughtUp(venue: ErgoVenue, suppliers: readonly ErgoSupplier[],
-  onPass?: (report: ErgoSyncReport) => void): Promise<ErgoCatchUpReport> {
+  onPass?: (report: ErgoSyncReport) => void, exhaustion: readonly ExhaustionSupplier[] = []): Promise<ErgoCatchUpReport> {
   for (let passes = 1; ; passes++) {
-    const report = await venue.sync(suppliers);
+    const report = await venue.sync(suppliers, exhaustion);
     const more = report.suppliers.some(supplier => supplier.stopped === "header budget") ||
       (report.unresolvedReason === "section budget" && report.sectionsRead > 0);
     if (!more) return Object.freeze({ ...report, passes });

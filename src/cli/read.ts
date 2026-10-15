@@ -189,7 +189,12 @@ export function succinctSupply(directory: Directory, kept: KeptTerms, view: View
     proof: async (hash, at) => { const answer = await wire.proof(hash, at); if (answer !== undefined) asked.proofs++; return answer; },
   };
   return { supply,
-    out: () => ({ read: { judgment: "succinct", set: set.identity, testSet: set.test, coversAsked: asked.covers, coversTaken: asked.covered, proofsFetched: asked.proofs } }) };
+    out: () => {
+      // The venue's reading (succinct-read §4): the exhaustion set its view rests on, and how much it read succinctly.
+      const venue = view.venue.succinctSummary();
+      return { read: { judgment: "succinct", set: set.identity, testSet: set.test, coversAsked: asked.covers, coversTaken: asked.covered, proofsFetched: asked.proofs,
+        ...(venue === undefined ? {} : { venue: { exhaustionSet: venue.set, followed: venue.followed, succinctIndices: venue.succinctIndices } }) } };
+    } };
 }
 
 /** A replica's URL: the loopback or v3 onion forms a service file takes, with no credential (M12b). */
@@ -449,7 +454,7 @@ async function frontier(directory: Directory, args: Arguments, kept: KeptTerms, 
       // A read is final at its judging index; where the view could not read further, the output says so.
       const stalled = synced.suppliers.filter(supplier => supplier.stopped !== undefined).map(supplier => ({ name: supplier.name, stopped: supplier.stopped }));
       const readOver = async (source: Uint8Array, origin: object) => {
-        const read = await readAt(kept, view, at, source, { verifier, ...opened, answers });
+        const read = await view.following(() => readAt(kept, view, at, source, { verifier, ...opened, answers }));
         use(at, read, { tipHeight: synced.tipHeight, unresolvedIndex: synced.unresolvedIndex ?? null, stopped: stalled }, { ...origin, ...reading?.out() });
       };
       const file = flag(args, "package");

@@ -22,6 +22,8 @@ export interface ExhaustionServerOptions {
   /** A fold proof over these inputs: the first fold's where `first`, else a next fold's over the previous. */
   prove(first: boolean, inputs: FoldInputs): Promise<Uint8Array> | Uint8Array;
   readonly name?: string;
+  /** The block at a height, where the caller keeps blocks itself (a view's rows): the server then keeps none. */
+  block?(height: bigint): ServedBlock | undefined;
 }
 
 /** The map from the set's start, extended a period at a time; it answers keys at its latest fold only. */
@@ -41,6 +43,8 @@ export class ExhaustionServer implements ExhaustionSupplier {
 
   /** The latest fold, if any. */
   get latest(): Fold | undefined { return this.#fold; }
+  /** The height the map is at: the start's, or the last block appended. */
+  get height(): bigint { return this.#map.end.height; }
 
   /** Append `blocks`, the next after the map's end in order, and seal a fold at the last: a period. */
   async extend(blocks: readonly ServedBlock[]): Promise<Fold> {
@@ -49,7 +53,7 @@ export class ExhaustionServer implements ExhaustionSupplier {
       const owned = { id: copyBytes(block.id), transactionsRoot: copyBytes(block.transactionsRoot),
         section: block.section.map(t => ({ unsigned: copyBytes(t.unsigned), witnessId: copyBytes(t.witnessId) })) };
       this.#map.appendBlock(owned.id, owned.section.map(t => t.unsigned));
-      this.#blocks.set(this.#map.end.height, owned);
+      if (this.#options.block === undefined) this.#blocks.set(this.#map.end.height, owned);
     }
     const end = this.#map.end, start = this.#options.start, first = this.#fold === undefined;
     const inputs: FoldInputs = { startId: copyBytes(start.id), startHeight: start.height, endId: end.id, endHeight: end.height,
@@ -70,7 +74,8 @@ export class ExhaustionServer implements ExhaustionSupplier {
   }
 
   async transaction(height: bigint, position: bigint): Promise<IncludedTransaction | undefined> {
-    const block = this.#blocks.get(height), j = Number(position);
+    if (height > this.#map.end.height) return undefined;
+    const block = this.#options.block?.(height) ?? this.#blocks.get(height), j = Number(position);
     const unsigned = block?.section[j]?.unsigned;
     if (block === undefined || unsigned === undefined) return undefined;
     const steps = sectionInclusionPath(block.section, block.transactionsRoot, j);

@@ -18,6 +18,8 @@ const NEUTRAL = [
   "src/venue-error.ts", "src/venue-records.ts", "src/record-range.ts", "src/record-venue.ts",
   "src/ergo-profile.ts", "src/ergo-headers.ts", "src/ergo-supplier.ts", "src/ergo-publisher.ts", "src/ergo-synthetic.ts",
   "src/ergo.ts", "src/ergo-store.ts",
+  // A venue read succinctly (succinct-read §4, slice 43): the exhaustion's reader, its scan and its wire frames.
+  "src/ergo-exhaustion.ts", "src/ergo-scan.ts", "src/ergo-exhaustion-wire.ts",
   "src/pool/field.ts", "src/pool/poseidon2.ts", "src/pool/notes.ts", "src/pool/note-tree.ts",
   "src/pool/scope.ts", "src/pool/schedule.ts", "src/pool/parameters.ts", "src/pool/proof-verifier.ts", "src/pool/evidence-chain.ts",
   "src/pool/packaged-binary.ts",

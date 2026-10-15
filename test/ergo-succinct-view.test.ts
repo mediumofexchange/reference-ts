@@ -9,6 +9,10 @@ import { ergoProfileIdentity, transactionsRoot, type ErgoTransactionView } from 
 import type { ErgoVenueJournal as Journal } from "../src/ergo-store.js";
 import { MAX_RANGE_RECORD_BYTES, type RecordKind } from "../src/record-range.js";
 import { VenueError } from "../src/venue-error.js";
+import { decodeFold, decodeIncluded, decodeKeyAnswer, encodeFold, encodeIncluded, encodeKeyAnswer } from "../src/ergo-exhaustion-wire.js";
+import { createV3EvidenceService } from "../src/pool/v3/service-http.js";
+import { exhaustionClient } from "../src/pool/v3/service-client.js";
+import { EncodingError } from "../src/bytes.js";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { BranchSupplier, Chain, plainOutput, recordOutput, transaction, type Block, type Output } from "./ergo-chain.js";
 
@@ -181,6 +185,7 @@ describe("a succinct Ergo view (succinct-read §4)", () => {
     venue.follow(s);
     await expect(venue.sync([node(30)], [unsound])).rejects.toThrow("the exhaustion set disagreed");
     expect(() => venue.witnessedIndex()).toThrow(VenueError);
+    await expect(venue.sync([node(34)], [honest])).rejects.toThrow("the exhaustion set disagreed");
     journals.pop()!.close();
     expect(() => opened(path).venue.witnessedIndex()).toThrow("the exhaustion set disagreed");
   });
@@ -224,5 +229,32 @@ describe("a succinct Ergo view (succinct-read §4)", () => {
     expect(fetched.length).toBe(7);
     expect(sectionsAsked(supplier)).toBe(0);
     expect(expectSame(venue, await complete(40), [u])).toBeGreaterThan(3);
+  });
+
+  it("travels over a replica's listener: frames round-trip, a malformed one is refused, and a view reads through the client", async () => {
+    const x = await server(20), fold = (await x.fold(1n << 40n))!, key = (await x.key(A + 20n, subjectKey(s), 0n))!, tx = (await x.transaction(A + 4n, 1n))!;
+    expect(decodeFold(encodeFold(fold))).toEqual(fold);
+    expect(decodeKeyAnswer(encodeKeyAnswer(key))).toEqual(key);
+    expect(decodeIncluded(encodeIncluded(tx))).toEqual({ unsigned: tx.unsigned, steps: tx.steps });
+    expect(() => decodeFold(Uint8Array.of(2, ...encodeFold(fold).subarray(1)))).toThrow(EncodingError);
+    expect(() => decodeKeyAnswer(Buffer.concat([encodeKeyAnswer(key), Uint8Array.of(0)]))).toThrow("trailing bytes");
+    const listener = createV3EvidenceService({ serve: async () => { throw new Error("no evidence"); }, proof: () => undefined, cover: () => undefined },
+      { set: set.identity, supplier: x });
+    await new Promise<void>(done => listener.listen(0, "127.0.0.1", done));
+    try {
+      const url = `http://127.0.0.1:${(listener.address() as { port: number }).port}/`;
+      const client = exhaustionClient(url, set.identity), other = exhaustionClient(url, new Uint8Array(32).fill(7));
+      expect(await client.fold(A + 20n)).toEqual(fold);
+      expect(await client.fold(A + 19n)).toBeUndefined();
+      expect(await other.fold(A + 20n)).toBeUndefined();
+      expect(await client.key(A + 19n, subjectKey(s), 0n)).toBeUndefined();
+      expect(await client.transaction(A + 4n, 1n)).toEqual({ unsigned: tx.unsigned, steps: tx.steps });
+      const native = node(30), { venue } = opened();
+      venue.follow(s);
+      const report = await venue.sync([native], [client]);
+      expect(report.succinct).toMatchObject({ supplier: url, foldIndex: 19n, indicesRead: 20 });
+      expect(sectionsAsked(native)).toBe(7);
+      expect(expectSame(venue, await complete(30), [s])).toBeGreaterThan(5);
+    } finally { await new Promise(done => listener.close(done)); }
   });
 });

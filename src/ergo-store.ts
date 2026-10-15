@@ -500,6 +500,13 @@ export class ErgoVenueJournal {
     const next = this.db.prepare("SELECT coalesce(max(position) + 1, 0) AS next FROM objects WHERE idx=?"); next.setReadBigInts(true);
     for (const o of state.backfill) object.run(o.index, next.get(o.index)!.next as bigint, o.kind, o.subject, o.ordinal, o.record, objectKey(o.kind, o.subject, o.record));
   }
+  /** The section read natively at `index`: its header id and views; undefined for an index not kept or read succinctly. */
+  section(index: bigint): { readonly header: Uint8Array; readonly views: readonly ErgoTransactionView[] } | undefined {
+    const row = this.db.prepare("SELECT header, views FROM sections WHERE idx=?").get(index);
+    if (row === undefined) return undefined;
+    const views = decodeViews(blob(row.views));
+    return views.length === 0 ? undefined : { header: blob(row.header, 32), views };
+  }
   /** The transactions a succinct read fetched at `index`, in position order, for an audit. */
   included(index: bigint): ErgoIncludedRow[] {
     if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='included'").get() === undefined) return [];
