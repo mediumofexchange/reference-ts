@@ -305,11 +305,16 @@ the same CPU model (one run each; the probe's 71–75 s), likely from the host, 
 equal byte for byte to native nargo, which compiles the full size) and executes every leaf of a synthetic chain of 9
 blocks (both root rules, 21 entries for keys shared and not, kind-4 runs, an ungrammatical transaction holding a shaped
 output, transactions over several slots), as one period and as two, and of 8 consecutive mainnet blocks to height
-1,894,700 (64 transactions, 334 leaves); each period ends where a fold requires with `SubjectMap`'s root. It refuses 23
-hostile leaves and 18 hostile streams and folds, each witness otherwise consistent with the state hashes, by the
-check each targets (by name). `exhaustion-prove.mjs` proves two periods of three synthetic blocks end to end (leaves,
-nodes, first and next fold; 19 minutes) and the reader's `checkFold` takes the last fold under the derived fold keys on
-the pinned WebAssembly verifier and refuses five hostile ones.
+1,894,700 (64 transactions, 334 leaves); each period ends where a fold requires with `SubjectMap`'s root. 65 crafted
+and mutated transactions (tokens, extensions, data inputs, fixed trees, 18 minimal shaped outputs in one, bytes outside
+the grammar) give 260 entries, each leaf executing with `scanTransaction`'s outputs as its list. It refuses 28 hostile
+leaves and 23 hostile streams, folds and node admissions, each witness otherwise consistent with the state hashes, by
+the check each targets (by name; the list's order check is the leaf's one unnamed range check).
+`exhaustion-prove.mjs` proves two periods of three synthetic blocks end to end (leaves, nodes, first and next fold); five
+hostile recursions (a node over children that do not join, a fold over a node carrying another node key-hash input,
+next folds naming another `foldKeyHash` or start or continuing the wrong fold) prove but do not verify; and the
+reader's `checkFold` takes the last fold under the derived fold keys on the pinned WebAssembly verifier and refuses
+five hostile ones.
 
 **Limits.** A test set: keys derived here, no adoption (§6). One run on one host. The mainnet blocks carry no shaped
 output, so the map leaves run on synthetic entries. Proving reads 2^22 G1 points whose leading 2^21 match the check

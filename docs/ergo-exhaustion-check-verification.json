@@ -1,0 +1,344 @@
+{
+  "specification": "succinct-read 282c925",
+  "sources": {
+    "scripts/venue/exhaustion-build.mjs": "56a60dbf5bf197d812df0a39f44c847a23156ffa731778e0783ea9d682830724",
+    "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
+    "scripts/venue/exhaustion-periods.mjs": "3c35f414eee34dc0735bbe20a7fc7d72af3e674446c7d36dab4a2fcd866e1244",
+    "scripts/venue/exhaustion-check.mjs": "ca2a817fc076ca3f5f0c9b0467a8c6d3a74c87837f0f7a43c227d5a27aaae639",
+    "scripts/venue/exhaustion-prove.mjs": "a74af5cf1590cd2736b77fb03645de2cbe965b8ccc670b1488886e8ab7920d69",
+    "scripts/venue/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
+    "scripts/venue/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
+    "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
+    "src/ergo-exhaustion-prover.ts": "4b1e8910042664c1e738ce7ae345afae25a622954ce3df3a564dc4ae74f5f82f",
+    "src/ergo-exhaustion.ts": "3c015f24e43f3a6edc2db643bd325de8fafbed1a925871ee51d2eaf24ad86981",
+    "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
+    "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
+    "src/ergo-profile.ts": "679161a58f56f7c1b16619e1a43c53c353929df130996218e92d4565a95e5c06",
+    "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
+    "src/pool/proof-verifier.ts": "9b6feafb80bf932a084e392bfb724bb7735684720411f31194cdd0041b1248cc"
+  },
+  "sizes": {
+    "t": 6,
+    "m": 12,
+    "u": 6
+  },
+  "periods": [
+    {
+      "label": "synthetic",
+      "blocks": 9,
+      "periods": 1,
+      "transactions": 17,
+      "leaves": 17,
+      "entries": 21
+    },
+    {
+      "label": "synthetic in two periods",
+      "blocks": 9,
+      "periods": 2,
+      "transactions": 17,
+      "leaves": 18,
+      "entries": 21
+    },
+    {
+      "label": "mainnet",
+      "blocks": 8,
+      "periods": 1,
+      "transactions": 64,
+      "leaves": 334,
+      "entries": 0
+    }
+  ],
+  "hostile": [
+    {
+      "name": "an emitted entry left out of the list",
+      "kind": "t",
+      "refusal": "list",
+      "expected": "list"
+    },
+    {
+      "name": "an entry added to the list",
+      "kind": "t",
+      "refusal": "list",
+      "expected": "list"
+    },
+    {
+      "name": "a listed subject changed",
+      "kind": "t",
+      "refusal": "list",
+      "expected": "list"
+    },
+    {
+      "name": "a listed output changed",
+      "kind": "t",
+      "refusal": "list",
+      "expected": "list"
+    },
+    {
+      "name": "a listed height changed",
+      "kind": "t",
+      "refusal": "list",
+      "expected": "list"
+    },
+    {
+      "name": "the list reordered",
+      "kind": "t",
+      "refusal": "call to assert_max_bit_size",
+      "expected": "assert_max_bit_size"
+    },
+    {
+      "name": "a gap in the list",
+      "kind": "t",
+      "refusal": "list prefix",
+      "expected": "list prefix"
+    },
+    {
+      "name": "a listed position aliased past 32 bits",
+      "kind": "t",
+      "refusal": "The value passed for parameter `lposition[0]` does not match the specified type:",
+      "expected": "does not match the specified type"
+    },
+    {
+      "name": "a nonzero byte past a transaction",
+      "kind": "t",
+      "refusal": "byte past a slot",
+      "expected": "byte past a slot"
+    },
+    {
+      "name": "a transaction started inside another",
+      "kind": "t",
+      "refusal": "start inside a transaction",
+      "expected": "start inside a transaction"
+    },
+    {
+      "name": "a transaction ended early",
+      "kind": "t",
+      "refusal": "slot outside a transaction",
+      "expected": "slot outside a transaction"
+    },
+    {
+      "name": "a slot shortened inside a transaction",
+      "kind": "t",
+      "refusal": "short slot",
+      "expected": "short slot"
+    },
+    {
+      "name": "a block started inside a transaction",
+      "kind": "t",
+      "refusal": "block start",
+      "expected": "block start"
+    },
+    {
+      "name": "a header's transactions root altered",
+      "kind": "m",
+      "refusal": "transactions root",
+      "expected": "transactions root"
+    },
+    {
+      "name": "a header's parent altered",
+      "kind": "m",
+      "refusal": "parent id",
+      "expected": "parent id"
+    },
+    {
+      "name": "a pushed id other than the bytes hashed",
+      "kind": "m",
+      "refusal": "pushed id",
+      "expected": "pushed id"
+    },
+    {
+      "name": "a merge into the stack's sentinel",
+      "kind": "m",
+      "refusal": "merge into a sentinel",
+      "expected": "merge into a sentinel"
+    },
+    {
+      "name": "a lift over the empty stack",
+      "kind": "m",
+      "refusal": "lift over an empty stack",
+      "expected": "lift over an empty stack"
+    },
+    {
+      "name": "an id leaf hashed under the node prefix",
+      "kind": "m",
+      "refusal": "leaf prefix",
+      "expected": "leaf prefix"
+    },
+    {
+      "name": "a witness id of 32 bytes",
+      "kind": "m",
+      "refusal": "witness id length",
+      "expected": "witness id length"
+    },
+    {
+      "name": "a lift carrying a right child",
+      "kind": "m",
+      "refusal": "lift length",
+      "expected": "lift length"
+    },
+    {
+      "name": "a leaf below a block's tree",
+      "kind": "m",
+      "refusal": "one root",
+      "expected": "one root"
+    },
+    {
+      "name": "a tree step inside a header",
+      "kind": "m",
+      "refusal": "tree inside a header",
+      "expected": "tree inside a header"
+    },
+    {
+      "name": "a wrong map sibling",
+      "kind": "u",
+      "refusal": "map path",
+      "expected": "map path"
+    },
+    {
+      "name": "a wrong prior count",
+      "kind": "u",
+      "refusal": "map path",
+      "expected": "map path"
+    },
+    {
+      "name": "a wrong prior chain",
+      "kind": "u",
+      "refusal": "map path",
+      "expected": "map path"
+    },
+    {
+      "name": "a chain at count zero",
+      "kind": "u",
+      "refusal": "empty leaf",
+      "expected": "empty leaf"
+    },
+    {
+      "name": "a key's entry shifted to another key",
+      "kind": "u",
+      "refusal": "map path",
+      "expected": "map path"
+    }
+  ],
+  "folds": [
+    {
+      "name": "the honest streams in kind order",
+      "refusal": null,
+      "expected": null
+    },
+    {
+      "name": "a transaction omitted",
+      "refusal": "period end: id chains",
+      "expected": "period end: id chains"
+    },
+    {
+      "name": "two transactions swapped",
+      "refusal": "period end: id chains",
+      "expected": "period end: id chains"
+    },
+    {
+      "name": "a block boundary moved",
+      "refusal": "period end: id chains",
+      "expected": "period end: id chains"
+    },
+    {
+      "name": "map entries reordered",
+      "refusal": "u leaf: map path",
+      "expected": "map path"
+    },
+    {
+      "name": "the last map entry left out",
+      "refusal": "period end: entry chains",
+      "expected": "period end: entry chains"
+    },
+    {
+      "name": "a map entry applied twice",
+      "refusal": "u leaf: map path",
+      "expected": "map path"
+    },
+    {
+      "name": "a header left out",
+      "refusal": "period end: header open",
+      "expected": "period end: header open"
+    },
+    {
+      "name": "a transaction left open after the last block",
+      "refusal": "period end: transaction open",
+      "expected": "period end: transaction open"
+    },
+    {
+      "name": "another start id",
+      "refusal": "start id",
+      "expected": "start id"
+    },
+    {
+      "name": "another start height",
+      "refusal": "start height",
+      "expected": "start height"
+    },
+    {
+      "name": "another end id",
+      "refusal": "end id",
+      "expected": "end id"
+    },
+    {
+      "name": "another end height",
+      "refusal": "end height",
+      "expected": "end height"
+    },
+    {
+      "name": "another map root",
+      "refusal": "map root",
+      "expected": "map root"
+    },
+    {
+      "name": "a tree under a key outside the set",
+      "refusal": "tree key",
+      "expected": "tree key"
+    },
+    {
+      "name": "a first map not empty",
+      "refusal": "empty map",
+      "expected": "empty map"
+    },
+    {
+      "name": "a start with an entry list chain",
+      "refusal": "period start: entry list chain",
+      "expected": "period start: entry list chain"
+    },
+    {
+      "name": "a start with an entry stream",
+      "refusal": "period start: entry stream",
+      "expected": "period start: entry stream"
+    },
+    {
+      "name": "a start with an id chain",
+      "refusal": "period start: tree id chain",
+      "expected": "period start: tree id chain"
+    },
+    {
+      "name": "a start inside a transaction",
+      "refusal": "period start: transaction open",
+      "expected": "period start: transaction open"
+    },
+    {
+      "name": "an end inside a header",
+      "refusal": "period end: header open",
+      "expected": "period end: header open"
+    },
+    {
+      "name": "a previous fold under another key",
+      "refusal": "previous fold key",
+      "expected": "previous fold key"
+    },
+    {
+      "name": "a node child under a key outside the set",
+      "refusal": "child key",
+      "expected": "child key"
+    }
+  ],
+  "nargoEqualsWasm": true,
+  "crafted": {
+    "transactions": 65,
+    "entries": 260
+  },
+  "result": "pass"
+}

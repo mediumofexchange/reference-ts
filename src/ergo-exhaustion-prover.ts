@@ -113,8 +113,10 @@ export function idChain(previous: bigint, id: readonly bigint[], height: bigint,
 /** The stream's entry chain over every key, in §4.2's T_ENTRY form. */
 const streamChain = (previous: bigint, e: Entry): bigint => poseidon2Hash([1010n, previous, e.hi, e.lo, e.height, e.position, e.output]);
 
-/** An entry as the circuits carry it: the subject's limbs and its place. */
-export interface Entry { readonly hi: bigint; readonly lo: bigint; readonly height: bigint; readonly position: bigint; readonly output: bigint }
+/** An entry as the circuits carry it: the subject's limbs and its place. A hostile list may hold a row marked unused. */
+export interface Entry {
+  readonly hi: bigint; readonly lo: bigint; readonly height: bigint; readonly position: bigint; readonly output: bigint; readonly unused?: boolean;
+}
 
 /** An authenticated block: its header's bytes and its section, in order. */
 export interface ExhaustionBlock {
@@ -124,8 +126,10 @@ export interface ExhaustionBlock {
 /** A transaction slot: up to 128 bytes, the length the slot claims (the bytes' own by default; a hostile witness may
  * claim fewer than it carries), and whether it starts a transaction, a block, or ends a transaction. */
 export interface TSlot { readonly bytes: Uint8Array; readonly length?: number; readonly start: boolean; readonly newBlock: boolean; readonly last: boolean }
-/** A tree-and-header operation; an id pushed may claim another id than the one hashed (a hostile witness). */
-export type MOp = { readonly op: "id"; readonly id: Uint8Array; readonly claim?: Uint8Array } | { readonly op: "wid"; readonly witnessId: Uint8Array } | { readonly op: "mrg" } | { readonly op: "lift" }
+/** A tree-and-header operation. A hostile witness may push an id claiming another than the one hashed or hashed under
+ * another prefix, or lift with bytes after the entry. */
+export type MOp = { readonly op: "id"; readonly id: Uint8Array; readonly claim?: Uint8Array; readonly prefix?: number }
+  | { readonly op: "wid"; readonly witnessId: Uint8Array } | { readonly op: "mrg" } | { readonly op: "lift"; readonly extra?: Uint8Array }
   | { readonly op: "hdr"; readonly bytes: Uint8Array; readonly last: boolean };
 
 /** venue-ergo §4's tree over `leaves` as the stack machine builds it: each leaf pushed, equal levels merged eagerly, a
@@ -209,14 +213,14 @@ export function transactionLeaf(state: ExhaustionState, slots: readonly TSlot[],
   }
   const entries = [...list(emitted)];
   if (entries.length > LIST_PER_SLOT * size) throw new EncodingError("a transaction leaf's list overflows");
-  for (const e of entries) t.echain = streamChain(t.echain, e);
+  for (const e of entries) if (e.unused !== true) t.echain = streamChain(t.echain, e);
   const pad = <X>(xs: readonly X[], n: number, zero: X): X[] => [...xs, ...Array<X>(n - xs.length).fill(zero)];
   const tb = pad(slots.map(s => { const b = new Uint8Array(128); b.set(s.bytes); return [...b].map(String); }), size, Array<string>(128).fill("0"));
   const rows = pad(entries, LIST_PER_SLOT * size, { hi: 0n, lo: 0n, height: 0n, position: 0n, output: 0n });
   const own = {
     tb, tlen: pad(slots.map(s => String(s.length ?? s.bytes.length)), size, "0"), tstart: pad(slots.map(s => s.start), size, false),
     tnew: pad(slots.map(s => s.newBlock), size, false), tlast: pad(slots.map(s => s.last), size, false),
-    lu: rows.map((_, k) => k < entries.length), lhi: rows.map(e => dec(e.hi)), llo: rows.map(e => dec(e.lo)), lheight: rows.map(e => dec(e.height)),
+    lu: rows.map((e, k) => k < entries.length && e.unused !== true), lhi: rows.map(e => dec(e.hi)), llo: rows.map(e => dec(e.lo)), lheight: rows.map(e => dec(e.height)),
     lposition: rows.map(e => dec(e.position)), loutput: rows.map(e => dec(e.output)),
   };
   return { leaf: leafInputs("t", state, after, nodeKeyHash, own), after, entries: emitted };
@@ -232,16 +236,17 @@ export function treeLeaf(state: ExhaustionState, ops: readonly MOp[], size: numb
     const sp = m.sp, top = m.stack[sp + 1]!, below = m.stack[sp]!;
     let len: number, id = [0n, 0n, 0n, 0n], last = false;
     if (op.op === "id" || op.op === "wid") {
-      const leaf = op.op === "id" ? op.id : op.witnessId;
-      block.set(leaf, 1); len = 1 + leaf.length;
-      m.stack[sp + 2] = digest(0, leaf); m.sp = sp + 1;
+      const leaf = op.op === "id" ? op.id : op.witnessId, prefix = op.op === "id" ? op.prefix ?? 0 : 0;
+      block[0] = prefix; block.set(leaf, 1); len = 1 + leaf.length;
+      m.stack[sp + 2] = digest(prefix, leaf); m.sp = sp + 1;
       if (op.op === "id") { id = wordsOf(op.claim ?? op.id); m.chain = idChain(m.chain, id, m.height + 1n, m.j); m.j += 1n; }
     } else if (op.op === "mrg") {
       block[0] = 1; block.set(bytesOf(below), 1); block.set(bytesOf(top), 33); len = 65;
       m.stack[sp] = digest(1, bytesOf(below), bytesOf(top)); m.sp = sp - 1;
     } else if (op.op === "lift") {
-      block[0] = 1; block.set(bytesOf(top), 1); len = 33;
-      m.stack[sp + 1] = digest(1, bytesOf(top));
+      const extra = op.extra ?? new Uint8Array(0);
+      block[0] = 1; block.set(bytesOf(top), 1); block.set(extra, 33); len = 33 + extra.length;
+      m.stack[sp + 1] = digest(1, bytesOf(top), extra);
     } else {
       block.set(op.bytes); len = op.bytes.length; last = op.last;
       const counted = (m.inHeader ? m.hc : 0n) + BigInt(len);

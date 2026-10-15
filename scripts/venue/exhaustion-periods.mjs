@@ -41,3 +41,33 @@ export function recordedPeriod(file) {
       transactions: b.txs.map(x => ({ unsigned: hex(x.u), witnessId: hex(x.w) })) })),
   };
 }
+
+/** Crafted and mutated unsigned transactions of at most `limit` bytes for the scan's agreement: shaped outputs among
+ * tokens, extensions, data inputs, a pay-to-public-key tree and minimal 42-byte shaped outputs, one with a byte past
+ * the grammar, and 60 random byte mutations of them (deterministic). */
+export function craftedTransactions(limit) {
+  let seed = 12345;
+  const rnd = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const vlq = v => { const o = []; v = BigInt(v); do { let b = Number(v & 127n); v >>= 7n; if (v) b |= 128; o.push(b); } while (v); return o; };
+  const bytes = (n, f = 0) => Array.from({ length: n }, (_, i) => (f + i) & 255);
+  const shaped = (fill, r5) => [...vlq(1000), 0x08, ...vlq(3), 1, 2, 3, ...vlq(5), 0, 2, 0x0e, 32, ...bytes(32, fill), 0x0e, ...vlq(r5), ...bytes(r5, 9)];
+  const minimal = fill => [1, 0x08, 0, 0, 0, 2, 0x0e, 32, ...bytes(32, fill), 0x0e, 0];
+  const p2pk = () => [...vlq(5), 0x00, 0x08, 0xcd, ...bytes(33, 7), 1, 0, 0];
+  const tokens = fill => [...vlq(77), 0x08, 0, ...vlq(9), 2, ...vlq(0), ...vlq(300), ...vlq(1), ...vlq(5), 3, 0x0e, 32, ...bytes(32, fill), 0x0e, 1, 42, 0x0e, 0];
+  const input = ext => [...bytes(32, 1), 0, ext.length, ...ext.flatMap(([k, n]) => [k, 0x0e, ...vlq(n), ...bytes(n, 2)])];
+  const tx = (inputs, dataInputs, tokenIds, outputs) => [...vlq(inputs.length), ...inputs.flat(), ...vlq(dataInputs), ...Array(dataInputs).fill(bytes(32, 3)).flat(),
+    ...vlq(tokenIds), ...Array(tokenIds).fill(bytes(32, 5)).flat(), ...vlq(outputs.length), ...outputs.flat()];
+  const crafted = [
+    tx([input([])], 0, 0, [shaped(1, 3)]),
+    tx([input([[1, 4], [2, 0]]), input([])], 2, 1, [tokens(10), p2pk(), shaped(11, 0)]),
+    tx([], 0, 0, Array.from({ length: 18 }, (_, i) => minimal(i))),
+    [...tx([input([])], 0, 0, [shaped(1, 3)]), 0],
+    tx([input([])], 0, 0, [shaped(2, 200), shaped(3, 1)]),
+  ];
+  for (let i = 0; i < 60; i++) {
+    const base = [...crafted[rnd(5)]];
+    for (let j = 0, k = 1 + rnd(4); j < k; j++) base[rnd(base.length)] = [0, 1, 2, 6, 7, 0x0e, 0x20, 0x80, 0xff, 0x08, 0x10, rnd(256)][rnd(12)];
+    crafted.push(base);
+  }
+  return crafted.filter(t => t.length > 0 && t.length <= limit).map(t => Uint8Array.from(t));
+}

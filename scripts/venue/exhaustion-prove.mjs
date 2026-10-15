@@ -1,7 +1,9 @@
 // The exhaustion circuits proved end to end at full size (succinct-read §4.3): their keys derived on bb.js's bundled
 // native `bb`, two consecutive periods of a synthetic chain proved leaf by leaf, joined by nodes, folded by a first and
 // a next fold, and the last fold taken by the reader's §4.3 rules (`checkFold`) under the derived fold keys on the
-// pinned WebAssembly verifier; hostile folds and nodes are refused. Each proof's time is recorded with the host's CPU.
+// pinned WebAssembly verifier; hostile recursion (a node whose children do not join, a tree under another node key-hash
+// input, next folds that do not continue their previous fold) is not proved or does not verify, and the reader refuses
+// hostile fold inputs. Each proof's time is recorded with the host's CPU.
 //
 //   NARGO=<nargo 1.0.0-beta.26> node scripts/venue/exhaustion-prove.mjs [--sizes CT,CM,E] [--report <file>]
 //
@@ -14,6 +16,7 @@ import path from "node:path";
 import { Noir } from "@noir-lang/noir_js";
 import { BB, build, CRS, EXHAUSTION_SPECIFICATION, root, sourceHashes } from "./exhaustion-build.mjs";
 import { syntheticPeriod } from "./exhaustion-periods.mjs";
+import { Chain, plainOutput, transaction } from "../../dist/ergo-synthetic.js";
 import { checkFold, EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustion.js";
 import { foldStateInputs, periodLeaves, stateEnd } from "../../dist/ergo-exhaustion-prover.js";
 import { limbsOf } from "../../dist/pool/field.js";
@@ -75,24 +78,28 @@ const chain = syntheticPeriod(6);
 const periods = [chain.blocks.slice(0, 3), chain.blocks.slice(3)];
 const map = new SubjectMap(chain.start.id, chain.start.height);
 const dec = x => x.toString();
+const nodeInputs = (a, b, key = nodeKeyHash) => ({ sin: a.publicInputs[0], sout: b.publicInputs[1], node_key_hash: dec(key), keys: [a.key, b.key],
+  proofs: [a.proofFields, b.proofFields], key_hashes: [a.keyHash, b.keyHash], middle: a.publicInputs[1] });
+/** A period's leaves proved, then joined pairwise by nodes carrying `key` as their key-hash input: the leaf proofs and the root. */
+async function tree(leaves, key = nodeKeyHash, label = "") {
+  let level = [];
+  for (const l of leaves) level.push(await prove(`leaf-${l.kind}`, l.inputs, `${label}leaf-${l.kind}`));
+  const proved = [...level];
+  while (level.length > 1) {
+    const up = [];
+    for (let i = 0; i + 1 < level.length; i += 2) up.push(await prove("node", nodeInputs(level[i], level[i + 1], key), `${label}node`));
+    if (level.length % 2) up.push(level.at(-1));
+    level = up;
+  }
+  return { leaves: proved, root: level[0] };
+}
+const done = [];
 let previous, last;
 for (const [k, blocks] of periods.entries()) {
   const startOf = map.end;
   const run = periodLeaves(map, blocks, SIZES, nodeKeyHash);
   log(`period ${k}: ${blocks.length} blocks, leaves ${run.leaves.map(l => l.kind).join("")}`);
-  let level = [];
-  for (const l of run.leaves) level.push(await prove(`leaf-${l.kind}`, l.inputs));
-  while (level.length > 1) {
-    const up = [];
-    for (let i = 0; i + 1 < level.length; i += 2) {
-      const [a, b] = [level[i], level[i + 1]];
-      up.push(await prove("node", { sin: a.publicInputs[0], sout: b.publicInputs[1], node_key_hash: dec(nodeKeyHash), keys: [a.key, b.key],
-        proofs: [a.proofFields, b.proofFields], key_hashes: [a.keyHash, b.keyHash], middle: a.publicInputs[1] }));
-    }
-    if (level.length % 2) up.push(level.at(-1));
-    level = up;
-  }
-  const rootProof = level[0];
+  const { leaves: leafProofs, root: rootProof } = await tree(run.leaves);
   const [sh, sl] = limbsOf(chain.start.id), endOf = stateEnd(run.end), [eh, el] = limbsOf(endOf.id);
   const inputs = { start_hi: dec(sh), start_lo: dec(sl), start_height: dec(chain.start.height), end_hi: dec(eh), end_lo: dec(el), end_height: dec(endOf.height),
     map_root: dec(map.root), fold_key_hash: circuits["fold-next"].key.hash, key: rootProof.key, proof: rootProof.proofFields, key_hash: rootProof.keyHash,
@@ -103,8 +110,41 @@ for (const [k, blocks] of periods.entries()) {
   check(`period ${k}: the fold's public inputs are §4.3's, ending at the period's last header with the map's root`,
     JSON.stringify(fold.publicInputs.slice(0, 8).map(BigInt).map(String)) === JSON.stringify([sh, sl, chain.start.height, eh, el, endOf.height, map.root, BigInt(circuits["fold-next"].key.hash)].map(String)));
   check(`period ${k}: it starts where the previous ended`, startOf.height === (k === 0 ? chain.start.height : periods[k - 1].at(-1).height));
+  done.push({ run, blocks, leafProofs, inputs, fold, mapRoot: map.root });
   previous = fold;
   last = { fold, end: endOf };
+}
+
+// Hostile recursion: each is refused where proving fails or the proof does not verify natively.
+async function refusedProof(name, circuit, inputs) {
+  let outcome;
+  try { outcome = nativeVerify(circuit, await prove(circuit, inputs, `hostile-${circuit}`)) ? "verifies" : "does not verify"; }
+  catch (error) { outcome = `not proved (${String(error.message ?? error).split("\n")[0].slice(0, 120)})`; }
+  check(`hostile: ${name}`, outcome !== "verifies", outcome);
+}
+{
+  const [p0, p1] = done;
+  if (p1.leafProofs.length < 3) throw new Error("the second period has fewer than three leaves");
+  await refusedProof("a node over children that do not join", "node", nodeInputs(p1.leafProofs[0], p1.leafProofs[2]));
+  // §2 rule 1: a period whose node carries another key-hash input than the node's own key's (here 7) is not the fold's.
+  // A one-block period of two leaves under one node, folded with the genuine input and with 7.
+  const mini = new Chain(), block = mini.mine(mini.anchor, [transaction([plainOutput])]);
+  for (const key of [nodeKeyHash, 7n]) {
+    const m = new SubjectMap(mini.anchor.id, mini.anchor.height);
+    const run = periodLeaves(m, [{ header: block.bytes, transactions: block.section }], SIZES, key);
+    if (run.leaves.length !== 2) throw new Error("the one-block period is not two leaves");
+    const { root } = await tree(run.leaves, key, key === nodeKeyHash ? "one-block-" : "other-key-");
+    const [sh, sl] = limbsOf(mini.anchor.id), [eh, el] = limbsOf(block.id);
+    const inputs = { start_hi: dec(sh), start_lo: dec(sl), start_height: dec(mini.anchor.height), end_hi: dec(eh), end_lo: dec(el), end_height: dec(block.height),
+      map_root: dec(m.root), fold_key_hash: circuits["fold-next"].key.hash, key: root.key, proof: root.proofFields, key_hash: root.keyHash,
+      ...foldStateInputs(run.start, "0"), ...foldStateInputs(run.end, "1") };
+    if (key === nodeKeyHash) check("a one-block period's first fold over one node verifies", nativeVerify("fold-first", await prove("fold-first", inputs, "one-block-fold-first")));
+    else await refusedProof("a first fold over a node carrying another node key hash", "fold-first", inputs);
+  }
+  const nextInputs = { ...p1.inputs, previous_key: p0.fold.key, previous_proof: p0.fold.proofFields, previous_key_hash: p0.fold.keyHash };
+  await refusedProof("a next fold naming another foldKeyHash than its previous fold's", "fold-next", { ...nextInputs, fold_key_hash: "7" });
+  await refusedProof("a next fold naming another start than its previous fold's", "fold-next", { ...nextInputs, start_height: dec(chain.start.height + 1n) });
+  await refusedProof("a next fold whose previous fold is its own period's", "fold-next", { ...nextInputs, previous_key: p1.fold.key, previous_proof: p1.fold.proofFields, previous_key_hash: p1.fold.keyHash });
 }
 
 // The reader's §4.3 rules over the last fold, under the derived fold keys on the pinned WebAssembly verifier.

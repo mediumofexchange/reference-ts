@@ -14,12 +14,13 @@ import path from "node:path";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import { Noir } from "@noir-lang/noir_js";
 import { build, compile, EXHAUSTION_SPECIFICATION, root, sourceHashes } from "./exhaustion-build.mjs";
-import { foldFirst, foldNext } from "./exhaustion-sources.mjs";
-import { recordedPeriod, syntheticPeriod } from "./exhaustion-periods.mjs";
+import { foldFirst, foldNext, node as nodeSource } from "./exhaustion-sources.mjs";
+import { craftedTransactions, recordedPeriod, syntheticPeriod } from "./exhaustion-periods.mjs";
+import { scanTransaction } from "../../dist/ergo-scan.js";
 import { EMPTY_SUBTREES, SubjectMap } from "../../dist/ergo-exhaustion.js";
 import { foldStateInputs, isPeriodEnd, mapUpdateLeaf, periodLeaves, periodStreams, startState, stateEnd, transactionLeaf, treeLeaf }
   from "../../dist/ergo-exhaustion-prover.js";
-import { limbsOf } from "../../dist/pool/field.js";
+import { identifierOf, limbsOf } from "../../dist/pool/field.js";
 
 const argv = process.argv.slice(2);
 const option = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
@@ -124,7 +125,10 @@ await hostile("an entry added to the list", "t", withList(e => [...e, { ...e.at(
 await hostile("a listed subject changed", "t", withList(e => [{ ...e[0], lo: e[0].lo ^ 1n }, ...e.slice(1)]), "list");
 await hostile("a listed output changed", "t", withList(e => [{ ...e[0], output: e[0].output + 1n }, ...e.slice(1)]), "list");
 await hostile("a listed height changed", "t", withList(e => [{ ...e[0], height: e[0].height - 1n }, ...e.slice(1)]), "list");
+// The order's range check carries no message; it is the only 96-bit check in the leaf, and nothing else changes here.
 await hostile("the list reordered", "t", withList(e => [e[1], e[0], ...e.slice(2)]), "assert_max_bit_size");
+await hostile("a gap in the list", "t", withList(e => [e[0], { ...e[0], unused: true }, ...e.slice(1)]), "list prefix");
+await hostile("a listed position aliased past 32 bits", "t", withList(e => [{ ...e[0], height: e[0].height - 1n, position: e[0].position + (1n << 32n) }, ...e.slice(1)]), "does not match the specified type");
 const multi = firstSlots.findIndex(s => !s.start);
 if (multi < 1) throw new Error("the hostile period's first leaf has no transaction over one slot");
 const slotsWith = (i, change) => firstSlots.map((s, k) => (k === i ? { ...s, ...change } : s));
@@ -149,6 +153,9 @@ await hostile("a header's parent altered", "m", treeLeaf(s0, opsWith(firstHeader
 await hostile("a pushed id other than the bytes hashed", "m", treeLeaf(s0, opsWith(0, { ...blockOps[0], claim: flip(blockOps[0].id, 0) }), SIZES.m, node), "pushed id");
 await hostile("a merge into the stack's sentinel", "m", treeLeaf(s0, [blockOps[0], { op: "mrg" }], SIZES.m, node), "merge into a sentinel");
 await hostile("a lift over the empty stack", "m", treeLeaf(s0, [{ op: "lift" }], SIZES.m, node), "lift over an empty stack");
+await hostile("an id leaf hashed under the node prefix", "m", treeLeaf(s0, opsWith(0, { ...blockOps[0], prefix: 1 }), SIZES.m, node), "leaf prefix");
+await hostile("a witness id of 32 bytes", "m", treeLeaf(s0, [{ op: "wid", witnessId: blockOps[0].id }], SIZES.m, node), "witness id length");
+await hostile("a lift carrying a right child", "m", treeLeaf(s0, [blockOps[0], { op: "lift", extra: blockOps[0].id }], SIZES.m, node), "lift length");
 const extra = { op: "id", id: blake2b(Uint8Array.of(9), { dkLen: 32 }) };
 await hostile("a leaf below a block's tree", "m", treeLeaf(s0, [extra, ...blockOps], SIZES.m, node), "one root");
 await hostile("a tree step inside a header", "m", treeLeaf(s0, [...blockOps.slice(0, firstHeader + 1), extra, ...blockOps.slice(firstHeader + 1)], SIZES.m, node), "tree inside a header");
@@ -168,19 +175,23 @@ await hostile("a wrong prior chain", "u", mapUpdateLeaf(s0, updatesWith(repeated
 await hostile("a chain at count zero", "u", mapUpdateLeaf(s0, updatesWith(0, { chain: 5n }), SIZES.u, node), "empty leaf");
 await hostile("a key's entry shifted to another key", "u", mapUpdateLeaf(s0, someUpdates.map((x, k) => (k === 0 ? { ...x, entry: { ...x.entry, subject: flip(x.entry.subject, 31) } } : x)), SIZES.u, node), "map path");
 
-// Streams: leaves each valid, refused by the fold's end checks. Each case rebuilds the period's leaves over rearranged
-// streams, every transaction leaf, then every tree leaf, then every map leaf (the order between kinds is free; the honest
-// streams in that order are the base).
+// Streams: each case rebuilds the period's leaves over rearranged streams, every transaction leaf, then every tree leaf,
+// then every map leaf (the order between kinds is free; the honest streams in that order are the base), executes them,
+// and names the first refusal: a leaf's where one refuses, else the fold's.
 function rerun(slots, ops, ups) {
   let st = startState(p.start.id, p.start.height, new SubjectMap(p.start.id, p.start.height).root);
-  for (let i = 0; i < slots.length; i += SIZES.t) st = transactionLeaf(st, slots.slice(i, i + SIZES.t), SIZES.t, node).after;
-  for (let i = 0; i < ops.length; i += SIZES.m) st = treeLeaf(st, ops.slice(i, i + SIZES.m), SIZES.m, node).after;
-  for (let i = 0; i < ups.length; i += SIZES.u) st = mapUpdateLeaf(st, ups.slice(i, i + SIZES.u), SIZES.u, node).after;
-  return st;
+  const leaves = [];
+  const add = r => { leaves.push(r.leaf); st = r.after; };
+  for (let i = 0; i < slots.length; i += SIZES.t) add(transactionLeaf(st, slots.slice(i, i + SIZES.t), SIZES.t, node));
+  for (let i = 0; i < ops.length; i += SIZES.m) add(treeLeaf(st, ops.slice(i, i + SIZES.m), SIZES.m, node));
+  for (let i = 0; i < ups.length; i += SIZES.u) add(mapUpdateLeaf(st, ups.slice(i, i + SIZES.u), SIZES.u, node));
+  return { end: st, leaves };
 }
 const streamStart = startState(p.start.id, p.start.height, new SubjectMap(p.start.id, p.start.height).root);
-async function streamCase(name, end, expected) {
-  const why = await refusal(first, foldInputs(streamStart, end, p.start, mapU));
+async function streamCase(name, { end, leaves }, expected) {
+  let why;
+  for (const l of leaves) if ((why = await refusal(leaf[l.kind], l.inputs)) !== undefined) { why = `${l.kind} leaf: ${why}`; break; }
+  why ??= await refusal(first, foldInputs(streamStart, end, p.start, mapU));
   report.folds.push({ name, refusal: why ?? null, expected: expected ?? null });
   if (expected === undefined) { if (why !== undefined) fail(`stream ${name}: refused by "${why}"`); else console.log(`stream ${name}: the fold executes`); }
   else if (why === undefined) fail(`stream ${name}: the fold executes`);
@@ -193,14 +204,16 @@ for (const slot of tSlots) (slot.start ? txs.push([slot]) : txs.at(-1).push(slot
 const arranged = (order, flags = txs.map(x => x[0].newBlock)) => order.map((i, k) => txs[i].map((slot, j) => ({ ...slot, newBlock: j === 0 && flags[k] }))).flat();
 const all = txs.map((_, i) => i);
 await streamCase("the honest streams in kind order", rerun(tSlots, mOps, updates));
-await streamCase("a transaction omitted", rerun(arranged(all.filter(i => i !== 1), txs.filter((_, i) => i !== 1).map(x => x[0].newBlock)), mOps, updates), "period end");
-await streamCase("two transactions swapped", rerun(arranged([1, 0, ...all.slice(2)]), mOps, updates), "period end");
+await streamCase("a transaction omitted", rerun(arranged(all.filter(i => i !== 1), txs.filter((_, i) => i !== 1).map(x => x[0].newBlock)), mOps, updates), "period end: id chains");
+await streamCase("two transactions swapped", rerun(arranged([1, 0, ...all.slice(2)]), mOps, updates), "period end: id chains");
 const second = txs.findIndex((x, i) => i > 0 && x[0].newBlock);
-await streamCase("a block boundary moved", rerun(arranged(all, txs.map((x, i) => (i === second ? false : i === second + 1 ? true : x[0].newBlock))), mOps, updates), "period end");
-await streamCase("map entries reordered", rerun(tSlots, mOps, [updates[1], updates[0], ...updates.slice(2)]), "period end");
-await streamCase("a map entry left out", rerun(tSlots, mOps, updates.slice(1)), "period end");
-await streamCase("a map entry applied twice", rerun(tSlots, mOps, [updates[0], ...updates]), "period end");
-await streamCase("a header left out", rerun(tSlots, mOps.slice(0, mOps.length - 1), updates), "period end");
+await streamCase("a block boundary moved", rerun(arranged(all, txs.map((x, i) => (i === second ? false : i === second + 1 ? true : x[0].newBlock))), mOps, updates), "period end: id chains");
+await streamCase("map entries reordered", rerun(tSlots, mOps, [updates[1], updates[0], ...updates.slice(2)]), "map path");
+await streamCase("the last map entry left out", rerun(tSlots, mOps, updates.slice(0, -1)), "period end: entry chains");
+await streamCase("a map entry applied twice", rerun(tSlots, mOps, [updates[0], ...updates]), "map path");
+await streamCase("a header left out", rerun(tSlots, mOps.slice(0, mOps.length - 1), updates), "period end: header open");
+const plain = txs.find(x => x.length > 1)[0];
+await streamCase("a transaction left open after the last block", rerun([...tSlots, { ...plain, newBlock: false, last: false }], mOps, updates), "period end: transaction open");
 
 // Folds' own checks over the honest period.
 {
@@ -215,8 +228,11 @@ await streamCase("a header left out", rerun(tSlots, mOps.slice(0, mOps.length - 
     ["another map root", first, { map_root: "7" }, "map root"],
     ["a tree under a key outside the set", first, { key_hash: "0x09" }, "tree key"],
     ["a first map not empty", first, foldStateInputs({ ...run.start, u: { ...run.start.u, root: 7n } }, "0"), "empty map"],
-    ["a start with an entry stream", first, foldStateInputs({ ...run.start, t: { ...run.start.t, echain: 7n } }, "0"), "period start"],
-    ["an end inside a header", first, foldStateInputs({ ...run.end, m: { ...run.end.m, inHeader: true } }, "1"), "period end"],
+    ["a start with an entry list chain", first, foldStateInputs({ ...run.start, t: { ...run.start.t, echain: 7n } }, "0"), "period start: entry list chain"],
+    ["a start with an entry stream", first, foldStateInputs({ ...run.start, u: { ...run.start.u, chain: 7n } }, "0"), "period start: entry stream"],
+    ["a start with an id chain", first, foldStateInputs({ ...run.start, m: { ...run.start.m, chain: 7n } }, "0"), "period start: tree id chain"],
+    ["a start inside a transaction", first, foldStateInputs({ ...run.start, t: { ...run.start.t, inTx: true } }, "0"), "period start: transaction open"],
+    ["an end inside a header", first, foldStateInputs({ ...run.end, m: { ...run.end.m, inHeader: true } }, "1"), "period end: header open"],
     ["a previous fold under another key", next, { previous_key: Array(115).fill("0"), previous_proof: Array(458).fill("0"), previous_key_hash: "0x09" }, "previous fold key"],
   ];
   for (const [name, program, change, expected] of cases) {
@@ -226,6 +242,41 @@ await streamCase("a header left out", rerun(tSlots, mOps.slice(0, mOps.length - 
     else if (!why.includes(expected)) fail(`fold ${name}: refused by "${why}", not "${expected}"`);
     else console.log(`fold ${name}: refused (${why})`);
   }
+}
+
+// The node's admission, executed with placeholder proofs (its joins are recursive: exhaustion-prove.mjs).
+{
+  const nodeProgram = new Noir(await compile(built.directory, "node", nodeSource({ t: KEYS.t, m: KEYS.m, u: KEYS.u })));
+  const base = { sin: "1", sout: "2", node_key_hash: KEYS.n, keys: [Array(115).fill("0"), Array(115).fill("0")], proofs: [Array(458).fill("0"), Array(458).fill("0")],
+    key_hashes: [KEYS.t, KEYS.n], middle: "3" };
+  const honest = await refusal(nodeProgram, base);
+  if (honest !== undefined) fail(`node: admitted keys refused: ${honest}`);
+  const why = await refusal(nodeProgram, { ...base, key_hashes: [KEYS.t, "0x09"] });
+  report.folds.push({ name: "a node child under a key outside the set", refusal: why ?? null, expected: "child key" });
+  if (why === undefined || !why.includes("child key")) fail(`node: a child under a key outside the set: ${why ?? "executes"}`);
+  else console.log(`node a child under a key outside the set: refused (${why})`);
+}
+
+// The scan's agreement beyond the synthetic chain: crafted and mutated transactions (tokens, extensions, data inputs,
+// fixed trees, minimal shaped outputs, bytes outside the grammar), each one leaf from a fresh state: the leaf executes
+// with the prover's list, which must be scanTransaction's outputs.
+{
+  let entries = 0, transactions = 0;
+  const s1 = startState(new Uint8Array(32).fill(1), 900000n, 0n);
+  for (const unsigned of craftedTransactions(SIZES.t * 128)) {
+    const n = Math.max(1, Math.ceil(unsigned.length / 128));
+    const slots = Array.from({ length: n }, (_, k) => ({ bytes: unsigned.subarray(k * 128, (k + 1) * 128), start: k === 0, newBlock: k === 0, last: k === n - 1 }));
+    const r = transactionLeaf(s1, slots, SIZES.t, node);
+    const scanned = scanTransaction(unsigned);
+    const same = scanned.length === r.entries.length && scanned.every((x, i) => BigInt(x.output) === r.entries[i].output &&
+      Buffer.from(x.subject).equals(Buffer.from(identifierOf(r.entries[i].hi, r.entries[i].lo))));
+    if (!same) fail(`crafted transaction ${transactions}: the prover's entries are not scanTransaction's`);
+    const why = await refusal(leaf.t, r.leaf.inputs);
+    if (why !== undefined) fail(`crafted transaction ${transactions}: refused: ${why}`);
+    transactions++; entries += r.entries.length;
+  }
+  report.crafted = { transactions, entries };
+  console.log(`crafted: ${transactions} transactions, ${entries} entries, each leaf executed`);
 }
 
 report.result = failed === 0 ? "pass" : `${failed} failures`;

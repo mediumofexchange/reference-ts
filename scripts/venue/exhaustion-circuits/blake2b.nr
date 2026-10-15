@@ -140,26 +140,3 @@ pub fn word(bytes: [u8; 128], i: u32) -> u64 {
     r
 }
 unconstrained fn as_u64(w: Field) -> u64 { w as u64 }
-
-/// Blake2b-256 of a fixed-length message (length known at compile time, at least one byte), as 32 bytes.
-pub fn blake2b256<let L: u32>(msg: [u8; L]) -> [u64; 4] {
-    let blocks = (L + 127) / 128;
-    let mut h = iv0();
-    for b in 0..blocks {
-        let mut block: [u8; 128] = [0; 128];
-        for j in 0..128 {
-            let k = b * 128 + j;
-            if k < L {
-                block[j] = msg[k];
-            }
-        }
-        let mut m: [u64; 16] = [0; 16];
-        for i in 0..16 {
-            m[i] = word(block, i);
-        }
-        let last = b == blocks - 1;
-        let t = if last { L as u64 } else { ((b + 1) * 128) as u64 };
-        h = compress(h, m, t, last);
-    }
-    [h[0], h[1], h[2], h[3]]
-}
