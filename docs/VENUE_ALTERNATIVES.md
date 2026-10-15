@@ -321,6 +321,29 @@ output, so the map leaves run on synthetic entries. Proving reads 2^22 G1 points
 set's pinned hash; the rest are the CDN's, unpinned until an adoption names them. Full-size compilation exceeds
 noir_wasm's memory and uses nargo 1.0.0-beta.26, shown equal at small sizes only.
 
+### The prover pool over mainnet blocks (slice 43)
+
+Measured 2026-10-15 ([decision](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12); [report](ergo-exhaustion-pool-verification.json)). `scripts/venue/exhaustion-pool.mjs` hands 48 consecutive mainnet blocks (heights 1,894,826–1,894,873; 425 transactions, 1.40 MB unsigned) to an `ExhaustionServer` in three periods of 16 blocks, and `ExhaustionPool` proves them with the [production circuits](#the-exhaustion-circuits-in-production-form-slice-43) on bb.js's native binary from the pinned 2^22 points, one 4-vCPU Xeon at 2.10 GHz (15 GB), the same CPU model as before.
+
+**Real blocks fold.** The periods take 8, 40 and 26 leaves (71 transaction, 3 tree-and-header, no map-update: these blocks hold no output with §6's shape) and 7, 39 and 25 nodes; the first fold and two next folds verify, and the reader's `checkFold` takes each under a test set of the built circuits on the pinned WebAssembly verifier (0.24 s for the first, 0.04 s after). It refuses seven hostile folds by rule: another map root, the next fold's proof under the first fold's key, the first fold's proof for the last fold's inputs, another end header, an end above the depth, another start and another fold key hash. A subject's path at the last fold reproduces its root with no entry. A second pool over the kept proofs proves the three periods again in 7 seconds without a proof (each kept proof verified again), with the same fold bytes.
+
+**Times.**
+
+| Proof | Mean (range) | Count |
+|---|---|---|
+| Transaction or tree leaf, alone | 52.6 s (52.5–52.8) | 2 |
+| The same while the next leaf's witness runs | 77.7 s (56.6–92.9) | 51 |
+| Leaf witness, noir_js | 25.4 s (transaction), 19–45 s (tree) | 53 |
+| Node | 19.0 s (17.9–20.1) | 64 |
+| Next fold | 19.9 s | 2 |
+
+- *The built key cuts a leaf's proof:* bb.js's `generateProof` passes no key and derives it again each proof (about 100 s a leaf here); with the key, a leaf proves in 52.6 s, under the 58–62 s of `bb prove -k` before.
+- *Overlapping the witness buys nothing on four cores:* a leaf proved beside the next witness takes 77.7 s, as long as the witness and the proof one after the other (78.0 s). The overlap pays only where witnesses run on other cores or natively (`nargo execute`, 15.7 s).
+- *This window is heavier than slice 43's day:* 1.40 MB in 48 blocks is about 21 MB a day against that day's 13.3 MB; its last period (16 blocks, 32 minutes of chain) took 42 minutes, so one prover keeps up with it 0.76 times. At these means slice 43's day (709 leaves, 708 nodes) takes 19.1 hours, one prover keeping up 1.26 times (the estimate was 1.20).
+- *Memory:* proving left at least 5.4 GiB of the 15.7 available; one native instance at a time.
+
+**Limits.** A test set over circuits built here (no adoption); one run on one host; 48 blocks, not a day; no map-update leaf on real blocks; witnesses by noir_js; one prover.
+
 ### The venue recheck (slice 29)
 
 Measured 2026-10-13, read-only ([tooling and result](https://github.com/mediumofexchange/reference-ts/tree/bcd39d2/scripts/venue/recheck-probe); [decision](../decisions/2026-10.md#2026-10-13--keep-ergo-for-the-release-a-phone-reaches-bitcoin-only-through-about-ten-provers-dogecoin-is-the-next-venue-probe-and-a-venue-move-is-a-planned-move-for-pool-v4-slice-29-next-12)). Three questions, scoped 2026-10-12: does a chain not yet weighed beat Ergo for the release, or Bitcoin as the second venue, by §2 and by what a phone pays ([slice 20](#absence-for-one-subject-slice-20)); what does a phone pay to reach Bitcoin through [slice 21](#the-succinct-proof-of-exhaustions-prover-cost-slice-21)'s succinct route; and can Ergo alone carry the release, with which hedges?

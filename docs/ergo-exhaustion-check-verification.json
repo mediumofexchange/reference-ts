@@ -1,21 +1,26 @@
 {
   "specification": "succinct-read 282c925",
   "sources": {
-    "scripts/venue/exhaustion-build.mjs": "56a60dbf5bf197d812df0a39f44c847a23156ffa731778e0783ea9d682830724",
+    "scripts/venue/exhaustion-build.mjs": "6473cdb986d36a4152126ffb8c868f417a46b3346da0a729bb02d821887a65d6",
     "scripts/venue/exhaustion-sources.mjs": "83f704dd827ef3117358c9668d8f4f3cc5dff68e3999227a086a74ab7610d1fe",
     "scripts/venue/exhaustion-periods.mjs": "3c35f414eee34dc0735bbe20a7fc7d72af3e674446c7d36dab4a2fcd866e1244",
     "scripts/venue/exhaustion-check.mjs": "ca2a817fc076ca3f5f0c9b0467a8c6d3a74c87837f0f7a43c227d5a27aaae639",
     "scripts/venue/exhaustion-prove.mjs": "f7c0263b971e5da6a97bebefa1eed17f41062aff9c06c4476e4d018164d171e8",
+    "scripts/venue/exhaustion-pool.mjs": "fdc2e65974d513ccb4bdc8ee58e8b7653b0baabe84c168a043163ab9a6c26c71",
     "scripts/venue/exhaustion-circuits/exhaustion.nr": "d245fd0162c9a998ece823a40e94973a01dd0a75684b9e9ddd5aeef99efc81d3",
     "scripts/venue/exhaustion-circuits/blake2b.nr": "2c021e29c19bd09b735354d8ac80effb8772f014c0d6e2c4a60472929d7c5100",
     "src/pool/circuits/vendor/poseidon2.nr": "44f3a3d1abe7d5fa2da5c0339e52018195d55f295c320e530d355f9cc62159d8",
-    "src/ergo-exhaustion-prover.ts": "4b1e8910042664c1e738ce7ae345afae25a622954ce3df3a564dc4ae74f5f82f",
-    "src/ergo-exhaustion.ts": "3c015f24e43f3a6edc2db643bd325de8fafbed1a925871ee51d2eaf24ad86981",
+    "src/ergo-exhaustion-prover.ts": "5f743571d6b40242781a2d65dd7aad22867c6d4eb05ebc28a8afb11d08d41cf4",
+    "src/ergo-exhaustion-pool.ts": "322796d5ebe52578a23e1513c4dc381a92ca989321ed0c2645b0799d1d952621",
+    "src/ergo-exhaustion-server.ts": "52cf252c38cd11eb9ebcb082b304643f1b061ef366adaa28d2638fde333ad75a",
+    "src/ergo-exhaustion.ts": "943ed44ba9ef458c7c058104401e1a4838971695a258d4cb8097e1a0e6b191de",
     "src/ergo-scan.ts": "73352b1f5412cc13ac8bede4387007196f6beace1462a7db0d016969673417e7",
     "src/ergo-synthetic.ts": "659d27646efef374f7224c536206cbe6ad0783a7fb8aa4015440033444d314e8",
     "src/ergo-profile.ts": "679161a58f56f7c1b16619e1a43c53c353929df130996218e92d4565a95e5c06",
     "src/pool/poseidon2.ts": "c33b48e98263bdf99efc9650b81f57d90136017be2c843963ef38043bb09f308",
-    "src/pool/proof-verifier.ts": "9b6feafb80bf932a084e392bfb724bb7735684720411f31194cdd0041b1248cc"
+    "src/pool/proof-verifier.ts": "be9c7f8557d4bf3301ac773af91006138ef01eb3b2aec009e5679ac7e3ceca34",
+    "src/pool/parameters.ts": "2824970cab95bab2aabd0e5994ef1523dcbbf305bf2c5f190ef52d8d715736ee",
+    "src/pool/parameter-files.ts": "bc5f843d1c773f2de31974b0c5007279426fbbf570d80c0568ec37141399fdd4"
   },
   "sizes": {
     "t": 6,

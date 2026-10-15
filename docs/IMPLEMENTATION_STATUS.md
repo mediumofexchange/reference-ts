@@ -140,7 +140,11 @@ The six exhaustion circuits (§4.3, [succinct-read 282c925](https://github.com/m
 executes them over synthetic and mainnet periods with hostile witnesses ([report](ergo-exhaustion-check-verification.json)) and
 `exhaustion-prove.mjs` proves two periods end to end at full size, the reader taking the last fold
 ([report](ergo-exhaustion-prove-verification.json); [slice 43](../decisions/2026-10.md#2026-10-15--prove-the-exhaustions-six-circuits-in-production-form-end-to-end-and-keep-up-with-a-heavy-ergo-day-one-and-a-half-times-on-one-prover-slice-43-next-12)).
-Their keys are a test set's (none is adopted). The Ergo view reads the venue succinctly where its owner asks
+Their keys are a test set's (none is adopted). A prover pool (`src/ergo-exhaustion-pool.ts`) proves the periods an
+`ExhaustionServer` hands it on the native backend from pinned 2^22 points, resuming from kept proofs; `exhaustion-pool.mjs`
+folds 48 mainnet blocks with it, the reader taking each fold ([report](ergo-exhaustion-pool-verification.json);
+[slice 43](../decisions/2026-10.md#2026-10-15--prove-a-replicas-exhaustion-periods-in-a-resumable-prover-pool-from-pinned-222-points-and-fold-real-ergo-mainnet-blocks-slice-43-next-12)).
+The Ergo view reads the venue succinctly where its owner asks
 (`ErgoVenue`'s `succinct` option): headers natively, the subjects it follows below an exhaustion supplier's fold, sections
 natively above; a replica serves its map and test-set folds (`reader serve`, `ExhaustionServer`, `GET /exhaustion`) and a
 `--read succinct` directory's view reads them, which `npm test` holds to the complete view and CI's `succinct` group
