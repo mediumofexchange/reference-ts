@@ -276,27 +276,42 @@ async function main() {
     } finally { server.close(); }
   }
 
-  const executable = findBrowser(options.browser), profile = mkdtempSync(join(tmpdir(), "moe-browser-"));
-  const browser = spawn(executable, [
-    "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
-    "--disable-extensions", "--disable-background-networking", "--enable-blink-features=ForceEagerMeasureMemory",
-    ...(process.platform === "linux" ? ["--no-sandbox"] : []), "about:blank",
-  ], { stdio: "ignore" });
+  const executable = findBrowser(options.browser);
+  const start = () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-browser-"));
+    return { profile: directory, browser: spawn(executable, [
+      "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--no-first-run", "--no-default-browser-check",
+      "--disable-extensions", "--disable-background-networking", "--enable-blink-features=ForceEagerMeasureMemory",
+      ...(process.platform === "linux" ? ["--no-sandbox"] : []), "about:blank",
+    ], { stdio: "ignore" }) };
+  };
+  let { browser, profile } = start();
   let connection;
   try {
-    const portFile = join(profile, "DevToolsActivePort");
     // The port file's lines once both are written; on Windows the browser holds it open while writing (EBUSY), which is
     // read as not written yet.
     const portLines = () => {
+      const portFile = join(profile, "DevToolsActivePort");
       try { return existsSync(portFile) ? readFileSync(portFile, "utf8").split("\n") : []; } catch (error) {
         if (error?.code === "EBUSY" || error?.code === "EPERM") return [];
         throw error;
       }
     };
+    // A browser that exits or writes no port within 60 s is started once more with a fresh profile: a hosted Windows
+    // runner's first start of the browser has missed 30 s (main's CI at 7e91d6e and abf6da3). The second failure stands.
     let lines;
-    for (let i = 0; (lines = portLines()).length < 2; i++) {
-      if (i > 300 || browser.exitCode !== null) throw new Error(`browser check: ${executable} did not open DevTools`);
-      await new Promise(r => setTimeout(r, 100));
+    for (let attempt = 1; ; attempt++) {
+      let i = 0;
+      while ((lines = portLines()).length < 2 && i <= 600 && browser.exitCode === null) { await new Promise(r => setTimeout(r, 100)); i++; }
+      if (lines.length >= 2) break;
+      const why = browser.exitCode !== null ? `exited with ${browser.exitCode}` : "wrote no DevTools port in 60 s";
+      if (attempt === 2) throw new Error(`browser check: ${executable} did not open DevTools (${why}, twice)`);
+      log(`${executable} ${why}; starting it once more`);
+      const exited = browser.exitCode !== null ? Promise.resolve() : new Promise(r => browser.once("exit", r));
+      browser.kill();
+      await exited;
+      try { rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch (error) { log(`left ${profile}: ${error.code}`); }
+      ({ browser, profile } = start());
     }
     const [devPort, path] = lines;
     // A crashed page posts nothing: its check fails at once rather than after the wait.
